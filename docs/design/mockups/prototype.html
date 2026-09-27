@@ -176,7 +176,25 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .hostapp .h{height:20px;width:80%;border-radius:4px;background:#D5D7DA;margin:var(--space-16) 0}
 .hostapp .top{display:flex;align-items:center;gap:8px;font-weight:600;font-size:var(--text-13);color:#535862}
 /* ---------- batch 2: listening ---------- */
-.w{border-radius:3px;transition:background .15s ease}
+.listenbtn{height:36px;padding:0 var(--space-12) 0 var(--space-8);border-radius:var(--radius-pill);background:var(--gradient-primary);color:var(--on-gradient);display:inline-flex;align-items:center;gap:6px;font-size:var(--text-13);font-weight:600;flex:none;margin-right:var(--space-4)}
+.ptop{flex:none;position:relative;z-index:2;background:var(--reader-bg);color:var(--reader-text);padding:var(--space-4) var(--space-12) var(--space-8);border-bottom:1px solid color-mix(in srgb, var(--reader-muted) 25%, transparent)}
+.ptop.enter{animation:ptopIn .25s cubic-bezier(.2,.8,.2,1)}
+@keyframes ptopIn{from{opacity:0;transform:translateY(-8px)}}
+.ptop .row{display:flex;align-items:center;gap:var(--space-4)}
+.ptop .pp{width:44px;height:44px;border-radius:var(--radius-pill);background:var(--gradient-primary);color:var(--on-gradient);display:inline-flex;align-items:center;justify-content:center;flex:none;margin-right:var(--space-8)}
+.ptop .info{flex:1;min-width:0}
+.ptop .voice{margin:0;font-size:12px;color:var(--reader-muted);white-space:nowrap;overflow:hidden}
+.ptop .voice b{color:var(--reader-text)}
+.ptop .tt{font-size:12px;color:var(--reader-muted);font-variant-numeric:tabular-nums}
+.ptop .ctl{width:44px;height:44px;color:var(--reader-text)}
+.ptop .rate{height:32px;min-width:44px;padding:0 var(--space-8);background:color-mix(in srgb, var(--reader-muted) 15%, transparent);color:var(--reader-text)}
+.ptop .scrub{margin:var(--space-8) 0 0;height:3px;background:color-mix(in srgb, var(--reader-muted) 25%, transparent)}
+.ptop .scrub b{width:10px;height:10px;margin:-5px 0 0 -5px}
+.ptop .pnote{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px;color:var(--reader-muted)}
+.mini.enter{animation:miniIn .3s cubic-bezier(.2,.8,.2,1)}
+@keyframes miniIn{from{opacity:0;transform:translateY(24px) scale(.96)}}
+.mini.leave{transition:transform .26s ease-in,opacity .26s ease-in;transform:translateY(32px) scale(.94);opacity:0;pointer-events:none}
+.w{border-radius:3px;transition:background .15s ease,box-shadow .15s ease}
 .w.on{background:var(--reader-highlight);box-shadow:0 0 0 2px var(--reader-highlight)}
 .rplayer{position:absolute;left:var(--space-12);right:var(--space-12);bottom:var(--space-12);z-index:3;background:var(--surface);color:var(--text);border-radius:var(--radius-sheet);border:var(--card-edge);box-shadow:var(--shadow-card),0 8px 24px #10182826;padding:var(--space-12) var(--space-16) var(--space-12)}
 .voice{display:flex;align-items:center;gap:var(--space-8);font-size:var(--text-13);color:var(--muted);margin-bottom:var(--space-8);min-height:20px}
@@ -283,7 +301,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
       <button data-jump="listen-offline">Listen, offline</button>
       <button data-jump="lock">Lock screen</button>
     </div>
-    <div class="note"><strong>Two layout calls to check:</strong> in the Reader, Listen and Archive float at the bottom right where the thumb rests (the flow map had them in the top bar), and pressing Listen turns that pill into the full player. The mini player gains a ✕ once paused, so it can be put away; the flow map didn't say how it goes.</div>
+    <div class="note"><strong>Reader layout:</strong> Listen sits in the top bar; pressing it opens a player strip under the top bar while the text highlights and scrolls. Archive floats at the bottom right, where the thumb rests. The mini player gets a ✕ once paused and animates away when closed.</div>
   </aside>
 </div>
 
@@ -478,7 +496,15 @@ function voiceLine(){
   }[a.note] || '';
   return `${ic('phone', 14)}<b>Phone voice</b>${extra}`;
 }
-function refreshVoice(){ vp.querySelectorAll('.voice').forEach(v => v.innerHTML = voiceLine()); }
+function voiceShort(){ const a = S.audio; return a.voice === 'better' ? `${ic('sparkle', 14)}<b>Better voice</b>` : `${ic('phone', 14)}<b>Phone voice</b>`; }
+function voiceNote(){
+  const n = { preparing: '<span class="pdot" aria-hidden="true"></span>Preparing a better voice for next time', ready: 'Better voice ready for next time', unavailable: 'Better voice unavailable for this one' }[S.audio.note];
+  return n ? `<div class="pnote">${n}</div>` : '';
+}
+function refreshVoice(){
+  vp.querySelectorAll('.nowcard .voice').forEach(v => v.innerHTML = voiceLine());
+  const p = vp.querySelector('.ptop'); if (p) { p.querySelector('.pnote')?.remove(); p.insertAdjacentHTML('beforeend', voiceNote()); }
+}
 
 function controlsHTML(withArchive){
   const a = S.audio;
@@ -494,14 +520,23 @@ function controlsHTML(withArchive){
 }
 
 function playerHTML(){
-  return `<div class="rplayer"><div class="voice">${voiceLine()}</div>${controlsHTML(true)}</div>`;
+  const a = S.audio;
+  const enter = S.ptopFor !== a.id; S.ptopFor = a.id;
+  return `<div class="ptop ${enter ? 'enter' : ''}"><div class="row">
+    <button class="pp js-pp" data-play aria-label="${a.playing ? 'Pause' : 'Play'}">${ic(a.playing ? 'pause' : 'play', 20, 'fill="currentColor"')}</button>
+    <div class="info"><div class="voice">${voiceShort()}</div><div class="tt js-tof"></div></div>
+    <button class="ctl" data-skip="-15" aria-label="Back 15 seconds">${ic('back15', 24)}<small>15</small></button>
+    <button class="ctl" data-skip="15" aria-label="Forward 15 seconds">${ic('fwd15', 24)}<small>15</small></button>
+    <button class="rate" data-rate aria-label="Speed">${rateLabel(a.rate)}</button></div>
+    <div class="scrub"><i class="js-bar"></i><b class="js-knob"></b></div>${voiceNote()}</div>`;
 }
 
 function miniHTML(){
   const a = S.audio;
-  if (!a || S.screen === 'reader' || S.screen === 'listen' || S.lock || (S.sheet && S.sheet.startsWith('share'))) return '';
+  if (!a || S.screen === 'reader' || S.screen === 'listen' || S.lock || (S.sheet && S.sheet.startsWith('share'))) { S.miniOn = false; return ''; }
+  const enter = !S.miniOn; S.miniOn = true;
   const it = S.items.find(i => i.id === a.id);
-  return `<div class="mini">
+  return `<div class="mini ${enter ? 'enter' : ''}">
     <button class="pp js-pp" data-play aria-label="${a.playing ? 'Pause' : 'Play'}">${ic(a.playing ? 'pause' : 'play', 20, 'fill="currentColor"')}</button>
     <button class="info" data-open-audio><b>${esc(it.title)}</b><span class="js-tof"></span></button>
     ${a.playing ? '' : `<button class="x" data-stop-audio aria-label="Close player">${ic('x', 20)}</button>`}
@@ -569,7 +604,7 @@ function updatePlayer(forceScroll){
       const rs = document.getElementById('rs');
       const r = el.getBoundingClientRect(), rr = rs.getBoundingClientRect();
       const y = r.top - rr.top;
-      if (forceScroll || y < 60 || y > rs.clientHeight - 240) rs.scrollTo({ top: rs.scrollTop + y - rs.clientHeight / 3, behavior: forceScroll ? 'auto' : 'smooth' });
+      if (forceScroll || y < 40 || y > rs.clientHeight - 100) rs.scrollTo({ top: rs.scrollTop + y - rs.clientHeight / 3, behavior: forceScroll ? 'auto' : 'smooth' });
     }
   }
 }
@@ -592,6 +627,7 @@ setInterval(() => {
 
 function readerScreen(){
   const it = S.items.find(i => i.id === S.readerId) || S.items[0];
+  if (!(S.audio && S.audio.id === it.id)) S.ptopFor = null;
   if (S.readerMode === 'error') {
     return `<div class="screen iab">
       <div class="bar"><button class="iconbtn" data-back aria-label="Close">${ic('x',22)}</button><div class="u"><b>${esc(it.title)}</b>${esc(it.host)}</div><button class="iconbtn" aria-label="Open in browser">${ic('ext',20)}</button></div>
@@ -610,10 +646,10 @@ function readerScreen(){
   }
   return `<div class="screen reader" data-reader="${S.readerTheme}">
     <div class="rtop"><button class="iconbtn" data-back aria-label="Back">${ic('back',22)}</button><div class="host">${esc(it.host)}</div>
-      <button class="iconbtn aa" data-sheet="aa" aria-label="Text and theme">Aa</button><button class="iconbtn" data-sheet="menu" aria-label="More">${ic('more',22)}</button></div>
-    <div class="rprog"><i id="rp" style="width:${it.progress*100}%"></i></div>
-    <div class="scroll" id="rs"><div class="article ${S.audio && S.audio.id === it.id ? 'playing' : ''}">${content}</div></div>
-    ${S.readerMode === 'loading' ? '' : (S.audio && S.audio.id === it.id ? playerHTML() : `<div class="dock"><button class="arch" data-archive-open aria-label="Archive">${ic('archive',22)}</button><button class="play" data-listen>${ic('play',18,'fill="currentColor"')}Listen</button></div>`)}
+      ${S.audio && S.audio.id === it.id || S.readerMode === 'loading' ? '' : `<button class="listenbtn" data-listen>${ic('play',14,'fill="currentColor"')}Listen</button>`}<button class="iconbtn aa" data-sheet="aa" aria-label="Text and theme">Aa</button><button class="iconbtn" data-sheet="menu" aria-label="More">${ic('more',22)}</button></div>
+    ${S.audio && S.audio.id === it.id ? playerHTML() : ''}<div class="rprog" style="${S.audio && S.audio.id === it.id ? 'display:none' : ''}"><i id="rp" style="width:${it.progress*100}%"></i></div>
+    <div class="scroll" id="rs"><div class="article">${content}</div></div>
+    ${S.readerMode === 'loading' ? '' : `<div class="dock"><button class="arch" data-archive-open aria-label="Archive">${ic('archive',22)}</button></div>`}
   </div>`;
 }
 
@@ -752,13 +788,27 @@ vp.addEventListener('click', e => {
   if (d.undo !== undefined && S.toast && S.toast.undo) { S.toast.undo(); S.toast = null; clearTimeout(toastTimer); }
   if (d.undoShare !== undefined) { S.items = S.items.filter(i => i.id !== 99); S.sheet = null; clearTimeout(sheetTimer); }
   if (d.readnow !== undefined) { clearTimeout(sheetTimer); S.sheet = null; openItem(99); return; }
-  if (d.listen !== undefined) startAudio(S.readerId);
+  if (d.listen !== undefined) {
+    // Start from the paragraph the reader is looking at, not the top of the article.
+    const it = S.items.find(i => i.id === S.readerId), rs = document.getElementById('rs');
+    if (it && !it.listenT && rs) {
+      const top = rs.getBoundingClientRect().top + 60;
+      const paras = [...vp.querySelectorAll('.prose p')];
+      const k = Math.max(0, paras.findIndex(p => p.getBoundingClientRect().bottom > top));
+      it.listenT = PROSE.slice(0, k).join(' ').split(/s+/).filter(Boolean).length / WPS;
+    }
+    startAudio(S.readerId);
+  }
   if (d.play !== undefined && S.audio) S.audio.playing = !S.audio.playing;
   if (d.skip && S.audio) { S.audio.t = Math.max(0, Math.min(DUR - 1, S.audio.t + (+d.skip))); }
   if (d.rate !== undefined && S.audio) S.audio.rate = RATES[(RATES.indexOf(S.audio.rate) + 1) % RATES.length];
   if (d.playall !== undefined && S.played.length) { S.playAll = true; if (!S.audio || S.audio.id !== S.played[0]) { S.audio = null; startAudio(S.played[0]); } else S.audio.playing = true; }
   if (d.playitem) { S.playAll = false; startAudio(+d.playitem); }
-  if (d.stopAudio !== undefined) { S.audio = null; S.playAll = false; }
+  if (d.stopAudio !== undefined) {
+    const m = vp.querySelector('.mini'); if (m) m.classList.add('leave');
+    setTimeout(() => { S.audio = null; S.playAll = false; render(); }, 260);
+    return;
+  }
   if (d.openAudio !== undefined && S.audio) { S.lock = false; S.readerId = S.audio.id; S.readerMode = 'ok'; S.screen = 'reader'; S.scrollToWord = true; }
   render();
 });
