@@ -185,7 +185,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .ptop .info{flex:1;min-width:0}
 .ptop .voice{margin:0;font-size:12px;color:var(--reader-muted);white-space:nowrap;overflow:hidden}
 .ptop .voice b{color:var(--reader-text)}
-.ptop .tt{font-size:12px;color:var(--reader-muted);font-variant-numeric:tabular-nums}
+.ptop .tt{font-size:var(--text-15);font-weight:500;color:var(--reader-text);font-variant-numeric:tabular-nums}
 .ptop .ctl{width:44px;height:44px;color:var(--reader-text)}
 .ptop .rate{height:32px;min-width:44px;padding:0 var(--space-8);background:color-mix(in srgb, var(--reader-muted) 15%, transparent);color:var(--reader-text)}
 .ptop .scrub{margin:var(--space-8) 0 0;height:3px;background:color-mix(in srgb, var(--reader-muted) 25%, transparent)}
@@ -246,6 +246,78 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .media .controls{justify-content:center;gap:var(--space-24)}
 .media .ctl.big{background:#F7F7F7;color:#0C0E12;box-shadow:none}
 .lock .hint{margin-top:auto;font-size:var(--text-13);opacity:.7}
+/* ---------- batch 3: first launch and return ---------- */
+.onb{background:var(--background);color:var(--text)}
+.onbtop{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 var(--space-8)}
+.onbbody{padding:var(--space-8) var(--space-24)}
+.onb h1{font-size:var(--text-28);line-height:1.2;font-weight:600;letter-spacing:-.02em;margin:0 0 var(--space-8)}
+.onb .lead{color:var(--muted);margin:0 0 var(--space-24)}
+.onbactions{flex:none;padding:var(--space-16) var(--space-24) var(--space-24);display:flex;flex-direction:column;gap:var(--space-8)}
+.btn.full{width:100%}
+.btn[disabled]{opacity:.45;pointer-events:none}
+.fine{font-size:var(--text-13);color:var(--muted);text-align:center;margin:var(--space-4) 0 0;display:flex;align-items:center;justify-content:center;gap:6px}
+.hero{flex:1;position:relative;min-height:300px}
+.hc{position:absolute;left:50%;top:50%;width:230px;margin-left:-115px;padding:var(--space-12);background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card),0 12px 32px #10182814;border:var(--card-edge);overflow:hidden}
+.hc .ln{height:8px;border-radius:var(--radius-pill);background:var(--line);margin-bottom:8px}
+.hc .ln.src{width:35%;height:6px}
+.hc .ln.t{background:color-mix(in srgb, var(--text) 70%, transparent);height:9px}
+.hc .pbar{position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--accent-soft)}
+.hc .pbar i{display:block;height:100%;width:45%;background:var(--accent)}
+.hc .aud{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:600}
+.notecard{display:flex;align-items:center;gap:var(--space-8);padding:var(--space-12) var(--space-16);border-radius:var(--radius);background:var(--accent-soft);font-size:var(--text-13);margin-bottom:var(--space-16)}
+.notecard svg{color:var(--accent)}
+.choice{display:flex;align-items:center;gap:var(--space-12);width:100%;min-height:76px;padding:var(--space-12) var(--space-16);margin-bottom:10px;border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge);text-align:left}
+.choice .ico{width:44px;height:44px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent);display:inline-flex;align-items:center;justify-content:center;flex:none}
+.choice .tx{flex:1;min-width:0}
+.choice b{display:block;font-size:var(--text-15);font-weight:600}
+.choice span.s{font-size:var(--text-13);color:var(--muted)}
+.choice .chev{color:var(--muted)}
+.choice[disabled]{opacity:.45;pointer-events:none}
+.primeillus{display:flex;justify-content:center;margin:var(--space-8) 0 var(--space-24)}
+.vf{position:relative;height:300px;border-radius:var(--radius-sheet);overflow:hidden;background:#0C0E12;margin:var(--space-16) 0}
+.vf .qr{position:absolute;left:50%;top:50%;width:150px;height:150px;margin:-75px 0 0 -75px;opacity:.35}
+.vf .corner{position:absolute;width:34px;height:34px;border:3px solid #FFFFFF;opacity:.9}
+.vf .c1{left:18%;top:17%;border-right:0;border-bottom:0;border-radius:10px 0 0 0}.vf .c2{right:18%;top:17%;border-left:0;border-bottom:0;border-radius:0 10px 0 0}
+.vf .c3{left:18%;bottom:17%;border-right:0;border-top:0;border-radius:0 0 0 10px}.vf .c4{right:18%;bottom:17%;border-left:0;border-top:0;border-radius:0 0 10px 0}
+.vf .scanline{position:absolute;left:20%;right:20%;height:2px;background:var(--accent);box-shadow:0 0 12px var(--accent);animation:scanmove 1.8s ease-in-out infinite alternate}
+@keyframes scanmove{from{top:22%}to{top:78%}}
+.vf .cap{position:absolute;left:0;right:0;bottom:var(--space-12);text-align:center;color:#FFFFFF;font-size:var(--text-13);opacity:.85}
+.vf.off{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:var(--space-8);color:#FFFFFF;text-align:center;padding:var(--space-24)}
+.or{display:flex;align-items:center;gap:var(--space-12);color:var(--muted);font-size:var(--text-13);margin:0 0 var(--space-12)}
+.or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
+.sixdigit{display:block;width:100%;height:52px;border-radius:var(--radius-pill);border:1px solid var(--line);background:var(--surface);color:var(--text);text-align:center;font:600 22px/1 var(--font-ui);letter-spacing:.35em;outline:0;font-variant-numeric:tabular-nums}
+.sixdigit:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.errline{display:flex;align-items:flex-start;gap:var(--space-8);padding:var(--space-12) var(--space-16);border-radius:var(--radius);background:color-mix(in srgb, var(--error) 10%, var(--surface));color:var(--text);font-size:var(--text-13);margin-bottom:var(--space-16)}
+.errline svg{color:var(--error);flex:none;margin-top:1px}
+.words{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-8)}
+.wf{display:flex;align-items:center;gap:var(--space-8);min-width:0;height:44px;padding:0 var(--space-12);border-radius:var(--radius-pill);background:var(--surface);border:1px solid var(--line)}
+.wf span{width:18px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;text-align:right}
+.wf input{flex:1;min-width:0;width:100%;border:0;outline:0;background:none;font:inherit;color:var(--text)}
+.wf:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.wf.bad{border-color:var(--error)}
+.sugg{display:flex;gap:var(--space-8);min-height:40px;margin:var(--space-12) 0 var(--space-4);flex-wrap:wrap}
+.sugg button{height:36px;padding:0 var(--space-16);border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--text);font-weight:500;font-size:var(--text-13)}
+.fielderr{color:var(--error);font-size:var(--text-13);min-height:20px}
+.headrow{display:flex;align-items:center;justify-content:space-between;gap:var(--space-8);margin-bottom:var(--space-12)}
+.headrow h2{margin:0;font-size:var(--text-15);font-weight:600}
+.waiting{display:flex;flex-direction:column;align-items:center;text-align:center;padding:var(--space-32) 0}
+.dots{display:inline-flex;gap:6px;margin-bottom:var(--space-16)}
+.dots i{width:10px;height:10px;border-radius:var(--radius-pill);background:var(--accent);animation:breathe 1.2s ease-in-out infinite}
+.dots i:nth-child(2){animation-delay:.2s}.dots i:nth-child(3){animation-delay:.4s}
+.field1{display:flex;align-items:center;height:48px;border-radius:var(--radius-pill);background:var(--surface);border:1px solid var(--line);padding:0 var(--space-16);margin-bottom:var(--space-12)}
+.field1 input{flex:1;border:0;outline:0;background:none;font:inherit;color:var(--text)}
+.restore{margin:0 var(--space-16) var(--space-12);padding:var(--space-16);border-radius:var(--radius-sheet);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge)}
+.restore .h{display:flex;align-items:center;justify-content:space-between;gap:var(--space-8);font-weight:600;margin-bottom:var(--space-8)}
+.restore .h span{font-size:var(--text-13);color:var(--muted);font-weight:500;font-variant-numeric:tabular-nums}
+.restore .bar{height:4px;border-radius:var(--radius-pill);background:var(--line);overflow:hidden;margin-bottom:var(--space-8)}
+.restore .bar i{display:block;height:100%;background:var(--accent);border-radius:var(--radius-pill);transition:width .3s ease}
+.restore p{margin:0;font-size:var(--text-13);color:var(--muted)}
+.restore.done .h{margin:0;justify-content:flex-start}
+/* Android system permission dialog, drawn as a reference */
+.sysscrim{position:absolute;inset:0;z-index:60;background:#0000007A;display:flex;align-items:center;justify-content:center;padding:var(--space-24)}
+.sysdlg{width:100%;background:#F3EDF7;color:#1D1B20;border-radius:28px;padding:var(--space-24);text-align:center;font-family:Roboto,var(--font-ui)}
+.sysdlg h4{font-size:var(--text-20);font-weight:400;line-height:1.3;margin:var(--space-12) 0 var(--space-20)}
+.sysdlg button{display:block;width:100%;height:44px;border-radius:var(--radius-pill);background:#E8DEF8;color:#1D1B20;font-weight:500;margin-top:var(--space-8)}
 /* ---------- speed read (RSVP) ---------- */
 .rsvp{position:absolute;inset:0;z-index:45;background:var(--reader-bg);color:var(--reader-text);display:flex;flex-direction:column}
 .rsvp .top{height:56px;flex:none;display:flex;align-items:center;gap:var(--space-4);padding:0 var(--space-8)}
@@ -320,13 +392,47 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
     <h2>Listening (batch 2)</h2>
     <div class="btns">
       <button data-jump="play">Reader, playing</button>
-      <button data-jump="play-preparing">First listen: preparing better voice</button>
-      <button data-jump="play-unavailable">Better voice unavailable</button>
       <button data-jump="mini">Mini player on Saves</button>
       <button data-jump="listen">Listen tab</button>
       <button data-jump="listen-empty">Listen, empty</button>
-      <button data-jump="listen-offline">Listen, offline</button>
       <button data-jump="lock">Lock screen</button>
+    </div>
+    <h2>First launch and return (batch 3)</h2>
+    <div class="btns">
+      <button data-jump="welcome">Welcome</button>
+      <button data-jump="welcome-early">Welcome, after an early share</button>
+      <button data-jump="return">Bring back your shelf</button>
+      <button data-jump="return-offline">…offline</button>
+    </div>
+    <h2>Scan from my other phone</h2>
+    <div class="btns">
+      <button data-jump="scan-prime">Before the camera</button>
+      <button data-jump="scan-prompt">Camera permission</button>
+      <button data-jump="scan-view">Scanning</button>
+      <button data-jump="scan-refused">Camera refused</button>
+      <button data-jump="scan-expired">Code expired</button>
+      <button data-jump="scan-connecting">Connecting</button>
+    </div>
+    <h2>Enter my recovery code</h2>
+    <div class="btns">
+      <button data-jump="code-empty">Empty</button>
+      <button data-jump="code-wrong">Word not on the list</button>
+      <button data-jump="code-ready">All twelve words</button>
+      <button data-jump="code-checking">Checking</button>
+      <button data-jump="code-notfound">Nothing found</button>
+    </div>
+    <h2>Sign in with your nostr app</h2>
+    <div class="btns">
+      <button data-jump="nostr">Start</button>
+      <button data-jump="nostr-waiting">Waiting for the app</button>
+      <button data-jump="nostr-none">No nostr app</button>
+      <button data-jump="nostr-declined">Declined</button>
+      <button data-jump="nostr-import">Import bookmarks</button>
+    </div>
+    <h2>Restoring</h2>
+    <div class="btns">
+      <button data-jump="restoring">Watch it restore</button>
+      <button data-jump="restoring-mid">Halfway</button>
     </div>
     <h2>Speed read</h2>
     <div class="btns">
@@ -371,6 +477,13 @@ const I = {
   zap:'<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
   skipback:'<polygon points="19 20 9 12 19 4 19 20"/><line x1="5" x2="5" y1="19" y2="5"/>',
   skipfwd:'<polygon points="5 4 15 12 5 20 5 4"/><line x1="19" x2="19" y1="5" y2="19"/>',
+  shield:'<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+  scan:'<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect width="7" height="7" x="8.5" y="8.5" rx="1"/>',
+  keyboard:'<path d="M10 8h.01M12 12h.01M14 8h.01M16 12h.01M18 8h.01M6 8h.01M7 16h10M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/>',
+  login:'<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/>',
+  chev:'<path d="m9 18 6-6-6-6"/>',
+  camera:'<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>',
+  clipboard:'<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>',
   laptop:'<path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>',
 };
 const ic = (n, s=20, extra='') => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${I[n]}</svg>`;
@@ -391,7 +504,8 @@ const S = {
   items: seed(), tab:'saves', list:'unread', savesMode:'normal', online:true,
   screen:'saves', query:'', readerId:2, readerMode:'ok', readerTheme:'light', readerSize:18,
   sheet:null, toast:null, scrollToEnd:false,
-  audio:null, played:[], playAll:false, lock:false, scrollToWord:false
+  audio:null, played:[], playAll:false, lock:false, scrollToWord:false,
+  early:false, restoring:null, onbOffline:false, scan:'prime', six:'', nostr:'intro'
 };
 let toastTimer=null, sheetTimer=null;
 
@@ -410,13 +524,14 @@ function cardHTML(it){
   } else if (it.status === 'browser') {
     src = `${ic('monitor',14)}From Chrome`;
     meta = `<span class="pdot" aria-hidden="true"></span>Getting the text…`;
+  } else if (it.status === 'restoring') {
+    meta = `<span class="pdot" aria-hidden="true"></span>Getting the text…`;
   } else if (it.status === 'failed') {
     meta = `<span>Couldn't get the text</span><span class="sep"></span><span class="link">Open original ${ic('ext',14)}</span>`;
   } else {
     const parts = [];
     if (it.progress > 0 && it.progress < 1) parts.push(`<span class="hot">${minsLeft(it)} min left</span>`);
     else parts.push(`${it.mins} min`);
-    if (it.audio) parts.push(`<span class="tag">${ic('audio',14)}Audio</span>`);
     if (S.screen === 'search' && it.archived) parts.push(`<span class="tag plain">Archive</span>`);
     meta = parts.join('<span class="sep"></span>');
     if (it.progress > 0 && it.progress < 1) extra = `<span class="progress"><i style="width:${it.progress*100}%"></i></span>`;
@@ -464,6 +579,7 @@ function savesScreen(){
       ${S.savesMode === 'first' ? '' : `<button class="searchbar" data-go="search">${ic('search',18)}Search your saves</button>`}
       ${S.savesMode === 'loading' ? '<div style="height:12px"></div><div class="refresh"><i></i></div>' : ''}
       ${S.savesMode === 'first' ? '' : `<div class="segs"><button class="seg ${S.list==='unread'?'on':''}" data-list="unread">Unread</button><button class="seg ${S.list==='archive'?'on':''}" data-list="archive">Archive</button></div>`}
+      ${restoreCard()}
       ${!S.online ? `<div class="banner">${ic('wifioff',16)}Offline — showing saved copies</div>` : ''}
       ${body}
     </div>
@@ -514,33 +630,8 @@ function startAudio(id){
   const it = S.items.find(i => i.id === id);
   if (!it) return;
   if (S.audio && S.audio.id === id) { S.audio.playing = !S.audio.playing; return; }
-  const note = it.audio ? null : (it.voiceNote || (S.online ? 'preparing' : 'offline'));
-  S.audio = { id, t: it.listenT || 0, playing: true, rate: S.audio ? S.audio.rate : 1, voice: it.audio ? 'better' : 'phone', note };
+  S.audio = { id, t: it.listenT || 0, playing: true, rate: S.audio ? S.audio.rate : 1 };
   S.played = [id, ...S.played.filter(x => x !== id)];
-  if (note === 'preparing') setTimeout(() => {
-    if (S.audio && S.audio.id === id && S.audio.note === 'preparing') { S.audio.note = 'ready'; it.audio = true; refreshVoice(); }
-  }, 6000);
-}
-
-function voiceLine(){
-  const a = S.audio;
-  if (a.voice === 'better') return `${ic('sparkle', 14)}<b>Better voice</b><span>· downloaded</span>`;
-  const extra = {
-    preparing: `<span>·</span><span class="pdot" aria-hidden="true"></span><span>Preparing a better voice for next time</span>`,
-    ready: `<span>· Better voice ready for next time</span>`,
-    unavailable: `<span>· Better voice unavailable for this one</span>`,
-    offline: `<span>· Offline</span>`,
-  }[a.note] || '';
-  return `${ic('phone', 14)}<b>Phone voice</b>${extra}`;
-}
-function voiceShort(){ const a = S.audio; return a.voice === 'better' ? `${ic('sparkle', 14)}<b>Better voice</b>` : `${ic('phone', 14)}<b>Phone voice</b>`; }
-function voiceNote(){
-  const n = { preparing: '<span class="pdot" aria-hidden="true"></span>Preparing a better voice for next time', ready: 'Better voice ready for next time', unavailable: 'Better voice unavailable for this one' }[S.audio.note];
-  return n ? `<div class="pnote">${n}</div>` : '';
-}
-function refreshVoice(){
-  vp.querySelectorAll('.nowcard .voice').forEach(v => v.innerHTML = voiceLine());
-  const p = vp.querySelector('.ptop'); if (p) { p.querySelector('.pnote')?.remove(); p.insertAdjacentHTML('beforeend', voiceNote()); }
 }
 
 function controlsHTML(withArchive){
@@ -561,11 +652,11 @@ function playerHTML(){
   const enter = S.ptopFor !== a.id; S.ptopFor = a.id;
   return `<div class="ptop ${enter ? 'enter' : ''}"><div class="row">
     <button class="pp js-pp" data-play aria-label="${a.playing ? 'Pause' : 'Play'}">${ic(a.playing ? 'pause' : 'play', 20, 'fill="currentColor"')}</button>
-    <div class="info"><div class="voice">${voiceShort()}</div><div class="tt js-tof"></div></div>
+    <div class="info"><div class="tt js-tt"></div></div>
     <button class="ctl" data-skip="-15" aria-label="Back 15 seconds">${ic('back15', 24)}<small>15</small></button>
     <button class="ctl" data-skip="15" aria-label="Forward 15 seconds">${ic('fwd15', 24)}<small>15</small></button>
     <button class="rate" data-rate aria-label="Speed">${rateLabel(a.rate)}</button></div>
-    <div class="scrub"><i class="js-bar"></i><b class="js-knob"></b></div>${voiceNote()}</div>`;
+    <div class="scrub"><i class="js-bar"></i><b class="js-knob"></b></div></div>`;
 }
 
 function miniHTML(){
@@ -591,10 +682,10 @@ function listenScreen(){
     const a = S.audio, cur = a && S.items.find(i => i.id === a.id);
     const now = cur ? `<div class="nowcard"><div class="lbl">${a.playing ? 'Now playing' : 'Paused'}</div>
         <button class="t" data-open-audio>${esc(cur.title)}</button><div class="s">${esc(cur.src)}</div>
-        <div class="voice">${voiceLine()}</div>${controlsHTML(false)}</div>` : '';
+        ${controlsHTML(false)}</div>` : '';
     const rows = played.map(it => {
       const isCur = a && a.id === it.id;
-      const mark = it.audio ? `<span class="tag">${ic('download', 14)}Downloaded</span>` : (!S.online ? `<span>Phone voice</span>` : '');
+      const mark = '';
       const icon = isCur ? `<span class="eq ${a.playing ? '' : 'paused'}"><i></i><i></i><i></i></span>` : ic('play', 16, 'fill="currentColor"');
       return `<button class="lrow ${isCur ? 'playing' : ''}" data-playitem="${it.id}"><span class="rp">${icon}</span>
         <div class="body"><div class="src">${esc(it.src)}</div><div class="title">${esc(it.title)}</div>
@@ -605,7 +696,6 @@ function listenScreen(){
   }
   return `<div class="screen"><div class="scroll">
       <div class="head"><h1>Listen</h1><span class="count">${played.length ? played.length + ' played' : ''}</span></div>
-      ${!S.online ? `<div class="banner">${ic('wifioff', 16)}Offline — downloaded audio plays, the rest uses your phone's voice</div>` : ''}
       ${body}</div>${tabbar()}</div>`;
 }
 
@@ -630,6 +720,7 @@ function updatePlayer(forceScroll){
   vp.querySelectorAll('.js-knob').forEach(e => e.style.left = pct + '%');
   vp.querySelectorAll('.js-t').forEach(e => e.textContent = fmt(a.t));
   vp.querySelectorAll('.js-d').forEach(e => e.textContent = '-' + fmt(DUR - a.t));
+  vp.querySelectorAll('.js-tt').forEach(e => e.textContent = `${fmt(a.t)} / ${fmt(DUR)}`);
   vp.querySelectorAll('.js-tof').forEach(e => e.textContent = `${fmt(a.t)} of ${fmt(DUR)} · ${rateLabel(a.rate)}`);
   if (S.screen === 'reader' && S.readerId === a.id) {
     const w = Math.min(WORDS - 1, Math.floor(a.t * WPS));
@@ -661,6 +752,196 @@ setInterval(() => {
   }
   updatePlayer(false);
 }, 200);
+
+/* ---------------- first launch and return (batch 3) ---------------- */
+// A slice of the BIP-39 English list, enough to demonstrate autocomplete. The app ships all 2048.
+const WORDLIST = ('abandon ability able about above absent absorb abstract absurd abuse access accident account accuse achieve acid acoustic acquire across act action actor actress actual adapt add addict address adjust admit adult advance advice afford afraid again age agent agree ahead aim air airport aisle alarm album alert alien all alley allow almost alone alpha already also alter always amateur amazing among amount anchor ancient anger angle angry animal ankle announce annual another answer antenna antique anxiety apart apology appear apple approve april arch arctic area arena argue arm armed armor army around arrange arrest arrive arrow art artist ask aspect asset assist assume athlete atom attack attend auction audit august aunt author auto autumn average avocado avoid awake aware away awesome awful axis '
+  + 'canal cancel candle candy cannon garden garlic garment harbor hard harvest lemon lend lens leopard museum mushroom music noble noise nominee orange orbit orchard order rescue research resemble shadow shaft shallow tiger tilt timber velvet vendor venue').split(' ');
+const WORDSET = new Set(WORDLIST);
+const SAMPLE_CODE = 'harbor lemon candle rescue orbit velvet noble garden shadow tiger across museum'.split(' ');
+const freshCode = () => ({ words: Array(12).fill(''), focus: 0, checking: false, notFound: false });
+S.code = freshCode();
+let onbTimers = [];
+const later = (fn, ms) => onbTimers.push(setTimeout(fn, ms));
+const clearOnb = () => { onbTimers.forEach(clearTimeout); onbTimers = []; };
+
+const EARLY = () => ({id:98, src:'The Atlantic', host:'theatlantic.com', title:'What we lose when we stop reading long things', mins:11, progress:0, img:'shelf-atlantic', audio:false, status:'ok', archived:false, by:'Megan Garber'});
+
+function onbShell(inner, actions, backTo){
+  return `<div class="screen onb">
+    <div class="onbtop">${backTo ? `<button class="iconbtn" data-onb-go="${backTo}" aria-label="Back">${ic('back', 22)}</button>` : '<span></span>'}</div>
+    <div class="scroll"><div class="onbbody">${inner}</div></div>
+    ${actions ? `<div class="onbactions">${actions}</div>` : ''}</div>`;
+}
+
+function welcomeScreen(){
+  const card = (rot, x, y, extra, z) => `<div class="hc" style="transform:translate(${x}px,${y}px) rotate(${rot}deg);z-index:${z}">
+      <div class="ln src"></div><div class="ln t" style="width:92%"></div><div class="ln t" style="width:64%;margin-bottom:12px"></div>${extra}</div>`;
+  return `<div class="screen onb">
+    <div class="hero">
+      ${card(-6, -20, -150, '<div class="ln" style="width:30%"></div>', 1)}
+      ${card(4, 18, -78, `<span class="aud">${ic('headphones', 12)}Listen</span>`, 2)}
+      ${card(-1, 0, -4, '<div class="ln" style="width:22%;background:var(--accent-soft)"></div><div class="pbar"><i></i></div>', 3)}
+    </div>
+    <div class="onbbody" style="flex:none">
+      <h1>Shelf</h1>
+      <p class="lead" style="margin-bottom:var(--space-16)">Save anything from your phone or browser. Read it clean and offline, or listen to it.</p>
+      ${S.early ? `<div class="notecard">${ic('check', 18)}<span>You've already saved one article. It'll be on your shelf either way.</span></div>` : ''}
+    </div>
+    <div class="onbactions" style="padding-top:0">
+      <button class="btn primary full" data-new>New here</button>
+      <button class="btn secondary full" data-onb-go="return">I already have a shelf</button>
+      <p class="fine">${ic('shield', 14)}No account, no email. Private to you.</p>
+    </div></div>`;
+}
+
+function returnScreen(){
+  const off = S.onbOffline;
+  const row = (id, icon, t, s) => `<button class="choice" data-onb-go="${id}" ${off ? 'disabled' : ''}><span class="ico">${ic(icon, 22)}</span><span class="tx"><b>${t}</b><span class="s">${s}</span></span><span class="chev">${ic('chev', 20)}</span></button>`;
+  return onbShell(`<h1>Bring back your shelf</h1><p class="lead">Pick whichever you have to hand.</p>
+    ${off ? `<div class="banner" style="margin:0 0 var(--space-16)">${ic('wifioff', 16)}You'll need a connection to bring your shelf back</div>` : ''}
+    ${row('scan', 'scan', 'Scan from my other phone', 'If you still have the phone your shelf is on')}
+    ${row('code', 'keyboard', 'Enter my recovery code', 'The twelve words you wrote down')}
+    ${row('nostr', 'login', 'Sign in with your nostr app', 'If you already use nostr elsewhere')}`, '', 'welcome');
+}
+
+function phoneQR(size){
+  // a stylised code, not a scannable one
+  const cells = [];
+  const on = (x, y) => ((x * 7 + y * 13 + x * y) % 5) < 2;
+  for (let y = 0; y < 11; y++) for (let x = 0; x < 11; x++) {
+    const finder = (x < 3 && y < 3) || (x > 7 && y < 3) || (x < 3 && y > 7);
+    if (finder || on(x, y)) cells.push(`<rect x="${x * 10}" y="${y * 10}" width="9" height="9" rx="1.5"/>`);
+  }
+  return `<svg width="${size}" height="${size}" viewBox="0 0 110 110" fill="currentColor">${cells.join('')}</svg>`;
+}
+
+function scanScreen(){
+  const st = S.scan;
+  const codeField = `<div class="or">or type the six-digit code under it</div>
+    <input class="sixdigit" id="six" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="off" value="${esc(S.six || '')}">`;
+  if (st === 'prime' || st === 'prompt') {
+    const body = `<h1>Scan from your other phone</h1>
+      <p class="lead">On your other phone, open Shelf, go to <strong>You</strong>, then <strong>Add another device</strong>. A code will appear for this phone to scan.</p>
+      <div class="primeillus"><div style="width:150px;height:250px;border-radius:26px;border:3px solid var(--text);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:var(--surface)">
+        <div style="color:var(--text)">${phoneQR(96)}</div><div style="font:600 17px/1 var(--font-ui);letter-spacing:.2em">482 913</div></div></div>
+      <p class="fine" style="text-align:left;justify-content:flex-start">${ic('camera', 14)}Shelf uses the camera only to read this code.</p>`;
+    const dlg = st === 'prompt' ? `<div class="sysscrim"><div class="sysdlg">${ic('camera', 26)}<h4>Allow <b>Shelf</b> to take pictures and record video?</h4>
+        <button data-perm="allow">While using the app</button><button data-perm="once">Only this time</button><button data-perm="deny">Don't allow</button></div></div>` : '';
+    return onbShell(body, `<button class="btn primary full" data-allow-camera>${ic('camera', 18)}Use the camera</button>`, 'return') + dlg;
+  }
+  if (st === 'refused') {
+    return onbShell(`<h1>Scan from your other phone</h1>
+      <div class="vf off">${ic('camera', 32)}<b>The camera is switched off for Shelf</b><span style="font-size:13px;opacity:.8">You can turn it on in Android settings, or type the code instead.</span></div>
+      ${codeField}`, `<button class="btn secondary full" data-open-settings>Open Android settings</button>`, 'return');
+  }
+  if (st === 'connecting') {
+    return onbShell(`<h1>Scan from your other phone</h1><div class="waiting"><div class="dots"><i></i><i></i><i></i></div>
+      <b>Connecting to your other phone</b><p class="lead" style="margin-top:var(--space-8)">Keep Shelf open on both phones. This takes a few seconds.</p></div>`, '', 'return');
+  }
+  const expired = st === 'expired' ? `<div class="errline">${ic('alert', 16)}<span>That code has expired. Show a new one on your other phone, then scan again.</span></div>` : '';
+  return onbShell(`<h1>Scan from your other phone</h1>${expired}
+    <div class="vf"><div class="qr" style="color:#FFFFFF">${phoneQR(150)}</div><i class="corner c1"></i><i class="corner c2"></i><i class="corner c3"></i><i class="corner c4"></i>
+      <div class="scanline"></div><div class="cap">Point at the code on your other phone</div></div>
+    ${codeField}`, '', 'return');
+}
+
+function codeScreen(){
+  const C = S.code;
+  if (C.notFound) {
+    return onbShell(`<h1>Enter your recovery code</h1>
+      <div class="errline">${ic('alert', 16)}<span><b>No saves found for this code.</b><br>The words are valid, but nothing has been saved with them. Check it's the code from Shelf's You tab.</span></div>`,
+      `<button class="btn secondary full" data-code-retry>Try again</button><button class="btn quiet full" data-new>Start fresh instead</button>`, 'return');
+  }
+  const bad = i => C.words[i] && !WORDSET.has(C.words[i]) && !(C.focus === i && WORDLIST.some(w => w.startsWith(C.words[i])));
+  const fields = C.words.map((w, i) => `<label class="wf ${bad(i) ? 'bad' : ''}" data-wf="${i}"><span>${i + 1}</span><input data-word="${i}" value="${esc(w)}" autocomplete="off" autocapitalize="none" spellcheck="false" ${C.checking ? 'disabled' : ''}></label>`).join('');
+  const firstBad = C.words.findIndex((w, i) => bad(i));
+  const ready = C.words.every(w => WORDSET.has(w));
+  return onbShell(`<h1>Enter your recovery code</h1><p class="lead">The twelve words from when you backed up your shelf, in order.</p>
+    <div class="headrow"><h2>Your twelve words</h2><button class="pbtn" data-paste>${ic('clipboard', 14)}Paste</button></div>
+    <div class="words">${fields}</div>
+    <div class="sugg" id="sugg">${suggHTML()}</div>
+    <div class="fielderr" id="ferr">${firstBad >= 0 ? `Word ${firstBad + 1}, “${esc(C.words[firstBad])}”, isn't one of the recovery words. Check the spelling.` : ''}</div>`,
+    `<button class="btn primary full" id="codego" data-code-continue ${ready && !C.checking ? '' : 'disabled'}>${C.checking ? '<span class="dots" style="margin:0"><i style="background:currentColor"></i><i style="background:currentColor"></i><i style="background:currentColor"></i></span>Checking' : 'Bring back my shelf'}</button>`, 'return');
+}
+
+function suggHTML(){
+  const C = S.code, i = C.focus;
+  if (i == null) return '';
+  const v = (C.words[i] || '').toLowerCase();
+  if (!v || WORDSET.has(v)) return '';
+  return WORDLIST.filter(w => w.startsWith(v)).slice(0, 3).map(w => `<button data-sugg="${w}">${w}</button>`).join('');
+}
+
+function codeRefresh(){
+  // update in place so the keyboard keeps focus
+  const C = S.code;
+  vp.querySelectorAll('[data-wf]').forEach(l => {
+    const i = +l.dataset.wf, w = C.words[i];
+    l.classList.toggle('bad', !!w && !WORDSET.has(w) && !(C.focus === i && WORDLIST.some(x => x.startsWith(w))));
+  });
+  const sg = document.getElementById('sugg'); if (sg) sg.innerHTML = suggHTML();
+  const firstBad = [...vp.querySelectorAll('.wf.bad')].map(l => +l.dataset.wf)[0];
+  const fe = document.getElementById('ferr'); if (fe) fe.textContent = firstBad != null ? `Word ${firstBad + 1}, “${C.words[firstBad]}”, isn't one of the recovery words. Check the spelling.` : '';
+  const go = document.getElementById('codego'); if (go) go.disabled = !C.words.every(w => WORDSET.has(w));
+}
+
+function bindCode(){
+  vp.querySelectorAll('input[data-word]').forEach(inp => {
+    const i = +inp.dataset.word;
+    inp.onfocus = () => { S.code.focus = i; codeRefresh(); };
+    inp.oninput = () => {
+      const parts = inp.value.trim().toLowerCase().split(/\s+/);
+      if (parts.length > 1) { parts.slice(0, 12 - i).forEach((p, k) => S.code.words[i + k] = p); render(); return; }
+      S.code.words[i] = parts[0]; codeRefresh();
+    };
+    inp.onblur = () => setTimeout(() => { if (S.code.focus === i && document.activeElement !== inp) { S.code.focus = null; codeRefresh(); } }, 120);
+  });
+  if (S.code.focus != null) { const f = vp.querySelector(`input[data-word="${S.code.focus}"]`); if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); } }
+  const six = document.getElementById('six');
+  if (six) six.oninput = () => { six.value = six.value.replace(/\D/g, '').slice(0, 6); S.six = six.value; if (six.value.length === 6) { S.scan = 'connecting'; render(); later(() => startRestore(), 1800); } };
+}
+
+function nostrScreen(){
+  const st = S.nostr;
+  if (st === 'waiting') {
+    return onbShell(`<h1>Sign in with your nostr app</h1><div class="waiting"><div class="dots"><i></i><i></i><i></i></div>
+      <b>Waiting for your nostr app</b><p class="lead" style="margin-top:var(--space-8)">Approve the request there, then come back to Shelf.</p></div>`,
+      `<button class="btn secondary full" data-nostr="intro">Cancel</button>`, 'return');
+  }
+  if (st === 'none') {
+    return onbShell(`<h1>No nostr app on this phone</h1><p class="lead">Install a nostr sign-in app, or paste a sign-in link from the one you use elsewhere.</p>
+      <div class="field1"><input placeholder="bunker://…" autocomplete="off" spellcheck="false"></div>`,
+      `<button class="btn primary full" data-nostr="waiting">Connect with the link</button>`, 'return');
+  }
+  const declined = st === 'declined' ? `<div class="errline">${ic('alert', 16)}<span>The request was declined in your nostr app. Nothing has changed.</span></div>` : '';
+  return onbShell(`<h1>Sign in with your nostr app</h1>${declined}
+    <p class="lead">Shelf asks your nostr app to confirm it's you. Your saves stay private: only you can read them.</p>`,
+    `<button class="btn primary full" data-nostr="waiting">${ic('login', 18)}Open my nostr app</button><button class="btn quiet full" data-nostr="none">Use a sign-in link instead</button>`, 'return');
+}
+
+function restoreCard(){
+  const R = S.restoring; if (!R) return '';
+  if (R.done) return `<div class="restore done"><div class="h"><span class="check" style="width:24px;height:24px">${ic('check', 14)}</span><b>All ${R.total} saves are back</b></div></div>`;
+  return `<div class="restore"><div class="h"><b>Bringing back your shelf</b><span>${R.found} of ${R.total}</span></div>
+    <div class="bar"><i style="width:${R.found / R.total * 100}%"></i></div>
+    <p>${S.onbOffline ? 'Paused. It will carry on when you\'re online.' : 'Your saves are kept in several independent places, so this works even if Shelf\'s own server is down.'}${R.early ? ' Your one save from before is included.' : ''}</p></div>`;
+}
+
+function startRestore(opts = {}){
+  clearOnb();
+  const all = seed();
+  S.screen = 'saves'; S.tab = 'saves'; S.savesMode = 'normal'; S.list = 'unread'; S.sheet = null;
+  S.items = S.early ? [EARLY()] : [];
+  S.restoring = { found: 0, total: all.length, done: false, early: !!S.early };
+  const step = k => {
+    if (k >= all.length) { S.restoring.done = true; render(); later(() => { S.restoring = null; render(); }, 3000); return; }
+    const it = all[k]; const real = it.status; it.status = 'restoring'; S.items.push(it); S.restoring.found = k + 1; render();
+    later(() => { it.status = real; if (S.screen === 'saves') render(); }, 1100);
+    if (!opts.freezeAt || k + 1 < opts.freezeAt) later(() => step(k + 1), 450);
+  };
+  step(0);
+}
 
 /* ---------------- speed read (RSVP) ---------------- */
 // Same word stream as listening: word n here is data-w="n" in the Reader.
@@ -866,6 +1147,9 @@ function sheetHTML(){
       <button class="menuitem" data-close>${ic('link',20)}Copy link</button>
       <button class="menuitem danger" data-delete>${ic('trash',20)}Delete</button></div></div>`;
   }
+  if (S.sheet === 'import') {
+    return `<div class="scrim"><div class="sheet" data-stop><div class="grab"></div><h3>Bring in your bookmarks?</h3><p class="sub">We found 23 bookmarks in your nostr account. On your shelf they'll be private, like everything else.</p><div class="row"><button class="btn secondary" data-import="no">Not now</button><button class="btn primary" data-import="yes">Bring them in</button></div></div></div>`;
+  }
   if (S.sheet.startsWith('share')) {
     const mode = S.sheet.split('-')[1];
     if (mode === 'nolink') {
@@ -894,6 +1178,11 @@ function render(){
   else if (S.screen === 'search') html = searchScreen();
   else if (S.screen === 'reader') html = readerScreen();
   else if (S.screen === 'listen') html = listenScreen();
+  else if (S.screen === 'welcome') html = welcomeScreen();
+  else if (S.screen === 'return') html = returnScreen();
+  else if (S.screen === 'scan') html = scanScreen();
+  else if (S.screen === 'code') html = codeScreen();
+  else if (S.screen === 'nostr') html = nostrScreen();
   vp.innerHTML = html + miniHTML() + toastHTML() + sheetHTML() + lockHTML() + rsvpHTML();
   const q = document.getElementById('q');
   if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); q.oninput = e => { S.query = e.target.value; render(); }; }
@@ -909,6 +1198,8 @@ function render(){
   updatePlayer(S.scrollToWord); S.scrollToWord = false;
   flashWord();
   bindRsvp();
+  bindCode();
+  const sg = document.getElementById('sugg'); if (sg) sg.onpointerdown = e => e.preventDefault();
 }
 
 function showToast(text, undo){
@@ -952,7 +1243,7 @@ function openItem(id){
 
 /* ---------------- events ---------------- */
 vp.addEventListener('click', e => {
-  const t = e.target.closest('[data-tab],[data-list],[data-go],[data-back],[data-clear],[data-sheet],[data-close],[data-rtheme],[data-size],[data-delete],[data-undo],[data-undo-share],[data-readnow],[data-archive-open],[data-next],[data-stop],[data-play],[data-skip],[data-rate],[data-listen],[data-playall],[data-playitem],[data-open-audio],[data-stop-audio],[data-rsvp],[data-rsvp-exit],[data-rsvp-toggle],[data-rsvp-sent],[data-wpm],[data-rsvp-archive]');
+  const t = e.target.closest('[data-tab],[data-list],[data-go],[data-back],[data-clear],[data-sheet],[data-close],[data-rtheme],[data-size],[data-delete],[data-undo],[data-undo-share],[data-readnow],[data-archive-open],[data-next],[data-stop],[data-play],[data-skip],[data-rate],[data-listen],[data-playall],[data-playitem],[data-open-audio],[data-stop-audio],[data-rsvp],[data-rsvp-exit],[data-rsvp-toggle],[data-rsvp-sent],[data-wpm],[data-rsvp-archive],[data-new],[data-onb-go],[data-allow-camera],[data-perm],[data-open-settings],[data-paste],[data-sugg],[data-code-continue],[data-code-retry],[data-nostr],[data-import]');
   if (!t) return;
   const d = t.dataset;
   if (d.stop !== undefined) return;
@@ -983,6 +1274,17 @@ vp.addEventListener('click', e => {
   if (d.undo !== undefined && S.toast && S.toast.undo) { S.toast.undo(); S.toast = null; clearTimeout(toastTimer); }
   if (d.undoShare !== undefined) { S.items = S.items.filter(i => i.id !== 99); S.sheet = null; clearTimeout(sheetTimer); }
   if (d.readnow !== undefined) { clearTimeout(sheetTimer); S.sheet = null; openItem(99); return; }
+  if (d.new !== undefined) { clearOnb(); S.restoring = null; S.tab = S.screen = 'saves'; S.list = 'unread'; if (S.early) { S.items = [EARLY()]; S.savesMode = 'normal'; } else { S.items = []; S.savesMode = 'first'; } }
+  if (d.onbGo) { clearOnb(); const g = d.onbGo; if (g === 'scan') { S.scan = 'prime'; S.six = ''; } if (g === 'code') S.code = freshCode(); if (g === 'nostr') S.nostr = 'intro'; S.screen = g; }
+  if (d.allowCamera !== undefined) S.scan = 'prompt';
+  if (d.perm) { if (d.perm === 'deny') S.scan = 'refused'; else { S.scan = 'view'; later(() => { if (S.screen === 'scan' && S.scan === 'view') { S.scan = 'connecting'; render(); later(() => startRestore(), 1800); } }, 2600); } }
+  if (d.openSettings !== undefined) { showToast('Would open Shelf in Android settings'); S.toast.undo = null; }
+  if (d.paste !== undefined) { S.code.words = [...SAMPLE_CODE]; S.code.focus = null; }
+  if (d.sugg && S.code.focus != null) { const i = S.code.focus; S.code.words[i] = d.sugg; S.code.focus = i < 11 ? i + 1 : null; }
+  if (d.codeContinue !== undefined) { const ok = S.code.words.join(' ') === SAMPLE_CODE.join(' '); S.code.checking = true; S.code.focus = null; render(); later(() => { S.code.checking = false; if (ok) startRestore(); else { S.code.notFound = true; render(); } }, 1400); return; }
+  if (d.codeRetry !== undefined) S.code = freshCode();
+  if (d.nostr) { clearOnb(); S.nostr = d.nostr; if (d.nostr === 'waiting') later(() => { if (S.screen === 'nostr' && S.nostr === 'waiting') { S.sheet = 'import'; render(); } }, 2200); }
+  if (d.import) { startRestore(); return; }
   if (d.rsvp !== undefined) { startRsvp(); return; }
   if (d.rsvpExit !== undefined) { exitRsvp(); return; }
   if (d.rsvpToggle !== undefined) { rsvpToggle(); return; }
@@ -1034,18 +1336,29 @@ document.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => {
   S.readerMode = 'ok'; S.readerId = 2; S.screen = 'saves';
   S.audio = null; S.played = []; S.playAll = false; S.lock = false; S.tab = 'saves';
   clearTimeout(rsvpTimer); S.rsvp = null; S.flashWord = null;
+  clearOnb(); S.early = false; S.restoring = null; S.onbOffline = false; S.scan = 'prime'; S.six = ''; S.nostr = 'intro'; S.code = freshCode();
   const j = b.dataset.jump;
+  if (j === 'welcome') { S.screen = 'welcome'; S.items = []; }
+  if (j === 'welcome-early') { S.screen = 'welcome'; S.early = true; S.items = [EARLY()]; }
+  if (j.startsWith('return')) { S.screen = 'return'; S.onbOffline = j === 'return-offline'; }
+  if (j.startsWith('scan-')) { S.screen = 'scan'; S.scan = { 'scan-prime': 'prime', 'scan-prompt': 'prompt', 'scan-view': 'view', 'scan-refused': 'refused', 'scan-expired': 'expired', 'scan-connecting': 'connecting' }[j]; }
+  if (j.startsWith('code-')) {
+    S.screen = 'code';
+    if (j === 'code-wrong') { S.code.words = ['harbor', 'lemmon', 'candle', 'rescue', '', '', '', '', '', '', '', '']; S.code.focus = null; }
+    if (j === 'code-ready' || j === 'code-checking') { S.code.words = [...SAMPLE_CODE]; S.code.focus = null; S.code.checking = j === 'code-checking'; }
+    if (j === 'code-notfound') S.code.notFound = true;
+  }
+  if (j.startsWith('nostr')) { S.screen = 'nostr'; S.nostr = { nostr: 'intro', 'nostr-waiting': 'waiting', 'nostr-none': 'none', 'nostr-declined': 'declined', 'nostr-import': 'waiting' }[j]; if (j === 'nostr-import') S.sheet = 'import'; }
+  if (j === 'restoring') { startRestore(); return; }
+  if (j === 'restoring-mid') { startRestore({ freezeAt: 4 }); return; }
   const listenSeed = (id, frac, playing = true) => {
     S.played = [2, 1, 8, 6].filter(x => x !== id); S.played.unshift(id);
     startAudio(id); S.audio.t = DUR * frac; S.audio.playing = playing;
   };
   if (j === 'play') { S.screen = 'reader'; listenSeed(2, .34); S.scrollToWord = true; }
-  if (j === 'play-preparing') { S.screen = 'reader'; S.readerId = 1; listenSeed(1, .05); S.scrollToWord = true; }
-  if (j === 'play-unavailable') { S.screen = 'reader'; S.readerId = 3; S.items[2].voiceNote = 'unavailable'; listenSeed(3, .1); S.scrollToWord = true; }
   if (j === 'mini') listenSeed(2, .34);
   if (j === 'listen') { S.tab = S.screen = 'listen'; listenSeed(2, .34); }
   if (j === 'listen-empty') { S.tab = S.screen = 'listen'; }
-  if (j === 'listen-offline') { S.tab = S.screen = 'listen'; S.online = false; listenSeed(2, .34); }
   if (j === 'lock') { S.screen = 'reader'; listenSeed(2, .34); S.lock = true; }
   if (j.startsWith('rsvp')) { S.screen = 'reader'; S.items[1].rsvpIdx = j === 'rsvp-done' ? TOK.length - 1 : 58; }
   if (j === 'saves-empty') { S.items = []; S.savesMode = 'first'; }
