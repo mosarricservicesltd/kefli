@@ -103,3 +103,12 @@ A four-lens consistency review of the phone prototype (player system, screen sca
 
 55. **App icon: "Bookmark on Terracotta".** A cream, square-shouldered bookmark with a notched tail standing on a two-tone reading-progress bar, on the brand gradient. Chosen over the Ledge (books on a shelf) after a concept round of five and a refinement round, compared at real sizes on home screens, themed icons and a 16 px toolbar. Sources and the asset build live in `shared/brand/`.
 56. **In-app icons are Lucide**, plus one custom pair: skip back and forward 15, in Lucide's exact rotate geometry with a lighter, centred "15" (variant C). Whether the custom speed, speed-read and shelf icons replace Lucide's `gauge`, `zap`/`scan-text` and `library-big` is still open.
+
+## Round 15 (2026-09-27), from the extension consistency review
+
+The extension review (internal, cross-surface with the phone, browser conventions; 34 findings confirmed) produced 21 fixes and 13 rules that hold on both surfaces. Richard's answers (all the recommended options):
+
+57. **The extension's save toast matches the phone's toast**: the house inverted toast, kept as a small card because it has two lines. One look for "saved" across both products.
+58. **Keyboard reach to Undo: press the shortcut again.** The toast never takes focus on its own (a stray Space or Enter would otherwise undo the save). Pressing Alt+Shift+S again while "Saved" shows moves focus to Undo; Escape or ✕ returns focus to the page.
+59. **Pages where no toast can run** (PDFs, reader view, browser pages, the Web Store) show a small "Saved to Shelf" popup with Undo under the toolbar button, like Chrome's bookmark bubble, as well as the icon tick. Needs Chrome 127+; older versions keep the tick only.
+60. **Offline saves offer Undo**: the save is still in this browser's queue, so Undo just removes it and lowers the waiting count. Changes decision 30. Also: disconnecting a browser now names any unsent saves it would delete, so nothing saved is lost silently (decision 31's spirit).
