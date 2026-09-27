@@ -83,3 +83,18 @@ A review of both prototypes (flow, copy, accessibility, visual, logic), with eve
 42. **Dead ends fixed:** "Connect your browser" on the first-run empty state opens Connect a browser (camera explanation first); ⋯ → Open original shows the page; Copy link confirms; Next unread only appears when there is one.
 43. **Accessibility floor:** every tap target is at least 48 × 48 (pills keep their look with an invisible hit area); cards open by keyboard and screen reader as well as by tap; sheets are dialogs that take and return focus and close on Escape; selected tabs, segments, voices and reader colours are exposed as selected; icon buttons and the speed button are named; the reader's progress lines and speed-read focus letter use a per-theme reader accent so they stay legible on Sepia; follow-scroll respects reduced motion. The ±15 s buttons drop the tiny "15" numerals (below the type scale) and keep "Back 15 seconds" / "Forward 15 seconds" as their names.
 44. **Extension:** relay names only inside Advanced; "Couldn't send" rows give a plain reason and Retry shows progress; "Disconnect this browser" asks first, like the phone; the toast pauses on hover or focus and keeps focus sensible; the toolbar button's name carries the waiting count.
+
+## Round 13 (2026-09-27), from the UI/UX consistency review
+
+A four-lens consistency review of the phone prototype (player system, screen scaffolding, components, interaction patterns), measured across all 85 states and verified, confirmed 45 findings and produced the rules in `consistency-spec.md`. Richard's answers to the ten trade-offs (all the recommended options):
+
+45. **One player, at the bottom.** The mini player sits at the bottom on every screen; in the playing article's Reader it expands in place (play, time, −15, +15, speed, ✕ when paused) and its line replaces the reading line. Archive floats above it. Supersedes decision 18's top strip. Pause never moves and stays in thumb reach.
+46. **The dark pill is for toasts only.** The mini player is a light floating card (reader colours inside the Reader); the offline banner is a quiet neutral notice.
+47. **The Reader's Listen button is soft** (tinted, not gradient). The gradient marks only the live play/pause and a screen's one primary button.
+48. **No seeking in v1.** Progress bars are display-only; ±15 s and "Listen starts where you're reading" cover moving around.
+49. **Listen rows open the article**, like every other card, with a separate round play button.
+50. **Back returns to where you came from**: from Listen to Listen, from the mini player to the screen it was tapped on, from Search to Search with the results kept; opening straight into an article still goes to Saves. Supersedes decision 33 for those routes.
+51. **Search is a full screen** without the tab bar, like Android's own search.
+52. **The mini player on Listen** appears once the Now playing card scrolls away, and slides in only when a session starts or the card leaves, not on every tab switch. Refines decision 20.
+53. **Phone-to-phone restore follows the contract**: scan the QR, then type the six digits shown on the other phone (a second factor, never an alternative to scanning). If the camera is refused, the way on is the recovery code. Corrects the flow map, which said the code could be typed instead of scanning.
+54. **"Next unread" becomes "Archive and next"**, saying what it does. The end card's pair is [Archive and next] [Archive], primary on the right.
