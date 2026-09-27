@@ -39,3 +39,7 @@ Decisions taken with Richard while testing flow map rev. 2 against full coverage
 18. **Reader player:** Listen sits in the Reader's top bar. Pressing it opens a player strip under the top bar (play/pause, time, ±15 s, speed, progress), which replaces the reading-progress line while it plays. The text highlights the spoken word and scrolls to keep it in view. Archive floats at the bottom right.
 19. **Listening starts where you're reading:** Listen begins at the paragraph in view, not the top of the article.
 20. **Mini player:** shows a ✕ only when paused; it slides up when it appears and slides down and fades when closed. Hidden on the Listen tab, where the Now playing card does its job.
+
+## Round 7 (2026-09-27)
+
+21. **Speed read (RSVP) is in v1.** Reader ⋯ → Speed read opens a full-screen view showing one word at a time, its focus letter in Terracotta at a fixed point. It is driven by the same word stream as listening, so reading, listening and speed reading share one position. Timing: 60 000 ÷ wpm per word, held longer for long words and numbers (×1.4), commas (×1.8), sentence ends (×2.5) and paragraph ends (×3.5), easing in from 60 % speed after each start. Tap pauses and shows the whole sentence; swipe moves by sentence; − / + sets 200–700 wpm (default 300, remembered). Exit returns to the Reader at that word. Starting it pauses audio. Weight: one menu item, one view, one remembered setting; no permissions, no server work, no contract change.
