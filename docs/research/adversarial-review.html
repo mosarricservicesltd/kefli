@@ -1,0 +1,108 @@
+<title>Pocket on Nostr Plan Review</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{--bg:#f6f7f5;--surface:#fff;--ink:#1b1f1e;--muted:#5f6763;--line:#d9ded9;--accent:#2f6b4f;--soft:#e3eee7;--warn:#b5542e;--warnsoft:#f6e6df}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15181a;--surface:#1d2124;--ink:#ebeeec;--muted:#9aa39e;--line:#2c3235;--accent:#7dbb9a;--soft:#213229;--warn:#e08a66;--warnsoft:#3a2620}}
+:root[data-theme="dark"]{--bg:#15181a;--surface:#1d2124;--ink:#ebeeec;--muted:#9aa39e;--line:#2c3235;--accent:#7dbb9a;--soft:#213229;--warn:#e08a66;--warnsoft:#3a2620}
+body{background:var(--bg);color:var(--ink);font-family:"Source Serif 4",Georgia,serif;font-size:17px;line-height:1.6;margin:0}
+.wrap{max-width:720px;margin:0 auto;padding:56px 24px 96px}
+.eyebrow{font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:600}
+h1{font-family:"IBM Plex Sans",system-ui,sans-serif;font-weight:600;font-size:34px;line-height:1.15;margin:8px 0 12px;text-wrap:balance}
+h2{font-family:"IBM Plex Sans",system-ui,sans-serif;font-weight:600;font-size:21px;margin:44px 0 12px;text-wrap:balance}
+h3{font-family:"IBM Plex Sans",system-ui,sans-serif;font-weight:600;font-size:15px;margin:24px 0 6px}
+p{margin:0 0 15px}
+.standfirst{font-size:19px;color:var(--muted)}
+.verdict{font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:2px 8px;border-radius:4px;display:inline-block;margin-left:8px;vertical-align:middle}
+.v-fatal{background:var(--warnsoft);color:var(--warn)}
+.v-fix{background:var(--soft);color:var(--accent)}
+.v-partial{background:var(--line);color:var(--ink)}
+.plan{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px 22px;margin:18px 0}
+.plan h3{margin-top:0}
+.plan p:last-child{margin-bottom:0}
+dl{margin:16px 0;display:grid;grid-template-columns:150px minmax(0,1fr);gap:8px 16px;font-size:15px}
+dt{font-family:"IBM Plex Sans",system-ui,sans-serif;font-weight:600;color:var(--muted)}
+dd{margin:0}
+.sources{font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:13px;color:var(--muted);line-height:1.5}
+.sources p{overflow-wrap:anywhere}
+a{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--soft)}
+@media print{body{background:#fff;color:#111;font-size:11.5pt}.wrap{max-width:none;padding:0}h2{break-after:avoid}.plan{break-inside:avoid}a{color:#2f6b4f;border:0}}
+</style>
+<div class="wrap">
+<div class="eyebrow">Adversarial review · September 2026</div>
+<h1>Where the pared-back Pocket plan breaks, and what changes</h1>
+<div class="plan" style="border-color:var(--warn)"><h3>Addendum, September 2026</h3><p>The revised plan at the end of this review was refined again in contract v1.1. Private saves use the standard NIP-78 kind 30078 in place of an app-invented kind. Saves and text are mirrored to two independent relays and a second storage server by default, because the plan below still left new users on our server alone, which contradicted the "outlives the service" claim. The extension gets its own device key and sends pages through encrypted storage, since the whole page inside a relay message would exceed most relays' size limits. Relay authentication is needed only for reading sealed messages, after an earlier ruling proved wrong.</p></div>
+<p class="standfirst">An independent hostile pass over the v1 plan (protocol engineer, platform engineer, product, lawyer), then my ruling on each finding: fatal as designed, fixable with a change, or overstated. The revised plan at the end is what we'd build.</p>
+
+<h2>1. Public hosting of parsed articles and generated audio <span class="verdict v-fatal">Fatal as designed</span></h2>
+<p>The plan puts the parsed text of every saved article, and a generated audio rendering of it, on Blossom servers as public content-addressed blobs, and announces the audio with a public kind 1063 event so any client can find it. Pocket, Instapaper and Readwise all cache article text and generate audio server-side, and publishers tolerate that because the copy is scoped to one account and served only to that account. Content-addressed public blobs, deduplicated across users and indexed for discovery, are distribution of a copyrighted work plus a derivative work, with no access control and no way to take a blob down without breaking every library that references it. A paywalled article captured from a logged-in browser makes it worse. This is the finding that most needs to change, and the cheap version of the feature ("any client finds the audio") cannot survive it.</p>
+<p>The fix keeps the economics and drops the openness. Article text is encrypted on the device before upload, so the server holds ciphertext scoped to one user, exactly Pocket's model. Audio is generated once per article on the server and cached, but the cache is served only from your own authenticated endpoint to users who present a signed request naming the URL they saved, never published as a public blob or a public event, and expired on an LRU basis. Generation stays once-per-article, which was the whole economic point. The one place shared public audio is legitimate is nostr-native long-form (kind 30023), whose authors published on an open protocol; those can be public blobs with a kind 1063 index, and that is a nice differentiator rather than a liability.</p>
+
+<h2>2. NIP-37 as a private-storage envelope <span class="verdict v-fix">Wrong spec, easy fix</span></h2>
+<p>NIP-37 kind 31234 is a draft-storage spec, and a blank content means "draft deleted". Any client that understands it would treat the library as unfinished posts, and a "publish this draft" button in another client would publish a private reading list as a public bookmark. NIP-44 also caps plaintext at 65,535 bytes, so article bodies could never have ridden inside the event anyway. The fix is an app-specific addressable kind (in the 30000 range, so it's replaceable per URL) with a NIP-44-encrypted JSON body carrying the URL, title, source, saved time, read progress, and the Blossom hash and decryption key of the encrypted text. Other clients ignore it, which for private data is what you want. A public "recommend" becomes a bare NIP-B0 kind 39701 event and a private-to-public transition is a deliberate second gesture, as the flow already says.</p>
+<p>The reviewer is also right that NIP-B0's URL rule is scheme-stripping only, so tracking parameters, AMP mirrors and trailing slashes would produce duplicate saves. The app needs its own normaliser (strip utm and known trackers, prefer the page's canonical link when the extension can read it, lowercase host, drop fragments). Nobody else will match it exactly, and that only matters for the public recommend path, where near-duplicates are tolerable.</p>
+
+<h2>3. Copying the private key into the browser extension <span class="verdict v-fix">Replace with a better design</span></h2>
+<p>A raw key in extension storage is readable by other extensions and profile-directory malware, and it trains users to move nsecs around. There is a neater answer that also removes the pairing QR's sensitivity: the extension never holds the user's key at all. At pairing it receives only the public key. On save, it generates a throwaway key, encrypts the URL and parsed text to the user's public key (NIP-17 style, a sealed message to self), and publishes it to your relay. The phone picks the message up, creates the real save under the real key, and acknowledges. If the phone is offline the message waits on the relay. The extension is now harmless if compromised, the phone remains the only signer, and an existing nostr user with a NIP-07 extension can still sign directly if they prefer.</p>
+
+<h2>4. Key loss before the backup card <span class="verdict v-fix">Fix with OS features</span></h2>
+<p>A silently generated key with a dismissable backup card after three saves will lose libraries on reinstall or a lost phone, and the review will say "lost everything". Both platforms already solve this: a key stored in the iOS Keychain with iCloud sync, or in Android's backed-up credential storage, survives reinstall and transfers to a new phone with the user's account. So the automatic backup is the OS credential sync, on by default, and the 12-word phrase becomes the explicit export for people who want independence from Apple and Google, offered once and then left under You. The word "wallet" never appears; the phrase is called a recovery code.</p>
+
+<h2>5. The iOS share sheet and background work <span class="verdict v-partial">Partly right; the promise needs qualifying</span></h2>
+<p>iOS share extensions run in roughly 120 MB and cannot host a web view large enough to render a modern news page for Readability, and background refresh after the extension closes is discretionary. So "save from any app, parsed and offline by the time you reach the train" cannot be promised unconditionally on iOS. Two mitigations cover most of it. When the share comes from Safari, the extension's JavaScript preprocessing file runs inside Safari's already-rendered page and can hand over the Readability output directly, which is how Pocket and Instapaper did it and costs the extension almost no memory. When the share comes from another app (X, Mail), the extension gets a URL only, and a lightweight HTML fetch plus a native Readability port inside the extension handles most static pages within the limit; JavaScript-rendered pages wait for the next app open. The reader must therefore have an honest state for "saved, text not fetched yet" that opens the original page instead of failing, and the flow's offline lane should say so. Android has none of this problem for parsing, and its six-hour foreground-service budget is irrelevant for work that takes seconds. On-device Kokoro generation in the background is impossible on iOS and is dropped from v1 anyway (see 8).</p>
+
+<h2>6. Images on the server <span class="verdict v-fix">Drop them</span></h2>
+<p>Uploading every article's images to Blossom is 2 to 10 MB per save with no owner-scoped retention, which is the storage line that would actually sink a free service. Images stay on the device only, cached at save time for the offline copy, and are refetched from the origin on a second device. The server stores encrypted text, which is tens of kilobytes per save.</p>
+
+<h2>7. Abuse of the fallback fetcher and the blob store <span class="verdict v-fix">Harden or remove</span></h2>
+<p>A server that fetches arbitrary user-supplied URLs is an SSRF and scraping proxy unless it blocks private address ranges and redirects, caps response size and rate-limits per key; a Blossom endpoint accepting any blob from any key is a free file host and hotlink target. For v1 the fetcher is removed (parsing happens on devices; a failed parse stores the link), and uploads to your Blossom server are restricted to keys that have registered through the app, with per-user quotas and no public listing. The TTS worker generates only on a signed request from a registered user who saved that URL, never on save, which bounds compute to what people actually listen to.</p>
+
+<h2>8. On-device Kokoro and GPL <span class="verdict v-fix">Cut from v1</span></h2>
+<p>Kokoro's model is Apache 2.0, but its phonemiser depends on espeak-ng, which is GPL-3, and GPL code inside an App Store binary is the known VLC problem. On the server that's irrelevant; in the app it's a licensing and packaging headache for a feature a small minority would use. Listening in v1 is the OS voice plus the server cache; the on-device model waits for a non-GPL phonemiser or a different model.</p>
+
+<h2>9. Voice switching mid-article and auto-continue <span class="verdict v-fix">Small behaviour changes</span></h2>
+<p>If playback starts with the OS voice and the server file arrives mid-article, switching voices and timestamp sources would feel like a bug. Rule: whatever voice started an article finishes it; the better file is used from the next play. Auto-continue to the next unread suits podcasts and annoys readers when a two-minute item is followed by a forty-minute essay, so it applies only to "Play all" from the Listen tab, and the in-article player stops at the end of the article with a "next" button.</p>
+
+<h2>10. App Store rules <span class="verdict v-fix">Plan for them</span></h2>
+<p>Guideline 5.1.1(v) requires in-app account deletion; the app needs a "delete everything" that sends NIP-09 deletion requests for its events, deletes the user's blobs and audio cache entries on your server, and wipes the key, with an honest note that copies on third-party relays the user added themselves are outside its control. Guideline 4.2.2's "web clippings" clause has coexisted with Pocket, Instapaper and Readwise for a decade, so it's survivable with a functioning reader. Zaps and Lightning are not in the plan; the Damus precedent is a reason to keep them out of the iOS build if they ever come.</p>
+
+<h2>11. Existing-user import and interoperability <span class="verdict v-partial">Lower expectations</span></h2>
+<p>Kind 10003 bookmark lists are mostly event references and hashtags, so importing them yields a library of nostr notes rather than articles. Import only the `r` (URL) and `a` (long-form article) entries and show them as their own source type. Existing nostr users will also expect saves made here to appear in Amethyst or Coracle; they won't, because private saves use an app-specific kind, and the app should say so once at sign-in. Public recommendations will appear everywhere that reads NIP-B0.</p>
+
+<h2>12. The queue model and the guilt pile <span class="verdict v-partial">Keep, watch</span></h2>
+<p>A single Unread list with no organisation is what Instapaper still ships and what most Pocket users actually used. The reviewer's worry that it becomes a guilt pile is real but is a v2 question answered by data from v1: if unread counts climb, the answer is a gentle "older than 30 days" section or a bulk-archive sweep, both of which slot into the existing flow without a new tab.</p>
+
+<h2>13. Timeline <span class="verdict v-fatal">My estimates were wrong</span></h2>
+<p>Two platforms, two browsers, a share extension with its own parsing constraints, a signer abstraction across four sign-in methods, a relay, a blob server, a TTS worker with a job queue, lock-screen audio on both platforms, offline caches, and App Store review is not three weeks and it is not twelve. A realistic single-developer path with AI assistance is one platform first. Android first (you already ship there, the share target and background work are simpler, no review gate on sideloading) with OS-voice listening and the extension: roughly three months to something you'd use daily. Server Kokoro and the audio cache: a further month. iOS: two to three months after that, with review time. Call it eight to ten months to the full v1 as now revised, and the plan's own discipline is what keeps it from stretching further.</p>
+
+<h2>14. Economics when it works <span class="verdict v-partial">Bounded, given the changes above</span></h2>
+<p>With images off the server, text encrypted and small, audio generated only on request and expired by LRU, uploads restricted to registered keys, and the relay running a retention script for the app's own kinds, the marginal cost per user is a few kilobytes of relay storage and occasional CPU. A single VPS covers hundreds of active users; a second box covers thousands. The Omnivore comparison holds in one respect: there is still no revenue line. The honest mitigations are a voluntary paid tier for a premium voice, and, more importantly, the fact that the library outlives the service. If the server goes away, every user's saves are still on their own relays under their own key and the app keeps working with a different relay, which is the one property Pocket and Omnivore could never offer.</p>
+
+<h2>What survives, and what changes</h2>
+<div class="plan">
+<h3>Unchanged</h3>
+<p>Phone-first, three tabs, one Unread list plus Archive, no tags or discovery, silent key creation, share-sheet and extension save, reader with progress line and Aa, OS-voice listening from the first minute, offline reading of everything cached, second device by QR, "sign in with your nostr app" for existing users, social deferred to v2 as private-by-default recommendations.</p>
+</div>
+<div class="plan">
+<h3>Changed</h3>
+<dl>
+<dt>Storage kind</dt><dd>App-specific addressable kind with NIP-44-encrypted body, replacing the NIP-37 wrapper. Public recommend = bare kind 39701.</dd>
+<dt>Article text</dt><dd>Encrypted on device before upload; server holds ciphertext scoped to the user. No cross-user dedup of text.</dd>
+<dt>Images</dt><dd>Device cache only. Never uploaded.</dd>
+<dt>Audio</dt><dd>Generated on request, cached on your server, served only over an authenticated endpoint to users who saved that URL, LRU-expired. No public blob, no public index. Public shared audio only for nostr-native long-form.</dd>
+<dt>Extension</dt><dd>Holds the public key only. Sends an encrypted save message to the phone via the relay; the phone makes the real save. NIP-07 signing when present.</dd>
+<dt>Backup</dt><dd>OS credential sync by default (Keychain/iCloud, Android backup); recovery code as explicit export.</dd>
+<dt>iOS save</dt><dd>Safari share uses the in-page preprocessing script; other apps get URL + lightweight fetch; honest "text not fetched yet" state that opens the original.</dd>
+<dt>Server fetcher</dt><dd>Removed from v1.</dd>
+<dt>On-device Kokoro</dt><dd>Removed from v1 (GPL phonemiser, no background execution on iOS).</dd>
+<dt>Playback</dt><dd>Voice fixed per article session; auto-continue only under Play all.</dd>
+<dt>Account deletion</dt><dd>In-app, with NIP-09 requests and server-side purge.</dd>
+<dt>Import</dt><dd>Only URL and article entries from kind 10003.</dd>
+<dt>Order</dt><dd>Android + extension first (about three months), server audio next, iOS last. Eight to ten months to the full v1.</dd>
+</dl>
+</div>
+
+<h2>Sources</h2>
+<div class="sources">
+<p><a href="https://github.com/nostr-protocol/nips/blob/master/37.md">NIP-37</a> · <a href="https://github.com/nostr-protocol/nips/blob/master/B0.md">NIP-B0</a> · <a href="https://github.com/nostr-protocol/nips/blob/master/44.md">NIP-44</a> · <a href="https://github.com/hexgrad/kokoro/issues/247">Kokoro espeak-ng licensing issue</a> · <a href="https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX-timestamped/discussions/2">Kokoro timestamp drift discussion</a> · <a href="https://blog.kulman.sk/dealing-with-memory-limits-in-app-extensions/">iOS app extension memory limits</a> · <a href="https://developer.android.com/develop/background-work/services/fgs/timeout">Android foreground service timeouts</a> · <a href="https://developer.apple.com/app-store/review/guidelines/">App Store Review Guidelines</a> · <a href="https://www.theblock.co/post/234392/apple-damus-app-removal-warning">Damus removal warning</a> · <a href="https://github.com/hzrd149/blossom-server">blossom-server</a> · <a href="https://github.com/hoytech/strfry">strfry</a> · <a href="https://9to5mac.com/2025/05/22/mozilla-announces-shutdown-of-pocket/">Pocket shutdown</a></p>
+</div>
+</div>

@@ -1,0 +1,344 @@
+<title>Shelf Style Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap">
+<style>
+:root{
+  --pg:#f4f4f5; --card:#ffffff; --ink:#18181b; --mute:#63636b; --rule:#e4e4e7; --chip:#ececef; --sel:#18181b; --onsel:#ffffff;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --pg:#0f0f11; --card:#18181b; --ink:#f4f4f5; --mute:#a1a1aa; --rule:#27272a; --chip:#232327; --sel:#f4f4f5; --onsel:#18181b; }
+}
+:root[data-theme="dark"]{ --pg:#0f0f11; --card:#18181b; --ink:#f4f4f5; --mute:#a1a1aa; --rule:#27272a; --chip:#232327; --sel:#f4f4f5; --onsel:#18181b; }
+*{box-sizing:border-box}
+body{margin:0;background:var(--pg);color:var(--ink);font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:14px;line-height:1.5}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 80px}
+h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0 0 4px}
+.lede{color:var(--mute);margin:0 0 20px;max-width:70ch}
+.controls{display:flex;flex-wrap:wrap;gap:18px 28px;align-items:flex-start;padding:16px 18px;background:var(--card);border:1px solid var(--rule);border-radius:14px;position:sticky;top:8px;z-index:5}
+.group{display:flex;flex-direction:column;gap:8px}
+.glabel{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--mute)}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--rule);background:var(--card);color:var(--ink);font:500 13px/1 Inter,system-ui,sans-serif;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--sel);color:var(--onsel);border-color:var(--sel)}
+.seg button:focus-visible{outline:2px solid #6d8cff;outline-offset:2px}
+.dot{width:12px;height:12px;border-radius:999px;display:inline-block;flex-shrink:0}
+h2{font-size:17px;font-weight:600;margin:34px 0 4px;letter-spacing:-.01em}
+.sub{color:var(--mute);margin:0 0 14px;max-width:80ch}
+.row{display:flex;gap:22px;overflow-x:auto;padding:6px 2px 14px}
+.cell{display:flex;flex-direction:column;gap:8px;flex-shrink:0}
+.cap{font-size:12.5px;color:var(--mute);max-width:260px}
+.cap b{color:var(--ink);font-weight:600;display:block;font-size:13.5px;margin-bottom:2px}
+.frame{align-self:flex-start;width:max-content;border-radius:40px;overflow:hidden;box-shadow:0 18px 44px rgba(0,0,0,.16),0 0 0 1px rgba(0,0,0,.06);flex-shrink:0}
+.z62{zoom:.62}.z48{zoom:.48}
+.tokens{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+@media (max-width:820px){.tokens{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--card);border:1px solid var(--rule);border-radius:14px;padding:16px}
+.scale{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:4px;margin-top:8px}
+.sw{display:flex;flex-direction:column;gap:4px;align-items:stretch}
+.sw i{display:block;height:34px;border-radius:6px;border:1px solid rgba(0,0,0,.06)}
+.sw span{font-size:10.5px;color:var(--mute);text-align:center;font-variant-numeric:tabular-nums}
+pre{margin:8px 0 0;background:var(--chip);border-radius:10px;padding:12px;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;overflow-x:auto;white-space:pre}
+dl{display:grid;grid-template-columns:130px minmax(0,1fr);gap:6px 12px;margin:8px 0 0;font-size:13px}
+dt{color:var(--mute)} dd{margin:0}
+.note{font-size:12.5px;color:var(--mute);margin-top:10px}
+@media print{.controls{display:none}}
+</style>
+
+<div class="wrap" id="app">
+  <h1>Shelf Style Lab</h1>
+  <p class="lede">Pick a style, an accent and a mode; the three phones redraw. Everything here maps onto Untitled UI's token system, so the choice you land on exports straight into the Figma and React build below.</p>
+  <div class="controls" id="controls"></div>
+  <h2 id="pickTitle">Your pick</h2>
+  <p class="sub" id="pickBlurb"></p>
+  <div class="row" id="pick"></div>
+  <h2>All four styles, same accent and mode</h2>
+  <p class="sub">The Saves screen in each style, so the differences sit side by side.</p>
+  <div class="row" id="compare"></div>
+  <h2>Tokens for Untitled UI</h2>
+  <p class="sub">Brand scale generated from your accent, named the way Untitled UI's theme expects (brand-600 is the primary). Paste the CSS into the theme file; the style settings tell the Figma build which radius and type choices to make.</p>
+  <div class="tokens" id="tokens"></div>
+</div>
+
+<script>
+(function(){
+/* ---------- colour helpers ---------- */
+function hx(h){h=h.replace('#','');return[parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
+function toHex(c){return'#'+c.map(function(v){v=Math.max(0,Math.min(255,Math.round(v)));return v.toString(16).padStart(2,'0');}).join('');}
+function mix(a,b,t){var A=hx(a),B=hx(b);return toHex(A.map(function(v,i){return v+(B[i]-v)*t;}));}
+function lum(h){var c=hx(h).map(function(v){v/=255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4);});return 0.2126*c[0]+0.7152*c[1]+0.0722*c[2];}
+function toHsl(h){var c=hx(h).map(function(v){return v/255;});var r=c[0],g=c[1],b=c[2];var mx=Math.max(r,g,b),mn=Math.min(r,g,b),H=0,S=0,L=(mx+mn)/2;
+ if(mx!==mn){var d=mx-mn;S=L>0.5?d/(2-mx-mn):d/(mx+mn);H=mx===r?(g-b)/d+(g<b?6:0):mx===g?(b-r)/d+2:(r-g)/d+4;H*=60;}return[H,S,L];}
+function fromHsl(H,S,L){function f(n){var k=(n+H/30)%12,a=S*Math.min(L,1-L);return L-a*Math.max(-1,Math.min(k-3,Math.min(9-k,1)));}return toHex([f(0)*255,f(8)*255,f(4)*255]);}
+function hue(h,d){var x=toHsl(h);return fromHsl((x[0]+d+360)%360,x[1],x[2]);}
+
+/* ---------- options ---------- */
+var ACCENTS=[
+ {id:'nostr',name:'Nostr purple',hex:'#8E30EB'},
+ {id:'untitled',name:'Untitled purple',hex:'#7F56D9'},
+ {id:'ocean',name:'Ocean blue',hex:'#2F62D6'},
+ {id:'sage',name:'Sage green',hex:'#3F7D5A'},
+ {id:'terracotta',name:'Terracotta',hex:'#B5542E'},
+ {id:'graphite',name:'Graphite',hex:'#2B303B'}
+];
+var STYLES=[
+ {id:'untitled',name:'Untitled stock',blurb:'Untitled UI as it ships: Inter, 8 to 12 px corners, hairline borders, a flat accent. The least custom work in Figma and React, and the least distinctive.'},
+ {id:'soft',name:'Soft pills',blurb:'Pill buttons, soft shadows instead of borders, and one gradient on the primary action. The current Shelf direction; needs custom button and card variants on top of Untitled UI.'},
+ {id:'editorial',name:'Editorial',blurb:'Serif headlines, hairline rules and no cards, so it reads like a magazine. The accent appears only on play and the active tab. Suits a reading app; the serif is the one addition to Untitled UI.'},
+ {id:'compact',name:'Compact',blurb:'Text-first and dense: no thumbnails, a segmented filter, a player docked above the tabs. Shows the most items per screen, closest to Instapaper.'}
+];
+var state={style:'soft',accent:'nostr',mode:'light'};
+try{var saved=JSON.parse(localStorage.getItem('shelf-lab')||'null');if(saved&&saved.style)state=saved;}catch(e){}
+var sheet=location.hash==='#sheet';
+
+var INTER="Inter,-apple-system,'Segoe UI',Roboto,sans-serif";
+var SERIF="Newsreader,'New York','Iowan Old Style',Georgia,serif";
+
+/* ---------- tokens ---------- */
+function tokens(st,accHex,dark){
+ var b=dark?{bg:'#0C0E12',surface:'#13161B',raised:'#1A1D23',border:'#22262F',text:'#F7F7F7',muted:'#94979C',faint:'#61656C',seg:'#1A1D23'}
+            :{bg:'#FAFAFA',surface:'#FFFFFF',raised:'#FFFFFF',border:'#E9EAEB',text:'#181D27',muted:'#535862',faint:'#A4A7AE',seg:'#F2F2F3'};
+ if(!dark){ if(st==='soft') b.bg=mix(accHex,'#FFFFFF',0.955); if(st==='editorial'||st==='compact') b.bg='#FFFFFF'; }
+ var t={};for(var k in b)t[k]=b[k];
+ var veryDark=lum(accHex)<0.04;
+ if(dark&&veryDark){ t.a='#D5D7DA'; t.fill='#F2F2F3'; t.onFill='#181D27'; t.tint='#22262F'; t.onTint='#F7F7F7'; t.grad=t.fill; }
+ else{
+  t.a=dark?mix(accHex,'#FFFFFF',0.28):accHex;
+  t.tint=dark?mix(accHex,b.bg,0.78):mix(accHex,'#FFFFFF',0.9);
+  t.onTint=dark?mix(accHex,'#FFFFFF',0.5):mix(accHex,'#000000',0.18);
+  t.grad='linear-gradient(135deg,'+hue(accHex,-40)+' 0%,'+accHex+' 55%,'+hue(accHex,18)+' 100%)';
+  t.fill=st==='soft'?t.grad:accHex;
+  t.onFill=lum(accHex)>0.45?'#181D27':'#FFFFFF';
+ }
+ t.thumbs=[0,1,2,3,4].map(function(i){return dark?mix(hue(accHex,i*22-30),b.bg,0.72):mix(hue(accHex,i*22-30),'#FFFFFF',0.84);});
+ t.shadowSm=dark?'0 2px 10px rgba(0,0,0,.35)':'0 2px 10px rgba(30,25,60,.06)';
+ t.shadowMd=dark?'0 12px 30px rgba(0,0,0,.5)':'0 12px 30px rgba(30,25,60,.12)';
+ t.xs=dark?'0 1px 2px rgba(0,0,0,.4)':'0 1px 2px rgba(10,13,18,.05)';
+ return t;
+}
+var P={
+ untitled:{head:INTER,headW:600,h1:30,ls:'-0.02em',cardR:12,btnR:8,thumbR:8,cards:true,border:true,rowPad:16,rowGap:10,thumb:true,chip:'badge',player:'card',np:'card',tab:'text',search:'box',back:'box',site:'badge',bar:'card'},
+ soft:{head:INTER,headW:700,h1:34,ls:'-0.03em',cardR:20,btnR:999,thumbR:16,cards:true,border:false,rowPad:14,rowGap:10,thumb:true,chip:'pill',player:'pill',np:'gradient',tab:'pill',search:'pill',back:'round',site:'pill',bar:'pill'},
+ editorial:{head:SERIF,headW:500,h1:38,ls:'-0.01em',cardR:0,btnR:4,thumbR:3,cards:false,border:false,rowPad:18,rowGap:0,thumb:true,chip:'underline',player:'bar',np:'plain',tab:'text',search:'line',back:'plain',site:'caps',bar:'rule'},
+ compact:{head:INTER,headW:700,h1:28,ls:'-0.02em',cardR:0,btnR:10,thumbR:0,cards:false,border:false,rowPad:12,rowGap:0,thumb:false,chip:'segmented',player:'bar',np:'tint',tab:'text',search:'filled',back:'plain',site:'text',bar:'rule'}
+};
+
+/* ---------- icons ---------- */
+function ic(n,sz,col,sw){sw=sw||1.8;var p={
+ search:'<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
+ saves:'<path d="M6 4h12a1 1 0 011 1v15l-7-4-7 4V5a1 1 0 011-1z"/>',
+ listen:'<path d="M4 14v-2a8 8 0 0116 0v2"/><rect x="4" y="14" width="4" height="6" rx="2"/><rect x="16" y="14" width="4" height="6" rx="2"/>',
+ you:'<circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.5-6 8-6s8 2 8 6"/>',
+ play:'<path d="M8 5l11 7-11 7z" fill="currentColor" stroke="none"/>',
+ pause:'<rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none"/>',
+ back:'<path d="M15 5l-7 7 7 7"/>',
+ aa:'<path d="M4 18l5-12 5 12M6.5 14h5"/><path d="M16 12c2 0 3 1 3 3v3M19 15c-2.5 0-4 .5-4 2s1.5 1.6 2.5 1.6c1 0 1.5-.6 1.5-1.6"/>',
+ archive:'<rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 002 2h10a2 2 0 002-2V9M10 13h4"/>',
+ more:'<circle cx="6" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="18" cy="12" r="1.4" fill="currentColor" stroke="none"/>',
+ skipb:'<path d="M11 12l8-6v12zM5 6v12"/>',skipf:'<path d="M13 12L5 6v12zM19 6v12"/>',
+ check:'<path d="M5 12l5 5 9-10"/>'
+ }[n];return '<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 24 24" fill="none" stroke="'+(col||'currentColor')+'" stroke-width="'+sw+'" stroke-linecap="round" stroke-linejoin="round" style="display:block;flex-shrink:0">'+p+'</svg>';}
+
+var ARTS=[
+ ['The Guardian','The quiet return of the read-it-later app, and why it matters this time','9 min',true],
+ ['Stratechery','Aggregation theory, ten years on','14 min',false],
+ ['Bitcoin Magazine','Why relays, not servers, are the future of personal data','6 min',true],
+ ['The Atlantic','What we lose when we stop reading long things','11 min',false],
+ ['Ars Technica',"Mozilla's Readability library is quietly everywhere",'5 min',false]
+];
+var CENTER='display:flex;align-items:center;justify-content:center;';
+
+function phone(t,inner,bg){return '<div style="width:390px;height:844px;position:relative;display:flex;flex-direction:column;overflow:hidden;background:'+(bg||t.bg)+';color:'+t.text+';font-family:'+INTER+';-webkit-font-smoothing:antialiased">'+inner+'</div>';}
+function avatar(t,p){var r=p.btnR===4?6:999;var bg=p.np==='gradient'?t.grad:t.fill;return '<div style="'+CENTER+'width:34px;height:34px;border-radius:'+r+'px;background:'+bg+';color:'+t.onFill+';font:600 14px/1 '+INTER+'">R</div>';}
+function h1(t,p,txt){return '<div style="font-family:'+p.head+';font-size:'+p.h1+'px;font-weight:'+p.headW+';letter-spacing:'+p.ls+';line-height:1.1">'+txt+'</div>';}
+function header(t,p,txt){return '<div style="display:flex;align-items:center;justify-content:space-between">'+h1(t,p,txt)+avatar(t,p)+'</div>';}
+
+function search(t,p){
+ var base='display:flex;align-items:center;gap:10px;height:44px;padding:0 14px;color:'+t.faint+';font-size:15px;';
+ if(p.search==='box')return '<div style="'+base+'border-radius:8px;background:'+t.surface+';border:1px solid '+t.border+';box-shadow:'+t.xs+'">'+ic('search',20)+'<span>Search your saves</span></div>';
+ if(p.search==='pill')return '<div style="'+base+'padding:0 16px;border-radius:999px;background:'+t.surface+';border:1px solid '+t.border+'">'+ic('search',20)+'<span>Search your saves</span></div>';
+ if(p.search==='line')return '<div style="'+base+'padding:0;border-bottom:1px solid '+t.border+';height:40px">'+ic('search',18)+'<span style="font-family:'+SERIF+';font-style:italic;font-size:16px">Search your saves</span></div>';
+ return '<div style="'+base+'height:38px;border-radius:10px;background:'+t.seg+'">'+ic('search',18)+'<span>Search</span></div>';
+}
+function chips(t,p){
+ var L=['Unread','Archive','Audio'],o='';
+ if(p.chip==='segmented'){
+  L.forEach(function(c,i){o+='<div style="'+CENTER+'flex:1;height:30px;border-radius:8px;font:600 13px/1 '+INTER+';'+(i===0?'background:'+t.surface+';color:'+t.text+';box-shadow:'+t.xs:'color:'+t.muted)+'">'+c+'</div>';});
+  return '<div style="display:flex;gap:2px;padding:3px;border-radius:10px;background:'+t.seg+'">'+o+'</div>';}
+ if(p.chip==='underline'){
+  L.forEach(function(c,i){o+='<div style="'+CENTER+'height:34px;font:'+(i===0?600:500)+' 14px/1 '+INTER+';color:'+(i===0?t.text:t.muted)+';border-bottom:2px solid '+(i===0?t.a:'transparent')+'">'+c+'</div>';});
+  return '<div style="display:flex;gap:22px;border-bottom:1px solid '+t.border+'">'+o+'</div>';}
+ var h=p.chip==='badge'?30:36,pad=p.chip==='badge'?12:16;
+ L.forEach(function(c,i){
+  var on=i===0,s;
+  if(p.chip==='badge') s=on?'background:'+t.tint+';color:'+t.onTint+';border:1px solid '+t.tint:'background:'+t.surface+';color:'+t.muted+';border:1px solid '+t.border;
+  else s=on?'background:'+t.fill+';color:'+t.onFill+';border:1px solid transparent':'background:'+t.surface+';color:'+t.muted+';border:1px solid '+t.border;
+  o+='<div style="'+CENTER+'height:'+h+'px;padding:0 '+pad+'px;border-radius:999px;font:600 13px/1 '+INTER+';'+s+'">'+c+'</div>';});
+ return '<div style="display:flex;gap:8px">'+o+'</div>';
+}
+function listenTag(t,p){
+ var dotBg=p.np==='gradient'?t.grad:t.a;
+ return '<div style="display:flex;align-items:center;gap:5px;color:'+t.a+';font:600 12px/1 '+INTER+'"><div style="'+CENTER+'width:16px;height:16px;border-radius:999px;background:'+dotBg+';color:'+t.onFill+'">'+ic('play',9,t.onFill)+'</div>Listen</div>';
+}
+function row(t,p,a,i){
+ var site=a[0],title=a[1],mins=a[2],audio=a[3];
+ if(p.chip==='segmented'){ // compact
+  return '<div style="display:flex;flex-direction:column;gap:4px;padding:'+p.rowPad+'px 0;border-bottom:1px solid '+t.border+'">'+
+   '<div style="font:600 15.5px/1.35 '+INTER+';letter-spacing:-.01em">'+title+'</div>'+
+   '<div style="display:flex;align-items:center;gap:10px;font-size:12.5px;color:'+t.muted+'"><span>'+site+' · '+mins+'</span>'+(audio?listenTag(t,p):'')+'</div></div>';
+ }
+ var titleFont=p.head===SERIF?'500 19px/1.3 '+SERIF:'600 16px/1.3 '+INTER;
+ var text='<div style="display:flex;flex-direction:column;gap:6px;flex-grow:1;min-width:0">'+
+  '<div style="font:'+(p.site==='caps'?'600 11px/1 ':'600 12px/1.2 ')+INTER+';color:'+t.muted+';letter-spacing:'+(p.site==='caps'?'.08em':'.01em')+';text-transform:'+(p.site==='caps'?'uppercase':'none')+'">'+site+'</div>'+
+  '<div style="font:'+titleFont+';letter-spacing:-.01em">'+title+'</div>'+
+  '<div style="display:flex;align-items:center;gap:12px;margin-top:2px"><span style="font-size:12px;color:'+t.faint+'">'+mins+'</span>'+(audio?listenTag(t,p):'')+'</div></div>';
+ var sz=p.cards?76:70;
+ var th=p.thumb?'<div style="width:'+sz+'px;height:'+sz+'px;border-radius:'+p.thumbR+'px;background:'+t.thumbs[i%5]+';flex-shrink:0"></div>':'';
+ if(p.cards) return '<div style="display:flex;gap:14px;padding:'+p.rowPad+'px;background:'+t.surface+';border-radius:'+p.cardR+'px;'+(p.border?'border:1px solid '+t.border+';box-shadow:'+t.xs:'box-shadow:'+t.shadowSm)+'">'+text+th+'</div>';
+ return '<div style="display:flex;gap:16px;padding:'+p.rowPad+'px 0;border-bottom:1px solid '+t.border+'">'+text+th+'</div>';
+}
+function tabbar(t,p,active){
+ var items=[['saves','Saves'],['listen','Listen'],['you','You']],o='';
+ items.forEach(function(it){var on=it[0]===active,col=on?t.a:t.faint;
+  var wrap=p.tab==='pill'&&on?'background:'+t.tint+';':'';
+  o+='<div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;min-height:44px;justify-content:center"><div style="'+CENTER+'width:56px;height:30px;border-radius:999px;'+wrap+'color:'+col+'">'+ic(it[0],22,col)+'</div><div style="font:600 11px/1 '+INTER+';color:'+col+'">'+it[1]+'</div></div>';});
+ return '<div style="display:flex;padding:8px 12px 22px;background:'+t.surface+';border-top:1px solid '+t.border+'">'+o+'</div>';
+}
+function miniPlayer(t,p){
+ var title='Why relays, not servers, are the future…';
+ var prog='<div style="height:3px;border-radius:999px;background:'+t.border+';overflow:hidden"><div style="width:38%;height:100%;background:'+(p.np==='gradient'?t.grad:t.a)+'"></div></div>';
+ if(p.player==='bar'){
+  return '<div style="position:absolute;left:0;right:0;bottom:74px;background:'+t.surface+';border-top:1px solid '+t.border+'">'+
+   '<div style="height:2px;background:'+t.border+'"><div style="width:38%;height:100%;background:'+t.a+'"></div></div>'+
+   '<div style="display:flex;align-items:center;gap:12px;height:56px;padding:0 16px">'+
+   '<div style="'+CENTER+'width:36px;height:36px;border-radius:999px;background:'+t.fill+';color:'+t.onFill+'">'+ic('pause',16,t.onFill)+'</div>'+
+   '<div style="flex:1;min-width:0;font:600 13.5px/1.2 '+(p.head===SERIF?SERIF:INTER)+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+title+'</div>'+
+   '<div style="color:'+t.muted+'">'+ic('skipf',20)+'</div></div></div>';
+ }
+ var r=p.player==='pill'?999:12, btnR=p.player==='pill'?999:8;
+ return '<div style="position:absolute;left:14px;right:14px;bottom:92px;display:flex;align-items:center;gap:12px;padding:10px 14px 10px 10px;border-radius:'+r+'px;background:'+t.surface+';border:1px solid '+t.border+';box-shadow:'+t.shadowMd+'">'+
+  '<div style="'+CENTER+'width:44px;height:44px;border-radius:'+btnR+'px;background:'+t.fill+';color:'+t.onFill+';flex-shrink:0">'+ic('pause',20,t.onFill)+'</div>'+
+  '<div style="display:flex;flex-direction:column;gap:5px;flex:1;min-width:0"><div style="font:600 13px/1.2 '+INTER+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+title+'</div>'+prog+'</div>'+
+  '<div style="color:'+t.muted+'">'+ic('skipf',22)+'</div></div>';
+}
+
+/* ---------- screens ---------- */
+function saves(st,acc,dark){
+ var t=tokens(st,acc,dark),p=P[st];
+ var list=ARTS.map(function(a,i){return row(t,p,a,i);}).join('');
+ var pad=p.cards?'0 14px':'0 20px';
+ return phone(t,
+  '<div style="display:flex;flex-direction:column;gap:14px;padding:60px 20px 12px">'+header(t,p,'Saves')+search(t,p)+chips(t,p)+'</div>'+
+  '<div style="display:flex;flex-direction:column;gap:'+p.rowGap+'px;padding:'+(p.cards?'4px':'0')+' '+pad.split(' ')[1]+' 0;flex:1;overflow:hidden">'+list+'</div>'+
+  miniPlayer(t,p)+tabbar(t,p,'saves'));
+}
+function reader(st,acc,dark){
+ var t=tokens(st,acc,dark),p=P[st];
+ var bg=(st==='soft'||st==='untitled')?t.surface:t.bg;
+ var btn=function(n){
+  if(p.back==='round')return '<div style="'+CENTER+'width:40px;height:40px;border-radius:999px;background:'+t.surface+';box-shadow:'+t.shadowSm+';color:'+t.text+'">'+ic(n,20)+'</div>';
+  if(p.back==='box')return '<div style="'+CENTER+'width:40px;height:40px;border-radius:8px;background:'+t.surface+';border:1px solid '+t.border+';box-shadow:'+t.xs+';color:'+t.text+'">'+ic(n,20)+'</div>';
+  return '<div style="'+CENTER+'width:40px;height:40px;color:'+t.text+'">'+ic(n,22)+'</div>';};
+ var site;
+ if(p.site==='pill')site='<div style="'+CENTER+'height:30px;padding:0 14px;border-radius:999px;background:'+t.tint+';color:'+t.onTint+';font:600 12px/1 '+INTER+'">bitcoinmagazine.com</div>';
+ else if(p.site==='badge')site='<div style="'+CENTER+'height:26px;padding:0 10px;border-radius:999px;background:'+t.tint+';color:'+t.onTint+';font:500 12px/1 '+INTER+'">bitcoinmagazine.com</div>';
+ else if(p.site==='caps')site='<div style="font:600 11px/1 '+INTER+';letter-spacing:.1em;text-transform:uppercase;color:'+t.muted+'">Bitcoin Magazine</div>';
+ else site='<div style="font:500 13px/1 '+INTER+';color:'+t.muted+'">bitcoinmagazine.com</div>';
+ var body=[
+  'The first time a page disappears from the web while it is still in your list, you learn what a read-it-later app is actually for. Nate Weiner learned it in 2007, when a bookmark folder full of dead links pushed him to build a Firefox extension that kept the text as well as the address.',
+  'Everything that followed was an elaboration of that one move. Sync arrived so the reading could happen somewhere other than the saving. A clean view arrived so the text could be read without the page fighting back.',
+  'What never changed was the shape of the shelf: a list, newest at the top, that belonged to one person and nobody else.'
+ ].map(function(x){return '<p style="margin:0 0 18px;font:400 18px/1.62 '+SERIF+'">'+x+'</p>';}).join('');
+ var titleFont=p.head===SERIF?'500 32px/1.15 '+SERIF:'700 27px/1.2 '+INTER;
+ var toolbar;
+ if(p.bar==='pill') toolbar='<div style="position:absolute;left:24px;right:24px;bottom:34px;display:flex;align-items:center;justify-content:space-between;padding:8px 8px 8px 22px;border-radius:999px;background:'+t.surface+';border:1px solid '+t.border+';box-shadow:'+t.shadowMd+';color:'+t.muted+'">'+ic('aa',22)+ic('archive',22)+'<div style="'+CENTER+'width:52px;height:52px;border-radius:999px;background:'+t.fill+';color:'+t.onFill+'">'+ic('play',22,t.onFill)+'</div></div>';
+ else if(p.bar==='card') toolbar='<div style="position:absolute;left:16px;right:16px;bottom:30px;display:flex;align-items:center;gap:18px;padding:10px 10px 10px 18px;border-radius:12px;background:'+t.surface+';border:1px solid '+t.border+';box-shadow:'+t.shadowMd+';color:'+t.muted+'">'+ic('aa',22)+ic('archive',22)+'<div style="flex:1"></div><div style="'+CENTER+'gap:8px;height:44px;padding:0 18px;border-radius:8px;background:'+t.fill+';color:'+t.onFill+';font:600 15px/1 '+INTER+'">'+ic('play',16,t.onFill)+'Listen</div></div>';
+ else toolbar='<div style="position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;gap:22px;padding:12px 20px 30px;background:'+bg+';border-top:1px solid '+t.border+';color:'+t.muted+'">'+ic('aa',22)+ic('archive',22)+'<div style="flex:1"></div>'+
+   (st==='editorial'?'<div style="'+CENTER+'gap:8px;height:40px;padding:0 16px;border-radius:'+p.btnR+'px;border:1px solid '+t.a+';color:'+t.a+';font:600 14px/1 '+INTER+'">'+ic('play',14,t.a)+'Listen</div>'
+   :'<div style="'+CENTER+'width:44px;height:44px;border-radius:999px;background:'+t.fill+';color:'+t.onFill+'">'+ic('play',20,t.onFill)+'</div>')+'</div>';
+ return phone(t,
+  '<div style="height:3px;background:'+t.border+'"><div style="width:42%;height:100%;background:'+(st==='soft'?t.grad:t.a)+'"></div></div>'+
+  '<div style="display:flex;align-items:center;justify-content:space-between;padding:50px 14px 8px">'+btn('back')+site+btn('more')+'</div>'+
+  '<div style="padding:10px 24px 0;flex:1;overflow:hidden"><div style="font:'+titleFont+';letter-spacing:-.02em;margin-bottom:10px">Why relays, not servers, are the future of personal data</div>'+
+  '<div style="font-size:13px;color:'+t.muted+';margin-bottom:22px">Shinobi · 6 min · Saved yesterday</div>'+body+'</div>'+toolbar, bg);
+}
+function listen(st,acc,dark){
+ var t=tokens(st,acc,dark),p=P[st];
+ var title='Why relays, not servers, are the future of personal data';
+ var np, onCard;
+ function controls(col,playBg,playCol,ring){return '<div style="display:flex;align-items:center;justify-content:center;gap:26px;color:'+col+'">'+ic('skipb',24)+'<div style="'+CENTER+'width:60px;height:60px;border-radius:999px;background:'+playBg+';color:'+playCol+';'+(ring?'border:1.5px solid '+ring:'')+'">'+ic('pause',24,playCol)+'</div>'+ic('skipf',24)+'</div>';}
+ function track(bgc,fg,txt){return '<div style="display:flex;align-items:center;gap:10px;font-size:12px;color:'+txt+'"><span>2:14</span><div style="flex:1;height:4px;border-radius:999px;background:'+bgc+'"><div style="width:38%;height:100%;border-radius:999px;background:'+fg+'"></div></div><span>5:52</span></div>';}
+ function chipsRow(bgc,col,r){return '<div style="display:flex;justify-content:space-between">'+['1.2×','Natural voice'].map(function(c){return '<div style="'+CENTER+'height:28px;padding:0 12px;border-radius:'+r+'px;background:'+bgc+';color:'+col+';font:600 12px/1 '+INTER+'">'+c+'</div>';}).join('')+'</div>';}
+ var eyebrow=function(col){return '<div style="font:600 11px/1 '+INTER+';letter-spacing:.08em;text-transform:uppercase;color:'+col+'">Now playing</div>';};
+ if(p.np==='gradient'){
+  np='<div style="border-radius:26px;padding:20px;background:'+t.grad+';color:'+t.onFill+';display:flex;flex-direction:column;gap:14px;box-shadow:'+t.shadowMd+'">'+eyebrow('rgba(255,255,255,.85)')+'<div style="font:700 20px/1.25 '+INTER+'">'+title+'</div>'+track('rgba(255,255,255,.3)','#fff','rgba(255,255,255,.9)')+controls('#fff','#fff',(t.onFill==='#FFFFFF'?t.a:'#181D27'))+chipsRow('rgba(255,255,255,.18)','#fff',999)+'</div>';
+ } else if(p.np==='card'){
+  np='<div style="border-radius:12px;padding:18px;background:'+t.surface+';border:1px solid '+t.border+';box-shadow:'+t.xs+';display:flex;flex-direction:column;gap:14px">'+eyebrow(t.onTint)+'<div style="font:600 19px/1.3 '+INTER+'">'+title+'</div>'+track(t.border,t.a,t.muted)+controls(t.muted,t.fill,t.onFill)+chipsRow(t.seg,t.muted,8)+'</div>';
+ } else if(p.np==='plain'){
+  np='<div style="display:flex;flex-direction:column;gap:14px;padding:6px 0 18px;border-bottom:1px solid '+t.border+'">'+eyebrow(t.muted)+'<div style="font:500 26px/1.2 '+SERIF+'">'+title+'</div>'+track(t.border,t.a,t.muted)+controls(t.text,'transparent',t.a,t.a)+chipsRow('transparent',t.muted,4)+'</div>';
+ } else {
+  np='<div style="border-radius:12px;padding:16px;background:'+t.tint+';color:'+t.onTint+';display:flex;flex-direction:column;gap:12px">'+eyebrow(t.onTint)+'<div style="font:700 18px/1.3 '+INTER+';color:'+t.text+'">'+title+'</div>'+track(dark?t.border:'rgba(0,0,0,.08)',t.a,t.muted)+controls(t.onTint,t.fill,t.onFill)+'</div>';
+ }
+ var q=ARTS.slice(0,4).map(function(a,i){
+  var off=a[3]?'<div style="display:flex;align-items:center;gap:4px;color:'+t.a+';font:600 11px/1 '+INTER+'">'+ic('check',13,t.a)+'Offline</div>':'';
+  var play='<div style="'+CENTER+'width:36px;height:36px;border-radius:'+(p.btnR===4?4:999)+'px;background:'+t.tint+';color:'+t.onTint+';flex-shrink:0">'+ic('play',15,t.onTint)+'</div>';
+  var txt='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><div style="font:'+(p.head===SERIF?'500 16px/1.3 '+SERIF:'600 14px/1.3 '+INTER)+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+a[1]+'</div><div style="font-size:12px;color:'+t.faint+'">'+a[0]+' · '+a[2]+'</div></div>';
+  if(p.cards) return '<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:'+t.surface+';border-radius:'+Math.min(p.cardR,18)+'px;'+(p.border?'border:1px solid '+t.border:'box-shadow:'+t.shadowSm)+'">'+play+txt+off+'</div>';
+  return '<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid '+t.border+'">'+play+txt+off+'</div>';
+ }).join('');
+ var playAll='<div style="'+CENTER+'height:34px;padding:0 14px;border-radius:'+p.btnR+'px;border:1px solid '+t.border+';background:'+t.surface+';color:'+t.a+';font:600 13px/1 '+INTER+'">Play all</div>';
+ return phone(t,
+  '<div style="display:flex;flex-direction:column;gap:16px;padding:60px 20px 10px">'+header(t,p,'Listen')+np+
+  '<div style="display:flex;align-items:center;justify-content:space-between"><div style="font:'+(p.head===SERIF?'500 20px/1 '+SERIF:'700 16px/1 '+INTER)+'">Up next</div>'+playAll+'</div></div>'+
+  '<div style="display:flex;flex-direction:column;gap:'+(p.cards?8:0)+'px;padding:0 '+(p.cards?14:20)+'px;flex:1;overflow:hidden">'+q+'</div>'+tabbar(t,p,'listen'));
+}
+
+/* ---------- token export ---------- */
+function scale(acc){
+ var stops=[['25',0.97,'#FFFFFF'],['50',0.94,'#FFFFFF'],['100',0.87,'#FFFFFF'],['200',0.74,'#FFFFFF'],['300',0.56,'#FFFFFF'],['400',0.36,'#FFFFFF'],['500',0.16,'#FFFFFF'],['600',0,null],['700',0.16,'#000000'],['800',0.32,'#000000'],['900',0.46,'#000000'],['950',0.62,'#000000']];
+ return stops.map(function(s){return [s[0], s[2]?mix(acc,s[2],s[1]):acc.toUpperCase()];});
+}
+function renderTokens(){
+ var acc=ACCENTS.filter(function(a){return a.id===state.accent;})[0], st=STYLES.filter(function(s){return s.id===state.style;})[0], p=P[state.style];
+ var sc=scale(acc.hex);
+ var sw=sc.map(function(s){return '<div class="sw"><i style="background:'+s[1]+'"></i><span>'+s[0]+'</span></div>';}).join('');
+ var css='@theme {\n'+sc.map(function(s){return '  --color-brand-'+s[0]+': '+s[1].toLowerCase()+';';}).join('\n')+'\n}';
+ var radii={untitled:'Untitled defaults (buttons radius-lg 8px, cards radius-xl 12px)',soft:'buttons and inputs radius-full; cards 20px; sheets 30px',editorial:'buttons radius-xs 4px; no cards, hairline rows',compact:'buttons and segmented control 10px; no cards'}[state.style];
+ var type=p.head===SERIF?'Headlines Newsreader 500 (serif); UI Inter; article body Newsreader 18/1.6':'UI and headlines Inter; article body Newsreader 18/1.6';
+ var fx={untitled:'Borders plus shadow-xs; flat brand-600 fills',soft:'No borders on cards; soft shadow; one 135° gradient (brand hue −40° → brand-600 → hue +18°) on the primary action only',editorial:'No shadows; 1px rules; accent on play and active tab only',compact:'No thumbnails; segmented filter; docked player'}[state.style];
+ document.getElementById('tokens').innerHTML=
+  '<div class="panel"><div class="glabel">Brand scale · '+acc.name+'</div><div class="scale">'+sw+'</div><pre>'+css+'</pre></div>'+
+  '<div class="panel"><div class="glabel">Style settings · '+st.name+'</div><dl><dt>Accent</dt><dd>'+acc.hex+' as brand-600</dd><dt>Radius</dt><dd>'+radii+'</dd><dt>Type</dt><dd>'+type+'</dd><dt>Surfaces</dt><dd>'+fx+'</dd><dt>Neutrals</dt><dd>Untitled UI gray scale; dark mode uses its dark-mode class</dd></dl>'+
+  '<p class="note">The scale is generated by mixing the accent with white and black, a close match for Untitled UI\'s own ramps. Check brand-500 to brand-700 for text contrast on white before locking it.</p></div>';
+}
+
+/* ---------- controls and render ---------- */
+function btns(key,opts,label){
+ return '<div class="group"><div class="glabel">'+label+'</div><div class="seg" role="group" aria-label="'+label+'">'+opts.map(function(o){
+  var d=o.hex?'<span class="dot" style="background:'+o.hex+'"></span>':'';
+  return '<button type="button" data-k="'+key+'" data-v="'+o.id+'" aria-pressed="'+(state[key]===o.id)+'">'+d+o.name+'</button>';}).join('')+'</div></div>';
+}
+function render(){
+ try{localStorage.setItem('shelf-lab',JSON.stringify(state));}catch(e){}
+ document.getElementById('controls').innerHTML=btns('style',STYLES,'Style')+btns('accent',ACCENTS,'Accent')+btns('mode',[{id:'light',name:'Light'},{id:'dark',name:'Dark'}],'Mode');
+ var acc=ACCENTS.filter(function(a){return a.id===state.accent;})[0].hex, dark=state.mode==='dark', st=STYLES.filter(function(s){return s.id===state.style;})[0];
+ document.getElementById('pickTitle').textContent='Your pick: '+st.name+', '+ACCENTS.filter(function(a){return a.id===state.accent;})[0].name+', '+(dark?'dark':'light');
+ document.getElementById('pickBlurb').textContent=st.blurb;
+ var cell=function(html,cap,z){return '<div class="cell"><div class="frame '+z+'">'+html+'</div>'+(cap?'<div class="cap">'+cap+'</div>':'')+'</div>';};
+ document.getElementById('pick').innerHTML=cell(saves(state.style,acc,dark),'','z62')+cell(reader(state.style,acc,dark),'','z62')+cell(listen(state.style,acc,dark),'','z62');
+ document.getElementById('compare').innerHTML=STYLES.map(function(s){return cell(saves(s.id,acc,dark),'<b>'+s.name+'</b>'+s.blurb,'z48');}).join('');
+ renderTokens();
+}
+document.getElementById('controls').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;state[b.dataset.k]=b.dataset.v;render();});
+
+/* sheet mode for PDF export */
+function renderSheet(){
+ var accId=(location.search.match(/accent=(\w+)/)||[])[1]||'nostr', mode=(location.search.match(/mode=(\w+)/)||[])[1]||'light';
+ var acc=ACCENTS.filter(function(a){return a.id===accId;})[0], dark=mode==='dark';
+ var rows=STYLES.map(function(s){
+  return '<div style="display:flex;gap:18px;align-items:flex-start;padding:10px 0 16px;border-bottom:1px solid var(--rule)"><div style="width:170px;flex-shrink:0;padding-top:6px"><div style="font:700 17px/1.2 Inter,sans-serif;margin-bottom:6px">'+s.name+'</div><div style="font-size:11.5px;color:var(--mute);line-height:1.45">'+s.blurb+'</div></div>'+
+   '<div style="display:flex;gap:16px;zoom:.42">'+[saves,reader,listen].map(function(f){return '<div class="frame">'+f(s.id,acc.hex,dark)+'</div>';}).join('')+'</div></div>';}).join('');
+ document.getElementById('app').innerHTML='<h1>Shelf Style Lab: four styles</h1><p class="lede">Accent '+acc.name+' ('+acc.hex+'), '+(dark?'dark':'light')+' mode. Saves, Reader and Listen in each style. The live lab lets you switch accent and mode.</p>'+rows;
+}
+if(sheet||location.search.indexOf('sheet')>-1) renderSheet(); else render();
+})();
+</script>

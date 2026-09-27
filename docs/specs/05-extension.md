@@ -1,0 +1,197 @@
+# Browser extension: Chrome and Firefox
+
+Owner: extension engineer. Version 1.0, September 2026. Codes against `00-contract.md` v1.0 and the sequence in `01-project-plan.md`. Working name Shelf; the name appears only in the manifest, the store listings and the toast.
+
+> **Revision note (contract v1.1).** This specification was written against contract v1.0. Contract v1.1 (document 00) takes precedence wherever they differ; apply its section 11 changelog, in particular the move to NIP-78 kind 30078, default public mirrors, AUTH only for reading gift wraps, the 16 KB event ceiling, and the extension device key with inbox blobs. References here to kinds 30979, 979, 978 or 10013 should be read in that light.
+
+## 1. Goal and scope
+
+The extension takes the page in front of the user and puts it on their phone's shelf. One click on the toolbar button, one keyboard shortcut, or one right-click on a link, and a small toast says "Saved" with Undo and Open in app. There is no popup list, no reader, no account. The extension never holds the user's private key; it holds the user's public key, a relay list and a pairing token, all learned from the phone during a QR handshake, and sends every save as a NIP-59 gift wrap that only the phone can open.
+
+In scope for v1: a Manifest V3 WebExtension in TypeScript, one codebase producing a Chrome build (which also installs on Brave, Edge, Vivaldi and Arc) and a Firefox build; Readability capture on the live DOM; the pairing protocol; per-save gift wrap publish to the operator relay and the user's write relays; an offline queue with retry; Undo; context-menu "Save link"; a keyboard shortcut; an options page with pair, unpair and a read-only relay display; submission to the Chrome Web Store and addons.mozilla.org. Out of scope: Safari (Xcode wrapper and Apple review; v2), Firefox for Android, any reading or listing, any analytics, and any Markdown conversion in the extension, which contract 4.2 and 4.4 put on the phone so that one implementation produces the `text_hash` the audio cache depends on.
+
+## 2. Architecture
+
+The manifest is generated at build time from one template with two overlays. Shared keys: `manifest_version: 3`, `action` (toolbar button, "Save to Shelf"), `commands` (one shortcut, default `Alt+Shift+S`, remappable in both browsers), `permissions: ["activeTab", "scripting", "storage", "alarms", "contextMenus"]`, no `host_permissions`, `options_ui` opening in a tab, and the default MV3 content security policy with no remote sources. The Chrome overlay sets `background.service_worker` and `minimum_chrome_version: "116"`, the version from which an open WebSocket keeps the worker alive (section 6). The Firefox overlay sets `background.scripts` (an event page, since Firefox does not support `background.service_worker`: https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/background), `browser_specific_settings.gecko.id`, `strict_min_version: "121"`, and `gecko.data_collection_permissions: { "required": ["none"] }`, which addons.mozilla.org has required of new submissions since 3 November 2025 (https://blog.mozilla.org/addons/2025/10/23/data-collection-consent-changes-for-new-firefox-extensions/).
+
+Four scripts make up the extension. The background (`bg.ts`) owns all state and all network: it handles the action click, the command, the context-menu click and messages from the other scripts, holds the WebSocket pool and runs the offline queue. The capture content script (`capture.ts`) is injected on demand with `chrome.scripting.executeScript` under `activeTab`, runs Readability against a clone of the live document, gathers metadata and returns one message. The toast content script (`toast.ts`) is injected the same way once the background has a result, renders a fixed-position card inside a closed shadow root so that page CSS cannot touch it, and relays Undo and Open clicks back. The options page (`options.ts`) draws the QR, shows connection state and relays, and offers Unpair. There is no popup. Both browsers expose `chrome.*` with promises, so the code uses that namespace directly and skips `webextension-polyfill`.
+
+Message flow for a save, in text:
+
+```
+user clicks action / presses shortcut / picks "Save link"
+  bg: read pairing from storage.local; if none -> open options page, stop
+  bg -> tab: executeScript(capture.ts)               [activeTab grants access]
+  capture: Readability(clone(document)).parse()
+           + canonical, title, byline, site, lang, hero
+  capture -> bg: { ok, meta, html }                   [html <= 512 KB]
+  bg: build rumor kind 979 -> seal kind 13 -> wrap kind 1059 (fresh key)
+  bg: enqueue { wrapId, wrap, ephemeralSk, createdAt, status: "pending" }
+  bg -> tab: executeScript(toast.ts, { state: "saving" })
+  bg: publish wrap to operator relay + user write relays over WebSocket
+  relay -> bg: OK true                                 [first OK wins]
+  bg -> toast: { state: "saved", wrapId }              -> "Saved  Undo  Open in app"
+  toast -> bg: { undo, wrapId }   (within 8 s)         -> bg publishes kind 5 from ephemeralSk
+  toast -> bg: { open }                                -> bg opens https://<domain>/open?u=<url>
+  bg: after 8 s or on toast dismiss, discard ephemeralSk, mark queue entry "sent"
+```
+
+The background never parses HTML and never needs a DOM; Readability runs where the page already is. This keeps the service worker small and removes any need for an offscreen document in the save path.
+
+## 3. Pairing protocol
+
+The contract has the extension show a QR that the phone scans, and this document keeps that direction. The phone is the only device with a private key, so the phone must be the one that decides to trust a browser, and scanning is the gesture by which a user points a trusted device at something. If the phone showed the QR the extension would need a camera or a paste box, and the phone would still have to receive a message from the extension before anything could be verified.
+
+The extension's side begins when the options page opens with no pairing stored. The background generates an ephemeral secp256k1 key pair `(esk, epk)` with nostr-tools, keeps `esk` in `chrome.storage.session` (memory only), opens a subscription on the operator relay for `{"kinds":[1059], "#p":[epk]}` after answering the NIP-42 challenge with `esk`, and renders a QR whose text is:
+
+```
+shelf://pair?v=1&k=<epk hex, 64 chars>&r=<percent-encoded wss URL>&e=<unix expiry>&n=<percent-encoded browser label>
+```
+
+`e` is issue time plus 300 seconds. `n` is a label such as "Chrome on a Linux laptop", built from `navigator.userAgentData` brand and platform, never a hostname or username. The QR is regenerated with a new key every five minutes while the page stays open, with a countdown beneath it and the line "Open Shelf on your phone, go to You, then Connect a browser, and scan this." It is drawn by the Nayuki `qrcodegen` TypeScript port (MIT, no dependencies, https://www.nayuki.io/page/qr-code-generator-library) into an SVG at error-correction level M.
+
+The phone's side, which the Android and iOS engineers implement from this section, begins in the You tab under "Connect a browser". The phone scans, rejects the payload if `v` is unknown, `e` is past, `k` is not a valid x-only pubkey or `r` is not `wss://`, and shows a sheet: "Connect Chrome on a Linux laptop? It will be able to add pages to your shelf. It can't read anything." with Connect and Cancel. On Connect the phone builds a rumor of kind 978 (pairing acknowledgement, a new kind proposed for the contract) with content:
+
+```
+{ "v": 1,
+  "pubkey": "<user's hex pubkey>",
+  "relays": [ { "url": "wss://relay.<domain>", "read": true, "write": true }, ... ],
+  "token": "<32 random bytes, hex>",
+  "label": "<the n value echoed back>",
+  "ack_for": "<epk>" }
+```
+
+`relays` is the operator relay followed by the user's NIP-65 write relays and any NIP-37 private relays. `token` is a per-browser secret the phone stores under "Connected browsers" with the label and date; every save rumor carries it (section 4), the phone drops kind 979 rumors whose token it does not recognise, and Disconnect on the phone forgets it. Without the token anyone who learns the user's npub could push pages onto their shelf, since gift wraps to a pubkey are open to all senders. The phone seals the rumor with its own key to `epk`, wraps it with a fresh random key, tags the wrap `["p", epk]`, publishes it to the relay from `r`, and shows "Connected".
+
+The extension unwraps with `esk`, checks that the seal's signing pubkey equals `pubkey` in the content (so a third party cannot answer on the user's behalf), that `ack_for` equals `epk`, and that the message arrived before `e`. On success it writes `{ v:1, pubkey, relays, token, label, pairedAt }` to `chrome.storage.local`, closes the subscription, discards `esk`, and replaces the QR with "Connected to your phone" and the date. The exchange takes one to three seconds. If the timer runs out the page shows "This code expired" and a "Show a new one" button. If AUTH is refused or the socket fails, the page shows "Can't reach the relay. Check your connection." and retries every ten seconds while visible. Nothing is stored on either side until the acknowledgement lands.
+
+Unpair from the extension side is local: it deletes the pairing record, drains the queue, and shows the QR again; the options page adds "To stop this browser fully, also remove it under Connected browsers on your phone." Unpair from the phone side revokes the token, after which the phone ignores that browser's saves. The extension cannot learn this, because after pairing it holds no key on which a message could be received, so a revoked browser keeps showing "Saved" until the user re-pairs it. This v1 limitation is written into the phone's Disconnect dialog: "Pages saved from that browser will be ignored. Uninstall the extension there or connect it again."
+
+## 4. Save flow
+
+Capture runs under `activeTab`, which grants access to the current tab for the duration of the gesture without any host permission. The capture script deep-clones `document`, because Readability mutates the tree it parses and the user must not see their page change, then calls `new Readability(clone, { charThreshold: 250 }).parse()`. Readability is `@mozilla/readability` 0.6.0, Apache-2.0 (https://github.com/mozilla/readability/blob/main/package.json). Metadata comes from the live document in this order: canonical from `<link rel="canonical">`, then `og:url`, then `location.href` without fragment; title from `og:title`, then Readability's title, then `document.title`; byline from Readability, then `<meta name="author">`; site from `og:site_name`, then Readability's `siteName`, then the hostname; hero from `og:image`. The message to the background is `{ ok, url, canonical, title, site, byline, lang, hero, html }`. If Readability returns null (a login wall, an unrendered JavaScript shell, a PDF viewer) the save proceeds with an empty `html` so that the phone fetches the page itself as it would for a share-sheet save, and the toast reads "Saved — your phone will fetch the text".
+
+The cap is applied in the capture script before the message crosses to the background. The script serialises Readability's `content`, measures it with `TextEncoder`, and if it exceeds 512 × 1024 bytes drops trailing top-level children of the content node until it fits, then appends `<p data-shelf-truncated="1">` so that the phone can show "Text was cut short; open the original". Scripts, styles, forms, iframes and `data:` images are stripped before measurement.
+
+The wrap is built in the background with nostr-tools 2.25.x (Unlicense; https://jsr.io/@nostr/tools/doc), whose `nip59` module provides `createRumor`, `createSeal` and `createWrap`. The rumor is kind 979, `created_at` the capture time, no tags, content the JSON from contract 4.4 plus two proposed fields: `"token"` from the pairing record and `"truncated": true` when the cap fired. The seal is kind 13, signed by a fresh random key `sk1`, its content NIP-44 v2 ciphertext under the conversation key of `sk1` and the user's pubkey, its `created_at` tweaked backwards by up to two days as NIP-59 recommends (https://github.com/nostr-protocol/nips/blob/master/59.md). The wrap is kind 1059 signed by a second fresh key `sk2`, tagged `["p", userPubkey]`, `created_at` tweaked the same way. Nothing in the wrap identifies the extension, the browser or the URL. `sk1` is discarded after sealing; `sk2` is kept for eight seconds in `chrome.storage.session` for Undo.
+
+Publish opens one WebSocket per relay from the pairing record, answers an AUTH challenge with `sk2` (the pubkey the relay sees as the writer), sends `["EVENT", wrap]` and waits for `["OK", id, true]`. Connections are held for 60 seconds after the last message so consecutive saves reuse them. The operator relay's OK flips the toast to "Saved"; the user's own relays are best-effort. If no relay accepts within ten seconds the entry stays pending and the queue takes over.
+
+The toast is a 320-pixel card in the bottom right of the viewport, using the Stage 0 tokens (system font at 15, radius 10, the accent for Undo and Open), with `role="status"` and `aria-live="polite"`. It shows "Saving…" until the first OK, then "Saved to Shelf" with Undo and Open in app, and dismisses after eight seconds or on Escape. On pages where a content script cannot run (`chrome://`, `about:`, the Chrome Web Store, the built-in PDF viewer, Firefox reader view) the action badge shows a tick for four seconds instead, the save is URL-only, and Undo is unavailable.
+
+Undo publishes a NIP-09 kind 5 signed by `sk2` with `["e", wrapId]` and `["k", "1059"]` to every relay the wrap reached. This is valid because NIP-09 requires the deletion to come from the event's author, and the wrap's author is `sk2`; the operator relay accepts kind 5 from anyone (contract section 3). If the phone was awake and already unwrapped the message, the item exists there and the deletion only removes the wrap, so the options page carries one honest line: "If your phone had already picked the page up, remove it there." A rumor-level unsave is v2.
+
+Open in app opens `https://<domain>/open?u=<encoded canonical URL>` in a new tab, a static page owned by the backend that tries the app's deep link on a phone and otherwise says "Open Shelf on your phone".
+
+The offline queue lives in `chrome.storage.local` under one key, an array of `{ wrapId, wrap, relaysDone, createdAt, attempts }`. Wraps are stored already encrypted, so a queued entry leaks nothing if the profile is copied. `storage.local` allows 10 MB (https://developer.chrome.com/docs/extensions/reference/api/storage) and a wrap is at most about 700 KB after encryption and base64, so the queue is capped at eight entries; a ninth save drops the oldest with a console warning and the toast shows "8 waiting". A `chrome.alarms` alarm fires every minute while the queue is non-empty (the minimum period for a packed extension) and retries each pending entry against the relays it has not reached, with attempts capped at 200, after which the entry appears on the options page under "Couldn't send" with a Retry button. For a save made offline the toast reads "Saved — will send when you're online" with Open in app only, since Undo requires a wrap that reached a relay.
+
+## 5. NIP-07 decision
+
+The extension does not use `window.nostr` in v1. Signing kind 30979 directly from a NIP-07 signer would require the extension to run the Turndown conversion (duplicating the hash-critical step the contract centralises on the phone), generate an AES key and encrypt the text, upload the blob to Blossom with a kind 24242 auth event, call `POST /register` under NIP-98, and self-encrypt the item JSON with `window.nostr.nip44.encrypt`, which Alby, nos2x and their forks implement unevenly and each behind a separate prompt. That is four or five signer pop-ups for one click, against a contract principle that only the phone holds the key. The gift wrap costs nothing extra and keeps the phone as the single writer of kind 30979, so the audio cache and the fixture hash stay consistent. NIP-07 could offer pairing without a QR via `getPublicKey()`, but that would skip the token exchange and leave the user no way to disconnect a browser from the phone, so it is also rejected. A user with a signer extension installed sees no difference.
+
+## 6. Browser-specific notes
+
+Chrome terminates the service worker after 30 seconds of inactivity and after five minutes of continuous processing of one event; since Chrome 110 extension API calls reset the idle timer, since 114 a long-lived message port does, and since 116 an open WebSocket with traffic does (https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle). The publish path relies on the WebSocket rule and sends a NIP-01 `["REQ", "ping", {"limit":0}]` and `CLOSE` every 20 seconds while a publish is in flight. Nothing in the extension needs the offscreen document API (https://developer.chrome.com/docs/extensions/reference/api/offscreen), since Readability runs in the tab; it is absent from the manifest. All state that must outlive a worker restart is in `storage.local` or `storage.session`, never in module-level variables, and every message handler returns a promise so that the worker stays alive for its duration.
+
+Firefox runs the background as an event page, also suspended after 30 seconds idle and restarted on events, and the same storage discipline covers it. Firefox has no `chrome.offscreen`, which is another reason the design avoids it. The context menu is created unconditionally at the top level of the background script rather than inside `onInstalled`, following the Extension Workshop migration guide (https://extensionworkshop.com/documentation/develop/manifest-v3-migration-guide/), so that it survives event-page restarts. `commands`, `action`, `alarms` and `storage.session` (Firefox 115+) are supported. Firefox's reader view is a separate `about:reader` document where content scripts do not run; saving from there is URL-only.
+
+Brave and Edge run the Chrome package unmodified. Brave's Shields on the aggressive setting may block the WebSocket to a relay, which appears as a queue that never drains; the "Couldn't send" list names the relay so that the user can allow it. Edge's store takes the same zip and is an optional Stage 5 submission.
+
+## 7. Security and privacy
+
+The extension stores, in `chrome.storage.local`: the pairing record (user pubkey, relay list, token, label, date) and the queue of encrypted wraps. In `chrome.storage.session`: the pairing ephemeral secret while a QR is showing, and each save's `sk2` for eight seconds. Nothing goes to `storage.sync`. No URL, title or article text is persisted in plaintext; the only plaintext exists inside the capture message in memory. The extension makes no HTTP request to any server; its network traffic is WebSocket frames to the paired relays and the user-initiated Open in app tab.
+
+Permissions and why each is needed: `activeTab` grants access to the current tab only on the user's gesture, which is exactly the scope of a save and avoids `<all_urls>`, the largest cause of slow Web Store review (https://developer.chrome.com/docs/webstore/review-process). `scripting` is required to inject the capture and toast scripts under MV3. `storage` holds the pairing and the queue. `alarms` retries the queue after the worker has been terminated. `contextMenus` provides "Save link to Shelf". No `tabs`, `notifications`, `cookies`, `webRequest`, `unlimitedStorage` or host permissions are requested.
+
+If the extension is compromised, by a malicious update, a supply-chain injection or a compromised profile, the attacker learns the user's public key and relay list (public anyway), the pairing token, and the content of any page saved from then on, since capture sees plaintext. The attacker can push arbitrary pages to the shelf until the user disconnects that browser on the phone, and can delete queued wraps. The attacker cannot read any existing save, decrypt any kind 30979 or earlier wrap, sign as the user, delete the user's items, or reach the audio API, because all of that needs the private key the extension never has. The build is reproducible from a tagged commit with a lockfile, packages are pinned by integrity hash, the content security policy forbids remote code, and each store listing links the source repository and release commit.
+
+From the relay's point of view a wrap reveals the recipient pubkey, a time smeared over two days, and a size, so the operator can count saves per user roughly and guess article length; NIP-44's padding hides size differences below 64 KB.
+
+## 8. Testing at each stage
+
+Unit tests run in Vitest with jsdom. The capture module is tested against the twenty fixture pages in `shared/fixtures/`: each fixture's HTML is loaded into jsdom, the capture function runs, and the test converts the resulting Readability HTML with Turndown 7.2 (MIT, used as a dev dependency only) under `shared/turndown-rules.json` and asserts that the sha256 of the Markdown equals the fixture `text_hash`. This is the proof that the extension's HTML, converted by the phone, yields the same hash the phone would get from its own fetch, and it is the test the project plan says must pass before integration. The cap is tested with a synthetic 2 MB page. The normalise port is tested against `shared/normalise.fixtures.json` even though the extension only uses it for the Undo-time duplicate check on the queue. The wrap module is tested against the fixture kind 1059 save request: given the fixture rumor and known keys the output unwraps to the same rumor, and a round trip with random keys unwraps with the fixture's recipient secret. The pairing parser is tested with expired, malformed, wrong-version and valid payloads. The queue is tested with a fake relay that answers OK, refuses, and times out.
+
+Integration tests run against the staging relay from week 3 with an Android test phone on the staging build. The script is: pair, save five pages of different shapes (news, Substack, Wikipedia, X thread, GitHub README), observe each appear on the phone within ten seconds, Undo one within the window and confirm the wrap is gone from the relay and the phone did not receive it, turn Wi-Fi off, save two pages, turn it back on and confirm both arrive, disconnect the browser on the phone and confirm a further save is ignored, re-pair. A relay-side check with the fixture decryption tool confirms that no wrap carries a URL or title in its tags.
+
+The manual matrix is run before each gate and recorded as a checklist.
+
+| Case | Chrome | Firefox | Brave | Edge |
+|---|---|---|---|---|
+| Install, options page shows QR, pair with phone | ✓ | ✓ | ✓ | ✓ |
+| Toolbar save on a news article; toast; item on phone in 10 s | ✓ | ✓ | ✓ | ✓ |
+| Keyboard shortcut save | ✓ | ✓ | ✓ | ✓ |
+| Context-menu "Save link" on a link; URL-only save | ✓ | ✓ | ✓ | ✓ |
+| Save on chrome:// or about: page; badge tick; URL-only | ✓ | ✓ | ✓ | ✓ |
+| Save on PDF viewer; URL-only | ✓ | ✓ | ✓ | ✓ |
+| Save on JS-only SPA before render; "phone will fetch" toast | ✓ | ✓ | — | — |
+| Undo within 8 s; wrap deleted; no item on phone | ✓ | ✓ | ✓ | — |
+| Offline save; reconnect; alarm flush delivers | ✓ | ✓ | ✓ | — |
+| Kill browser mid-publish; queue survives; delivers on restart | ✓ | ✓ | — | — |
+| Slow relay (throttled to 3 s RTT); worker survives publish | ✓ | ✓ | — | — |
+| Brave Shields aggressive; relay blocked; options page names it | — | — | ✓ | — |
+| Firefox reader view; URL-only save | — | ✓ | — | — |
+| Unpair from extension; QR returns; queue drained | ✓ | ✓ | ✓ | ✓ |
+| Disconnect on phone; subsequent save ignored | ✓ | ✓ | — | — |
+| 2 MB article; cap fires; truncated marker shown on phone | ✓ | ✓ | — | — |
+| Dark and light browser theme; toast readable | ✓ | ✓ | ✓ | ✓ |
+| Screen reader announces "Saved to Shelf" | ✓ | ✓ | — | — |
+
+## 9. Timeline against master plan weeks 3–4
+
+| Day | Deliverable | Depends on |
+|---|---|---|
+| W3 D1 | Repo, build (Vite + esbuild, two manifests), CI running fixture tests on stub capture | Fixtures from Stage 0 |
+| W3 D2 | Capture script passing all twenty fixture hashes; cap; metadata | — |
+| W3 D3 | Wrap module passing fixture 1059 round trip; relay pool with AUTH | nostr-tools pinned |
+| W3 D4 | Pairing: QR, subscription, ack parsing; Android engineer has section 3 to implement | Staging relay up with 1059 policy (section 10) |
+| W3 D5 | End-to-end save Chrome → staging relay → Android test phone; toast | Android gift-wrap listener |
+| W3 weekend | Undo, offline queue, alarms, context menu, shortcut | — |
+| W4 D1 | Firefox build; event-page audit; manual matrix first pass on Chrome and Firefox | — |
+| W4 D2 | Options page final; unpair; "Couldn't send" list; accessibility pass | Design tokens |
+| W4 D3 | `dev`/`beta` build flavours with badge, stable ID `key`, options-page debug history; one-page developer-mode install guide | Backend `/open` page |
+| W4 D4 | Signed unlisted Firefox `.xpi` via `web-ext sign`; Brave and Edge matrix in developer mode | — |
+| W4 D5 | Stage 2 gate: laptop save on phone in under ten seconds, recorded | Project engineer |
+
+Testing runs in developer mode (section 11). Store listings are filed at the start of Stage 4 rather than at Stage 5 because Chrome states that most reviews finish within a few days but can take a few weeks (https://developer.chrome.com/docs/webstore/review-process); filing during the beta keeps review off the launch date.
+
+## 10. Integration points and dependencies
+
+On the backend: the strfry write policy must accept kind 1059 from any authenticated pubkey provided the wrap's `p` tag names a registered pubkey, and must accept kind 1059 from a registered, authenticated pubkey addressed to any `p` (the pairing acknowledgement goes to an unregistered ephemeral key). The contract's wording, "accepts writes of those kinds only from authenticated pubkeys", together with the allowlist created by `/register`, would refuse both if the allowlist gates writes, since neither `sk2` nor the pairing key is ever registered. This needs a sentence in contract section 3. The relay must also serve `REQ` for kind 1059 with `#p` equal to the authenticated pubkey for any pubkey that can AUTH, registered or not, so the extension can receive its acknowledgement. The backend also owns the `/open` page. On Android: the kind 1059 listener, the kind 978 pairing acknowledgement and the "Connected browsers" screen with Disconnect, the token check on kind 979, fetching the page when `html` is empty, and honouring `truncated`. On iOS: the same, in week 5, with the extension already proven against Android. On the project engineer: adding kind 978, the `token` and `truncated` fields, the empty-`html` rule and the relay policy sentence to contract 1.1; and supplying the fixture kind 1059 with its rumor and the recipient secret so that the wrap test is meaningful.
+
+FOSS dependencies and licences: `@mozilla/readability` 0.6.0 (Apache-2.0); `nostr-tools` 2.25.x (Unlicense) bringing `@noble/curves`, `@noble/hashes`, `@noble/ciphers` and `@scure/base` (all MIT); `qrcodegen` TypeScript port (MIT), vendored as one file; TypeScript (Apache-2.0); Vite and esbuild (MIT); Vitest and jsdom (MIT); `turndown` 7.2 (MIT, dev only); `web-ext` (MPL-2.0, dev only, for Firefox lint and packaging); `@types/chrome` (MIT, dev only). No runtime dependency loads code from the network.
+
+## 11. Test distribution: developer mode first
+
+Decision (September 2026): the extension is tested in developer mode, not through the stores, until launch. Store listings are prepared in parallel so that review time never sits on the critical path, but nobody installs from a store before Stage 5.
+
+**Two build flavours from one commit.** `npm run build:dev` produces `dist/dev-chrome/` and `dist/dev-firefox/` pointing at the staging relay, Blossom and API; `npm run build:beta` produces `dist/beta-chrome/` and `dist/beta-firefox/` pointing at production. Both set the toolbar badge text (`chrome.action.setBadgeText`) to `DEV` or `BETA` so nobody confuses a test build with the real thing, and the options page shows version, commit hash, environment and the outcome of the last twenty saves, with a "Copy debug info" button for bug reports. Neither flavour is ever minified or obfuscated, which also keeps the later store submission clean.
+
+**Stable extension ID.** An unpacked Chromium extension gets an ID derived from its folder path, so it changes from machine to machine. The dev and beta manifests carry a fixed `key` field so the ID is identical everywhere; the pairing flow, the `/open` page and any logs rely on a stable ID. The Firefox manifests carry a fixed `browser_specific_settings.gecko.id` for the same reason, which Firefox signing requires anyway.
+
+**Chrome, Brave, Edge, Vivaldi, Arc.** `chrome://extensions` (or `brave://`, `edge://`), switch on Developer mode, Load unpacked, choose the `dist/…-chrome` folder, pin the icon. To update: pull or unzip the new build over the same folder and press the reload arrow on the extension's card; the stable ID means pairing survives the reload. For the developer's own loop, `vite-plugin-web-extension` rebuilds on save and reloads the extension automatically. Chrome may show a banner inviting the user to disable developer-mode extensions; testers are told to dismiss it. Developer-mode extensions do not auto-update, so each new beta build is announced with a one-line changelog.
+
+**Firefox.** For the developer: `web-ext run --target=firefox-desktop --source-dir dist/dev-firefox` opens a scratch profile with the extension loaded and reloads it on every change; about:debugging → This Firefox → Load Temporary Add-on is the manual equivalent, cleared on restart. For beta testers, who need it to survive a restart: `web-ext sign --channel=unlisted` has Mozilla's automated signing produce an `.xpi` within minutes, with no listing and no human review; testers install it by opening the file, and an `update_url` in the manifest lets later signed builds update themselves. This is the one place Firefox testing is smoother than Chrome.
+
+**Safari** is out of scope for the extension in v1; iOS and macOS Safari users save through the share sheet.
+
+**Who tests, in what order.** Stage 2 (weeks 3–4): Richard alone on `dev` builds against staging, on Chrome and Firefox. Stage 4 (beta, weeks 6–7): the beta group of ten to twenty on `beta` builds against production, Chromium users via a zipped folder plus a one-page install guide, Firefox users via the signed unlisted `.xpi`. The install guide covers: unzip to a folder you won't delete, Developer mode on, Load unpacked, pin, pair with the phone, and what the `BETA` badge means.
+
+**What the developer-mode phase must prove before any store build.** Pairing works first time on Chrome, Brave, Edge and Firefox on Windows and macOS; a save reaches the phone in under ten seconds with the app open and on next open with it closed; no save is lost across a week of daily use by at least five testers, checked against the options page history; reloading a new build keeps the pairing; and the "Copy debug info" output was enough to diagnose every bug reported. When those hold, the same commit is submitted to the Chrome Web Store and AMO as listed items for launch.
+
+## 12. Store submission (for launch)
+
+Chrome Web Store requires a developer account (one-time fee), a 128-pixel icon, at least one 1280×800 screenshot, a short description, a single-purpose statement, a justification for each permission in the listing form, a privacy policy URL, and the data-usage disclosure, which for this extension is "does not collect or use any user data". The zip is the Chrome build with minified but unobfuscated code; obfuscation is disallowed and minification slows review, so the Chrome build ships with `minify: false` and only tree-shaking, which keeps the package under 400 KB. The listing is filed at the start of Stage 4, while the beta runs in developer mode, so review finishes before launch; it is kept unpublished until Stage 5 and never used for beta distribution.
+
+Addons.mozilla.org requires a Mozilla account, the same icon and screenshots, the `data_collection_permissions` manifest key, a privacy policy in the listing since data leaves the device, and, because the bundle is built, a source zip with build instructions that reproduce the bundle exactly (https://extensionworkshop.com/documentation/publish/submitting-an-add-on/). Automated review signs the package within minutes and lists it; a human review follows over days to weeks and may ask questions, most commonly about the source build. The Firefox build is submitted with `minify: false` too. Edge Add-ons accepts the Chrome zip and is filed at Stage 5 if time allows.
+
+Privacy policy text, to be hosted at `https://<domain>/extension-privacy`:
+
+"The Shelf browser extension saves web pages to the Shelf app on your phone. When you click Save, the extension reads the page you are looking at, extracts the article text and its title, author and address, encrypts it so that only your phone can read it, and sends it to the relay servers you connected through your phone. The extension stores on your computer: the public identifier of your phone, the list of relay servers, a pairing token, and any saves waiting to be sent while you are offline. All waiting saves are stored encrypted. The extension does not store your browsing history, does not run on pages until you click Save, does not use cookies, does not contain analytics or crash reporting, and does not send anything to us or anyone else except the encrypted save to your relays. Removing the extension deletes everything it stored. Disconnecting the browser in the Shelf app on your phone stops it from adding pages to your shelf. Questions: <email>."
+
+## 13. Risks
+
+Readability drift between the extension and the phone: the phone's share-sheet path fetches and parses on the phone, the extension parses the live DOM, and the same URL can produce different HTML (cookie walls, personalised content, lazy-loaded images). The fixture suite proves equality only for the fixtures; live pages will sometimes hash differently and miss the audio cache. This is accepted for v1 and recorded as a known behaviour, since the extension path with the live DOM is usually the better capture. Relay policy mismatch: if the backend gates 1059 writes by allowlist the whole extension fails on day one; section 10 raises it now so that it is settled in week 1. Service-worker termination on a very slow relay: the ping-keepalive is tested with a throttled relay in the matrix. Store review delays: mitigated by early unlisted submission and minimal permissions. Spam through the gift-wrap channel from parties who know the npub: mitigated by the token; without phone-side enforcement it is a real nuisance vector and the Android engineer must ship the check with the listener. Firefox event-page differences discovered late: the Firefox build is W4 D1, not the last day, and the design avoids every Chrome-only API.
+
+## 14. Definition of done
+
+The extension is done for v1 when: both builds come from one commit through CI that runs the fixture suite and passes all twenty hashes and the 1059 round trip; pairing completes in under five seconds on the staging relay with the Android build and the phone shows the browser under Connected browsers; a save from Chrome and from Firefox appears on the phone within ten seconds on the Stage 2 gate recording; Undo within the window leaves nothing on the relay or the phone; two saves made offline arrive after reconnect without user action; a disconnected browser's saves are ignored; the manual matrix in section 8 has no open failures on Chrome and Firefox and no severity-1 on Brave and Edge; the Chrome Web Store listing is approved (unlisted) and the AMO listing is signed; the privacy policy is live; the source repository is public with the release tag and the store listings link to it; and Richard has used it daily for a week on his own laptop without opening the options page.
