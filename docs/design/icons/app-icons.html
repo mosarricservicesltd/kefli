@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shelf In-App Icons</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../mockups/tokens.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--font-ui);background:#E7E3E1;color:#181D27}
+main{max-width:980px;margin:0 auto;padding:var(--space-32) var(--space-16)}
+h1{font-size:var(--text-28);margin:0 0 var(--space-4)}
+p.intro{color:#535862;margin:0 0 var(--space-24)}
+section{background:#FFFFFF;border-radius:var(--radius-sheet);padding:var(--space-24);margin-bottom:var(--space-16)}
+h2{font-size:var(--text-17);margin:0 0 var(--space-12)}
+table{border-collapse:collapse;width:100%}
+td,th{padding:var(--space-8) var(--space-12);text-align:left;vertical-align:middle;border-bottom:1px solid #E9EAEB;font-size:var(--text-13)}
+th{color:#535862;font-weight:600}
+.ic{display:inline-flex;color:#181D27}
+.strip .ic{color:inherit}
+.ic.lu{color:#535862}
+.strip{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:var(--radius);margin-top:var(--space-8)}
+.strip.light{background:#FCF7F6;color:#181D27}.strip.dark{background:#13161B;color:#F7F7F7}.strip.sepia{background:#F5EEDF;color:#3A2E22}
+.btn48{width:48px;height:48px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center}
+.pp{background:var(--gradient-primary);color:#FFFFFF}
+.pill{height:36px;padding:0 12px 0 8px;border-radius:999px;display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600}
+.strip.light .pill{background:var(--accent-soft)}.strip.dark .pill{background:#311D18}.strip.sepia .pill{background:#EBD3C2}
+.lbl{font-size:12px;color:#535862;margin-top:var(--space-16)}
+</style>
+</head>
+<body>
+<main>
+<h1>In-app icons</h1>
+<p class="intro">The five icons Lucide doesn't have, drawn to Lucide's rules. Each row shows the new icon at real sizes beside the Lucide icon it sits next to in the app, then in the places it's used.</p>
+
+<section><h2>Skip icons: three weights (A current, B lighter numerals, C Lucide circle + lighter numerals)</h2><div id="weights"></div></section>
+
+<section><h2>Sizes, beside Lucide</h2>
+<table><thead><tr><th>Icon</th><th>20</th><th>24</th><th>32</th><th>48</th><th>Next to (Lucide, grey)</th></tr></thead><tbody id="rows"></tbody></table></section>
+
+<section><h2>In the player (light, dark, sepia)</h2><div id="player"></div></section>
+<section><h2>Speed read entry and the shelf empty state</h2><div id="misc"></div></section>
+</main>
+<script>
+const LU = {
+  'rotate-ccw': '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+  play: '<polygon points="6 3 20 12 6 21 6 3"/>',
+  pause: '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
+  zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+  bookmark: '<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>',
+  more: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+};
+const lu = (n, s = 24) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${LU[n]}</svg>`;
+const ICONS = [['skip-back-15', ['rotate-ccw', 'play']], ['skip-forward-15', ['play', 'pause']], ['speed-read', ['zap', 'more']], ['speed', ['play', 'pause']], ['shelf', ['bookmark']]];
+const SRC = {};
+const VARS = ['skip-back-15-b', 'skip-forward-15-b', 'skip-back-15-c', 'skip-forward-15-c'];
+Promise.all([...ICONS.map(([n]) => fetch(`app/${n}.svg`).then(r => r.text()).then(t => SRC[n] = t)), ...VARS.map(n => fetch(`app/variants/${n}.svg`).then(r => r.text()).then(t => SRC[n] = t))]).then(() => {
+  const own = (n, s) => `<span class="ic" style="width:${s}px;height:${s}px">${SRC[n].replace(/width="[^"]*"/, '').replace(/height="[^"]*"/, '').replace('<svg', `<svg width="${s}" height="${s}"`)}</span>`;
+  document.getElementById('rows').innerHTML = ICONS.map(([n, next]) => `<tr><td><b>${n}</b></td>${[20, 24, 32, 48].map(s => `<td>${own(n, s)}</td>`).join('')}<td>${own(n, 24)} ${next.map(x => `<span class="ic lu">${lu(x)}</span>`).join(' ')}</td></tr>`).join('');
+  const player = mode => `<div class="strip ${mode}"><span class="btn48 pp">${lu('pause', 20)}</span><span style="flex:1;font-size:13px;opacity:.75">0:33 / 1:36</span>
+    <span class="btn48">${own('skip-back-15', 24)}</span><span class="btn48">${own('skip-forward-15', 24)}</span><span class="pill">${own('speed', 16)}1.2×</span></div>`;
+  document.getElementById('player').innerHTML = ['light', 'dark', 'sepia'].map(player).join('');
+  const pair = (v, mode) => { const b = v ? 'skip-back-15-' + v : 'skip-back-15', f = v ? 'skip-forward-15-' + v : 'skip-forward-15'; return `<div class="strip ${mode}"><b style="width:24px;font-size:13px">${(v || 'a').toUpperCase()}</b><span class="btn48 pp">${lu('pause', 20)}</span><span class="btn48">${own(b, 24)}</span><span class="btn48">${own(f, 24)}</span><span style="width:12px"></span><span class="ic lu" style="color:inherit;opacity:.55">${lu('rotate-ccw')}</span><span style="font-size:12px;opacity:.6">Lucide rotate-ccw for weight</span><span style="flex:1"></span>${own(b, 20)}${own(b, 32)}</div>`; };
+  document.getElementById('weights').innerHTML = ['light', 'dark'].map(mode => ['', 'b', 'c'].map(v => pair(v, mode)).join('')).join('');
+  document.getElementById('misc').innerHTML = `<div class="strip light"><span class="btn48">${lu('more', 22)}</span><span style="font-size:15px;font-weight:500;display:inline-flex;gap:12px;align-items:center">${own('speed-read', 20)}Speed read</span></div>
+    <div class="strip light" style="flex-direction:column;align-items:center;padding:24px"><span class="btn48" style="background:var(--accent-soft);color:var(--accent);width:56px;height:56px">${own('shelf', 26)}</span><b>Your shelf is empty</b></div>
+    <p class="lbl">Speed read currently uses Lucide's zap (a lightning bolt) in the Reader's ⋯ menu; the new icon replaces it.</p>`;
+});
+</script>
+</body>
+</html>

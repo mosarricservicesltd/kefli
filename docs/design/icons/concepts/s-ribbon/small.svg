@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#BE6947"/>
+      <stop offset="1" stop-color="#944526"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="8" fill="url(#bg)"/>
+  <!-- bars and counters 4 units, every horizontal and vertical edge on an even unit: crisp at 16 px and 32 px -->
+  <path fill="#FFFFFF" d="M20 6H14A6 6 0 0 0 14 18H18A2 2 0 0 1 18 22H8L12 24L8 26H18A6 6 0 0 0 18 14H14A2 2 0 0 1 14 10H20A2 2 0 0 0 20 6Z"/>
+</svg>

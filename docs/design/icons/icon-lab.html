@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shelf Icon Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../mockups/tokens.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--font-ui);font-size:var(--text-15);line-height:1.5;background:#E7E3E1;color:#181D27}
+main{max-width:1180px;margin:0 auto;padding:var(--space-32) var(--space-16)}
+h1{font-size:var(--text-28);margin:0 0 var(--space-4);letter-spacing:-.02em}
+.intro{color:#535862;margin:0 0 var(--space-24);max-width:80ch}
+.concept{background:#FFFFFF;border-radius:var(--radius-sheet);padding:var(--space-24);margin-bottom:var(--space-24);box-shadow:0 1px 2px #1018280D}
+.concept > header{display:flex;align-items:baseline;gap:var(--space-12);margin-bottom:var(--space-16)}
+.concept h2{margin:0;font-size:var(--text-20)}
+.concept header span{color:#535862;font-size:var(--text-13)}
+.rows{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:var(--space-16)}
+.cell{border-radius:var(--radius);padding:var(--space-16);min-height:150px;display:flex;flex-direction:column;gap:var(--space-12)}
+.cell .cap{font-size:var(--text-13);color:#535862}
+.cell.dark .cap{color:#B4B7BD}
+.light{background:#F4F1EC}.dark{background:#1B1C1F}
+.wall-light{background:linear-gradient(160deg,#DCE7F2,#F3E9DF)}
+.wall-dark{background:linear-gradient(160deg,#1F2A38,#2C1E1A)}
+.homerow{display:flex;gap:8px;align-items:flex-start;justify-content:space-between}
+.app{display:flex;flex-direction:column;align-items:center;gap:6px;font:12px/1.2 Roboto,var(--font-ui);width:56px}
+.wall-light .app{color:#1F1F1F}.wall-dark .app{color:#F1F1F1}
+/* adaptive icon: the launcher shows the central 72 of the 108 canvas */
+.ai{position:relative;width:56px;height:56px;overflow:hidden;flex:none}
+.ai img{position:absolute;width:150%;height:150%;left:-25%;top:-25%}
+.m-circle{border-radius:50%}.m-squircle{border-radius:32%}.m-rsq{border-radius:18%}
+.other{width:56px;height:56px;border-radius:50%;background:#CFD6DE;opacity:.9}
+.wall-dark .other{background:#4A5260}
+/* themed icon: the monochrome layer tinted by the system */
+.themed{position:relative;width:56px;height:56px;border-radius:50%;overflow:hidden}
+.wall-light .themed{background:#E9DDD6}.wall-dark .themed{background:#3A2F2A}
+.themed i{position:absolute;inset:-25%;-webkit-mask-size:100% 100%;mask-size:100% 100%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
+.wall-light .themed i{background:#5A3B2E}.wall-dark .themed i{background:#F2D9CD}
+.big{display:flex;gap:var(--space-16);align-items:flex-end;flex-wrap:wrap}
+.big .ai{width:108px;height:108px}
+.store{width:96px;height:96px;border-radius:22%;overflow:hidden;box-shadow:0 1px 3px #00000033}
+.store img{width:100%;height:100%}
+/* browser toolbar */
+.chrome{border-radius:10px;overflow:hidden;font:12px Roboto,var(--font-ui)}
+.chrome.l{background:#DFE1E5;color:#1F1F1F}.chrome.d{background:#202124;color:#E8EAED}
+.tabs{display:flex;padding:6px 8px 0}.tab{display:flex;align-items:center;gap:8px;height:30px;padding:0 12px;border-radius:8px 8px 0 0;max-width:220px}
+.chrome.l .tab{background:#FFFFFF}.chrome.d .tab{background:#35363A}
+.bar{display:flex;align-items:center;gap:8px;height:40px;padding:0 8px}
+.chrome.l .bar{background:#FFFFFF}.chrome.d .bar{background:#35363A}
+.omni{flex:1;height:28px;border-radius:14px;padding:0 12px;display:flex;align-items:center;color:#5F6368}
+.chrome.l .omni{background:#F1F3F4}.chrome.d .omni{background:#202124;color:#9AA0A6}
+.tb{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center}
+.px16{width:16px;height:16px;image-rendering:auto}.px24{width:24px;height:24px}.px32{width:32px;height:32px}
+.sizes{display:flex;gap:14px;align-items:flex-end}
+.sizes figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;color:#535862}
+.notif{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:16px;font:13px Roboto,var(--font-ui)}
+.dark .notif{background:#2A2B2E;color:#E8EAED}.light .notif{background:#FFFFFF;color:#1F1F1F}
+.notif i{width:18px;height:18px;-webkit-mask-size:100% 100%;mask-size:100% 100%;background:currentColor;flex:none;transform:scale(1.5)}
+.rationale{margin:var(--space-16) 0 0;color:#414651;font-size:var(--text-13);max-width:90ch}
+.missing{color:#D92D20;font-size:var(--text-13)}
+</style>
+</head>
+<body>
+<main>
+<h1>Shelf icon lab</h1>
+<p class="intro">Every concept at the sizes and in the places it will actually live: an Android home screen under three launcher masks, Android 13 themed icons, the Play Store, the media notification, and a Chrome toolbar and tab at true pixel size. Judge at the small sizes first.</p>
+<div id="concepts"></div>
+</main>
+<script>
+const KEYS = (new URLSearchParams(location.search).get('keys') || 'ledge,s-ribbon,bracket,bookmark-shelf,spines-s').split(',');
+const RATIONALE = window.RATIONALE || {};
+const f = (k, file) => `concepts/${k}/${file}`;
+const ai = (k, mask, size) => `<span class="ai ${mask}" style="${size ? `width:${size}px;height:${size}px` : ''}"><img src="${f(k, 'background.svg')}" alt=""><img src="${f(k, 'foreground.svg')}" alt=""></span>`;
+const themed = k => `<span class="themed"><i style="-webkit-mask-image:url(${f(k, 'monochrome.svg')});mask-image:url(${f(k, 'monochrome.svg')})"></i></span>`;
+const home = (k, wall) => `<div class="homerow">
+  <div class="app"><span class="other"></span>Maps</div>
+  <div class="app">${ai(k, 'm-circle')}Shelf</div>
+  <div class="app"><span class="other"></span>Mail</div>
+  <div class="app">${ai(k, 'm-squircle')}Shelf</div></div>`;
+const chrome = (k, mode) => `<div class="chrome ${mode}"><div class="tabs"><div class="tab"><img class="px16" src="${f(k, 'small.svg')}" alt="">Shelf · Connect</div></div>
+  <div class="bar"><div class="omni">theatlantic.com/ideas/…</div><span class="tb"><img class="px16" src="${f(k, 'small.svg')}" alt="Shelf"></span><span class="tb" style="opacity:.5">⋮</span></div></div>`;
+function concept(k){
+  return `<section class="concept"><header><h2>${k}</h2><span>${RATIONALE[k] || ''}</span></header>
+  <div class="rows">
+    <div class="cell wall-light"><div class="cap">Home screen, light wallpaper (circle and squircle masks)</div>${home(k)}</div>
+    <div class="cell wall-dark"><div class="cap" style="color:#D0D4DA">Home screen, dark wallpaper</div>${home(k)}</div>
+    <div class="cell wall-light"><div class="cap">Themed icons (Android 13+), light and dark</div><div class="homerow"><div class="app">${themed(k)}Shelf</div></div></div>
+    <div class="cell wall-dark"><div class="cap" style="color:#D0D4DA">Themed icons, dark</div><div class="homerow"><div class="app">${themed(k)}Shelf</div></div></div>
+    <div class="cell light"><div class="cap">Chrome toolbar and tab, 16 px, light</div>${chrome(k, 'l')}</div>
+    <div class="cell dark"><div class="cap">Chrome toolbar and tab, 16 px, dark</div>${chrome(k, 'd')}</div>
+    <div class="cell light"><div class="cap">Small sizes (small.svg)</div><div class="sizes">
+      <figure><img class="px16" src="${f(k, 'small.svg')}" alt="">16</figure><figure><img class="px24" src="${f(k, 'small.svg')}" alt="">24</figure><figure><img class="px32" src="${f(k, 'small.svg')}" alt="">32</figure>
+      <figure><img style="width:48px;height:48px" src="${f(k, 'small.svg')}" alt="">48</figure></div></div>
+    <div class="cell dark"><div class="cap">Media notification (monochrome) and Play Store</div>
+      <div class="notif"><i style="-webkit-mask-image:url(${f(k, 'monochrome.svg')});mask-image:url(${f(k, 'monochrome.svg')})"></i>Shelf · Why relays, not servers…</div>
+      <div class="store"><img src="${f(k, 'full.svg')}" alt=""></div></div>
+    <div class="cell light"><div class="cap">Large: unmasked canvas, circle, rounded square</div><div class="big">
+      <img src="${f(k, 'full.svg')}" alt="" style="width:108px;height:108px;border:1px dashed #B4B7BD">${ai(k, 'm-circle', 108)}${ai(k, 'm-rsq', 108)}</div></div>
+  </div>
+  ${RATIONALE[k + ':long'] ? `<p class="rationale">${RATIONALE[k + ':long']}</p>` : ''}</section>`;
+}
+document.getElementById('concepts').innerHTML = KEYS.map(concept).join('');
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <!-- Shelf "spines-s": three shelf boards draw the S's horizontals; two book spines,
+       each standing on a board and rising past the cut-back board above, draw its bends. -->
+  <!-- shelves -->
+  <rect x="49" y="29" width="25" height="7" rx="3.5" fill="#FFFFFF"/>
+  <rect x="34" y="49" width="25" height="7" rx="3.5" fill="#FFFFFF"/>
+  <rect x="34" y="72" width="40" height="7" rx="3.5" fill="#FFFFFF"/>
+  <!-- spines: pill tops, flat feet on the shelf below -->
+  <path d="M34 49V35A6 6 0 0 1 46 35V49Z" fill="#FFFFFF"/>
+  <path d="M62 72V55A6 6 0 0 1 74 55V72Z" fill="#FFFFFF"/>
+</svg>

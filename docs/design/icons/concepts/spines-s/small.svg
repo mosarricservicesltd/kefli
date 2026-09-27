@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- 16-32 px: spines and shelves fused into one S, edges on even units (whole pixels at 16 px) -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#BE6947"/>
+      <stop offset="1" stop-color="#944526"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="url(#bg)"/>
+  <path d="M12 4H24A2 2 0 0 1 24 8H12V14H20A6 6 0 0 1 26 20V24A4 4 0 0 1 22 28H8A2 2 0 0 1 8 24H20V18H10A4 4 0 0 1 6 14V10A6 6 0 0 1 12 4Z" fill="#FFFFFF"/>
+</svg>

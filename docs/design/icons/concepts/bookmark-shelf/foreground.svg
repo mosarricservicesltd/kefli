@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <defs>
+    <linearGradient id="mark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#BE6947"/>
+      <stop offset="1" stop-color="#944526"/>
+    </linearGradient>
+  </defs>
+  <!-- bookmark: chunky Saves glyph, soft top, rounded tails -->
+  <path d="M48 30H60A11 11 0 0 1 71 41V64.4A2.5 2.5 0 0 1 67.14 66.5L55.63 59.05A3 3 0 0 0 52.37 59.05L40.86 66.5A2.5 2.5 0 0 1 37 64.4V41A11 11 0 0 1 48 30Z" fill="url(#mark)"/>
+  <!-- shelf = reading-progress bar: track, then the read part -->
+  <rect x="29" y="70" width="50" height="7" rx="3.5" fill="#E7C8BC"/>
+  <rect x="29" y="70" width="31" height="7" rx="3.5" fill="#B5542E"/>
+</svg>

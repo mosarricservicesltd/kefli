@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108">
+  <defs>
+    <linearGradient id="ledge-spine-full" x1="0" y1="32" x2="0" y2="67" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#BE6947"/>
+      <stop offset="1" stop-color="#944526"/>
+    </linearGradient>
+  </defs>
+  <rect width="108" height="108" fill="#FCF7F6"/>
+  <rect x="33" y="39" width="9" height="32" rx="3.5" fill="#181D27"/>
+  <rect x="47" y="32" width="11" height="39" rx="3.5" fill="url(#ledge-spine-full)"/>
+  <path fill="#181D27" d="M60.41 37.73L62.32 37.12A3.5 3.5 0 0 1 66.73 39.36L74.76 64.09A3.5 3.5 0 0 1 72.51 68.5L70.61 69.12A3.5 3.5 0 0 1 66.2 66.87L58.17 42.14A3.5 3.5 0 0 1 60.41 37.73Z"/>
+  <rect x="28" y="67" width="52" height="8" rx="4" fill="#181D27"/>
+</svg>
