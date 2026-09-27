@@ -17,7 +17,7 @@ Working name **Shelf** (placeholder; the name appears in the protocol only as th
 - **Backend:** one VPS running strfry (relay), a Blossom server, and a Go API with the Kokoro TTS worker. See backend spec.
 - **Protocol essentials:** private saves are NIP-78 kind 30078, `d` = `shelf/item/<sha256 normalised URL>`, `t` = `shelf`, NIP-44 self-encrypted. Article text is an AES-GCM encrypted Blossom blob, mirrored. Saves go to three relays by default (ours plus two public ones). The extension has its own device key and never holds the user's key; it sends NIP-59 gift wraps carrying only a blob hash and key. No event over 16 KB.
 - **Parser:** `@mozilla/readability` 0.6.0 plus `turndown` 7.2.4, vendored in `shared/vendor/`. The same JS runs in the extension and in a hidden WebView on the phone, so article hashes match.
-- **Visual style:** not yet chosen. Candidates are in `docs/design/style-lab.html` (Untitled stock / Soft pills / Editorial / Compact × six accents × light/dark). The UI will be designed in Figma with Untitled UI; its React components apply to the website and the extension UI only, since they don't run in React Native. Tokens live in `shared/tokens/tokens.json` and are generated out to every platform.
+- **Visual style:** Soft pills with the Terracotta accent (#B5542E) and Lucide icons, chosen September 2026. Values are in `shared/tokens/tokens.json` (draft until the Stage 0 screens are approved). Screens are drawn by Richard in Figma (file "Shelf — Stage 0 (Copy)", Untitled UI free kit) with Claude guiding page by page and reviewing through the read-only Figma connection. Untitled UI React components apply to the website and the extension UI only, since they don't run in React Native. Tokens are generated out to every platform from the JSON.
 
 ## Repo layout (target)
 
@@ -52,5 +52,4 @@ If all three work, Expo is confirmed and the Android spec is rewritten as an Exp
 ## Open items for Richard
 
 - Name, and the licence (open-sourcing the clients supports the "outlives the service" story; AGPL stops a closed fork).
-- Visual style choice from the Style Lab.
 - Queue model is currently a flat Unread list plus Archive; confirm.
