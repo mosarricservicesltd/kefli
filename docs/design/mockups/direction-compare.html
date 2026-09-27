@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shelf Directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --background:#FCF7F6; --surface:#FFFFFF; --line:#E9EAEB; --text:#181D27; --muted:#535862;
+  --accent:#B5542E; --accent-soft:#F8EEEA; --on-accent:#FFFFFF;
+  --grad-from:#BE6947; --grad-to:#944526;
+  --paper:#F7F1EA; --paper-line:#E6DDD2; --ink:#1F1A17; --ink-muted:#6B625B;
+  --page:#EDEAE6;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--text);font:15px/1.5 Inter,Roboto,sans-serif}
+main{max-width:900px;margin:0 auto;padding:32px 16px 64px}
+h1{font:600 28px/1.2 Newsreader,Georgia,serif;margin:0 0 6px}
+.intro{color:var(--muted);margin:0 0 28px;max-width:70ch}
+.row{display:flex;flex-wrap:wrap;gap:32px;justify-content:center}
+figure{margin:0;width:360px;max-width:100%}
+figcaption{margin-top:14px}
+figcaption strong{display:block;font-size:17px;margin-bottom:4px}
+figcaption span{color:var(--muted);font-size:13px}
+.phone{width:360px;max-width:100%;height:760px;border-radius:28px;overflow:hidden;position:relative;box-shadow:0 1px 2px #1018280D,0 12px 32px #10182814;display:flex;flex-direction:column}
+.status{height:24px;flex:none}
+.scroll{flex:1;overflow:hidden}
+.tabs{height:64px;flex:none;display:flex;justify-content:space-around;align-items:center;font-size:11px;font-weight:500}
+.tab{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:64px}
+svg{display:block}
+
+/* ---------- A: Soft pills ---------- */
+.a{background:var(--background)}
+.a .top{display:flex;justify-content:space-between;align-items:center;padding:12px 16px 12px}
+.a h2{margin:0;font:600 28px/1.2 Inter,sans-serif;letter-spacing:-.02em}
+.a .avatar{width:32px;height:32px;border-radius:999px;background:var(--accent);color:var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600}
+.a .search{margin:0 16px;height:40px;border-radius:999px;background:var(--surface);box-shadow:0 1px 2px #1018280D,0 4px 12px #1018280F;display:flex;align-items:center;gap:8px;padding:0 14px;color:var(--muted);font-size:13px}
+.a .chips{display:flex;gap:8px;padding:12px 16px}
+.a .chip{height:32px;padding:0 14px;border-radius:999px;display:flex;align-items:center;font-size:13px;font-weight:500;background:var(--surface);box-shadow:0 1px 2px #1018280D}
+.a .chip.on{background:linear-gradient(180deg,var(--grad-from),var(--grad-to));color:var(--on-accent)}
+.a .card{margin:0 16px 10px;background:var(--surface);border-radius:10px;padding:12px;display:flex;gap:12px;box-shadow:0 1px 2px #1018280D,0 4px 12px #1018280F}
+.a .card .txt{flex:1;min-width:0}
+.a .src{font-size:11px;font-weight:500;color:var(--muted)}
+.a .ttl{font-size:15px;font-weight:600;line-height:1.3;margin:2px 0 6px}
+.a .meta{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.a .listen{display:inline-flex;align-items:center;gap:4px;color:var(--accent);font-weight:500}
+.a .thumb{width:64px;height:64px;border-radius:10px;background:var(--accent-soft);flex:none}
+.a .mini{position:absolute;left:12px;right:12px;bottom:76px;height:52px;border-radius:999px;background:var(--surface);box-shadow:0 1px 2px #1018280D,0 8px 24px #10182824;display:flex;align-items:center;gap:10px;padding:0 8px}
+.a .play{width:36px;height:36px;border-radius:999px;background:linear-gradient(180deg,var(--grad-from),var(--grad-to));display:flex;align-items:center;justify-content:center;flex:none}
+.a .mini .t{flex:1;font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.a .tabs{background:var(--surface);border-top:1px solid var(--line);color:var(--muted)}
+.a .tab.on{color:var(--accent)}
+
+/* ---------- B: Warm paper ---------- */
+.b{background:var(--paper);color:var(--ink)}
+.b .top{display:flex;justify-content:space-between;align-items:baseline;padding:16px 20px 8px}
+.b h2{margin:0;font:500 32px/1.1 Newsreader,Georgia,serif;letter-spacing:-.01em}
+.b .count{font-size:13px;color:var(--ink-muted)}
+.b .controls{display:flex;gap:8px;align-items:center;padding:8px 20px 12px}
+.b .seg{display:flex;background:#EFE7DD;border-radius:999px;padding:3px}
+.b .seg span{height:30px;padding:0 14px;border-radius:999px;display:flex;align-items:center;font-size:13px;font-weight:500;color:var(--ink-muted)}
+.b .seg span.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px #1018280D}
+.b .searchbtn{margin-left:auto;width:36px;height:36px;border-radius:999px;display:flex;align-items:center;justify-content:center;color:var(--ink-muted)}
+.b .item{position:relative;margin:0 20px;padding:14px 0 14px 14px;border-top:1px solid var(--paper-line)}
+.b .item:first-of-type{border-top:none}
+.b .ribbon{position:absolute;left:0;top:16px;bottom:16px;width:3px;border-radius:999px;background:var(--paper-line);overflow:hidden}
+.b .ribbon i{position:absolute;left:0;right:0;top:0;background:var(--accent);border-radius:999px}
+.b .src{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-muted)}
+.b .ttl{font:500 19px/1.3 Newsreader,Georgia,serif;margin:4px 0 6px}
+.b .meta{font-size:13px;color:var(--ink-muted);display:flex;align-items:center;gap:10px}
+.b .dot{width:3px;height:3px;border-radius:999px;background:currentColor;opacity:.6}
+.b .aud{display:inline-flex;align-items:center;gap:4px;color:var(--accent)}
+.b .left{color:var(--accent);font-weight:500}
+.b .mini{position:absolute;left:12px;right:12px;bottom:76px;height:56px;border-radius:999px;background:var(--ink);color:#F7F1EA;display:flex;align-items:center;gap:12px;padding:0 8px 0 10px;box-shadow:0 8px 24px #1F1A1733}
+.b .mini .prog{position:absolute;left:28px;right:28px;bottom:6px;height:2px;border-radius:999px;background:#FFFFFF26}
+.b .mini .prog i{position:absolute;left:0;top:0;bottom:0;width:38%;background:var(--grad-from);border-radius:999px}
+.b .play{width:38px;height:38px;border-radius:999px;background:var(--grad-from);display:flex;align-items:center;justify-content:center;flex:none}
+.b .mini .t{flex:1;min-width:0}
+.b .mini .t b{display:block;font:500 15px/1.2 Newsreader,Georgia,serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.b .mini .t small{font-size:11px;opacity:.7}
+.b .tabs{background:var(--paper);border-top:1px solid var(--paper-line);color:var(--ink-muted)}
+.b .tab.on{color:var(--ink)}
+.b .tab.on .ind{background:var(--accent)}
+.b .ind{width:4px;height:4px;border-radius:999px;background:transparent}
+</style>
+</head>
+<body>
+<main>
+<h1>Two directions for Shelf, same screen</h1>
+<p class="intro">The Saves list, light mode, Terracotta accent, with a mini player running. Left is Soft pills as chosen from the Style Lab. Right is the proposed Warm paper hybrid: the same pill controls and floating player, with serif titles, paper instead of cards, no placeholder thumbnails, and a reading-progress ribbon on part-read items.</p>
+
+<div class="row">
+
+<figure>
+<div class="phone a">
+  <div class="status"></div>
+  <div class="scroll">
+    <div class="top"><h2>Saves</h2><div class="avatar">R</div></div>
+    <div class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Search your saves</div>
+    <div class="chips"><span class="chip on">Unread</span><span class="chip">Archive</span></div>
+    <div class="card"><div class="txt"><div class="src">The Guardian</div><div class="ttl">The quiet return of the read-it-later app, and why it matters this time</div><div class="meta">9 min <span class="listen"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Listen</span></div></div><div class="thumb"></div></div>
+    <div class="card"><div class="txt"><div class="src">Stratechery</div><div class="ttl">Aggregation theory, ten years on</div><div class="meta">14 min</div></div><div class="thumb"></div></div>
+    <div class="card"><div class="txt"><div class="src">Bitcoin Magazine</div><div class="ttl">Why relays, not servers, are the future of personal data</div><div class="meta">6 min <span class="listen"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Listen</span></div></div><div class="thumb"></div></div>
+    <div class="card"><div class="txt"><div class="src">The Atlantic</div><div class="ttl">What we lose when we stop reading long things</div><div class="meta">11 min</div></div><div class="thumb"></div></div>
+  </div>
+  <div class="mini"><div class="play"><svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></div><div class="t">Why relays, not servers, are the future of personal data</div><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m5 4 10 8-10 8V4z"/><path d="M19 5v14"/></svg></div>
+  <div class="tabs">
+    <div class="tab on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>Saves</div>
+    <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg>Listen</div>
+    <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>You</div>
+  </div>
+</div>
+<figcaption><strong>A · Soft pills</strong><span>Inter throughout, shadowed cards, thumbnail tiles, gradient on the active chip and play button.</span></figcaption>
+</figure>
+
+<figure>
+<div class="phone b">
+  <div class="status"></div>
+  <div class="scroll">
+    <div class="top"><h2>Saves</h2><span class="count">12 unread</span></div>
+    <div class="controls"><div class="seg"><span class="on">Unread</span><span>Archive</span></div><span class="searchbtn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span></div>
+    <div class="item"><span class="ribbon"><i style="height:60%"></i></span><div class="src">The Guardian</div><div class="ttl">The quiet return of the read-it-later app, and why it matters this time</div><div class="meta"><span class="left">4 min left</span><span class="dot"></span><span class="aud"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 10v3M6 6v11M10 3v18M14 8v7M18 5v13M22 10v3"/></svg>Audio ready</span></div></div>
+    <div class="item"><div class="src">Stratechery</div><div class="ttl">Aggregation theory, ten years on</div><div class="meta">14 min</div></div>
+    <div class="item"><span class="ribbon"><i style="height:30%"></i></span><div class="src">Bitcoin Magazine</div><div class="ttl">Why relays, not servers, are the future of personal data</div><div class="meta"><span class="left">Listening</span><span class="dot"></span>6 min</div></div>
+    <div class="item"><div class="src">The Atlantic</div><div class="ttl">What we lose when we stop reading long things</div><div class="meta">11 min</div></div>
+  </div>
+  <div class="mini"><div class="play"><svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></div><div class="t"><b>Why relays, not servers, are the future of personal data</b><small>Bitcoin Magazine · 2:14 of 5:52</small></div><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5V2L8 6l4 4V7a6 6 0 1 1-6 6"/></svg><div class="prog"><i></i></div></div>
+  <div class="tabs">
+    <div class="tab on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>Saves<span class="ind"></span></div>
+    <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg>Listen<span class="ind"></span></div>
+    <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>You<span class="ind"></span></div>
+  </div>
+</div>
+<figcaption><strong>B · Warm paper (proposed)</strong><span>Serif titles, hairline rules on paper, the progress ribbon on part-read rows, time left instead of total, a dark ink mini player with the terracotta play button.</span></figcaption>
+</figure>
+
+</div>
+</main>
+</body>
+</html>

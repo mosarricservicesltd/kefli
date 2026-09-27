@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Saves Card</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--font-ui);font-size:var(--text-15);line-height:1.5;background:var(--background);color:var(--text)}
+.doc{max-width:820px;margin:0 auto;padding:var(--space-32) var(--space-16)}
+.doc h1{font-size:var(--text-28);font-weight:600;letter-spacing:-.02em;margin:0 0 var(--space-8)}
+.doc p{color:var(--muted);margin:0 0 var(--space-24);max-width:68ch}
+.cols{display:flex;flex-wrap:wrap;gap:var(--space-24);justify-content:center}
+.col{width:360px;max-width:100%;background:var(--background);color:var(--text);border-radius:24px;padding:var(--space-20) var(--space-16);border:1px solid var(--line)}
+.col h2{font-size:var(--text-13);font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:0 0 var(--space-16)}
+.state{font-size:var(--text-13);color:var(--muted);margin:var(--space-16) 0 var(--space-8)}
+.state:first-of-type{margin-top:0}
+
+/* ---------- the component ---------- */
+.card{position:relative;display:flex;gap:var(--space-12);padding:var(--space-12);background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);border:var(--card-edge);overflow:hidden;min-height:48px;text-decoration:none;color:inherit}
+.card + .card{margin-top:10px}
+.body{flex:1;min-width:0}
+.src{display:flex;align-items:center;gap:var(--space-4);font-size:var(--text-13);font-weight:500;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.title{font-size:var(--text-15);font-weight:600;line-height:1.35;margin:2px 0 var(--space-8);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.meta{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-4) var(--space-8);font-size:var(--text-13);color:var(--muted)}
+.meta .sep{width:3px;height:3px;border-radius:var(--radius-pill);background:currentColor;opacity:.6}
+.meta .hot{color:var(--accent);font-weight:500}
+.tag{display:inline-flex;align-items:center;gap:var(--space-4);height:24px;padding:0 var(--space-8);border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--text);font-size:var(--text-13);font-weight:500;line-height:1}
+.tag svg{color:var(--accent)}
+.thumb{width:72px;height:72px;border-radius:8px;object-fit:cover;flex:none;background:var(--accent-soft)}
+.progress{position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--accent-soft)}
+.progress i{display:block;height:100%;background:var(--accent);border-radius:0 var(--radius-pill) var(--radius-pill) 0}
+.pending-dot{width:8px;height:8px;border-radius:var(--radius-pill);background:var(--accent);flex:none;animation:breathe 1.6s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:.35}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.pending-dot{animation:none;opacity:.7}}
+.url{font-size:var(--text-13);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:2px 0 var(--space-8)}
+.link{color:var(--accent);font-weight:500;text-decoration:none;display:inline-flex;align-items:center;gap:var(--space-4);min-height:24px}
+.warn{color:var(--error)}
+.muted-title{color:var(--muted);overflow-wrap:anywhere;font-weight:500}
+
+/* swipe-to-archive, frozen mid-gesture */
+.swipe{position:relative;border-radius:var(--radius);overflow:hidden;margin-top:10px;background:var(--accent)}
+.swipe .under{position:absolute;inset:0;display:flex;align-items:center;justify-content:flex-end;padding-right:var(--space-20);gap:var(--space-8);color:var(--on-accent);font-size:var(--text-13);font-weight:600}
+.swipe .card{transform:translateX(-96px);margin:0;border-radius:var(--radius) 0 0 var(--radius)}
+svg{flex:none}
+</style>
+</head>
+<body>
+<div class="doc">
+<h1>Saves card</h1>
+<p>The first component, finished before anything else is built. One card, every state it can be in, light and dark. Tap anywhere on the card opens the Reader; swipe left archives. Reading progress is the signature: a thin Terracotta bar along the bottom and time left in place of the total.</p>
+
+<div class="cols">
+<!-- ================= LIGHT ================= -->
+<section class="col" data-theme="light">
+<h2>Light</h2>
+
+<div class="state">Unread, with the article's image</div>
+<a class="card" href="#"><div class="body"><div class="src">The Guardian</div><div class="title">The quiet return of the read-it-later app, and why it matters this time</div><div class="meta">9 min</div></div><img class="thumb" src="https://picsum.photos/seed/shelf-guardian/144/144" alt=""></a>
+
+<div class="state">Unread, no image: the title takes the width</div>
+<a class="card" href="#"><div class="body"><div class="src">Stratechery</div><div class="title">Aggregation theory, ten years on</div><div class="meta">14 min</div></div></a>
+
+<div class="state">Part-read, audio downloaded</div>
+<a class="card" href="#"><div class="body"><div class="src">Bitcoin Magazine</div><div class="title">Why relays, not servers, are the future of personal data</div><div class="meta"><span class="hot">4 min left</span><span class="sep"></span><span class="tag"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 10v3M6 6v11M10 3v18M14 8v7M18 5v13M22 10v3"/></svg>Audio</span></div></div><img class="thumb" src="https://picsum.photos/seed/shelf-relays/144/144" alt=""><span class="progress"><i style="width:34%"></i></span></a>
+
+<div class="state">Getting the text (just shared)</div>
+<a class="card" href="#"><div class="body"><div class="src"><span class="pending-dot" aria-hidden="true"></span>theatlantic.com</div><div class="title muted-title">theatlantic.com/ideas/archive/2026/09/reading-long-things</div><div class="meta">Getting the text…</div></div></a>
+
+<div class="state">Saved from your browser, still arriving</div>
+<a class="card" href="#"><div class="body"><div class="src"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>From Chrome</div><div class="title">Mozilla's Readability library is quietly everywhere</div><div class="meta"><span class="pending-dot" aria-hidden="true"></span>Getting the text…</div></div></a>
+
+<div class="state">Couldn't get the text: saved as a link</div>
+<a class="card" href="#"><div class="body"><div class="src">nytimes.com</div><div class="title">The Long Road Back to the Office</div><div class="meta"><span>Couldn't get the text</span><span class="sep"></span><span class="link">Open original <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></span></div></div></a>
+
+<div class="state">Saved while offline</div>
+<a class="card" href="#"><div class="body"><div class="src">arstechnica.com</div><div class="title muted-title">arstechnica.com/science/2026/09/the-quiet-web</div><div class="meta"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></svg>Will fetch when you're online</div></div></a>
+
+<div class="state">Swiping left to archive</div>
+<div class="swipe"><div class="under"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/></svg>Archive</div><a class="card" href="#"><div class="body"><div class="src">Stratechery</div><div class="title">Aggregation theory, ten years on</div><div class="meta">14 min</div></div></a></div>
+</section>
+
+<!-- ================= DARK ================= -->
+<section class="col" data-theme="dark">
+<h2>Dark</h2>
+
+<div class="state">Unread, with the article's image</div>
+<a class="card" href="#"><div class="body"><div class="src">The Guardian</div><div class="title">The quiet return of the read-it-later app, and why it matters this time</div><div class="meta">9 min</div></div><img class="thumb" src="https://picsum.photos/seed/shelf-guardian/144/144" alt=""></a>
+
+<div class="state">Unread, no image: the title takes the width</div>
+<a class="card" href="#"><div class="body"><div class="src">Stratechery</div><div class="title">Aggregation theory, ten years on</div><div class="meta">14 min</div></div></a>
+
+<div class="state">Part-read, audio downloaded</div>
+<a class="card" href="#"><div class="body"><div class="src">Bitcoin Magazine</div><div class="title">Why relays, not servers, are the future of personal data</div><div class="meta"><span class="hot">4 min left</span><span class="sep"></span><span class="tag"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 10v3M6 6v11M10 3v18M14 8v7M18 5v13M22 10v3"/></svg>Audio</span></div></div><img class="thumb" src="https://picsum.photos/seed/shelf-relays/144/144" alt=""><span class="progress"><i style="width:34%"></i></span></a>
+
+<div class="state">Getting the text (just shared)</div>
+<a class="card" href="#"><div class="body"><div class="src"><span class="pending-dot" aria-hidden="true"></span>theatlantic.com</div><div class="title muted-title">theatlantic.com/ideas/archive/2026/09/reading-long-things</div><div class="meta">Getting the text…</div></div></a>
+
+<div class="state">Saved from your browser, still arriving</div>
+<a class="card" href="#"><div class="body"><div class="src"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>From Chrome</div><div class="title">Mozilla's Readability library is quietly everywhere</div><div class="meta"><span class="pending-dot" aria-hidden="true"></span>Getting the text…</div></div></a>
+
+<div class="state">Couldn't get the text: saved as a link</div>
+<a class="card" href="#"><div class="body"><div class="src">nytimes.com</div><div class="title">The Long Road Back to the Office</div><div class="meta"><span>Couldn't get the text</span><span class="sep"></span><span class="link">Open original <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></span></div></div></a>
+
+<div class="state">Saved while offline</div>
+<a class="card" href="#"><div class="body"><div class="src">arstechnica.com</div><div class="title muted-title">arstechnica.com/science/2026/09/the-quiet-web</div><div class="meta"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></svg>Will fetch when you're online</div></div></a>
+
+<div class="state">Swiping left to archive</div>
+<div class="swipe"><div class="under"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/></svg>Archive</div><a class="card" href="#"><div class="body"><div class="src">Stratechery</div><div class="title">Aggregation theory, ten years on</div><div class="meta">14 min</div></div></a></div>
+</section>
+</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,68 @@
+/* Generated from shared/tokens/tokens.json (v0.1.0) by build-css.mjs. Do not edit. */
+:root, [data-theme="light"] {
+  --background: #FCF7F6;
+  --surface: #FFFFFF;
+  --line: #E9EAEB;
+  --text: #181D27;
+  --muted: #535862;
+  --accent: #B5542E;
+  --accent-soft: #F8EEEA;
+  --on-accent: #FFFFFF;
+  --success: #079455;
+  --error: #D92D20;
+  --shadow-card: 0px 1px 2px #1018280D, 0px 4px 12px #1018280F;
+  --card-edge: none;
+}
+[data-theme="dark"] {
+  --background: #0C0E12;
+  --surface: #13161B;
+  --line: #22262F;
+  --text: #F7F7F7;
+  --muted: #94979C;
+  --accent: #CA8469;
+  --accent-soft: #311D18;
+  --on-accent: #0C0E12;
+  --success: #47CD89;
+  --error: #F97066;
+  --shadow-card: none;
+  --card-edge: 1px solid #22262F;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: #0C0E12;
+    --surface: #13161B;
+    --line: #22262F;
+    --text: #F7F7F7;
+    --muted: #94979C;
+    --accent: #CA8469;
+    --accent-soft: #311D18;
+    --on-accent: #0C0E12;
+    --success: #47CD89;
+    --error: #F97066;
+    --shadow-card: none;
+    --card-edge: 1px solid #22262F;
+  }
+}
+:root {
+  --on-gradient: #FFFFFF;
+  --gradient-primary: linear-gradient(180deg, #BE6947, #944526);
+  --text-13: 13px;
+  --text-15: 15px;
+  --text-17: 17px;
+  --text-20: 20px;
+  --text-28: 28px;
+  --text-32: 32px;
+  --reader-size: 18px;
+  --reader-leading: 1.55;
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --radius: 10px;
+  --radius-pill: 999px;
+  --font-ui: Inter, Roboto, system-ui, sans-serif;
+  --font-reader: 'Noto Serif', Georgia, serif;
+}
