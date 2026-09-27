@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <path d="M41 25H67A4 4 0 0 1 71 29V64.24A1.5 1.5 0 0 1 68.68 65.5L54 56L39.32 65.5A1.5 1.5 0 0 1 37 64.24V29A4 4 0 0 1 41 25Z" fill="#000000"/>
+  <!-- one colour cannot show read vs unread, so the shelf breaks where reading stops -->
+  <rect x="30" y="70" width="30" height="9" rx="4.5" fill="#000000"/>
+  <rect x="65" y="70" width="13" height="9" rx="4.5" fill="#000000"/>
+</svg>

@@ -98,3 +98,8 @@ A four-lens consistency review of the phone prototype (player system, screen sca
 52. **The mini player on Listen** appears once the Now playing card scrolls away, and slides in only when a session starts or the card leaves, not on every tab switch. Refines decision 20.
 53. **Phone-to-phone restore follows the contract**: scan the QR, then type the six digits shown on the other phone (a second factor, never an alternative to scanning). If the camera is refused, the way on is the recovery code. Corrects the flow map, which said the code could be typed instead of scanning.
 54. **"Next unread" becomes "Archive and next"**, saying what it does. The end card's pair is [Archive and next] [Archive], primary on the right.
+
+## Round 14 (2026-09-27), icons
+
+55. **App icon: "Bookmark on Terracotta".** A cream, square-shouldered bookmark with a notched tail standing on a two-tone reading-progress bar, on the brand gradient. Chosen over the Ledge (books on a shelf) after a concept round of five and a refinement round, compared at real sizes on home screens, themed icons and a 16 px toolbar. Sources and the asset build live in `shared/brand/`.
+56. **In-app icons are Lucide**, plus one custom pair: skip back and forward 15, in Lucide's exact rotate geometry with a lighter, centred "15" (variant C). Whether the custom speed, speed-read and shelf icons replace Lucide's `gauge`, `zap`/`scan-text` and `library-big` is still open.
