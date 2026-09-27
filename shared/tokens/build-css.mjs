@@ -45,11 +45,12 @@ const lines = [
   ...t.space.map((s) => `  --space-${s}: ${s}px;`),
   `  --radius: ${t.radius.container}px;`,
   `  --radius-pill: ${t.radius.pill}px;`,
+  `  --radius-sheet: ${t.radius.sheet}px;`,
   "  --font-ui: Inter, Roboto, system-ui, sans-serif;",
   "  --font-reader: 'Noto Serif', Georgia, serif;",
   '}',
   ...Object.entries(t.type.reader.palette).map(([name, c]) =>
-    `[data-reader="${name}"] { --reader-bg: ${c.bg}; --reader-text: ${c.text}; --reader-muted: ${c.muted}; --reader-link: ${c.link}; }`),
+    `[data-reader="${name}"] { --reader-bg: ${c.bg}; --reader-text: ${c.text}; --reader-muted: ${c.muted}; --reader-link: ${c.link}; --reader-highlight: ${c.highlight}; }`),
   '',
 ];
 
