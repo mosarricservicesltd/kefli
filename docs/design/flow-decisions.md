@@ -28,3 +28,8 @@ Decisions taken with Richard while testing flow map rev. 2 against full coverage
 13. **Switching to a nostr app later:** You → Advanced → "Use my nostr app instead" moves every save across to the nostr identity. Out of the main path; nobody is locked in.
 14. **Delete my data:** one screen explaining what goes (phone, our server) and what can only be asked for (deletion from independent relays), then type DELETE to confirm. The only confirmation-style gate in the app, because it is the only truly irreversible action.
 15. **Notifications:** none in v1, so no notification permission is ever requested. Android's media controls during playback need no permission.
+
+## Round 5 (2026-09-27), from the usability pass
+
+16. **Appearance row cut:** the app follows the phone's light/dark setting. The Reader's Light · Sepia · Dark lives only in the Aa sheet.
+17. **Backup card:** "Later" hides it until ten more saves. The "Not written down" row under You stays visible regardless.
