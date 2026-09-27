@@ -1,4 +1,4 @@
-/* Generated from shared/tokens/tokens.json (v0.1.0) by build-css.mjs. Do not edit. */
+/* Generated from shared/tokens/tokens.json (v0.1.1) by build-css.mjs. Do not edit. */
 :root, [data-theme="light"] {
   --background: #FCF7F6;
   --surface: #FFFFFF;
@@ -18,7 +18,7 @@
   --surface: #13161B;
   --line: #22262F;
   --text: #F7F7F7;
-  --muted: #94979C;
+  --muted: #B4B7BD;
   --accent: #CA8469;
   --accent-soft: #311D18;
   --on-accent: #0C0E12;
@@ -33,7 +33,7 @@
     --surface: #13161B;
     --line: #22262F;
     --text: #F7F7F7;
-    --muted: #94979C;
+    --muted: #B4B7BD;
     --accent: #CA8469;
     --accent-soft: #311D18;
     --on-accent: #0C0E12;
