@@ -48,6 +48,8 @@ const lines = [
   "  --font-ui: Inter, Roboto, system-ui, sans-serif;",
   "  --font-reader: 'Noto Serif', Georgia, serif;",
   '}',
+  ...Object.entries(t.type.reader.palette).map(([name, c]) =>
+    `[data-reader="${name}"] { --reader-bg: ${c.bg}; --reader-text: ${c.text}; --reader-muted: ${c.muted}; --reader-link: ${c.link}; }`),
   '',
 ];
 

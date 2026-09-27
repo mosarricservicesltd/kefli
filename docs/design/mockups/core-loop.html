@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shelf Core Loop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Serif:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<style>
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font-family:var(--font-ui);font-size:var(--text-15);line-height:1.5;background:#E7E3E1;color:#181D27}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.stage{display:flex;flex-wrap:wrap;gap:var(--space-32);justify-content:center;align-items:flex-start;padding:var(--space-32) var(--space-16)}
+
+/* ---------- control panel (outside the phone) ---------- */
+.panel{width:300px;max-width:100%;font-size:var(--text-13)}
+.panel h1{font-size:var(--text-20);margin:0 0 var(--space-4);font-weight:600}
+.panel p{margin:0 0 var(--space-16);color:#535862}
+.panel h2{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#535862;margin:var(--space-20) 0 var(--space-8)}
+.panel .btns{display:flex;flex-wrap:wrap;gap:6px}
+.panel .btns button{height:32px;padding:0 12px;border-radius:var(--radius-pill);background:#FFFFFF;border:1px solid #D5D7DA;display:inline-flex;align-items:center}
+.panel .btns button.on{background:#181D27;color:#FFFFFF;border-color:#181D27}
+.panel .note{margin-top:var(--space-20);padding:var(--space-12);border-radius:var(--radius);background:#FFFFFF;border:1px solid #D5D7DA;color:#414651}
+
+/* ---------- phone ---------- */
+.phone{width:360px;height:800px;flex:none;border-radius:32px;overflow:hidden;position:relative;background:var(--background);color:var(--text);box-shadow:0 0 0 8px #181D27,0 24px 48px #10182840;display:flex;flex-direction:column}
+.statusbar{height:24px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 var(--space-16);font-size:12px;font-weight:600}
+.viewport{flex:1;position:relative;overflow:hidden}
+.screen{position:absolute;inset:0;display:flex;flex-direction:column}
+.scroll{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
+.scroll::-webkit-scrollbar{display:none}
+.gesturebar{height:16px;flex:none;display:flex;align-items:center;justify-content:center;background:var(--surface)}
+.gesturebar i{width:108px;height:4px;border-radius:var(--radius-pill);background:var(--text);opacity:.35}
+
+/* tab bar */
+.tabbar{height:64px;flex:none;display:flex;background:var(--surface);border-top:1px solid var(--line)}
+.tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:12px;font-weight:500;color:var(--muted)}
+.tabbar button.on{color:var(--accent)}
+.tabbar .pill{width:56px;height:28px;border-radius:var(--radius-pill);display:flex;align-items:center;justify-content:center}
+.tabbar button.on .pill{background:var(--accent-soft)}
+
+/* saves header */
+.head{padding:var(--space-12) var(--space-16) var(--space-8);display:flex;align-items:center;justify-content:space-between}
+.head h1{margin:0;font-size:var(--text-28);font-weight:600;letter-spacing:-.02em}
+.head .count{font-size:var(--text-13);color:var(--muted)}
+.searchbar{margin:0 var(--space-16);height:44px;border-radius:var(--radius-pill);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge);display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-16);color:var(--muted);width:calc(100% - 32px);text-align:left}
+.segs{display:flex;gap:var(--space-8);padding:var(--space-12) var(--space-16)}
+.seg{height:36px;padding:0 var(--space-16);border-radius:var(--radius-pill);display:inline-flex;align-items:center;font-size:var(--text-13);font-weight:500;background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge)}
+.seg.on{background:var(--text);color:var(--background);box-shadow:none;border-color:transparent}
+.list{padding:0 var(--space-16) 96px}
+.refresh{height:3px;margin:0 var(--space-16);border-radius:var(--radius-pill);background:var(--accent-soft);overflow:hidden;position:relative}
+.refresh i{position:absolute;top:0;bottom:0;width:30%;background:var(--accent);border-radius:var(--radius-pill);animation:slide 1.2s ease-in-out infinite}
+@keyframes slide{0%{left:-30%}100%{left:100%}}
+.banner{margin:0 var(--space-16) var(--space-8);min-height:40px;border-radius:var(--radius-pill);background:var(--text);color:var(--background);display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-16);font-size:var(--text-13);font-weight:500}
+
+/* card (locked component) */
+.cardwrap{position:relative;border-radius:var(--radius);margin-bottom:10px;touch-action:pan-y;user-select:none}
+.cardwrap .under{position:absolute;inset:0;border-radius:var(--radius);background:var(--accent);color:var(--on-accent);display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-20);font-size:var(--text-13);font-weight:600;opacity:0}
+.cardwrap .under.left{justify-content:flex-end}
+.card{position:relative;display:flex;gap:var(--space-12);padding:var(--space-12);background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);border:var(--card-edge);overflow:hidden;text-align:left;width:100%;transition:transform .2s ease}
+.card.dragging{transition:none}
+.body{flex:1;min-width:0}
+.src{display:flex;align-items:center;gap:var(--space-4);font-size:var(--text-13);font-weight:500;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.title{font-size:var(--text-15);font-weight:600;line-height:1.35;margin:2px 0 var(--space-8);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.title.url{color:var(--muted);font-weight:500;overflow-wrap:anywhere}
+.meta{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-4) var(--space-8);font-size:var(--text-13);color:var(--muted)}
+.meta .sep{width:3px;height:3px;border-radius:var(--radius-pill);background:currentColor;opacity:.6}
+.meta .hot{color:var(--accent);font-weight:500}
+.tag{display:inline-flex;align-items:center;gap:var(--space-4);height:24px;padding:0 var(--space-8);border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--text);font-size:var(--text-13);font-weight:500;line-height:1}
+.tag svg{color:var(--accent)}
+.tag.plain{background:var(--line)}
+.thumb{width:72px;height:72px;border-radius:8px;object-fit:cover;flex:none;background:var(--accent-soft)}
+.progress{position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--accent-soft)}
+.progress i{display:block;height:100%;background:var(--accent);border-radius:0 var(--radius-pill) var(--radius-pill) 0}
+.pdot{width:8px;height:8px;border-radius:var(--radius-pill);background:var(--accent);flex:none;animation:breathe 1.6s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:.35}50%{opacity:1}}
+.link{color:var(--accent);font-weight:500;display:inline-flex;align-items:center;gap:var(--space-4)}
+
+/* empty states */
+.empty{padding:var(--space-32) var(--space-24);text-align:center;display:flex;flex-direction:column;align-items:center}
+.empty h2{font-size:var(--text-20);font-weight:600;margin:var(--space-20) 0 var(--space-8)}
+.empty p{color:var(--muted);margin:0 0 var(--space-24);max-width:28ch}
+.illus{width:200px;height:150px;border-radius:20px;background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge);padding:var(--space-12);display:flex;flex-direction:column;gap:var(--space-8);justify-content:flex-end}
+.illus .rowi{display:flex;gap:var(--space-8);justify-content:center}
+.illus .app{width:36px;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10px;color:var(--muted)}
+.illus .app b{width:36px;height:36px;border-radius:12px;background:var(--line);display:block}
+.illus .app.me b{background:var(--gradient-primary);display:flex;align-items:center;justify-content:center}
+.illus .app.me{color:var(--text);font-weight:600}
+.illus .lbl{font-size:11px;color:var(--muted);text-align:left}
+.btn{height:48px;padding:0 var(--space-24);border-radius:var(--radius-pill);display:inline-flex;align-items:center;justify-content:center;gap:var(--space-8);font-weight:600;font-size:var(--text-15);line-height:1}
+.btn.primary{background:var(--gradient-primary);color:var(--on-gradient)}
+.btn.secondary{background:var(--surface);color:var(--text);box-shadow:var(--shadow-card);border:var(--card-edge)}
+.btn.quiet{color:var(--accent);height:44px}
+
+/* toast */
+.toast{position:absolute;left:var(--space-16);right:var(--space-16);bottom:76px;min-height:52px;border-radius:var(--radius-pill);background:var(--text);color:var(--background);display:flex;align-items:center;justify-content:space-between;padding:0 var(--space-8) 0 var(--space-20);font-size:var(--text-15);z-index:30;box-shadow:0 8px 24px #10182833;overflow:hidden}
+.toast button{height:40px;padding:0 var(--space-16);border-radius:var(--radius-pill);font-weight:600;color:var(--background)}
+.toast .timer{position:absolute;left:0;bottom:0;height:2px;background:var(--accent);animation:shrink linear forwards}
+@keyframes shrink{from{width:100%}to{width:0}}
+
+/* search */
+.searchtop{display:flex;align-items:center;gap:var(--space-8);padding:var(--space-12) var(--space-16)}
+.iconbtn{width:44px;height:44px;border-radius:var(--radius-pill);display:inline-flex;align-items:center;justify-content:center;flex:none}
+.field{flex:1;height:44px;border-radius:var(--radius-pill);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge);display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-16)}
+.field input{flex:1;min-width:0;border:0;outline:0;background:none;font:inherit;color:var(--text)}
+.caption{padding:0 var(--space-16) var(--space-8);font-size:var(--text-13);color:var(--muted)}
+
+/* reader */
+.reader{background:var(--reader-bg);color:var(--reader-text)}
+.rtop{height:56px;flex:none;display:flex;align-items:center;gap:var(--space-4);padding:0 var(--space-8);background:var(--reader-bg);position:relative;z-index:2}
+.rtop .host{flex:1;text-align:center;font-size:var(--text-13);color:var(--reader-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rtop .aa{font-weight:600;font-size:var(--text-15);letter-spacing:-.02em}
+.rprog{height:2px;flex:none;background:transparent;position:relative;z-index:2}
+.rprog i{position:absolute;left:0;top:0;bottom:0;background:var(--accent)}
+.article{padding:var(--space-16) var(--space-20) 140px}
+.article .kicker{font-size:var(--text-13);color:var(--reader-muted);margin-bottom:var(--space-8)}
+.article h1{font-family:var(--font-ui);font-size:var(--text-28);line-height:1.2;font-weight:600;letter-spacing:-.02em;margin:0 0 var(--space-12)}
+.article .by{font-size:var(--text-13);color:var(--reader-muted);margin-bottom:var(--space-24)}
+.article .prose{font-family:var(--font-reader);line-height:var(--reader-leading)}
+.article .prose p{margin:0 0 1em}
+.article .prose a{color:var(--reader-link)}
+.article .fig{width:100%;aspect-ratio:3/2;border-radius:8px;object-fit:cover;background:var(--accent-soft);margin:0 0 1em;display:block}
+.shimmer{position:relative;overflow:hidden}
+.shimmer::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,#FFFFFF55,transparent);animation:sweep 1.4s infinite}
+@keyframes sweep{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+.skel{border-radius:6px;background:var(--line);margin-bottom:10px}
+.endcard{margin:var(--space-32) 0 0;padding:var(--space-20);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge);text-align:center;font-family:var(--font-ui);color:var(--text)}
+.endcard h3{margin:0 0 var(--space-4);font-size:var(--text-17);font-weight:600}
+.endcard p{margin:0 0 var(--space-16);font-size:var(--text-13);color:var(--muted)}
+.endcard .row{display:flex;gap:var(--space-8);justify-content:center}
+.dock{position:absolute;right:var(--space-16);bottom:var(--space-16);display:flex;gap:var(--space-8);z-index:3}
+.dock .play{height:52px;padding:0 var(--space-20) 0 var(--space-16);border-radius:var(--radius-pill);background:var(--gradient-primary);color:var(--on-gradient);display:inline-flex;align-items:center;gap:var(--space-8);font-weight:600;box-shadow:0 8px 20px #10182833}
+.dock .arch{width:52px;height:52px;border-radius:var(--radius-pill);background:var(--surface);color:var(--text);box-shadow:var(--shadow-card), 0 4px 16px #10182822;border:var(--card-edge);display:inline-flex;align-items:center;justify-content:center}
+
+/* in-app browser (reader error) */
+.iab{background:#FFFFFF;color:#181D27}
+.iab .bar{height:56px;display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-8);border-bottom:1px solid #E9EAEB}
+.iab .bar .u{flex:1;font-size:var(--text-13)}
+.iab .bar .u b{display:block;font-size:var(--text-15)}
+.iab .notice{margin:var(--space-12) var(--space-16);padding:var(--space-12) var(--space-16);border-radius:var(--radius);background:#F8EEEA;color:#181D27;font-size:var(--text-13)}
+.fakepage{padding:var(--space-16)}
+.fakepage .l{height:10px;border-radius:4px;background:#E9EAEB;margin-bottom:10px}
+.fakepage .h{height:22px;width:85%;border-radius:4px;background:#D5D7DA;margin-bottom:16px}
+.fakepage .im{height:150px;border-radius:6px;background:#E9EAEB;margin:16px 0}
+
+/* sheets */
+.scrim{position:absolute;inset:0;background:#0C0E1266;z-index:40;display:flex;align-items:flex-end}
+.sheet{width:100%;background:var(--surface);color:var(--text);border-radius:24px 24px 0 0;padding:var(--space-8) var(--space-20) var(--space-24);position:relative}
+.grab{width:36px;height:4px;border-radius:var(--radius-pill);background:var(--line);margin:0 auto var(--space-16)}
+.sheet h3{margin:0 0 var(--space-4);font-size:var(--text-20);font-weight:600;display:flex;align-items:center;gap:var(--space-8)}
+.sheet .sub{color:var(--muted);font-size:var(--text-13);margin:0 0 var(--space-16)}
+.saveditem{display:flex;gap:var(--space-12);align-items:center;padding:var(--space-12);border-radius:var(--radius);background:var(--background);margin-bottom:var(--space-16)}
+.saveditem .t{font-weight:600;line-height:1.35}
+.saveditem .s{font-size:var(--text-13);color:var(--muted)}
+.sheet .row{display:flex;gap:var(--space-8)}
+.sheet .row .btn{flex:1}
+.check{width:28px;height:28px;border-radius:var(--radius-pill);background:var(--success);color:#FFFFFF;display:inline-flex;align-items:center;justify-content:center}
+.sheet .timer{position:absolute;left:24px;right:24px;top:0;height:2px;border-radius:2px;overflow:hidden}
+.sheet .timer i{display:block;height:100%;background:var(--accent);animation:shrink 4s linear forwards}
+.menuitem{width:100%;min-height:52px;display:flex;align-items:center;gap:var(--space-12);font-size:var(--text-15);font-weight:500;border-radius:var(--radius);padding:0 var(--space-4);text-align:left}
+.menuitem.danger{color:var(--error)}
+.aarow{display:flex;align-items:center;gap:var(--space-12);margin-bottom:var(--space-20)}
+.aarow .sz{width:48px;height:48px;border-radius:var(--radius-pill);background:var(--background);display:inline-flex;align-items:center;justify-content:center;font-weight:600}
+.aarow .track{flex:1;height:4px;border-radius:var(--radius-pill);background:var(--line);position:relative}
+.aarow .track i{position:absolute;left:0;top:0;bottom:0;border-radius:var(--radius-pill);background:var(--accent)}
+.aarow .track b{position:absolute;top:50%;width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:var(--radius-pill);background:var(--surface);box-shadow:0 1px 4px #10182840;border:2px solid var(--accent)}
+.themes{display:flex;gap:var(--space-8)}
+.themes button{flex:1;height:64px;border-radius:var(--radius);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:var(--text-13);font-weight:500;border:2px solid transparent}
+.themes button span{font-family:var(--font-reader);font-size:var(--text-20)}
+.themes button.on{border-color:var(--accent)}
+.hostapp{position:absolute;inset:0;background:#FFFFFF;color:#181D27;padding:var(--space-16)}
+.hostapp .l{height:10px;border-radius:4px;background:#E9EAEB;margin-bottom:10px}
+.hostapp .h{height:20px;width:80%;border-radius:4px;background:#D5D7DA;margin:var(--space-16) 0}
+.hostapp .top{display:flex;align-items:center;gap:8px;font-weight:600;font-size:var(--text-13);color:#535862}
+@media (prefers-reduced-motion:reduce){*{animation-duration:0s!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="phone" id="phone" data-theme="light">
+    <div class="statusbar"><span>9:41</span><span>●●● ▮</span></div>
+    <div class="viewport" id="vp"></div>
+    <div class="gesturebar"><i></i></div>
+  </div>
+
+  <aside class="panel">
+    <h1>Batch 1 · core loop</h1>
+    <p>Everything on the phone is clickable: tap a card to read, swipe it left to archive, use Aa and ⋯ in the Reader. The buttons below jump straight to any state.</p>
+    <h2>Theme</h2>
+    <div class="btns" id="themeBtns"><button data-theme-set="light" class="on">Light</button><button data-theme-set="dark">Dark</button></div>
+    <h2>Saves</h2>
+    <div class="btns">
+      <button data-jump="saves">Populated</button>
+      <button data-jump="saves-empty">Empty, first run</button>
+      <button data-jump="saves-cleared">Empty, all read</button>
+      <button data-jump="saves-loading">Loading</button>
+      <button data-jump="saves-offline">Offline</button>
+      <button data-jump="archive">Archive</button>
+      <button data-jump="archive-empty">Archive, empty</button>
+      <button data-jump="search">Search</button>
+      <button data-jump="search-none">Search, no results</button>
+    </div>
+    <h2>Saved sheet (share from another app)</h2>
+    <div class="btns">
+      <button data-jump="share">Saved</button>
+      <button data-jump="share-offline">Offline</button>
+      <button data-jump="share-nolink">Not a link</button>
+    </div>
+    <h2>Reader</h2>
+    <div class="btns">
+      <button data-jump="reader">Reading</button>
+      <button data-jump="reader-loading">Loading</button>
+      <button data-jump="reader-images">Images arriving</button>
+      <button data-jump="reader-error">Couldn't get text</button>
+      <button data-jump="reader-end">End card</button>
+      <button data-jump="reader-aa">Aa sheet</button>
+      <button data-jump="reader-menu">⋯ menu</button>
+    </div>
+    <div class="note"><strong>One layout change from the flow map:</strong> Listen and Archive sit in a floating pill at the bottom right of the Reader, where the thumb rests, instead of in the top bar. The top bar keeps back, Aa and ⋯.</div>
+  </aside>
+</div>
+
+<script>
+/* ---------------- icons (Lucide) ---------------- */
+const I = {
+  search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  back:'<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+  x:'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  more:'<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  play:'<polygon points="6 3 20 12 6 21 6 3"/>',
+  archive:'<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
+  restore:'<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
+  trash:'<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
+  ext:'<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  link:'<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  wifioff:'<path d="M12 20h.01"/><path d="M8.5 16.43a5 5 0 0 1 7 0"/><path d="M5 12.86a10 10 0 0 1 5.17-2.69"/><path d="M19 12.86a10 10 0 0 0-2-1.52"/><path d="M2 8.82a15 15 0 0 1 4.18-2.64"/><path d="M22 8.82a15 15 0 0 0-11.29-3.76"/><path d="m2 2 20 20"/>',
+  monitor:'<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/>',
+  hourglass:'<path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/>',
+  audio:'<path d="M2 10v3M6 6v11M10 3v18M14 8v7M18 5v13M22 10v3"/>',
+  bookmark:'<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>',
+  headphones:'<path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/>',
+  user:'<circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  share:'<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98M15.41 6.51l-6.82 3.98"/>',
+  alert:'<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>',
+  laptop:'<path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>',
+};
+const ic = (n, s=20, extra='') => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${I[n]}</svg>`;
+
+/* ---------------- data ---------------- */
+const seed = () => ([
+  {id:1, src:'The Guardian', host:'theguardian.com', title:'The quiet return of the read-it-later app, and why it matters this time', mins:9, progress:0, img:'shelf-guardian', audio:false, status:'ok', archived:false, by:'Alex Hern'},
+  {id:2, src:'Bitcoin Magazine', host:'bitcoinmagazine.com', title:'Why relays, not servers, are the future of personal data', mins:6, progress:.34, img:'shelf-relays', audio:true, status:'ok', archived:false, by:'Shinobi'},
+  {id:3, src:'Stratechery', host:'stratechery.com', title:'Aggregation theory, ten years on', mins:14, progress:0, img:null, audio:false, status:'ok', archived:false, by:'Ben Thompson'},
+  {id:4, src:'From Chrome', host:'arstechnica.com', title:"Mozilla's Readability library is quietly everywhere", mins:5, progress:0, img:null, audio:false, status:'browser', archived:false},
+  {id:5, src:'nytimes.com', host:'nytimes.com', title:'The Long Road Back to the Office', mins:0, progress:0, img:null, audio:false, status:'failed', archived:false},
+  {id:6, src:'The Atlantic', host:'theatlantic.com', title:'What we lose when we stop reading long things', mins:11, progress:0, img:'shelf-atlantic', audio:false, status:'ok', archived:false, by:'Megan Garber'},
+  {id:7, src:'Aeon', host:'aeon.co', title:'The case for boring technology in an age of constant upgrades', mins:18, progress:0, img:null, audio:false, status:'ok', archived:true, by:'Claire Evans'},
+  {id:8, src:'Wired', host:'wired.com', title:'Your bookmarks are a graveyard. Here is how to dig them up', mins:7, progress:1, img:'shelf-wired', audio:true, status:'ok', archived:true, by:'Lauren Goode'},
+]);
+
+const S = {
+  items: seed(), tab:'saves', list:'unread', savesMode:'normal', online:true,
+  screen:'saves', query:'', readerId:2, readerMode:'ok', readerTheme:'light', readerSize:18,
+  sheet:null, toast:null, scrollToEnd:false
+};
+let toastTimer=null, sheetTimer=null;
+
+/* ---------------- helpers ---------------- */
+const vp = document.getElementById('vp');
+const phone = document.getElementById('phone');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const minsLeft = it => Math.max(1, Math.round(it.mins * (1 - it.progress)));
+
+function cardHTML(it){
+  let src = esc(it.src), meta = '', title = `<div class="title">${esc(it.title)}</div>`, extra = '';
+  if (it.status === 'pending') {
+    src = `<span class="pdot" aria-hidden="true"></span>${esc(it.host)}`;
+    title = `<div class="title url">${esc(it.url || it.host)}</div>`;
+    meta = S.online ? 'Getting the text…' : `${ic('hourglass',14)}Will fetch when you're online`;
+  } else if (it.status === 'browser') {
+    src = `${ic('monitor',14)}From Chrome`;
+    meta = `<span class="pdot" aria-hidden="true"></span>Getting the text…`;
+  } else if (it.status === 'failed') {
+    meta = `<span>Couldn't get the text</span><span class="sep"></span><span class="link">Open original ${ic('ext',14)}</span>`;
+  } else {
+    const parts = [];
+    if (it.progress > 0 && it.progress < 1) parts.push(`<span class="hot">${minsLeft(it)} min left</span>`);
+    else parts.push(`${it.mins} min`);
+    if (it.audio) parts.push(`<span class="tag">${ic('audio',14)}Audio</span>`);
+    if (S.screen === 'search' && it.archived) parts.push(`<span class="tag plain">Archive</span>`);
+    meta = parts.join('<span class="sep"></span>');
+    if (it.progress > 0 && it.progress < 1) extra = `<span class="progress"><i style="width:${it.progress*100}%"></i></span>`;
+  }
+  const img = it.img && it.status === 'ok' ? `<img class="thumb" src="https://picsum.photos/seed/${it.img}/144/144" alt="">` : '';
+  const under = it.archived
+    ? `<div class="under">${ic('restore',18)}Back to Unread</div>`
+    : `<div class="under left">${ic('archive',18)}Archive</div>`;
+  return `<div class="cardwrap" data-id="${it.id}">${under}<button class="card" data-open="${it.id}"><div class="body"><div class="src">${src}</div>${title}<div class="meta">${meta}</div></div>${img}${extra}</button></div>`;
+}
+
+function tabbar(){
+  const t = (id, icon, label) => `<button class="${S.tab===id?'on':''}" data-tab="${id}"><span class="pill">${ic(icon,22)}</span>${label}</button>`;
+  return `<nav class="tabbar">${t('saves','bookmark','Saves')}${t('listen','headphones','Listen')}${t('you','user','You')}</nav>`;
+}
+
+/* ---------------- screens ---------------- */
+function savesScreen(){
+  const unread = S.items.filter(i => !i.archived);
+  const archived = S.items.filter(i => i.archived);
+  const showing = S.list === 'unread' ? unread : archived;
+  let body = '';
+  if (S.savesMode === 'first') {
+    body = `<div class="empty">
+      <div class="illus"><div class="lbl">Share to</div><div class="rowi">
+        <span class="app"><b></b>Messages</span><span class="app"><b></b>Mail</span>
+        <span class="app me"><b>${ic('bookmark',18,'stroke="#fff"')}</b>Shelf</span><span class="app"><b></b>Notes</span></div></div>
+      <h2>Your shelf is empty</h2>
+      <p>Share any link from any app and it lands here, cleaned up and ready to read offline.</p>
+      <button class="btn primary">${ic('laptop',18)}Connect your browser</button>
+    </div>`;
+  } else if (S.list === 'unread' && unread.length === 0) {
+    body = `<div class="empty"><div class="check" style="width:56px;height:56px">${ic('check',28)}</div>
+      <h2>All read</h2><p>Nothing waiting. New saves will appear here.</p>
+      <button class="btn secondary" data-list="archive">See your archive</button></div>`;
+  } else if (S.list === 'archive' && archived.length === 0) {
+    body = `<div class="empty"><h2>Nothing archived yet</h2><p>Swipe an article left, or tap Archive when you finish it, and it moves here.</p></div>`;
+  } else {
+    body = `<div class="list">${showing.map(cardHTML).join('')}</div>`;
+  }
+  const count = S.savesMode === 'first' ? '' : (S.list === 'unread' ? `${unread.length} unread` : `${archived.length} archived`);
+  return `<div class="screen">
+    <div class="scroll" id="sc">
+      <div class="head"><h1>Saves</h1><span class="count">${count}</span></div>
+      ${S.savesMode === 'first' ? '' : `<button class="searchbar" data-go="search">${ic('search',18)}Search your saves</button>`}
+      ${S.savesMode === 'loading' ? '<div style="height:12px"></div><div class="refresh"><i></i></div>' : ''}
+      ${S.savesMode === 'first' ? '' : `<div class="segs"><button class="seg ${S.list==='unread'?'on':''}" data-list="unread">Unread</button><button class="seg ${S.list==='archive'?'on':''}" data-list="archive">Archive</button></div>`}
+      ${!S.online ? `<div class="banner">${ic('wifioff',16)}Offline — showing saved copies</div>` : ''}
+      ${body}
+    </div>
+    ${tabbar()}
+  </div>`;
+}
+
+function searchScreen(){
+  const q = S.query.trim().toLowerCase();
+  const res = q ? S.items.filter(i => (i.title + ' ' + i.src).toLowerCase().includes(q)) : [];
+  let body = '';
+  if (!q) body = `<div class="caption">Searches the full text of everything you've saved, on this phone.</div>`;
+  else if (!res.length) body = `<div class="empty"><h2>Nothing matches “${esc(S.query)}”</h2><p>Search looks through titles, sources and full text in Unread and Archive.</p><button class="btn secondary" data-clear>Clear search</button></div>`;
+  else body = `<div class="caption">${res.length} result${res.length>1?'s':''}</div><div class="list">${res.map(cardHTML).join('')}</div>`;
+  return `<div class="screen">
+    <div class="searchtop"><button class="iconbtn" data-back aria-label="Back">${ic('back',22)}</button>
+      <label class="field">${ic('search',18)}<input id="q" value="${esc(S.query)}" placeholder="Search your saves" autocomplete="off"></label></div>
+    <div class="scroll">${body}</div>
+    ${tabbar()}
+  </div>`;
+}
+
+const PROSE = [
+  "The first time a page disappears from the web while it is still on your list, you learn what a read-it-later app is actually for. It was never about saving time. It was about keeping the thing itself, the words, somewhere that belongs to you rather than to whoever happens to be hosting them this year.",
+  "Everything that followed was an elaboration of that one move. Sync arrived so the reading could happen somewhere other than the saving. A clean view arrived so the text could be read without the page fighting back. A voice arrived so the reading could happen with your hands on a steering wheel.",
+  "What never changed was the shape of the shelf: a list, newest at the top, that belonged to one person and nobody else. The services that held those lists came and went. Some were bought, some were shut, one was quietly folded into a browser and then quietly folded away again.",
+  "Relays change the arithmetic. If the list lives in several places at once, and only its owner can read it, then no single company closing its doors takes the list with it. The app becomes a window onto something the user already has, rather than the thing they are renting.",
+  "That sounds abstract until the day it matters. Then it sounds like the most practical idea in the world: the article you saved in 2026 is still there in 2036, readable offline, in a clean column, exactly where you left it.",
+];
+
+function readerScreen(){
+  const it = S.items.find(i => i.id === S.readerId) || S.items[0];
+  if (S.readerMode === 'error') {
+    return `<div class="screen iab">
+      <div class="bar"><button class="iconbtn" data-back aria-label="Close">${ic('x',22)}</button><div class="u"><b>${esc(it.title)}</b>${esc(it.host)}</div><button class="iconbtn" aria-label="Open in browser">${ic('ext',20)}</button></div>
+      <div class="notice">We couldn't get a clean copy of this page, so here's the original. It won't be available offline.</div>
+      <div class="scroll"><div class="fakepage"><div class="h"></div><div class="l"></div><div class="l" style="width:92%"></div><div class="l" style="width:80%"></div><div class="im"></div><div class="l"></div><div class="l" style="width:88%"></div><div class="l" style="width:95%"></div><div class="l" style="width:70%"></div></div></div>
+    </div>`;
+  }
+  const fig = it.img ? (S.readerMode === 'images' ? `<div class="fig shimmer"></div>` : `<img class="fig" src="https://picsum.photos/seed/${it.img}/720/480" alt="">`) : '';
+  let content;
+  if (S.readerMode === 'loading') {
+    content = `<div class="skel" style="height:12px;width:40%"></div><div class="skel" style="height:28px;width:95%"></div><div class="skel" style="height:28px;width:70%;margin-bottom:24px"></div>${Array.from({length:9},(_,k)=>`<div class="skel" style="height:14px;width:${[100,96,92,98,60,100,94,97,72][k]}%"></div>`).join('')}`;
+  } else {
+    content = `<div class="kicker">${esc(it.src)}</div><h1>${esc(it.title)}</h1><div class="by">${esc(it.by || it.src)} · ${it.mins} min · Saved yesterday</div>
+      <div class="prose" style="font-size:${S.readerSize}px">${fig}${PROSE.map((p,k)=>`<p>${k===3?p.replace('Relays change the arithmetic','<a href="#">Relays</a> change the arithmetic'):p}</p>`).join('')}</div>
+      <div class="endcard"><h3>You've reached the end</h3><p>${esc(it.src)} · ${it.mins} min</p><div class="row"><button class="btn primary" data-archive-open>${ic('archive',18)}Archive</button><button class="btn secondary" data-next>Next unread</button></div></div>`;
+  }
+  return `<div class="screen reader" data-reader="${S.readerTheme}">
+    <div class="rtop"><button class="iconbtn" data-back aria-label="Back">${ic('back',22)}</button><div class="host">${esc(it.host)}</div>
+      <button class="iconbtn aa" data-sheet="aa" aria-label="Text and theme">Aa</button><button class="iconbtn" data-sheet="menu" aria-label="More">${ic('more',22)}</button></div>
+    <div class="rprog"><i id="rp" style="width:${it.progress*100}%"></i></div>
+    <div class="scroll" id="rs"><div class="article">${content}</div></div>
+    ${S.readerMode === 'loading' ? '' : `<div class="dock"><button class="arch" data-archive-open aria-label="Archive">${ic('archive',22)}</button><button class="play">${ic('play',18,'fill="currentColor"')}Listen</button></div>`}
+  </div>`;
+}
+
+function hostApp(){
+  return `<div class="hostapp"><div class="top">${ic('share',16)}Another app · sharing a link</div><div class="h"></div><div class="l"></div><div class="l" style="width:90%"></div><div class="l" style="width:84%"></div><div class="l" style="width:95%"></div><div class="l" style="width:60%"></div></div>`;
+}
+
+function sheetHTML(){
+  if (!S.sheet) return '';
+  const it = S.items.find(i => i.id === S.readerId) || S.items[0];
+  if (S.sheet === 'aa') {
+    const pct = (S.readerSize - 15) / (24 - 15) * 100;
+    const th = (id, label, bg, fg) => `<button class="${S.readerTheme===id?'on':''}" data-rtheme="${id}" style="background:${bg};color:${fg}"><span>Aa</span>${label}</button>`;
+    return `<div class="scrim" data-close><div class="sheet" data-stop><div class="grab"></div><h3>Text</h3><p class="sub">Size and colours for reading. The rest of the app follows your phone.</p>
+      <div class="aarow"><button class="sz" data-size="-1" style="font-size:13px">A</button><div class="track"><i style="width:${pct}%"></i><b style="left:${pct}%"></b></div><button class="sz" data-size="1" style="font-size:20px">A</button></div>
+      <div class="themes">${th('light','Light','#FCF7F6','#181D27')}${th('sepia','Sepia','#F5EEDF','#3A2E22')}${th('dark','Dark','#0C0E12','#E4E4E6')}</div></div></div>`;
+  }
+  if (S.sheet === 'menu') {
+    return `<div class="scrim" data-close><div class="sheet" data-stop><div class="grab"></div>
+      <button class="menuitem" data-close>${ic('ext',20)}Open original</button>
+      <button class="menuitem" data-close>${ic('link',20)}Copy link</button>
+      <button class="menuitem danger" data-delete>${ic('trash',20)}Delete</button></div></div>`;
+  }
+  if (S.sheet.startsWith('share')) {
+    const mode = S.sheet.split('-')[1];
+    if (mode === 'nolink') {
+      return `<div class="scrim" data-close><div class="sheet" data-stop><div class="grab"></div><h3>${ic('alert',22,'style="color:var(--error)"')}That wasn't a link</h3><p class="sub">Shelf saves web pages. Try sharing the page itself, or copy its address and share that.</p><div class="row"><button class="btn secondary" data-close>OK</button></div></div></div>`;
+    }
+    const off = mode === 'offline';
+    return `<div class="scrim" data-close><div class="sheet" data-stop>${off?'':'<div class="timer"><i></i></div>'}<div class="grab"></div>
+      <h3><span class="check">${ic('check',16)}</span>Saved</h3>
+      <p class="sub">${off ? 'Saved · will fetch when online' : 'Private. Ready to read offline in a moment.'}</p>
+      <div class="saveditem"><div><div class="t">What we lose when we stop reading long things</div><div class="s">theatlantic.com</div></div></div>
+      <div class="row"><button class="btn secondary" data-undo-share>Undo</button>${off ? '<button class="btn primary" data-close>Done</button>' : '<button class="btn primary" data-readnow>Read now</button>'}</div></div></div>`;
+  }
+  return '';
+}
+
+function toastHTML(){
+  if (!S.toast) return '';
+  return `<div class="toast" style="${S.screen==='reader'?'bottom:84px':''}"><span>${esc(S.toast.text)}</span><button data-undo>Undo</button><span class="timer" style="animation-duration:5s"></span></div>`;
+}
+
+/* ---------------- render ---------------- */
+function render(){
+  let html = '';
+  if (S.sheet && S.sheet.startsWith('share')) html = hostApp();
+  else if (S.screen === 'saves') html = savesScreen();
+  else if (S.screen === 'search') html = searchScreen();
+  else if (S.screen === 'reader') html = readerScreen();
+  vp.innerHTML = html + toastHTML() + sheetHTML();
+  const q = document.getElementById('q');
+  if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); q.oninput = e => { S.query = e.target.value; render(); }; }
+  const rs = document.getElementById('rs');
+  if (rs) {
+    const it = S.items.find(i => i.id === S.readerId);
+    if (S.scrollToEnd) { rs.scrollTop = rs.scrollHeight; S.scrollToEnd = false; }
+    else if (it && it.progress > 0 && it.progress < 1) rs.scrollTop = it.progress * (rs.scrollHeight - rs.clientHeight);
+    const upd = () => { const max = rs.scrollHeight - rs.clientHeight; const p = max > 0 ? rs.scrollTop / max : 0; document.getElementById('rp').style.width = (p*100) + '%'; if (it && S.readerMode === 'ok') it.progress = p > .98 ? .99 : p; };
+    rs.onscroll = upd; upd();
+  }
+  bindSwipes();
+}
+
+function showToast(text, undo){
+  clearTimeout(toastTimer);
+  S.toast = {text, undo};
+  toastTimer = setTimeout(() => { S.toast = null; render(); }, 5000);
+}
+
+/* ---------------- swipe ---------------- */
+function bindSwipes(){
+  vp.querySelectorAll('.cardwrap').forEach(w => {
+    const card = w.querySelector('.card'), under = w.querySelector('.under');
+    const it = S.items.find(i => i.id === +w.dataset.id);
+    let x0 = null, dx = 0, moved = false;
+    const dir = it.archived ? 1 : -1;
+    w.onpointerdown = e => { x0 = e.clientX; dx = 0; moved = false; card.classList.add('dragging'); w.setPointerCapture(e.pointerId); };
+    w.onpointermove = e => { if (x0 === null) return; dx = e.clientX - x0; if (Math.abs(dx) > 6) moved = true; const d = dir < 0 ? Math.min(0, dx) : Math.max(0, dx); card.style.transform = `translateX(${d}px)`; under.style.opacity = Math.min(1, Math.abs(d) / 80); };
+    w.onpointerup = () => {
+      card.classList.remove('dragging');
+      const d = dir < 0 ? Math.min(0, dx) : Math.max(0, dx);
+      if (Math.abs(d) > 96) {
+        it.archived = !it.archived;
+        showToast(it.archived ? 'Archived' : 'Moved back to Unread', () => { it.archived = !it.archived; });
+        render();
+      } else { card.style.transform = ''; under.style.opacity = 0; if (!moved) openItem(it.id); }
+      x0 = null;
+    };
+    card.onclick = e => e.preventDefault();
+  });
+}
+
+function openItem(id){
+  const it = S.items.find(i => i.id === id);
+  if (!it) return;
+  S.readerId = id;
+  S.readerMode = it.status === 'failed' ? 'error' : (it.status === 'ok' ? 'ok' : 'loading');
+  S.screen = 'reader'; S.sheet = null;
+  render();
+  if (S.readerMode === 'loading') setTimeout(() => { if (S.screen === 'reader' && S.readerId === id) { it.status = 'ok'; it.src = it.src === 'From Chrome' ? 'Ars Technica' : it.src; S.readerMode = 'ok'; render(); } }, 900);
+}
+
+/* ---------------- events ---------------- */
+vp.addEventListener('click', e => {
+  const t = e.target.closest('[data-tab],[data-list],[data-go],[data-back],[data-clear],[data-sheet],[data-close],[data-rtheme],[data-size],[data-delete],[data-undo],[data-undo-share],[data-readnow],[data-archive-open],[data-next],[data-stop]');
+  if (!t) return;
+  const d = t.dataset;
+  if (d.stop !== undefined) return;
+  if (d.tab) { if (d.tab === 'saves') { S.screen = 'saves'; } else { showToast(d.tab === 'listen' ? 'Listen is batch 2' : 'You is batch 4'); S.toast.undo = null; } }
+  if (d.list) { S.list = d.list; S.savesMode = S.savesMode === 'first' ? 'normal' : S.savesMode; }
+  if (d.go === 'search') { S.screen = 'search'; S.query = ''; }
+  if (d.back !== undefined) { S.screen = 'saves'; S.sheet = null; }
+  if (d.clear !== undefined) S.query = '';
+  if (d.sheet) S.sheet = d.sheet;
+  if (d.close !== undefined && (!t.classList.contains('scrim') || e.target === t)) { S.sheet = null; clearTimeout(sheetTimer); }
+  if (d.rtheme) S.readerTheme = d.rtheme;
+  if (d.size) S.readerSize = Math.max(15, Math.min(24, S.readerSize + (+d.size)));
+  if (d.delete !== undefined) {
+    const it = S.items.find(i => i.id === S.readerId); const idx = S.items.indexOf(it);
+    S.items.splice(idx, 1); S.sheet = null; S.screen = 'saves';
+    showToast('Deleted', () => { S.items.splice(idx, 0, it); });
+  }
+  if (d.archiveOpen !== undefined) {
+    const it = S.items.find(i => i.id === S.readerId); it.archived = true; S.screen = 'saves';
+    showToast('Archived', () => { it.archived = false; });
+  }
+  if (d.next !== undefined) {
+    const it = S.items.find(i => i.id === S.readerId); it.archived = true;
+    const nxt = S.items.find(i => !i.archived && i.status === 'ok' && i.id !== it.id);
+    if (nxt) { openItem(nxt.id); showToast('Archived', () => { it.archived = false; }); return; }
+    S.screen = 'saves';
+  }
+  if (d.undo !== undefined && S.toast && S.toast.undo) { S.toast.undo(); S.toast = null; clearTimeout(toastTimer); }
+  if (d.undoShare !== undefined) { S.items = S.items.filter(i => i.id !== 99); S.sheet = null; clearTimeout(sheetTimer); }
+  if (d.readnow !== undefined) { clearTimeout(sheetTimer); S.sheet = null; openItem(99); return; }
+  render();
+});
+
+function addSharedItem(){
+  if (!S.items.find(i => i.id === 99)) S.items.unshift({id:99, src:'theatlantic.com', host:'theatlantic.com', url:'theatlantic.com/ideas/archive/2026/09/reading-long-things', title:'What we lose when we stop reading long things', mins:11, progress:0, img:'shelf-atlantic2', audio:false, status:'pending', archived:false, by:'Megan Garber'});
+}
+
+/* ---------------- panel ---------------- */
+document.querySelectorAll('[data-theme-set]').forEach(b => b.onclick = () => {
+  phone.dataset.theme = b.dataset.themeSet;
+  document.querySelectorAll('[data-theme-set]').forEach(x => x.classList.toggle('on', x === b));
+  if (S.screen === 'reader' && (S.readerTheme === 'light' || S.readerTheme === 'dark')) S.readerTheme = b.dataset.themeSet;
+  else if (S.readerTheme !== 'sepia') S.readerTheme = b.dataset.themeSet;
+  render();
+});
+
+document.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => {
+  document.querySelectorAll('[data-jump]').forEach(x => x.classList.toggle('on', x === b));
+  clearTimeout(toastTimer); clearTimeout(sheetTimer);
+  S.items = seed(); S.toast = null; S.sheet = null; S.online = true; S.savesMode = 'normal'; S.list = 'unread'; S.query = '';
+  S.readerMode = 'ok'; S.readerId = 2; S.screen = 'saves';
+  const j = b.dataset.jump;
+  if (j === 'saves-empty') { S.items = []; S.savesMode = 'first'; }
+  if (j === 'saves-cleared') S.items.forEach(i => i.archived = true);
+  if (j === 'saves-loading') S.savesMode = 'loading';
+  if (j === 'saves-offline') { S.online = false; addSharedItem(); S.items[0].status = 'pending'; }
+  if (j === 'archive') S.list = 'archive';
+  if (j === 'archive-empty') { S.list = 'archive'; S.items.forEach(i => i.archived = false); }
+  if (j === 'search') { S.screen = 'search'; S.query = 'read'; }
+  if (j === 'search-none') { S.screen = 'search'; S.query = 'volcano'; }
+  if (j.startsWith('share')) { addSharedItem(); S.sheet = j === 'share' ? 'share-saved' : j; if (j === 'share-nolink') S.items = S.items.filter(i => i.id !== 99);
+    if (j === 'share') sheetTimer = setTimeout(() => { S.sheet = null; render(); }, 4000); }
+  if (j.startsWith('reader')) { S.screen = 'reader'; S.items[1].progress = .34; }
+  if (j === 'reader-loading') S.readerMode = 'loading';
+  if (j === 'reader-images') S.readerMode = 'images';
+  if (j === 'reader-error') { S.readerId = 5; S.readerMode = 'error'; }
+  if (j === 'reader-end') S.scrollToEnd = true;
+  if (j === 'reader-aa') S.sheet = 'aa';
+  if (j === 'reader-menu') S.sheet = 'menu';
+  render();
+});
+
+render();
+</script>
+</body>
+</html>

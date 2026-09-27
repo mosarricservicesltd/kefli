@@ -1,4 +1,4 @@
-/* Generated from shared/tokens/tokens.json (v0.1.1) by build-css.mjs. Do not edit. */
+/* Generated from shared/tokens/tokens.json (v0.1.2) by build-css.mjs. Do not edit. */
 :root, [data-theme="light"] {
   --background: #FCF7F6;
   --surface: #FFFFFF;
@@ -66,3 +66,6 @@
   --font-ui: Inter, Roboto, system-ui, sans-serif;
   --font-reader: 'Noto Serif', Georgia, serif;
 }
+[data-reader="light"] { --reader-bg: #FCF7F6; --reader-text: #181D27; --reader-muted: #535862; --reader-link: #B5542E; }
+[data-reader="sepia"] { --reader-bg: #F5EEDF; --reader-text: #3A2E22; --reader-muted: #6E5F4E; --reader-link: #944526; }
+[data-reader="dark"] { --reader-bg: #0C0E12; --reader-text: #E4E4E6; --reader-muted: #B4B7BD; --reader-link: #CA8469; }
