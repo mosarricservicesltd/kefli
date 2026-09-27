@@ -27,10 +27,11 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .panel .btns button{height:32px;padding:0 12px;border-radius:var(--radius-pill);background:#FFFFFF;border:1px solid #D5D7DA;display:inline-flex;align-items:center}
 .panel .btns button.on{background:#181D27;color:#FFFFFF;border-color:#181D27}
 .panel .note{margin-top:var(--space-12);padding:var(--space-12);border-radius:var(--radius);background:#FFFFFF;border:1px solid #D5D7DA;color:#414651;max-width:80ch}
+.panel.after{margin:var(--space-20) 0 0}
 .panel .note p{margin:0 0 var(--space-8);color:inherit}
 .panel .note p:last-child{margin:0}
 .panel .jnote{margin:var(--space-12) 0 0}
-.panel details.note summary{cursor:pointer;font-weight:600;color:#181D27}
+.panel details.note summary{cursor:pointer;font-weight:600}
 .panel details.note ul{margin:var(--space-8) 0 0;padding-left:1.2em}
 .panel details.note li{margin-bottom:var(--space-4)}
 
@@ -113,7 +114,7 @@ svg.mark{display:block;flex:none}
 :is(.toast,.popup) .x{width:32px;height:32px;border-radius:var(--radius-pill);display:inline-flex;align-items:center;justify-content:center;color:var(--muted);flex:none}
 .toast .act{color:var(--toast-fg)}
 .toast .act:hover,.toast .x:hover{background:color-mix(in srgb, var(--toast-fg) 12%, transparent)}
-:is(.toast,.popup) button:focus-visible,:is(.toast,.popup).kbd button:focus{outline:2px solid var(--accent);outline-offset:-2px}
+:is(.toast,.popup) button:focus-visible,:is(.toast,.popup).viakey button:focus{outline:2px solid var(--accent);outline-offset:-2px}
 :is(.toast,.popup) .timer{height:2px;background:var(--accent);animation:shrink linear forwards}
 .paused .timer{animation-play-state:paused}
 @keyframes shrink{from{width:100%}to{width:0}}
@@ -224,7 +225,7 @@ details.adv[open] summary > svg:last-child{transform:rotate(90deg)}
 <div class="wrap">
   <div class="panel">
     <h1>Shelf prototype · batch 5 · browser extension</h1>
-    <p>Click the Shelf button in the toolbar or press Alt+Shift+S to save the page, or jump to any state below. The toast never takes focus: press the shortcut again while it says Saved to reach Undo, then Tab, Escape or ✕ to go back to the page. It pauses while the pointer is over it or focus you gave it is inside it. On a browser page, a small popup opens under Shelf’s button instead. Shelf’s options open in their own tab; click the article’s tab to go back. When Shelf isn’t pinned, click the puzzle piece to pin it. The browser window, tab strip, badge and right-click menu are Chrome’s, drawn only for context; the toast, the popup and the options page are Shelf’s.</p>
+    <p>Click the Shelf button in the toolbar or press Alt+Shift+S to save the page, or jump to any state below. The toast never takes focus: press the shortcut again while it says Saved to reach Undo, then Tab, Escape or ✕ to go back to the page. It pauses while the pointer is over it or focus you gave it is inside it. On a browser page, a small popup opens under Shelf’s button instead. Shelf’s options open in their own tab; click the article’s tab to go back. When Shelf isn’t pinned, click the puzzle piece to pin it. The browser window, tab strip, badge and right-click menu are Chrome’s, drawn only for context; the toast, the popup and the options page are Shelf’s. Decisions and build notes are under the window.</p>
     <div class="grid">
       <div><h2>Theme</h2><div class="btns"><button data-theme-set="light" class="on">Light</button><button data-theme-set="dark">Dark</button></div></div>
       <div><h2>Platform</h2><div class="btns"><button data-toggle="mac" aria-pressed="false">Mac</button><button data-toggle="nokey" aria-pressed="false">Shortcut not set</button></div></div>
@@ -258,26 +259,6 @@ details.adv[open] summary > svg:last-child{transform:rotate(90deg)}
       </div></div>
     </div>
     <p class="note jnote" id="jnote" hidden></p>
-    <div class="note">
-      <p><strong>For you to decide:</strong> the spec drops the oldest queued save when a ninth is made offline. Here the ninth is refused instead, with a clear message, so nothing you saved is ever silently lost (decision 31).</p>
-      <p><strong>Changed in this pass:</strong> the toast never takes focus; a second press of the shortcut reaches Undo (58, updates 44). Browser pages show a small popup as well as the tick (59). Offline saves offer Undo (60, changes 30). The badge, the button’s name and the options page count every save that hasn’t reached Shelf’s server, including ones that couldn’t send (refines 30). Disconnecting names the unsent saves it would delete.</p>
-    </div>
-    <details class="note">
-      <summary>Build notes</summary>
-      <ul>
-        <li><strong>Toast:</strong> the shadow-root contract is in the comment above the toast host in this file’s source.</li>
-        <li><strong>Second press:</strong> while a Saved toast shows, the command handler asks the tab’s content script to reach Undo and passes the keyboard flag.</li>
-        <li><strong>Install:</strong> on runtime.onInstalled with reason 'install', call runtime.openOptionsPage() so Connect opens by itself. The Firefox manifest overlay sets action.default_area:'navbar'.</li>
-        <li><strong>Pin line:</strong> read action.getUserSettings().isOnToolbar (Chrome 91+, Firefox 118+); re-check on focus, visibilitychange and action.onUserSettingsChanged where it exists, and drop the line once Shelf is pinned.</li>
-        <li><strong>Browser-page popup:</strong> in the command or click handler, action.setPopup({popup:'saved.html'}), then action.openPopup(), then setPopup({popup:''}) so the next click still saves. Needs Chrome 127+; below that the tick alone stays. Firefox allows openPopup() from the same user-action handler.</li>
-        <li><strong>Badge:</strong> setBadgeBackgroundColor '#535862' while saves wait to send and '#079455' for the tick; setBadgeTextColor('#FFFFFF') in both builds.</li>
-        <li><strong>Shortcut:</strong> read the live binding with commands.getAll() in both browsers. 'Set a shortcut' opens chrome://extensions/shortcuts with tabs.create (Edge and Brave redirect it); in Firefox, commands.openShortcutSettings() where it exists, otherwise the words 'Add-ons, then the gear, then Manage Extension Shortcuts'. In this mock it simulates setting Alt+Shift+S there and coming back.</li>
-        <li><strong>Fonts:</strong> the options page and the popup use Inter, bundled as a local @font-face (the extension’s CSP forbids remote fonts). The injected toast stays system-ui.</li>
-        <li><strong>Browser name:</strong> the connected lead takes it from the pairing label; fall back to navigator.userAgent where navigator.userAgentData is missing (Firefox).</li>
-        <li><strong>Firefox build:</strong> the menu item is titled 'Save Link to Shelf' (Title Case) and the options row repeats that wording; the options page lives at moz-extension://…/options.html; a save from about:reader?url=… sends the inner url. No Firefox window is drawn here.</li>
-        <li><strong>Check:</strong> verify in a light and a dark Windows contrast theme (for example Desert and Night sky).</li>
-      </ul>
-    </details>
   </div>
 
   <div class="win" id="win" data-theme="light">
@@ -319,6 +300,28 @@ details.adv[open] summary > svg:last-child{transform:rotate(90deg)}
     <!-- Shelf's action popup (saved.html in the build), opened on pages where no toast can run. Chrome anchors it under the
          toolbar button; its document takes focus as a browser popup does, but Undo is not focused. It has its own status region. -->
     <div class="popup" id="apopup" role="dialog" aria-label="Shelf" tabindex="-1" hidden></div>
+  </div>
+  <div class="panel after">
+    <div class="note">
+      <p><strong>For you to decide:</strong> the spec drops the oldest queued save when a ninth is made offline. Here the ninth is refused instead, with a clear message, so nothing you saved is ever silently lost (decision 31).</p>
+      <p><strong>Changed in this pass:</strong> the toast never takes focus; a second press of the shortcut reaches Undo (58, updates 44). Browser pages show a small popup as well as the tick (59). Offline saves offer Undo (60, changes 30). The badge, the button’s name and the options page count every save that hasn’t reached Shelf’s server, including ones that couldn’t send (refines 30). Disconnecting names the unsent saves it would delete.</p>
+    </div>
+    <details class="note">
+      <summary>Build notes</summary>
+      <ul>
+        <li><strong>Toast:</strong> the shadow-root contract is in the comment above the toast host in this file’s source.</li>
+        <li><strong>Second press:</strong> while a Saved toast shows, the command handler asks the tab’s content script to reach Undo and passes the keyboard flag.</li>
+        <li><strong>Install:</strong> on runtime.onInstalled with reason 'install', call runtime.openOptionsPage() so Connect opens by itself. The Firefox manifest overlay sets action.default_area:'navbar'.</li>
+        <li><strong>Pin line:</strong> read action.getUserSettings().isOnToolbar (Chrome 91+, Firefox 118+); re-check on focus, visibilitychange and action.onUserSettingsChanged where it exists, and drop the line once Shelf is pinned.</li>
+        <li><strong>Browser-page popup:</strong> in the command or click handler, action.setPopup({popup:'saved.html'}), then action.openPopup(), then setPopup({popup:''}) so the next click still saves. Needs Chrome 127+; below that the tick alone stays. Firefox allows openPopup() from the same user-action handler.</li>
+        <li><strong>Badge:</strong> setBadgeBackgroundColor '#535862' while saves wait to send and '#079455' for the tick; setBadgeTextColor('#FFFFFF') in both builds.</li>
+        <li><strong>Shortcut:</strong> read the live binding with commands.getAll() in both browsers. 'Set a shortcut' opens chrome://extensions/shortcuts with tabs.create (Edge and Brave redirect it); in Firefox, commands.openShortcutSettings() where it exists, otherwise the words 'Add-ons, then the gear, then Manage Extension Shortcuts'. In this mock it simulates setting Alt+Shift+S there and coming back.</li>
+        <li><strong>Fonts:</strong> the options page and the popup use Inter, bundled as a local @font-face (the extension’s CSP forbids remote fonts). The injected toast stays system-ui.</li>
+        <li><strong>Browser name:</strong> the connected lead takes it from the pairing label; fall back to navigator.userAgent where navigator.userAgentData is missing (Firefox).</li>
+        <li><strong>Firefox build:</strong> the menu item is titled 'Save Link to Shelf' (Title Case) and the options row repeats that wording; the options page lives at moz-extension://…/options.html; a save from about:reader?url=… sends the inner url. No Firefox window is drawn here.</li>
+        <li><strong>Check:</strong> verify in a light and a dark Windows contrast theme (for example Desert and Night sky).</li>
+      </ul>
+    </details>
   </div>
 </div>
 
@@ -633,16 +636,16 @@ function buildToast(){
   el.addEventListener('mouseenter', () => { if (el !== toastEl()) return; TT.hover = true; TT.pause(); });
   el.addEventListener('mouseleave', () => { if (el !== toastEl()) return; TT.hover = false; TT.resume(); });
   // a mouse click inside must not hold the toast open: only hover does, until the pointer leaves
-  el.addEventListener('pointerdown', () => { el.classList.remove('kbd'); TT.focus = false; });
+  el.addEventListener('pointerdown', () => { el.classList.remove('viakey'); TT.focus = false; });
   el.addEventListener('focusin', e => {
     if (el !== toastEl()) return;
-    if (!(e.target.matches(':focus-visible') || el.classList.contains('kbd'))) return;   // a mouse click focuses the button but shouldn't hold the toast open
+    if (!(e.target.matches(':focus-visible') || el.classList.contains('viakey'))) return;   // a mouse click focuses the button but shouldn't hold the toast open
     if (!TT.focus && e.relatedTarget && !el.contains(e.relatedTarget)) S.returnFocus = e.relatedTarget;
     TT.focus = true; TT.pause();
   });
   el.addEventListener('focusout', e => {
     if (el !== toastEl() || (e.relatedTarget && el.contains(e.relatedTarget))) return;
-    el.classList.remove('kbd'); TT.focus = false; TT.resume();
+    el.classList.remove('viakey'); TT.focus = false; TT.resume();
   });
   // Leaving the toast returns focus to where the person was: Tab past the last button, Shift+Tab before the first, or Escape.
   el.addEventListener('keydown', e => {
@@ -717,7 +720,7 @@ function openPopup(kind, o = {}){
   S.popup = kind;
   if (o.host) S.popHost = o.host;
   if (o.timed !== undefined) S.popTimed = o.timed; else if (opening) S.popTimed = true;
-  if (opening) { S.popReturn = document.activeElement; PT.stop(); PT.hover = false; PT.focus = false; pop.classList.remove('kbd'); pop.hidden = false; }
+  if (opening) { S.popReturn = document.activeElement; PT.stop(); PT.hover = false; PT.focus = false; pop.classList.remove('viakey'); pop.hidden = false; }
   renderChrome();                                           // also places the popup under the (possibly popped-out) button
   const t = TOASTS[kind]({ host: S.popHost, link: true });
   paintCard(pop, t, S.popTimed);
@@ -758,15 +761,15 @@ function initPopup(){
   pop.innerHTML = `${cardShell()}<div id="poplive" class="sr" role="status" aria-live="polite"></div>`;
   pop.addEventListener('mouseenter', () => { PT.hover = true; PT.pause(); });
   pop.addEventListener('mouseleave', () => { PT.hover = false; PT.resume(); });
-  pop.addEventListener('pointerdown', () => { pop.classList.remove('kbd'); PT.focus = false; });
+  pop.addEventListener('pointerdown', () => { pop.classList.remove('viakey'); PT.focus = false; });
   pop.addEventListener('focusin', e => {
     if (e.target === pop) return;                          // the popup's own document focus isn't focus the person gave it
-    if (!(e.target.matches(':focus-visible') || pop.classList.contains('kbd'))) return;
+    if (!(e.target.matches(':focus-visible') || pop.classList.contains('viakey'))) return;
     PT.focus = true; PT.pause();
   });
   pop.addEventListener('focusout', e => {
     if (e.relatedTarget && pop.contains(e.relatedTarget)) return;
-    PT.focus = false; pop.classList.remove('kbd');
+    PT.focus = false; pop.classList.remove('viakey');
     closePopup({ restore: false });                        // a browser popup closes when it loses focus
   });
   pop.addEventListener('keydown', e => {
@@ -796,7 +799,7 @@ function secondPress(){
     const ae = document.activeElement;
     if (pop.contains(ae) && ae !== pop) return true;       // already on one of its buttons
     const a = pop.querySelector('.act[data-act="Undo"]');
-    if (a) { pop.classList.add('kbd'); a.focus(); return true; }
+    if (a) { pop.classList.add('viakey'); a.focus(); return true; }
     if (pop.contains(ae)) return true;
   }
   const el = toastEl();
@@ -810,7 +813,7 @@ function reachUndo(){
   const el = toastEl(), a = el && el.querySelector('.act[data-act="Undo"]');
   if (!a) return;
   S.returnFocus = document.activeElement;
-  el.classList.add('kbd');
+  el.classList.add('viakey');
   a.focus();
 }
 
@@ -1003,6 +1006,10 @@ document.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => {
   if (TOAST_JUMPS.includes(j)) showToast(j, { timed: false });          // held still for review
   if (j === 'reach') { showToast('saved', { timed: false }); reachUndo(); }
   if (j === 'popup') openPopup('notext', { host: 'chrome://settings', timed: false });
+  if (j === 'o-unsent') {                                  // bring the confirm into view inside the options tab
+    const o = content.querySelector('.opts'), c = content.querySelector('.confirm');
+    o.scrollTop += c.getBoundingClientRect().bottom - o.getBoundingClientRect().bottom + 24;
+  }
   if (j === 'o-offline') say(optLive, 'Can’t connect right now');
   if (j === 'o-scanned') later(() => { S.paired = true; S.connectedOn = 'today'; render(); if (S.view === 'options') say(optLive, 'Connected to your phone'); }, 1200, 'scan');
   const note = $('jnote');
