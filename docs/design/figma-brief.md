@@ -7,8 +7,9 @@ Nothing gets drawn that isn't on the flow map. If a frame needs something new, i
 ## 1. File setup
 
 1. In Figma Community, open **Untitled UI – FREE Figma UI kit** and choose **Open in Figma**. That puts a copy in your drafts.
-2. Make a separate design file called **Shelf — Stage 0** and enable the duplicated kit as a library for it. Keeping the kit in its own file means our pages stay small, and swapping to Untitled UI Pro later is a library swap.
-3. Pages in **Shelf — Stage 0**, in this order:
+2. Rename that copy **Shelf — Stage 0** and add our pages to it, next to the kit's own pages. On the free Starter plan, a file's components can't be published as a library for another file, so the kit and our screens live in the same file. When we move to a paid plan, the kit pages can be split out into a library.
+3. For Android system chrome (status bar, gesture bar, the system share sheet, the media notification), use the **Material 3 Design Kit**, which Figma already makes available to every file. Use it only for things the operating system draws, never for Shelf's own screens.
+4. Pages to add, in this order, above the kit's pages:
    - `00 Cover`: name, date, status (Exploring, In review, Frozen).
    - `01 Tokens`: the token table from section 2, drawn as colour styles and text styles.
    - `02 Style round`: the style comparison from section 3.
@@ -16,8 +17,8 @@ Nothing gets drawn that isn't on the flow map. If a frame needs something new, i
    - `10 Saves`, `11 Reader`, `12 Listen`, `13 You`, `14 Share and sheets`, `15 Sign-in and pairing`: phone screens, one page per area.
    - `20 Extension`: toast and options page.
    - `90 Parking`: anything cut or v2.
-4. Phone frame: **360 × 800** (Android compact, the most common size), with a 24 px status bar and a 16 px gesture bar area at the bottom. Draw one frame at 412 × 915 for the Library and the Reader only, to check that nothing breaks on a larger phone.
-5. Frame naming: `Area / Screen / State`, for example `Saves / Library / Offline`. The state names are the five from the flow map's state matrix: Populated, Empty, Loading, Partial, Error, Offline. Consistent names let me check coverage automatically.
+5. Phone frame: **360 × 800** (Android compact, the most common size), with a 24 px status bar and a 16 px gesture bar area at the bottom. Draw one frame at 412 × 915 for the Library and the Reader only, to check that nothing breaks on a larger phone.
+6. Frame naming: `Area / Screen / State`, for example `Saves / Library / Offline`. The state names are the five from the flow map's state matrix: Populated, Empty, Loading, Partial, Error, Offline. Consistent names let me check coverage automatically.
 
 The kit's components are React on the web side only. On the phone they're a visual reference, and the Expo build redraws them in React Native from the same tokens. Draw freely, but avoid anything that only exists as a web interaction (hover-only states, tooltips as the only way to learn something).
 
