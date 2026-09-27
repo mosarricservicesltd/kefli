@@ -1,4 +1,4 @@
-/* Generated from shared/tokens/tokens.json (v0.1.3) by build-css.mjs. Do not edit. */
+/* Generated from shared/tokens/tokens.json (v0.1.4) by build-css.mjs. Do not edit. */
 :root, [data-theme="light"] {
   --background: #FCF7F6;
   --surface: #FFFFFF;
@@ -12,6 +12,7 @@
   --error: #D92D20;
   --shadow-card: 0px 1px 2px #1018280D, 0px 4px 12px #1018280F;
   --card-edge: none;
+  --shadow-float: 0px 12px 32px #10182833;
 }
 [data-theme="dark"] {
   --background: #0C0E12;
@@ -26,6 +27,7 @@
   --error: #F97066;
   --shadow-card: none;
   --card-edge: 1px solid #22262F;
+  --shadow-float: 0px 12px 32px #000000B3;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -41,6 +43,7 @@
     --error: #F97066;
     --shadow-card: none;
     --card-edge: 1px solid #22262F;
+    --shadow-float: 0px 12px 32px #000000B3;
   }
 }
 :root {
@@ -64,9 +67,11 @@
   --radius: 10px;
   --radius-pill: 999px;
   --radius-sheet: 24px;
+  --radius-image: 8px;
+  --gap-card: 10px;
   --font-ui: Inter, Roboto, system-ui, sans-serif;
   --font-reader: 'Noto Serif', Georgia, serif;
 }
-[data-reader="light"] { --reader-bg: #FCF7F6; --reader-text: #181D27; --reader-muted: #535862; --reader-link: #B5542E; --reader-highlight: #EDD5CA; }
-[data-reader="sepia"] { --reader-bg: #F5EEDF; --reader-text: #3A2E22; --reader-muted: #6E5F4E; --reader-link: #944526; --reader-highlight: #EBD3C2; }
-[data-reader="dark"] { --reader-bg: #0C0E12; --reader-text: #E4E4E6; --reader-muted: #B4B7BD; --reader-link: #CA8469; --reader-highlight: #4A2B20; }
+[data-reader="light"] { --reader-bg: #FCF7F6; --reader-text: #181D27; --reader-muted: #535862; --reader-link: #B5542E; --reader-highlight: #EDD5CA; --reader-accent: #B5542E; }
+[data-reader="sepia"] { --reader-bg: #F5EEDF; --reader-text: #3A2E22; --reader-muted: #6E5F4E; --reader-link: #944526; --reader-highlight: #EBD3C2; --reader-accent: #944526; }
+[data-reader="dark"] { --reader-bg: #0C0E12; --reader-text: #E4E4E6; --reader-muted: #B4B7BD; --reader-link: #CA8469; --reader-highlight: #4A2B20; --reader-accent: #CA8469; }
