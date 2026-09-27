@@ -33,3 +33,9 @@ Decisions taken with Richard while testing flow map rev. 2 against full coverage
 
 16. **Appearance row cut:** the app follows the phone's light/dark setting. The Reader's Light · Sepia · Dark lives only in the Aa sheet.
 17. **Backup card:** "Later" hides it until ten more saves. The "Not written down" row under You stays visible regardless.
+
+## Round 6 (2026-09-27), from the batch 2 review
+
+18. **Reader player:** Listen sits in the Reader's top bar. Pressing it opens a player strip under the top bar (play/pause, time, ±15 s, speed, progress), which replaces the reading-progress line while it plays. The text highlights the spoken word and scrolls to keep it in view. Archive floats at the bottom right.
+19. **Listening starts where you're reading:** Listen begins at the paragraph in view, not the top of the article.
+20. **Mini player:** shows a ✕ only when paused; it slides up when it appears and slides down and fades when closed. Hidden on the Listen tab, where the Now playing card does its job.
