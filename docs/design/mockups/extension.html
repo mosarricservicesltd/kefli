@@ -304,7 +304,7 @@ details.adv[open] summary > svg:last-child{transform:rotate(90deg)}
   <div class="panel after">
     <div class="note">
       <p><strong>For you to decide:</strong> the spec drops the oldest queued save when a ninth is made offline. Here the ninth is refused instead, with a clear message, so nothing you saved is ever silently lost (decision 31).</p>
-      <p><strong>Changed in this pass:</strong> the toast never takes focus; a second press of the shortcut reaches Undo (58, updates 44). Browser pages show a small popup as well as the tick (59). Offline saves offer Undo (60, changes 30). The badge, the button’s name and the options page count every save that hasn’t reached Shelf’s server, including ones that couldn’t send (refines 30). Disconnecting names the unsent saves it would delete.</p>
+      <p><strong>Changed in this pass:</strong> the toast never takes focus; a second press of the shortcut reaches Undo (58, updates 44). Browser pages show a small popup as well as the tick (59). Offline saves offer Undo (60, changes 30). The badge, the button’s name and the options notice count offline saves only (30); saves that couldn’t send are listed on the options page. Disconnecting names every unsent save it would delete, including ones that couldn’t send.</p>
     </div>
     <details class="note">
       <summary>Build notes</summary>
@@ -394,7 +394,8 @@ const FRESH = () => ({
 });
 const S = Object.assign(FRESH(), { mac: false, shortcut: KEY });   // platform and live binding: panel toggles, kept across jumps
 
-/* Every save that hasn't reached a relay yet: offline ones waiting, and ones that couldn't send. One neutral count. */
+/* Every save that hasn't reached a relay yet: offline ones waiting, and ones that couldn't send. Only the Disconnect confirm uses it;
+   the badge, the button's name and the options notice count offline saves only (decision 30, kept by Richard). */
 const unsent = () => S.waiting + S.failed.filter(f => !f.sent).length;
 
 /* The live binding (commands.getAll() in the build), in the platform's own glyphs. */
@@ -539,7 +540,7 @@ function renderChrome(){
     ${S.optsOpen ? `<button class="tab ${opts ? 'on' : ''}" role="tab" aria-selected="${opts}" data-tab="options"><span class="fav shelf">${MARK(16)}</span><span class="lbl">${S.paired ? 'Shelf · Options' : 'Shelf · Connect'}</span></button>` : ''}`;
   if (keepTab) { const t = document.querySelector(`[data-tab="${keepTab}"]`); if (t) t.focus(); }
   $('omni').innerHTML = opts ? `${MARK(16)}<b>Shelf</b>&nbsp;·&nbsp;chrome-extension://shelf/options.html` : `<b>${S.base === 'restricted' ? 'chrome://settings' : URL_}</b>`;
-  const n = unsent();
+  const n = S.waiting;                                      // offline saves only (decision 30)
   const b = $('badge');
   if (S.tick) { b.className = 'badge ok'; b.textContent = '✓'; }
   else if (n) { b.className = 'badge wait'; b.textContent = String(n); }
