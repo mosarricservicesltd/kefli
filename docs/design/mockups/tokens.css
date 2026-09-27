@@ -1,4 +1,4 @@
-/* Generated from shared/tokens/tokens.json (v0.1.4) by build-css.mjs. Do not edit. */
+/* Generated from shared/tokens/tokens.json (v0.1.5) by build-css.mjs. Do not edit. */
 :root, [data-theme="light"] {
   --background: #FCF7F6;
   --surface: #FFFFFF;
@@ -48,6 +48,7 @@
 }
 :root {
   --on-gradient: #FFFFFF;
+  --accent-fill: #B5542E;
   --gradient-primary: linear-gradient(180deg, #BE6947, #944526);
   --text-13: 13px;
   --text-15: 15px;

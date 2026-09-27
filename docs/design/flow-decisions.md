@@ -112,3 +112,7 @@ The extension review (internal, cross-surface with the phone, browser convention
 58. **Keyboard reach to Undo: press the shortcut again.** The toast never takes focus on its own (a stray Space or Enter would otherwise undo the save). Pressing Alt+Shift+S again while "Saved" shows moves focus to Undo; Escape or ✕ returns focus to the page.
 59. **Pages where no toast can run** (PDFs, reader view, browser pages, the Web Store) show a small "Saved to Shelf" popup with Undo under the toolbar button, like Chrome's bookmark bubble, as well as the icon tick. Needs Chrome 127+; older versions keep the tick only.
 60. **Offline saves offer Undo**: the save is still in this browser's queue, so Undo just removes it and lowers the waiting count. Changes decision 30. Also: disconnecting a browser now names any unsent saves it would delete, so nothing saved is lost silently (decision 31's spirit).
+
+## Round 16 (2026-09-27), from Richard
+
+61. **Content on Terracotta is white, in every theme and reading palette.** Richard found the Speed read play button's icon black in the light Reader: a rule meant for the plain controls beside it had recoloured it. The same check found the active Unread/Archive segment and the swipe reveal carrying near-black content in dark mode, where they filled with the lighter #CA8469. Solid Terracotta fills now use #B5542E in both themes (white on it is 4.9:1), and the lighter dark-mode Terracotta stays for lines, dots, text and focus rings. Tokens 0.1.5.

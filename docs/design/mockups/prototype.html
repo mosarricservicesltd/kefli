@@ -56,7 +56,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .searchbar{margin:0 var(--gutter);height:48px;border-radius:var(--radius-pill);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge);display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-16);color:var(--muted);width:calc(100% - 2 * var(--gutter));text-align:left}
 .segs{display:flex;gap:var(--space-8);padding:var(--space-12) var(--gutter)}
 .seg{height:36px;padding:0 var(--space-16);border-radius:var(--radius-pill);display:inline-flex;align-items:center;font-size:var(--text-13);font-weight:500;background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge);position:relative}
-.seg.on{background:var(--accent);color:var(--on-accent);box-shadow:none;border-color:transparent}
+.seg.on{background:var(--accent-fill);color:var(--on-gradient);box-shadow:none;border-color:transparent}
 .list{padding:0 var(--gutter) 160px}
 .refresh{height:3px;margin:0 var(--gutter);border-radius:var(--radius-pill);background:var(--accent-soft);overflow:hidden;position:relative}
 .refresh i{position:absolute;top:0;bottom:0;width:30%;background:var(--accent);border-radius:var(--radius-pill);animation:slide 1.2s ease-in-out infinite}
@@ -73,7 +73,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .cardwrap{position:relative;border-radius:var(--radius);margin-bottom:var(--gap-card);touch-action:pan-y;user-select:none}
 .cardwrap.leaving{height:0!important;margin-bottom:0;opacity:0;overflow:hidden;transition:height var(--motion-exit),margin-bottom var(--motion-exit),opacity var(--motion-exit)}
 .cardwrap.entering{overflow:hidden;transition:height var(--motion-enter),margin-bottom var(--motion-enter),opacity var(--motion-enter)}
-.cardwrap .under{position:absolute;inset:0;border-radius:var(--radius);background:var(--accent);color:var(--on-accent);display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-20);font-size:var(--text-13);font-weight:600;opacity:0}
+.cardwrap .under{position:absolute;inset:0;border-radius:var(--radius);background:var(--accent-fill);color:var(--on-gradient);display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-20);font-size:var(--text-13);font-weight:600;opacity:0}
 .cardwrap .under.left{justify-content:flex-end}
 .card{position:relative;display:flex;gap:var(--space-12);padding:var(--space-12);background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);border:var(--card-edge);overflow:hidden;text-align:left;width:100%;transition:transform .2s ease}
 .card.dragging{transition:none}
@@ -232,7 +232,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 /* Reader tier: the mini expanded in place in the playing article's Reader, in the reader palette (Q1) */
 .mini.pdock{gap:var(--space-4);background:var(--reader-bg);color:var(--reader-text);border:0;box-shadow:var(--shadow-float),inset 0 0 0 1px color-mix(in srgb, var(--reader-muted) 25%, transparent)}
 .pdock .tt{flex:1;min-width:0;font-size:var(--text-13);font-weight:500;color:var(--reader-muted);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden}
-.pdock .ctl{color:var(--reader-text)}
+.pdock .ctl:not(.big){color:var(--reader-text)}
 .pdock .pclose{color:var(--reader-muted)}
 .pdock .line{background:color-mix(in srgb, var(--reader-muted) 25%, transparent)}
 .pdock .line i{background:var(--reader-accent)}
@@ -468,7 +468,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .rsvp .hint{text-align:center;font-size:var(--text-13);color:var(--reader-muted);margin-top:var(--space-12)}
 .rsvp .bottom{flex:none;display:flex;flex-direction:column;align-items:center;gap:var(--space-16);padding:var(--space-12) var(--space-16) var(--space-24)}
 .rsvp .ctrls{display:flex;align-items:center;gap:var(--space-24)}
-.rsvp .ctl{color:var(--reader-text)}
+.rsvp .ctl:not(.big){color:var(--reader-text)}
 .rsvp .done{text-align:center}
 .rsvp .done h3{font-family:var(--font-ui);font-size:var(--text-20);font-weight:600;margin:0 0 var(--space-8)}
 .rsvp .done p{color:var(--reader-muted);margin:0 0 var(--space-16);font-size:var(--text-15)}
