@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shelf Flow Map</title>
+<style>
+:root{
+  --bg:#FCF7F6; --surface:#FFFFFF; --line:#E9EAEB; --text:#181D27; --muted:#535862;
+  --accent:#B5542E; --accent-soft:#F8EEEA; --success:#079455; --error:#D92D20;
+  --screen:#181D27; --action:#B5542E; --input:#6941C6; --decision:#B54708; --wait:#535862; --perm:#D92D20; --star:#079455;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0C0E12; --surface:#13161B; --line:#22262F; --text:#F7F7F7; --muted:#94979C;
+    --accent:#CA8469; --accent-soft:#311D18; --success:#47CD89; --error:#F97066;
+    --screen:#F7F7F7; --action:#CA8469; --input:#B692F6; --decision:#FDB022; --wait:#94979C; --perm:#F97066; --star:#47CD89;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 Inter,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1080px;margin:0 auto;padding:40px 16px 96px}
+h1{font-size:32px;line-height:1.2;margin:0 0 8px;font-family:"Noto Serif",Georgia,serif;font-weight:600}
+h2{font-size:22px;margin:56px 0 12px;padding-top:16px;border-top:1px solid var(--line)}
+h3{font-size:17px;margin:28px 0 8px}
+p{margin:0 0 12px;max-width:72ch}
+.lede{color:var(--muted);font-size:17px}
+.meta{color:var(--muted);font-size:13px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 20px;margin:12px 0}
+.loop{font-family:"Noto Serif",Georgia,serif;font-size:20px;background:var(--accent-soft);border:none}
+nav.toc{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0}
+nav.toc a{display:inline-flex;align-items:center;min-height:32px;padding:0 14px;border-radius:999px;background:var(--surface);border:1px solid var(--line);color:var(--text);text-decoration:none;font-size:13px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:13px;color:var(--muted)}
+.tag{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;border:1px solid currentColor;white-space:nowrap}
+.t-screen{color:var(--screen)} .t-action{color:var(--action)} .t-input{color:var(--input)} .t-decision{color:var(--decision)}
+.t-wait{color:var(--wait)} .t-perm{color:var(--perm)} .t-star{color:var(--star)} .t-bg{color:var(--wait);border-style:dashed}
+ol.flow{list-style:none;margin:0;padding:0}
+ol.flow li{display:grid;grid-template-columns:96px 1fr;gap:12px;align-items:start;padding:6px 0;border-bottom:1px dashed var(--line)}
+ol.flow li:last-child{border-bottom:none}
+ol.flow li .tag{margin-top:2px;justify-self:start}
+ol.flow ol.flow{margin:6px 0 0 0;padding-left:12px;border-left:2px solid var(--line)}
+.star{font-weight:600;color:var(--star)}
+.note{color:var(--muted);font-size:13px}
+.changed{display:inline-flex;align-items:center;height:18px;padding:0 6px;margin-left:6px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:600}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:10px;background:var(--surface);margin:12px 0}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--line)}
+th{font-weight:600;background:var(--bg);position:sticky;top:0}
+tr:last-child td{border-bottom:none}
+td:first-child{font-weight:600;white-space:nowrap}
+.matrix td{min-width:150px}
+.num{font-variant-numeric:tabular-nums;font-weight:600}
+ul{margin:0 0 12px;padding-left:20px} li{margin:2px 0}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+code{font-size:13px;background:var(--accent-soft);padding:1px 5px;border-radius:4px}
+@media (max-width:600px){ ol.flow li{grid-template-columns:1fr;gap:4px} h1{font-size:28px} }
+</style>
+</head>
+<body>
+<main>
+<h1>Shelf flow map, revision 3</h1>
+<p class="lede">Every screen, decision, input and wait from each way into the app to the moment of value, plus the state of every screen. Screens are built from this map and nothing else.</p>
+<p class="meta">27 September 2026 · supersedes revision 2 (<code>pocket-on-nostr-flow.html</code>) · decisions in <code>flow-decisions.md</code> · style: Soft pills, Terracotta, Lucide (<code>shared/tokens/tokens.json</code>) · marks what changed from revision 2: <span class="changed">new</span></p>
+
+<nav class="toc">
+  <a href="#loop">Core loop</a><a href="#nav">Navigation</a><a href="#j1">First launch</a><a href="#j2">Returning to a shelf</a>
+  <a href="#j3">Save from phone</a><a href="#j4">Save from browser</a><a href="#j5">Read</a><a href="#j6">Listen</a>
+  <a href="#j7">You</a><a href="#weight">Weight audit</a><a href="#states">State matrix</a><a href="#inventory">Screen inventory</a>
+  <a href="#heuristics">Usability pass</a><a href="#open">Open items</a>
+</nav>
+
+<h2 id="loop">Core loop</h2>
+<div class="card loop">The user opens the app to read what they saved earlier.</div>
+<p>Listening is a way of reading, not a second job. Saving is how things get in. Every screen either serves this sentence or carries a written reason below.</p>
+
+<div class="legend">
+  <span><span class="tag t-screen">Screen</span> a place the user lands</span>
+  <span><span class="tag t-action">Action</span> tap, swipe, gesture</span>
+  <span><span class="tag t-input">Input</span> typed, chosen, scanned</span>
+  <span><span class="tag t-decision">Decision</span> a fork the user resolves</span>
+  <span><span class="tag t-wait">Wait</span> blocks the user</span>
+  <span><span class="tag t-bg">Silent</span> the app works without asking</span>
+  <span><span class="tag t-perm">Permission</span> an OS prompt</span>
+  <span><span class="tag t-star">★ Value</span> first value</span>
+</div>
+
+<h2 id="nav">Navigation</h2>
+<p>Three tabs, bottom bar: <strong>Saves</strong> (the core loop, where the app opens), <strong>Listen</strong>, <strong>You</strong>. Stack navigation inside each tab; Android back always pops one level and never exits from a deep screen. The mini player docks above the tab bar on every tab while audio is loaded. No drawer, no Home or discovery tab, no notifications.</p>
+<div class="grid2">
+  <div class="card"><strong>Entry points</strong>
+    <ul>
+      <li>Cold open, first launch → Welcome</li>
+      <li>Share sheet from any app, including before the first open <span class="changed">new</span></li>
+      <li>Returning open → where the user was <span class="changed">new</span></li>
+      <li>Lock screen or media notification → Reader at the spoken word <span class="changed">new</span></li>
+      <li>Browser extension toolbar, shortcut or right-click (desktop)</li>
+    </ul>
+  </div>
+  <div class="card"><strong>Returning open rule</strong> <span class="changed">new</span>
+    <ul>
+      <li>Last screen was the Reader, less than 12 hours ago → Reader at the saved position</li>
+      <li>Anything else → Saves</li>
+      <li>Back from the Reader always goes to Saves</li>
+    </ul>
+  </div>
+</div>
+
+<h2 id="j1">1 · First launch</h2>
+<p>No signup, no tour. One question, then the empty state does the teaching.</p>
+<div class="card">
+<ol class="flow">
+  <li><span class="tag t-screen">Screen</span><div><strong>Welcome</strong> <span class="changed">new</span>. App name, one line on what it does, two buttons: <em>New here</em> (primary) and <em>I already have a shelf</em>.</div></li>
+  <li><span class="tag t-decision">Decision</span><div>New here → continue below. I already have a shelf → journey 2.</div></li>
+  <li><span class="tag t-bg">Silent</span><div>Generate key, store in Keystore, back up through Google Block Store. No screen.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Saves, empty.</strong> Teaches the share sheet with one illustration of it. One button: <em>Connect your browser</em>. The nostr sign-in link has moved to journey 2.</div></li>
+  <li><span class="tag t-action">Action</span><div>In any app: Share → Shelf. (Journey 3.)</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Saved sheet</strong> → <em>Read now</em></div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Reader</strong>, clean text <span class="star">★ FIRST VALUE</span></div></li>
+</ol>
+</div>
+<h3>Share before the first open <span class="changed">new</span></h3>
+<div class="card">
+<ol class="flow">
+  <li><span class="tag t-action">Action</span><div>Freshly installed, never opened: Share → Shelf.</div></li>
+  <li><span class="tag t-bg">Silent</span><div>Key generated as above; the save proceeds normally.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Saved sheet</strong> → Read now → Reader <span class="star">★</span></div></li>
+  <li><span class="tag t-screen">Screen</span><div>On the first proper open: <strong>Welcome</strong>. New here → Saves, already populated. I already have a shelf → journey 2, and the early saves are moved into the restored shelf, never lost.</div></li>
+</ol>
+</div>
+
+<h2 id="j2">2 · Returning to a shelf <span class="changed">new</span></h2>
+<p>A new phone, a reinstall without Google backup, or an existing nostr user. Every way back in sits on one screen.</p>
+<div class="card">
+<ol class="flow">
+  <li><span class="tag t-screen">Screen</span><div><strong>Bring back your shelf.</strong> Three rows: <em>Scan from my other phone</em>, <em>Enter my recovery code</em>, <em>Sign in with your nostr app</em>. Back returns to Welcome.</div></li>
+  <li><span class="tag t-decision">Decision</span><div>Which of the three.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>A · Scan from my other phone.</strong> One line: "On your other phone, open You, then Add another device."</div>
+    <ol class="flow">
+      <li><span class="tag t-perm">Permission</span><div>Camera, asked here and only here, with the reason on screen first.</div></li>
+      <li><span class="tag t-input">Input</span><div>Scan the QR, or type the six-digit code shown under it.</div></li>
+      <li><span class="tag t-bg">Unhappy</span><div>Camera refused → screen explains, button opens Android settings, and the six-digit code still works. Code expired → "That code has expired. Show a new one on your other phone."</div></li>
+    </ol>
+  </li>
+  <li><span class="tag t-screen">Screen</span><div><strong>B · Enter my recovery code.</strong> Twelve numbered fields; paste fills all twelve; each word autocompletes from the standard list.</div>
+    <ol class="flow">
+      <li><span class="tag t-input">Input</span><div>Twelve words.</div></li>
+      <li><span class="tag t-bg">Unhappy</span><div>A word not on the list is marked at that field. A valid code with nothing saved under it: "No saves found for this code" with <em>Try again</em> and <em>Start fresh instead</em>.</div></li>
+    </ol>
+  </li>
+  <li><span class="tag t-screen">Screen</span><div><strong>C · Sign in with your nostr app.</strong> Hands off to the signer app on the phone (NIP-55), with a remote signer (NIP-46) as the second choice. The only screen that says "nostr".</div>
+    <ol class="flow">
+      <li><span class="tag t-bg">Unhappy</span><div>No signer app installed → a short explanation and the remote-signer option. Request refused in the signer → back to this screen, nothing changed.</div></li>
+      <li><span class="tag t-decision">Decision</span><div>Once, after first sign-in: "Bring in your existing bookmarks?" Private by default. Skippable.</div></li>
+    </ol>
+  </li>
+  <li><span class="tag t-wait">Wait</span><div><strong>Restoring.</strong> Saves fill in as they arrive from the three relays; text downloads from mirrored storage. The list is usable at once (partial state). One line says this works even if Shelf's own server is off, in plain words.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Saves, populated</strong> <span class="star">★</span></div></li>
+</ol>
+</div>
+
+<h2 id="j3">3 · Save from the phone</h2>
+<div class="card">
+<ol class="flow">
+  <li><span class="tag t-action">Action</span><div>Share → Shelf, from any app.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Saved sheet</strong>, confirmed at once: title, source, "Private. Ready to read offline in a moment." <em>Undo</em> · <em>Read now</em>. Dismisses itself after 4 seconds and returns the user to the app they were in.</div></li>
+  <li><span class="tag t-bg">Silent</span><div>Fetch and parse; cache text and images; encrypt; publish to three relays; queued if offline.</div></li>
+  <li><span class="tag t-bg">Unhappy</span><div>Offline → sheet reads "Saved · will fetch when online". Shared text with no link → "That wasn't a link." Page can't be parsed → saved as a link; the row later reads "Couldn't get the text · open original".</div></li>
+</ol>
+</div>
+
+<h2 id="j4">4 · Save from the browser</h2>
+<h3>Connecting a browser (once)</h3>
+<div class="card">
+<ol class="flow">
+  <li><span class="tag t-action">Action</span><div>Laptop: install the extension and click its icon. Unpaired, so the options page opens.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Extension: connect.</strong> QR, a short typed code under it <span class="changed">new</span>, a five-minute countdown, and "Open Shelf on your phone, go to You, then Connect a browser."</div></li>
+  <li><span class="tag t-action">Action</span><div>Phone: You → Connected browsers → <em>Connect a browser</em>.</div></li>
+  <li><span class="tag t-perm">Permission</span><div>Camera, first time only, reason shown first.</div></li>
+  <li><span class="tag t-input">Input</span><div>Scan the QR, or <em>Type a code instead</em> <span class="changed">new</span>.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Connect this browser?</strong> "Chrome on a Windows laptop". One tap.</div></li>
+  <li><span class="tag t-screen">Screen</span><div>Phone returns to Connected browsers with the new row. Extension shows "Connected to your phone" and the date.</div></li>
+  <li><span class="tag t-bg">Unhappy</span><div>Code expired → "This code expired" with <em>Show a new one</em>. No connection → "Can't connect right now. Check your connection." and a retry every ten seconds. Camera refused → the typed code.</div></li>
+</ol>
+</div>
+<h3>Every save after that</h3>
+<div class="card">
+<ol class="flow">
+  <li><span class="tag t-action">Action</span><div>Toolbar icon, keyboard shortcut, or right-click → Save link.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Toast:</strong> "Saving…" then "Saved to Shelf · Undo", eight seconds. <em>Open in app</em> is removed <span class="changed">new</span>.</div></li>
+  <li><span class="tag t-bg">Unhappy</span><div>No text captured → "Saved — your phone will fetch the text". Offline → "Saved — will send when you're online", no Undo. Eight waiting → "8 waiting". Pages where scripts can't run → a tick on the icon for four seconds, link only.</div></li>
+  <li><span class="tag t-bg">Silent</span><div>Phone picks it up next time the app is open; until then it shows as a pending row.</div></li>
+</ol>
+</div>
+
+<h2 id="j5">5 · Read</h2>
+<div class="card">
+<ol class="flow">
+  <li><span class="tag t-screen">Screen</span><div><strong>Saves: Unread</strong>, newest first. Row: source · title · read time · audio mark if audio is downloaded. Search at the top. Unread / Archive switch.</div></li>
+  <li><span class="tag t-action">Action</span><div>Tap a row → Reader. Swipe left → Archive, with a five-second undo.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Reader.</strong> Progress line. Top bar: back · Aa · ▶ · Archive · ⋯ (Delete <span class="changed">new</span>, Open original, Copy link).</div></li>
+  <li><span class="tag t-action">Action</span><div>Reach the end → <strong>End card</strong>: <em>Archive</em> · <em>Next unread</em>. Delete → back to Saves with a five-second undo <span class="changed">new</span>.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Aa sheet.</strong> Text size, and Light · Sepia · Dark for the Reader.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Archive.</strong> Same rows. Swipe right → back to Unread. Delete from each row's menu, with undo.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Search.</strong> On-device, full text, across Unread and Archive, results labelled with which list they're in.</div></li>
+</ol>
+</div>
+
+<h2 id="j6">6 · Listen</h2>
+<div class="card">
+<ol class="flow">
+  <li><span class="tag t-action">Action</span><div>▶ in the Reader.</div></li>
+  <li><span class="tag t-screen">Screen</span><div>The phone's voice starts at once; words highlight as they're spoken; the mini player docks (play/pause, skip ±15 s, speed). The article joins the Listen tab.</div></li>
+  <li><span class="tag t-bg">Silent</span><div>Ask the server for the better voice. It's cached per article and used from the next play; it never swaps voices mid-article.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Lock screen and car controls.</strong> Tap → Reader at the spoken word <span class="changed">new</span>.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Listen tab</strong>: Now playing card, then everything played, most recent first <span class="changed">changed</span>. <em>Play all</em> continues down that list; it's the only auto-continue.</div></li>
+  <li><span class="tag t-bg">Unhappy</span><div>Better voice unavailable for an article → a quiet note; the phone's voice carries on. Offline → downloaded audio plays, everything else uses the phone's voice.</div></li>
+</ol>
+</div>
+
+<h2 id="j7">7 · You</h2>
+<div class="card">
+<ol class="flow">
+  <li><span class="tag t-screen">Screen</span><div><strong>You.</strong> Header: nostr name and picture if signed in with a nostr app, otherwise "47 saves · 12 listened" <span class="changed">new</span>. Then: Back up your shelf card (while not done), Recovery code, Add another device, Connected browsers, Voice, Advanced, Delete my data.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Recovery code sheet.</strong> Twelve numbered words, Copy, one line on when you'd need it. Viewing it clears "Not written down".</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Add another device.</strong> QR plus six-digit code, five minutes. Expired → "Code expired, show a new one".</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Connected browsers.</strong> List, Connect a browser, Disconnect with its dialog: "Pages saved from that browser will be ignored. Uninstall the extension there or connect it again."</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Voice.</strong> Which better voice to use; the phone's voice as the fallback.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Advanced.</strong> Relays (the one place the word appears), Export, <em>Use my nostr app instead</em> <span class="changed">new</span>, which moves every save across.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Delete my data.</strong> What goes, and what can only be asked of independent relays. Type DELETE to confirm <span class="changed">new</span>. Done → Welcome.</div></li>
+</ol>
+</div>
+
+<h2 id="weight">Weight audit, critical path (cold open → first value)</h2>
+<div class="scroll"><table>
+<tr><th>Metric</th><th>Rev. 2</th><th>Rev. 3</th><th>Why</th></tr>
+<tr><td>Taps to first value</td><td class="num">4 (2 with Read now)</td><td class="num">5 (3 with Read now)</td><td>+1 for "New here" on Welcome.</td></tr>
+<tr><td>Inputs</td><td class="num">0</td><td class="num">0</td><td>Nothing typed, chosen or scanned.</td></tr>
+<tr><td>Decisions</td><td class="num">0</td><td class="num">1</td><td>New here / I already have a shelf. Accepted: without it, a returning user has no front door and a silent key would be thrown away.</td></tr>
+<tr><td>Waits</td><td class="num">1</td><td class="num">1</td><td>Parse after save, in the background; Read now shows a sub-second skeleton at worst.</td></tr>
+<tr><td>Permissions before value</td><td class="num">0</td><td class="num">0</td><td>Camera only when scanning; no notifications at all.</td></tr>
+<tr><td>Screens traversed</td><td class="num">3</td><td class="num">4</td><td>Welcome · Saves (empty) · Saved sheet · Reader.</td></tr>
+</table></div>
+<p class="note">A user whose first contact is a share from another app skips Welcome entirely until the next open, so their path stays at rev. 2's weight.</p>
+
+<h2 id="states">State matrix</h2>
+<p>Every screen, every state. "n/a" means the state cannot occur. Populated is designed last.</p>
+<div class="scroll"><table class="matrix">
+<tr><th>Screen</th><th>Empty</th><th>Loading</th><th>Partial</th><th>Populated</th><th>Error</th><th>Offline</th></tr>
+<tr><td>Welcome</td><td>n/a</td><td>n/a</td><td>n/a</td><td>Name, one line, two buttons</td><td>n/a</td><td>Identical; both routes say later if they need a connection</td></tr>
+<tr><td>Bring back your shelf</td><td>n/a</td><td>n/a</td><td>n/a</td><td>Three rows</td><td>n/a</td><td>"You'll need a connection to bring your shelf back"; rows disabled</td></tr>
+<tr><td>Scan / six-digit code</td><td>n/a</td><td>Camera starting: dark frame, no spinner</td><td>n/a</td><td>Viewfinder, code field below</td><td>Camera refused; code expired; code wrong</td><td>Needs a connection, says so</td></tr>
+<tr><td>Recovery code entry</td><td>Twelve blank fields, paste hint</td><td>Checking: button shows progress</td><td>Some words filled</td><td>All valid, Continue enabled</td><td>Word not on list (at the field); nothing found for this code</td><td>Needs a connection, says so</td></tr>
+<tr><td>Nostr sign-in</td><td>n/a</td><td>Waiting for the signer app</td><td>n/a</td><td>Signed in → import question</td><td>No signer installed; request refused</td><td>Needs a connection, says so</td></tr>
+<tr><td>Restoring</td><td>"No saves found" (see code entry)</td><td>First items arriving</td><td>List usable while more arrive; text still downloading marked</td><td>→ Saves</td><td>One relay unreachable: carry on with the others, silently</td><td>Paused, resumes on reconnect</td></tr>
+<tr><td>Saves: Unread</td><td>First run: teaches the share sheet + Connect your browser. Cleared out: "All read" with a link to Archive</td><td>Cached list at once, thin refresh line</td><td>Pending dot for unparsed; browser saves waiting; "Couldn't get the text · open original"</td><td>Rows</td><td>Row-level only, never whole-screen</td><td>Banner "Offline — showing saved copies"; queued saves marked ⏳</td></tr>
+<tr><td>Saves: Archive</td><td>"Nothing archived yet"</td><td>Cached at once</td><td>n/a</td><td>Rows, swipe right to restore</td><td>n/a</td><td>Identical</td></tr>
+<tr><td>Search</td><td>Before typing: nothing, keyboard up</td><td>n/a (on-device, instant)</td><td>n/a</td><td>Results labelled Unread / Archive</td><td>"Nothing matches" + clear search</td><td>Identical</td></tr>
+<tr><td>Saved sheet</td><td>n/a</td><td>Never: confirms at once</td><td>n/a</td><td>Saved · Undo · Read now</td><td>"That wasn't a link."</td><td>"Saved · will fetch when online"</td></tr>
+<tr><td>Reader</td><td>n/a</td><td>Skeleton under a second, only if not yet parsed</td><td>Text in place, images still arriving</td><td>Article</td><td>Original page in an in-app browser</td><td>Identical to online</td></tr>
+<tr><td>Aa sheet</td><td>n/a</td><td>n/a</td><td>n/a</td><td>Size, Light · Sepia · Dark</td><td>n/a</td><td>Identical</td></tr>
+<tr><td>Mini player</td><td>Hidden</td><td>Never blocks: phone voice starts at once</td><td>"Preparing better voice" note</td><td>Title, play/pause, ±15 s, speed</td><td>"Better voice unavailable for this one"</td><td>Downloaded audio, else phone voice</td></tr>
+<tr><td>Listen</td><td>"Tap ▶ on any article to listen to it here."</td><td>n/a (local)</td><td>Downloaded items marked, others streamable</td><td>Now playing + played list, Play all</td><td>Per-item note only</td><td>Downloaded play; others use the phone's voice</td></tr>
+<tr><td>You</td><td>n/a</td><td>n/a</td><td>Recovery code row "Not written down" until viewed</td><td>Header + rows</td><td>n/a</td><td>Add device and Connect a browser say they need a connection</td></tr>
+<tr><td>Recovery code sheet</td><td>n/a</td><td>n/a</td><td>n/a</td><td>Twelve words, Copy</td><td>n/a</td><td>Identical</td></tr>
+<tr><td>Add another device</td><td>n/a</td><td>Generating code: skeleton QR</td><td>n/a</td><td>QR + six digits + countdown</td><td>"Code expired, show a new one"</td><td>Needs a connection, says so</td></tr>
+<tr><td>Connected browsers</td><td>"No browsers yet" + Connect a browser</td><td>n/a</td><td>n/a</td><td>List + Connect a browser</td><td>Pairing failed: reason + try again</td><td>List shown; Connect disabled with reason</td></tr>
+<tr><td>Connect this browser?</td><td>n/a</td><td>Connecting (1–3 s)</td><td>n/a</td><td>Browser label + Connect</td><td>Expired / can't connect</td><td>Needs a connection</td></tr>
+<tr><td>Voice</td><td>n/a</td><td>Voice list loading: skeleton rows</td><td>n/a</td><td>Voices, current ticked</td><td>List unavailable: phone voice only, says why</td><td>Phone voice only</td></tr>
+<tr><td>Advanced</td><td>n/a</td><td>n/a</td><td>A relay not responding, marked</td><td>Relays, Export, Use my nostr app</td><td>Export failed: retry</td><td>Relays shown as unreachable; export works</td></tr>
+<tr><td>Delete my data</td><td>n/a</td><td>Deleting: steps listed as they finish</td><td>Some relays didn't confirm: named, honestly</td><td>Explain + type DELETE</td><td>Our server unreachable: nothing deleted, retry</td><td>Blocked, says it needs a connection</td></tr>
+<tr><td>Extension toast</td><td>n/a</td><td>"Saving…"</td><td>"Saved — your phone will fetch the text"</td><td>"Saved to Shelf · Undo"</td><td>"Couldn't send" (after retries)</td><td>"Saved — will send when you're online"; "8 waiting"</td></tr>
+<tr><td>Extension options</td><td>Unpaired: QR + typed code</td><td>Waiting for phone</td><td>n/a</td><td>"Connected to your phone", relays read-only, Unpair</td><td>"This code expired"; failed queue with Retry</td><td>"Can't connect right now. Check your connection."</td></tr>
+</table></div>
+
+<h2 id="inventory">Screen inventory for the mockups</h2>
+<p>Built locally as HTML prototypes, phone-sized (360 × 800, checked at 412 × 915), light and dark, each state from the matrix as its own frame. Batches, in order:</p>
+<ol>
+  <li><strong>Core loop:</strong> Saves (all states), Saved sheet, Reader (all states), Aa sheet, end card.</li>
+  <li><strong>Listen:</strong> mini player, Reader playing with highlight, Listen tab, lock screen reference.</li>
+  <li><strong>First launch and return:</strong> Welcome, Bring back your shelf, scan, recovery code, nostr sign-in, Restoring.</li>
+  <li><strong>You:</strong> You, recovery code sheet, Add another device, Connected browsers and Connect this browser?, Voice, Advanced, Delete my data.</li>
+  <li><strong>Extension:</strong> toast states, options page states.</li>
+</ol>
+
+<h2 id="heuristics">Usability pass (design time)</h2>
+<div class="scroll"><table>
+<tr><th>Heuristic</th><th>Finding</th><th>Resolution</th></tr>
+<tr><td>Visibility of status</td><td>Pending, queued, preparing and offline all have a visible mark.</td><td>Pass.</td></tr>
+<tr><td>Match the real world</td><td>"Relays" appears only in Advanced; "nostr" only on the sign-in route.</td><td>Pass. Extension error rewritten from "Can't reach the relay".</td></tr>
+<tr><td>Control and freedom</td><td>Archive, delete and save all undo; only Delete my data confirms.</td><td>Pass.</td></tr>
+<tr><td>Consistency</td><td>Swipe left archives in Unread; swipe right restores in Archive.</td><td>Pass: same axis, opposite meanings, each list has one.</td></tr>
+<tr><td>Error prevention</td><td>Typed DELETE on the one irreversible action.</td><td>Pass.</td></tr>
+<tr><td>Recognition over recall</td><td>Returning open resumes the article.</td><td>Pass.</td></tr>
+<tr><td>Flexibility</td><td>Swipe-to-archive needs a visible equivalent.</td><td>Archive button in the Reader and on the end card. Pass.</td></tr>
+<tr><td>Minimalist design</td><td>You had an Appearance row duplicating the Reader's Aa sheet.</td><td><strong>Proposed cut:</strong> the app follows the phone's light/dark setting; Reader theme lives only in Aa. Needs your OK.</td></tr>
+<tr><td>Recover from errors</td><td>Every error row names a next step.</td><td>Pass.</td></tr>
+<tr><td>Help</td><td>Empty states teach; no tour.</td><td>Pass. <strong>Proposed rule:</strong> "Later" on the backup card hides it until ten more saves. Needs your OK.</td></tr>
+</table></div>
+
+<h2 id="open">Open items</h2>
+<ul>
+  <li><strong>Your OK on two proposals:</strong> cut the Appearance row; the backup card returns after ten more saves when dismissed.</li>
+  <li><strong>Contract v1.2:</strong> typed-code variant of browser pairing (decision 11); extension spec loses "Open in app" and <code>/open</code> (decision 9); moving saves to a nostr identity (decisions 6 and 13) needs a re-encryption path written down.</li>
+  <li><strong>Name and licence:</strong> still open. "Shelf" stays the working name in every mockup.</li>
+</ul>
+</main>
+</body>
+</html>
