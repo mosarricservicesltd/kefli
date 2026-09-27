@@ -14,6 +14,12 @@ body{font-family:var(--font-ui);font-size:var(--text-15);line-height:1.5;backgro
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 .stage{display:flex;flex-wrap:wrap;gap:var(--space-32);justify-content:center;align-items:flex-start;padding:var(--space-32) var(--space-16)}
 
+/* ---------- layout and motion tokens (consistency spec, fix 1) ---------- */
+:root{--gutter:16px;--gutter-reader:20px;--stack-gap:8px;--motion-enter:250ms cubic-bezier(.2,.8,.2,1);--motion-exit:200ms cubic-bezier(.4,0,1,1)}
+@keyframes riseIn{from{opacity:0;transform:translateY(24px)}}
+@keyframes sheetIn{from{transform:translateY(100%)}}
+@keyframes fadeIn{from{opacity:0}}
+
 /* ---------- control panel (outside the phone) ---------- */
 .panel{width:300px;max-width:100%;font-size:var(--text-13)}
 .panel h1{font-size:var(--text-20);margin:0 0 var(--space-4);font-weight:600}
@@ -23,6 +29,8 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .panel .btns button{height:32px;padding:0 12px;border-radius:var(--radius-pill);background:#FFFFFF;border:1px solid #D5D7DA;display:inline-flex;align-items:center}
 .panel .btns button.on{background:#181D27;color:#FFFFFF;border-color:#181D27}
 .panel .note{margin-top:var(--space-20);padding:var(--space-12);border-radius:var(--radius);background:#FFFFFF;border:1px solid #D5D7DA;color:#414651}
+.panel .note p{margin:0 0 var(--space-8);color:inherit}
+.panel .note p:last-child{margin:0}
 
 /* ---------- phone ---------- */
 .phone{width:360px;height:800px;flex:none;border-radius:32px;overflow:hidden;position:relative;background:var(--background);color:var(--text);box-shadow:0 0 0 8px #181D27,0 24px 48px #10182840;display:flex;flex-direction:column}
@@ -41,22 +49,30 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .tabbar .pill{width:56px;height:28px;border-radius:var(--radius-pill);display:flex;align-items:center;justify-content:center}
 .tabbar button.on .pill{background:var(--accent-soft)}
 
-/* saves header */
-.head{padding:var(--space-12) var(--space-16) var(--space-8);display:flex;align-items:center;justify-content:space-between}
-.head h1{margin:0;font-size:var(--text-28);font-weight:600;letter-spacing:-.02em}
-.head .count{font-size:var(--text-13);color:var(--muted)}
-.searchbar{margin:0 var(--space-16);height:48px;border-radius:var(--radius-pill);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge);display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-16);color:var(--muted);width:calc(100% - 32px);text-align:left}
-.segs{display:flex;gap:var(--space-8);padding:var(--space-12) var(--space-16)}
+/* tab-screen header row: title left, count right (fix 15) */
+.head{padding:var(--space-12) var(--gutter) var(--space-8);display:flex;align-items:center;justify-content:space-between;gap:var(--space-8)}
+.head h1{margin:0;font-size:var(--text-28);line-height:1.2;font-weight:600;letter-spacing:-.02em}
+.head .count{font-size:var(--text-13);color:var(--muted);text-align:right}
+.searchbar{margin:0 var(--gutter);height:48px;border-radius:var(--radius-pill);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge);display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-16);color:var(--muted);width:calc(100% - 2 * var(--gutter));text-align:left}
+.segs{display:flex;gap:var(--space-8);padding:var(--space-12) var(--gutter)}
 .seg{height:36px;padding:0 var(--space-16);border-radius:var(--radius-pill);display:inline-flex;align-items:center;font-size:var(--text-13);font-weight:500;background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge);position:relative}
 .seg.on{background:var(--accent);color:var(--on-accent);box-shadow:none;border-color:transparent}
-.list{padding:0 var(--space-16) 160px}
-.refresh{height:3px;margin:0 var(--space-16);border-radius:var(--radius-pill);background:var(--accent-soft);overflow:hidden;position:relative}
+.list{padding:0 var(--gutter) 160px}
+.refresh{height:3px;margin:0 var(--gutter);border-radius:var(--radius-pill);background:var(--accent-soft);overflow:hidden;position:relative}
 .refresh i{position:absolute;top:0;bottom:0;width:30%;background:var(--accent);border-radius:var(--radius-pill);animation:slide 1.2s ease-in-out infinite}
 @keyframes slide{0%{left:-30%}100%{left:100%}}
-.banner{margin:0 var(--space-16) var(--space-8);min-height:40px;border-radius:var(--radius-pill);background:var(--text);color:var(--background);display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-16);font-size:var(--text-13);font-weight:500}
+
+/* in-flow notices (one component, three tones). The inverted pill belongs to toasts only (Q5). */
+.banner{margin:0 var(--gutter) var(--space-12);display:flex;align-items:center;gap:var(--space-8);padding:var(--space-12) var(--space-16);border-radius:var(--radius);background:var(--surface);border:1px solid var(--line);color:var(--text);font-size:var(--text-13);font-weight:500;line-height:1.4}
+.banner svg{color:var(--muted);flex:none}
+.notice{display:flex;align-items:flex-start;gap:var(--space-8);padding:var(--space-12) var(--space-16);border-radius:var(--radius);font-size:var(--text-13);font-weight:500;line-height:1.4;color:var(--text)}
+.notice.info{background:var(--accent-soft)}
+.notice.info svg{color:var(--accent);flex:none;margin-top:1px}
 
 /* card (locked component) */
 .cardwrap{position:relative;border-radius:var(--radius);margin-bottom:var(--gap-card);touch-action:pan-y;user-select:none}
+.cardwrap.leaving{height:0!important;margin-bottom:0;opacity:0;overflow:hidden;transition:height var(--motion-exit),margin-bottom var(--motion-exit),opacity var(--motion-exit)}
+.cardwrap.entering{overflow:hidden;transition:height var(--motion-enter),margin-bottom var(--motion-enter),opacity var(--motion-enter)}
 .cardwrap .under{position:absolute;inset:0;border-radius:var(--radius);background:var(--accent);color:var(--on-accent);display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-20);font-size:var(--text-13);font-weight:600;opacity:0}
 .cardwrap .under.left{justify-content:flex-end}
 .card{position:relative;display:flex;gap:var(--space-12);padding:var(--space-12);background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);border:var(--card-edge);overflow:hidden;text-align:left;width:100%;transition:transform .2s ease}
@@ -72,40 +88,49 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .tag svg{color:var(--accent)}
 .tag.plain{background:var(--line)}
 .thumb{width:72px;height:72px;border-radius:var(--radius-image);object-fit:cover;flex:none;background:var(--accent-soft)}
+.thumb.sm{width:56px;height:56px}
 .progress{position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--accent-soft)}
 .progress i{display:block;height:100%;background:var(--accent);border-radius:0 var(--radius-pill) var(--radius-pill) 0}
-.pdot{width:8px;height:8px;border-radius:var(--radius-pill);background:var(--accent);flex:none;animation:breathe 1.6s ease-in-out infinite}
+.progress.idle{display:none}
+.pdot{width:8px;height:8px;border-radius:var(--radius-pill);background:var(--accent);flex:none;animation:breathe 1.2s ease-in-out infinite}
 @keyframes breathe{0%,100%{opacity:.35}50%{opacity:1}}
 .link{color:var(--accent);font-weight:500;display:inline-flex;align-items:center;gap:var(--space-4)}
 
-/* empty states */
+/* empty states: one medallion (fix 29) */
 .empty{padding:var(--space-32) var(--space-24);text-align:center;display:flex;flex-direction:column;align-items:center}
 .empty h2{font-size:var(--text-20);font-weight:600;margin:var(--space-20) 0 var(--space-8)}
 .empty p{color:var(--muted);margin:0 0 var(--space-24);max-width:28ch}
+.medal{width:56px;height:56px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent);display:inline-flex;align-items:center;justify-content:center;flex:none}
 .illus{width:200px;height:150px;border-radius:var(--radius-sheet);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge);padding:var(--space-12);display:flex;flex-direction:column;gap:var(--space-8);justify-content:flex-end}
 .illus .rowi{display:flex;gap:var(--space-8);justify-content:center}
 .illus .app{width:36px;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10px;color:var(--muted)}
 .illus .app b{width:36px;height:36px;border-radius:var(--radius);background:var(--line);display:block}
-.illus .app.me b{background:var(--gradient-primary);display:flex;align-items:center;justify-content:center}
+.illus .app.me b{background:var(--gradient-primary);color:var(--on-gradient);display:flex;align-items:center;justify-content:center}
 .illus .app.me{color:var(--text);font-weight:600}
 .illus .lbl{font-size:11px;color:var(--muted);text-align:left}
 .btn{height:48px;padding:0 var(--space-24);border-radius:var(--radius-pill);display:inline-flex;align-items:center;justify-content:center;gap:var(--space-8);font-weight:600;font-size:var(--text-15);line-height:1}
 .btn.primary{background:var(--gradient-primary);color:var(--on-gradient)}
 .btn.secondary{background:var(--surface);color:var(--text);box-shadow:var(--shadow-card);border:var(--card-edge)}
 .btn.quiet{color:var(--accent);height:48px}
+/* busy: full opacity, three dots, never [disabled] (fix 28) */
+.btn.busy{pointer-events:none}
+.dots.inbtn{margin:0;gap:4px}
+.dots.inbtn i{width:6px;height:6px;background:currentColor}
 
-/* toast */
-.toast{position:absolute;left:var(--space-16);right:var(--space-16);bottom:76px;min-height:52px;border-radius:var(--radius-pill);background:var(--text);color:var(--background);display:flex;align-items:center;justify-content:space-between;padding:0 var(--space-8) 0 var(--space-20);font-size:var(--text-15);z-index:30;box-shadow:0 8px 24px #10182833;overflow:hidden}
+/* toast: the only inverted pill. Its bottom is set by placeStack(). */
+.toast{position:absolute;left:var(--gutter);right:var(--gutter);bottom:72px;min-height:52px;border-radius:var(--radius-pill);background:var(--text);color:var(--background);display:flex;align-items:center;justify-content:space-between;padding:0 var(--space-8) 0 var(--space-20);font-size:var(--text-15);z-index:30;box-shadow:0 8px 24px #10182833;overflow:hidden;transition:bottom var(--motion-enter)}
+.toast.enter{animation:riseIn var(--motion-enter)}
+.toast.leave{transform:translateY(24px);opacity:0;pointer-events:none;transition:bottom var(--motion-enter),transform var(--motion-exit),opacity var(--motion-exit)}
 .toast button{height:48px;padding:0 var(--space-16);border-radius:var(--radius-pill);font-weight:600;color:var(--background)}
-.toast .timer{position:absolute;left:0;bottom:0;height:2px;background:var(--accent);animation:shrink linear forwards}
+.toast .timer{position:absolute;left:0;bottom:0;height:2px;background:var(--accent);animation:shrink 5000ms linear forwards}
 @keyframes shrink{from{width:100%}to{width:0}}
 
-/* search */
-.searchtop{display:flex;align-items:center;gap:var(--space-8);padding:var(--space-12) var(--space-16)}
+/* search: a pushed screen with the 56 px bar (fix 16, Q8) */
+.searchtop{height:56px;flex:none;display:flex;align-items:center;gap:var(--space-4);padding:0 var(--gutter) 0 var(--space-8)}
 .iconbtn{width:48px;height:48px;border-radius:var(--radius-pill);display:inline-flex;align-items:center;justify-content:center;flex:none}
 .field{flex:1;height:48px;border-radius:var(--radius-pill);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge);display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-16)}
 .field input{flex:1;min-width:0;border:0;outline:0;background:none;font:inherit;color:var(--text)}
-.caption{padding:0 var(--space-16) var(--space-8);font-size:var(--text-13);color:var(--muted)}
+.caption{padding:0 var(--gutter) var(--space-8);font-size:var(--text-13);color:var(--muted)}
 
 /* reader */
 .reader{background:var(--reader-bg);color:var(--reader-text)}
@@ -114,8 +139,8 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .rtop .aa{font-weight:600;font-size:var(--text-15);letter-spacing:-.02em}
 .rprog{height:2px;flex:none;background:transparent;position:relative;z-index:2}
 .rprog i{position:absolute;left:0;top:0;bottom:0;background:var(--reader-accent)}
-.article{padding:var(--space-16) var(--space-20) 140px}
-.article.playing{padding-bottom:230px}
+.article{padding:var(--space-16) var(--gutter-reader) 140px}
+.article.playing{padding-bottom:156px}
 .article .kicker{font-size:var(--text-13);color:var(--reader-muted);margin-bottom:var(--space-8)}
 .article h1{font-family:var(--font-ui);font-size:var(--text-28);line-height:1.2;font-weight:600;letter-spacing:-.02em;margin:0 0 var(--space-12)}
 .article .by{font-size:var(--text-13);color:var(--reader-muted);margin-bottom:var(--space-24)}
@@ -127,46 +152,53 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .shimmer::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,#FFFFFF55,transparent);animation:sweep 1.4s infinite}
 @keyframes sweep{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
 .skel{border-radius:var(--radius-image);background:var(--line);margin-bottom:var(--space-8)}
-.endcard{margin:var(--space-32) 0 0;padding:var(--space-20);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge);text-align:center;font-family:var(--font-ui);color:var(--text)}
-.endcard h3{margin:0 0 var(--space-4);font-size:var(--text-17);font-weight:600}
+.endcard{margin:var(--space-32) 0 0;padding:var(--space-16);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge);text-align:center;font-family:var(--font-ui);color:var(--text)}
+.endcard h3{margin:0 0 var(--space-4);font-size:var(--text-20);font-weight:600}
 .endcard p{margin:0 0 var(--space-16);font-size:var(--text-13);color:var(--muted)}
 .endcard .row{display:flex;gap:var(--space-8);justify-content:center}
-.dock{position:absolute;right:var(--space-16);bottom:var(--space-16);display:flex;gap:var(--space-8);z-index:3}
-
+/* two buttons share the end cards' row, so they take the 16 px side padding to fit */
+.endcard .row .btn,.rsvp .done .row .btn{padding:0 var(--space-16)}
+.dock{position:absolute;right:var(--gutter);bottom:16px;display:flex;gap:var(--space-8);z-index:3;transition:bottom var(--motion-enter)}
 .dock .arch{width:52px;height:52px;border-radius:var(--radius-pill);background:var(--surface);color:var(--text);box-shadow:var(--shadow-float);border:var(--card-edge);display:inline-flex;align-items:center;justify-content:center}
 
-/* in-app browser (reader error) */
+/* in-app browser view of a save (drawn web page; Shelf's own parts use tokens) */
 .iab{background:#FFFFFF;color:#181D27}
-.iab .bar{height:56px;display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-8);border-bottom:1px solid #E9EAEB}
-.iab .bar .u{flex:1;font-size:var(--text-13)}
-.iab .bar .u b{display:block;font-size:var(--text-15)}
-.iab .notice{margin:var(--space-12) var(--space-16);padding:var(--space-12) var(--space-16);border-radius:var(--radius);background:#F8EEEA;color:#181D27;font-size:var(--text-13)}
-.fakepage{padding:var(--space-16)}
+.iab .bar{height:56px;flex:none;display:flex;align-items:center;gap:var(--space-4);padding:0 var(--space-8);border-bottom:1px solid #E9EAEB}
+.iab .bar .u{flex:1;min-width:0;font-size:var(--text-13);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.iab .bar .u b{display:block;font-size:var(--text-15);overflow:hidden;text-overflow:ellipsis}
+.iab .notice{margin:var(--space-12) var(--gutter) 0}
+.fakepage{padding:var(--space-16) var(--space-16) 156px}
 .fakepage .l{height:10px;border-radius:4px;background:#E9EAEB;margin-bottom:10px}
 .fakepage .h{height:22px;width:85%;border-radius:4px;background:#D5D7DA;margin-bottom:16px}
 .fakepage .im{height:150px;border-radius:6px;background:#E9EAEB;margin:16px 0}
 
 /* sheets */
 .scrim{position:absolute;inset:0;background:#0C0E1266;z-index:40;display:flex;align-items:flex-end}
-.sheet{width:100%;background:var(--surface);color:var(--text);border-radius:var(--radius-sheet) var(--radius-sheet) 0 0;padding:var(--space-8) var(--space-20) var(--space-24);position:relative}
+.scrim.enter{animation:fadeIn var(--motion-enter)}
+.scrim.enter .sheet{animation:sheetIn var(--motion-enter)}
+.scrim.leave{opacity:0;pointer-events:none;transition:opacity var(--motion-exit)}
+.scrim.leave .sheet{transform:translateY(100%);transition:transform var(--motion-exit)}
+.sheet{width:100%;background:var(--surface);color:var(--text);border-radius:var(--radius-sheet) var(--radius-sheet) 0 0;padding:var(--space-8) var(--gutter) var(--space-24);position:relative}
 .grab{width:36px;height:4px;border-radius:var(--radius-pill);background:var(--line);margin:0 auto var(--space-16)}
 .sheet h3{margin:0 0 var(--space-4);font-size:var(--text-20);font-weight:600;display:flex;align-items:center;gap:var(--space-8)}
 .sheet .sub{color:var(--muted);font-size:var(--text-13);margin:0 0 var(--space-16)}
+.sheet .copynote{margin:0 0 var(--space-16);font-size:var(--text-13);color:var(--muted)}
+.sheet .copynote:empty{margin:0}
 .saveditem{display:flex;gap:var(--space-12);align-items:center;padding:var(--space-12);border-radius:var(--radius);background:var(--background);margin-bottom:var(--space-16)}
 .saveditem .t{font-weight:600;line-height:1.35}
 .saveditem .s{font-size:var(--text-13);color:var(--muted)}
 .sheet .row{display:flex;gap:var(--space-8)}
 .sheet .row .btn{flex:1}
 .check{width:28px;height:28px;border-radius:var(--radius-pill);background:var(--success);color:var(--on-accent);display:inline-flex;align-items:center;justify-content:center}
+.check.big{width:56px;height:56px}
 .sheet .timer{position:absolute;left:24px;right:24px;top:0;height:2px;border-radius:2px;overflow:hidden}
-.sheet .timer i{display:block;height:100%;background:var(--accent);animation:shrink 4s linear forwards}
+.sheet .timer i{display:block;height:100%;background:var(--accent);animation:shrink 4000ms linear forwards}
 .menuitem{width:100%;min-height:52px;display:flex;align-items:center;gap:var(--space-12);font-size:var(--text-15);font-weight:500;border-radius:var(--radius);padding:0 var(--space-4);text-align:left}
 .menuitem.danger{color:var(--error)}
 .aarow{display:flex;align-items:center;gap:var(--space-12);margin-bottom:var(--space-20)}
 .aarow .sz{width:48px;height:48px;border-radius:var(--radius-pill);background:var(--background);display:inline-flex;align-items:center;justify-content:center;font-weight:600}
 .aarow .track{flex:1;height:4px;border-radius:var(--radius-pill);background:var(--line);position:relative}
 .aarow .track i{position:absolute;left:0;top:0;bottom:0;border-radius:var(--radius-pill);background:var(--accent)}
-.aarow .track b{position:absolute;top:50%;width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:var(--radius-pill);background:var(--surface);box-shadow:0 1px 4px #10182840;border:2px solid var(--accent)}
 .themes{display:flex;gap:var(--space-8)}
 .themes button{flex:1;height:64px;border-radius:var(--radius);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:var(--text-13);font-weight:500;border:2px solid transparent}
 .themes button span{font-family:var(--font-reader);font-size:var(--text-20)}
@@ -175,59 +207,65 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .hostapp .l{height:10px;border-radius:4px;background:#E9EAEB;margin-bottom:10px}
 .hostapp .h{height:20px;width:80%;border-radius:4px;background:#D5D7DA;margin:var(--space-16) 0}
 .hostapp .top{display:flex;align-items:center;gap:8px;font-weight:600;font-size:var(--text-13);color:#535862}
-/* ---------- batch 2: listening ---------- */
-.listenbtn{height:36px;padding:0 var(--space-12) 0 var(--space-8);border-radius:var(--radius-pill);background:var(--gradient-primary);color:var(--on-gradient);display:inline-flex;align-items:center;gap:6px;font-size:var(--text-13);font-weight:600;flex:none;margin-right:var(--space-4);position:relative}
-.ptop{flex:none;position:relative;z-index:2;background:var(--reader-bg);color:var(--reader-text);padding:var(--space-4) var(--space-12) var(--space-8);border-bottom:1px solid color-mix(in srgb, var(--reader-muted) 25%, transparent)}
-.ptop.enter{animation:ptopIn .25s cubic-bezier(.2,.8,.2,1)}
-@keyframes ptopIn{from{opacity:0;transform:translateY(-8px)}}
-.ptop .row{display:flex;align-items:center;gap:var(--space-4)}
-.ptop .pp{width:48px;height:48px;border-radius:var(--radius-pill);background:var(--gradient-primary);color:var(--on-gradient);display:inline-flex;align-items:center;justify-content:center;flex:none;margin-right:var(--space-8)}
-.ptop .info{flex:1;min-width:0}
 
-
-.ptop .tt{font-size:var(--text-15);font-weight:500;color:var(--reader-text);font-variant-numeric:tabular-nums}
-.ptop .ctl{width:48px;height:48px;color:var(--reader-text)}
-.ptop .rate{height:32px;min-width:44px;padding:0 var(--space-8);background:color-mix(in srgb, var(--reader-muted) 15%, transparent);color:var(--reader-text)}
-.ptop .scrub{margin:var(--space-8) 0 0;height:3px;background:color-mix(in srgb, var(--reader-muted) 25%, transparent)}
-.ptop .scrub b{width:10px;height:10px;margin:-5px 0 0 -5px}
-
-.mini.enter{animation:miniIn .3s cubic-bezier(.2,.8,.2,1)}
-@keyframes miniIn{from{opacity:0;transform:translateY(24px) scale(.96)}}
-.mini.leave{transition:transform .26s ease-in,opacity .26s ease-in;transform:translateY(32px) scale(.94);opacity:0;pointer-events:none}
+/* ---------- listening ---------- */
+/* Listen chip: a soft entry point; the gradient marks only the live play/pause (Q6) */
+.listenbtn{height:36px;padding:0 var(--space-12) 0 var(--space-8);border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--text);display:inline-flex;align-items:center;gap:6px;font-size:var(--text-13);font-weight:600;flex:none;margin-right:var(--space-4);position:relative}
+.listenbtn svg{color:var(--accent)}
+.reader .listenbtn{background:color-mix(in srgb, var(--reader-accent) 12%, var(--reader-bg));color:var(--reader-text)}
+.reader .listenbtn svg{color:var(--reader-accent)}
 .w{border-radius:3px;transition:background .15s ease,box-shadow .15s ease}
 .w.on{background:var(--reader-highlight);box-shadow:0 0 0 2px var(--reader-highlight)}
 
-
-
-.scrub{position:relative;height:4px;border-radius:var(--radius-pill);background:var(--line);margin:var(--space-4) 0}
-.scrub i{position:absolute;left:0;top:0;bottom:0;border-radius:var(--radius-pill);background:var(--accent)}
-.scrub b{position:absolute;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:var(--radius-pill);background:var(--accent)}
-.times{display:flex;justify-content:space-between;font-size:var(--text-13);color:var(--muted);font-variant-numeric:tabular-nums;margin-bottom:var(--space-4)}
-.controls{display:flex;align-items:center;justify-content:space-between}
-.ctl{width:48px;height:48px;border-radius:var(--radius-pill);display:inline-flex;align-items:center;justify-content:center;position:relative}
-
-.ctl.big{width:60px;height:60px;background:var(--gradient-primary);color:var(--on-gradient);box-shadow:var(--shadow-float)}
-.rate{height:36px;min-width:52px;padding:0 var(--space-12);border-radius:var(--radius-pill);background:var(--background);font-size:var(--text-13);font-weight:600;font-variant-numeric:tabular-nums;position:relative}
-.mini{position:absolute;left:var(--space-8);right:var(--space-8);bottom:72px;height:64px;z-index:20;border-radius:var(--radius-pill);background:var(--text);color:var(--background);display:flex;align-items:center;gap:var(--space-12);padding:0 var(--space-8) 0 var(--space-8);box-shadow:0 8px 24px #10182840;overflow:hidden;text-align:left}
+/* compact player (mini): a float surface, like the Archive button (Q5). Bottom set by placeStack(). */
+.mini{position:absolute;left:var(--gutter);right:var(--gutter);bottom:72px;height:64px;z-index:20;border-radius:var(--radius-pill);background:var(--surface);color:var(--text);box-shadow:var(--shadow-float);border:var(--card-edge);display:flex;align-items:center;gap:var(--space-12);padding:0 var(--space-8);overflow:hidden;text-align:left;transition:bottom var(--motion-enter)}
+.mini.enter{animation:riseIn var(--motion-enter)}
+.mini.leave{transform:translateY(24px);opacity:0;pointer-events:none;transition:transform var(--motion-exit),opacity var(--motion-exit)}
 .mini .pp{width:48px;height:48px;border-radius:var(--radius-pill);background:var(--gradient-primary);color:var(--on-gradient);display:inline-flex;align-items:center;justify-content:center;flex:none}
 .mini .info{flex:1;min-width:0;text-align:left;color:inherit;align-self:stretch;display:flex;flex-direction:column;justify-content:center}
 .mini .info b{display:block;font-size:var(--text-13);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mini .info span{font-size:var(--text-13);opacity:.75;font-variant-numeric:tabular-nums}
-.mini .line{position:absolute;left:28px;right:28px;bottom:5px;height:2px;border-radius:var(--radius-pill);background:color-mix(in srgb, var(--background) 25%, transparent)}
+.mini .info span{font-size:var(--text-13);font-weight:500;color:var(--muted);font-variant-numeric:tabular-nums}
+.mini .line{position:absolute;left:28px;right:28px;bottom:5px;height:2px;border-radius:var(--radius-pill);background:var(--line)}
 .mini .line i{position:absolute;left:0;top:0;bottom:0;border-radius:var(--radius-pill);background:var(--accent)}
-.mini .x{width:48px;height:48px;border-radius:var(--radius-pill);display:inline-flex;align-items:center;justify-content:center;flex:none;opacity:.8}
-.nowcard{margin:0 var(--space-16) var(--space-20);padding:var(--space-16);border-radius:var(--radius-sheet);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge)}
-.nowcard .lbl{font-size:var(--text-13);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin-bottom:var(--space-8)}
+/* one close control on every player surface (fix 8) */
+.pclose{width:48px;height:48px;border-radius:var(--radius-pill);display:inline-flex;align-items:center;justify-content:center;flex:none;color:var(--muted)}
+/* Reader tier: the mini expanded in place in the playing article's Reader, in the reader palette (Q1) */
+.mini.pdock{gap:var(--space-4);background:var(--reader-bg);color:var(--reader-text);border:0;box-shadow:var(--shadow-float),inset 0 0 0 1px color-mix(in srgb, var(--reader-muted) 25%, transparent)}
+.pdock .tt{flex:1;min-width:0;font-size:var(--text-13);font-weight:500;color:var(--reader-muted);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden}
+.pdock .ctl{color:var(--reader-text)}
+.pdock .pclose{color:var(--reader-muted)}
+.pdock .line{background:color-mix(in srgb, var(--reader-muted) 25%, transparent)}
+.pdock .line i{background:var(--reader-accent)}
+
+/* full tier: the Listen tab's Now playing card */
+.pline{position:relative;height:3px;border-radius:var(--radius-pill);background:var(--line);margin:var(--space-4) 0}
+.pline i{position:absolute;left:0;top:0;bottom:0;border-radius:var(--radius-pill);background:var(--accent)}
+.times{display:flex;justify-content:space-between;font-size:var(--text-13);color:var(--muted);font-variant-numeric:tabular-nums;margin-bottom:var(--space-4)}
+.controls{display:flex;align-items:center;justify-content:space-between}
+.ctl{width:48px;height:48px;border-radius:var(--radius-pill);display:inline-flex;align-items:center;justify-content:center;position:relative;flex:none}
+.ctl.big{width:60px;height:60px;background:var(--gradient-primary);color:var(--on-gradient);box-shadow:var(--shadow-float)}
+/* one speed pill (fix 7) */
+.rate{height:36px;min-width:52px;padding:0 var(--space-12);border-radius:var(--radius-pill);background:var(--background);font-size:var(--text-13);font-weight:600;font-variant-numeric:tabular-nums;position:relative;flex:none}
+.reader .rate,.pdock .rate{background:color-mix(in srgb, var(--reader-muted) 15%, transparent);color:var(--reader-text)}
+.nowcard{position:relative;margin:0 var(--gutter) var(--space-20);padding:var(--space-16);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge)}
+.nowcard .lbl{font-size:var(--text-13);font-weight:600;color:var(--muted);margin-bottom:var(--space-8);padding-right:48px}
+.nowcard .pclose{position:absolute;top:4px;right:4px}
 .nowcard .t{display:block;width:100%;text-align:left;font-size:var(--text-17);font-weight:600;line-height:1.3;margin-bottom:var(--space-4);min-height:48px}
 .nowcard .s{font-size:var(--text-13);color:var(--muted);margin-bottom:var(--space-12)}
-.sectionhead{display:flex;align-items:center;justify-content:space-between;padding:0 var(--space-16) var(--space-8)}
+.nowcard .controls{display:grid;grid-template-columns:1fr 48px 60px 48px 1fr;column-gap:8px;align-items:center}
+.nowcard .controls [data-skip="-15"]{grid-column:2}
+.nowcard .controls [data-play]{grid-column:3}
+.nowcard .controls [data-skip="15"]{grid-column:4}
+.nowcard .controls .rate{grid-column:5;justify-self:end}
+.sectionhead{display:flex;align-items:center;justify-content:space-between;padding:0 var(--gutter) var(--space-8)}
 .sectionhead h2{margin:0;font-size:var(--text-17);font-weight:600}
-.pbtn{height:48px;padding:0 var(--space-16);border-radius:var(--radius-pill);display:inline-flex;align-items:center;gap:var(--space-8);font-size:var(--text-13);font-weight:600;background:var(--accent-soft);color:var(--text)}
+/* entry chips (Play all, Paste): 36 visual, 48 hit (fix 13) */
+.pbtn{height:36px;padding:0 var(--space-12) 0 var(--space-8);border-radius:var(--radius-pill);display:inline-flex;align-items:center;gap:6px;font-size:var(--text-13);font-weight:600;background:var(--accent-soft);color:var(--text);position:relative;flex:none}
 .pbtn svg{color:var(--accent)}
-.lrow{display:flex;align-items:center;gap:var(--space-12);width:100%;text-align:left;padding:var(--space-12);margin-bottom:var(--gap-card);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge);position:relative;overflow:hidden}
-.lrow .body .title{-webkit-line-clamp:2;margin-bottom:var(--space-4)}
-.lrow .rp{width:40px;height:40px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent);display:inline-flex;align-items:center;justify-content:center;flex:none}
-.lrow.playing .rp{background:var(--gradient-primary);color:var(--on-gradient)}
+/* Listen rows follow the card anatomy; the body opens, the leading circle plays (Q2) */
+.lrow{display:flex;align-items:center;gap:var(--space-12);padding:var(--space-12);margin-bottom:var(--gap-card);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge);position:relative;overflow:hidden}
+.lrow .rp{width:48px;height:48px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent);display:inline-flex;align-items:center;justify-content:center;flex:none}
+.lrow .lbody{flex:1;min-width:0;align-self:stretch;display:flex;gap:var(--space-12);text-align:left;border-radius:var(--radius-image)}
 .eq{display:inline-flex;align-items:flex-end;gap:2px;height:12px}
 .eq i{width:3px;height:8px;background:currentColor;border-radius:1px;animation:eq 1s ease-in-out infinite}
 .eq i:nth-child(2){animation-delay:.2s}.eq i:nth-child(3){animation-delay:.4s}
@@ -242,17 +280,21 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .media .app b{width:18px;height:18px;border-radius:5px;background:var(--gradient-primary);display:inline-flex;align-items:center;justify-content:center}
 .media .t{font-size:var(--text-15);font-weight:600;line-height:1.3}
 .media .s{font-size:var(--text-13);opacity:.75;margin-bottom:var(--space-12)}
-.media .scrub{background:#FFFFFF33}
+.media .pline{background:#FFFFFF33}
 .media .controls{justify-content:center;gap:var(--space-24)}
 .media .ctl.big{background:#F7F7F7;color:#0C0E12;box-shadow:none}
 .lock .hint{margin-top:auto;font-size:var(--text-13);opacity:.7}
-/* ---------- batch 3: first launch and return ---------- */
+
+/* ---------- first launch, return and pushed screens ---------- */
 .onb{background:var(--background);color:var(--text)}
-.onbtop{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 var(--space-8)}
-.onbbody{padding:var(--space-8) var(--space-24)}
+.onbtop{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 var(--space-8);position:relative}
+/* the large title fades into the pinned bar once it scrolls under it (fix 15) */
+.onbtop .bartitle{position:absolute;left:64px;right:var(--gutter);top:0;line-height:56px;font-size:var(--text-15);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:0;transition:opacity 150ms ease;pointer-events:none}
+.onbtop .bartitle.on{opacity:1}
+.onbbody{padding:var(--space-8) var(--gutter)}
 .onb h1{font-size:var(--text-28);line-height:1.2;font-weight:600;letter-spacing:-.02em;margin:0 0 var(--space-8)}
 .onb .lead{color:var(--muted);margin:0 0 var(--space-24)}
-.onbactions{flex:none;padding:var(--space-16) var(--space-24) var(--space-24);display:flex;flex-direction:column;gap:var(--space-8)}
+.onbactions{flex:none;padding:var(--space-16) var(--gutter) var(--space-24);display:flex;flex-direction:column;gap:var(--space-8);transition:padding-bottom var(--motion-enter)}
 .btn.full{width:100%}
 .btn[disabled]{opacity:.45;pointer-events:none}
 .fine{font-size:var(--text-13);color:var(--muted);text-align:center;margin:var(--space-4) 0 0;display:flex;align-items:center;justify-content:center;gap:6px}
@@ -263,7 +305,6 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .hc .ln.t{background:color-mix(in srgb, var(--text) 70%, transparent);height:9px}
 .hc .pbar{position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--accent-soft)}
 .hc .pbar i{display:block;height:100%;width:45%;background:var(--accent)}
-.hc .aud{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 var(--space-8);border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent);font-size:var(--text-13);font-weight:600}
 .notecard{display:flex;align-items:center;gap:var(--space-8);padding:var(--space-12) var(--space-16);border-radius:var(--radius);background:var(--accent-soft);font-size:var(--text-13);margin-bottom:var(--space-16)}
 .notecard svg{color:var(--accent)}
 .choice{display:flex;align-items:center;gap:var(--space-12);width:100%;min-height:76px;padding:var(--space-12) var(--space-16);margin-bottom:var(--gap-card);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge);text-align:left}
@@ -271,9 +312,14 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .choice .tx{flex:1;min-width:0}
 .choice b{display:block;font-size:var(--text-15);font-weight:600}
 .choice span.s{font-size:var(--text-13);color:var(--muted)}
-.choice .chev{color:var(--muted)}
+.choice .chev{color:var(--muted);display:inline-flex}
 .choice[disabled]{opacity:.45;pointer-events:none}
 .primeillus{display:flex;justify-content:center;margin:var(--space-8) 0 var(--space-24)}
+/* pairing explain drawing: the other device showing its code (fix 23) */
+.pairillus{display:flex;flex-direction:column;align-items:center;padding:var(--space-20) var(--space-16) var(--space-16);border-radius:var(--radius-sheet);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge)}
+.pairillus .scr{width:196px;height:124px;border:3px solid var(--text);border-radius:10px 10px 4px 4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--text)}
+.pairillus .scr b{font:600 var(--text-15)/1 var(--font-ui);letter-spacing:.12em;font-variant-numeric:tabular-nums}
+.pairillus .base{width:236px;height:10px;border-radius:0 0 10px 10px;background:var(--text)}
 .vf{position:relative;height:300px;border-radius:var(--radius-sheet);overflow:hidden;background:#0C0E12;margin:var(--space-16) 0;border:1px solid var(--line)}
 .vf .qr{position:absolute;left:50%;top:50%;width:150px;height:150px;margin:-75px 0 0 -75px;opacity:.35}
 .vf .corner{position:absolute;width:34px;height:34px;border:3px solid #FFFFFF;opacity:.9}
@@ -283,14 +329,18 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 @keyframes scanmove{from{top:22%}to{top:78%}}
 .vf .cap{position:absolute;left:0;right:0;bottom:var(--space-12);text-align:center;color:#FFFFFF;font-size:var(--text-13);opacity:.85}
 .vf.off{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:var(--space-8);color:var(--text);text-align:center;padding:var(--space-24);background:var(--surface);box-shadow:var(--shadow-card)}
-.or{display:flex;align-items:center;gap:var(--space-12);color:var(--muted);font-size:var(--text-13);margin:0 0 var(--space-12)}
-.or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
-.sixdigit{display:block;width:100%;height:52px;border-radius:var(--radius-pill);border:1px solid var(--line);background:var(--surface);color:var(--text);text-align:center;font:600 var(--text-20)/1 var(--font-ui);letter-spacing:.35em;outline:0;font-variant-numeric:tabular-nums}
-.sixdigit:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+/* one code-field component (fix 22) */
+.codefield{display:block;width:100%;height:52px;border-radius:var(--radius-pill);border:1px solid var(--line);background:var(--surface);color:var(--text);text-align:center;font:600 var(--text-20)/1 var(--font-ui);font-variant-numeric:tabular-nums;outline:0;padding:0 var(--space-16)}
+.codefield.digits{letter-spacing:.35em;text-indent:.35em}
+.codefield.browser,.codefield.caps{letter-spacing:.2em;text-indent:.2em;text-transform:uppercase}
+.codefield:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.codefield.bad,.codefield.bad:focus{border-color:var(--error)}
+.codefield[disabled]{opacity:.45}
+.codefield + .fielderr{margin-top:var(--space-8)}
 .errline{display:flex;align-items:flex-start;gap:var(--space-8);padding:var(--space-12) var(--space-16);border-radius:var(--radius);background:color-mix(in srgb, var(--error) 10%, var(--surface));color:var(--text);font-size:var(--text-13);margin-bottom:var(--space-16)}
 .errline svg{color:var(--error);flex:none;margin-top:1px}
 .words{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-8)}
-.wf{display:flex;align-items:center;gap:var(--space-8);min-width:0;height:44px;padding:0 var(--space-12);border-radius:var(--radius-pill);background:var(--surface);border:1px solid var(--line)}
+.wf{display:flex;align-items:center;gap:var(--space-8);min-width:0;height:48px;padding:0 var(--space-12);border-radius:var(--radius-pill);background:var(--surface);border:1px solid var(--line)}
 .wf span{width:18px;font-size:var(--text-13);color:var(--muted);font-variant-numeric:tabular-nums;text-align:right}
 .wf input{flex:1;min-width:0;width:100%;border:0;outline:0;background:none;font:inherit;color:var(--text)}
 .wf:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
@@ -299,34 +349,35 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .sugg button{height:36px;padding:0 var(--space-16);border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--text);font-weight:500;font-size:var(--text-13);position:relative}
 .fielderr{color:var(--error);font-size:var(--text-13);min-height:20px}
 .headrow{display:flex;align-items:center;justify-content:space-between;gap:var(--space-8);margin-bottom:var(--space-12)}
-.headrow h2{margin:0;font-size:var(--text-15);font-weight:600}
+.headrow h2{margin:0;font-size:var(--text-17);font-weight:600}
 .waiting{display:flex;flex-direction:column;align-items:center;text-align:center;padding:var(--space-32) 0}
 .dots{display:inline-flex;gap:6px;margin-bottom:var(--space-16)}
 .dots i{width:10px;height:10px;border-radius:var(--radius-pill);background:var(--accent);animation:breathe 1.2s ease-in-out infinite}
 .dots i:nth-child(2){animation-delay:.2s}.dots i:nth-child(3){animation-delay:.4s}
 .field1{display:flex;align-items:center;height:48px;border-radius:var(--radius-pill);background:var(--surface);border:1px solid var(--line);padding:0 var(--space-16);margin-bottom:var(--space-12)}
 .field1 input{flex:1;border:0;outline:0;background:none;font:inherit;color:var(--text)}
-.restore{margin:0 var(--space-16) var(--space-12);padding:var(--space-16);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge)}
-.restore .h{display:flex;align-items:center;justify-content:space-between;gap:var(--space-8);font-weight:600;margin-bottom:var(--space-8)}
+.restore{margin:0 var(--gutter) var(--space-12);padding:var(--space-16);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge)}
+.restore.leave{opacity:0;transition:opacity var(--motion-exit)}
+.restore .h{display:flex;align-items:center;justify-content:space-between;gap:var(--space-8);font-weight:600;font-size:var(--text-17);margin-bottom:var(--space-8)}
 .restore .h span{font-size:var(--text-13);color:var(--muted);font-weight:500;font-variant-numeric:tabular-nums}
 .restore .bar{height:4px;border-radius:var(--radius-pill);background:var(--line);overflow:hidden;margin-bottom:var(--space-8)}
 .restore .bar i{display:block;height:100%;background:var(--accent);border-radius:var(--radius-pill);transition:width .3s ease}
 .restore p{margin:0;font-size:var(--text-13);color:var(--muted)}
 .restore.done .h{margin:0;justify-content:flex-start}
-/* ---------- batch 4: You ---------- */
-.ycount{padding:0 var(--space-16) var(--space-16);font-size:var(--text-13);color:var(--muted)}
-.yprofile{display:flex;align-items:center;gap:var(--space-12);margin:0 var(--space-16) var(--space-16)}
+/* ---------- You ---------- */
+.yprofile{display:flex;align-items:center;gap:var(--space-12);margin:0 var(--gutter) var(--space-16)}
 .avatar{width:56px;height:56px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--text);display:inline-flex;align-items:center;justify-content:center;font-size:var(--text-20);font-weight:600;flex:none}
 .yprofile b{display:block;font-size:var(--text-17)}
 .yprofile span{font-size:var(--text-13);color:var(--muted)}
-.bcard{margin:0 var(--space-16) var(--space-16);padding:var(--space-16);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge)}
+.bcard{margin:0 var(--gutter) var(--space-16);padding:var(--space-16);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge)}
 .bcard .h{display:flex;align-items:center;gap:var(--space-8);font-weight:600;font-size:var(--text-17);margin-bottom:var(--space-4)}
 .bcard .h svg{color:var(--accent)}
 .bcard p{margin:0 0 var(--space-16);color:var(--muted);font-size:var(--text-13)}
-.bcard .row{display:flex;gap:var(--space-8)}
-.gtitle{padding:0 var(--space-16) var(--space-8);font-size:var(--text-13);font-weight:600;color:var(--muted)}
-.ygroup{margin:0 var(--space-16) var(--space-20);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge);overflow:hidden}
+.bcard .row{display:flex;gap:var(--space-8);justify-content:flex-end}
+.gtitle{padding:0 var(--gutter) var(--space-8);font-size:var(--text-13);font-weight:600;color:var(--muted)}
+.ygroup{margin:0 var(--gutter) var(--space-20);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge);overflow:hidden}
 .onbbody .ygroup{margin-left:0;margin-right:0}
+.onbbody .gtitle{padding-left:0;padding-right:0}
 .yrow{display:flex;align-items:center;gap:var(--space-12);width:100%;min-height:56px;padding:var(--space-8) var(--space-16);text-align:left;border-top:1px solid var(--line)}
 .ygroup > .yrow:first-child{border-top:0}
 .yrow .yi{color:var(--muted);display:inline-flex;flex:none}
@@ -344,7 +395,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .status::before{content:"";width:8px;height:8px;border-radius:var(--radius-pill);background:var(--success)}
 .status.down::before{background:var(--error)}
 .status.off::before{background:var(--muted)}
-.gnote{margin:calc(-1 * var(--space-12)) var(--space-16) var(--space-20);font-size:var(--text-13);color:var(--muted)}
+.gnote{margin:calc(-1 * var(--space-12)) var(--gutter) var(--space-20);font-size:var(--text-13);color:var(--muted)}
 .onbbody .gnote{margin-left:0;margin-right:0}
 .codegrid{position:relative;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-8);margin-bottom:var(--space-16)}
 .codegrid .cw{display:flex;align-items:center;gap:var(--space-8);height:40px;padding:0 var(--space-12);border-radius:var(--radius-pill);background:var(--background);font-weight:500}
@@ -364,9 +415,13 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .vrow .yl{flex:1;font-weight:500}
 .sample{width:48px;height:48px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent);display:inline-flex;align-items:center;justify-content:center;flex:none}
 .stepper{display:flex;align-items:center;justify-content:space-between;min-height:56px;padding:var(--space-8) var(--space-8) var(--space-8) var(--space-16)}
-.stepper .ctrl{display:flex;align-items:center;gap:var(--space-4);height:48px;border-radius:var(--radius-pill);background:var(--background)}
-.stepper .ctrl button{width:48px;height:48px;border-radius:var(--radius-pill);font-size:var(--text-20)}
-.stepper .ctrl span{min-width:48px;text-align:center;font-weight:600;font-variant-numeric:tabular-nums}
+/* one stepper for stepped values: Voice's default speed and Speed read's wpm (fix 7) */
+.stepper .ctrl,.wpm{display:flex;align-items:center;height:48px;padding:0;gap:0;border-radius:var(--radius-pill)}
+.stepper .ctrl{background:var(--background)}
+.wpm{background:color-mix(in srgb, var(--reader-muted) 14%, transparent)}
+.stepper .ctrl button,.wpm button{width:48px;height:48px;border-radius:var(--radius-pill);font-size:var(--text-20);font-weight:500}
+.wpm button{color:var(--reader-text)}
+.stepper .ctrl span,.wpm span{min-width:48px;padding:0 var(--space-4);text-align:center;font-size:var(--text-15);font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
 .btn.danger{background:var(--surface);color:var(--error);border:1.5px solid var(--error)}
 .btn.danger:not([disabled]){background:var(--error);color:var(--on-accent)}
 .plist{list-style:none;margin:0 0 var(--space-20);padding:0}
@@ -375,8 +430,6 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .plist li.go svg{color:var(--error)}
 .plist li.ask svg{color:var(--muted)}
 .plist li small{display:block;color:var(--muted);font-size:var(--text-13)}
-.typebox{display:block;width:100%;height:48px;border-radius:var(--radius-pill);border:1px solid var(--line);background:var(--surface);color:var(--text);padding:0 var(--space-16);font:600 var(--text-15)/1 var(--font-ui);letter-spacing:.08em;outline:0;text-transform:uppercase}
-.typebox:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .label{display:block;font-size:var(--text-13);font-weight:600;margin-bottom:var(--space-8)}
 .steps{list-style:none;margin:0;padding:0}
 .steps li{display:flex;align-items:center;gap:var(--space-12);min-height:48px;border-top:1px solid var(--line)}
@@ -387,7 +440,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .steps li.wait .st::after{content:"";width:8px;height:8px;border-radius:var(--radius-pill);background:var(--accent);animation:breathe 1.2s ease-in-out infinite}
 .steps li span.t{flex:1}
 .steps li small{color:var(--muted);font-size:var(--text-13)}
-.confirmcard{display:flex;flex-direction:column;align-items:center;text-align:center;gap:var(--space-8);padding:var(--space-24);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge);margin:var(--space-16) 0}
+.confirmcard{display:flex;flex-direction:column;align-items:center;text-align:center;gap:var(--space-8);padding:var(--space-16);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge);margin:var(--space-16) 0}
 .confirmcard .ico{width:56px;height:56px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent);display:inline-flex;align-items:center;justify-content:center}
 .confirmcard b{font-size:var(--text-17)}
 .confirmcard span{color:var(--muted);font-size:var(--text-13)}
@@ -416,37 +469,30 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .rsvp .bottom{flex:none;display:flex;flex-direction:column;align-items:center;gap:var(--space-16);padding:var(--space-12) var(--space-16) var(--space-24)}
 .rsvp .ctrls{display:flex;align-items:center;gap:var(--space-24)}
 .rsvp .ctl{color:var(--reader-text)}
-.wpm{display:flex;align-items:center;gap:var(--space-4);height:56px;padding:0 var(--space-4);border-radius:var(--radius-pill);background:color-mix(in srgb, var(--reader-muted) 14%, transparent)}
-.wpm button{width:48px;height:48px;border-radius:var(--radius-pill);font-size:var(--text-20);font-weight:500;color:var(--reader-text)}
-.wpm span{min-width:88px;text-align:center;font-size:var(--text-13);font-weight:600;font-variant-numeric:tabular-nums}
 .rsvp .done{text-align:center}
-.rsvp .done h3{font-family:var(--font-ui);font-size:var(--text-20);margin:0 0 var(--space-8)}
+.rsvp .done h3{font-family:var(--font-ui);font-size:var(--text-20);font-weight:600;margin:0 0 var(--space-8)}
 .rsvp .done p{color:var(--reader-muted);margin:0 0 var(--space-16);font-size:var(--text-15)}
 .rsvp .done .row{display:flex;gap:var(--space-8);justify-content:center}
-@media (prefers-reduced-motion:reduce){*{animation-duration:0s!important;transition:none!important}}
 
 /* ---------- review fixes (2026-09-27) ---------- */
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.yrow:focus-visible,.vpick:focus-visible,.choice:focus-visible,.card:focus-visible{outline-offset:-2px}
+.yrow:focus-visible,.vpick:focus-visible,.choice:focus-visible,.card:focus-visible,.lrow .lbody:focus-visible{outline-offset:-2px}
 .field:focus-within,.field1:focus-within{border:1px solid var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 /* 48px hit areas on pills that keep a smaller visual height */
-.seg::before,.sugg button::before,.yrow .textbtn::before,.listenbtn::before,.rate::before{content:"";position:absolute;inset:-8px -2px}
-.ptop .scrub i,.ptop .scrub b{background:var(--reader-accent)}
+.seg::before,.sugg button::before,.yrow .textbtn::before,.listenbtn::before,.rate::before,.pbtn::before{content:"";position:absolute;inset:-8px -2px}
 /* reader surfaces derive from the reader palette */
 .reader .endcard{background:color-mix(in srgb, var(--reader-muted) 8%, var(--reader-bg));color:var(--reader-text);border:1px solid color-mix(in srgb, var(--reader-muted) 25%, transparent);box-shadow:none}
 .reader .endcard p{color:var(--reader-muted)}
 .reader .btn.secondary,.rsvp .btn.secondary{background:var(--reader-bg);color:var(--reader-text);border:1px solid color-mix(in srgb, var(--reader-muted) 35%, transparent);box-shadow:none}
 .reader .dock .arch{background:var(--reader-bg);color:var(--reader-text);border:1px solid color-mix(in srgb, var(--reader-muted) 35%, transparent)}
 .reader .skel,.reader .fig.shimmer{background:color-mix(in srgb, var(--reader-muted) 18%, transparent)}
-.reader .dock.lift{bottom:88px}
 /* toasts without an action */
 .toast.noact{padding-right:var(--space-20)}
 /* archived rows carry a visible menu (decision 7) */
 .card.hasmore{padding-right:60px}
 .rowmore{position:absolute;right:6px;top:50%;margin-top:-24px;width:48px;height:48px;border-radius:var(--radius-pill);display:inline-flex;align-items:center;justify-content:center;color:var(--muted);z-index:2}
 .rowmenu-title{font-weight:600;margin:0 0 var(--space-8);font-size:var(--text-15)}
-/* screens without a tab bar leave room for the mini player */
-.onb.withmini .onbactions{padding-bottom:96px}
+/* pushed screens without an action bar leave room for the mini player */
 .onb.withmini .scroll .onbbody{padding-bottom:96px}
 .onbbody .banner{margin:0 0 var(--space-16)}
 /* voice picker rows are single radio targets */
@@ -456,6 +502,18 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .offwait .ic{width:48px;height:48px;border-radius:var(--radius-pill);background:color-mix(in srgb, var(--reader-muted) 14%, transparent);display:inline-flex;align-items:center;justify-content:center;color:var(--reader-muted)}
 .offwait p{margin:0;color:var(--reader-muted)}
 .srlive{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+/* leaving copies of a closed sheet or player: animate out, never take input */
+.ghost{pointer-events:none}
+
+/* reduced motion: the same enters and exits as fades at the same durations; ambient loops stay off */
+@media (prefers-reduced-motion:reduce){
+  .toast.enter,.mini.enter,.scrim.enter,.scrim.enter .sheet{animation-name:fadeIn}
+  .toast.leave,.mini.leave{transform:none;transition:opacity var(--motion-exit)}
+  .scrim.leave .sheet{transform:none}
+  .toast,.mini,.dock,.onbactions,.card,.restore .bar i{transition:none}
+  .cardwrap.leaving,.cardwrap.entering{transition-property:opacity}
+  .eq i,.pdot,.dots i,.shimmer::after,.steps li.wait .st::after,.refresh i,.vf .scanline{animation:none}
+}
 </style>
 </head>
 <body>
@@ -481,12 +539,14 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
       <button data-jump="archive">Archive</button>
       <button data-jump="archive-empty">Archive, empty</button>
       <button data-jump="archive-menu">Archive, row menu</button>
-      <button data-jump="search">Search</button>
+      <button data-jump="search">Search (no tab bar)</button>
       <button data-jump="search-none">Search, no results</button>
+      <button data-jump="search-reader">Reader opened from Search</button>
     </div>
     <h2>Saved sheet (share from another app)</h2>
     <div class="btns">
       <button data-jump="share">Saved</button>
+      <button data-jump="share-undone">…after Undo</button>
       <button data-jump="share-offline">Offline</button>
       <button data-jump="share-nolink">Not a link</button>
     </div>
@@ -496,6 +556,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
       <button data-jump="reader-loading">Loading</button>
       <button data-jump="reader-images">Images arriving</button>
       <button data-jump="reader-error">Couldn’t get text</button>
+      <button data-jump="reader-error-menu">…its ⋯ menu</button>
       <button data-jump="reader-end">End card</button>
       <button data-jump="reader-aa">Aa sheet</button>
       <button data-jump="reader-menu">⋯ menu</button>
@@ -504,9 +565,13 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
     </div>
     <h2>Listening (batch 2)</h2>
     <div class="btns">
-      <button data-jump="play">Reader, playing</button>
+      <button data-jump="play">Reader, playing (player at the bottom)</button>
+      <button data-jump="play-paused">Reader, paused</button>
+      <button data-jump="mini-reader">Another article’s Reader</button>
       <button data-jump="mini">Mini player on Saves</button>
       <button data-jump="listen">Listen tab</button>
+      <button data-jump="listen-scrolled">Listen, card scrolled away</button>
+      <button data-jump="listen-reader">Reader opened from Listen</button>
       <button data-jump="listen-empty">Listen, empty</button>
       <button data-jump="lock">Lock screen</button>
     </div>
@@ -522,9 +587,10 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
       <button data-jump="scan-prime">Before the camera</button>
       <button data-jump="scan-prompt">Camera permission</button>
       <button data-jump="scan-view">Scanning</button>
+      <button data-jump="scan-code">QR read, type the code</button>
+      <button data-jump="scan-wrong">Wrong code</button>
       <button data-jump="scan-refused">Camera refused</button>
       <button data-jump="scan-expired">Code expired</button>
-      <button data-jump="scan-wrong">Wrong code</button>
       <button data-jump="scan-connecting">Connecting</button>
     </div>
     <h2>Enter my recovery code</h2>
@@ -561,6 +627,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
     <div class="btns">
       <button data-jump="rec-hidden">Recovery code, hidden</button>
       <button data-jump="rec-shown">Recovery code, shown</button>
+      <button data-jump="rec-copied">…copied</button>
       <button data-jump="dev">Add another device</button>
       <button data-jump="dev-expired">…code expired</button>
     </div>
@@ -569,11 +636,14 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
       <button data-jump="br">List</button>
       <button data-jump="br-empty">None yet</button>
       <button data-jump="br-disconnect">Disconnect</button>
+      <button data-jump="conn-first">Connect, from first-run Saves</button>
       <button data-jump="conn-ask">Connect: camera</button>
       <button data-jump="conn-scan">Connect: scanning</button>
-      <button data-jump="conn-type">Connect: type a code</button>
+      <button data-jump="conn-type">Connect: type the code</button>
       <button data-jump="conn-typewrong">…wrong typed code</button>
       <button data-jump="conn-confirm">Connect this browser?</button>
+      <button data-jump="conn-busy">…connecting</button>
+      <button data-jump="conn-refused">Camera refused</button>
       <button data-jump="conn-expired">Code expired</button>
       <button data-jump="conn-failed">Can’t connect</button>
     </div>
@@ -582,14 +652,19 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
       <button data-jump="voice">Voice</button>
       <button data-jump="adv">Advanced</button>
       <button data-jump="adv-down">…a relay not responding</button>
+      <button data-jump="adv-offline">…offline</button>
       <button data-jump="sw">Use my nostr app instead</button>
+      <button data-jump="sw-waiting">…waiting for the nostr app</button>
+      <button data-jump="sw-declined">…declined</button>
+      <button data-jump="sw-offline">…offline</button>
       <button data-jump="sw-moving">…moving saves</button>
       <button data-jump="del">Delete my data</button>
       <button data-jump="del-typed">…DELETE typed</button>
       <button data-jump="del-running">…deleting</button>
       <button data-jump="del-partial">…a server didn’t confirm</button>
       <button data-jump="del-failed">…couldn’t reach our server</button>
-      <button data-jump="del-nostr">…nostr user approves</button>
+      <button data-jump="del-nostr">…waiting for the nostr app</button>
+      <button data-jump="del-declined">…declined in the nostr app</button>
     </div>
     <h2>Speed read</h2>
     <div class="btns">
@@ -597,8 +672,13 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
       <button data-jump="rsvp">Running</button>
       <button data-jump="rsvp-paused">Paused (sentence shown)</button>
       <button data-jump="rsvp-done">Finished</button>
+      <button data-jump="rsvp-done-archived">Finished, archived article</button>
     </div>
-    <div class="note"><strong>Reader layout:</strong> Listen sits in the top bar; pressing it opens a player strip under the top bar while the text highlights and scrolls. Archive floats at the bottom right, where the thumb rests. The mini player gets a ✕ once paused and animates away when closed.</div>
+    <div class="note">
+      <p><strong>Player:</strong> one listening session, three sizes. The mini player sits at the bottom of every screen (8 px above the tab bar, or 16 px above the screen edge). In the playing article’s Reader it expands in place into the full row: play, time, ±15 s, speed, and ✕ once paused. Its line replaces the reading line. On Listen the Now playing card is the player; the mini slides in once the card has scrolled mostly away. Only play controls play: a Listen row’s body opens the article, its round button plays.</p>
+      <p><strong>Bottom stack:</strong> tab bar or screen edge, then the player, then the screen’s own bar or floating Archive, then the toast, 8 px apart. Back from a Reader returns to whatever opened it.</p>
+      <p><strong>Build notes:</strong> Android Back is swallowed while switching accounts moves saves and while a deletion runs. Mark the recovery-code clip as sensitive (ClipDescription.EXTRA_IS_SENSITIVE); on Android 13+ the system confirms copies, so Shelf shows its own copy toast only below API 33. Toasts use getRecommendedTimeoutMillis(5000) and never auto-dismiss while a screen reader is on. In a Custom Tab, Archive is the tab’s action button and Copy link and Delete are menu items.</p>
+    </div>
   </aside>
 </div>
 
@@ -625,8 +705,9 @@ const I = {
   share:'<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98M15.41 6.51l-6.82 3.98"/>',
   alert:'<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>',
   pause:'<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
-  back15:'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
-  fwd15:'<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',
+  // final in-app skip icons: docs/design/icons/app/skip-back-15.svg and skip-forward-15.svg (numerals at a 1.5 stroke)
+  back15:'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 5v3h3"/><path stroke-width="1.5" d="M9 10.5l1.125-1.125v5.25"/><path stroke-width="1.5" d="M15 9.375h-2.25v2.25h.75a1.5 1.5 0 0 1 0 3h-.75"/>',
+  fwd15:'<path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 5v3h-3"/><path stroke-width="1.5" d="M9 10.5l1.125-1.125v5.25"/><path stroke-width="1.5" d="M15 9.375h-2.25v2.25h.75a1.5 1.5 0 0 1 0 3h-.75"/>',
   download:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
   phone:'<rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/>',
   zap:'<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
@@ -643,6 +724,7 @@ const I = {
   server:'<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>',
   refresh:'<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
   laptop:'<path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>',
+  info:'<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
 };
 const ic = (n, s=20, extra='') => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${I[n]}</svg>`;
 
@@ -664,37 +746,58 @@ const S = {
   sheet:null, toast:null, scrollToEnd:false,
   audio:null, played:[], playAll:false, lock:false, scrollToWord:false,
   early:false, restoring:null, onbOffline:false, scan:'prime', six:'', nostr:'intro',
-  rate:1, queue:null, host:false, rowId:null, sheetOpener:null
+  rate:1, queue:null, host:false, rowId:null, sheetOpener:null,
+  readerBack:null,        // where ← from the Reader goes: the screen that opened it (Q7); null = Saves
+  listenMini:false,       // Listen shows the mini once the Now playing card has mostly scrolled away (Q3a)
+  playerEnter:false,      // slide the player in on this render only: session start or the Listen chip (Q3b)
+  stack:{ mini:72, dock:16, pad:24, toast:72 },   // last offsets placeStack() applied
+  restoreScroll:null, searchFocus:false, expandId:null, shareRemoved:false, shareT:null
 };
 let toastTimer=null, sheetTimer=null;
-const TAB_SCREENS = ['saves', 'search', 'listen', 'you'];
+// Search is a pushed screen (Q8): it hides the tab bar
+const TAB_SCREENS = ['saves', 'listen', 'you'];
 
 /* ---------------- helpers ---------------- */
 const vp = document.getElementById('vp');
 const phone = document.getElementById('phone');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const minsLeft = it => Math.max(1, Math.round(it.mins * (1 - it.progress)));
+const partRead = it => it.progress > 0 && it.progress < 1;
+const isPlaying = it => !!(S.audio && S.audio.id === it.id);
+const busyDots = () => '<span class="dots inbtn" aria-hidden="true"><i></i><i></i><i></i></span>';
+const offlineNotice = text => `<div class="banner">${ic('wifioff', 16)}<span>${text}</span></div>`;
+
+// 'N min left' and the card bar both read it.progress, the one stored position (fix 11).
+// The playing article always carries both, so they can follow the audio between renders.
+function leftMetaHTML(it){
+  const live = isPlaying(it) ? ` js-left" data-pid="${it.id}` : '';
+  return partRead(it) || live ? `<span class="hot${live}">${minsLeft(it)} min left</span>` : `${it.mins} min`;
+}
+function progressHTML(it){
+  const live = isPlaying(it) ? ` js-prog" data-pid="${it.id}` : '';
+  if (!partRead(it) && !live) return '';
+  return `<span class="progress ${partRead(it) ? '' : 'idle'}"><i class="${live}" style="width:${it.progress * 100}%"></i></span>`;
+}
 
 function cardHTML(it){
   let src = esc(it.src), meta = '', title = `<div class="title">${esc(it.title)}</div>`, extra = '';
   if (it.status === 'pending') {
-    src = S.online ? `<span class="pdot" aria-hidden="true"></span>${esc(it.host)}` : esc(it.host);
+    // waiting states always start the meta line with the dot; the source line shows only the host (fix 28)
+    src = esc(it.host);
     title = `<div class="title url">${esc(it.url || it.host)}</div>`;
-    meta = S.online ? 'Getting the text…' : `${ic('hourglass',14)}Will fetch when you’re online`;
+    meta = S.online ? `<span class="pdot" aria-hidden="true"></span>Getting the text…` : `${ic('hourglass',14)}Will fetch when you’re online`;
   } else if (it.status === 'browser') {
-    src = `${ic('monitor',14)}From Chrome`;
+    src = `${ic('laptop',14)}From Chrome`;
     meta = `<span class="pdot" aria-hidden="true"></span>Getting the text…`;
   } else if (it.status === 'restoring') {
     meta = `<span class="pdot" aria-hidden="true"></span>Getting the text…`;
   } else if (it.status === 'failed') {
     meta = `<span>Couldn’t get the text</span><span class="sep"></span><span class="link">Open original ${ic('ext',14)}</span>`;
   } else {
-    const parts = [];
-    if (it.progress > 0 && it.progress < 1) parts.push(`<span class="hot">${minsLeft(it)} min left</span>`);
-    else parts.push(`${it.mins} min`);
+    const parts = [leftMetaHTML(it)];
     if (S.screen === 'search' && it.archived) parts.push(`<span class="tag plain">Archive</span>`);
     meta = parts.join('<span class="sep"></span>');
-    if (it.progress > 0 && it.progress < 1) extra = `<span class="progress"><i style="width:${it.progress*100}%"></i></span>`;
+    extra = progressHTML(it);
   }
   const img = it.img && it.status === 'ok' ? `<img class="thumb" src="https://picsum.photos/seed/${it.img}/144/144" alt="">` : '';
   const under = it.archived
@@ -716,24 +819,27 @@ function savesScreen(){
   const showing = S.list === 'unread' ? unread : archived;
   let body = '';
   if (S.savesMode === 'first') {
+    // once a browser is connected (fix 19 returns here), the empty state has nothing left to offer but the sharing lesson
     body = `<div class="empty">
       <div class="illus"><div class="lbl">Share to</div><div class="rowi">
         <span class="app"><b></b>Messages</span><span class="app"><b></b>Mail</span>
-        <span class="app me"><b>${ic('bookmark',18,'stroke="#fff"')}</b>Shelf</span><span class="app"><b></b>Notes</span></div></div>
+        <span class="app me"><b>${ic('bookmark',18)}</b>Shelf</span><span class="app"><b></b>Notes</span></div></div>
       <h2>Your shelf is empty</h2>
       <p>Share any link from any app and it lands here, cleaned up and ready to read offline.</p>
-      <button class="btn primary" data-you-go="connect" data-first="1">${ic('laptop',18)}Connect your browser</button>
+      ${S.you.browsers.length ? '' : `<button class="btn primary" data-you-go="connect" data-first="1">${ic('laptop',18)}Connect your browser</button>`}
     </div>`;
   } else if (S.list === 'unread' && unread.length === 0) {
-    body = `<div class="empty"><div class="check" style="width:56px;height:56px">${ic('check',28)}</div>
+    body = `<div class="empty"><div class="check big">${ic('check',28)}</div>
       <h2>All read</h2><p>Nothing waiting. New saves will appear here.</p>
       <button class="btn secondary" data-list="archive">See your archive</button></div>`;
   } else if (S.list === 'archive' && archived.length === 0) {
-    body = `<div class="empty"><h2>Nothing archived yet</h2><p>Swipe an article left, or tap Archive when you finish it, and it moves here.</p></div>`;
+    body = `<div class="empty"><span class="medal">${ic('archive',26)}</span><h2>Nothing archived yet</h2><p>Swipe an article left, or tap Archive when you finish it, and it moves here.</p></div>`;
   } else {
     body = `<div class="list">${showing.map(cardHTML).join('')}</div>`;
   }
   const count = S.savesMode === 'first' ? '' : (S.list === 'unread' ? `${unread.length} unread` : `${archived.length} archived`);
+  // one notice slot, after the segments; the restore card's 'Paused…' line replaces it (fix 27)
+  const restoringNow = S.restoring && !S.restoring.done;
   return `<div class="screen">
     <div class="scroll" id="sc">
       <div class="head"><h1>Saves</h1><span class="count">${count}</span></div>
@@ -741,7 +847,7 @@ function savesScreen(){
       ${S.savesMode === 'loading' ? '<div style="height:12px"></div><div class="refresh"><i></i></div>' : ''}
       ${S.savesMode === 'first' ? '' : `<div class="segs" role="tablist" aria-label="Which list"><button class="seg ${S.list==='unread'?'on':''}" role="tab" aria-selected="${S.list==='unread'}" data-list="unread">Unread</button><button class="seg ${S.list==='archive'?'on':''}" role="tab" aria-selected="${S.list==='archive'}" data-list="archive">Archive</button></div>`}
       ${restoreCard()}
-      ${!S.online ? `<div class="banner">${ic('wifioff',16)}Offline — showing saved copies</div>` : ''}
+      ${!S.online && !restoringNow ? offlineNotice('Offline · showing saved copies') : ''}
       ${body}
     </div>
     ${tabbar()}
@@ -753,13 +859,13 @@ function searchScreen(){
   const res = q ? S.items.filter(i => (i.title + ' ' + i.src).toLowerCase().includes(q)) : [];
   let body = '';
   if (!q) body = `<div class="caption">Searches the full text of everything you’ve saved, on this phone.</div>`;
-  else if (!res.length) body = `<div class="empty"><h2>Nothing matches “${esc(S.query)}”</h2><p>Search looks through titles, sources and full text in Unread and Archive.</p><button class="btn secondary" data-clear>Clear search</button></div>`;
+  else if (!res.length) body = `<div class="empty"><span class="medal">${ic('search',26)}</span><h2>Nothing matches “${esc(S.query)}”</h2><p>Search looks through titles, sources and full text in Unread and Archive.</p><button class="btn secondary" data-clear>Clear search</button></div>`;
   else body = `<div class="caption">${res.length} result${res.length>1?'s':''}</div><div class="list">${res.map(cardHTML).join('')}</div>`;
+  // a pushed screen: 56 px bar with ← at x=8, no tab bar (fix 16, Q8)
   return `<div class="screen">
     <div class="searchtop"><button class="iconbtn" data-back aria-label="Back">${ic('back',22)}</button>
       <label class="field">${ic('search',18)}<input id="q" value="${esc(S.query)}" placeholder="Search your saves" aria-label="Search your saves" autocomplete="off"></label></div>
     <div class="scroll">${body}</div>
-    ${tabbar()}
   </div>`;
 }
 
@@ -775,9 +881,14 @@ const PROSE = [
 const WORDS = PROSE.join(' ').split(/\s+/).length;
 const WPS = 2.6;                       // spoken words per second at 1×
 const DUR = Math.round(WORDS / WPS);   // every sample article shares the same text
-const RATES = [1, 1.2, 1.5, 2, 0.8];
+// One speed list for the player pill and You → Voice → Default speed (fix 7). A tap wraps from 2 back to 0.8.
+const RATES = [0.8, 1, 1.2, 1.5, 2];
 const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const rateLabel = r => `${r}×`;
+// One stored position per article (fix 11): it.progress (0–1) stands in for the build's word index.
+// Audio time, the spoken word and every bar are derived from it.
+const wordAt = t => Math.min(WORDS - 1, Math.floor(t / DUR * WORDS + 1e-6));
+const ttText = a => a.playing ? `${fmt(a.t)} / ${fmt(DUR)}` : fmt(a.t);   // the Reader tier drops the total while ✕ shows
 
 function proseHTML(it){
   if (!(S.audio && S.audio.id === it.id) && S.flashWord == null) {
@@ -791,73 +902,78 @@ function startAudio(id){
   const it = S.items.find(i => i.id === id);
   if (!it) return;
   if (S.audio && S.audio.id === id) { S.audio.playing = !S.audio.playing; return; }
-  S.audio = { id, t: it.listenT || 0, playing: true, rate: S.rate };
+  if (S.audio) { S.playAll = false; S.queue = null; }   // only starting a different article ends Play all
+  else S.playerEnter = true;                            // a new session slides its player in (Q3b)
+  const from = partRead(it) && it.progress < .99 ? it.progress : 0;
+  S.audio = { id, t: from * DUR, playing: true, rate: S.rate };
   S.played = [id, ...S.played.filter(x => x !== id)];
 }
 
-function controlsHTML(withArchive){
+// Full tier (Listen's Now playing card): −15, play, +15 centred, speed at the trailing end (fix 8).
+// Bars are display-only lines: no seeking in v1 (Q4).
+function controlsHTML(){
   const a = S.audio;
-  return `<div class="scrub"><i class="js-bar"></i><b class="js-knob"></b></div>
-    <div class="times"><span class="js-t">0:00</span><span class="js-d">-${fmt(DUR)}</span></div>
+  return `<div class="pline" aria-hidden="true"><i class="js-bar" style="width:${a.t / DUR * 100}%"></i></div>
+    <div class="times"><span class="js-t">${fmt(a.t)}</span><span>${fmt(DUR)}</span></div>
     <div class="controls">
-      <button class="rate" data-rate aria-label="Speed ${rateLabel(a.rate)}">${rateLabel(a.rate)}</button>
-      <button class="ctl" data-skip="-15" aria-label="Back 15 seconds">${ic('back15', 26)}</button>
+      <button class="ctl" data-skip="-15" aria-label="Back 15 seconds">${ic('back15', 24)}</button>
       <button class="ctl big js-pp" data-play aria-label="${a.playing ? 'Pause' : 'Play'}">${ic(a.playing ? 'pause' : 'play', 24, 'fill="currentColor"')}</button>
-      <button class="ctl" data-skip="15" aria-label="Forward 15 seconds">${ic('fwd15', 26)}</button>
-      ${withArchive ? `<button class="ctl" data-archive-open aria-label="Archive">${ic('archive', 22)}</button>` : `<span class="ctl"></span>`}
+      <button class="ctl" data-skip="15" aria-label="Forward 15 seconds">${ic('fwd15', 24)}</button>
+      <button class="rate" data-rate aria-label="Speed ${rateLabel(a.rate)}">${rateLabel(a.rate)}</button>
     </div>`;
 }
 
+// Where the live player shows: the compact mini, the Reader tier ('dock') in the playing article's Reader, or nothing.
+function playerMode(){
+  const a = S.audio;
+  if (!a || S.lock || S.rsvp || S.host) return null;
+  if (!S.items.find(i => i.id === a.id)) return null;
+  if (['welcome', 'return', 'scan', 'code', 'nostr'].includes(S.screen)) return null;
+  if (S.screen === 'reader' && S.readerId === a.id && (S.readerMode === 'ok' || S.readerMode === 'images')) return 'dock';
+  if (S.screen === 'listen') return S.listenMini ? 'mini' : null;   // the Now playing card is the player while it's on screen
+  return 'mini';
+}
+
+// The compact mini and its expanded Reader form share one float surface at the bottom (Q1, Q5).
 function playerHTML(){
-  const a = S.audio;
-  const enter = S.ptopFor !== a.id; S.ptopFor = a.id;
-  return `<div class="ptop ${enter ? 'enter' : ''}"><div class="row">
-    <button class="pp js-pp" data-play aria-label="${a.playing ? 'Pause' : 'Play'}">${ic(a.playing ? 'pause' : 'play', 20, 'fill="currentColor"')}</button>
-    <div class="info"><div class="tt js-tt"></div></div>
-    <button class="ctl" data-skip="-15" aria-label="Back 15 seconds">${ic('back15', 24)}</button>
-    <button class="ctl" data-skip="15" aria-label="Forward 15 seconds">${ic('fwd15', 24)}</button>
-    <button class="rate" data-rate aria-label="Speed ${rateLabel(a.rate)}">${rateLabel(a.rate)}</button></div>
-    <div class="scrub"><i class="js-bar"></i><b class="js-knob"></b></div></div>`;
-}
-
-function miniVisible(){
-  const a = S.audio;
-  if (!a || S.lock || S.rsvp || S.host) return false;
-  if (['listen', 'welcome', 'return', 'scan', 'code', 'nostr'].includes(S.screen)) return false;
-  if (S.screen === 'reader' && S.readerId === a.id) return false;
-  return !!S.items.find(i => i.id === a.id);
-}
-
-function miniHTML(){
-  const a = S.audio;
-  if (!miniVisible()) { S.miniOn = false; return ''; }
-  const enter = !S.miniOn; S.miniOn = true;
-  const it = S.items.find(i => i.id === a.id);
-  return `<div class="mini ${enter ? 'enter' : ''}" style="bottom:${TAB_SCREENS.includes(S.screen) ? 72 : 16}px">
-    <button class="pp js-pp" data-play aria-label="${a.playing ? 'Pause' : 'Play'}">${ic(a.playing ? 'pause' : 'play', 20, 'fill="currentColor"')}</button>
-    <button class="info" data-open-audio><b>${esc(it.title)}</b><span class="js-tof"></span></button>
-    ${a.playing ? '' : `<button class="x" data-stop-audio aria-label="Close player">${ic('x', 20)}</button>`}
-    <div class="line"><i class="js-bar"></i></div></div>`;
+  const mode = playerMode();
+  if (!mode) return '';
+  const a = S.audio, it = S.items.find(i => i.id === a.id);
+  const cls = `mini${mode === 'dock' ? ' pdock' : ''}${S.playerEnter ? ' enter' : ''}`;
+  const pp = `<button class="pp js-pp" data-play aria-label="${a.playing ? 'Pause' : 'Play'}">${ic(a.playing ? 'pause' : 'play', 20, 'fill="currentColor"')}</button>`;
+  const x = a.playing ? '' : `<button class="pclose" data-stop-audio aria-label="Close player">${ic('x', 20)}</button>`;
+  const line = `<div class="line" aria-hidden="true"><i class="js-bar" style="width:${a.t / DUR * 100}%"></i></div>`;
+  if (mode === 'dock') {
+    return `<div class="${cls}" data-reader="${S.readerTheme}" role="region" aria-label="Player" style="bottom:${RS.mini}px">${pp}<span class="tt js-tt">${ttText(a)}</span>
+      <button class="ctl" data-skip="-15" aria-label="Back 15 seconds">${ic('back15', 24)}</button>
+      <button class="ctl" data-skip="15" aria-label="Forward 15 seconds">${ic('fwd15', 24)}</button>
+      <button class="rate" data-rate aria-label="Speed ${rateLabel(a.rate)}">${rateLabel(a.rate)}</button>${x}${line}</div>`;
+  }
+  return `<div class="${cls}" role="region" aria-label="Player" style="bottom:${RS.mini}px">${pp}
+    <button class="info" data-open-audio><b>${esc(it.title)}</b><span class="js-tof">${fmt(a.t)} / ${fmt(DUR)}</span></button>${x}${line}</div>`;
 }
 
 function listenScreen(){
   const played = S.played.map(id => S.items.find(i => i.id === id)).filter(Boolean);
   let body;
   if (!played.length) {
-    body = `<div class="empty"><div class="check" style="width:64px;height:64px;background:var(--accent-soft);color:var(--accent)">${ic('headphones', 28)}</div>
+    body = `<div class="empty"><span class="medal">${ic('headphones', 26)}</span>
       <h2>Nothing played yet</h2><p>Tap Listen on any article to hear it here. It keeps playing when your screen is off.</p>
       <button class="btn secondary" data-tab="saves">Go to your saves</button></div>`;
   } else {
     const a = S.audio, cur = a && S.items.find(i => i.id === a.id);
     const now = cur ? `<div class="nowcard"><div class="lbl">${a.playing ? 'Now playing' : 'Paused'}</div>
+        ${a.playing ? '' : `<button class="pclose" data-stop-audio aria-label="Close player">${ic('x', 20)}</button>`}
         <button class="t" data-open-audio>${esc(cur.title)}</button><div class="s">${esc(cur.src)}</div>
-        ${controlsHTML(false)}</div>` : '';
+        ${controlsHTML()}</div>` : '';
+    // rows follow the card anatomy: the body opens the Reader, the leading circle plays or pauses (Q2)
     const rows = played.map(it => {
-      const isCur = a && a.id === it.id;
-      const icon = isCur ? `<span class="eq ${a.playing ? '' : 'paused'}"><i></i><i></i><i></i></span>` : ic('play', 16, 'fill="currentColor"');
-      return `<button class="lrow ${isCur ? 'playing' : ''}" data-playitem="${it.id}"><span class="rp">${icon}</span>
-        <div class="body"><div class="src">${esc(it.src)}</div><div class="title">${esc(it.title)}</div>
-        <div class="meta">${it.progress > 0 && it.progress < 1 ? `<span class="hot">${minsLeft(it)} min left</span>` : `${it.mins} min`}</div></div>${it.progress > 0 && it.progress < 1 ? `<span class="progress"><i style="width:${it.progress * 100}%"></i></span>` : ''}</button>`;
+      const on = isPlaying(it) && S.audio.playing;
+      const img = it.img && it.status === 'ok' ? `<img class="thumb sm" src="https://picsum.photos/seed/${it.img}/144/144" alt="">` : '';
+      return `<div class="lrow" data-lid="${it.id}">
+        <button class="rp" data-playitem="${it.id}" aria-label="${on ? 'Pause' : 'Play'} ${esc(it.title)}">${ic(on ? 'pause' : 'play', 18, 'fill="currentColor"')}</button>
+        <button class="lbody" data-open="${it.id}"><span class="body"><span class="src">${esc(it.src)}</span><span class="title">${esc(it.title)}</span>
+          <span class="meta">${leftMetaHTML(it)}</span></span>${img}</button>${progressHTML(it)}</div>`;
     }).join('');
     body = `${now}<div class="sectionhead"><h2>Played</h2><button class="pbtn" data-playall>${ic('play', 14, 'fill="currentColor"')}Play all</button></div>
       <div class="list">${rows}</div>`;
@@ -871,10 +987,11 @@ function lockHTML(){
   if (!S.lock || !S.audio) return '';
   const it = S.items.find(i => i.id === S.audio.id);
   if (!it) return '';
+  // Android's media layout; the media session exposes no seek, so its bar is display-only too (Q4)
   return `<div class="lock" data-theme="dark"><div class="clock">9:41</div><div class="date">Sunday 27 September</div>
     <div class="media" data-open-audio><div class="app"><b>${ic('bookmark', 11, 'stroke="#fff"')}</b>Shelf</div>
       <div class="t">${esc(it.title)}</div><div class="s">${esc(it.src)}</div>
-      <div class="scrub"><i class="js-bar"></i><b class="js-knob"></b></div>
+      <div class="pline"><i class="js-bar"></i></div>
       <div class="controls"><button class="ctl" data-skip="-15" aria-label="Back 15 seconds">${ic('back15', 26)}</button>
         <button class="ctl big js-pp" data-play aria-label="Play or pause">${ic(S.audio.playing ? 'pause' : 'play', 24, 'fill="currentColor"')}</button>
         <button class="ctl" data-skip="15" aria-label="Forward 15 seconds">${ic('fwd15', 26)}</button></div></div>
@@ -886,22 +1003,29 @@ function updatePlayer(forceScroll){
   if (!a) return;
   const pct = a.t / DUR * 100;
   vp.querySelectorAll('.js-bar').forEach(e => e.style.width = pct + '%');
-  vp.querySelectorAll('.js-knob').forEach(e => e.style.left = pct + '%');
   vp.querySelectorAll('.js-t').forEach(e => e.textContent = fmt(a.t));
-  vp.querySelectorAll('.js-d').forEach(e => e.textContent = '-' + fmt(DUR - a.t));
-  vp.querySelectorAll('.js-tt').forEach(e => e.textContent = `${fmt(a.t)} / ${fmt(DUR)}`);
-  vp.querySelectorAll('.js-tof').forEach(e => e.textContent = `${fmt(a.t)} of ${fmt(DUR)} · ${rateLabel(a.rate)}`);
-  if (S.screen === 'reader' && S.readerId === a.id) {
-    const w = Math.min(WORDS - 1, Math.floor(a.t * WPS));
+  vp.querySelectorAll('.js-tt').forEach(e => e.textContent = ttText(a));
+  vp.querySelectorAll('.js-tof').forEach(e => e.textContent = `${fmt(a.t)} / ${fmt(DUR)}`);
+  // cards, Listen rows and 'min left' follow the audio: they all read the one stored position
+  const it = S.items.find(i => i.id === a.id);
+  if (it) {
+    vp.querySelectorAll(`.js-prog[data-pid="${it.id}"]`).forEach(e => { e.style.width = it.progress * 100 + '%'; e.parentElement.classList.toggle('idle', !partRead(it)); });
+    vp.querySelectorAll(`.js-left[data-pid="${it.id}"]`).forEach(e => e.textContent = `${minsLeft(it)} min left`);
+  }
+  if (S.screen === 'reader' && S.readerId === a.id && !S.rsvp) {
+    const w = wordAt(a.t);
     const prev = vp.querySelector('.w.on');
     const el = vp.querySelector(`.w[data-w="${w}"]`);
     if (prev && prev !== el) prev.classList.remove('on');
-    if (el) {
+    const rs = document.getElementById('rs');
+    if (el && rs) {
       el.classList.add('on');
-      const rs = document.getElementById('rs');
       const r = el.getBoundingClientRect(), rr = rs.getBoundingClientRect();
       const y = r.top - rr.top;
-      if (forceScroll || y < 40 || y > rs.clientHeight - 100) rs.scrollTo({ top: rs.scrollTop + y - rs.clientHeight / 3, behavior: (forceScroll || matchMedia('(prefers-reduced-motion: reduce)').matches) ? 'auto' : 'smooth' });
+      // keep the spoken word clear of the bottom player and the floating Archive above it (about y=540, Q1)
+      let floor = rs.clientHeight - 100;
+      vp.querySelectorAll('.screen .dock, .mini:not(.ghost)').forEach(e => { floor = Math.min(floor, e.getBoundingClientRect().top - rr.top - 80); });
+      if (forceScroll || y < 40 || y > floor) rs.scrollTo({ top: rs.scrollTop + y - Math.min(rs.clientHeight / 3, floor / 2), behavior: (forceScroll || matchMedia('(prefers-reduced-motion: reduce)').matches) ? 'auto' : 'smooth' });
     }
   }
 }
@@ -911,18 +1035,19 @@ setInterval(() => {
   if (!a || !a.playing) return;
   a.t += 0.2 * a.rate;
   const it = S.items.find(i => i.id === a.id);
-  if (it) it.listenT = a.t;
   if (a.t >= DUR) {
-    a.playing = false; a.t = 0; if (it) it.listenT = 0;
+    // a finished article rewinds to the start, paused (decision 35)
+    a.playing = false; a.t = 0; if (it) it.progress = 0;
     const next = S.playAll && S.queue ? S.queue[S.queue.indexOf(a.id) + 1] : null;
     if (next) {
       const following = S.screen === 'reader' && S.readerId === a.id;
-      S.audio = null; startAudio(next);
+      S.audio = null; startAudio(next); S.playerEnter = false;   // same session, so the player stays put
       if (following) { S.readerId = next; S.scrollToWord = true; }
     } else { S.playAll = false; S.queue = null; }
     render();
     return;
   }
+  if (it) it.progress = a.t / DUR;
   updatePlayer(false);
 }, 200);
 
@@ -943,20 +1068,27 @@ const clearRestore = () => { restoreTimers.forEach(clearTimeout); restoreTimers 
 
 const EARLY = () => ({id:98, src:'The Atlantic', host:'theatlantic.com', title:'What we lose when we stop reading long things', mins:11, progress:0, img:'shelf-atlantic', status:'ok', archived:false, by:'Megan Garber'});
 
-function onbShell(inner, actions, backTo){
-  return `<div class="screen onb ${miniVisible() ? 'withmini' : ''}">
-    <div class="onbtop">${backTo ? `<button class="iconbtn" data-onb-go="${backTo}" aria-label="Back">${ic('back', 22)}</button>` : '<span></span>'}</div>
+// Pushed screens: pinned 56 px bar with ← at x=8, large title, bottom action bar, no tab bar.
+// `back` is a screen name (data-onb-go) or { attr } when ← must do exactly what the screen's Cancel does (fix 20).
+function onbShell(inner, actions, back){
+  const m = inner.match(/<h1[^>]*>([\s\S]*?)<\/h1>/);
+  const title = m ? m[1].replace(/<[^>]+>/g, '') : '';
+  const backBtn = !back ? '<span></span>'
+    : `<button class="iconbtn" ${typeof back === 'string' ? `data-onb-go="${back}"` : back.attr} aria-label="Back">${ic('back', 22)}</button>`;
+  return `<div class="screen onb ${playerMode() === 'mini' ? 'withmini' : ''}">
+    <div class="onbtop">${backBtn}<span class="bartitle" aria-hidden="true">${title}</span></div>
     <div class="scroll"><div class="onbbody">${inner}</div></div>
-    ${actions ? `<div class="onbactions">${actions}</div>` : ''}</div>`;
+    ${actions ? `<div class="onbactions" style="padding-bottom:${RS.pad}px">${actions}</div>` : ''}</div>`;
 }
 
 function welcomeScreen(){
   const card = (rot, x, y, extra, z) => `<div class="hc" style="transform:translate(${x}px,${y}px) rotate(${rot}deg);z-index:${z}">
       <div class="ln src"></div><div class="ln t" style="width:92%"></div><div class="ln t" style="width:64%;margin-bottom:12px"></div>${extra}</div>`;
+  // no audio mark on the hero's cards: decision 8 removed it from real cards (fix 13)
   return `<div class="screen onb">
     <div class="hero">
       ${card(-6, -20, -150, '<div class="ln" style="width:30%"></div>', 1)}
-      ${card(4, 18, -78, `<span class="aud">${ic('play', 12, 'fill="currentColor"')}Listen</span>`, 2)}
+      ${card(4, 18, -78, '<div class="ln" style="width:40%"></div>', 2)}
       ${card(-1, 0, -4, '<div class="ln" style="width:22%;background:var(--accent-soft)"></div><div class="pbar"><i></i></div>', 3)}
     </div>
     <div class="onbbody" style="flex:none">
@@ -973,9 +1105,11 @@ function welcomeScreen(){
 
 function returnScreen(){
   const off = S.onbOffline;
-  const row = (id, icon, t, s) => `<button class="choice" data-onb-go="${id}" ${off ? 'disabled' : ''}><span class="ico">${ic(icon, 22)}</span><span class="tx"><b>${t}</b><span class="s">${s}</span></span><span class="chev">${ic('chev', 20)}</span></button>`;
-  return onbShell(`<h1>Bring back your shelf</h1><p class="lead">Pick whichever you have to hand.</p>
-    ${off ? `<div class="banner">${ic('wifioff', 16)}You’ll need a connection to bring your shelf back</div>` : ''}
+  const row = (id, icon, t, s) => `<button class="choice" data-onb-go="${id}" ${off ? 'disabled' : ''}><span class="ico">${ic(icon, 22)}</span><span class="tx"><b>${t}</b><span class="s">${s}</span></span><span class="chev">${ic('chev', 18)}</span></button>`;
+  // the notice slot is directly under the h1 (fix 27)
+  return onbShell(`<h1>Bring back your shelf</h1>
+    ${off ? offlineNotice('Bringing back your shelf needs a connection') : ''}
+    <p class="lead">Pick whichever you have to hand.</p>
     ${row('scan', 'scan', 'Scan from my other phone', 'If you still have the phone your shelf is on')}
     ${row('code', 'keyboard', 'Enter my recovery code', 'The twelve words you wrote down')}
     ${row('nostr', 'login', 'Sign in with your nostr app', 'If you already use nostr elsewhere')}`, '', 'welcome');
@@ -994,8 +1128,6 @@ function phoneQR(size){
 
 function scanScreen(){
   const st = S.scan;
-  const codeField = `<div class="or">or type the six-digit code under it</div>
-    <input class="sixdigit" id="six" inputmode="numeric" maxlength="6" placeholder="••••••" aria-label="Six-digit code" autocomplete="off" value="${esc(S.six || '')}">`;
   if (st === 'prime' || st === 'prompt') {
     const body = `<h1>Scan from your other phone</h1>
       <p class="lead">On your other phone, open Shelf, go to <strong>You</strong>, then <strong>Add another device</strong>. A code will appear for this phone to scan.</p>
@@ -1007,39 +1139,51 @@ function scanScreen(){
     return onbShell(body, `<button class="btn primary full" data-allow-camera>${ic('camera', 18)}Use the camera</button>`, 'return') + dlg;
   }
   if (st === 'refused') {
+    // phone pairing needs the QR (contract v1.1 §2), so the way forward without the camera is the recovery code (Q9)
     return onbShell(`<h1>Scan from your other phone</h1>
-      <div class="vf off">${ic('camera', 32)}<b>The camera is switched off for Shelf</b><span style="font-size:var(--text-13);color:var(--muted)">You can turn it on in Android settings, or type the code instead.</span></div>
-      ${codeField}`, `<button class="btn secondary full" data-open-settings>Open Android settings</button>`, 'return');
+      <div class="vf off">${ic('camera', 32)}<b>The camera is switched off for Shelf</b><span style="font-size:var(--text-13);color:var(--muted)">Scanning needs the camera. Turn it on in Android settings, or use your recovery code instead.</span></div>`,
+      `<button class="btn primary full" data-onb-go="code">${ic('keyboard', 18)}Use my recovery code instead</button><button class="btn secondary full" data-open-settings>Open Android settings</button>`, 'return');
   }
   if (st === 'connecting') {
     return onbShell(`<h1>Scan from your other phone</h1><div class="waiting"><div class="dots"><i></i><i></i><i></i></div>
-      <b>Connecting to your other phone</b><p class="lead" style="margin-top:var(--space-8)">Keep Shelf open on both phones. This takes a few seconds.</p></div>`, '', 'return');
+      <b>Connecting to your other phone</b><p class="lead" style="margin-top:var(--space-8)">This takes a few seconds.</p></div>`, '', 'return');
   }
-  const expired = st === 'expired' ? `<div class="errline">${ic('alert', 16)}<span>That code has expired. Show a new one on your other phone, then scan again.</span></div>`
-    : st === 'wrong' ? `<div class="errline">${ic('alert', 16)}<span>That code didn’t match. Check the six digits on your other phone.</span></div>` : '';
+  if (st === 'code' || st === 'wrong') {
+    // the six digits are a second factor typed after the QR is read, never an alternative to it (Q9);
+    // the camera has stopped, so the keyboard never covers a live viewfinder
+    const bad = st === 'wrong';
+    return onbShell(`<h1>Scan from your other phone</h1>
+      <p class="lead">Scanned. The six digits under the code make sure only you can use it.</p>
+      <label class="label" for="six">Type the six-digit code shown on your other phone</label>
+      <input class="codefield digits ${bad ? 'bad' : ''}" id="six" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="off" aria-describedby="sixerr" ${bad ? 'aria-invalid="true"' : ''} value="${esc(S.six || '')}">
+      <div class="fielderr" id="sixerr">${bad ? 'That code didn’t match. Check the six digits on your other phone.' : ''}</div>`, '', 'return');
+  }
+  // scanning: the viewfinder only. An expired code is an outcome error, so it sits in the notice slot under the h1.
+  const expired = st === 'expired' ? `<div class="errline">${ic('alert', 16)}<span>That code has expired. Show a new one on your other phone, then scan again.</span></div>` : '';
   return onbShell(`<h1>Scan from your other phone</h1>${expired}
     <div class="vf"><div class="qr" style="color:#FFFFFF">${phoneQR(150)}</div><i class="corner c1"></i><i class="corner c2"></i><i class="corner c3"></i><i class="corner c4"></i>
-      <div class="scanline"></div><div class="cap">Point at the code on your other phone</div></div>
-    ${codeField}`, '', 'return');
+      <div class="scanline"></div><div class="cap">Point at the code on your other phone</div></div>`, '', 'return');
 }
 
 function codeScreen(){
   const C = S.code;
   if (C.notFound) {
+    // an error's recovery action is the primary (fix 24)
     return onbShell(`<h1>Enter your recovery code</h1>
       <div class="errline">${ic('alert', 16)}<span><b>No saves found for this code.</b><br>The words are valid, but nothing has been saved with them. Check it’s the code from Shelf’s You tab.</span></div>`,
-      `<button class="btn secondary full" data-code-retry>Try again</button><button class="btn quiet full" data-new>Start fresh instead</button>`, 'return');
+      `<button class="btn primary full" data-code-retry>Try again</button><button class="btn quiet full" data-new>Start fresh instead</button>`, 'return');
   }
   const bad = i => C.words[i] && !WORDSET.has(C.words[i]) && !(C.focus === i && WORDLIST.some(w => w.startsWith(C.words[i])));
   const fields = C.words.map((w, i) => `<label class="wf ${bad(i) ? 'bad' : ''}" data-wf="${i}"><span>${i + 1}</span><input data-word="${i}" value="${esc(w)}" autocomplete="off" autocapitalize="none" spellcheck="false" ${C.checking ? 'disabled' : ''}></label>`).join('');
   const firstBad = C.words.findIndex((w, i) => bad(i));
   const ready = C.words.every(w => WORDSET.has(w));
+  // checking is shown in the pressed button at full opacity; [disabled] means only 'not ready yet' (fix 28)
   return onbShell(`<h1>Enter your recovery code</h1><p class="lead">The twelve words from when you backed up your shelf, in order.</p>
     <div class="headrow"><h2>Your twelve words</h2><button class="pbtn" data-paste>${ic('clipboard', 14)}Paste</button></div>
     <div class="words">${fields}</div>
     <div class="sugg" id="sugg">${suggHTML()}</div>
     <div class="fielderr" id="ferr">${firstBad >= 0 ? `Word ${firstBad + 1}, “${esc(C.words[firstBad])}”, isn’t one of the recovery words. Check the spelling.` : ''}</div>`,
-    `<button class="btn primary full" id="codego" data-code-continue ${ready && !C.checking ? '' : 'disabled'}>${C.checking ? '<span class="dots" style="margin:0"><i style="background:currentColor"></i><i style="background:currentColor"></i><i style="background:currentColor"></i></span>Checking' : 'Bring back my shelf'}</button>`, 'return');
+    `<button class="btn primary full ${C.checking ? 'busy' : ''}" id="codego" data-code-continue ${C.checking ? 'aria-busy="true"' : (ready ? '' : 'disabled')}>${C.checking ? busyDots() + 'Checking' : 'Bring back my shelf'}</button>`, 'return');
 }
 
 function suggHTML(){
@@ -1076,15 +1220,27 @@ function bindCode(){
   });
   if (S.code.focus != null) { const f = vp.querySelector(`input[data-word="${S.code.focus}"]`); if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); } }
   const six = document.getElementById('six');
-  if (six) six.oninput = () => { six.value = six.value.replace(/\D/g, '').slice(0, 6); S.six = six.value; if (six.value.length === 6) { if (six.value !== '482913') { S.scan = 'wrong'; S.six = ''; render(); return; } S.scan = 'connecting'; render(); later(() => startRestore(), 1800); } };
+  if (six) {
+    // a wrong code keeps its value, selected, so retyping replaces it (fix 22)
+    if (S.scan === 'wrong') { six.focus(); six.select(); } else if (document.activeElement !== six) six.focus();
+    six.oninput = () => {
+      six.value = six.value.replace(/\D/g, '').slice(0, 6); S.six = six.value;
+      if (S.scan === 'wrong') { S.scan = 'code'; six.classList.remove('bad'); six.removeAttribute('aria-invalid'); const er = document.getElementById('sixerr'); if (er) er.textContent = ''; }
+      if (six.value.length === 6) {
+        if (six.value !== '482913') { S.scan = 'wrong'; render(); return; }
+        S.scan = 'connecting'; render(); later(() => startRestore(), 1800);
+      }
+    };
+  }
 }
 
 function nostrScreen(){
   const st = S.nostr;
   if (st === 'waiting') {
+    // ← does what Cancel does: back to the step that started the wait (fix 20)
     return onbShell(`<h1>Sign in with your nostr app</h1><div class="waiting"><div class="dots"><i></i><i></i><i></i></div>
       <b>Waiting for your nostr app</b><p class="lead" style="margin-top:var(--space-8)">Approve the request there, then come back to Shelf.</p></div>`,
-      `<button class="btn secondary full" data-nostr="intro">Cancel</button>`, 'return');
+      `<button class="btn secondary full" data-nostr="intro">Cancel</button>`, { attr: 'data-nostr="intro"' });
   }
   if (st === 'none') {
     return onbShell(`<h1>No nostr app on this phone</h1><p class="lead">Install a nostr sign-in app, or paste a sign-in link from the one you use elsewhere.</p>
@@ -1112,7 +1268,12 @@ function startRestore(opts = {}){
   S.items = S.early ? [EARLY()] : [];
   S.restoring = { found: 0, total: all.length, done: false, early: !!S.early };
   const step = k => {
-    if (k >= all.length) { S.restoring.done = true; render(); laterR(() => { S.restoring = null; if (S.screen === 'saves') render(); }, 3000); return; }
+    if (k >= all.length) {
+      S.restoring.done = true; render();
+      // the 'All N saves are back' card fades out over the exit duration before it goes (fix 6)
+      laterR(() => { const c = vp.querySelector('.restore.done'); if (c) c.classList.add('leave'); laterR(() => { S.restoring = null; if (S.screen === 'saves') render(); }, 200); }, 3000);
+      return;
+    }
     const it = all[k]; const real = it.status; it.status = 'restoring'; S.items.push(it); S.restoring.found = k + 1; if (S.screen === 'saves') render();
     laterR(() => { it.status = real; if (S.screen === 'saves') render(); }, 1100);
     if (!opts.freezeAt || k + 1 < opts.freezeAt) laterR(() => step(k + 1), 450);
@@ -1123,13 +1284,12 @@ function startRestore(opts = {}){
 /* ---------------- You (batch 4) ---------------- */
 const freshYou = () => ({
   backupDone: false, backupHidden: false, nostrUser: false, voices: 1, voiceSel: 0, speed: 1, sampling: null,
-  codeShown: false, browsers: [{ name: 'Chrome on a Windows laptop', when: 'Connected 27 September' }], disconnect: null,
-  conn: 'scan', camOK: true, typed: '', dev: 'show', countdown: 298, relayDown: false, sw: 'explain', swDone: 0,
+  codeShown: false, copied: false, browsers: [{ name: 'Chrome on a Windows laptop', when: 'Connected 27 September' }], disconnect: null,
+  conn: 'scan', connectFrom: 'browsers', camOK: true, typed: '', dev: 'show', countdown: 298, relayDown: false, sw: 'explain', swDone: 0,
   del: 'explain', delTyped: '', steps: [],
 });
 S.you = freshYou();
 const VOICES = ['UK English · voice 1', 'UK English · voice 2', 'US English · voice 1'];
-const SPEEDS = [0.8, 1, 1.2, 1.5, 2];
 const RELAYS = [['Shelf', 'relay.shelf.app'], ['Backup 1', 'nos.lol'], ['Backup 2', 'relay.damus.io']];
 const RECOVERY = SAMPLE_CODE;
 
@@ -1142,20 +1302,21 @@ function yrow(go, icon, label, value, opts = {}){
 function youScreen(){
   const Y = S.you, off = !S.online;
   const saves = S.items.length, listened = S.played.length || 12;
-  const head = Y.nostrUser
-    ? `<div class="yprofile"><span class="avatar">R</span><div><b>Richard</b><span>Signed in with your nostr app</span></div></div>`
-    : `<div class="ycount">${saves} saves · ${listened} listened</div>`;
+  // the counts use the header row's count slot, like Saves and Listen; nostr users get the profile block instead (fix 15)
+  const count = Y.nostrUser ? '' : `${saves} saves · ${listened} listened`;
+  const profile = Y.nostrUser ? `<div class="yprofile"><span class="avatar">R</span><div><b>Richard</b><span>Signed in with your nostr app</span></div></div>` : '';
+  // card pairs put the primary on the right; a paired deferral is secondary (fix 24)
   const backup = !Y.nostrUser && !Y.backupDone && !Y.backupHidden
     ? `<div class="bcard"><div class="h">${ic('shield', 20)}Back up your shelf</div>
         <p>Your saves are yours alone. A recovery code brings them back on any phone, even if this one is lost.</p>
-        <div class="row"><button class="btn primary" data-you-act="show-code">Show recovery code</button><button class="btn quiet" data-you-act="later">Later</button></div></div>` : '';
+        <div class="row"><button class="btn secondary" data-you-act="later">Later</button><button class="btn primary" data-you-act="show-code">Show recovery code</button></div></div>` : '';
   const first = Y.nostrUser
     ? yrow(null, 'login', 'Your nostr app', 'Signed in')
     : yrow('recovery', 'keyboard', 'Recovery code', '', { warn: !Y.backupDone, sub: Y.backupDone ? 'Written down' : 'Not written down' });
+  // offline: no banner on You; the rows carry the reason (fix 27)
   return `<div class="screen"><div class="scroll">
-      <div class="head"><h1>You</h1></div>
-      ${head}
-      ${off ? `<div class="banner">${ic('wifioff', 16)}Offline — adding a device or browser needs a connection</div>` : ''}
+      <div class="head"><h1>You</h1><span class="count">${count}</span></div>
+      ${profile}
       ${backup}
       <div class="ygroup">
         ${first}
@@ -1172,22 +1333,27 @@ function youScreen(){
 function recoverySheet(){
   const Y = S.you;
   const words = RECOVERY.map((w, i) => `<div class="cw"><span>${i + 1}</span>${w}</div>`).join('');
-  return `<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" data-stop><div class="grab"></div>
+  // Copy confirms inside the sheet, never with a toast under the scrim (fix 4)
+  const copyBtn = Y.copied
+    ? `<button class="btn secondary" data-you-act="copy" id="copybtn">${ic('check', 16)}Copied</button>`
+    : `<button class="btn secondary" data-you-act="copy" id="copybtn">${ic('clipboard', 16)}Copy</button>`;
+  return `<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" aria-label="Your recovery code" data-stop><div class="grab"></div>
     <h3>Your recovery code</h3>
     <p class="sub">These twelve words bring your shelf back on any phone. Write them down and keep them somewhere safe: anyone who has them can read your saves.</p>
     <div class="codegrid ${Y.codeShown ? '' : 'hidden'}">${words}
       ${Y.codeShown ? '' : `<div class="reveal"><span>Make sure nobody can see your screen</span><button class="btn secondary" data-you-act="reveal">Show the words</button></div>`}</div>
-    <div class="row">${Y.codeShown ? `<button class="btn secondary" data-you-act="copy">${ic('clipboard', 16)}Copy</button><button class="btn primary" data-close>Done</button>` : `<button class="btn secondary" data-close>Not now</button>`}</div>
+    ${Y.codeShown ? `<p class="copynote" id="copynote" aria-live="polite">${Y.copied ? 'Paste it somewhere safe, then clear your clipboard.' : ''}</p>` : ''}
+    <div class="row">${Y.codeShown ? `${copyBtn}<button class="btn primary" data-close>Done</button>` : `<button class="btn secondary" data-close>Not now</button>`}</div>
   </div></div>`;
 }
 
 function addDeviceScreen(){
   const Y = S.you;
-  if (!S.online) return onbShell(`<h1>Add another device</h1><div class="banner">${ic('wifioff', 16)}Adding a device needs a connection</div><p class="lead">Try again when you’re online.</p>`, '', 'you');
+  if (!S.online) return onbShell(`<h1>Add another device</h1>${offlineNotice('Adding a device needs a connection')}<p class="lead">Try again when you’re online.</p>`, '', 'you');
   const exp = Y.dev === 'expired';
   const mm = `${Math.floor(Y.countdown / 60)}:${String(Y.countdown % 60).padStart(2, '0')}`;
   return onbShell(`<h1>Add another device</h1>
-    <p class="lead">On the new phone, install Shelf, choose <strong>I already have a shelf</strong>, then <strong>Scan from my other phone</strong>.</p>
+    <p class="lead">On the new phone, install Shelf, choose <strong>I already have a shelf</strong>, then <strong>Scan from my other phone</strong>. It scans this code, then asks for the six digits under it.</p>
     <div class="qrcard ${exp ? 'expired' : ''}">${phoneQR(180)}<div class="six">${exp ? '––– –––' : '482 913'}</div></div>
     ${exp ? `<div class="errline">${ic('alert', 16)}<span>This code has expired.</span></div>` : `<div class="cd">Code expires in <span class="js-cd">${mm}</span></div>`}`,
     exp ? `<button class="btn primary full" data-you-act="new-code">${ic('refresh', 18)}Show a new one</button>` : '', 'you');
@@ -1197,9 +1363,10 @@ function browsersScreen(){
   const Y = S.you;
   const list = Y.browsers.length
     ? `<div class="ygroup">${Y.browsers.map((b, i) => `<div class="yrow"><span class="yi">${ic('laptop', 20)}</span><span class="yl">${esc(b.name)}<small>${esc(b.when)}</small></span><button class="textbtn" data-you-act="disconnect" data-i="${i}">Disconnect</button></div>`).join('')}</div>`
-    : `<div class="empty" style="padding:var(--space-24) 0"><div class="check" style="width:56px;height:56px;background:var(--accent-soft);color:var(--accent)">${ic('laptop', 26)}</div><h2>No browsers yet</h2><p>Save pages from your laptop with the Shelf extension for Chrome or Firefox.</p></div>`;
-  return onbShell(`<h1>Connected browsers</h1><p class="lead">Pages you save in a connected browser arrive here the next time you open Shelf.</p>
-    ${!S.online ? `<div class="banner">${ic('wifioff', 16)}Connecting a browser needs a connection</div>` : ''}${list}`,
+    : `<div class="empty"><span class="medal">${ic('laptop', 26)}</span><h2>No browsers yet</h2><p>Save pages from your laptop with the Shelf extension for Chrome or Firefox.</p></div>`;
+  return onbShell(`<h1>Connected browsers</h1>
+    ${!S.online ? offlineNotice('Connecting a browser needs a connection') : ''}
+    <p class="lead">Pages you save in a connected browser arrive here the next time you open Shelf.</p>${list}`,
     `<button class="btn primary full" data-you-go="connect" ${S.online ? '' : 'disabled'}>${ic('laptop', 18)}Connect a browser</button>`, 'you');
 }
 
@@ -1211,37 +1378,40 @@ function disconnectSheet(){
 }
 
 function connectScreen(){
-  const Y = S.you, st = Y.conn;
+  const Y = S.you, st = Y.conn, from = Y.connectFrom || 'browsers';   // ← and success return to the launcher (fix 19)
   const intro = `<h1>Connect a browser</h1><p class="lead">On your laptop, install the Shelf extension and click its icon. Scan the code it shows, or type the eight-character code.</p>`;
-  const typeLink = `<button class="btn quiet full" data-you-act="conn-type">${ic('keyboard', 18)}Type a code instead</button>`;
+  const typeLink = `<button class="btn quiet full" data-you-act="conn-type">${ic('keyboard', 18)}Type the code instead</button>`;
   if (st === 'type' || st === 'typewrong') {
-    return onbShell(`<h1>Connect a browser</h1><p class="lead">Type the code shown in the extension.</p>${Y.conn === 'typewrong' ? `<div class="errline">${ic('alert', 16)}<span>That code didn’t match. Check it in your browser, or show a new one there.</span></div>` : ''}
+    // its own step, so the full keyboard never covers a live viewfinder; moves on at the 8th character (fix 22)
+    const bad = st === 'typewrong';
+    return onbShell(`<h1>Connect a browser</h1><p class="lead">Type the code shown in the extension.</p>
       <label class="label" for="bcode">Code from your browser</label>
-      <input class="typebox" id="bcode" aria-label="Code from your browser" placeholder="XXXX-XXXX" maxlength="9" autocomplete="off" spellcheck="false" value="${esc(Y.typed)}">`,
-      `<button class="btn primary full" id="bgo" data-you-act="conn-confirm" ${Y.typed.replace('-', '').length === 8 ? '' : 'disabled'}>Continue</button>`, 'browsers');
+      <input class="codefield browser ${bad ? 'bad' : ''}" id="bcode" placeholder="XXXX-XXXX" maxlength="9" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="bcodeerr" ${bad ? 'aria-invalid="true"' : ''} value="${esc(Y.typed)}">
+      <div class="fielderr" id="bcodeerr">${bad ? 'That code didn’t match. Check it in your browser, or show a new one there.' : ''}</div>`, '', from);
   }
-  if (st === 'confirm') {
+  if (st === 'confirm' || st === 'busy') {
+    // Shelf's own network step shows in the pressed button; the card stays and Cancel is unavailable (fix 21)
+    const busy = st === 'busy';
     return onbShell(`<h1>Connect this browser?</h1><div class="confirmcard"><span class="ico">${ic('laptop', 26)}</span><b>Chrome on a Windows laptop</b><span>Pages you save there will come to this shelf.</span></div>`,
-      `<button class="btn primary full" data-you-act="conn-go">Connect</button><button class="btn secondary full" data-you-go="browsers">Cancel</button>`, 'browsers');
-  }
-  if (st === 'connecting') {
-    return onbShell(`<h1>Connect a browser</h1><div class="waiting"><div class="dots"><i></i><i></i><i></i></div><b>Connecting to Chrome</b><p class="lead" style="margin-top:var(--space-8)">This takes a few seconds.</p></div>`, '', 'browsers');
+      `<button class="btn primary full ${busy ? 'busy' : ''}" data-you-act="conn-go" ${busy ? 'aria-busy="true"' : ''}>${busy ? busyDots() + 'Connecting' : 'Connect'}</button><button class="btn secondary full" data-onb-go="${from}" ${busy ? 'disabled' : ''}>Cancel</button>`, busy ? null : from);
   }
   if (st === 'ask' || st === 'prompt') {
+    // its own explain drawing, the laptop showing its code; .vf.off is only for the refused state (fix 23)
     const dlg = st === 'prompt' ? `<div class="sysscrim"><div class="sysdlg">${ic('camera', 26)}<h4>Allow <b>Shelf</b> to take pictures and record video?</h4>
       <button data-you-act="perm-allow">While using the app</button><button data-you-act="perm-allow">Only this time</button><button data-you-act="perm-deny">Don’t allow</button></div></div>` : '';
-    return onbShell(`${intro}<div class="vf off">${ic('camera', 32)}<b>Shelf uses the camera only to read this code</b></div>`,
-      `<button class="btn primary full" data-you-act="cam">${ic('camera', 18)}Use the camera</button>${typeLink}`, 'browsers') + dlg;
+    return onbShell(`${intro}<div class="primeillus"><div class="pairillus" aria-hidden="true"><div class="scr">${phoneQR(64)}<b>K7QM-4XPD</b></div><div class="base"></div></div></div>
+      <p class="fine" style="text-align:left;justify-content:flex-start">${ic('camera', 14)}Shelf uses the camera only to read this code.</p>`,
+      `<button class="btn primary full" data-you-act="cam">${ic('camera', 18)}Use the camera</button>${typeLink}`, from) + dlg;
   }
   if (st === 'refused') {
     return onbShell(`${intro}<div class="vf off">${ic('camera', 32)}<b>The camera is switched off for Shelf</b><span style="font-size:var(--text-13);color:var(--muted)">Turn it on in Android settings, or type the code instead.</span></div>`,
-      `<button class="btn primary full" data-you-act="conn-type">${ic('keyboard', 18)}Type a code instead</button><button class="btn secondary full" data-open-settings>Open Android settings</button>`, 'browsers');
+      `<button class="btn primary full" data-you-act="conn-type">${ic('keyboard', 18)}Type the code instead</button><button class="btn secondary full" data-open-settings>Open Android settings</button>`, from);
   }
   const err = st === 'expired' ? `<div class="errline">${ic('alert', 16)}<span>That code has expired. Show a new one in the extension, then scan again.</span></div>`
     : st === 'failed' ? `<div class="errline">${ic('alert', 16)}<span>Can’t connect right now. Check your connection and try again.</span></div>` : '';
   return onbShell(`${intro}${err}<div class="vf"><div class="qr" style="color:#FFFFFF">${phoneQR(150)}</div><i class="corner c1"></i><i class="corner c2"></i><i class="corner c3"></i><i class="corner c4"></i>
     <div class="scanline"></div><div class="cap">Point at the code in your browser</div></div>`,
-    st === 'failed' ? `<button class="btn primary full" data-you-act="conn-retry">Try again</button>${typeLink}` : typeLink, 'browsers');
+    st === 'failed' ? `<button class="btn primary full" data-you-act="conn-retry">Try again</button>${typeLink}` : typeLink, from);
 }
 
 function voiceScreen(){
@@ -1255,37 +1425,43 @@ function voiceScreen(){
 }
 
 function advancedScreen(){
-  const Y = S.you;
+  const Y = S.you, off = !S.online;
   const relays = RELAYS.map(([label, host], i) => {
-    const st = !S.online ? '<span class="status off">Unreachable</span>' : (Y.relayDown && i === 2 ? '<span class="status down">Not responding</span>' : '<span class="status">Connected</span>');
+    const st = off ? '<span class="status off">Unreachable</span>' : (Y.relayDown && i === 2 ? '<span class="status down">Not responding</span>' : '<span class="status">Connected</span>');
     return `<div class="yrow"><span class="yi">${ic('server', 20)}</span><span class="yl">${label}<small>${host}</small></span>${st}</div>`;
   }).join('');
+  // offline, the switch row is disabled and says why (fix 27)
   return onbShell(`<h1>Advanced</h1>
-    <div class="gtitle" style="padding-left:0">Relays</div>
+    <div class="gtitle">Relays</div>
     <div class="ygroup">${relays}</div>
-    <p class="gnote">Your saves are copied to all three. Any one of them is enough to bring your shelf back.${Y.relayDown && S.online ? ' Saves will reach relay.damus.io when it answers again.' : ''}</p>
+    <p class="gnote">Your saves are copied to all three. Any one of them is enough to bring your shelf back.${Y.relayDown && !off ? ' Saves will reach relay.damus.io when it answers again.' : ''}</p>
     <div class="ygroup">
       <button class="yrow" data-you-act="export"><span class="yi">${ic('download', 20)}</span><span class="yl">Export my saves<small>One file with every link and its text</small></span></button>
-      ${Y.nostrUser ? '' : `<button class="yrow" data-you-go="switchnostr"><span class="yi">${ic('login', 20)}</span><span class="yl">Use my nostr app instead<small>Move your saves to your nostr account</small></span><span class="chev">${ic('chev', 18)}</span></button>`}
+      ${Y.nostrUser ? '' : `<button class="yrow" data-you-go="switchnostr" ${off ? 'disabled' : ''}><span class="yi">${ic('login', 20)}</span><span class="yl">Use my nostr app instead<small>${off ? 'Needs a connection' : 'Move your saves to your nostr account'}</small></span><span class="chev">${ic('chev', 18)}</span></button>`}
     </div>`, '', 'you');
 }
 
 function switchScreen(){
-  const Y = S.you;
+  const Y = S.you, off = !S.online;
+  // waiting on the nostr app: ← does what Cancel does (fix 20)
   if (Y.sw === 'waiting') return onbShell(`<h1>Use my nostr app instead</h1><div class="waiting"><div class="dots"><i></i><i></i><i></i></div><b>Waiting for your nostr app</b><p class="lead" style="margin-top:var(--space-8)">Approve the request there, then come back to Shelf.</p></div>`,
-    `<button class="btn secondary full" data-you-act="sw-cancel">Cancel</button>`, 'advanced');
+    `<button class="btn secondary full" data-you-act="sw-cancel">Cancel</button>`, { attr: 'data-you-act="sw-cancel"' });
+  // can't be left: no ←, and Android Back is swallowed (build note)
   if (Y.sw === 'moving') return onbShell(`<h1>Moving your saves</h1><div class="restore" style="margin:var(--space-16) 0"><div class="h"><b>Moving to your nostr account</b><span>${Y.swDone} of 8</span></div>
       <div class="bar"><i style="width:${Y.swDone / 8 * 100}%"></i></div><p>Keep Shelf open until this finishes.</p></div>`, '', null);
-  return onbShell(`<h1>Use my nostr app instead</h1>
+  const declined = Y.sw === 'declined' ? `<div class="errline">${ic('alert', 16)}<span>The request was declined in your nostr app. Nothing has changed.</span></div>` : '';
+  return onbShell(`<h1>Use my nostr app instead</h1>${declined}${off ? offlineNotice('Moving your saves needs a connection') : ''}
     <p class="lead">Your saves move to your nostr account, and your nostr app keeps you signed in from then on.</p>
     <ul class="plist"><li class="ask">${ic('check', 18)}<span>Every save and its text comes with you<small>Nothing is lost, and it stays private.</small></span></li>
     <li class="go">${ic('alert', 18)}<span>Your recovery code stops working<small>Afterwards you can throw it away. Your nostr app is how you get back in.</small></span></li></ul>`,
-    `<button class="btn primary full" data-you-act="sw-start">${ic('login', 18)}Continue with my nostr app</button>`, 'advanced');
+    `<button class="btn primary full" data-you-act="sw-start" ${off ? 'disabled' : ''}>${ic('login', 18)}Continue with my nostr app</button>`, 'advanced');
 }
 
 function deleteScreen(){
   const Y = S.you;
-  if (Y.del === 'approve') return onbShell(`<h1>Deleting your data</h1><div class="waiting"><div class="dots"><i></i><i></i><i></i></div><b>Approve the deletion in your nostr app</b><p class="lead" style="margin-top:var(--space-8)">The requests to delete your saves are signed there, then Shelf sends them.</p></div>`, '', null);
+  // waiting on the nostr app: same wait block, Cancel and ← both return to Delete my data (fix 20)
+  if (Y.del === 'approve') return onbShell(`<h1>Delete my data</h1><div class="waiting"><div class="dots"><i></i><i></i><i></i></div><b>Waiting for your nostr app</b><p class="lead" style="margin-top:var(--space-8)">Approve the request there, then come back to Shelf.</p></div>`,
+    `<button class="btn secondary full" data-you-act="del-cancel">Cancel</button>`, { attr: 'data-you-act="del-cancel"' });
   if (Y.del === 'running' || Y.del === 'partial') {
     const rows = Y.steps.map(s => `<li class="${s.state}"><span class="st">${s.state === 'done' ? ic('check', 14) : s.state === 'fail' ? ic('x', 14) : ''}</span><span class="t">${s.label}</span><small>${s.note || ''}</small></li>`).join('');
     const partial = Y.del === 'partial'
@@ -1293,17 +1469,18 @@ function deleteScreen(){
     return onbShell(`<h1>${Y.del === 'partial' ? 'Almost everything is gone' : 'Deleting your data'}</h1><div class="ygroup" style="padding:0 var(--space-16)"><ul class="steps">${rows}</ul></div>${partial}`,
       Y.del === 'partial' ? `<button class="btn primary full" data-you-act="del-finish">Finish</button>` : '', null);
   }
-  const failed = Y.del === 'failed' ? `<div class="errline">${ic('alert', 16)}<span>Couldn’t reach Shelf’s server, so nothing has been deleted. Check your connection and try again.</span></div>` : '';
+  const failed = Y.del === 'failed' ? `<div class="errline">${ic('alert', 16)}<span>Couldn’t reach Shelf’s server, so nothing has been deleted. Check your connection and try again.</span></div>`
+    : Y.del === 'declined' ? `<div class="errline">${ic('alert', 16)}<span>The request was declined in your nostr app. Nothing has been deleted.</span></div>` : '';
   const ok = Y.delTyped === 'DELETE' && S.online;
   return onbShell(`<h1>Delete my data</h1>${failed}
-    ${!S.online ? `<div class="banner">${ic('wifioff', 16)}Deleting needs a connection</div>` : ''}
+    ${!S.online ? offlineNotice('Deleting needs a connection') : ''}
     <ul class="plist">
       <li class="go">${ic('trash', 18)}<span>Your saves and their text on Shelf’s server</span></li>
       <li class="go">${ic('trash', 18)}<span>Everything on this phone<small>Shelf starts fresh afterwards, as if just installed.</small></span></li>
       <li class="ask">${ic('server', 18)}<span>Copies on two independent backup servers<small>We ask both to delete your copies. Each server decides for itself.</small></span></li>
     </ul>
     <label class="label" for="deltype">Type DELETE to confirm</label>
-    <input class="typebox" id="deltype" autocomplete="off" spellcheck="false" autocapitalize="characters" value="${esc(Y.delTyped)}" ${S.online ? '' : 'disabled'}>`,
+    <input class="codefield caps" id="deltype" autocomplete="off" spellcheck="false" autocapitalize="characters" value="${esc(Y.delTyped)}" ${S.online ? '' : 'disabled'}>`,
     `<button class="btn danger full" id="delgo" data-you-act="del-go" ${ok ? '' : 'disabled'}>Delete everything</button>`, 'you');
 }
 
@@ -1330,23 +1507,29 @@ function runDelete(partial){
 
 function finishDelete(){
   clearOnb(); clearRestore();
-  S.items = []; S.played = []; S.audio = null; S.early = false; S.you = freshYou();
+  S.items = []; S.played = []; S.audio = null; S.early = false; S.you = freshYou(); S.readerBack = null;
   S.screen = 'welcome'; S.tab = 'saves';
-  showToast('Your data has been deleted');
+  showToast('Your data is deleted');
   render();
 }
 
 function bindYou(){
+  const Y = S.you;
   const bc = document.getElementById('bcode');
-  if (bc) bc.oninput = () => {
-    let v = bc.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
-    if (v.length > 4) v = v.slice(0, 4) + '-' + v.slice(4);
-    bc.value = v; S.you.typed = v;
-    document.getElementById('bgo').disabled = v.replace('-', '').length !== 8;
-  };
+  if (bc) {
+    // a wrong code keeps its value, selected, so retyping replaces it
+    if (Y.conn === 'typewrong') { bc.focus(); bc.select(); } else if (document.activeElement !== bc) bc.focus();
+    bc.oninput = () => {
+      let v = bc.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+      if (v.length > 4) v = v.slice(0, 4) + '-' + v.slice(4);
+      bc.value = v; Y.typed = v;
+      if (Y.conn === 'typewrong') { Y.conn = 'type'; bc.classList.remove('bad'); bc.removeAttribute('aria-invalid'); const er = document.getElementById('bcodeerr'); if (er) er.textContent = ''; }
+      if (v.length === 9) { Y.conn = v === 'K7QM-4XPD' ? 'confirm' : 'typewrong'; render(); }
+    };
+  }
   const dt = document.getElementById('deltype');
   if (dt) dt.oninput = () => {
-    dt.value = dt.value.toUpperCase(); S.you.delTyped = dt.value;
+    dt.value = dt.value.toUpperCase(); Y.delTyped = dt.value;
     document.getElementById('delgo').disabled = !(dt.value === 'DELETE' && S.online);
   };
 }
@@ -1359,42 +1542,72 @@ setInterval(() => {
   const el = vp.querySelector('.js-cd'); if (el) el.textContent = `${Math.floor(Y.countdown / 60)}:${String(Y.countdown % 60).padStart(2, '0')}`;
 }, 1000);
 
+// Connect a browser returns to whichever screen launched it, on ← and on success (fix 19)
+function leaveConnect(){
+  const from = S.you.connectFrom || 'browsers';
+  S.screen = from;
+  if (TAB_SCREENS.includes(from)) S.tab = from;
+}
+const scanThenConfirm = () => later(() => { if (S.screen === 'connect' && S.you.conn === 'scan') { S.you.conn = 'confirm'; render(); } }, 2600);
+
 vp.addEventListener('click', e => {
   const t = e.target.closest('[data-you-go],[data-you-act]');
   if (!t) return;
   const Y = S.you, go = t.dataset.youGo, act = t.dataset.youAct, i = +t.dataset.i;
   if (go) {
     clearOnb();
-    if (go !== 'recovery') S.tab = 'you';
-    if (go === 'connect' && t.dataset.first) Y.camOK = false;
-    if (go === 'recovery') { S.sheet = 'recovery'; Y.codeShown = false; render(); return; }
+    const first = go === 'connect' && !!t.dataset.first;
+    // opened from Saves' first-run state, Connect keeps Saves lit and returns there (fix 19)
+    if (go !== 'recovery' && !first) S.tab = 'you';
+    if (go === 'recovery') { S.sheet = 'recovery'; S.sheetOpener = '[data-you-go="recovery"]'; Y.codeShown = false; Y.copied = false; render(); return; }
     if (go === 'adddevice') { Y.dev = 'show'; Y.countdown = 298; }
-    if (go === 'connect') { Y.conn = Y.camOK ? 'scan' : 'ask'; Y.typed = ''; if (Y.camOK) later(() => { if (S.screen === 'connect' && Y.conn === 'scan') { Y.conn = 'confirm'; render(); } }, 2600); }
+    if (go === 'connect') {
+      Y.connectFrom = first ? 'saves' : 'browsers';
+      if (first) Y.camOK = false;
+      Y.conn = Y.camOK ? 'scan' : 'ask'; Y.typed = '';
+      if (Y.camOK) scanThenConfirm();
+    }
     if (go === 'switchnostr') Y.sw = 'explain';
     if (go === 'delete') { Y.del = 'explain'; Y.delTyped = ''; }
     S.sheet = null; S.screen = go; render(); return;
   }
   switch (act) {
-    case 'show-code': S.sheet = 'recovery'; Y.codeShown = false; break;
-    case 'later': Y.backupHidden = true; showToast("We’ll remind you after ten more saves"); break;
+    case 'show-code': S.sheet = 'recovery'; S.sheetOpener = '[data-you-act="show-code"]'; Y.codeShown = false; Y.copied = false; break;
+    case 'later': Y.backupHidden = true; showToast('Backup reminder in ten more saves'); break;
     case 'reveal': Y.codeShown = true; Y.backupDone = true; break;
-    case 'copy': showToast('Copied. Paste it somewhere safe, then clear your clipboard.'); break;
+    case 'copy': {
+      // confirmed inside the sheet, updated in place so the polite live line is announced (fix 4)
+      Y.copied = true;
+      const b = document.getElementById('copybtn'); if (b) b.innerHTML = `${ic('check', 16)}Copied`;
+      const n = document.getElementById('copynote'); if (n) n.textContent = 'Paste it somewhere safe, then clear your clipboard.';
+      return;
+    }
     case 'new-code': Y.dev = 'show'; Y.countdown = 298; break;
-    case 'disconnect': Y.disconnect = i; S.sheet = 'disconnect'; break;
-    case 'disconnect-yes': { const b = Y.browsers.splice(Y.disconnect, 1)[0]; S.sheet = null; showToast(`Disconnected ${b.name}`); break; }
+    case 'disconnect': Y.disconnect = i; S.sheet = 'disconnect'; S.sheetOpener = `[data-you-act="disconnect"][data-i="${i}"]`; break;
+    case 'disconnect-yes': { const b = Y.browsers.splice(Y.disconnect, 1)[0]; S.sheet = null; S.sheetOpener = null; showToast(`Disconnected from ${b.name}`); break; }
     case 'cam': Y.conn = 'prompt'; break;
-    case 'perm-allow': Y.camOK = true; Y.conn = 'scan'; later(() => { if (S.screen === 'connect' && Y.conn === 'scan') { Y.conn = 'confirm'; render(); } }, 2600); break;
+    case 'perm-allow': Y.camOK = true; Y.conn = 'scan'; scanThenConfirm(); break;
     case 'perm-deny': Y.conn = 'refused'; break;
-    case 'conn-type': clearOnb(); Y.conn = 'type'; break;
-    case 'conn-confirm': if (Y.conn.startsWith('type') && Y.typed !== 'K7QM-4XPD') { Y.conn = 'typewrong'; break; } Y.conn = 'confirm'; break;
-    case 'conn-retry': Y.conn = 'scan'; later(() => { if (S.screen === 'connect' && Y.conn === 'scan') { Y.conn = 'confirm'; render(); } }, 2600); break;
-    case 'conn-go': Y.conn = 'connecting'; later(() => { Y.browsers.push({ name: 'Chrome on a Windows laptop', when: 'Connected just now' }); S.screen = 'browsers'; showToast('Connected to Chrome on a Windows laptop'); render(); }, 1600); break;
+    case 'conn-type': clearOnb(); Y.conn = 'type'; Y.typed = ''; break;
+    case 'conn-retry': Y.conn = 'scan'; scanThenConfirm(); break;
+    case 'conn-go':
+      // busy in the pressed button, then back to the launcher with the toast (fix 21)
+      if (Y.conn === 'busy') return;
+      Y.conn = 'busy';
+      later(() => { Y.browsers.push({ name: 'Chrome on a Windows laptop', when: 'Connected just now' }); Y.conn = 'scan'; leaveConnect(); showToast('Connected to Chrome on a Windows laptop'); render(); }, 1600);
+      break;
     case 'voice': Y.voiceSel = i; break;
     case 'sample': Y.sampling = i; later(() => { if (Y.sampling === i) { Y.sampling = null; render(); } }, 1800); break;
-    case 'speed': { const k = SPEEDS.indexOf(Y.speed) + i; Y.speed = SPEEDS[Math.max(0, Math.min(SPEEDS.length - 1, k))]; S.rate = Y.speed; if (S.audio) S.audio.rate = S.rate; break; }
+    // one speed list; the stepper clamps within it (fix 7)
+    case 'speed': { const k = RATES.indexOf(Y.speed) + i; Y.speed = RATES[Math.max(0, Math.min(RATES.length - 1, k))]; S.rate = Y.speed; if (S.audio) S.audio.rate = S.rate; break; }
     case 'export': showToast('Saved shelf-export.html to Downloads'); break;
-    case 'sw-start': Y.sw = 'waiting'; later(() => { if (S.screen === 'switchnostr' && Y.sw === 'waiting') { Y.sw = 'moving'; Y.swDone = 0; render(); moveStep(); } }, 2000); break;
+    case 'sw-start':
+      if (!S.online) return;
+      Y.sw = 'waiting';
+      later(() => { if (S.screen === 'switchnostr' && Y.sw === 'waiting') { Y.sw = 'moving'; Y.swDone = 0; render(); moveStep(); } }, 2000);
+      break;
     case 'sw-cancel': clearOnb(); Y.sw = 'explain'; break;
+    case 'del-cancel': clearOnb(); Y.del = 'explain'; Y.delTyped = ''; break;
     case 'del-go': runDelete(false); return;
     case 'del-finish': finishDelete(); return;
   }
@@ -1403,7 +1616,7 @@ vp.addEventListener('click', e => {
 
 function moveStep(){
   const Y = S.you;
-  if (Y.swDone >= 8) { Y.nostrUser = true; S.screen = S.tab = 'you'; showToast('Your saves are now on your nostr account'); render(); return; }
+  if (Y.swDone >= 8) { Y.nostrUser = true; S.screen = S.tab = 'you'; showToast('Saves moved to your nostr account'); render(); return; }
   later(() => { Y.swDone++; if (S.screen === 'switchnostr') render(); moveStep(); }, 350);
 }
 
@@ -1415,21 +1628,36 @@ function youJump(j){
   else if (j === 'you-nostr') { at('you'); Y.nostrUser = true; }
   else if (j === 'you-voices') { at('you'); Y.voices = 3; }
   else if (j === 'you-offline') { at('you'); S.online = false; }
-  else if (j === 'rec-hidden' || j === 'rec-shown') { at('you'); S.sheet = 'recovery'; Y.codeShown = j === 'rec-shown'; }
+  else if (j === 'rec-hidden' || j === 'rec-shown' || j === 'rec-copied') { at('you'); S.sheet = 'recovery'; Y.codeShown = j !== 'rec-hidden'; Y.copied = j === 'rec-copied'; if (Y.codeShown) Y.backupDone = true; }
   else if (j === 'dev') at('adddevice');
   else if (j === 'dev-expired') { at('adddevice'); Y.dev = 'expired'; }
   else if (j === 'br') at('browsers');
   else if (j === 'br-empty') { at('browsers'); Y.browsers = []; }
   else if (j === 'br-disconnect') { at('browsers'); Y.disconnect = 0; S.sheet = 'disconnect'; }
-  else if (j.startsWith('conn-')) { at('connect'); Y.conn = { 'conn-ask': 'ask', 'conn-scan': 'scan', 'conn-type': 'type', 'conn-typewrong': 'typewrong', 'conn-confirm': 'confirm', 'conn-expired': 'expired', 'conn-failed': 'failed' }[j]; Y.camOK = j !== 'conn-ask'; if (j === 'conn-typewrong') Y.typed = 'K7QM-4XPB'; }
+  else if (j === 'conn-first') {
+    // Connect opened from the first-run empty state: Saves stays lit, and ← or success return there
+    at('connect', 'saves'); S.items = []; S.savesMode = 'first'; Y.browsers = []; Y.connectFrom = 'saves'; Y.camOK = false; Y.conn = 'ask';
+  }
+  else if (j.startsWith('conn-')) {
+    at('connect'); Y.connectFrom = 'browsers';
+    Y.conn = { 'conn-ask': 'ask', 'conn-scan': 'scan', 'conn-type': 'type', 'conn-typewrong': 'typewrong', 'conn-confirm': 'confirm', 'conn-busy': 'busy', 'conn-refused': 'refused', 'conn-expired': 'expired', 'conn-failed': 'failed' }[j];
+    Y.camOK = j !== 'conn-ask';
+    if (j === 'conn-typewrong') Y.typed = 'K7QM-4XPB';
+    if (j === 'conn-busy') later(() => { Y.browsers.push({ name: 'Chrome on a Windows laptop', when: 'Connected just now' }); Y.conn = 'scan'; leaveConnect(); showToast('Connected to Chrome on a Windows laptop'); render(); }, 1600);
+  }
   else if (j === 'voice') { at('voice'); Y.voices = 3; }
   else if (j === 'adv') at('advanced');
   else if (j === 'adv-down') { at('advanced'); Y.relayDown = true; }
+  else if (j === 'adv-offline') { at('advanced'); S.online = false; }
   else if (j === 'sw') { at('switchnostr'); Y.sw = 'explain'; }
+  else if (j === 'sw-waiting') { at('switchnostr'); Y.sw = 'waiting'; }
+  else if (j === 'sw-declined') { at('switchnostr'); Y.sw = 'declined'; }
+  else if (j === 'sw-offline') { at('switchnostr'); Y.sw = 'explain'; S.online = false; }
   else if (j === 'sw-moving') { at('switchnostr'); Y.sw = 'moving'; Y.swDone = 3; }
   else if (j === 'del') at('delete');
   else if (j === 'del-typed') { at('delete'); Y.delTyped = 'DELETE'; }
   else if (j === 'del-nostr') { at('delete'); Y.nostrUser = true; Y.del = 'approve'; }
+  else if (j === 'del-declined') { at('delete'); Y.nostrUser = true; Y.del = 'declined'; Y.delTyped = ''; }
   else if (j === 'del-failed') { at('delete'); Y.del = 'failed'; Y.delTyped = 'DELETE'; }
   else if (j === 'del-running') { at('delete'); runDelete(false); onbTimers.forEach(clearTimeout); onbTimers = []; Y.steps[0].state = 'done'; Y.steps[0].note = 'Deleted'; Y.steps[1].state = 'done'; Y.steps[1].note = 'Asked to delete'; render(); return true; }
   else if (j === 'del-partial') { at('delete'); Y.del = 'partial'; Y.steps = [{ label: "Shelf’s server", state: 'done', note: 'Deleted' }, { label: 'Backup: nos.lol', state: 'done', note: 'Asked to delete' }, { label: 'Backup: relay.damus.io', state: 'fail', note: "Didn’t confirm" }, { label: 'This phone', state: 'done', note: 'Deleted' }]; }
@@ -1476,9 +1704,9 @@ function sentenceAt(i){
   return [SENT[k], (SENT[k + 1] ?? TOK.length)];
 }
 
-// The one position per article (decisions 19 and 21): the loaded audio’s word, else the saved word if it is on screen, else the paragraph in view.
+// The one position per article (decisions 19, 21 and 36): the loaded audio’s word, else the saved word if it is on screen, else the paragraph in view.
 function startWord(it){
-  if (S.audio && S.audio.id === it.id) return Math.min(TOK.length - 1, Math.floor(S.audio.t * WPS));
+  if (S.audio && S.audio.id === it.id) return wordAt(S.audio.t);
   const rs = document.getElementById('rs');
   const paras = [...vp.querySelectorAll('.prose p')];
   let k = 0, k2 = PROSE.length - 1;
@@ -1487,15 +1715,15 @@ function startWord(it){
     k = Math.max(0, paras.findIndex(p => p.getBoundingClientRect().bottom > r.top + 60));
     k2 = Math.max(k, paras.map(p => p.getBoundingClientRect().top < r.bottom).lastIndexOf(true));
   }
-  const saved = it.listenT ? Math.floor(it.listenT * WPS) : -1;
-  if (saved >= 0 && TOK[saved] && TOK[saved].para >= k && TOK[saved].para <= k2) return saved;
+  const saved = partRead(it) && it.progress < .99 ? Math.min(TOK.length - 1, Math.round(it.progress * TOK.length)) : -1;
+  if (saved >= 0 && TOK[saved].para >= k && TOK[saved].para <= k2) return saved;
   return Math.max(0, TOK.findIndex(t => t.para === k));
 }
 
 function startRsvp(){
   const it = S.items.find(i => i.id === S.readerId);
   const idx = startWord(it);
-  if (S.audio && S.audio.playing) S.audio.playing = false;
+  if (S.audio && S.audio.playing) S.audio.playing = false;   // starting Speed read pauses audio
   S.sheet = null;
   S.rsvp = { idx: Math.max(0, idx), playing: false, started: false, ramp: 0, done: false };
   render();
@@ -1529,17 +1757,25 @@ function rsvpSentence(dir){
   render(); rsvpSchedule();
 }
 
+// Leaving Speed read writes the one stored position and moves the audio to the same word (decision 36, fix 11).
+function saveRsvpPosition(){
+  const R = S.rsvp, it = S.items.find(i => i.id === S.readerId);
+  if (!R || !it) return;
+  it.progress = Math.min(.99, R.idx / TOK.length);
+  if (S.audio && S.audio.id === it.id) S.audio.t = it.progress * DUR;
+}
+
 function exitRsvp(){
   const R = S.rsvp; clearTimeout(rsvpTimer);
-  const it = S.items.find(i => i.id === S.readerId);
-  if (R && it) { it.listenT = R.done ? 0 : R.idx / WPS; if (S.audio && S.audio.id === it.id) S.audio.t = it.listenT; S.flashWord = R.idx; }
+  if (R) { saveRsvpPosition(); S.flashWord = R.idx; }
   S.rsvp = null;
   render();
 }
 
+// 'N min left', like cards and Listen rows; the bar already shows how far through (fix 11)
 function rsvpMeta(){
   const R = S.rsvp, left = TOK.length - R.idx;
-  return `${Math.round(R.idx / (TOK.length - 1) * 100)}% · ${Math.max(1, Math.ceil(left / S.wpm))} min left`;
+  return `${Math.max(1, Math.ceil(left / S.wpm))} min left`;
 }
 
 function wordHTML(i){
@@ -1552,8 +1788,12 @@ function rsvpHTML(){
   const it = S.items.find(i => i.id === S.readerId);
   const [s0, s1] = sentenceAt(R.idx);
   const ctx = TOK.slice(s0, s1).map((t, k) => s0 + k === R.idx ? `<span class="cur">${esc(t.w)}</span>` : esc(t.w)).join(' ');
+  // [secondary][primary]; an archived article offers Back to Unread, never a second 'Archived' (fixes 24, 25; decision 37)
+  const primary = it.archived
+    ? `<button class="btn primary" data-rsvp-unarchive>${ic('restore', 18)}Back to Unread</button>`
+    : `<button class="btn primary" data-rsvp-archive>${ic('archive', 18)}Archive</button>`;
   const centre = R.done
-    ? `<div class="done"><h3>You’ve reached the end</h3><p>${esc(it.src)} · read at ${S.wpm} wpm</p><div class="row"><button class="btn primary" data-rsvp-archive>${ic('archive', 18)}Archive</button><button class="btn secondary" data-rsvp-exit>Back to article</button></div></div>`
+    ? `<div class="done"><h3>You’ve reached the end</h3><p>${esc(it.src)} · read at ${S.wpm} wpm</p><div class="row"><button class="btn secondary" data-rsvp-exit>Back to article</button>${primary}</div></div>`
     : `<div class="frame"><div class="word js-word">${wordHTML(R.idx)}</div></div>
        <div class="context ${R.playing ? '' : 'show'}">${R.playing ? '' : ctx}</div>
        <div class="hint">${R.playing ? 'Tap to pause' : (R.started ? 'Tap to carry on · swipe to move by sentence' : 'Tap to start · swipe to move by sentence')}</div>`;
@@ -1602,14 +1842,19 @@ function flashWord(){
   setTimeout(() => el.classList.remove('on'), 1600);
 }
 
+const modeFor = it => it.status === 'failed' ? 'error' : (it.status === 'ok' ? 'ok' : (S.online ? 'loading' : 'offlinewait'));
+
 function readerScreen(){
   const it = S.items.find(i => i.id === S.readerId) || S.items[0];
-  if (!(S.audio && S.audio.id === it.id)) S.ptopFor = null;
+  // Archive, or Back to Unread for an archived article, floats at right 16; placeStack() lifts it 8 px above a player
+  const dock = `<div class="dock" style="bottom:${RS.dock}px">${it.archived ? `<button class="arch" data-unarchive-open aria-label="Back to Unread">${ic('restore',22)}</button>` : `<button class="arch" data-archive-open aria-label="Archive">${ic('archive',22)}</button>`}</div>`;
   if (S.readerMode === 'error' || S.readerMode === 'original') {
+    // the in-app browser view of a save keeps Shelf's article actions: ⋯ and the floating Archive (fix 26)
     return `<div class="screen iab">
-      <div class="bar"><button class="iconbtn" ${S.readerMode === 'original' ? 'data-orig-close' : 'data-back'} aria-label="Close">${ic('x',22)}</button><div class="u"><b>${esc(it.title)}</b>${esc(it.host)}</div><button class="iconbtn" aria-label="Open in browser">${ic('ext',20)}</button></div>
-      ${S.readerMode === 'error' ? `<div class="notice">We couldn’t get a clean copy of this page, so here’s the original. It won’t be available offline.</div>` : ''}
+      <div class="bar"><button class="iconbtn" ${S.readerMode === 'original' ? 'data-orig-close' : 'data-back'} aria-label="Close">${ic('x',22)}</button><div class="u"><b>${esc(it.title)}</b>${esc(it.host)}</div><button class="iconbtn" data-sheet="iabmenu" aria-label="More">${ic('more',22)}</button></div>
+      ${S.readerMode === 'error' ? `<div class="notice info">${ic('info', 16)}<span>We couldn’t get a clean copy of this page, so here’s the original. It won’t be available offline.</span></div>` : ''}
       <div class="scroll"><div class="fakepage"><div class="h"></div><div class="l"></div><div class="l" style="width:92%"></div><div class="l" style="width:80%"></div><div class="im"></div><div class="l"></div><div class="l" style="width:88%"></div><div class="l" style="width:95%"></div><div class="l" style="width:70%"></div></div></div>
+      ${dock}
     </div>`;
   }
   const fig = it.img ? (S.readerMode === 'images' ? `<div class="fig shimmer"></div>` : `<img class="fig" src="https://picsum.photos/seed/${it.img}/720/480" alt="">`) : '';
@@ -1617,18 +1862,26 @@ function readerScreen(){
   if (S.readerMode === 'offlinewait') {
     content = `<div class="offwait"><span class="ic">${ic('hourglass', 22)}</span><b>${esc(it.url || it.title)}</b><p>This page will be fetched when you’re online. Then it’s here to read, offline too.</p></div>`;
   } else if (S.readerMode === 'loading') {
-    content = `<div class="skel" style="height:12px;width:40%"></div><div class="skel" style="height:28px;width:95%"></div><div class="skel" style="height:28px;width:70%;margin-bottom:24px"></div>${Array.from({length:9},(_,k)=>`<div class="skel" style="height:14px;width:${[100,96,92,98,60,100,94,97,72][k]}%"></div>`).join('')}`;
+    // skeleton lines sweep like the images do (fix 28)
+    content = `<div class="skel shimmer" style="height:12px;width:40%"></div><div class="skel shimmer" style="height:28px;width:95%"></div><div class="skel shimmer" style="height:28px;width:70%;margin-bottom:24px"></div>${Array.from({length:9},(_,k)=>`<div class="skel shimmer" style="height:14px;width:${[100,96,92,98,60,100,94,97,72][k]}%"></div>`).join('')}`;
   } else {
+    // [secondary][primary]. 'Archive and next' says that it archives, and appears only when there is a next (Q10, fix 24)
+    const next = !it.archived && S.items.some(i => !i.archived && i.status === 'ok' && i.id !== it.id);
+    const row = it.archived
+      ? `<button class="btn primary" data-unarchive-open>${ic('restore',18)}Back to Unread</button>`
+      : `${next ? '<button class="btn secondary" data-next>Archive and next</button>' : ''}<button class="btn primary" data-archive-open>${ic('archive',18)}Archive</button>`;
     content = `<div class="kicker">${esc(it.src)}</div><h1>${esc(it.title)}</h1><div class="by">${esc(it.by || it.src)} · ${it.mins} min · Saved yesterday</div>
       <div class="prose" style="font-size:${S.readerSize}px">${fig}${proseHTML(it)}</div>
-      <div class="endcard"><h3>You’ve reached the end</h3><p>${esc(it.src)} · ${it.mins} min</p><div class="row">${it.archived ? `<button class="btn primary" data-unarchive-open>${ic('restore',18)}Back to Unread</button>` : `<button class="btn primary" data-archive-open>${ic('archive',18)}Archive</button>`}${!it.archived && S.items.some(i => !i.archived && i.status === 'ok' && i.id !== it.id) ? '<button class="btn secondary" data-next>Next unread</button>' : ''}</div></div>`;
+      <div class="endcard"><h3>You’ve reached the end</h3><p>${esc(it.src)} · ${it.mins} min</p><div class="row">${row}</div></div>`;
   }
+  // while this article's player shows at the bottom, its line replaces the reading line (Q1)
+  const docked = playerMode() === 'dock';
   return `<div class="screen reader" data-reader="${S.readerTheme}">
     <div class="rtop"><button class="iconbtn" data-back aria-label="Back">${ic('back',22)}</button><div class="host">${esc(it.host)}</div>
-      ${S.audio && S.audio.id === it.id || S.readerMode === 'loading' || S.readerMode === 'offlinewait' ? '' : `<button class="listenbtn" data-listen>${ic('play',14,'fill="currentColor"')}Listen</button>`}<button class="iconbtn aa" data-sheet="aa" aria-label="Text and theme">Aa</button><button class="iconbtn" data-sheet="menu" aria-label="More">${ic('more',22)}</button></div>
-    ${S.audio && S.audio.id === it.id ? playerHTML() : ''}<div class="rprog" style="${S.audio && S.audio.id === it.id ? 'display:none' : ''}"><i id="rp" style="width:${it.progress*100}%"></i></div>
-    <div class="scroll" id="rs"><div class="article">${content}</div></div>
-    ${S.readerMode === 'loading' || S.readerMode === 'offlinewait' ? '' : `<div class="dock ${miniVisible() ? 'lift' : ''}">${it.archived ? `<button class="arch" data-unarchive-open aria-label="Back to Unread">${ic('restore',22)}</button>` : `<button class="arch" data-archive-open aria-label="Archive">${ic('archive',22)}</button>`}</div>`}
+      ${isPlaying(it) || S.readerMode === 'loading' || S.readerMode === 'offlinewait' ? '' : `<button class="listenbtn" data-listen>${ic('play',14,'fill="currentColor"')}Listen</button>`}<button class="iconbtn aa" data-sheet="aa" aria-label="Text and theme">Aa</button><button class="iconbtn" data-sheet="menu" aria-label="More">${ic('more',22)}</button></div>
+    <div class="rprog" ${docked ? 'style="display:none"' : ''}><i id="rp" style="width:${it.progress*100}%"></i></div>
+    <div class="scroll" id="rs"><div class="article ${playerMode() ? 'playing' : ''}">${content}</div></div>
+    ${S.readerMode === 'loading' || S.readerMode === 'offlinewait' ? '' : dock}
   </div>`;
 }
 
@@ -1641,16 +1894,25 @@ function sheetHTML(){
   const it = S.items.find(i => i.id === S.readerId) || S.items[0];
   if (S.sheet === 'aa') {
     const pct = (S.readerSize - 15) / (24 - 15) * 100;
-    const th = (id, label, bg, fg) => `<button class="${S.readerTheme===id?'on':''}" role="radio" aria-checked="${S.readerTheme===id}" data-rtheme="${id}" style="background:${bg};color:${fg}"><span>Aa</span>${label}</button>`;
-    return `<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" data-stop><div class="grab"></div><h3>Text</h3><p class="sub">Size and colours for reading. The rest of the app follows your phone.</p>
-      <div class="aarow"><button class="sz" data-size="-1" aria-label="Smaller text" style="font-size:var(--text-13)">A</button><div class="track" aria-hidden="true"><i style="width:${pct}%"></i><b style="left:${pct}%"></b></div><button class="sz" data-size="1" aria-label="Larger text" style="font-size:var(--text-20)">A</button></div><span class="srlive" aria-live="polite">Text size ${S.readerSize}</span>
-      <div class="themes" role="radiogroup" aria-label="Reader colours">${th('light','Light','#FCF7F6','#181D27')}${th('sepia','Sepia','#F5EEDF','#3A2E22')}${th('dark','Dark','#0C0E12','#E4E4E6')}</div></div></div>`;
+    // each swatch takes its own reader palette; the size track shows the size and the A buttons change it (no knob, fix 14)
+    const th = (id, label) => `<button class="${S.readerTheme===id?'on':''}" role="radio" aria-checked="${S.readerTheme===id}" data-rtheme="${id}" data-reader="${id}" style="background:var(--reader-bg);color:var(--reader-text)"><span>Aa</span>${label}</button>`;
+    return `<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" aria-label="Text" data-stop><div class="grab"></div><h3>Text</h3><p class="sub">Size and colours for reading. The rest of the app follows your phone.</p>
+      <div class="aarow"><button class="sz" data-size="-1" aria-label="Smaller text" style="font-size:var(--text-13)">A</button><div class="track" aria-hidden="true"><i style="width:${pct}%"></i></div><button class="sz" data-size="1" aria-label="Larger text" style="font-size:var(--text-20)">A</button></div><span class="srlive" aria-live="polite">Text size ${S.readerSize}</span>
+      <div class="themes" role="radiogroup" aria-label="Reader colours">${th('light','Light')}${th('sepia','Sepia')}${th('dark','Dark')}</div></div></div>`;
   }
   if (S.sheet === 'menu') {
-    return `<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" data-stop><div class="grab"></div>
+    return `<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" aria-label="More" data-stop><div class="grab"></div>
       <button class="menuitem" data-rsvp>${ic('zap',20)}Speed read</button>
       ${it.archived ? `<button class="menuitem" data-unarchive-open>${ic('restore',20)}Back to Unread</button>` : ''}
       <button class="menuitem" data-orig>${ic('ext',20)}Open original</button>
+      <button class="menuitem" data-copylink>${ic('link',20)}Copy link</button>
+      <button class="menuitem danger" data-delete>${ic('trash',20)}Delete</button></div></div>`;
+  }
+  if (S.sheet === 'iabmenu') {
+    // the in-app browser view's ⋯, headed with the article title (fix 26)
+    return `<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(it.title)}" data-stop><div class="grab"></div>
+      <p class="rowmenu-title">${esc(it.title)}</p>
+      <button class="menuitem" data-openbrowser>${ic('ext',20)}Open in browser</button>
       <button class="menuitem" data-copylink>${ic('link',20)}Copy link</button>
       <button class="menuitem danger" data-delete>${ic('trash',20)}Delete</button></div></div>`;
   }
@@ -1672,37 +1934,234 @@ function sheetHTML(){
     if (mode === 'nolink') {
       return `<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" data-stop><div class="grab"></div><h3>${ic('alert',22,'style="color:var(--error)"')}That wasn’t a link</h3><p class="sub">Shelf saves web pages. Try sharing the page itself, or copy its address and share that.</p><div class="row"><button class="btn secondary" data-close>OK</button></div></div></div>`;
     }
+    // after Undo the sheet says so for 1.5 s, with no buttons and no bar, then returns to the host app (fix 5)
+    if (S.shareRemoved) {
+      return `<div class="scrim"><div class="sheet" role="dialog" aria-modal="true" aria-label="Removed from Shelf" data-stop><div class="grab"></div><h3 role="status">Removed from Shelf</h3></div></div>`;
+    }
     const off = mode === 'offline';
-    return `<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" data-stop>${off?'':'<div class="timer"><i></i></div>'}<div class="grab"></div>
-      <h3><span class="check">${ic('check',16)}</span>Saved</h3>
-      <p class="sub">${off ? 'Saved · will fetch when online' : 'Private. Ready to read offline in a moment.'}</p>
+    const T = S.shareT;
+    const bar = off || !T ? '' : `<div class="timer"><i style="animation-delay:-${SHARE_MS - shareLeft()}ms;animation-play-state:${T.running ? 'running' : 'paused'}"></i></div>`;
+    return `<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" aria-label="Saved to Shelf" data-stop data-share>${bar}<div class="grab"></div>
+      <h3><span class="check">${ic('check',16)}</span>Saved to Shelf</h3>
+      <p class="sub">${off ? 'Saved · will fetch when you’re online' : 'Private. Ready to read offline in a moment.'}</p>
       <div class="saveditem"><div><div class="t">What we lose when we stop reading long things</div><div class="s">theatlantic.com</div></div></div>
       <div class="row"><button class="btn secondary" data-undo-share>Undo</button>${off ? '<button class="btn primary" data-close>Done</button>' : '<button class="btn primary" data-readnow>Read now</button>'}</div></div></div>`;
   }
   return '';
 }
 
-function toastBottom(){
-  const tabbed = TAB_SCREENS.includes(S.screen);
-  if (S.screen === 'reader') return S.miniOn ? 152 : 84;
-  if (tabbed) return S.miniOn ? 144 : 76;
-  return S.miniOn ? 88 : 16;
-}
+/* ---------------- toast and share-sheet timers (fixes 4, 5) ---------------- */
+// Timers pause on touch or focus and resume with the time they had left, like the extension.
+// The build takes the times from getRecommendedTimeoutMillis and never auto-dismisses while a screen reader is on.
+const TOAST_MS = 5000, SHARE_MS = 4000;
+let toastSeq = 0;
+const timeLeft = T => T.running ? Math.max(0, T.left - (Date.now() - T.start)) : T.left;
+const toastLeft = () => S.toast ? timeLeft(S.toast) : TOAST_MS;
+const shareLeft = () => S.shareT ? timeLeft(S.shareT) : SHARE_MS;
 
 function toastHTML(){
-  if (!S.toast) return '';
-  const undo = typeof S.toast.undo === 'function';
-  return `<div class="toast ${undo ? '' : 'noact'}" role="status" aria-live="polite" style="bottom:${toastBottom()}px"><span>${esc(S.toast.text)}</span>${undo ? '<button data-undo>Undo</button>' : ''}<span class="timer" style="animation-duration:5s"></span></div>`;
+  const T = S.toast;
+  if (!T) return '';
+  const undo = typeof T.undo === 'function';
+  const fresh = !T.entered; T.entered = true;
+  return `<div class="toast ${undo ? '' : 'noact'} ${fresh ? 'enter fresh' : ''}" data-tid="${T.id}" role="status" aria-live="polite" style="bottom:${S.stack.toast}px"><span>${esc(T.text)}</span>${undo ? '<button data-undo>Undo</button>' : ''}<span class="timer" style="animation-delay:-${TOAST_MS - toastLeft()}ms;animation-play-state:${T.running ? 'running' : 'paused'}"></span></div>`;
+}
+function toastRun(){
+  const T = S.toast;
+  if (!T || T.running || T.touch || T.focus || S.sheet) return;
+  T.start = Date.now(); T.running = true;
+  clearTimeout(toastTimer); toastTimer = setTimeout(dropToast, T.left);
+  const b = vp.querySelector('.toast:not(.leave) .timer'); if (b) b.style.animationPlayState = 'running';
+}
+function toastPause(){
+  const T = S.toast;
+  if (!T || !T.running) return;
+  T.left = timeLeft(T); T.running = false;
+  clearTimeout(toastTimer);
+  const b = vp.querySelector('.toast:not(.leave) .timer'); if (b) b.style.animationPlayState = 'paused';
+}
+// No toast runs over a sheet: it waits, paused under the scrim, and resumes with its remaining time once the sheet closes.
+function syncToast(){ if (!S.toast) return; if (S.sheet || S.toast.touch || S.toast.focus) toastPause(); else toastRun(); }
+function showToast(text, undo){
+  clearTimeout(toastTimer);
+  S.toast = { id: ++toastSeq, text, undo, left: TOAST_MS, start: 0, running: false, touch: false, focus: false, entered: false };
+  placeStack();
+}
+function dropToast(){
+  clearTimeout(toastTimer);
+  S.toast = null;
+  const t = vp.querySelector('.toast:not(.leave)');
+  if (t) { t.classList.add('leave'); setTimeout(() => t.remove(), 220); }
+  placeStack();
+}
+function bindHold(el, T, sync){
+  el.onpointerdown = () => { T.touch = true; sync(); };
+  el.onpointerup = el.onpointerleave = el.onpointercancel = () => { if (T.touch) { T.touch = false; sync(); } };
+  el.onfocusin = () => { T.focus = true; sync(); };
+  el.onfocusout = e => { if (!el.contains(e.relatedTarget)) { T.focus = false; sync(); } };
+}
+function bindToast(){
+  const t = vp.querySelector('.toast:not(.leave)');
+  if (t && S.toast) bindHold(t, S.toast, syncToast);
+}
+function shareRun(){
+  const T = S.shareT;
+  if (!T || T.running || T.touch || T.focus) return;
+  T.start = Date.now(); T.running = true;
+  clearTimeout(sheetTimer); sheetTimer = setTimeout(() => { S.shareT = null; S.sheet = null; render(); }, T.left);
+  const b = vp.querySelector('.sheet[data-share] .timer i'); if (b) b.style.animationPlayState = 'running';
+}
+function sharePause(){
+  const T = S.shareT;
+  if (!T || !T.running) return;
+  T.left = timeLeft(T); T.running = false; clearTimeout(sheetTimer);
+  const b = vp.querySelector('.sheet[data-share] .timer i'); if (b) b.style.animationPlayState = 'paused';
+}
+const syncShare = () => { const T = S.shareT; if (!T) return; if (T.touch || T.focus) sharePause(); else shareRun(); };
+function bindShare(){
+  const sh = vp.querySelector('.scrim:not(.ghost) .sheet[data-share]');
+  if (sh && S.shareT) bindHold(sh, S.shareT, syncShare);
+}
+const freshShareT = () => ({ left: SHARE_MS, start: 0, running: false, touch: false, focus: false });
+
+/* ---------------- the bottom stack (fix 3) ---------------- */
+// Built from the bottom up with 8 px between layers:
+// tab bar or screen edge → player → the screen's own bar or floating Archive → toast.
+let RS = { ...S.stack };   // offsets the markup is first drawn at; placeStack() then moves them on the enter curve
+function stackPlan(){
+  const base = TAB_SCREENS.includes(S.screen) && !S.host ? 64 + 8 : 16;
+  const floating = !!playerMode();
+  return { mini: base, dock: floating ? base + 64 + 8 : 16, pad: floating ? 16 + 64 + 8 : 24, toast: S.stack.toast };
+}
+function placeStack(){
+  const tb = vp.querySelector('.screen .tabbar');
+  const base = tb ? tb.offsetHeight + 8 : 16;
+  const player = vp.querySelector('.mini:not(.ghost)');
+  const floating = !!player;
+  const move = (el, prop, v) => { el.offsetHeight; el.style[prop] = v + 'px'; };   // flush first so a change animates
+  let top = tb ? tb.offsetHeight : 8;
+  if (player) { move(player, 'bottom', base); top = Math.max(top, base + 64); }
+  const dock = vp.querySelector('.screen .dock');
+  const dockB = floating ? base + 64 + 8 : 16;
+  if (dock) { move(dock, 'bottom', dockB); top = Math.max(top, dockB + 52); }
+  const acts = vp.querySelector('.screen .onbactions');
+  const pad = floating ? 16 + 64 + 8 : 24;
+  if (acts) {
+    const cur = parseFloat(getComputedStyle(acts).paddingBottom) || 0;
+    const h = acts.offsetHeight - cur + pad;
+    move(acts, 'paddingBottom', pad);
+    top = Math.max(top, h);
+  }
+  // scroll content clears the floating layers: 156 in a Reader with a player
+  const art = vp.querySelector('#rs .article'); if (art) art.classList.toggle('playing', floating);
+  const toastB = top + 8;
+  S.stack = { mini: base, dock: dockB, pad, toast: toastB };
+  const t = vp.querySelector('.toast:not(.leave)');
+  if (t) {
+    if (t.classList.contains('fresh')) { t.style.transition = 'none'; t.style.bottom = toastB + 'px'; t.offsetHeight; t.style.transition = ''; t.classList.remove('fresh'); }
+    else move(t, 'bottom', toastB);
+  }
+}
+
+/* ---------------- Listen: the mini once the Now playing card has scrolled away (Q3a) ---------------- */
+let listenIO = null, barIO = null;
+function bindListenMini(){
+  if (listenIO) { listenIO.disconnect(); listenIO = null; }
+  if (S.screen !== 'listen' || S.host || !('IntersectionObserver' in window)) return;
+  const card = vp.querySelector('.nowcard'), sc = vp.querySelector('.screen > .scroll');
+  if (!card || !sc) return;
+  // shows below 40 % visible and hides again above 60 %, so it doesn't flicker at the edge
+  listenIO = new IntersectionObserver(es => {
+    const r = es[es.length - 1].intersectionRatio;
+    if (r < .4 && !S.listenMini) setListenMini(true);
+    else if (r > .6 && S.listenMini) setListenMini(false);
+  }, { root: sc, threshold: [0, .2, .4, .6, .8, 1] });
+  listenIO.observe(card);
+}
+function setListenMini(on){
+  S.listenMini = on;
+  const old = vp.querySelector('.mini:not(.ghost)');
+  if (on && !old) {
+    RS = stackPlan(); S.playerEnter = true;   // slides in when the card scrolls out (Q3b)
+    const tmp = document.createElement('div'); tmp.innerHTML = playerHTML(); S.playerEnter = false;
+    const m = tmp.firstElementChild, scr = vp.querySelector('.screen');
+    if (m && scr) { scr.after(m); updatePlayer(false); }
+  } else if (!on && old) leaveNode(old);
+  placeStack();
+}
+// pushed screens: the large title fades into the pinned bar once it scrolls under it (fix 15)
+function bindBarTitle(){
+  if (barIO) { barIO.disconnect(); barIO = null; }
+  const h = vp.querySelector('.onb .onbbody h1'), bt = vp.querySelector('.onb .bartitle'), sc = vp.querySelector('.onb > .scroll');
+  if (!h || !bt || !sc || !('IntersectionObserver' in window)) return;
+  barIO = new IntersectionObserver(es => bt.classList.toggle('on', !es[es.length - 1].isIntersecting), { root: sc, threshold: 0 });
+  barIO.observe(h);
+}
+
+/* ---------------- motion helpers (fix 6) ---------------- */
+// A layer on its way out: it keeps its place, takes no input and plays the exit, then goes.
+function leaveNode(node){
+  node.classList.add('ghost'); node.setAttribute('inert', ''); node.setAttribute('aria-hidden', 'true');
+  if (!node.isConnected) vp.appendChild(node);
+  node.offsetHeight;
+  node.classList.add('leave');
+  setTimeout(() => node.remove(), 220);
+}
+// list rows collapse over the exit duration before the list re-renders, and expand again on Undo
+function collapseRow(w, then){
+  if (!w) { then(); return; }
+  w.style.height = w.offsetHeight + 'px';
+  w.offsetHeight;
+  w.classList.add('leaving');
+  setTimeout(then, 200);
+}
+function expandRow(){
+  const id = S.expandId; S.expandId = null;
+  if (id == null) return;
+  const w = vp.querySelector(`.cardwrap[data-id="${id}"]`); if (!w) return;
+  const h = w.offsetHeight;
+  w.style.overflow = 'hidden'; w.style.height = '0px'; w.style.marginBottom = '0px'; w.style.opacity = '0';
+  w.offsetHeight;
+  w.classList.add('entering');
+  w.style.height = h + 'px'; w.style.marginBottom = ''; w.style.opacity = '';
+  setTimeout(() => { w.classList.remove('entering'); w.style.height = ''; w.style.overflow = ''; }, 260);
+}
+
+// keep keyboard focus on the same control when a render rebuilds it
+const FOCUS_KEYS = ['playitem', 'skip', 'rate', 'size', 'rtheme', 'wpm', 'rsvpSent', 'rsvpToggle', 'youAct'];
+function focusKey(el){
+  if (!el || el.tagName !== 'BUTTON' || !vp.contains(el)) return null;
+  if (el.matches('.js-pp')) return el.closest('.nowcard') ? '.nowcard .js-pp' : '.mini .js-pp';
+  if (el.dataset.listen !== undefined) return '.mini .js-pp';
+  if (el.dataset.stopAudio !== undefined) return '[data-listen]';
+  for (const k of FOCUS_KEYS) {
+    if (el.dataset[k] === undefined) continue;
+    const attr = 'data-' + k.replace(/[A-Z]/g, c => '-' + c.toLowerCase());
+    return `[${attr}="${el.dataset[k]}"]` + (el.dataset.i !== undefined ? `[data-i="${el.dataset.i}"]` : '');
+  }
+  return null;
 }
 
 /* ---------------- render ---------------- */
 function render(){
   const key = S.screen + '|' + S.list + '|' + (S.host ? 'host' : '');
-  const oldScroll = vp.querySelector('.scroll:not(#rs)');
-  const keepTop = S.lastKey === key && oldScroll ? oldScroll.scrollTop : 0;
+  const sameKey = S.lastKey === key;
+  const oldScroll = vp.querySelector('.screen > .scroll:not(#rs)');
+  const keepTop = sameKey && oldScroll ? oldScroll.scrollTop : 0;
+  const oldRs = document.getElementById('rs');
+  const keepRs = sameKey && S.lastReaderId === S.readerId && oldRs ? oldRs.scrollTop : null;
   const ae = document.activeElement;
   const keepFocus = ae && vp.contains(ae) && ae.id && ae.tagName === 'INPUT' ? { id: ae.id, a: ae.selectionStart, b: ae.selectionEnd } : null;
+  const keepBtn = focusKey(ae);
   const sheetWas = S.lastSheet;
+  const oldSheet = vp.querySelector('.scrim:not(.ghost)');
+  const oldPlayer = vp.querySelector('.mini:not(.ghost)');
+  const oldToast = vp.querySelector('.toast:not(.leave)');
+  if (S.sheet !== 'recovery') S.you.copied = false;
+  if (!S.sheet || !S.sheet.startsWith('share')) S.shareRemoved = false;
+  if (!sameKey && S.screen === 'listen') S.listenMini = !!S.restoreListenMini;
+  S.restoreListenMini = false;
+  RS = sameKey ? { ...S.stack } : stackPlan();
   let html = '';
   if (S.host) html = hostApp();
   else if (S.screen === 'saves') html = savesScreen();
@@ -1722,45 +2181,51 @@ function render(){
   else if (S.screen === 'advanced') html = advancedScreen();
   else if (S.screen === 'switchnostr') html = switchScreen();
   else if (S.screen === 'delete') html = deleteScreen();
-  vp.innerHTML = html + miniHTML() + toastHTML() + sheetHTML() + lockHTML() + rsvpHTML();
+  let sheet = sheetHTML();
+  if (S.sheet && S.sheet !== sheetWas) sheet = sheet.replace('class="scrim"', 'class="scrim enter"');   // sheets slide up once, when they open
+  vp.innerHTML = html + playerHTML() + toastHTML() + sheet + lockHTML() + rsvpHTML();
+  S.playerEnter = false;
+  // every removal path plays the exit: a closed sheet slides down, an ended session's player and a replaced toast drop away
+  if (oldSheet && !S.sheet) leaveNode(oldSheet);
+  if (oldPlayer && !S.audio && sameKey) leaveNode(oldPlayer);
+  if (oldToast && (!S.toast || +oldToast.dataset.tid !== S.toast.id)) leaveNode(oldToast);
   const q = document.getElementById('q');
-  if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); q.oninput = e => { S.query = e.target.value; render(); }; }
+  if (q) {
+    if (S.searchFocus) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+    q.oninput = e => { S.query = e.target.value; render(); };
+  }
+  S.searchFocus = false;
   const rs = document.getElementById('rs');
   if (rs) {
     const it = S.items.find(i => i.id === S.readerId);
     if (S.scrollToEnd) { rs.scrollTop = rs.scrollHeight; S.scrollToEnd = false; }
-    else if (it && it.progress > 0 && it.progress < 1) rs.scrollTop = it.progress * (rs.scrollHeight - rs.clientHeight);
-    const upd = () => { if (!rs.isConnected) return; const max = rs.scrollHeight - rs.clientHeight; const p = max > 0 ? rs.scrollTop / max : 0; const rp = document.getElementById('rp'); if (rp) rp.style.width = (p*100) + '%'; if (it && S.readerMode === 'ok') it.progress = p > .98 ? .99 : p; };
+    else if (keepRs != null) rs.scrollTop = keepRs;
+    else if (it && partRead(it)) rs.scrollTop = it.progress * (rs.scrollHeight - rs.clientHeight);
+    // reading writes the one stored position only while this article isn't the one in the player (fix 11)
+    const upd = () => { if (!rs.isConnected) return; const max = rs.scrollHeight - rs.clientHeight; const p = max > 0 ? rs.scrollTop / max : 0; const rp = document.getElementById('rp'); if (rp) rp.style.width = (p*100) + '%'; if (it && S.readerMode === 'ok' && !isPlaying(it)) it.progress = p > .98 ? .99 : p; };
     rs.onscroll = upd; upd();
   }
   bindSwipes();
-  updatePlayer(S.scrollToWord); S.scrollToWord = false;
-  flashWord();
   bindRsvp();
   bindCode();
   bindYou();
   const sg = document.getElementById('sugg'); if (sg) sg.onpointerdown = e => e.preventDefault();
-  bindToast();
-  const newScroll = vp.querySelector('.scroll:not(#rs)');
-  if (keepTop && newScroll) newScroll.scrollTop = keepTop;
+  bindListenMini();
+  bindBarTitle();
+  const newScroll = vp.querySelector('.screen > .scroll:not(#rs)');
+  if (S.restoreScroll != null) { if (newScroll) newScroll.scrollTop = S.restoreScroll; S.restoreScroll = null; }
+  else if (keepTop && newScroll) newScroll.scrollTop = keepTop;
+  placeStack();
+  updatePlayer(S.scrollToWord); S.scrollToWord = false;
+  flashWord();
+  expandRow();
   if (keepFocus) { const f = document.getElementById(keepFocus.id); if (f && document.activeElement !== f) { f.focus(); try { f.setSelectionRange(keepFocus.a, keepFocus.b); } catch (e) {} } }
-  if (S.sheet && S.sheet !== sheetWas) { const first = vp.querySelector('.sheet button, .sheet input'); if (first) first.focus(); }
+  else if (keepBtn && (!document.activeElement || document.activeElement === document.body)) { const f = [...vp.querySelectorAll(keepBtn)].find(x => !x.closest('.ghost')); if (f) f.focus(); }
+  if (S.sheet && S.sheet !== sheetWas) { const first = vp.querySelector('.scrim:not(.ghost) .sheet button, .scrim:not(.ghost) .sheet input'); if (first) first.focus(); }
   if (!S.sheet && sheetWas && S.sheetOpener) { const o = vp.querySelector(S.sheetOpener); if (o) o.focus(); S.sheetOpener = null; }
-  S.lastKey = key; S.lastSheet = S.sheet;
-}
-
-function dropToast(){ S.toast = null; const t = vp.querySelector('.toast'); if (t) t.remove(); }
-function showToast(text, undo){
-  clearTimeout(toastTimer);
-  S.toast = { text, undo };
-  toastTimer = setTimeout(dropToast, 5000);
-}
-function bindToast(){
-  // pause while touched or focused (the build also lengthens it with getRecommendedTimeoutMillis)
-  const t = vp.querySelector('.toast'); if (!t) return;
-  const pause = () => { clearTimeout(toastTimer); const b = t.querySelector('.timer'); if (b) b.style.animationPlayState = 'paused'; };
-  const resume = () => { clearTimeout(toastTimer); toastTimer = setTimeout(dropToast, 3000); const b = t.querySelector('.timer'); if (b) b.style.animationPlayState = 'running'; };
-  t.onpointerenter = pause; t.onpointerleave = resume; t.onfocusin = pause; t.onfocusout = resume;
+  bindShare();   // after the sheet takes focus, so only the person's own touch or focus holds its timer
+  bindToast(); syncToast();
+  S.lastKey = key; S.lastSheet = S.sheet; S.lastReaderId = S.readerId;
 }
 
 /* ---------------- swipe ---------------- */
@@ -1775,21 +2240,27 @@ function bindSwipes(){
     w.onpointerup = () => {
       card.classList.remove('dragging');
       const d = dir < 0 ? Math.min(0, dx) : Math.max(0, dx);
-      if (Math.abs(d) > 96) {
-        it.archived = !it.archived;
-        showToast(it.archived ? 'Archived' : 'Moved back to Unread', () => { it.archived = !it.archived; });
-        render();
-      } else { card.style.transform = ''; under.style.opacity = 0; }
       x0 = null;
+      if (Math.abs(d) > 96) {
+        // on Saves the row leaves this list, so it collapses first; Search keeps it and tags it
+        const leaves = S.screen === 'saves';
+        const act = () => {
+          it.archived = !it.archived;
+          showToast(it.archived ? 'Archived' : 'Moved back to Unread', () => { it.archived = !it.archived; if (leaves) S.expandId = it.id; });
+          render();
+        };
+        if (leaves) collapseRow(w, act); else act();
+      } else { card.style.transform = ''; under.style.opacity = 0; }
     };
     w.onpointercancel = () => { card.classList.remove('dragging'); card.style.transform = ''; under.style.opacity = 0; x0 = null; };
   });
 }
 
-function deleteItem(it){
+function deleteItem(it, onUndo){
   const idx = S.items.indexOf(it);
   const snap = { audio: S.audio, played: [...S.played], playAll: S.playAll, queue: S.queue };
   S.items.splice(idx, 1);
+  // deleting the article that's playing ends the session; its player slides out (decision 34, Q3b)
   if (S.audio && S.audio.id === it.id) { S.audio = null; S.playAll = false; S.queue = null; }
   S.played = S.played.filter(x => x !== it.id);
   if (S.queue) S.queue = S.queue.filter(x => x !== it.id);
@@ -1797,69 +2268,123 @@ function deleteItem(it){
     S.items.splice(idx, 0, it);
     S.played = snap.played; S.queue = snap.queue;
     if (snap.audio && snap.audio.id === it.id) S.audio = { ...snap.audio, playing: false };
+    if (onUndo) onUndo();
   });
 }
 
-function openItem(id){
+/* ---------------- Reader routes (Q7, fixes 17 and 18) ---------------- */
+// What opened the Reader, so ← (and Archive, Delete, Back to Unread) can return there.
+function backHere(){
+  const sc = vp.querySelector('.screen > .scroll:not(#rs)');
+  const b = { screen: S.screen, tab: S.tab, scroll: sc ? sc.scrollTop : 0, listenMini: S.listenMini };
+  if (S.screen === 'reader') Object.assign(b, { readerId: S.readerId, readerMode: S.readerMode, back: S.readerBack });
+  return b;
+}
+// ← returns to the opener with its tab lit, query and scroll kept; a cold start has no history, so it goes to Saves
+function leaveReader(){
+  const b = S.readerBack;
+  S.sheet = null;
+  if (!b) { S.screen = S.tab = 'saves'; return; }
+  S.screen = b.screen; S.tab = b.tab;
+  if (b.screen === 'reader') { S.readerId = b.readerId; S.readerMode = b.readerMode; S.readerBack = b.back; S.scrollToWord = !!(S.audio && S.audio.id === b.readerId); }
+  else { S.restoreScroll = b.scroll; S.restoreListenMini = !!b.listenMini; }
+}
+// Undo of a Reader action that navigated away reopens that article at its saved position (or Speed read's word)
+function reopenReader(id, back, word){
+  const it = S.items.find(i => i.id === id); if (!it) return;
+  S.readerId = id; S.readerMode = modeFor(it); S.screen = 'reader'; S.sheet = null; S.readerBack = back;
+  if (word != null) S.flashWord = word;
+  if (isPlaying(it)) S.scrollToWord = true;
+}
+
+function openItem(id, back){
   const it = S.items.find(i => i.id === id);
   if (!it) return;
+  S.readerBack = back || null;
   S.readerId = id;
-  S.readerMode = it.status === 'failed' ? 'error' : (it.status === 'ok' ? 'ok' : (S.online ? 'loading' : 'offlinewait'));
+  S.readerMode = modeFor(it);
   S.screen = 'reader'; S.sheet = null;
+  if (isPlaying(it)) S.scrollToWord = true;
   render();
   if (S.readerMode === 'loading') setTimeout(() => { if (S.screen === 'reader' && S.readerId === id && S.online) { it.status = 'ok'; it.src = it.src === 'From Chrome' ? 'Ars Technica' : it.src; S.readerMode = 'ok'; render(); } }, 900);
 }
 
 /* ---------------- events ---------------- */
 vp.addEventListener('click', e => {
-  const t = e.target.closest('[data-tab],[data-list],[data-go],[data-back],[data-clear],[data-sheet],[data-close],[data-rtheme],[data-size],[data-delete],[data-undo],[data-undo-share],[data-readnow],[data-archive-open],[data-next],[data-stop],[data-play],[data-skip],[data-rate],[data-listen],[data-playall],[data-playitem],[data-open-audio],[data-stop-audio],[data-rsvp],[data-rsvp-exit],[data-rsvp-toggle],[data-rsvp-sent],[data-wpm],[data-rsvp-archive],[data-new],[data-onb-go],[data-allow-camera],[data-perm],[data-open-settings],[data-paste],[data-sugg],[data-code-continue],[data-code-retry],[data-nostr],[data-import],[data-open],[data-rowmenu],[data-row-restore],[data-row-delete],[data-unarchive-open],[data-orig],[data-orig-close],[data-copylink]');
-  if (!t) return;
+  const t = e.target.closest('[data-tab],[data-list],[data-go],[data-back],[data-clear],[data-sheet],[data-close],[data-rtheme],[data-size],[data-delete],[data-undo],[data-undo-share],[data-readnow],[data-archive-open],[data-next],[data-stop],[data-play],[data-skip],[data-rate],[data-listen],[data-playall],[data-playitem],[data-open-audio],[data-stop-audio],[data-rsvp],[data-rsvp-exit],[data-rsvp-toggle],[data-rsvp-sent],[data-wpm],[data-rsvp-archive],[data-rsvp-unarchive],[data-new],[data-onb-go],[data-allow-camera],[data-perm],[data-open-settings],[data-paste],[data-sugg],[data-code-continue],[data-code-retry],[data-nostr],[data-import],[data-open],[data-rowmenu],[data-row-restore],[data-row-delete],[data-unarchive-open],[data-orig],[data-orig-close],[data-copylink],[data-openbrowser]');
+  if (!t || t.closest('.ghost')) return;
   const d = t.dataset;
   if (d.stop !== undefined) return;
-  if (d.open) { const w = t.closest('.cardwrap'); openItem(+d.open); return; }
+  if (d.open) { openItem(+d.open, backHere()); return; }
   if (d.rowmenu) { S.rowId = +d.rowmenu; S.sheet = 'row'; S.sheetOpener = `[data-rowmenu="${d.rowmenu}"]`; render(); return; }
-  if (d.rowRestore !== undefined) { const it = S.items.find(i => i.id === S.rowId); S.sheet = null; if (it) { it.archived = false; showToast('Moved back to Unread', () => { it.archived = true; }); } }
-  if (d.rowDelete !== undefined) { const it = S.items.find(i => i.id === S.rowId); S.sheet = null; if (it) deleteItem(it); }
-  if (d.unarchiveOpen !== undefined) { const it = S.items.find(i => i.id === S.readerId); it.archived = false; S.sheet = null; S.tab = S.screen = 'saves'; showToast('Moved back to Unread', () => { it.archived = true; }); }
+  if (d.rowRestore !== undefined || d.rowDelete !== undefined) {
+    // close the sheet first, then collapse the row; Undo expands it again
+    const it = S.items.find(i => i.id === S.rowId); S.sheet = null; S.sheetOpener = null; render();
+    if (!it) return;
+    collapseRow(vp.querySelector(`.cardwrap[data-id="${it.id}"]`), () => {
+      if (d.rowRestore !== undefined) { it.archived = false; showToast('Moved back to Unread', () => { it.archived = true; S.expandId = it.id; }); }
+      else deleteItem(it, () => { S.expandId = it.id; });
+      render();
+    });
+    return;
+  }
+  // Reader actions return to the opener; their Undo reopens the article (Q7, fix 18)
+  if (d.unarchiveOpen !== undefined) {
+    const it = S.items.find(i => i.id === S.readerId), back = S.readerBack;
+    it.archived = false; leaveReader();
+    showToast('Moved back to Unread', () => { it.archived = true; reopenReader(it.id, back); });
+  }
+  if (d.archiveOpen !== undefined) {
+    const it = S.items.find(i => i.id === S.readerId), back = S.readerBack;
+    it.archived = true; leaveReader();
+    showToast('Archived', () => { it.archived = false; reopenReader(it.id, back); });
+  }
+  if (d.next !== undefined) {
+    // 'Archive and next': archives, with the Archived toast and Undo, then opens the next unread (Q10)
+    const it = S.items.find(i => i.id === S.readerId), back = S.readerBack;
+    const nxt = S.items.find(i => !i.archived && i.status === 'ok' && i.id !== it.id);
+    it.archived = true;
+    showToast('Archived', () => { it.archived = false; reopenReader(it.id, back); });
+    if (nxt) { openItem(nxt.id, back); return; }
+    leaveReader();
+  }
+  if (d.delete !== undefined) {
+    const it = S.items.find(i => i.id === S.readerId), back = S.readerBack;
+    leaveReader();
+    deleteItem(it, () => reopenReader(it.id, back));
+  }
   if (d.orig !== undefined) { S.sheet = null; S.readerMode = 'original'; }
   if (d.origClose !== undefined) { S.readerMode = 'ok'; }
   if (d.copylink !== undefined) { S.sheet = null; showToast('Link copied'); }
+  if (d.openbrowser !== undefined) { S.sheet = null; showToast('Would open in your browser'); }
   if (d.tab) { S.tab = d.tab; S.screen = d.tab; }
   if (d.list) { S.list = d.list; S.savesMode = S.savesMode === 'first' ? 'normal' : S.savesMode; }
-  if (d.go === 'search') { S.screen = 'search'; S.query = ''; }
-  if (d.back !== undefined) { if (S.screen === 'reader') S.tab = 'saves'; S.screen = S.tab; S.sheet = null; }   // decision 4: Back from the Reader goes to Saves
-  if (d.clear !== undefined) S.query = '';
+  if (d.go === 'search') { S.screen = 'search'; S.query = ''; S.searchFocus = true; }   // only entering from Saves resets the query
+  if (d.back !== undefined) { if (S.screen === 'reader') leaveReader(); else { S.screen = S.tab; S.sheet = null; } }
+  if (d.clear !== undefined) { S.query = ''; S.searchFocus = true; }
   if (d.sheet) { S.sheet = d.sheet; S.sheetOpener = `[data-sheet="${d.sheet}"]`; }
-  if (d.close !== undefined && (!t.classList.contains('scrim') || e.target === t)) { S.sheet = null; clearTimeout(sheetTimer); }
+  if (d.close !== undefined && (!t.classList.contains('scrim') || e.target === t)) { S.sheet = null; clearTimeout(sheetTimer); S.shareT = null; }
   if (d.close !== undefined && t.classList.contains('scrim') && e.target !== t) return;
   if (d.rtheme) S.readerTheme = d.rtheme;
   if (d.size) S.readerSize = Math.max(15, Math.min(24, S.readerSize + (+d.size)));
-  if (d.delete !== undefined) {
-    const it = S.items.find(i => i.id === S.readerId);
-    S.sheet = null; S.tab = S.screen = 'saves';
-    deleteItem(it);
+  if (d.undo !== undefined && S.toast && typeof S.toast.undo === 'function') { const u = S.toast.undo; clearTimeout(toastTimer); S.toast = null; u(); }
+  if (d.undoShare !== undefined) {
+    // Undo is told apart from the timeout: 'Removed from Shelf' for 1.5 s, then back to the host app (fix 5)
+    clearTimeout(sheetTimer); S.shareT = null;
+    S.items = S.items.filter(i => i.id !== 99);
+    S.shareRemoved = true;
+    sheetTimer = setTimeout(() => { S.shareRemoved = false; S.sheet = null; render(); }, 1500);
   }
-  if (d.archiveOpen !== undefined) {
-    const it = S.items.find(i => i.id === S.readerId); it.archived = true; S.tab = S.screen = 'saves';
-    showToast('Archived', () => { it.archived = false; });
-  }
-  if (d.next !== undefined) {
-    const it = S.items.find(i => i.id === S.readerId); it.archived = true;
-    const nxt = S.items.find(i => !i.archived && i.status === 'ok' && i.id !== it.id);
-    if (nxt) { openItem(nxt.id); showToast('Archived', () => { it.archived = false; }); return; }
-    S.tab = S.screen = 'saves'; showToast('Archived', () => { it.archived = false; });
-  }
-  if (d.undo !== undefined && S.toast && typeof S.toast.undo === 'function') { S.toast.undo(); S.toast = null; clearTimeout(toastTimer); }
-  if (d.undoShare !== undefined) { S.items = S.items.filter(i => i.id !== 99); S.sheet = null; clearTimeout(sheetTimer); }
-  if (d.readnow !== undefined) { clearTimeout(sheetTimer); S.sheet = null; S.host = false; S.tab = 'saves'; openItem(99); return; }
-  if (d.new !== undefined) { clearOnb(); clearRestore(); S.restoring = null; S.tab = S.screen = 'saves'; S.list = 'unread'; if (S.early) { S.items = [EARLY()]; S.savesMode = 'normal'; } else { S.items = []; S.savesMode = 'first'; } }
-  if (d.onbGo) { clearOnb(); const g = d.onbGo; if (g === 'scan') { S.scan = 'prime'; S.six = ''; } if (g === 'code') S.code = freshCode(); if (g === 'nostr') S.nostr = 'intro'; S.screen = g; }
+  if (d.readnow !== undefined) { clearTimeout(sheetTimer); S.shareT = null; S.sheet = null; S.host = false; S.tab = S.screen = 'saves'; openItem(99, null); return; }
+  if (d.new !== undefined) { clearOnb(); clearRestore(); S.restoring = null; S.tab = S.screen = 'saves'; S.list = 'unread'; S.you.browsers = []; if (S.early) { S.items = [EARLY()]; S.savesMode = 'normal'; } else { S.items = []; S.savesMode = 'first'; } }
+  if (d.onbGo) { clearOnb(); const g = d.onbGo; if (g === 'scan') { S.scan = 'prime'; S.six = ''; } if (g === 'code') S.code = freshCode(); if (g === 'nostr') S.nostr = 'intro'; if (TAB_SCREENS.includes(g)) S.tab = g; S.screen = g; }
   if (d.allowCamera !== undefined) S.scan = 'prompt';
-  if (d.perm) { if (d.perm === 'deny') S.scan = 'refused'; else { S.scan = 'view'; later(() => { if (S.screen === 'scan' && S.scan === 'view') { S.scan = 'connecting'; render(); later(() => startRestore(), 1800); } }, 2600); } }
+  // once the QR is read, the six digits are asked for (Q9)
+  if (d.perm) { if (d.perm === 'deny') S.scan = 'refused'; else { S.scan = 'view'; later(() => { if (S.screen === 'scan' && S.scan === 'view') { S.scan = 'code'; S.six = ''; render(); } }, 2600); } }
   if (d.openSettings !== undefined) { showToast('Would open Shelf in Android settings'); }
   if (d.paste !== undefined) { S.code.words = [...SAMPLE_CODE]; S.code.focus = null; }
   if (d.sugg && S.code.focus != null) { const i = S.code.focus; S.code.words[i] = d.sugg; S.code.focus = i < 11 ? i + 1 : null; }
-  if (d.codeContinue !== undefined) { const ok = S.code.words.join(' ') === SAMPLE_CODE.join(' '); S.code.checking = true; S.code.focus = null; render(); later(() => { S.code.checking = false; if (ok) startRestore(); else { S.code.notFound = true; render(); } }, 1400); return; }
+  if (d.codeContinue !== undefined) { if (S.code.checking) return; const ok = S.code.words.join(' ') === SAMPLE_CODE.join(' '); S.code.checking = true; S.code.focus = null; render(); later(() => { S.code.checking = false; if (ok) startRestore(); else { S.code.notFound = true; render(); } }, 1400); return; }
   if (d.codeRetry !== undefined) S.code = freshCode();
   if (d.nostr) { clearOnb(); S.nostr = d.nostr; if (d.nostr === 'waiting') later(() => { if (S.screen === 'nostr' && S.nostr === 'waiting') { S.sheet = 'import'; render(); } }, 2200); }
   if (d.import) { S.you.nostrUser = true; startRestore(); return; }
@@ -1868,24 +2393,50 @@ vp.addEventListener('click', e => {
   if (d.rsvpToggle !== undefined) { rsvpToggle(); return; }
   if (d.rsvpSent) { rsvpSentence(+d.rsvpSent); return; }
   if (d.wpm) { S.wpm = Math.max(200, Math.min(700, S.wpm + (+d.wpm))); if (S.rsvp) { S.rsvp.ramp = 0; } render(); return; }
-  if (d.rsvpArchive !== undefined) { clearTimeout(rsvpTimer); S.rsvp = null; const it = S.items.find(i => i.id === S.readerId); it.archived = true; S.tab = S.screen = 'saves'; showToast('Archived', () => { it.archived = false; }); render(); return; }
+  if (d.rsvpArchive !== undefined || d.rsvpUnarchive !== undefined) {
+    // lands the way the Reader's own action does; Undo reopens the Reader at that word (fixes 18, 25)
+    const arch = d.rsvpArchive !== undefined;
+    const it = S.items.find(i => i.id === S.readerId), back = S.readerBack, word = S.rsvp ? S.rsvp.idx : null;
+    clearTimeout(rsvpTimer); saveRsvpPosition(); S.rsvp = null;
+    it.archived = arch; leaveReader();
+    showToast(arch ? 'Archived' : 'Moved back to Unread', () => { it.archived = !arch; reopenReader(it.id, back, word); });
+    render(); return;
+  }
   if (d.listen !== undefined) {
-    // One shared position (decisions 19 and 21): start at the saved word if it is on screen, else at the paragraph in view.
+    // one shared position (decisions 19 and 36): start at the saved word if it is on screen, else the paragraph in view
     const it = S.items.find(i => i.id === S.readerId);
-    if (it) it.listenT = startWord(it) / WPS;
+    if (it) it.progress = startWord(it) / WORDS;
     startAudio(S.readerId);
+    S.playerEnter = true;   // the bottom player slides in (Q1)
   }
-  if (d.play !== undefined && S.audio) S.audio.playing = !S.audio.playing;
-  if (d.skip && S.audio) { S.audio.t = Math.max(0, Math.min(DUR - 1, S.audio.t + (+d.skip))); }
-  if (d.rate !== undefined && S.audio) { S.rate = RATES[(RATES.indexOf(S.audio.rate) + 1) % RATES.length]; S.audio.rate = S.rate; }
-  if (d.playall !== undefined && S.played.length) { S.playAll = true; S.queue = [...S.played]; if (!S.audio || S.audio.id !== S.queue[0]) { S.audio = null; startAudio(S.queue[0]); } else S.audio.playing = true; }
-  if (d.playitem) { S.playAll = false; S.queue = null; startAudio(+d.playitem); }
-  if (d.stopAudio !== undefined) {
-    const m = vp.querySelector('.mini'); if (m) m.classList.add('leave');
-    setTimeout(() => { S.audio = null; S.playAll = false; S.queue = null; render(); }, 260);
-    return;
+  if (d.play !== undefined && S.audio) S.audio.playing = !S.audio.playing;   // pausing never ends Play all
+  if (d.skip && S.audio) {
+    S.audio.t = Math.max(0, Math.min(DUR - 1, S.audio.t + (+d.skip)));
+    const it = S.items.find(i => i.id === S.audio.id); if (it) it.progress = S.audio.t / DUR;
   }
-  if (d.openAudio !== undefined && S.audio) { S.lock = false; S.readerId = S.audio.id; S.readerMode = 'ok'; S.screen = 'reader'; S.scrollToWord = true; }
+  if (d.rate !== undefined && S.audio) { const k = RATES.indexOf(S.audio.rate); S.rate = RATES[(k + 1) % RATES.length]; S.audio.rate = S.rate; }
+  if (d.playall !== undefined && S.played.length) {
+    const had = !!S.audio;
+    S.queue = [...S.played];
+    if (!S.audio || S.audio.id !== S.queue[0]) { S.audio = null; startAudio(S.queue[0]); if (had) S.playerEnter = false; }
+    else S.audio.playing = true;
+    S.playAll = true;
+  }
+  if (d.playitem) {
+    // the row's own play button: pausing the current article leaves Play all alone; a different one ends it (fix 12, Q2)
+    const id = +d.playitem;
+    if (S.audio && S.audio.id === id) S.audio.playing = !S.audio.playing;
+    else startAudio(id);
+  }
+  if (d.stopAudio !== undefined) { S.audio = null; S.playAll = false; S.queue = null; }   // render() plays the player's exit
+  if (d.openAudio !== undefined && S.audio) {
+    // the mini's title, the Now playing title and the lock screen open the Reader at the spoken word; ← returns here (Q7)
+    const here = S.screen === 'reader' && S.readerId === S.audio.id && S.readerMode !== 'error' && S.readerMode !== 'original';
+    const back = backHere();
+    S.lock = false;
+    if (!here) { S.readerBack = back; S.readerId = S.audio.id; S.readerMode = 'ok'; S.screen = 'reader'; S.sheet = null; }
+    S.scrollToWord = true;
+  }
   render();
 });
 
@@ -1894,7 +2445,7 @@ function addSharedItem(){
 }
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && S.sheet && S.sheet !== 'import') { S.sheet = null; clearTimeout(sheetTimer); render(); }
+  if (e.key === 'Escape' && S.sheet && S.sheet !== 'import' && !S.shareRemoved) { S.sheet = null; clearTimeout(sheetTimer); S.shareT = null; render(); }
 });
 
 /* ---------------- panel ---------------- */
@@ -1909,9 +2460,12 @@ document.querySelectorAll('[data-theme-set]').forEach(b => b.onclick = () => {
 document.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => {
   document.querySelectorAll('[data-jump]').forEach(x => x.classList.toggle('on', x === b));
   clearTimeout(toastTimer); clearTimeout(sheetTimer);
+  vp.innerHTML = '';   // a jump lands in place: nothing animates out of the previous state
   S.items = seed(); S.toast = null; S.sheet = null; S.online = true; S.savesMode = 'normal'; S.list = 'unread'; S.query = '';
-  S.readerMode = 'ok'; S.readerId = 2; S.screen = 'saves';
-  S.audio = null; S.played = []; S.playAll = false; S.queue = null; S.rate = 1; S.lock = false; S.tab = 'saves'; S.host = false; S.rowId = null; S.sheetOpener = null; S.miniOn = false;
+  S.readerMode = 'ok'; S.readerId = 2; S.screen = 'saves'; S.readerBack = null;
+  S.audio = null; S.played = []; S.playAll = false; S.queue = null; S.rate = 1; S.lock = false; S.tab = 'saves'; S.host = false; S.rowId = null; S.sheetOpener = null;
+  S.listenMini = false; S.playerEnter = false; S.restoreScroll = null; S.restoreListenMini = false; S.searchFocus = false; S.expandId = null;
+  S.shareRemoved = false; S.shareT = null; S.lastKey = null; S.lastSheet = null;
   clearTimeout(rsvpTimer); S.rsvp = null; S.flashWord = null;
   S.you = freshYou();
   clearOnb(); clearRestore(); S.early = false; S.restoring = null; S.onbOffline = false; S.scan = 'prime'; S.six = ''; S.nostr = 'intro'; S.code = freshCode();
@@ -1920,7 +2474,11 @@ document.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => {
   if (j === 'welcome') { S.screen = 'welcome'; S.items = []; }
   if (j === 'welcome-early') { S.screen = 'welcome'; S.early = true; S.items = [EARLY()]; }
   if (j.startsWith('return')) { S.screen = 'return'; S.onbOffline = j === 'return-offline'; }
-  if (j.startsWith('scan-')) { S.screen = 'scan'; S.scan = { 'scan-prime': 'prime', 'scan-prompt': 'prompt', 'scan-view': 'view', 'scan-refused': 'refused', 'scan-expired': 'expired', 'scan-connecting': 'connecting', 'scan-wrong': 'wrong' }[j]; }
+  if (j.startsWith('scan-')) {
+    S.screen = 'scan';
+    S.scan = { 'scan-prime': 'prime', 'scan-prompt': 'prompt', 'scan-view': 'view', 'scan-code': 'code', 'scan-refused': 'refused', 'scan-expired': 'expired', 'scan-connecting': 'connecting', 'scan-wrong': 'wrong' }[j];
+    if (j === 'scan-wrong') S.six = '482193';
+  }
   if (j.startsWith('code-')) {
     S.screen = 'code';
     if (j === 'code-wrong') { S.code.words = ['harbor', 'lemmon', 'candle', 'rescue', '', '', '', '', '', '', '', '']; S.code.focus = null; }
@@ -1934,15 +2492,24 @@ document.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => {
   if (j === 'archive-menu') { S.list = 'archive'; S.rowId = 8; S.sheet = 'row'; }
   const listenSeed = (id, frac, playing = true) => {
     S.played = [2, 1, 8, 6].filter(x => x !== id); S.played.unshift(id);
-    startAudio(id); S.audio.t = DUR * frac; S.audio.playing = playing;
+    startAudio(id); S.audio.t = DUR * frac; S.audio.playing = playing; S.playerEnter = false;
+    S.items.find(i => i.id === id).progress = frac;   // one stored position
   };
-  if (j === 'play') { S.screen = 'reader'; listenSeed(2, .34); S.scrollToWord = true; }
+  if (j === 'play' || j === 'play-paused') { S.screen = 'reader'; listenSeed(2, .34, j === 'play'); S.scrollToWord = true; }
+  if (j === 'mini-reader') { listenSeed(2, .34); S.screen = 'reader'; S.readerId = 1; }
   if (j === 'mini') listenSeed(2, .34);
-  if (j === 'listen') { S.tab = S.screen = 'listen'; listenSeed(2, .34); }
+  if (j === 'listen' || j === 'listen-scrolled' || j === 'listen-reader') { S.tab = S.screen = 'listen'; listenSeed(2, .34); }
+  if (j === 'listen-scrolled') {
+    // the Now playing card has scrolled away, so the mini sits at bottom 72 (Q3a)
+    S.listenMini = true; render();
+    const sc = vp.querySelector('.screen > .scroll'); if (sc) sc.scrollTop = sc.scrollHeight;
+    return;
+  }
+  if (j === 'listen-reader') { render(); openItem(1, backHere()); return; }   // ← returns to Listen (Q7)
   if (j === 'listen-empty') { S.tab = S.screen = 'listen'; }
   if (j === 'lock') { S.screen = 'reader'; listenSeed(2, .34); S.lock = true; }
-  if (j.startsWith('rsvp')) { S.screen = 'reader'; S.items[1].listenT = (j === 'rsvp-done' ? TOK.length - 1 : 58) / WPS; }
-  if (j === 'saves-empty') { S.items = []; S.savesMode = 'first'; }
+  if (j.startsWith('rsvp')) { S.screen = 'reader'; S.items[1].progress = j.startsWith('rsvp-done') ? .99 : 58 / TOK.length; if (j === 'rsvp-done-archived') S.items[1].archived = true; }
+  if (j === 'saves-empty') { S.items = []; S.savesMode = 'first'; S.you.browsers = []; }
   if (j === 'saves-cleared') S.items.forEach(i => i.archived = true);
   if (j === 'saves-loading') S.savesMode = 'loading';
   if (j === 'saves-offline') { S.online = false; addSharedItem(); S.items[0].status = 'pending'; }
@@ -1950,19 +2517,31 @@ document.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => {
   if (j === 'archive-empty') { S.list = 'archive'; S.items.forEach(i => i.archived = false); }
   if (j === 'search') { S.screen = 'search'; S.query = 'read'; }
   if (j === 'search-none') { S.screen = 'search'; S.query = 'volcano'; }
-  if (j.startsWith('share')) { S.host = true; addSharedItem(); S.sheet = j === 'share' ? 'share-saved' : j; if (j === 'share-nolink') S.items = S.items.filter(i => i.id !== 99);
+  if (j === 'search-reader') { S.screen = 'search'; S.query = 'read'; render(); openItem(1, backHere()); return; }   // ← returns to these results (fix 17)
+  if (j.startsWith('share')) {
+    S.host = true; addSharedItem();
+    S.sheet = j === 'share' || j === 'share-undone' ? 'share-saved' : j;
+    if (j === 'share-nolink') S.items = S.items.filter(i => i.id !== 99);
     if (j === 'share-offline') S.online = false;
-    if (j === 'share') sheetTimer = setTimeout(() => { S.sheet = null; render(); }, 4000); }
+    if (j === 'share') { S.shareT = freshShareT(); render(); shareRun(); return; }
+    if (j === 'share-undone') { S.items = S.items.filter(i => i.id !== 99); S.shareRemoved = true; render(); sheetTimer = setTimeout(() => { S.shareRemoved = false; S.sheet = null; render(); }, 1500); return; }
+  }
   if (j.startsWith('reader')) { S.screen = 'reader'; S.items[1].progress = .34; }
   if (j === 'reader-loading') S.readerMode = 'loading';
   if (j === 'reader-images') S.readerMode = 'images';
-  if (j === 'reader-error') { S.readerId = 5; S.readerMode = 'error'; }
+  if (j === 'reader-error' || j === 'reader-error-menu') { S.readerId = 5; S.readerMode = 'error'; if (j === 'reader-error-menu') S.sheet = 'iabmenu'; }
   if (j === 'reader-end') S.scrollToEnd = true;
   if (j === 'reader-aa') S.sheet = 'aa';
   if (j === 'reader-menu') S.sheet = 'menu';
   if (j === 'reader-original') S.readerMode = 'original';
   if (j === 'reader-offline') { S.online = false; S.readerId = 4; S.readerMode = 'offlinewait'; }
-  if (j.startsWith('rsvp')) { render(); startRsvp(); if (j === 'rsvp') rsvpToggle(); if (j === 'rsvp-paused') { S.rsvp.started = true; render(); } if (j === 'rsvp-done') { S.rsvp.playing = false; S.rsvp.done = true; clearTimeout(rsvpTimer); render(); } return; }
+  if (j.startsWith('rsvp')) {
+    render(); startRsvp();
+    if (j === 'rsvp') rsvpToggle();
+    if (j === 'rsvp-paused') { S.rsvp.started = true; render(); }
+    if (j.startsWith('rsvp-done')) { S.rsvp.idx = TOK.length - 1; S.rsvp.playing = false; S.rsvp.done = true; clearTimeout(rsvpTimer); render(); }
+    return;
+  }
   render();
 });
 
