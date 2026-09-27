@@ -313,6 +313,84 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .restore .bar i{display:block;height:100%;background:var(--accent);border-radius:var(--radius-pill);transition:width .3s ease}
 .restore p{margin:0;font-size:var(--text-13);color:var(--muted)}
 .restore.done .h{margin:0;justify-content:flex-start}
+/* ---------- batch 4: You ---------- */
+.ycount{padding:0 var(--space-16) var(--space-16);font-size:var(--text-13);color:var(--muted)}
+.yprofile{display:flex;align-items:center;gap:var(--space-12);margin:0 var(--space-16) var(--space-16)}
+.avatar{width:56px;height:56px;border-radius:var(--radius-pill);background:var(--gradient-primary);color:var(--on-gradient);display:inline-flex;align-items:center;justify-content:center;font-size:var(--text-20);font-weight:600;flex:none}
+.yprofile b{display:block;font-size:var(--text-17)}
+.yprofile span{font-size:var(--text-13);color:var(--muted)}
+.bcard{margin:0 var(--space-16) var(--space-16);padding:var(--space-16);border-radius:var(--radius-sheet);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge)}
+.bcard .h{display:flex;align-items:center;gap:var(--space-8);font-weight:600;font-size:var(--text-17);margin-bottom:var(--space-4)}
+.bcard .h svg{color:var(--accent)}
+.bcard p{margin:0 0 var(--space-16);color:var(--muted);font-size:var(--text-13)}
+.bcard .row{display:flex;gap:var(--space-8)}
+.gtitle{padding:0 var(--space-16) var(--space-8);font-size:var(--text-13);font-weight:600;color:var(--muted)}
+.ygroup{margin:0 var(--space-16) var(--space-20);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge);overflow:hidden}
+.onbbody .ygroup{margin-left:0;margin-right:0}
+.yrow{display:flex;align-items:center;gap:var(--space-12);width:100%;min-height:56px;padding:var(--space-8) var(--space-16);text-align:left;border-top:1px solid var(--line)}
+.ygroup > .yrow:first-child{border-top:0}
+.yrow .yi{color:var(--muted);display:inline-flex;flex:none}
+.yrow .yl{flex:1;min-width:0;font-weight:500}
+.yrow .yl small{display:block;font-size:var(--text-13);color:var(--muted);font-weight:400}
+.yrow .yv{font-size:var(--text-13);color:var(--muted);display:inline-flex;align-items:center;gap:6px;flex:none}
+.yrow .yl small.warnsub{color:var(--accent);font-weight:500}
+.yrow .yv.warn{color:var(--accent);font-weight:500}
+.yrow .yv.warn::before{content:"";width:6px;height:6px;border-radius:var(--radius-pill);background:currentColor}
+.yrow .chev{color:var(--muted);display:inline-flex}
+.yrow.danger .yl,.yrow.danger .yi{color:var(--error)}
+.yrow[disabled]{opacity:.45;pointer-events:none}
+.yrow .textbtn{height:36px;padding:0 var(--space-12);border-radius:var(--radius-pill);color:var(--error);font-weight:500;font-size:var(--text-13)}
+.status{display:inline-flex;align-items:center;gap:6px;font-size:var(--text-13);color:var(--muted)}
+.status::before{content:"";width:8px;height:8px;border-radius:var(--radius-pill);background:var(--success)}
+.status.down::before{background:var(--error)}
+.status.off::before{background:var(--muted)}
+.gnote{margin:calc(-1 * var(--space-12)) var(--space-16) var(--space-20);font-size:var(--text-13);color:var(--muted)}
+.onbbody .gnote{margin-left:0;margin-right:0}
+.codegrid{position:relative;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-8);margin-bottom:var(--space-16)}
+.codegrid .cw{display:flex;align-items:center;gap:var(--space-8);height:40px;padding:0 var(--space-12);border-radius:var(--radius-pill);background:var(--background);font-weight:500}
+.codegrid .cw span{width:18px;text-align:right;font-size:12px;color:var(--muted);font-weight:400}
+.codegrid.hidden .cw{filter:blur(6px)}
+.reveal{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-8);text-align:center;font-size:var(--text-13);color:var(--muted)}
+.reveal .btn{height:44px}
+.qrcard{background:#FFFFFF;color:#181D27;border-radius:var(--radius-sheet);padding:var(--space-24);display:flex;flex-direction:column;align-items:center;gap:var(--space-12);box-shadow:var(--shadow-card);border:var(--card-edge);margin-bottom:var(--space-16)}
+.qrcard .six{font:600 28px/1 var(--font-ui);letter-spacing:.18em;font-variant-numeric:tabular-nums}
+.qrcard.expired > svg{opacity:.12}
+.cd{text-align:center;font-size:var(--text-13);color:var(--muted);font-variant-numeric:tabular-nums}
+.vrow{display:flex;align-items:center;gap:var(--space-12);width:100%;min-height:60px;padding:var(--space-8) var(--space-8) var(--space-8) var(--space-16);border-top:1px solid var(--line);text-align:left}
+.ygroup > .vrow:first-child{border-top:0}
+.radio{width:22px;height:22px;border-radius:var(--radius-pill);border:2px solid var(--muted);flex:none;display:inline-flex;align-items:center;justify-content:center}
+.radio.on{border-color:var(--accent)}
+.radio.on::after{content:"";width:10px;height:10px;border-radius:var(--radius-pill);background:var(--accent)}
+.vrow .yl{flex:1;font-weight:500}
+.sample{width:44px;height:44px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent);display:inline-flex;align-items:center;justify-content:center;flex:none}
+.stepper{display:flex;align-items:center;justify-content:space-between;min-height:56px;padding:var(--space-8) var(--space-8) var(--space-8) var(--space-16)}
+.stepper .ctrl{display:flex;align-items:center;gap:var(--space-4);height:40px;border-radius:var(--radius-pill);background:var(--background)}
+.stepper .ctrl button{width:40px;height:40px;border-radius:var(--radius-pill);font-size:var(--text-20)}
+.stepper .ctrl span{min-width:48px;text-align:center;font-weight:600;font-variant-numeric:tabular-nums}
+.btn.danger{background:var(--surface);color:var(--error);border:1.5px solid var(--error)}
+.btn.danger:not([disabled]){background:var(--error);color:var(--on-accent)}
+.plist{list-style:none;margin:0 0 var(--space-20);padding:0}
+.plist li{display:flex;gap:var(--space-12);align-items:flex-start;padding:var(--space-8) 0;font-size:var(--text-15)}
+.plist li svg{flex:none;margin-top:2px}
+.plist li.go svg{color:var(--error)}
+.plist li.ask svg{color:var(--muted)}
+.plist li small{display:block;color:var(--muted);font-size:var(--text-13)}
+.typebox{display:block;width:100%;height:48px;border-radius:var(--radius-pill);border:1px solid var(--line);background:var(--surface);color:var(--text);padding:0 var(--space-16);font:600 var(--text-15)/1 var(--font-ui);letter-spacing:.08em;outline:0;text-transform:uppercase}
+.typebox:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.label{display:block;font-size:var(--text-13);font-weight:600;margin-bottom:var(--space-8)}
+.steps{list-style:none;margin:0;padding:0}
+.steps li{display:flex;align-items:center;gap:var(--space-12);min-height:48px;border-top:1px solid var(--line)}
+.steps li:first-child{border-top:0}
+.steps li .st{width:24px;height:24px;border-radius:var(--radius-pill);display:inline-flex;align-items:center;justify-content:center;flex:none}
+.steps li.done .st{background:var(--success);color:#FFFFFF}
+.steps li.fail .st{background:var(--error);color:#FFFFFF}
+.steps li.wait .st::after{content:"";width:8px;height:8px;border-radius:var(--radius-pill);background:var(--accent);animation:breathe 1.2s ease-in-out infinite}
+.steps li span.t{flex:1}
+.steps li small{color:var(--muted);font-size:var(--text-13)}
+.confirmcard{display:flex;flex-direction:column;align-items:center;text-align:center;gap:var(--space-8);padding:var(--space-24);border-radius:var(--radius-sheet);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge);margin:var(--space-16) 0}
+.confirmcard .ico{width:56px;height:56px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent);display:inline-flex;align-items:center;justify-content:center}
+.confirmcard b{font-size:var(--text-17)}
+.confirmcard span{color:var(--muted);font-size:var(--text-13)}
 /* Android system permission dialog, drawn as a reference */
 .sysscrim{position:absolute;inset:0;z-index:60;background:#0000007A;display:flex;align-items:center;justify-content:center;padding:var(--space-24)}
 .sysdlg{width:100%;background:#F3EDF7;color:#1D1B20;border-radius:28px;padding:var(--space-24);text-align:center;font-family:Roboto,var(--font-ui)}
@@ -434,6 +512,46 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
       <button data-jump="restoring">Watch it restore</button>
       <button data-jump="restoring-mid">Halfway</button>
     </div>
+    <h2>You (batch 4)</h2>
+    <div class="btns">
+      <button data-jump="you">Backup not done</button>
+      <button data-jump="you-done">Backed up</button>
+      <button data-jump="you-nostr">Signed in with nostr</button>
+      <button data-jump="you-voices">Several voices on the phone</button>
+      <button data-jump="you-offline">Offline</button>
+    </div>
+    <h2>Recovery code and devices</h2>
+    <div class="btns">
+      <button data-jump="rec-hidden">Recovery code, hidden</button>
+      <button data-jump="rec-shown">Recovery code, shown</button>
+      <button data-jump="dev">Add another device</button>
+      <button data-jump="dev-expired">…code expired</button>
+    </div>
+    <h2>Connected browsers</h2>
+    <div class="btns">
+      <button data-jump="br">List</button>
+      <button data-jump="br-empty">None yet</button>
+      <button data-jump="br-disconnect">Disconnect</button>
+      <button data-jump="conn-ask">Connect: camera</button>
+      <button data-jump="conn-scan">Connect: scanning</button>
+      <button data-jump="conn-type">Connect: type a code</button>
+      <button data-jump="conn-confirm">Connect this browser?</button>
+      <button data-jump="conn-expired">Code expired</button>
+      <button data-jump="conn-failed">Can't connect</button>
+    </div>
+    <h2>Voice, Advanced, Delete</h2>
+    <div class="btns">
+      <button data-jump="voice">Voice</button>
+      <button data-jump="adv">Advanced</button>
+      <button data-jump="adv-down">…a relay not responding</button>
+      <button data-jump="sw">Use my nostr app instead</button>
+      <button data-jump="sw-moving">…moving saves</button>
+      <button data-jump="del">Delete my data</button>
+      <button data-jump="del-typed">…DELETE typed</button>
+      <button data-jump="del-running">…deleting</button>
+      <button data-jump="del-partial">…a server didn't confirm</button>
+      <button data-jump="del-failed">…couldn't reach our server</button>
+    </div>
     <h2>Speed read</h2>
     <div class="btns">
       <button data-jump="rsvp-start">Just opened</button>
@@ -484,6 +602,9 @@ const I = {
   chev:'<path d="m9 18 6-6-6-6"/>',
   camera:'<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>',
   clipboard:'<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>',
+  settings:'<path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>',
+  server:'<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>',
+  refresh:'<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
   laptop:'<path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>',
 };
 const ic = (n, s=20, extra='') => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${I[n]}</svg>`;
@@ -661,7 +782,7 @@ function playerHTML(){
 
 function miniHTML(){
   const a = S.audio;
-  if (!a || S.screen === 'reader' || S.screen === 'listen' || S.lock || (S.sheet && S.sheet.startsWith('share'))) { S.miniOn = false; return ''; }
+  if (!a || !['saves', 'search', 'you'].includes(S.screen) || S.lock || (S.sheet && S.sheet.startsWith('share'))) { S.miniOn = false; return ''; }
   const enter = !S.miniOn; S.miniOn = true;
   const it = S.items.find(i => i.id === a.id);
   return `<div class="mini ${enter ? 'enter' : ''}">
@@ -943,6 +1064,320 @@ function startRestore(opts = {}){
   step(0);
 }
 
+/* ---------------- You (batch 4) ---------------- */
+const freshYou = () => ({
+  backupDone: false, backupHidden: false, nostrUser: false, voices: 1, voiceSel: 0, speed: 1, sampling: null,
+  codeShown: false, browsers: [{ name: 'Chrome on a Windows laptop', when: 'Connected 27 September' }], disconnect: null,
+  conn: 'scan', camOK: true, typed: '', dev: 'show', countdown: 298, relayDown: false, sw: 'explain', swDone: 0,
+  del: 'explain', delTyped: '', steps: [],
+});
+S.you = freshYou();
+const VOICES = ['UK English · voice 1', 'UK English · voice 2', 'US English · voice 1'];
+const SPEEDS = [0.8, 1, 1.2, 1.5, 2];
+const RELAYS = [['Shelf', 'relay.shelf.app'], ['Backup 1', 'nos.lol'], ['Backup 2', 'relay.damus.io']];
+const RECOVERY = SAMPLE_CODE;
+
+function yrow(go, icon, label, value, opts = {}){
+  const v = value ? `<span class="yv ${opts.warn ? 'warn' : ''}">${value}</span>` : '';
+  return `<button class="yrow ${opts.danger ? 'danger' : ''}" ${go ? `data-you-go="${go}"` : ''} ${opts.disabled ? 'disabled' : ''}>
+    <span class="yi">${ic(icon, 20)}</span><span class="yl">${label}${opts.sub ? `<small class="${opts.warn ? 'warnsub' : ''}">${opts.sub}</small>` : ''}</span>${v}${go ? `<span class="chev">${ic('chev', 18)}</span>` : ''}</button>`;
+}
+
+function youScreen(){
+  const Y = S.you, off = !S.online;
+  const saves = S.items.length, listened = S.played.length || 12;
+  const head = Y.nostrUser
+    ? `<div class="yprofile"><span class="avatar">R</span><div><b>Richard</b><span>Signed in with your nostr app</span></div></div>`
+    : `<div class="ycount">${saves} saves · ${listened} listened</div>`;
+  const backup = !Y.nostrUser && !Y.backupDone && !Y.backupHidden
+    ? `<div class="bcard"><div class="h">${ic('shield', 20)}Back up your shelf</div>
+        <p>Your saves are yours alone. A recovery code brings them back on any phone, even if this one is lost.</p>
+        <div class="row"><button class="btn primary" data-you-act="show-code">Show recovery code</button><button class="btn quiet" data-you-act="later">Later</button></div></div>` : '';
+  const first = Y.nostrUser
+    ? yrow(null, 'login', 'Your nostr app', 'Signed in')
+    : yrow('recovery', 'keyboard', 'Recovery code', '', { warn: !Y.backupDone, sub: Y.backupDone ? 'Written down' : 'Not written down' });
+  return `<div class="screen"><div class="scroll">
+      <div class="head"><h1>You</h1></div>
+      ${head}
+      ${off ? `<div class="banner">${ic('wifioff', 16)}Offline — adding a device or browser needs a connection</div>` : ''}
+      ${backup}
+      <div class="ygroup">
+        ${first}
+        ${yrow('adddevice', 'phone', 'Add another device', '', { disabled: off, sub: off ? 'Needs a connection' : '' })}
+        ${yrow('browsers', 'laptop', 'Connected browsers', String(Y.browsers.length))}
+        ${Y.voices > 1 ? yrow('voice', 'headphones', 'Voice', VOICES[Y.voiceSel].split(' · ')[0]) : ''}
+      </div>
+      <div class="ygroup">${yrow('advanced', 'settings', 'Advanced', '')}</div>
+      <div class="ygroup">${yrow('delete', 'trash', 'Delete my data', '', { danger: true })}</div>
+      <div style="height:96px"></div>
+    </div>${tabbar()}</div>`;
+}
+
+function recoverySheet(){
+  const Y = S.you;
+  const words = RECOVERY.map((w, i) => `<div class="cw"><span>${i + 1}</span>${w}</div>`).join('');
+  return `<div class="scrim" data-close><div class="sheet" data-stop><div class="grab"></div>
+    <h3>Your recovery code</h3>
+    <p class="sub">These twelve words bring your shelf back on any phone. Write them down and keep them somewhere safe: anyone who has them can read your saves.</p>
+    <div class="codegrid ${Y.codeShown ? '' : 'hidden'}">${words}
+      ${Y.codeShown ? '' : `<div class="reveal"><span>Make sure nobody can see your screen</span><button class="btn secondary" data-you-act="reveal">Show the words</button></div>`}</div>
+    <div class="row">${Y.codeShown ? `<button class="btn secondary" data-you-act="copy">${ic('clipboard', 16)}Copy</button><button class="btn primary" data-close>Done</button>` : `<button class="btn secondary" data-close>Not now</button>`}</div>
+  </div></div>`;
+}
+
+function addDeviceScreen(){
+  const Y = S.you;
+  if (!S.online) return onbShell(`<h1>Add another device</h1><div class="errline">${ic('wifioff', 16)}<span>Adding a device needs a connection. Try again when you're online.</span></div>`, '', 'you');
+  const exp = Y.dev === 'expired';
+  const mm = `${Math.floor(Y.countdown / 60)}:${String(Y.countdown % 60).padStart(2, '0')}`;
+  return onbShell(`<h1>Add another device</h1>
+    <p class="lead">On the new phone, install Shelf, choose <strong>I already have a shelf</strong>, then <strong>Scan from my other phone</strong>.</p>
+    <div class="qrcard ${exp ? 'expired' : ''}">${phoneQR(180)}<div class="six">${exp ? '––– –––' : '482 913'}</div></div>
+    ${exp ? `<div class="errline">${ic('alert', 16)}<span>This code has expired.</span></div>` : `<div class="cd">A new code appears in <span class="js-cd">${mm}</span></div>`}`,
+    exp ? `<button class="btn primary full" data-you-act="new-code">${ic('refresh', 18)}Show a new one</button>` : '', 'you');
+}
+
+function browsersScreen(){
+  const Y = S.you;
+  const list = Y.browsers.length
+    ? `<div class="ygroup">${Y.browsers.map((b, i) => `<div class="yrow"><span class="yi">${ic('laptop', 20)}</span><span class="yl">${esc(b.name)}<small>${esc(b.when)}</small></span><button class="textbtn" data-you-act="disconnect" data-i="${i}">Disconnect</button></div>`).join('')}</div>`
+    : `<div class="empty" style="padding:var(--space-24) 0"><div class="check" style="width:56px;height:56px;background:var(--accent-soft);color:var(--accent)">${ic('laptop', 26)}</div><h2>No browsers yet</h2><p>Save pages from your laptop with the Shelf extension for Chrome or Firefox.</p></div>`;
+  return onbShell(`<h1>Connected browsers</h1><p class="lead">Pages you save in a connected browser arrive here the next time you open Shelf.</p>
+    ${!S.online ? `<div class="banner" style="margin:0 0 var(--space-16)">${ic('wifioff', 16)}Connecting a browser needs a connection</div>` : ''}${list}`,
+    `<button class="btn primary full" data-you-go="connect" ${S.online ? '' : 'disabled'}>${ic('laptop', 18)}Connect a browser</button>`, 'you');
+}
+
+function disconnectSheet(){
+  const b = S.you.browsers[S.you.disconnect];
+  return `<div class="scrim" data-close><div class="sheet" data-stop><div class="grab"></div><h3>Disconnect ${esc(b.name)}?</h3>
+    <p class="sub">Pages saved from that browser will be ignored. Uninstall the extension there or connect it again.</p>
+    <div class="row"><button class="btn secondary" data-close>Cancel</button><button class="btn danger" data-you-act="disconnect-yes">Disconnect</button></div></div></div>`;
+}
+
+function connectScreen(){
+  const Y = S.you, st = Y.conn;
+  const intro = `<h1>Connect a browser</h1><p class="lead">On your laptop, install the Shelf extension and click its icon. Scan the code it shows, or type the code under it.</p>`;
+  const typeLink = `<button class="btn quiet full" data-you-act="conn-type">${ic('keyboard', 18)}Type a code instead</button>`;
+  if (st === 'type') {
+    return onbShell(`<h1>Connect a browser</h1><p class="lead">Type the code shown under the QR in the extension.</p>
+      <label class="label" for="bcode">Code from your browser</label>
+      <input class="typebox" id="bcode" placeholder="XXXX-XXXX" maxlength="9" autocomplete="off" spellcheck="false" value="${esc(Y.typed)}">`,
+      `<button class="btn primary full" id="bgo" data-you-act="conn-confirm" ${Y.typed.replace('-', '').length === 8 ? '' : 'disabled'}>Continue</button>`, 'browsers');
+  }
+  if (st === 'confirm') {
+    return onbShell(`<h1>Connect this browser?</h1><div class="confirmcard"><span class="ico">${ic('laptop', 26)}</span><b>Chrome on a Windows laptop</b><span>Pages you save there will come to this shelf.</span></div>`,
+      `<button class="btn primary full" data-you-act="conn-go">Connect</button><button class="btn secondary full" data-you-go="browsers">Cancel</button>`, 'browsers');
+  }
+  if (st === 'connecting') {
+    return onbShell(`<h1>Connect a browser</h1><div class="waiting"><div class="dots"><i></i><i></i><i></i></div><b>Connecting to Chrome</b><p class="lead" style="margin-top:var(--space-8)">This takes a few seconds.</p></div>`, '', 'browsers');
+  }
+  if (st === 'ask' || st === 'prompt') {
+    const dlg = st === 'prompt' ? `<div class="sysscrim"><div class="sysdlg">${ic('camera', 26)}<h4>Allow <b>Shelf</b> to take pictures and record video?</h4>
+      <button data-you-act="perm-allow">While using the app</button><button data-you-act="perm-allow">Only this time</button><button data-you-act="perm-deny">Don't allow</button></div></div>` : '';
+    return onbShell(`${intro}<div class="vf off">${ic('camera', 32)}<b>Shelf uses the camera only to read this code</b></div>`,
+      `<button class="btn primary full" data-you-act="cam">${ic('camera', 18)}Use the camera</button>${typeLink}`, 'browsers') + dlg;
+  }
+  if (st === 'refused') {
+    return onbShell(`${intro}<div class="vf off">${ic('camera', 32)}<b>The camera is switched off for Shelf</b><span style="font-size:13px;opacity:.8">Turn it on in Android settings, or type the code instead.</span></div>`,
+      `<button class="btn primary full" data-you-act="conn-type">${ic('keyboard', 18)}Type a code instead</button>`, 'browsers');
+  }
+  const err = st === 'expired' ? `<div class="errline">${ic('alert', 16)}<span>This code expired. Show a new one in the extension, then scan again.</span></div>`
+    : st === 'failed' ? `<div class="errline">${ic('alert', 16)}<span>Can't connect right now. Check your connection and try again.</span></div>` : '';
+  return onbShell(`${intro}${err}<div class="vf"><div class="qr" style="color:#FFFFFF">${phoneQR(150)}</div><i class="corner c1"></i><i class="corner c2"></i><i class="corner c3"></i><i class="corner c4"></i>
+    <div class="scanline"></div><div class="cap">Point at the code in your browser</div></div>`,
+    st === 'failed' ? `<button class="btn primary full" data-you-act="conn-retry">Try again</button>${typeLink}` : typeLink, 'browsers');
+}
+
+function voiceScreen(){
+  const Y = S.you;
+  const rows = VOICES.map((v, i) => `<div class="vrow"><button class="radio ${Y.voiceSel === i ? 'on' : ''}" data-you-act="voice" data-i="${i}" aria-label="Use ${v}"></button>
+    <button class="yl" style="text-align:left" data-you-act="voice" data-i="${i}">${v}</button>
+    <button class="sample" data-you-act="sample" data-i="${i}" aria-label="Play a sample">${Y.sampling === i ? '<span class="eq"><i></i><i></i><i></i></span>' : ic('play', 16, 'fill="currentColor"')}</button></div>`).join('');
+  return onbShell(`<h1>Voice</h1><p class="lead">These voices come from your phone and work offline.</p>
+    <div class="ygroup">${rows}</div>
+    <div class="ygroup"><div class="stepper"><span style="font-weight:500">Default speed</span><div class="ctrl"><button data-you-act="speed" data-i="-1" aria-label="Slower">−</button><span>${Y.speed}×</span><button data-you-act="speed" data-i="1" aria-label="Faster">+</button></div></div></div>
+    <p class="gnote" style="margin-top:0">To add more voices, open Android settings, then Text-to-speech output.</p>`, '', 'you');
+}
+
+function advancedScreen(){
+  const Y = S.you;
+  const relays = RELAYS.map(([label, host], i) => {
+    const st = !S.online ? '<span class="status off">Unreachable</span>' : (Y.relayDown && i === 2 ? '<span class="status down">Not responding</span>' : '<span class="status">Connected</span>');
+    return `<div class="yrow"><span class="yi">${ic('server', 20)}</span><span class="yl">${label}<small>${host}</small></span>${st}</div>`;
+  }).join('');
+  return onbShell(`<h1>Advanced</h1>
+    <div class="gtitle" style="padding-left:0">Relays</div>
+    <div class="ygroup">${relays}</div>
+    <p class="gnote">Your saves are copied to all three. Any one of them is enough to bring your shelf back.${Y.relayDown && S.online ? ' Saves will reach relay.damus.io when it answers again.' : ''}</p>
+    <div class="ygroup">
+      <button class="yrow" data-you-act="export"><span class="yi">${ic('download', 20)}</span><span class="yl">Export my saves<small>One file with every link and its text</small></span></button>
+      ${Y.nostrUser ? '' : `<button class="yrow" data-you-go="switchnostr"><span class="yi">${ic('login', 20)}</span><span class="yl">Use my nostr app instead<small>Move your saves to your nostr account</small></span><span class="chev">${ic('chev', 18)}</span></button>`}
+    </div>`, '', 'you');
+}
+
+function switchScreen(){
+  const Y = S.you;
+  if (Y.sw === 'waiting') return onbShell(`<h1>Use my nostr app instead</h1><div class="waiting"><div class="dots"><i></i><i></i><i></i></div><b>Waiting for your nostr app</b><p class="lead" style="margin-top:var(--space-8)">Approve the request there, then come back to Shelf.</p></div>`,
+    `<button class="btn secondary full" data-you-act="sw-cancel">Cancel</button>`, 'advanced');
+  if (Y.sw === 'moving') return onbShell(`<h1>Moving your saves</h1><div class="restore" style="margin:var(--space-16) 0"><div class="h"><b>Moving to your nostr account</b><span>${Y.swDone} of 8</span></div>
+      <div class="bar"><i style="width:${Y.swDone / 8 * 100}%"></i></div><p>Keep Shelf open until this finishes.</p></div>`, '', null);
+  return onbShell(`<h1>Use my nostr app instead</h1>
+    <p class="lead">Your saves move to your nostr account, and your nostr app keeps you signed in from then on.</p>
+    <ul class="plist"><li class="ask">${ic('check', 18)}<span>Every save and its text comes with you<small>Nothing is lost, and it stays private.</small></span></li>
+    <li class="go">${ic('alert', 18)}<span>Your recovery code stops working<small>Afterwards you can throw it away. Your nostr app is how you get back in.</small></span></li></ul>`,
+    `<button class="btn primary full" data-you-act="sw-start">${ic('login', 18)}Continue with my nostr app</button>`, 'advanced');
+}
+
+function deleteScreen(){
+  const Y = S.you;
+  if (Y.del === 'running' || Y.del === 'partial') {
+    const rows = Y.steps.map(s => `<li class="${s.state}"><span class="st">${s.state === 'done' ? ic('check', 14) : s.state === 'fail' ? ic('x', 14) : ''}</span><span class="t">${s.label}</span><small>${s.note || ''}</small></li>`).join('');
+    const partial = Y.del === 'partial'
+      ? `<div class="errline" style="margin-top:var(--space-16)">${ic('alert', 16)}<span>relay.damus.io didn't confirm the deletion. What's left there is encrypted, and only your recovery code could open it. To be sure, destroy any copy of your recovery code.</span></div>` : '';
+    return onbShell(`<h1>${Y.del === 'partial' ? 'Almost everything is gone' : 'Deleting your data'}</h1><div class="ygroup" style="padding:0 var(--space-16)"><ul class="steps">${rows}</ul></div>${partial}`,
+      Y.del === 'partial' ? `<button class="btn primary full" data-you-act="del-finish">Finish</button>` : '', null);
+  }
+  const failed = Y.del === 'failed' ? `<div class="errline">${ic('alert', 16)}<span>Couldn't reach Shelf's server, so nothing has been deleted. Check your connection and try again.</span></div>` : '';
+  const ok = Y.delTyped === 'DELETE' && S.online;
+  return onbShell(`<h1>Delete my data</h1>${failed}
+    ${!S.online ? `<div class="banner" style="margin:0 0 var(--space-16)">${ic('wifioff', 16)}Deleting needs a connection</div>` : ''}
+    <ul class="plist">
+      <li class="go">${ic('trash', 18)}<span>Your saves and their text on Shelf's server</span></li>
+      <li class="go">${ic('trash', 18)}<span>Everything on this phone<small>Shelf starts fresh afterwards, as if just installed.</small></span></li>
+      <li class="ask">${ic('server', 18)}<span>Copies on two independent backup servers<small>We ask them to delete them. They decide, and most do.</small></span></li>
+    </ul>
+    <label class="label" for="deltype">Type DELETE to confirm</label>
+    <input class="typebox" id="deltype" autocomplete="off" spellcheck="false" autocapitalize="characters" value="${esc(Y.delTyped)}" ${S.online ? '' : 'disabled'}>`,
+    `<button class="btn danger full" id="delgo" data-you-act="del-go" ${ok ? '' : 'disabled'}>Delete everything</button>`, 'you');
+}
+
+function runDelete(partial){
+  const Y = S.you;
+  Y.del = 'running';
+  Y.steps = [
+    { label: "Shelf's server", state: 'wait' },
+    { label: 'Backup: nos.lol', state: 'wait' },
+    { label: 'Backup: relay.damus.io', state: 'wait' },
+    { label: 'This phone', state: 'wait' },
+  ];
+  render();
+  Y.steps.forEach((s, k) => later(() => {
+    if (partial && k === 2) { s.state = 'fail'; s.note = "Didn't confirm"; } else { s.state = 'done'; if (k === 1 || k === 2) s.note = 'Asked to delete'; }
+    if (k === 3) {
+      if (partial) { Y.del = 'partial'; render(); return; }
+      finishDelete(); return;
+    }
+    render();
+  }, 700 * (k + 1)));
+}
+
+function finishDelete(){
+  clearOnb();
+  S.items = []; S.played = []; S.audio = null; S.early = false; S.you = freshYou();
+  S.screen = 'welcome'; S.tab = 'saves';
+  showToast('Your data has been deleted'); S.toast.undo = null;
+  render();
+}
+
+function bindYou(){
+  const bc = document.getElementById('bcode');
+  if (bc) bc.oninput = () => {
+    let v = bc.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+    if (v.length > 4) v = v.slice(0, 4) + '-' + v.slice(4);
+    bc.value = v; S.you.typed = v;
+    document.getElementById('bgo').disabled = v.replace('-', '').length !== 8;
+  };
+  const dt = document.getElementById('deltype');
+  if (dt) dt.oninput = () => {
+    dt.value = dt.value.toUpperCase(); S.you.delTyped = dt.value;
+    document.getElementById('delgo').disabled = !(dt.value === 'DELETE' && S.online);
+  };
+}
+
+setInterval(() => {
+  const Y = S.you;
+  if (S.screen !== 'adddevice' || Y.dev !== 'show') return;
+  Y.countdown = Math.max(0, Y.countdown - 1);
+  if (Y.countdown === 0) { Y.dev = 'expired'; render(); return; }
+  const el = vp.querySelector('.js-cd'); if (el) el.textContent = `${Math.floor(Y.countdown / 60)}:${String(Y.countdown % 60).padStart(2, '0')}`;
+}, 1000);
+
+vp.addEventListener('click', e => {
+  const t = e.target.closest('[data-you-go],[data-you-act]');
+  if (!t) return;
+  const Y = S.you, go = t.dataset.youGo, act = t.dataset.youAct, i = +t.dataset.i;
+  if (go) {
+    clearOnb();
+    if (go === 'recovery') { S.sheet = 'recovery'; Y.codeShown = false; render(); return; }
+    if (go === 'adddevice') { Y.dev = 'show'; Y.countdown = 298; }
+    if (go === 'connect') { Y.conn = Y.camOK ? 'scan' : 'ask'; Y.typed = ''; if (Y.camOK) later(() => { if (S.screen === 'connect' && Y.conn === 'scan') { Y.conn = 'confirm'; render(); } }, 2600); }
+    if (go === 'switchnostr') Y.sw = 'explain';
+    if (go === 'delete') { Y.del = 'explain'; Y.delTyped = ''; }
+    S.sheet = null; S.screen = go; render(); return;
+  }
+  switch (act) {
+    case 'show-code': S.sheet = 'recovery'; Y.codeShown = false; break;
+    case 'later': Y.backupHidden = true; showToast("We'll remind you after ten more saves"); S.toast.undo = null; break;
+    case 'reveal': Y.codeShown = true; Y.backupDone = true; break;
+    case 'copy': showToast('Copied. Paste it somewhere safe, then clear your clipboard'); S.toast.undo = null; break;
+    case 'new-code': Y.dev = 'show'; Y.countdown = 298; break;
+    case 'disconnect': Y.disconnect = i; S.sheet = 'disconnect'; break;
+    case 'disconnect-yes': { const b = Y.browsers.splice(Y.disconnect, 1)[0]; S.sheet = null; showToast(`Disconnected ${b.name}`); S.toast.undo = null; break; }
+    case 'cam': Y.conn = 'prompt'; break;
+    case 'perm-allow': Y.camOK = true; Y.conn = 'scan'; later(() => { if (S.screen === 'connect' && Y.conn === 'scan') { Y.conn = 'confirm'; render(); } }, 2600); break;
+    case 'perm-deny': Y.conn = 'refused'; break;
+    case 'conn-type': clearOnb(); Y.conn = 'type'; break;
+    case 'conn-confirm': Y.conn = 'confirm'; break;
+    case 'conn-retry': Y.conn = 'scan'; later(() => { if (S.screen === 'connect' && Y.conn === 'scan') { Y.conn = 'confirm'; render(); } }, 2600); break;
+    case 'conn-go': Y.conn = 'connecting'; later(() => { Y.browsers.push({ name: 'Chrome on a Windows laptop', when: 'Connected just now' }); S.screen = 'browsers'; showToast('Connected to Chrome on a Windows laptop'); S.toast.undo = null; render(); }, 1600); break;
+    case 'voice': Y.voiceSel = i; break;
+    case 'sample': Y.sampling = i; later(() => { if (Y.sampling === i) { Y.sampling = null; render(); } }, 1800); break;
+    case 'speed': { const k = SPEEDS.indexOf(Y.speed) + i; Y.speed = SPEEDS[Math.max(0, Math.min(SPEEDS.length - 1, k))]; break; }
+    case 'export': showToast(Y.relayDown ? 'Saved shelf-export.html to Downloads' : 'Saved shelf-export.html to Downloads'); S.toast.undo = null; break;
+    case 'sw-start': Y.sw = 'waiting'; later(() => { if (S.screen === 'switchnostr' && Y.sw === 'waiting') { Y.sw = 'moving'; Y.swDone = 0; render(); moveStep(); } }, 2000); break;
+    case 'sw-cancel': clearOnb(); Y.sw = 'explain'; break;
+    case 'del-go': runDelete(false); return;
+    case 'del-finish': finishDelete(); return;
+  }
+  render();
+});
+
+function moveStep(){
+  const Y = S.you;
+  if (Y.swDone >= 8) { Y.nostrUser = true; S.screen = S.tab = 'you'; showToast('Your saves are now on your nostr account'); S.toast.undo = null; render(); return; }
+  later(() => { Y.swDone++; if (S.screen === 'switchnostr') render(); moveStep(); }, 350);
+}
+
+function youJump(j){
+  const Y = S.you;
+  const at = (screen, tab = 'you') => { S.screen = screen; S.tab = tab; };
+  if (j === 'you') at('you');
+  else if (j === 'you-done') { at('you'); Y.backupDone = true; }
+  else if (j === 'you-nostr') { at('you'); Y.nostrUser = true; }
+  else if (j === 'you-voices') { at('you'); Y.voices = 3; }
+  else if (j === 'you-offline') { at('you'); S.online = false; }
+  else if (j === 'rec-hidden' || j === 'rec-shown') { at('you'); S.sheet = 'recovery'; Y.codeShown = j === 'rec-shown'; }
+  else if (j === 'dev') at('adddevice');
+  else if (j === 'dev-expired') { at('adddevice'); Y.dev = 'expired'; }
+  else if (j === 'br') at('browsers');
+  else if (j === 'br-empty') { at('browsers'); Y.browsers = []; }
+  else if (j === 'br-disconnect') { at('browsers'); Y.disconnect = 0; S.sheet = 'disconnect'; }
+  else if (j.startsWith('conn-')) { at('connect'); Y.conn = { 'conn-ask': 'ask', 'conn-scan': 'scan', 'conn-type': 'type', 'conn-confirm': 'confirm', 'conn-expired': 'expired', 'conn-failed': 'failed' }[j]; Y.camOK = j !== 'conn-ask'; }
+  else if (j === 'voice') { at('voice'); Y.voices = 3; }
+  else if (j === 'adv') at('advanced');
+  else if (j === 'adv-down') { at('advanced'); Y.relayDown = true; }
+  else if (j === 'sw') { at('switchnostr'); Y.sw = 'explain'; }
+  else if (j === 'sw-moving') { at('switchnostr'); Y.sw = 'moving'; Y.swDone = 3; }
+  else if (j === 'del') at('delete');
+  else if (j === 'del-typed') { at('delete'); Y.delTyped = 'DELETE'; }
+  else if (j === 'del-failed') { at('delete'); Y.del = 'failed'; Y.delTyped = 'DELETE'; }
+  else if (j === 'del-running') { at('delete'); runDelete(false); onbTimers.forEach(clearTimeout); onbTimers = []; Y.steps[0].state = 'done'; Y.steps[1].state = 'done'; Y.steps[1].note = 'Asked to delete'; render(); return true; }
+  else if (j === 'del-partial') { at('delete'); Y.del = 'partial'; Y.steps = [{ label: "Shelf's server", state: 'done' }, { label: 'Backup: nos.lol', state: 'done', note: 'Asked to delete' }, { label: 'Backup: relay.damus.io', state: 'fail', note: "Didn't confirm" }, { label: 'This phone', state: 'done' }]; }
+  else return false;
+  render();
+  return true;
+}
+
 /* ---------------- speed read (RSVP) ---------------- */
 // Same word stream as listening: word n here is data-w="n" in the Reader.
 const TOK = [];
@@ -1147,6 +1582,8 @@ function sheetHTML(){
       <button class="menuitem" data-close>${ic('link',20)}Copy link</button>
       <button class="menuitem danger" data-delete>${ic('trash',20)}Delete</button></div></div>`;
   }
+  if (S.sheet === 'recovery') return recoverySheet();
+  if (S.sheet === 'disconnect') return disconnectSheet();
   if (S.sheet === 'import') {
     return `<div class="scrim"><div class="sheet" data-stop><div class="grab"></div><h3>Bring in your bookmarks?</h3><p class="sub">We found 23 bookmarks in your nostr account. On your shelf they'll be private, like everything else.</p><div class="row"><button class="btn secondary" data-import="no">Not now</button><button class="btn primary" data-import="yes">Bring them in</button></div></div></div>`;
   }
@@ -1183,6 +1620,14 @@ function render(){
   else if (S.screen === 'scan') html = scanScreen();
   else if (S.screen === 'code') html = codeScreen();
   else if (S.screen === 'nostr') html = nostrScreen();
+  else if (S.screen === 'you') html = youScreen();
+  else if (S.screen === 'adddevice') html = addDeviceScreen();
+  else if (S.screen === 'browsers') html = browsersScreen();
+  else if (S.screen === 'connect') html = connectScreen();
+  else if (S.screen === 'voice') html = voiceScreen();
+  else if (S.screen === 'advanced') html = advancedScreen();
+  else if (S.screen === 'switchnostr') html = switchScreen();
+  else if (S.screen === 'delete') html = deleteScreen();
   vp.innerHTML = html + miniHTML() + toastHTML() + sheetHTML() + lockHTML() + rsvpHTML();
   const q = document.getElementById('q');
   if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); q.oninput = e => { S.query = e.target.value; render(); }; }
@@ -1199,6 +1644,7 @@ function render(){
   flashWord();
   bindRsvp();
   bindCode();
+  bindYou();
   const sg = document.getElementById('sugg'); if (sg) sg.onpointerdown = e => e.preventDefault();
 }
 
@@ -1247,7 +1693,7 @@ vp.addEventListener('click', e => {
   if (!t) return;
   const d = t.dataset;
   if (d.stop !== undefined) return;
-  if (d.tab) { if (d.tab === 'you') { showToast('You is batch 4'); S.toast.undo = null; } else { S.tab = d.tab; S.screen = d.tab; } }
+  if (d.tab) { S.tab = d.tab; S.screen = d.tab; }
   if (d.list) { S.list = d.list; S.savesMode = S.savesMode === 'first' ? 'normal' : S.savesMode; }
   if (d.go === 'search') { S.screen = 'search'; S.query = ''; }
   if (d.back !== undefined) { S.screen = S.tab; S.sheet = null; }
@@ -1336,8 +1782,10 @@ document.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => {
   S.readerMode = 'ok'; S.readerId = 2; S.screen = 'saves';
   S.audio = null; S.played = []; S.playAll = false; S.lock = false; S.tab = 'saves';
   clearTimeout(rsvpTimer); S.rsvp = null; S.flashWord = null;
+  S.you = freshYou();
   clearOnb(); S.early = false; S.restoring = null; S.onbOffline = false; S.scan = 'prime'; S.six = ''; S.nostr = 'intro'; S.code = freshCode();
   const j = b.dataset.jump;
+  if (youJump(j)) return;
   if (j === 'welcome') { S.screen = 'welcome'; S.items = []; }
   if (j === 'welcome-early') { S.screen = 'welcome'; S.early = true; S.items = [EARLY()]; }
   if (j.startsWith('return')) { S.screen = 'return'; S.onbOffline = j === 'return-offline'; }

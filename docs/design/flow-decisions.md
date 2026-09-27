@@ -52,3 +52,11 @@ Decisions taken with Richard while testing flow map rev. 2 against full coverage
 ## Round 9 (2026-09-27)
 
 24. **Voice setting appears only when there is a choice.** You → Voice is shown only if the phone's text-to-speech reports more than one installed voice for the article's language (Android `TextToSpeech.getVoices()`, filtered to voices that work offline). It lists those voices, each with a short sample to play, and holds the default speed. With one voice, the row is hidden and speed lives only in the player, remembered from the last change. Checked each time You opens, so a voice installed later makes the row appear. It stays out of first launch, keeping zero decisions before first value.
+
+## Round 10 (2026-09-27), batch 4 details
+
+25. **You tab as built:** header is the nostr name and picture for nostr users, otherwise "N saves · N listened". Rows: Recovery code (status under the label), Add another device, Connected browsers, Voice (only with several voices, decision 24), then Advanced, then Delete my data on its own. Offline, Add another device is disabled with "Needs a connection".
+26. **Nostr users have no recovery code:** their nostr app holds their identity, so the backup card and Recovery code row are replaced by "Your nostr app · Signed in", and Advanced hides "Use my nostr app instead".
+27. **Recovery code sheet:** the words are blurred until "Show the words" (with "Make sure nobody can see your screen"); showing them clears "Not written down". Copy warns to clear the clipboard afterwards.
+28. **Delete order:** our server first, then the two backup relays are asked, then this phone last, because the requests must be signed with the key that lives on the phone. If a backup relay doesn't confirm, the screen names it and explains that what's left is encrypted and only the recovery code could open it.
+29. **Connecting a browser:** the typed code is eight characters shown as XXXX-XXXX, entered as an alternative to scanning (decision 11). Confirming shows the browser's name before connecting.
