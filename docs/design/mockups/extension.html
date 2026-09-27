@@ -13,6 +13,7 @@ html,body{margin:0}
 body{font-family:var(--font-ui);font-size:var(--text-15);line-height:1.5;background:#E7E3E1;color:#181D27}
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 .wrap{max-width:1040px;margin:0 auto;padding:var(--space-24) var(--space-16) var(--space-32)}
+.sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0}
 
 /* ---------- control panel (outside the mock) ---------- */
 .panel{font-size:var(--text-13);margin-bottom:var(--space-20)}
@@ -32,16 +33,19 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .tabs{height:40px;display:flex;align-items:flex-end;gap:4px;padding:0 var(--space-12)}
 .dotsw{display:flex;gap:8px;align-self:center;margin-right:var(--space-12)}
 .dotsw i{width:12px;height:12px;border-radius:50%;background:var(--chrome-muted);opacity:.35}
-.tab{height:32px;display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-12);border-radius:10px 10px 0 0;background:var(--chrome-2);font-size:12px;max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tab{height:32px;min-width:0;display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-12);border-radius:10px 10px 0 0;background:transparent;color:var(--chrome-muted);font-size:12px;max-width:240px;white-space:nowrap;overflow:hidden}
+.tab:hover{background:color-mix(in srgb, var(--chrome-text) 8%, transparent)}
+.tab.on{background:var(--chrome-2);color:var(--chrome-text)}
+.tab .lbl{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .tab .fav{width:16px;height:16px;border-radius:4px;background:var(--chrome-muted);opacity:.5;flex:none}
-.tab .fav.shelf{background:var(--gradient-primary);opacity:1;display:inline-flex;align-items:center;justify-content:center;color:#FFFFFF}
+.tab .fav.shelf{background:var(--gradient-primary);opacity:1;display:inline-flex;align-items:center;justify-content:center;color:var(--on-gradient)}
 .bar{height:44px;display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-8);background:var(--chrome-2)}
 .bar .nav{width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:var(--chrome-muted)}
 .omni{flex:1;min-width:0;height:32px;border-radius:16px;background:var(--omni);display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-12);font-size:13px;color:var(--chrome-muted);white-space:nowrap;overflow:hidden}
 .omni b{color:var(--chrome-text);font-weight:400}
 .tb{position:relative;width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:var(--chrome-muted);flex:none}
 .tb:hover{background:#0000000F}
-.tb.shelf .ico{width:20px;height:20px;border-radius:6px;background:var(--gradient-primary);display:inline-flex;align-items:center;justify-content:center;color:#FFFFFF}
+.tb.shelf .ico{width:20px;height:20px;border-radius:6px;background:var(--gradient-primary);display:inline-flex;align-items:center;justify-content:center;color:var(--on-gradient)}
 .badge{position:absolute;right:0;bottom:1px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#079455;color:#FFFFFF;font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px var(--chrome-2)}
 .badge.warn{background:#B54708}
 .me{width:26px;height:26px;border-radius:50%;background:#8E9196;flex:none;margin-left:2px}
@@ -49,6 +53,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 /* ---------- the web page under the toast (someone else's site) ---------- */
 .page{position:relative;height:580px;overflow:hidden;background:#FFFFFF;color:#1F1F1F}
 .win[data-theme="dark"] .page{background:#16171A;color:#E8EAED}
+#content{height:100%}
 .site{max-width:640px;margin:0 auto;padding:var(--space-32) var(--space-24)}
 .site .kick{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#8E9196;margin-bottom:var(--space-8)}
 .site h1{font:600 30px/1.2 Georgia,serif;margin:0 0 var(--space-12)}
@@ -68,24 +73,27 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 
 /* ---------- Shelf's toast (our UI, tokens only) ---------- */
 .toast{position:absolute;right:var(--space-16);bottom:var(--space-16);width:320px;max-width:calc(100% - 32px);z-index:6;
-  background:var(--surface);color:var(--text);border-radius:var(--radius);box-shadow:var(--shadow-card),0 12px 32px #10182833;border:var(--card-edge);
+  background:var(--surface);color:var(--text);border-radius:var(--radius);box-shadow:var(--shadow-float);border:var(--card-edge);
   font-family:system-ui,var(--font-ui);overflow:hidden;animation:toastIn .22s cubic-bezier(.2,.8,.2,1)}
+[data-theme="dark"] .toast{border:1px solid color-mix(in srgb, var(--text) 18%, transparent)}
 @keyframes toastIn{from{opacity:0;transform:translateY(12px)}}
 .toast.leave{transition:opacity .2s ease,transform .2s ease;opacity:0;transform:translateY(12px)}
 .toast .row{display:flex;align-items:center;gap:var(--space-12);padding:var(--space-12) var(--space-8) var(--space-12) var(--space-12);min-height:64px}
 .toast .ti{width:32px;height:32px;border-radius:var(--radius-pill);display:inline-flex;align-items:center;justify-content:center;flex:none}
-.toast .ti.brand{background:var(--gradient-primary);color:var(--on-gradient)}
-.toast .ti.ok{background:var(--success);color:#FFFFFF}
-.toast .ti.warn{background:var(--accent-soft);color:var(--accent)}
+.toast .ti.soft{background:var(--accent-soft);color:var(--accent)}
+.toast .ti.ok{background:var(--success);color:var(--on-accent)}
 .toast .ti.bad{background:color-mix(in srgb, var(--error) 14%, var(--surface));color:var(--error)}
 .toast .tx{flex:1;min-width:0}
 .toast .tx b{display:block;font-size:var(--text-15);font-weight:600;line-height:1.3}
 .toast .tx span{display:block;font-size:var(--text-13);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .toast .tx span.wrap2{white-space:normal}
 .toast .act{height:36px;padding:0 var(--space-12);border-radius:var(--radius-pill);color:var(--accent);font-weight:600;font-size:var(--text-13);flex:none;display:inline-flex;align-items:center}
-.toast .act:hover{background:var(--accent-soft)}
+.toast .act:hover{background:var(--background)}
 .toast .x{width:32px;height:32px;border-radius:var(--radius-pill);display:inline-flex;align-items:center;justify-content:center;color:var(--muted);flex:none}
+.toast .x:hover{background:var(--background)}
+.toast button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .toast .timer{height:2px;background:var(--accent);animation:shrink linear forwards}
+.toast.paused .timer{animation-play-state:paused}
 @keyframes shrink{from{width:100%}to{width:0}}
 .saving{display:inline-flex;gap:3px}
 .saving i{width:5px;height:5px;border-radius:50%;background:currentColor;animation:breathe 1.2s ease-in-out infinite}
@@ -95,20 +103,23 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 /* ---------- options page (our UI, tokens only) ---------- */
 .opts{height:100%;overflow-y:auto;background:var(--background);color:var(--text);font-family:system-ui,var(--font-ui)}
 .opts .in{max-width:520px;margin:0 auto;padding:var(--space-32) var(--space-24)}
+.opts :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .brandrow{display:flex;align-items:center;gap:var(--space-8);font-weight:600;margin-bottom:var(--space-24)}
-.brandrow .lg{width:28px;height:28px;border-radius:8px;background:var(--gradient-primary);display:inline-flex;align-items:center;justify-content:center;color:var(--on-gradient)}
+.brandrow .lg{width:28px;height:28px;border-radius:var(--radius-image);background:var(--gradient-primary);display:inline-flex;align-items:center;justify-content:center;color:var(--on-gradient)}
 .brandrow span{color:var(--muted);font-weight:400}
 .opts h2{font-size:var(--text-28);line-height:1.2;letter-spacing:-.02em;font-weight:600;margin:0 0 var(--space-8)}
 .opts .lead{color:var(--muted);margin:0 0 var(--space-20)}
-.card{background:var(--surface);border-radius:var(--radius-sheet);box-shadow:var(--shadow-card);border:var(--card-edge);padding:var(--space-24)}
+.card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);border:var(--card-edge);padding:var(--space-24)}
 .pair{display:flex;gap:var(--space-24);align-items:center}
+.qrcol{flex:none;display:flex;flex-direction:column;align-items:center;gap:var(--space-12)}
 .qr{flex:none;padding:var(--space-12);border-radius:var(--radius);background:#FFFFFF;color:#181D27;line-height:0}
 .qr.faded svg{opacity:.12}
 .steps{margin:0;padding-left:1.2em;font-size:var(--text-15)}
 .steps li{margin-bottom:var(--space-8)}
-.code{display:inline-flex;align-items:center;height:40px;padding:0 var(--space-16);border-radius:var(--radius-pill);background:var(--background);font:600 var(--text-20)/1 var(--font-ui);letter-spacing:.12em;font-variant-numeric:tabular-nums;margin-top:var(--space-4)}
+.code{display:inline-flex;align-items:center;height:40px;padding:0 var(--space-16);border-radius:var(--radius-pill);background:var(--background);font:600 var(--text-20)/1 var(--font-ui);letter-spacing:.12em;font-variant-numeric:tabular-nums}
 .status{display:flex;align-items:center;gap:var(--space-8);margin-top:var(--space-16);padding-top:var(--space-16);border-top:1px solid var(--line);font-size:var(--text-13);color:var(--muted)}
-.status .dots{display:inline-flex;gap:4px}
+.status.plain{border-top:0}
+.status .dots{display:inline-flex;gap:var(--space-4)}
 .status .dots i{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:breathe 1.2s ease-in-out infinite}
 .status .dots i:nth-child(2){animation-delay:.2s}.status .dots i:nth-child(3){animation-delay:.4s}
 .status .cd{margin-left:auto;font-variant-numeric:tabular-nums}
@@ -117,27 +128,39 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .btn{height:44px;padding:0 var(--space-20);border-radius:var(--radius-pill);display:inline-flex;align-items:center;justify-content:center;gap:var(--space-8);font-weight:600;font-size:var(--text-15);line-height:1}
 .btn.primary{background:var(--gradient-primary);color:var(--on-gradient)}
 .btn.secondary{background:var(--surface);color:var(--text);box-shadow:var(--shadow-card);border:var(--card-edge)}
-.btn.dangerline{background:var(--surface);color:var(--error);border:1.5px solid var(--error)}
+/* destructive: filled when actionable, outlined only when disabled (same rule as the phone) */
+.btn.danger{background:var(--surface);color:var(--error);border:1.5px solid var(--error)}
+.btn.danger:not([disabled]){background:var(--error);color:var(--on-accent)}
+.btn.danger[disabled]{opacity:.45;cursor:default}
 .connected{display:flex;align-items:center;gap:var(--space-12)}
-.connected .ok{width:40px;height:40px;border-radius:50%;background:var(--success);color:#FFFFFF;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.connected .ok{width:40px;height:40px;border-radius:50%;background:var(--success);color:var(--on-accent);display:inline-flex;align-items:center;justify-content:center;flex:none}
 .connected b{display:block;font-size:var(--text-17)}
 .connected span{font-size:var(--text-13);color:var(--muted)}
 .sect{margin-top:var(--space-24)}
 .sect h3{font-size:var(--text-13);font-weight:600;color:var(--muted);margin:0 0 var(--space-8)}
+/* inline confirm before disconnecting (same pattern as the phone's Disconnect sheet) */
+.confirm{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);border:var(--card-edge);padding:var(--space-20)}
+.sect .confirm h3{font-size:var(--text-17);font-weight:600;color:var(--text);margin:0 0 var(--space-4)}
+.confirm p{color:var(--muted);margin:0 0 var(--space-16)}
+.confirm .row{display:flex;flex-wrap:wrap;gap:var(--space-8)}
 .list{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);border:var(--card-edge);overflow:hidden}
 .li{display:flex;align-items:center;gap:var(--space-12);min-height:52px;padding:var(--space-8) var(--space-16);border-top:1px solid var(--line);font-size:var(--text-15)}
 .li:first-child{border-top:0}
 .li .ic{color:var(--muted);display:inline-flex;flex:none}
 .li .t{flex:1;min-width:0}
 .li .t small{display:block;font-size:var(--text-13);color:var(--muted)}
-.kbd{display:inline-flex;align-items:center;height:24px;padding:0 8px;border-radius:6px;background:var(--background);border:1px solid var(--line);font-size:12px;font-weight:600}
-.li .retry{height:36px;padding:0 var(--space-12);border-radius:var(--radius-pill);color:var(--accent);font-weight:600;font-size:var(--text-13)}
+.kbd{display:inline-flex;align-items:center;height:24px;padding:0 var(--space-8);border-radius:var(--radius-image);background:var(--background);border:1px solid var(--line);font-size:var(--text-13);font-weight:600}
+.li .retry{height:36px;padding:0 var(--space-12);border-radius:var(--radius-pill);color:var(--accent);font-weight:600;font-size:var(--text-13);flex:none}
+.li .retry:hover{background:var(--background)}
+.li .retry[aria-disabled="true"]{color:var(--muted);cursor:default;background:none}
+.list :focus-visible{outline-offset:-2px}
 details.adv{margin-top:var(--space-24)}
 details.adv summary{cursor:pointer;font-size:var(--text-13);font-weight:600;color:var(--muted);min-height:32px;display:flex;align-items:center;gap:var(--space-8);list-style:none}
 details.adv summary::-webkit-details-marker{display:none}
 details.adv[open] summary svg{transform:rotate(90deg)}
-.sdot{display:inline-flex;align-items:center;gap:6px;font-size:var(--text-13);color:var(--muted)}
+.sdot{display:inline-flex;align-items:center;gap:var(--space-8);font-size:var(--text-13);color:var(--muted)}
 .sdot::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--success)}
+.sdot.bad::before{background:var(--error)}
 .fine{font-size:var(--text-13);color:var(--muted);margin:var(--space-12) 0 0}
 @media (max-width:640px){.pair{flex-direction:column;align-items:flex-start}}
 @media (prefers-reduced-motion:reduce){*{animation-duration:0s!important;transition:none!important}}
@@ -147,7 +170,7 @@ details.adv[open] summary svg{transform:rotate(90deg)}
 <div class="wrap">
   <div class="panel">
     <h1>Shelf prototype · batch 5 · browser extension</h1>
-    <p>Click the Shelf button in the toolbar (the terracotta bookmark) to save the page, or jump to any state below. Press Escape to dismiss a toast. The browser window, tab strip and right-click menu are Chrome's, drawn only for context; the toast and the options page are Shelf's.</p>
+    <p>Click the Shelf button in the toolbar (the terracotta bookmark) or press Alt+Shift+S to save the page, or jump to any state below. The toast pauses while the pointer is over it or focus is inside it; Escape or ✕ dismisses it. Shelf’s options open in their own tab; click the article’s tab to go back. The browser window, tab strip and right-click menu are Chrome’s, drawn only for context; the toast and the options page are Shelf’s.</p>
     <div class="grid">
       <div><h2>Theme</h2><div class="btns"><button data-theme-set="light" class="on">Light</button><button data-theme-set="dark">Dark</button></div></div>
       <div><h2>Save toast</h2><div class="btns">
@@ -157,16 +180,17 @@ details.adv[open] summary svg{transform:rotate(90deg)}
         <button data-jump="notext">Phone will fetch the text</button>
         <button data-jump="offline">Saved offline</button>
         <button data-jump="full">Ninth offline save</button>
-        <button data-jump="failed">Couldn't send</button>
+        <button data-jump="failed">Couldn’t send</button>
         <button data-jump="restricted">Browser page (icon tick)</button>
         <button data-jump="menu">Right-click a link</button>
       </div></div>
       <div><h2>Options page</h2><div class="btns">
         <button data-jump="o-pair">Not connected yet</button>
         <button data-jump="o-expired">Code expired</button>
-        <button data-jump="o-offline">Can't connect</button>
+        <button data-jump="o-offline">Can’t connect</button>
         <button data-jump="o-connected">Connected</button>
-        <button data-jump="o-failed">Connected, some couldn't send</button>
+        <button data-jump="o-failed">Connected, some couldn’t send</button>
+        <button data-jump="o-blocked">Connected, something is blocking Shelf</button>
         <button data-jump="o-scanned">Simulate: phone scans the code</button>
       </div></div>
     </div>
@@ -174,7 +198,7 @@ details.adv[open] summary svg{transform:rotate(90deg)}
   </div>
 
   <div class="win" id="win" data-theme="light">
-    <div class="tabs"><span class="dotsw"><i></i><i></i><i></i></span><div class="tab" id="tabtitle"><span class="fav"></span>What we lose when we stop reading long things</div></div>
+    <div class="tabs" id="tabs" role="tablist" aria-label="Tabs"></div>
     <div class="bar">
       <span class="nav" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></span>
       <span class="nav" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></span>
@@ -183,7 +207,13 @@ details.adv[open] summary svg{transform:rotate(90deg)}
       <button class="tb shelf" id="shelfbtn" aria-label="Save to Shelf (Alt+Shift+S)" title="Save to Shelf (Alt+Shift+S)"><span class="ico"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg></span><span id="badge"></span></button>
       <span class="me" aria-hidden="true"></span>
     </div>
-    <div class="page" id="page"></div>
+    <div class="page" id="page">
+      <div id="content"></div>
+      <!-- In the real extension this host is the toast's shadow root. The live region below is created once and only its text changes. -->
+      <div id="toasthost"><div id="toastlive" class="sr" role="status" aria-live="polite"></div></div>
+      <!-- The options page's one persistent status region. -->
+      <div id="optlive" class="sr" role="status" aria-live="polite"></div>
+    </div>
   </div>
 </div>
 
@@ -204,25 +234,63 @@ const I = {
   refresh:'<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
   server:'<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>',
 };
-const ic = (n, s = 18, extra = '') => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${I[n]}</svg>`;
+// `extra` goes first: HTML keeps the first of two identical attributes, so a stroke-width passed in wins.
+const ic = (n, s = 18, extra = '') => `<svg ${extra} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[n]}</svg>`;
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const $ = id => document.getElementById(id);
+const focusId = id => { const el = $(id); if (el) el.focus(); };
+const mmss = n => `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`;
 
-function qrSVG(size){
+function qrSVG(size, label){
   const cells = [], on = (x, y) => ((x * 7 + y * 13 + x * y) % 5) < 2;
   for (let y = 0; y < 11; y++) for (let x = 0; x < 11; x++) {
     const finder = (x < 3 && y < 3) || (x > 7 && y < 3) || (x < 3 && y > 7);
     if (finder || on(x, y)) cells.push(`<rect x="${x * 10}" y="${y * 10}" width="9" height="9" rx="1.5"/>`);
   }
-  return `<svg width="${size}" height="${size}" viewBox="0 0 110 110" fill="currentColor" role="img" aria-label="Connection code">${cells.join('')}</svg>`;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 110 110" fill="currentColor" role="img" aria-label="${label}">${cells.join('')}</svg>`;
 }
 
 /* ---------------- state ---------------- */
 const TITLE = 'What we lose when we stop reading long things';
-const S = { view: 'site', paired: true, toast: null, badge: null, menu: false, pair: 'show', countdown: 298, failedSends: false, connectedOn: '27 September 2026', url: 'theatlantic.com/ideas/archive/2026/09/reading-long-things' };
+const HOST = 'theatlantic.com';
+const URL_ = 'theatlantic.com/ideas/archive/2026/09/reading-long-things';
+const CAP = 8;                                        // offline queue limit (decision 31)
+/* "Couldn't send" lists only saves that no relay accepted. Relay names stay inside Advanced. */
+const WHY = {
+  reach: 'Couldn’t reach Shelf. It will keep trying.',
+  blocked: 'Something in this browser is blocking Shelf. See Advanced.',
+};
+const FAILED = () => [
+  { id: 'f1', title: 'Aggregation theory, ten years on', host: 'stratechery.com', why: 'reach' },
+  { id: 'f2', title: 'Mozilla’s Readability library is quietly everywhere', host: 'arstechnica.com', why: 'reach' },
+];
+const FRESH = () => ({
+  view: 'site',            // 'site' | 'restricted' | 'options': what the active tab shows
+  base: 'site',            // what the first tab holds: the article, or a browser page
+  optsOpen: false,         // Shelf's options open in a second tab
+  paired: true, online: true, waiting: 0, tick: false,
+  toast: null, toastTimed: true, returnFocus: null, menu: false,
+  pair: 'show', countdown: 298, connectedOn: '27 September 2026',
+  failed: [], blocked: false, advOpen: false, confirmUnpair: false,
+});
+const S = FRESH();
+
 let timers = [];
-const later = (fn, ms) => timers.push(setTimeout(fn, ms));
-const clearTimers = () => { timers.forEach(clearTimeout); timers = []; };
-const win = document.getElementById('win'), page = document.getElementById('page');
+const later = (fn, ms, group = 'misc') => {
+  const t = { group };
+  t.id = setTimeout(() => { timers = timers.filter(x => x !== t); fn(); }, ms);
+  timers.push(t);
+};
+const clearTimers = group => { timers = timers.filter(t => { if (group && t.group !== group) return true; clearTimeout(t.id); return false; }); };
+
+const win = $('win'), page = $('page'), content = $('content'), host = $('toasthost'), toastLive = $('toastlive'), optLive = $('optlive');
+
+/* One persistent region per surface: clear it, then set the new text. */
+function say(el, msg){
+  clearTimeout(el._t);
+  el.textContent = '';
+  if (msg) el._t = setTimeout(() => { el.textContent = msg; }, 80);
+}
 
 /* ---------------- rendering ---------------- */
 function siteHTML(){
@@ -233,6 +301,10 @@ function siteHTML(){
     ${S.menu ? menuHTML() : ''}`;
 }
 
+function restrictedHTML(){
+  return `<div class="site"><h1 style="font:600 22px/1.3 system-ui">Settings</h1><p style="font:15px/1.6 system-ui">Browser pages like this one don’t allow extensions to read them. Shelf saves the address, and your phone fetches the page.</p></div>`;
+}
+
 function menuHTML(){
   return `<div class="cmenu" style="left:190px;top:238px" role="menu" aria-label="Link menu">
     <div>Open link in new tab</div><div>Open link in new window</div><div>Open link in incognito window</div><div class="hr"></div>
@@ -241,150 +313,334 @@ function menuHTML(){
     <div class="hr"></div><div><span class="sp"></span>Inspect</div></div>`;
 }
 
+/* Toast copy. Page-title sublines and one-line titles have no full stop; sentence sublines do.
+   `say` is what the persistent live region announces (text only, never the buttons). */
 const TOASTS = {
-  saving:   () => ({ icon: 'brand', glyph: `<span class="saving"><i></i><i></i><i></i></span>`, title: 'Saving…', sub: esc(TITLE) }),
-  saved:    () => ({ icon: 'ok', glyph: ic('check', 16, 'stroke-width="3"'), title: 'Saved to Shelf', sub: esc(TITLE), action: 'Undo', timer: 8000 }),
-  undone:   () => ({ icon: 'warn', glyph: ic('undo', 16), title: 'Removed from Shelf', sub: 'If your phone already has it, remove it there.', wrap: true, timer: 4000 }),
-  notext:   () => ({ icon: 'ok', glyph: ic('check', 16, 'stroke-width="3"'), title: 'Saved to Shelf', sub: 'Your phone will fetch the text', action: 'Undo', timer: 8000 }),
-  offline:  () => ({ icon: 'warn', glyph: ic('wifioff', 16), title: 'Saved — will send when you’re online', sub: esc(TITLE), timer: 8000 }),
-  full:     () => ({ icon: 'bad', glyph: ic('alert', 16), title: 'Not saved: 8 are already waiting', sub: 'They’ll send when you’re back online. Save this again then.', wrap: true, timer: 10000 }),
-  failed:   () => ({ icon: 'bad', glyph: ic('alert', 16), title: 'Couldn’t send this save', sub: 'It’s kept safe here. Retry from Shelf’s options.', wrap: true, action: 'Options', timer: 10000 }),
+  saving:  () => ({ icon: 'soft', glyph: `<span class="saving"><i></i><i></i><i></i></span>`, title: 'Saving…', sub: TITLE, say: '' }),
+  saved:   () => ({ icon: 'ok', glyph: ic('check', 16, 'stroke-width="3"'), title: 'Saved to Shelf', sub: TITLE, action: 'Undo', timer: 8000, say: 'Saved to Shelf' }),
+  undone:  () => ({ icon: 'soft', glyph: ic('undo', 16), title: 'Removed from Shelf', sub: 'If your phone already has it, remove it there.', wrap: true, timer: 4000, say: 'Removed from Shelf. If your phone already has it, remove it there.' }),
+  notext:  () => ({ icon: 'ok', glyph: ic('check', 16, 'stroke-width="3"'), title: 'Saved to Shelf', sub: 'Your phone will fetch the text.', action: 'Undo', timer: 8000, say: 'Saved to Shelf. Your phone will fetch the text.' }),
+  offline: () => ({ icon: 'soft', glyph: ic('wifioff', 16), title: 'Saved — will send when you’re online', sub: TITLE, timer: 8000, say: 'Saved. It will send when you’re online.' }),
+  full:    () => ({ icon: 'bad', glyph: ic('alert', 16), title: `Not saved: ${CAP} are already waiting`, sub: 'They’ll send when you’re back online. Save this again then.', wrap: true, timer: 10000, say: `Not saved: ${CAP} are already waiting. They’ll send when you’re back online. Save this again then.` }),
+  failed:  () => ({ icon: 'bad', glyph: ic('alert', 16), title: 'Couldn’t send this save', sub: 'It’s kept safe here. Retry from Shelf’s options.', wrap: true, action: 'Options', timer: 10000, say: 'Couldn’t send this save. It’s kept safe here. Retry from Shelf’s options.' }),
 };
 
-function toastHTML(){
-  if (!S.toast) return '';
-  const t = TOASTS[S.toast]();
-  return `<div class="toast" id="toast" role="status" aria-live="polite">
-    <div class="row"><span class="ti ${t.icon}">${t.glyph}</span>
-      <div class="tx"><b>${t.title}</b><span class="${t.wrap ? 'wrap2' : ''}">${t.sub}</span></div>
-      ${t.action ? `<button class="act" data-act="${t.action}">${t.action}</button>` : ''}
-      <button class="x" data-act="close" aria-label="Dismiss">${ic('x', 16)}</button></div>
-    ${t.timer && S.toastTimed !== false ? `<div class="timer" style="animation-duration:${t.timer}ms"></div>` : ''}</div>`;
-}
+const failRow = f => `<div class="li"><span class="ic">${ic('alert', 18)}</span><span class="t">${esc(f.title)}<small>${esc(f.host)} · ${WHY[f.why]}</small></span>${
+  f.sending
+    ? `<button class="retry" id="retry-${f.id}" data-act="retry" data-id="${f.id}" aria-disabled="true">Sending…</button>`
+    : `<button class="retry" id="retry-${f.id}" data-act="retry" data-id="${f.id}" aria-label="Retry ${esc(f.title)}">Retry</button>`}</div>`;
 
 function optionsHTML(){
   const head = `<div class="brandrow"><span class="lg">${ic('bookmark', 16)}</span>Shelf <span>for Chrome</span></div>`;
   if (!S.paired) {
-    const mm = `${Math.floor(S.countdown / 60)}:${String(S.countdown % 60).padStart(2, '0')}`;
-    const expired = S.pair === 'expired', offline = S.pair === 'offline';
+    const expired = S.pair === 'expired', offline = S.pair === 'offline', dim = expired || offline;
     return `<div class="opts"><div class="in">${head}
-      <h2>Connect to your phone</h2><p class="lead">Pages you save here go straight to Shelf on your phone. Your phone decides which browsers it trusts, so you connect them from there.</p>
-      ${expired ? `<div class="errline">${ic('alert', 16)}<span>This code expired.</span></div>` : ''}
+      <h2 id="connecthead" tabindex="-1">Connect to your phone</h2><p class="lead">Pages you save here go straight to Shelf on your phone. Your phone decides which browsers it trusts, so you connect them from there.</p>
+      ${expired ? `<div class="errline">${ic('alert', 16)}<span>This code has expired.</span></div>` : ''}
       ${offline ? `<div class="errline">${ic('wifioff', 16)}<span>Can’t connect right now. Check your connection. Trying again every ten seconds.</span></div>` : ''}
       <div class="card"><div class="pair">
-        <div class="qr ${expired || offline ? 'faded' : ''}">${qrSVG(168)}</div>
-        <div><ol class="steps"><li>Open Shelf on your phone.</li><li>Go to <strong>You</strong>, then <strong>Connected browsers</strong>, then <strong>Connect a browser</strong>.</li><li>Scan this code, or type:</li></ol>
-          <div class="code">${expired || offline ? '––––-––––' : 'K7QM-4XPD'}</div></div></div>
-        ${expired ? `<div class="status" style="border:0;padding-top:var(--space-16)"><button class="btn primary" data-act="newcode">${ic('refresh', 16)}Show a new one</button></div>`
-          : offline ? '' : `<div class="status"><span class="dots"><i></i><i></i><i></i></span>Waiting for your phone<span class="cd">New code in <span id="cd">${mm}</span></span></div>`}
+        <div class="qrcol"><div class="qr ${dim ? 'faded' : ''}">${qrSVG(168, dim ? 'Connection code, not available' : 'Connection code')}</div>
+          ${dim ? `<div class="code" aria-hidden="true">––––-––––</div>` : `<div class="code" id="paircode" tabindex="-1">K7QM-4XPD</div>`}</div>
+        <ol class="steps"><li>Open Shelf on your phone.</li><li>Go to <strong>You</strong>, then <strong>Connected browsers</strong>, then <strong>Connect a browser</strong>.</li><li>Scan the code, or type the code under it.</li></ol></div>
+        ${expired ? `<div class="status plain"><button class="btn primary" id="newcode" data-act="newcode">${ic('refresh', 16)}Show a new one</button></div>`
+          : offline ? '' : `<div class="status"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>Waiting for your phone<span class="cd">Expires in <span id="cd">${mmss(S.countdown)}</span></span></div>`}
       </div></div></div>`;
   }
-  const failed = S.failedSends ? `<div class="sect"><h3>Couldn’t send</h3><div class="list">
-      <div class="li"><span class="ic">${ic('alert', 18)}</span><span class="t">Aggregation theory, ten years on<small>stratechery.com · relay.damus.io didn’t accept it</small></span><button class="retry" data-act="retry">Retry</button></div>
-      <div class="li"><span class="ic">${ic('alert', 18)}</span><span class="t">Mozilla’s Readability library is quietly everywhere<small>arstechnica.com · no connection for 3 days</small></span><button class="retry" data-act="retry">Retry</button></div></div></div>` : '';
+  const failed = S.failed.length
+    ? `<section class="sect" aria-labelledby="failhead"><h3 id="failhead" tabindex="-1">Couldn’t send</h3><div class="list">${S.failed.map(failRow).join('')}</div></section>`
+    : '';
+  const relays = [['relay.shelf.app', S.blocked], ['nos.lol', false], ['relay.damus.io', false]];
+  const unpair = S.confirmUnpair
+    ? `<div class="confirm" role="group" aria-labelledby="unpairhead"><h3 id="unpairhead">Disconnect this browser?</h3>
+        <p>This browser will stop sending saves to your phone. To stop it completely, also remove it under Connected browsers on your phone.</p>
+        <div class="row"><button class="btn secondary" id="unpair-cancel" data-act="unpair-cancel">Cancel</button><button class="btn danger" id="unpair-yes" data-act="unpair-yes">Disconnect</button></div></div>`
+    : `<button class="btn danger" id="unpair" data-act="unpair">Disconnect this browser</button>
+      <p class="fine">To stop this browser completely, also remove it under Connected browsers on your phone. If you undo a save your phone already picked up, remove it there too.</p>`;
   return `<div class="opts"><div class="in">${head}
-    <div class="card"><div class="connected"><span class="ok">${ic('check', 20, 'stroke-width="3"')}</span><div><b>Connected to your phone</b><span>Since ${S.connectedOn} · this browser shows as “Chrome on a Windows laptop”</span></div></div></div>
+    <div class="card"><div class="connected"><span class="ok">${ic('check', 20, 'stroke-width="3"')}</span><div><b id="connhead" tabindex="-1">Connected to your phone</b><span>Since ${S.connectedOn} · this browser shows as “Chrome on a Windows laptop”</span></div></div></div>
     ${failed}
     <div class="sect"><h3>Ways to save</h3><div class="list">
       <div class="li"><span class="ic">${ic('bookmark', 18)}</span><span class="t">Click the Shelf button in the toolbar</span></div>
       <div class="li"><span class="ic">${ic('keyboard', 18)}</span><span class="t">Press a shortcut</span><span class="kbd">Alt</span><span class="kbd">Shift</span><span class="kbd">S</span></div>
       <div class="li"><span class="ic">${ic('mouse', 18)}</span><span class="t">Right-click a link, then Save link to Shelf</span></div>
     </div></div>
-    <details class="adv"><summary>${ic('chev', 14)}Advanced</summary>
+    <details class="adv" ${S.advOpen ? 'open' : ''}><summary id="advsum">${ic('chev', 14)}Advanced</summary>
       <div class="sect" style="margin-top:var(--space-8)"><h3>Relays this browser sends to</h3><div class="list">
-        <div class="li"><span class="ic">${ic('server', 18)}</span><span class="t">relay.shelf.app</span><span class="sdot">Connected</span></div>
-        <div class="li"><span class="ic">${ic('server', 18)}</span><span class="t">nos.lol</span><span class="sdot">Connected</span></div>
-        <div class="li"><span class="ic">${ic('server', 18)}</span><span class="t">relay.damus.io</span><span class="sdot">Connected</span></div></div>
-        <p class="fine">Set by your phone. To change them, use You, then Advanced, on your phone.</p></div>
+        ${relays.map(([h, blocked]) => `<div class="li"><span class="ic">${ic('server', 18)}</span><span class="t">${h}</span><span class="sdot ${blocked ? 'bad' : ''}">${blocked ? 'Blocked in this browser' : 'Connected'}</span></div>`).join('')}</div>
+        <p class="fine">Set by your phone when you connected this browser.</p></div>
     </details>
-    <div class="sect"><button class="btn dangerline" data-act="unpair">Disconnect this browser</button>
-      <p class="fine">To stop this browser completely, also remove it under Connected browsers on your phone. If you undo a save your phone already picked up, remove it there too.</p></div>
+    <div class="sect">${unpair}</div>
   </div></div>`;
 }
 
-function render(){
+/* Browser chrome: tab strip, omnibox, toolbar badge and the button's name (which mirrors the badge). */
+function renderChrome(){
   const opts = S.view === 'options';
-  document.getElementById('omni').innerHTML = opts ? `${ic('bookmark', 14)}<b>Shelf</b>&nbsp;·&nbsp;chrome-extension://shelf/options.html` : `<b>${S.view === 'restricted' ? 'chrome://settings' : S.url}</b>`;
-  document.getElementById('tabtitle').innerHTML = opts ? `<span class="fav shelf">${ic('bookmark', 10, 'stroke-width="3"')}</span>Shelf · Connect` : (S.view === 'restricted' ? `<span class="fav"></span>Settings` : `<span class="fav"></span>${TITLE}`);
-  page.innerHTML = (opts ? optionsHTML() : S.view === 'restricted' ? `<div class="site"><h1 style="font:600 22px/1.3 system-ui">Settings</h1><p style="font:15px/1.6 system-ui">Browser pages like this one don’t allow extensions to read them. Shelf saves the address, and your phone fetches the page.</p></div>` : siteHTML()) + (opts ? '' : toastHTML());
-  const b = document.getElementById('badge');
-  b.className = S.badge ? `badge ${S.badge !== 'tick' ? 'warn' : ''}` : '';
-  b.textContent = S.badge === 'tick' ? '✓' : (S.badge || '');
-  const sl = document.getElementById('savelink');
-  if (sl) sl.onclick = () => { S.menu = false; save({ linkOnly: true }); };
+  const ae = document.activeElement, keepTab = ae && ae.dataset && ae.dataset.tab;
+  const baseLabel = S.base === 'restricted' ? 'Settings' : TITLE;
+  $('tabs').innerHTML = `<span class="dotsw" aria-hidden="true"><i></i><i></i><i></i></span>
+    <button class="tab ${opts ? '' : 'on'}" role="tab" aria-selected="${!opts}" data-tab="base"><span class="fav"></span><span class="lbl">${esc(baseLabel)}</span></button>
+    ${S.optsOpen ? `<button class="tab ${opts ? 'on' : ''}" role="tab" aria-selected="${opts}" data-tab="options"><span class="fav shelf">${ic('bookmark', 10, 'stroke-width="3"')}</span><span class="lbl">${S.paired ? 'Shelf · Options' : 'Shelf · Connect'}</span></button>` : ''}`;
+  if (keepTab) { const t = document.querySelector(`[data-tab="${keepTab}"]`); if (t) t.focus(); }
+  $('omni').innerHTML = opts ? `${ic('bookmark', 14)}<b>Shelf</b>&nbsp;·&nbsp;chrome-extension://shelf/options.html` : `<b>${S.base === 'restricted' ? 'chrome://settings' : URL_}</b>`;
+  const b = $('badge');
+  if (S.tick) { b.className = 'badge'; b.textContent = '✓'; }
+  else if (S.waiting) { b.className = 'badge warn'; b.textContent = String(S.waiting); }
+  else { b.className = ''; b.textContent = ''; }
+  // chrome.action.setTitle in the build: the badge is visual only, so its meaning goes in the name too.
+  const name = S.tick ? 'Saved to Shelf (link only)'
+    : S.waiting ? `Save to Shelf (Alt+Shift+S) · ${S.waiting} waiting to send`
+    : 'Save to Shelf (Alt+Shift+S)';
+  const btn = $('shelfbtn');
+  btn.title = name; btn.setAttribute('aria-label', name);
+}
+
+/* Page content of the active tab. Focus is kept on the same element (by id) across re-renders. */
+function renderContent(){
+  const ae = document.activeElement;
+  const keep = ae && ae.id && content.contains(ae) ? ae.id : '';
+  host.hidden = S.view === 'options';
+  content.innerHTML = S.view === 'options' ? optionsHTML() : S.view === 'restricted' ? restrictedHTML() : siteHTML();
+  const sl = $('savelink');
+  if (sl) sl.onclick = () => { S.menu = false; renderContent(); save({ linkOnly: true }); };
+  const adv = content.querySelector('details.adv');
+  if (adv) adv.addEventListener('toggle', () => { S.advOpen = adv.open; });
+  if (keep) focusId(keep);
+}
+
+function render(){ renderChrome(); renderContent(); }
+
+/* ---------------- toast ---------------- */
+/* The dismiss timer and its bar pause while the pointer is over the toast or focus is inside it. */
+const TT = { left: 0, start: 0, h: null, hover: false, focus: false };
+const toastEl = () => $('toast');
+function syncPaused(){ const el = toastEl(); if (el) el.classList.toggle('paused', TT.hover || TT.focus); }
+function timerStop(){ clearTimeout(TT.h); TT.h = null; TT.left = 0; }
+function timerResume(){
+  syncPaused();
+  if (TT.h || !TT.left || TT.hover || TT.focus) return;
+  TT.start = Date.now();
+  TT.h = setTimeout(() => { TT.h = null; TT.left = 0; dismissToast(); }, TT.left);
+}
+function timerPause(){
+  if (TT.h) { clearTimeout(TT.h); TT.h = null; TT.left = Math.max(1, TT.left - (Date.now() - TT.start)); }
+  syncPaused();
+}
+function timerStart(ms){ timerStop(); TT.left = ms; timerResume(); }
+
+function buildToast(){
+  const el = document.createElement('div');
+  el.className = 'toast'; el.id = 'toast';
+  el.setAttribute('role', 'group'); el.setAttribute('aria-label', 'Shelf');
+  el.innerHTML = `<div class="row"><span class="ti"></span><div class="tx"><b></b><span></span></div><button class="x" data-act="close" aria-label="Dismiss">${ic('x', 16)}</button></div>`;
+  el.addEventListener('mouseenter', () => { if (el !== toastEl()) return; TT.hover = true; timerPause(); });
+  el.addEventListener('mouseleave', () => { if (el !== toastEl()) return; TT.hover = false; timerResume(); });
+  el.addEventListener('focusin', e => {
+    if (el !== toastEl()) return;
+    if (!e.target.matches(':focus-visible')) return;          // a mouse click focuses the button but shouldn't hold the toast open
+    if (!TT.focus && e.relatedTarget && !el.contains(e.relatedTarget)) S.returnFocus = e.relatedTarget;
+    TT.focus = true; timerPause();
+  });
+  el.addEventListener('focusout', e => {
+    if (el !== toastEl() || (e.relatedTarget && el.contains(e.relatedTarget))) return;
+    TT.focus = false; timerResume();
+  });
+  host.insertBefore(el, toastLive);
+  return el;
+}
+
+/* Updates the toast in place: the element, its ✕ and the live region are kept. */
+function paintToast(){
+  const t = TOASTS[S.toast]();
+  const el = toastEl() || buildToast();
+  const ti = el.querySelector('.ti');
+  ti.className = `ti ${t.icon}`; ti.innerHTML = t.glyph; ti.setAttribute('aria-hidden', 'true');
+  el.querySelector('.tx b').textContent = t.title;
+  const sub = el.querySelector('.tx span');
+  sub.textContent = t.sub; sub.className = t.wrap ? 'wrap2' : '';
+  const x = el.querySelector('.x');
+  let act = el.querySelector('.act');
+  if (t.action) {
+    if (!act) { act = document.createElement('button'); act.className = 'act'; x.before(act); }
+    act.dataset.act = t.action; act.textContent = t.action;
+  } else if (act) {
+    if (act === document.activeElement) x.focus();          // never drop focus onto the page
+    act.remove();
+  }
+  const bar = el.querySelector('.timer');
+  if (bar) bar.remove();
+  if (t.timer && S.toastTimed) {
+    const nb = document.createElement('div');
+    nb.className = 'timer'; nb.style.animationDuration = `${t.timer}ms`;
+    el.append(nb);
+  }
+}
+
+function showToast(kind, o = {}){
+  clearTimers('save');
+  let el = toastEl();
+  const fresh = !(o.inPlace && el);
+  if (fresh) {
+    if (el) el.remove();
+    timerStop(); TT.hover = false; TT.focus = false;
+    S.returnFocus = o.returnTo || null;
+  }
+  S.toast = kind;
+  S.toastTimed = o.timed !== undefined ? o.timed : (fresh ? true : S.toastTimed);
+  paintToast();
+  const t = TOASTS[kind]();
+  say(toastLive, t.say);
+  if (t.timer && S.toastTimed) timerStart(t.timer); else timerStop();
+  el = toastEl();
+  if (o.focusUndo) { const a = el.querySelector('.act'); if (a) a.focus(); }
+  if (o.focusX) el.querySelector('.x').focus();
+}
+
+/* ✕, Escape and the timer. Focus goes back to where it was before the toast took it. */
+function dismissToast(){
+  const el = toastEl();
+  timerStop(); clearTimers('save');
+  S.toast = null;
+  if (!el) return;
+  const had = el.contains(document.activeElement);
+  el.id = ''; el.classList.add('leave');
+  setTimeout(() => el.remove(), 200);
+  if (had) {
+    const r = S.returnFocus;
+    if (r && r !== document.body && r.isConnected) r.focus(); else document.activeElement.blur();
+  }
+  S.returnFocus = null;
+}
+
+function removeToastNow(){
+  const el = toastEl();
+  timerStop(); clearTimers('save');
+  S.toast = null;
+  if (el) el.remove();
 }
 
 /* ---------------- behaviour ---------------- */
-function dismissToast(){
-  const t = document.getElementById('toast');
-  clearTimers();
-  if (!t) { S.toast = null; return; }
-  t.classList.add('leave');
-  setTimeout(() => { S.toast = null; render(); }, 200);
-}
-
-function showToast(kind){
-  clearTimers();
-  S.toast = kind; S.toastTimed = true;
+function openOptions(){
+  removeToastNow();
+  S.menu = false; S.optsOpen = true; S.view = 'options';
   render();
-  const t = TOASTS[kind]();
-  if (t.timer) later(dismissToast, t.timer);
 }
 
-function save(opts = {}){
-  if (!S.paired) { S.view = 'options'; render(); return; }       // first click with no phone: open the options page
-  if (S.view === 'restricted') { S.badge = 'tick'; render(); later(() => { S.badge = null; render(); }, 4000); return; }
-  showToast('saving');
-  clearTimers();
-  later(() => showToast(opts.linkOnly ? 'notext' : 'saved'), 900);
+/* Four-second icon tick, for pages where no toast can be shown. */
+function tick(){
+  clearTimers('tick');
+  S.tick = true; renderChrome();
+  later(() => { S.tick = false; renderChrome(); }, 4000, 'tick');
 }
 
-document.getElementById('shelfbtn').onclick = () => save();
+function save(o = {}){
+  if (!S.paired) { openOptions(); return; }                 // first click with no phone: options open in a new tab
+  if (S.view !== 'site') { tick(); return; }                // browser pages and Shelf's own options tab: icon tick only
+  const returnTo = o.viaKey ? document.activeElement : null;
+  if (!S.online) {
+    if (S.waiting >= CAP) { showToast('full', { returnTo }); return; }
+    S.waiting++; renderChrome();
+    showToast('offline', { returnTo });
+    return;
+  }
+  if (S.waiting) { S.waiting = 0; renderChrome(); }         // back online: the queue has sent
+  showToast('saving', { returnTo });
+  later(() => showToast(o.linkOnly ? 'notext' : 'saved', { inPlace: true, focusUndo: o.viaKey }), 900, 'save');
+}
+
+function retry(id){
+  const f = S.failed.find(x => x.id === id);
+  if (!f || f.sending) return;
+  f.sending = true;
+  renderContent();
+  later(() => {
+    const i = S.failed.findIndex(x => x.id === id);
+    if (i < 0) return;
+    const hadFocus = document.activeElement && document.activeElement.id === `retry-${id}`;
+    const [done] = S.failed.splice(i, 1);
+    if (done.why === 'blocked' && !S.failed.some(x => x.why === 'blocked')) S.blocked = false;
+    if (S.view !== 'options') return;
+    renderContent();
+    say(optLive, 'Sent to your phone');
+    if (hadFocus) {
+      const next = S.failed.slice(i).find(x => !x.sending) || S.failed.slice(0, i).reverse().find(x => !x.sending);
+      focusId(next ? `retry-${next.id}` : S.failed.length ? 'failhead' : 'connhead');
+    }
+  }, 1200, 'retry');
+}
+
+$('shelfbtn').onclick = () => save();
+$('tabs').addEventListener('click', e => {
+  const t = e.target.closest('[data-tab]');
+  if (!t) return;
+  const v = t.dataset.tab === 'options' ? 'options' : S.base;
+  if (v === S.view) return;
+  removeToastNow();
+  S.menu = false; S.view = v; S.confirmUnpair = false;
+  render();
+});
 page.addEventListener('click', e => {
   const a = e.target.closest('[data-act]');
-  if (!a) { if (S.menu && !e.target.closest('.cmenu')) { S.menu = false; render(); } return; }
+  if (!a) { if (S.menu && !e.target.closest('.cmenu')) { S.menu = false; renderContent(); } return; }
   const act = a.dataset.act;
   if (act === 'close') dismissToast();
-  if (act === 'Undo') showToast('undone');
-  if (act === 'Options') { S.toast = null; S.view = 'options'; S.failedSends = true; render(); }
-  if (act === 'newcode') { S.pair = 'show'; S.countdown = 298; render(); }
-  if (act === 'retry') { a.closest('.li').remove(); if (!page.querySelector('.retry')) { S.failedSends = false; render(); } }
-  if (act === 'unpair') { S.paired = false; S.pair = 'show'; S.countdown = 298; render(); }
+  else if (act === 'Undo') showToast('undone', { inPlace: true, timed: true, focusX: e.detail === 0 });   // keyboard only: a mouse user's toast must still time out
+  else if (act === 'Options') { S.failed = [{ id: 'f0', title: TITLE, host: HOST, why: 'reach' }, FAILED()[0]]; openOptions(); focusId('failhead'); }
+  else if (act === 'newcode') { S.pair = 'show'; S.countdown = 298; renderContent(); focusId('paircode'); }
+  else if (act === 'retry') retry(a.dataset.id);
+  else if (act === 'unpair') { S.confirmUnpair = true; renderContent(); focusId('unpair-cancel'); }
+  else if (act === 'unpair-cancel') { S.confirmUnpair = false; renderContent(); focusId('unpair'); }
+  else if (act === 'unpair-yes') {
+    clearTimers('retry');
+    Object.assign(S, { paired: false, pair: 'show', countdown: 298, failed: [], blocked: false, advOpen: false, confirmUnpair: false });
+    render(); focusId('connecthead');
+  }
 });
-page.addEventListener('contextmenu', e => { if (e.target.id === 'alink') { e.preventDefault(); S.menu = true; render(); } });
+page.addEventListener('contextmenu', e => { if (e.target.id === 'alink') { e.preventDefault(); S.menu = true; renderContent(); } });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && S.toast) dismissToast();
-  if (e.altKey && e.shiftKey && (e.key === 'S' || e.key === 's')) { e.preventDefault(); save(); }
+  if (e.key === 'Escape') {
+    if (S.menu) { S.menu = false; renderContent(); return; }
+    if (S.toast) dismissToast();
+  }
+  if (e.altKey && e.shiftKey && (e.code === 'KeyS' || e.key === 'S' || e.key === 's')) {
+    e.preventDefault();
+    if (!e.repeat) save({ viaKey: true });                  // the page keeps focus, so Undo takes it when it appears
+  }
 });
 setInterval(() => {
-  if (S.view !== 'options' || S.paired || S.pair !== 'show') return;
+  if (!S.optsOpen || S.paired || S.pair !== 'show') return;
   S.countdown = Math.max(0, S.countdown - 1);
-  if (!S.countdown) { S.pair = 'expired'; render(); return; }
-  const el = document.getElementById('cd'); if (el) el.textContent = `${Math.floor(S.countdown / 60)}:${String(S.countdown % 60).padStart(2, '0')}`;
+  if (!S.countdown) {
+    S.pair = 'expired';
+    if (S.view === 'options') { renderContent(); say(optLive, 'This code has expired'); }
+    return;
+  }
+  const el = $('cd'); if (el) el.textContent = mmss(S.countdown);
 }, 1000);
 
 /* ---------------- panel ---------------- */
+const TOAST_JUMPS = ['saving', 'saved', 'undone', 'notext', 'offline', 'full', 'failed'];
 document.querySelectorAll('[data-theme-set]').forEach(b => b.onclick = () => {
   win.dataset.theme = b.dataset.themeSet;
   document.querySelectorAll('[data-theme-set]').forEach(x => x.classList.toggle('on', x === b));
 });
 document.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => {
   document.querySelectorAll('[data-jump]').forEach(x => x.classList.toggle('on', x === b));
-  clearTimers();
+  clearTimers(); removeToastNow(); say(toastLive, ''); say(optLive, '');
   const j = b.dataset.jump;
-  Object.assign(S, { view: 'site', paired: true, toast: null, badge: null, menu: false, pair: 'show', countdown: 298, failedSends: false });
-  if (['saving', 'saved', 'undone', 'notext', 'offline', 'full', 'failed'].includes(j)) {
-    S.toast = j; S.toastTimed = false;                       // held still for review
-    if (j === 'offline') S.badge = '3';
-    if (j === 'full') S.badge = '8';
-  }
-  if (j === 'restricted') { S.view = 'restricted'; S.badge = 'tick'; }
+  Object.assign(S, FRESH());
+  if (j === 'offline') { S.online = false; S.waiting = 3; }
+  if (j === 'full') { S.online = false; S.waiting = CAP; }
+  if (j === 'restricted') { S.view = 'restricted'; S.base = 'restricted'; S.tick = true; }
   if (j === 'menu') S.menu = true;
-  if (j.startsWith('o-')) S.view = 'options';
-  if (j === 'o-pair' || j === 'o-expired' || j === 'o-offline') { S.paired = false; S.pair = { 'o-pair': 'show', 'o-expired': 'expired', 'o-offline': 'offline' }[j]; }
-  if (j === 'o-failed') S.failedSends = true;
-  if (j === 'o-scanned') { S.paired = false; render(); later(() => { S.paired = true; S.connectedOn = 'today'; render(); }, 1200); return; }
+  if (j.startsWith('o-')) { S.optsOpen = true; S.view = 'options'; }
+  if (['o-pair', 'o-expired', 'o-offline', 'o-scanned'].includes(j)) { S.paired = false; S.pair = { 'o-expired': 'expired', 'o-offline': 'offline' }[j] || 'show'; }
+  if (j === 'o-failed') S.failed = FAILED();
+  if (j === 'o-blocked') { S.failed = FAILED().map(f => ({ ...f, why: 'blocked' })); S.blocked = true; S.advOpen = true; }
   render();
+  if (TOAST_JUMPS.includes(j)) showToast(j, { timed: false });          // held still for review
+  if (j === 'o-offline') say(optLive, 'Can’t connect right now');
+  if (j === 'o-scanned') later(() => { S.paired = true; S.connectedOn = 'today'; render(); if (S.view === 'options') say(optLive, 'Connected to your phone'); }, 1200, 'scan');
 });
 
 render();
