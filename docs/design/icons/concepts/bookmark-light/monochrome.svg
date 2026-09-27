@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108">
+  <g fill="#000000">
+    <path d="M41.5 24H66.5A4.5 4.5 0 0 1 71 28.5V60.25A1.5 1.5 0 0 1 68.53 61.39L54.97 49.83A1.5 1.5 0 0 0 53.03 49.83L39.47 61.39A1.5 1.5 0 0 1 37 60.25V28.5A4.5 4.5 0 0 1 41.5 24Z"/>
+    <!-- one colour cannot show track vs fill, so the bar breaks where reading stops -->
+    <path d="M35 67H56V79H35A6 6 0 0 1 35 67Z"/>
+    <path d="M62 67H73A6 6 0 0 1 73 79H62Z"/>
+  </g>
+</svg>

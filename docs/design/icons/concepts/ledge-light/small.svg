@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <defs>
+    <linearGradient id="ledge-light-spine-small" x1="0" y1="4" x2="0" y2="22" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#BE6947"/>
+      <stop offset="1" stop-color="#944526"/>
+    </linearGradient>
+  </defs>
+  <!-- edges sit on even units so they land on whole pixels at 16 px -->
+  <rect width="32" height="32" rx="7" fill="#FCF7F6"/>
+  <rect x="6" y="10" width="4" height="13" rx="1.5" fill="#5E2C18"/>
+  <rect x="12" y="4" width="6" height="19" rx="1.5" fill="url(#ledge-light-spine-small)"/>
+  <path d="M19.14 8.97L20.11 8.73A1.5 1.5 0 0 1 21.93 9.82L24.59 20.5A1.5 1.5 0 0 1 23.49 22.31L22.52 22.56A1.5 1.5 0 0 1 20.71 21.46L18.04 10.79A1.5 1.5 0 0 1 19.14 8.97Z" fill="#181D27"/>
+  <!-- 6-unit ledge: 3 solid pixels at 16 px -->
+  <rect x="3" y="22" width="26" height="6" rx="2" fill="#5E2C18"/>
+</svg>

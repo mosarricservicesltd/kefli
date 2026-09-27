@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <defs>
+    <linearGradient id="ledge-tile-small" x1="0" y1="0" x2="0" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#BE6947"/>
+      <stop offset="1" stop-color="#944526"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="url(#ledge-tile-small)"/>
+  <rect x="6" y="10" width="4" height="15" rx="1.2" fill="#F3E4DE"/>
+  <path fill="#F3E4DE" d="M21.17 12.73L22.73 12.37A1.2 1.2 0 0 1 24.17 13.27L26.33 22.62A1.2 1.2 0 0 1 25.43 24.06L23.87 24.42A1.2 1.2 0 0 1 22.43 23.52L20.27 14.17A1.2 1.2 0 0 1 21.17 12.73Z"/>
+  <rect x="12" y="4" width="6" height="21" rx="1.2" fill="#FFFFFF"/>
+  <rect x="4" y="22" width="24" height="6" rx="2" fill="#F3E4DE"/>
+</svg>

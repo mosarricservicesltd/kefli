@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <defs>
+    <linearGradient id="bl-small" x1="0" y1="4" x2="0" y2="22" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#BE6947"/>
+      <stop offset="1" stop-color="#944526"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="#FCF7F6"/>
+  <path d="M9.5 4H22.5A1.5 1.5 0 0 1 24 5.5V20.79A0.5 0.5 0 0 1 23.15 21.15L16.35 14.35A0.5 0.5 0 0 0 15.65 14.35L8.85 21.15A0.5 0.5 0 0 1 8 20.79V5.5A1.5 1.5 0 0 1 9.5 4Z" fill="url(#bl-small)"/>
+  <!-- at 16 px two tones blur together, so the shelf is one solid Terracotta line -->
+  <rect x="4" y="24" width="24" height="4" rx="2" fill="#B5542E"/>
+</svg>

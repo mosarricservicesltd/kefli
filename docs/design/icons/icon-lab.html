@@ -60,6 +60,10 @@ h1{font-size:var(--text-28);margin:0 0 var(--space-4);letter-spacing:-.02em}
 .notif i{width:18px;height:18px;-webkit-mask-size:100% 100%;mask-size:100% 100%;background:currentColor;flex:none;transform:scale(1.5)}
 .rationale{margin:var(--space-16) 0 0;color:#414651;font-size:var(--text-13);max-width:90ch}
 .missing{color:#D92D20;font-size:var(--text-13)}
+.cmp{display:flex;flex-wrap:wrap;gap:var(--space-16);padding:var(--space-16);border-radius:var(--radius)}
+.cmpcell{display:flex;flex-direction:column;align-items:center;gap:var(--space-8);min-width:120px}
+.cmpcell>span:last-child{font-size:var(--text-13);color:#535862}
+.wall-dark .cmpcell>span:last-child{color:#D0D4DA}
 </style>
 </head>
 <body>
@@ -101,7 +105,21 @@ function concept(k){
   </div>
   ${RATIONALE[k + ':long'] ? `<p class="rationale">${RATIONALE[k + ':long']}</p>` : ''}</section>`;
 }
-document.getElementById('concepts').innerHTML = KEYS.map(concept).join('');
+const MODE = new URLSearchParams(location.search).get('mode');
+function compare(){
+  const row = (cap, cls, cell) => `<div class="concept"><header><h2 style="font-size:var(--text-17)">${cap}</h2></header><div class="cmp ${cls}">${KEYS.map(k => `<div class="cmpcell">${cell(k)}<span>${k}</span></div>`).join('')}</div></div>`;
+  const tb = (k, mode) => `<span class="chrome ${mode}" style="display:inline-flex;padding:8px;border-radius:8px"><img class="px16" src="${f(k, 'small.svg')}" alt=""></span>`;
+  return [
+    row('Home screen, light wallpaper (circle mask)', 'wall-light', k => ai(k, 'm-circle', 64)),
+    row('Home screen, dark wallpaper (squircle mask)', 'wall-dark', k => ai(k, 'm-squircle', 64)),
+    row('Themed icon (Android 13+), light wallpaper', 'wall-light', k => themed(k)),
+    row('Themed icon, dark wallpaper', 'wall-dark', k => themed(k)),
+    row('Browser toolbar at true 16 px, light and dark', 'light', k => tb(k, 'l') + ' ' + tb(k, 'd')),
+    row('Small sizes: 16, 24, 32', 'light', k => [16, 24, 32].map(n => `<img style="width:${n}px;height:${n}px" src="${f(k, 'small.svg')}" alt="">`).join(' ')),
+    row('Large, rounded square', 'light', k => ai(k, 'm-rsq', 108)),
+  ].join('');
+}
+document.getElementById('concepts').innerHTML = MODE === 'compare' ? compare() : KEYS.map(concept).join('');
 </script>
 </body>
 </html>
