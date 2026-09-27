@@ -1,0 +1,7 @@
+# Fixture hashes must be byte-identical on every platform: keep LF everywhere.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.mp3 binary
+*.m4a binary
+*.zip binary
