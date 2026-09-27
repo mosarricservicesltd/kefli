@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shelf Open Choices</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<style>
+/* Review-page scaffolding uses fixed neutrals; everything drawn as Shelf UI uses tokens. */
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--font-ui);font-size:var(--text-15);line-height:1.5;background:#E7E3E1;color:#181D27}
+main{max-width:1180px;margin:0 auto;padding:var(--space-32) var(--space-16) 64px}
+h1{font-size:var(--text-28);margin:0 0 var(--space-4);letter-spacing:-.02em}
+.intro{color:#414651;margin:0 0 var(--space-32);max-width:75ch}
+section.q{background:#FFFFFF;border-radius:var(--radius-sheet);padding:var(--space-24);margin-bottom:var(--space-24)}
+section.q > h2{margin:0 0 var(--space-4);font-size:var(--text-20)}
+section.q > p{margin:0 0 var(--space-16);color:#414651;max-width:80ch}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:var(--space-16)}
+.opt{border:1px solid #E9EAEB;border-radius:var(--radius);padding:var(--space-12);display:flex;flex-direction:column;gap:var(--space-12)}
+.opt.rec{border:2px solid #B5542E}
+.opt header{display:flex;align-items:center;gap:var(--space-8);flex-wrap:wrap}
+.opt header b{font-size:var(--text-15)}
+.tag{font-size:12px;font-weight:600;height:22px;padding:0 8px;border-radius:999px;display:inline-flex;align-items:center;background:#F2F4F7;color:#414651}
+.tag.rec{background:#B5542E;color:#FFFFFF}
+.opt .why{font-size:var(--text-13);color:#535862;margin:0}
+.rec-note{margin:var(--space-16) 0 0;padding:var(--space-12) var(--space-16);border-radius:var(--radius);background:#FAF3F0;color:#414651;font-size:var(--text-13);max-width:90ch}
+.rec-note b{color:#181D27}
+.big{display:flex;gap:var(--space-16);align-items:flex-end;color:#181D27}
+.big svg{display:block}
+
+/* --- Shelf UI, drawn from the prototype's own rules --- */
+.ui{border-radius:var(--radius);padding:var(--space-12);background:var(--background);color:var(--text)}
+.sheet{background:var(--surface);color:var(--text);border-radius:var(--radius-sheet) var(--radius-sheet) 0 0;padding:var(--space-8) var(--space-16) var(--space-8);box-shadow:var(--shadow-float);border:var(--card-edge)}
+.grab{width:36px;height:4px;border-radius:var(--radius-pill);background:var(--line);margin:0 auto var(--space-8)}
+.menuitem{width:100%;min-height:52px;display:flex;align-items:center;gap:var(--space-12);font-size:var(--text-15);font-weight:500;padding:0 var(--space-4)}
+.menuitem.danger{color:var(--error)}
+.menuitem.hl{background:color-mix(in srgb, var(--accent) 8%, transparent);border-radius:var(--radius)}
+/* the Reader's player, paused (its tightest state: the ✕ shows) */
+.dock{height:64px;border-radius:var(--radius-pill);background:var(--reader-bg);color:var(--reader-text);box-shadow:var(--shadow-float),inset 0 0 0 1px color-mix(in srgb, var(--reader-muted) 25%, transparent);display:flex;align-items:center;gap:var(--space-4);padding:0 var(--space-8);width:328px;max-width:100%;position:relative;overflow:hidden}
+.pp{width:48px;height:48px;border-radius:var(--radius-pill);background:var(--gradient-primary);color:var(--on-gradient);display:inline-flex;align-items:center;justify-content:center;flex:none}
+.tt{flex:1;min-width:0;font-size:var(--text-13);font-weight:500;color:var(--reader-muted);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden}
+.ctl{width:48px;height:48px;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.rate{height:36px;min-width:52px;padding:0 var(--space-12);border-radius:var(--radius-pill);background:color-mix(in srgb, var(--reader-muted) 15%, transparent);font-size:var(--text-13);font-weight:600;font-variant-numeric:tabular-nums;display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:none}
+.rate.icon{padding:0 var(--space-12) 0 var(--space-8)}
+.pclose{width:48px;height:48px;display:inline-flex;align-items:center;justify-content:center;flex:none;color:var(--reader-muted)}
+.cut{font-size:12px;color:#B42318;font-weight:500;margin:0}
+/* the restore card on first launch */
+.restore{padding:var(--space-16);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow-card);border:var(--card-edge)}
+.restore .h{display:flex;align-items:center;gap:var(--space-8);font-weight:600;font-size:var(--text-17);margin-bottom:var(--space-8)}
+.restore .h .ic{color:var(--accent);display:inline-flex}
+.restore .h span{margin-left:auto;font-size:var(--text-13);color:var(--muted);font-weight:500;font-variant-numeric:tabular-nums}
+.restore .bar{height:4px;border-radius:var(--radius-pill);background:var(--line);overflow:hidden;margin-bottom:var(--space-8)}
+.restore .bar i{display:block;height:100%;width:40%;background:var(--accent);border-radius:var(--radius-pill)}
+.restore p{margin:0;font-size:var(--text-13);color:var(--muted)}
+
+/* row menu: the two real prototypes, side by side */
+.frames{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:var(--space-16);align-items:start}
+.frame{border:1px solid #E9EAEB;border-radius:var(--radius);padding:var(--space-12);display:flex;flex-direction:column;gap:var(--space-12)}
+.frame.rec{border:2px solid #B5542E}
+.frame iframe{border:0;border-radius:var(--radius);background:#E7E3E1;width:100%}
+.shrink{width:100%;overflow:hidden;border-radius:var(--radius)}
+.shrink iframe{width:392px;height:830px;transform:scale(.72);transform-origin:0 0;margin-bottom:-232px}
+ul.pc{margin:0;padding-left:18px;font-size:var(--text-13);color:#414651}
+ul.pc li{margin:2px 0}
+</style>
+</head>
+<body>
+<main>
+<h1>Open choices</h1>
+<p class="intro">Four small decisions: three icons and one menu. Each option is drawn as it would appear in the app, in light and dark, with my recommendation outlined in Terracotta.</p>
+
+<section class="q">
+  <h2>1. Speed read, in the Reader’s ⋯ menu</h2>
+  <p>The menu row that opens speed reading. The label always says “Speed read”, so the icon only helps people spot the row.</p>
+  <div class="opts" id="q1"></div>
+  <p class="rec-note"><b>Recommend C.</b> It draws the Speed read screen itself: the two rules and the focus ticks around the word, so the row previews what it opens. The lightning bolt says “fast” but could be anything quick, and the scan frame reads as “scan a document”.</p>
+</section>
+
+<section class="q">
+  <h2>2. The speed button in the player</h2>
+  <p>The pill that cycles 0.8×, 1×, 1.2×, 1.5×, 2×. It works as text alone today. Shown in the Reader’s player while paused, its tightest state, where the ✕ also shows, twelve minutes into a long read.</p>
+  <div class="opts" id="q2"></div>
+  <p class="rec-note"><b>Recommend A (no icon).</b> The number is the information, and every slot in the Reader’s player is already taken. An icon leaves 29 px for the time: enough up to 9:59, but from ten minutes on the time is cut off. Without one it fits up to 59:59.</p>
+</section>
+
+<section class="q">
+  <h2>3. A “shelf” icon</h2>
+  <p>This icon was drawn for “your shelf” moments, but no screen currently needs it: the empty Saves screen has its own illustration and “All read” has its tick. The only candidate is the card that brings your saves back on a new phone.</p>
+  <div class="opts" id="q3"></div>
+  <p class="rec-note"><b>Recommend A (leave it out).</b> The card’s title already says what’s happening, and an icon added only to fill space is weight. If you take all three recommendations, the app has two custom icons in total, speed read and the ±15 pair, and everything else is Lucide.</p>
+</section>
+
+<section class="q">
+  <h2>4. The row menu in Archive</h2>
+  <p>In Archive, each article has a ⋯ button that offers <b>Back to Unread</b> and <b>Delete</b>. The two mockups show it differently, so one needs to change to match the other. Both panels below are the real prototypes.</p>
+  <div class="frames">
+    <div class="frame">
+      <header style="display:flex;gap:8px;align-items:center"><b>A · Small menu beside the row</b><span class="tag">Saves card mockup</span></header>
+      <iframe id="fa" src="saves-card.html" title="Saves card mockup: row menu" style="height:360px" scrolling="no"></iframe>
+      <ul class="pc">
+        <li>Appears next to your finger, with no dimmed background.</li>
+        <li>Android’s usual pattern for a ⋯ on a list item.</li>
+        <li>Behaves differently from the Reader’s ⋯, which opens a sheet.</li>
+        <li>Smaller targets, and it can cover the rows beneath it.</li>
+      </ul>
+    </div>
+    <div class="frame rec">
+      <header style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>B · Sheet from the bottom</b><span class="tag">Phone prototype</span><span class="tag rec">Recommended</span></header>
+      <div class="shrink"><iframe id="fb" src="prototype.html" title="Phone prototype: row menu sheet" scrolling="no"></iframe></div>
+      <ul class="pc">
+        <li>Matches the Reader’s ⋯ menu and every other menu in the app.</li>
+        <li>Headed with the article’s title, so you can see which one you’re acting on.</li>
+        <li>Full-width rows, within easy reach of your thumb.</li>
+        <li>One extra motion: the sheet slides up over a dimmed screen.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="rec-note"><b>Recommend B.</b> One kind of menu throughout the app is easier to learn, and the title heading guards against deleting the wrong article. If you agree, the Saves card mockup changes to match.</p>
+</section>
+</main>
+
+<script>
+const S = (paths, size = 20, extra = '') => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra} aria-hidden="true">${paths}</svg>`;
+const I = {
+  // Lucide (lucide-static 1.48.0, ISC)
+  zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+  scanText: '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8h8"/><path d="M7 12h10"/><path d="M7 16h6"/>',
+  gauge: '<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>',
+  libraryBig: '<rect width="8" height="18" x="3" y="3" rx="1"/><path d="M7 3v18"/><path d="M20.4 18.9c.2.5-.1 1.1-.6 1.3l-1.9.7c-.5.2-1.1-.1-1.3-.6L11.1 5.1c-.2-.5.1-1.1.6-1.3l1.9-.7c.5-.2 1.1.1 1.3.6Z"/>',
+  ext: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
+  play: '<polygon points="6 3 20 12 6 21 6 3" fill="currentColor"/>',
+  x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  // Shelf's own (docs/design/icons/app)
+  speedRead: '<path d="M3 4h18"/><path d="M10 4v4"/><path d="M6 12h12"/><path d="M10 20v-4"/><path d="M3 20h18"/>',
+  speed: '<path d="M5.64 19.36a9 9 0 1 1 12.72 0"/><path d="m12 13 3.5-3.5"/><circle cx="12" cy="13" r="1"/>',
+  shelf: '<path d="M3 20h18"/><path d="M5 20V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v15"/><path d="M16.55 20 14.2 8.48a1 1 0 0 1 .78-1.18l1.96-.4a1 1 0 0 1 1.18.78L20.63 20"/>',
+  back15: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 5v3h3"/><path stroke-width="1.5" d="M9 10.5l1.125-1.125v5.25"/><path stroke-width="1.5" d="M15 9.375h-2.25v2.25h.75a1.5 1.5 0 0 1 0 3h-.75"/>',
+  fwd15: '<path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 5v3h-3"/><path stroke-width="1.5" d="M9 10.5l1.125-1.125v5.25"/><path stroke-width="1.5" d="M15 9.375h-2.25v2.25h.75a1.5 1.5 0 0 1 0 3h-.75"/>',
+};
+const opt = (letter, name, tags, rec, body, why) => `<div class="opt${rec ? ' rec' : ''}"><header><b>${letter} · ${name}</b>${tags.map(t => `<span class="tag">${t}</span>`).join('')}${rec ? '<span class="tag rec">Recommended</span>' : ''}</header>${body}${why ? `<p class="why">${why}</p>` : ''}</div>`;
+const big = icon => `<div class="big">${[20, 24, 48].map(s => S(icon, s)).join('')}</div>`;
+const themes = fn => ['light', 'dark'].map(t => `<div class="ui" data-theme="${t}">${fn(t)}</div>`).join('');
+
+// 1. Speed read row
+const menu = icon => themes(() => `<div class="sheet"><div class="grab"></div>
+  <div class="menuitem hl">${S(icon)}Speed read</div>
+  <div class="menuitem">${S(I.ext)}Open original</div>
+  <div class="menuitem">${S(I.link)}Copy link</div>
+  <div class="menuitem danger">${S(I.trash)}Delete</div></div>`);
+document.getElementById('q1').innerHTML = [
+  opt('A', 'Lightning bolt', ['Lucide zap', 'In the prototype now'], false, big(I.zap) + menu(I.zap)),
+  opt('B', 'Scan frame', ['Lucide scan-text'], false, big(I.scanText) + menu(I.scanText)),
+  opt('C', 'Speed read frame', ['Shelf’s own'], true, big(I.speedRead) + menu(I.speedRead)),
+].join('');
+
+// 2. Speed pill in the Reader's player, paused
+const dock = icon => ['light', 'dark'].map(t => `<div class="ui" data-theme="${t}" data-reader="${t}" style="background:var(--reader-bg)"><div class="dock" data-reader="${t}">
+  <span class="pp">${S(I.play, 20)}</span><span class="tt">12:33</span>
+  <span class="ctl">${S(I.back15, 24)}</span><span class="ctl">${S(I.fwd15, 24)}</span>
+  <span class="rate${icon ? ' icon' : ''}">${icon ? S(icon, 16) : ''}1.2×</span><span class="pclose">${S(I.x)}</span></div></div>`).join('');
+document.getElementById('q2').innerHTML = [
+  opt('A', 'Number only', ['In the prototype now'], true, dock(null)),
+  opt('B', 'Dial and number', ['Lucide gauge'], false, big(I.gauge) + dock(I.gauge), ''),
+  opt('C', 'Speedometer and number', ['Shelf’s own'], false, big(I.speed) + dock(I.speed), ''),
+].join('');
+
+// 3. Shelf icon on the restore card
+const card = icon => themes(() => `<div class="restore"><div class="h">${icon ? `<span class="ic">${S(icon)}</span>` : ''}<b>Bringing back your shelf</b><span>5 of 12</span></div>
+  <div class="bar"><i></i></div><p>Articles appear as they arrive. You can start reading now.</p></div>`);
+document.getElementById('q3').innerHTML = [
+  opt('A', 'No icon', ['In the prototype now'], true, card(null)),
+  opt('B', 'Books', ['Lucide library-big'], false, big(I.libraryBig) + card(I.libraryBig)),
+  opt('C', 'Bookshelf', ['Shelf’s own'], false, big(I.shelf) + card(I.shelf)),
+].join('');
+
+// In B, show whether the time still fits once the pill carries an icon.
+requestAnimationFrame(() => document.querySelectorAll('#q2 .opt').forEach(o => {
+  const tt = o.querySelector('.tt');
+  if (tt && tt.scrollWidth > tt.clientWidth + 1) o.insertAdjacentHTML('beforeend', `<p class="cut">The time is cut off: ${tt.clientWidth} px left for “12:33”, which needs ${tt.scrollWidth} px.</p>`);
+}));
+
+// 4. The two real prototypes, opened at their row-menu state.
+document.getElementById('fa').addEventListener('load', e => {
+  const d = e.target.contentDocument, st = d.createElement('style');
+  st.textContent = 'body{padding:0!important;margin:0!important} h1,body>p,.intro{display:none!important}';
+  d.head.appendChild(st);
+  const anchor = d.getElementById('rowmenu-light').closest('.anchor');
+  e.target.contentWindow.scrollTo(0, anchor.getBoundingClientRect().top + e.target.contentWindow.scrollY - 150);
+});
+document.getElementById('fb').addEventListener('load', e => {
+  const d = e.target.contentDocument, st = d.createElement('style');
+  st.textContent = '.panel{display:none!important} body{margin:0!important;background:transparent!important} .stage{padding:8px 16px!important;justify-content:flex-start!important}';
+  d.head.appendChild(st);
+  d.querySelector('[data-jump="archive-menu"]').click();
+});
+</script>
+</body>
+</html>
