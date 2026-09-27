@@ -330,6 +330,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
     </div>
     <h2>Speed read</h2>
     <div class="btns">
+      <button data-jump="rsvp-start">Just opened</button>
       <button data-jump="rsvp">Running</button>
       <button data-jump="rsvp-paused">Paused (sentence shown)</button>
       <button data-jump="rsvp-done">Finished</button>
@@ -711,9 +712,8 @@ function startRsvp(){
     idx = TOK.findIndex(t => t.para === k);
   }
   S.sheet = null;
-  S.rsvp = { idx: Math.max(0, idx), playing: true, ramp: 0, done: false };
+  S.rsvp = { idx: Math.max(0, idx), playing: false, started: false, ramp: 0, done: false };
   render();
-  rsvpSchedule();
 }
 
 function rsvpSchedule(){
@@ -730,7 +730,7 @@ function rsvpSchedule(){
 
 function rsvpToggle(){
   const R = S.rsvp; if (!R || R.done) return;
-  R.playing = !R.playing; R.ramp = 0;
+  R.playing = !R.playing; R.started = true; R.ramp = 0;
   render(); rsvpSchedule();
 }
 
@@ -771,7 +771,7 @@ function rsvpHTML(){
     ? `<div class="done"><h3>You've reached the end</h3><p>${esc(it.src)} · read at ${S.wpm} wpm</p><div class="row"><button class="btn primary" data-rsvp-archive>${ic('archive', 18)}Archive</button><button class="btn secondary" data-rsvp-exit>Back to article</button></div></div>`
     : `<div class="frame"><div class="word js-word">${wordHTML(R.idx)}</div></div>
        <div class="context ${R.playing ? '' : 'show'}">${R.playing ? '' : ctx}</div>
-       <div class="hint">${R.playing ? 'Tap to pause' : 'Tap to carry on · swipe to move by sentence'}</div>`;
+       <div class="hint">${R.playing ? 'Tap to pause' : (R.started ? 'Tap to carry on · swipe to move by sentence' : 'Tap to start · swipe to move by sentence')}</div>`;
   return `<div class="rsvp" data-reader="${S.readerTheme}">
     <div class="top"><button class="iconbtn" data-rsvp-exit aria-label="Back to article">${ic('x', 22)}</button><div class="rmeta js-rmeta">${rsvpMeta()}</div><span class="iconbtn"></span></div>
     <div class="rbar"><i class="js-rbar" style="width:${R.idx / (TOK.length - 1) * 100}%"></i></div>
@@ -1065,7 +1065,7 @@ document.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => {
   if (j === 'reader-end') S.scrollToEnd = true;
   if (j === 'reader-aa') S.sheet = 'aa';
   if (j === 'reader-menu') S.sheet = 'menu';
-  if (j.startsWith('rsvp')) { render(); startRsvp(); if (j === 'rsvp-paused') { S.rsvp.playing = false; clearTimeout(rsvpTimer); render(); } if (j === 'rsvp-done') { S.rsvp.playing = false; S.rsvp.done = true; clearTimeout(rsvpTimer); render(); } return; }
+  if (j.startsWith('rsvp')) { render(); startRsvp(); if (j === 'rsvp') rsvpToggle(); if (j === 'rsvp-paused') { S.rsvp.started = true; render(); } if (j === 'rsvp-done') { S.rsvp.playing = false; S.rsvp.done = true; clearTimeout(rsvpTimer); render(); } return; }
   render();
 });
 
