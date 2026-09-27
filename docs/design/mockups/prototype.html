@@ -1381,7 +1381,7 @@ function disconnectSheet(){
 
 function connectScreen(){
   const Y = S.you, st = Y.conn, from = Y.connectFrom || 'browsers';   // ← and success return to the launcher (fix 19)
-  const intro = `<h1>Connect a browser</h1><p class="lead">On your laptop, install the Shelf extension and click its icon. Scan the code it shows, or type the eight-character code.</p>`;
+  const intro = `<h1>Connect a browser</h1><p class="lead">On your laptop, install the Shelf extension and click its icon. If it isn’t in the toolbar, it’s under the puzzle piece. Scan the code it shows, or type the eight-character code.</p>`;
   const typeLink = `<button class="btn quiet full" data-you-act="conn-type">${ic('keyboard', 18)}Type the code instead</button>`;
   if (st === 'type' || st === 'typewrong') {
     // its own step, so the full keyboard never covers a live viewfinder; moves on at the 8th character (fix 22)
