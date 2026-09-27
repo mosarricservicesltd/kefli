@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#BE6947"/>
+      <stop offset="1" stop-color="#944526"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="url(#tile)"/>
+  <!-- tuned for 32 px (toolbar at 2x): the notch and shelf keep the master's proportions (25% notch, 12.5% shelf); small.svg deepens both for 16 px -->
+  <path d="M10 4H22A2 2 0 0 1 24 6V20L16 16L8 20V6A2 2 0 0 1 10 4Z" fill="#FCF7F6"/>
+  <rect x="4" y="23" width="24" height="4" rx="2" fill="#DAAA97"/>
+  <path d="M6 23H20V27H6A2 2 0 0 1 6 23Z" fill="#FCF7F6"/>
+</svg>

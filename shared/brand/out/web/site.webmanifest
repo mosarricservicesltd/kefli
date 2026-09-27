@@ -1,4 +1,7 @@
 {
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
   "name": "Shelf",
   "short_name": "Shelf",
   "theme_color": "#B5542E",
