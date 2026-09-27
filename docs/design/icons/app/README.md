@@ -1,14 +1,14 @@
 # Shelf app icons (Lucide companions)
 
-Five interface icons that Lucide doesn't have. They're drawn by hand to Lucide's rules so they can sit in the same toolbar, player or empty state as Lucide icons without looking out of place. They're used exactly like Lucide SVGs: colour comes from `currentColor`, and they scale from the 24 x 24 viewBox.
+Interface icons that Lucide doesn't have. Three are in use: the skip ±15 pair and speed read (flow decisions 56 and 62). `unused/` keeps the speed and shelf drawings, which Richard chose not to use: the speed pill stays text only and no screen needs a shelf icon. They're drawn by hand to Lucide's rules so they can sit in the same toolbar, player or empty state as Lucide icons without looking out of place. They're used exactly like Lucide SVGs: colour comes from `currentColor`, and they scale from the 24 x 24 viewBox.
 
 | File | Use | Metaphor |
 | --- | --- | --- |
 | `skip-back-15.svg` | Player: jump back 15 seconds | Counter-clockwise circular arrow (the rotate-ccw head and tail) with the numerals 15 drawn as strokes inside it |
 | `skip-forward-15.svg` | Player: jump forward 15 seconds | Horizontal mirror of the arc and head (clockwise, head top right). The numerals are identical and are not mirrored |
-| `speed-read.svg` | Speed read (RSVP, one word at a time) | RSVP reticle: two rules with a focus tick above and below, and a word bar running through the gap. The ticks sit on the optimal recognition point, about a third of the way into the word, so this doesn't read as a centred "align" icon |
-| `speed.svg` | Playback-speed pill button | Speedometer: a 270° dial, a hub dot and a needle at 45°. It doesn't depend on the current rate, so the pill's own text (for example "1.25×") carries the number |
-| `shelf.svg` | "Your shelf": empty states, the restore card | Outline bookshelf: a plank with one upright book and one book leaning towards it. The books are open at the bottom and the plank closes them |
+| `speed-read.svg` | Speed read (RSVP, one word at a time): the Reader's ⋯ menu row, in place of Lucide's zap | RSVP reticle: two rules with a focus tick above and below, and a word bar running through the gap. The ticks sit on the optimal recognition point, about a third of the way into the word, so this doesn't read as a centred "align" icon |
+| `unused/speed.svg` | Not used (decision 62). Drawn for the playback-speed pill, which stays text only | Speedometer: a 270° dial, a hub dot and a needle at 45°. It doesn't depend on the current rate, so the pill's own text (for example "1.25×") carries the number |
+| `unused/shelf.svg` | Not used (decision 62). Drawn for "your shelf" moments; no screen needs one | Outline bookshelf: a plank with one upright book and one book leaning towards it. The books are open at the bottom and the plank closes them |
 
 ## Style rules followed
 

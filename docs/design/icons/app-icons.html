@@ -56,7 +56,7 @@ const lu = (n, s = 24) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" f
 const ICONS = [['skip-back-15', ['rotate-ccw', 'play']], ['skip-forward-15', ['play', 'pause']], ['speed-read', ['zap', 'more']], ['speed', ['play', 'pause']], ['shelf', ['bookmark']]];
 const SRC = {};
 const VARS = ['skip-back-15-b', 'skip-forward-15-b', 'skip-back-15-c', 'skip-forward-15-c'];
-Promise.all([...ICONS.map(([n]) => fetch(`app/${n}.svg`).then(r => r.text()).then(t => SRC[n] = t)), ...VARS.map(n => fetch(`app/variants/${n}.svg`).then(r => r.text()).then(t => SRC[n] = t))]).then(() => {
+Promise.all([...ICONS.map(([n]) => fetch(`app/${['speed', 'shelf'].includes(n) ? 'unused/' : ''}${n}.svg`).then(r => r.text()).then(t => SRC[n] = t)), ...VARS.map(n => fetch(`app/variants/${n}.svg`).then(r => r.text()).then(t => SRC[n] = t))]).then(() => {
   const own = (n, s) => `<span class="ic" style="width:${s}px;height:${s}px">${SRC[n].replace(/width="[^"]*"/, '').replace(/height="[^"]*"/, '').replace('<svg', `<svg width="${s}" height="${s}"`)}</span>`;
   document.getElementById('rows').innerHTML = ICONS.map(([n, next]) => `<tr><td><b>${n}</b></td>${[20, 24, 32, 48].map(s => `<td>${own(n, s)}</td>`).join('')}<td>${own(n, 24)} ${next.map(x => `<span class="ic lu">${lu(x)}</span>`).join(' ')}</td></tr>`).join('');
   const player = mode => `<div class="strip ${mode}"><span class="btn48 pp">${lu('pause', 20)}</span><span style="flex:1;font-size:13px;opacity:.75">0:33 / 1:36</span>

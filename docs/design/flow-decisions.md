@@ -102,7 +102,7 @@ A four-lens consistency review of the phone prototype (player system, screen sca
 ## Round 14 (2026-09-27), icons
 
 55. **App icon: "Bookmark on Terracotta".** A cream, square-shouldered bookmark with a notched tail standing on a two-tone reading-progress bar, on the brand gradient. Chosen over the Ledge (books on a shelf) after a concept round of five and a refinement round, compared at real sizes on home screens, themed icons and a 16 px toolbar. Sources and the asset build live in `shared/brand/`.
-56. **In-app icons are Lucide**, plus one custom pair: skip back and forward 15, in Lucide's exact rotate geometry with a lighter, centred "15" (variant C). Whether the custom speed, speed-read and shelf icons replace Lucide's `gauge`, `zap`/`scan-text` and `library-big` is still open.
+56. **In-app icons are Lucide**, plus one custom pair: skip back and forward 15, in Lucide's exact rotate geometry with a lighter, centred "15" (variant C). Whether the custom speed, speed-read and shelf icons replace Lucide's `gauge`, `zap`/`scan-text` and `library-big` was settled by decision 62.
 
 ## Round 15 (2026-09-27), from the extension consistency review
 
@@ -116,3 +116,9 @@ The extension review (internal, cross-surface with the phone, browser convention
 ## Round 16 (2026-09-27), from Richard
 
 61. **Content on Terracotta is white, in every theme and reading palette.** Richard found the Speed read play button's icon black in the light Reader: a rule meant for the plain controls beside it had recoloured it. The same check found the active Unread/Archive segment and the swipe reveal carrying near-black content in dark mode, where they filled with the lighter #CA8469. Solid Terracotta fills now use #B5542E in both themes (white on it is 4.9:1), and the lighter dark-mode Terracotta stays for lines, dots, text and focus rings. Tokens 0.1.5.
+
+## Round 17 (2026-09-27), from Richard: the last open choices
+
+62. **In-app icons are settled.** Speed read's row in the Reader's ⋯ menu uses Shelf's own speed-read icon (the Speed read frame: two rules and the focus ticks around the word) in place of Lucide's zap. The speed pill stays text only ("1.2×"): an icon would leave the Reader player 29 px for the time, which cuts it off from ten minutes in. No shelf icon: no screen needs one. Custom icons in total: the skip ±15 pair and speed read; everything else is Lucide. This closes decision 56's open part; the unused speed and shelf drawings sit in `docs/design/icons/app/unused/`.
+63. **Archive's row menu is a bottom sheet**, headed with the article's title, like the Reader's ⋯ menu, so every menu in the app is the same kind. The Saves card mockup's small anchored menu is replaced to match the phone prototype. Options were compared in `docs/design/mockups/choices.html`.
+

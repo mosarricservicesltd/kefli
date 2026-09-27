@@ -230,7 +230,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 /* one close control on every player surface (fix 8) */
 .pclose{width:48px;height:48px;border-radius:var(--radius-pill);display:inline-flex;align-items:center;justify-content:center;flex:none;color:var(--muted)}
 /* Reader tier: the mini expanded in place in the playing article's Reader, in the reader palette (Q1) */
-.mini.pdock{gap:var(--space-4);background:var(--reader-bg);color:var(--reader-text);border:0;box-shadow:var(--shadow-float),inset 0 0 0 1px color-mix(in srgb, var(--reader-muted) 25%, transparent)}
+.mini.pdock{gap:2px;background:var(--reader-bg);color:var(--reader-text);border:0;box-shadow:var(--shadow-float),inset 0 0 0 1px color-mix(in srgb, var(--reader-muted) 25%, transparent)}
 .pdock .tt{flex:1;min-width:0;font-size:var(--text-13);font-weight:500;color:var(--reader-muted);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden}
 .pdock .ctl:not(.big){color:var(--reader-text)}
 .pdock .pclose{color:var(--reader-muted)}
@@ -710,7 +710,7 @@ const I = {
   fwd15:'<path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 5v3h-3"/><path stroke-width="1.5" d="M9 10.5l1.125-1.125v5.25"/><path stroke-width="1.5" d="M15 9.375h-2.25v2.25h.75a1.5 1.5 0 0 1 0 3h-.75"/>',
   download:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
   phone:'<rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/>',
-  zap:'<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+  speedread:'<path d="M3 4h18"/><path d="M10 4v4"/><path d="M6 12h12"/><path d="M10 20v-4"/><path d="M3 20h18"/>',   // Shelf's own (icons/app/speed-read.svg): the Speed read frame, decision 62
   skipback:'<polygon points="19 20 9 12 19 4 19 20"/><line x1="5" x2="5" y1="19" y2="5"/>',
   skipfwd:'<polygon points="5 4 15 12 5 20 5 4"/><line x1="19" x2="19" y1="5" y2="19"/>',
   shield:'<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
@@ -883,7 +883,8 @@ const WPS = 2.6;                       // spoken words per second at 1×
 const DUR = Math.round(WORDS / WPS);   // every sample article shares the same text
 // One speed list for the player pill and You → Voice → Default speed (fix 7). A tap wraps from 2 back to 0.8.
 const RATES = [0.8, 1, 1.2, 1.5, 2];
-const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const pad2 = n => String(Math.floor(n)).padStart(2, '0');
+const fmt = s => s >= 3600 ? `${Math.floor(s / 3600)}:${pad2(s % 3600 / 60)}:${pad2(s % 60)}` : `${Math.floor(s / 60)}:${pad2(s % 60)}`;   // h:mm:ss from an hour
 const rateLabel = r => `${r}×`;
 // One stored position per article (fix 11): it.progress (0–1) stands in for the build's word index.
 // Audio time, the spoken word and every bar are derived from it.
@@ -1004,7 +1005,8 @@ function updatePlayer(forceScroll){
   const pct = a.t / DUR * 100;
   vp.querySelectorAll('.js-bar').forEach(e => e.style.width = pct + '%');
   vp.querySelectorAll('.js-t').forEach(e => e.textContent = fmt(a.t));
-  vp.querySelectorAll('.js-tt').forEach(e => e.textContent = ttText(a));
+  // position / total, or the position alone when both won't fit (long articles in the Reader tier)
+  vp.querySelectorAll('.js-tt').forEach(e => { e.textContent = ttText(a); if (e.scrollWidth > e.clientWidth) e.textContent = fmt(a.t); });
   vp.querySelectorAll('.js-tof').forEach(e => e.textContent = `${fmt(a.t)} / ${fmt(DUR)}`);
   // cards, Listen rows and 'min left' follow the audio: they all read the one stored position
   const it = S.items.find(i => i.id === a.id);
@@ -1902,7 +1904,7 @@ function sheetHTML(){
   }
   if (S.sheet === 'menu') {
     return `<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" aria-label="More" data-stop><div class="grab"></div>
-      <button class="menuitem" data-rsvp>${ic('zap',20)}Speed read</button>
+      <button class="menuitem" data-rsvp>${ic('speedread',20)}Speed read</button>
       ${it.archived ? `<button class="menuitem" data-unarchive-open>${ic('restore',20)}Back to Unread</button>` : ''}
       <button class="menuitem" data-orig>${ic('ext',20)}Open original</button>
       <button class="menuitem" data-copylink>${ic('link',20)}Copy link</button>
