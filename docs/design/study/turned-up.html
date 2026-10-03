@@ -1,0 +1,1033 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kiln Concept Board</title>
+<meta name="description" content="Shelf design study, direction Terracotta turned up: Kiln. Clay and Char surfaces, a wide poster face and the pour.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap" rel="stylesheet">
+<style>
+/* =====================================================================
+   KILN — tokens. Every colour on the board and in the phones comes from here.
+   ===================================================================== */
+:root{
+  --ui:"Archivo",system-ui,sans-serif;
+  --read:"Literata",Georgia,serif;
+
+  /* light theme, paper surface */
+  --paper:#FCF7F6; --card:#FFFFFF; --ink:#24130C; --muted:#6E5246; --line:#EEDFD7;
+  --clay:#B5542E; --clay-tone:#A64A26; --clay-shade:#9A4022; --clay-deep:#8E3A1C;
+  --blush:#F6DDD0; --sand:#F1E4D3;
+  --char:#2A140D; --char-2:#3A1E14; --char-soft:#4A2618; --char-line:#4E2C1F; --on-char:#FFF4EE; --on-char-muted:#D8BCAE; --ember:#FF8A5B;
+  --night-clay:#7A3018; --error:#C42A3C; --success:#1F7A4D;
+
+  --clay-field:radial-gradient(140% 100% at 14% 0%,#B5542E 0 44%,#A64A26 78%,#9A4022 100%);
+  --night-field:radial-gradient(140% 100% at 14% 0%,#7A3018 0 44%,#6B2914 80%,#5E2412 100%);
+  --char-field:radial-gradient(130% 60% at 50% 0%,#3A1E14 0%,#2A140D 55%,#22100A 100%);
+  --glaze:linear-gradient(180deg,#B5542E 0%,#A64A26 58%,#8E3A1C 100%);
+  --glaze-edge:inset 0 1px 0 #FFFFFF5C,inset 0 -2px 0 #00000024,0 8px 18px -8px #8E3A1CB3;
+  --white-glaze:linear-gradient(180deg,#FFFFFF 0%,#FFF6F1 100%);
+  --white-edge:inset 0 -2px 0 #8E3A1C1F,0 8px 18px -8px #3A100499;
+  --shadow-card:0 1px 2px #5A241414,0 8px 20px -8px #5A24142E;
+  --shadow-float:0 18px 40px -14px #5A241466;
+
+  --r-pill:999px; --r-card:14px; --r-img:10px; --r-sheet:28px;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--ui);font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1260px;margin:0 auto;padding:0 40px}
+.d{font-family:var(--ui);font-stretch:125%;font-weight:800;letter-spacing:-.025em;line-height:.95}
+.d2{font-family:var(--ui);font-stretch:112%;font-weight:750;letter-spacing:-.018em;line-height:1.1}
+.tnum{font-variant-numeric:tabular-nums}
+svg{display:block}
+
+/* ---------------- hero ---------------- */
+.hero{position:relative;overflow:hidden;background:var(--clay-field);color:#FFFFFF;padding:56px 0 64px}
+.hero .wrap{position:relative;z-index:2}
+.eyebrow{font-size:14px;font-weight:600;font-stretch:112%;letter-spacing:.01em;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.eyebrow .chip{height:30px;padding:0 14px;border-radius:var(--r-pill);background:#FFFFFF;color:var(--clay-shade);display:inline-flex;align-items:center;line-height:1}
+.hero h1{font-size:clamp(120px,21vw,300px);margin:28px 0 8px -8px;line-height:.82;-webkit-text-stroke:1.5px #FFFFFF}
+.hero .pitch{font-size:clamp(22px,2.4vw,32px);font-stretch:108%;font-weight:600;line-height:1.2;max-width:27em;margin:28px 0 0;letter-spacing:-.01em}
+.hero .sg{position:absolute;right:-150px;top:-150px;width:720px;height:auto;z-index:1;pointer-events:none}
+.hero .heroicon{position:absolute;right:120px;bottom:56px;z-index:3;width:168px;height:168px;border-radius:50%;overflow:hidden;box-shadow:0 30px 50px -20px #3A1004CC,0 0 0 6px #FFFFFF26;transform:rotate(-8deg)}
+.strip{display:flex;height:22px}
+.strip i{flex:1}
+
+/* ---------------- sections ---------------- */
+section{padding:88px 0 8px}
+.sh{display:grid;grid-template-columns:120px 1fr;gap:24px;align-items:end;border-bottom:3px solid var(--ink);padding-bottom:18px;margin-bottom:40px}
+.sh .n{font-size:88px;color:var(--clay)}
+.sh h2{font-size:64px;margin:0}
+.sh p{grid-column:2;margin:6px 0 0;color:var(--muted);font-size:17px;max-width:46em}
+h3.k{font-size:30px;margin:56px 0 18px}
+h3.k small{display:block;font-family:var(--ui);font-stretch:100%;font-weight:500;font-size:15px;letter-spacing:0;color:var(--muted);margin-top:8px;line-height:1.45}
+.lede{font-size:21px;line-height:1.55;max-width:44em;margin:0}
+.lede strong{font-weight:700}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:28px}
+.three{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+
+.infl{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-top:40px}
+.infl div{background:var(--card);border-radius:var(--r-card);box-shadow:var(--shadow-card);padding:18px 18px 20px;position:relative;overflow:hidden}
+.infl b{display:block;font-size:19px;margin:30px 0 8px}
+.infl span{font-size:14px;color:var(--muted);line-height:1.5;display:block}
+.infl i{position:absolute;left:18px;top:18px;width:30px;height:6px;border-radius:9px;background:var(--blush)}
+.infl i::after{content:"";position:absolute;left:0;top:0;bottom:0;width:60%;border-radius:9px;background:var(--clay)}
+
+.cs{border-radius:var(--r-card);padding:24px 26px 26px}
+.cs h4{font-size:24px;margin:0 0 14px}
+.cs ul{margin:0;padding:0;list-style:none}
+.cs li{padding:9px 0 9px 26px;position:relative;font-size:15.5px;line-height:1.45;border-top:1px solid var(--line)}
+.cs li:first-child{border-top:0}
+.cs li::before{content:"";position:absolute;left:0;top:15px;width:12px;height:6px;border-radius:9px;background:currentColor;opacity:.9}
+.cs.stay{background:var(--card);box-shadow:var(--shadow-card)}
+.cs.stay li::before{background:var(--muted)}
+.cs.change{background:var(--clay-field);color:#FFFFFF}
+.cs.change li{border-color:#FFFFFF33}
+.cs.change li::before{background:#FFFFFF}
+code,.hex{font-family:var(--ui);font-variant-numeric:tabular-nums;font-weight:600;font-stretch:100%}
+
+/* palette */
+.pal{display:grid;grid-template-columns:repeat(7,1fr);gap:10px}
+.sw{border-radius:var(--r-card);overflow:hidden;background:var(--card);box-shadow:var(--shadow-card)}
+.sw .c{height:92px;display:flex;align-items:flex-end;padding:10px 12px;font-size:13px;font-weight:600;line-height:1}
+.sw .m{padding:10px 12px 12px;font-size:13px;line-height:1.35}
+.sw .m b{display:block;font-size:14px}
+.sw .m .hex{color:var(--muted);font-weight:500}
+.darkpal .sw{background:#1F120C;color:#FBEEE7;box-shadow:none;border:1px solid #36231A}
+.darkpal .sw .m .hex{color:#CDB2A5}
+.darkband{background:#140B07;border-radius:var(--r-sheet);padding:24px}
+.darkband .lbl{color:#CDB2A5}
+.lbl{font-size:14px;font-weight:600;color:var(--muted);margin:0 0 12px;font-stretch:108%}
+
+/* surfaces */
+.firings{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.firing{border-radius:var(--r-card);padding:20px 20px 22px;min-height:240px;position:relative;overflow:hidden;display:flex;flex-direction:column}
+.firing b{font-size:34px;display:block}
+.firing p{font-size:14px;line-height:1.45;margin:10px 0 16px;max-width:24em}
+.firing .use{margin-top:auto;font-size:13px;font-weight:600;display:flex;flex-wrap:wrap;gap:6px}
+.firing .use span{height:28px;padding:0 11px;border-radius:var(--r-pill);display:inline-flex;align-items:center;line-height:1}
+.f-paper{background:var(--paper);box-shadow:inset 0 0 0 1px var(--line)}
+.f-paper p{color:var(--muted)}
+.f-paper .use span{background:var(--card);box-shadow:var(--shadow-card)}
+.f-clay{background:var(--clay-field);color:#FFFFFF}
+.f-clay .use span{background:#FFFFFF;color:var(--clay-shade)}
+.f-char{background:var(--char-field);color:var(--on-char)}
+.f-char p{color:var(--on-char-muted)}
+.f-char .use span{background:var(--char-soft);color:var(--on-char)}
+.f-sand{background:var(--sand)}
+.f-sand p{color:var(--muted)}
+.f-sand .use span{background:#FFFFFF80}
+.rule{margin-top:18px;border-radius:var(--r-card);background:var(--ink);color:var(--paper);padding:18px 22px;display:flex;gap:18px;align-items:center}
+.rule .dot{width:56px;height:56px;border-radius:50%;background:var(--glaze);box-shadow:var(--glaze-edge);color:#FFFFFF;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.rule p{margin:0;font-size:16px;line-height:1.5}
+.rule b{font-stretch:112%}
+
+/* reading palettes */
+.rpals{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.rpal{border-radius:var(--r-card);overflow:hidden;box-shadow:var(--shadow-card)}
+.rpal .pg{background:var(--r-bg);color:var(--r-text);padding:22px 24px 20px}
+.rpal .pg .kick{font-size:13px;color:var(--r-muted);margin-bottom:6px}
+.rpal .pg h5{font-family:var(--ui);font-stretch:112%;font-weight:700;letter-spacing:-.018em;font-size:22px;line-height:1.12;margin:0 0 12px}
+.rpal .pg p{font-family:var(--read);font-size:18px;line-height:1.6;margin:0}
+.rpal .pg a{color:var(--r-link);text-decoration-thickness:1px;text-underline-offset:3px}
+.rpal .pg mark{background:var(--r-hl);color:inherit;border-radius:3px;box-shadow:0 0 0 2px var(--r-hl)}
+.rpal .bar{height:6px;background:color-mix(in srgb,var(--r-muted) 18%,var(--r-bg));position:relative}
+.rpal .bar i{position:absolute;left:0;top:0;bottom:0;width:34%;background:var(--r-pour);box-shadow:2px 0 0 var(--r-edge)}
+.rpal .spec{background:var(--card);padding:14px 18px 16px;font-size:13px;line-height:1.5;display:grid;grid-template-columns:auto 1fr auto;gap:4px 10px;align-items:center}
+.rpal .spec h6{grid-column:1/-1;margin:0 0 4px;font-size:18px}
+.rpal .spec .k{width:14px;height:14px;border-radius:4px;box-shadow:inset 0 0 0 1px #00000014}
+.rpal .spec .v{color:var(--muted);font-variant-numeric:tabular-nums;text-align:right}
+
+/* type */
+.type{display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:16px}
+.tcard{background:var(--card);border-radius:var(--r-card);box-shadow:var(--shadow-card);padding:22px 24px 24px;overflow:hidden}
+.tcard .tl{font-size:13px;font-weight:600;color:var(--muted);display:flex;justify-content:space-between;gap:10px;margin-bottom:18px}
+.tcard .tl span:last-child{font-weight:500}
+.tcard dl{margin:18px 0 0;display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13px;border-top:1px solid var(--line);padding-top:14px}
+.tcard dt{font-weight:600;font-variant-numeric:tabular-nums}
+.tcard dd{margin:0;color:var(--muted)}
+
+/* shapes */
+.shapes{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.shape{background:var(--card);border-radius:var(--r-card);box-shadow:var(--shadow-card);padding:20px;min-height:220px;display:flex;flex-direction:column}
+.shape .demo{flex:1;display:flex;align-items:center;justify-content:center;min-height:120px}
+.shape b{font-size:17px;font-stretch:112%;display:block;margin-top:12px}
+.shape > span{font-size:13.5px;color:var(--muted);line-height:1.45}
+.btnx{height:48px;padding:0 24px;border-radius:var(--r-pill);display:inline-flex;align-items:center;justify-content:center;gap:8px;font:600 15px/1 var(--ui);color:#FFFFFF;background:var(--glaze);box-shadow:var(--glaze-edge);white-space:nowrap}
+.btnx.white{background:var(--white-glaze);color:var(--clay-shade);box-shadow:var(--white-edge)}
+.btnx.sec{background:var(--card);color:var(--ink);box-shadow:var(--shadow-card)}
+
+/* texture */
+.tex{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.tex .tile{border-radius:var(--r-card);overflow:hidden;background:var(--card);box-shadow:var(--shadow-card)}
+.tex .vis{height:210px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;gap:12px}
+.tex .cap{padding:14px 18px 18px;font-size:14px;line-height:1.5;color:var(--muted)}
+.tex .cap b{display:block;color:var(--ink);font-size:17px;font-stretch:112%;margin-bottom:4px}
+.duo{position:relative;display:block;overflow:hidden;border-radius:var(--r-img);background:var(--duo-sh,#4A1C0C);flex:none;isolation:isolate}
+.duo img{width:100%;height:100%;object-fit:cover;display:block;filter:grayscale(1) contrast(1.12) brightness(1.04);mix-blend-mode:screen}
+.duo::after{content:"";position:absolute;inset:0;background:var(--duo-hi,#F6CDB6);mix-blend-mode:multiply;pointer-events:none}
+.raw{display:block;overflow:hidden;border-radius:var(--r-img);flex:none}
+.raw img{width:100%;height:100%;object-fit:cover;display:block}
+
+/* icons */
+.icons{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.icons .tile{background:var(--card);border-radius:var(--r-card);box-shadow:var(--shadow-card);padding:20px;min-height:200px;display:flex;flex-direction:column}
+.icons .demo{flex:1;display:flex;align-items:center;justify-content:center;gap:14px;min-height:110px;border-radius:12px}
+.icons b{font-size:17px;font-stretch:112%;display:block;margin-top:14px}
+.icons .tile > span{font-size:13.5px;color:var(--muted);line-height:1.45}
+.medalx{width:64px;height:64px;border-radius:20px;background:var(--glaze);box-shadow:var(--glaze-edge);display:inline-flex;align-items:center;justify-content:center;color:#FFFFFF}
+.medalx.w{background:var(--white-glaze);box-shadow:var(--white-edge);color:var(--clay)}
+
+/* signature */
+.sig{display:grid;grid-template-columns:1fr 1.25fr;gap:40px;align-items:start}
+.sig .para{font-size:19px;line-height:1.6;margin:0}
+.pourdemo{background:var(--sand);border-radius:var(--r-sheet);padding:24px;display:grid;gap:14px}
+.pourdemo .row{display:grid;grid-template-columns:120px 1fr;gap:16px;align-items:center}
+.pourdemo .row > span{font-size:13px;font-weight:600;color:var(--muted)}
+.pourdemo input{width:100%;accent-color:var(--clay)}
+.pourdemo .pctl{display:flex;align-items:center;gap:14px;font-size:14px;font-weight:600}
+.pourdemo .pctl output{min-width:48px;height:32px;border-radius:var(--r-pill);background:var(--ink);color:var(--paper);display:inline-flex;align-items:center;justify-content:center;font-variant-numeric:tabular-nums;line-height:1}
+
+/* ---------------- phones ---------------- */
+.screens{display:grid;grid-template-columns:repeat(3,360px);justify-content:space-between;row-gap:64px}
+.shot{width:360px}
+.shot .tag{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 14px}
+.shot .tag b{font-size:22px}
+.shot .tag span{font-size:13px;font-weight:600;color:var(--muted);white-space:nowrap}
+.shot > p{font-size:14.5px;line-height:1.55;color:var(--muted);margin:18px 2px 0}
+.shot > p strong{color:var(--ink)}
+.side{align-self:start;padding-top:44px}
+.side h4{font-size:30px;margin:0 0 14px}
+.side p{font-size:16px;line-height:1.6;color:var(--muted);margin:0 0 14px}
+.side .callout{background:var(--card);border-radius:var(--r-card);box-shadow:var(--shadow-card);padding:16px 18px;font-size:14.5px;line-height:1.55;color:var(--ink)}
+
+.phone{width:360px;height:760px;border-radius:34px;overflow:hidden;position:relative;flex:none;background:var(--paper);color:var(--ink);font-family:var(--ui);font-size:15px;line-height:1.45;box-shadow:0 0 0 6px #1E100A,0 0 0 7px #4A2C1E,0 44px 70px -34px #46190ACC;isolation:isolate}
+.phone *{font-stretch:100%}
+.phone .sb{position:absolute;top:0;left:0;right:0;height:24px;display:flex;align-items:center;justify-content:space-between;padding:0 20px 0 22px;font-size:12px;font-weight:600;z-index:60;font-variant-numeric:tabular-nums}
+.phone .sb .ics{display:flex;gap:5px;align-items:center}
+.phone .vp{position:absolute;inset:0 0 16px 0;overflow:hidden}
+.phone .gb{position:absolute;left:0;right:0;bottom:0;height:16px;display:flex;align-items:center;justify-content:center;z-index:59}
+.phone .gb i{width:108px;height:4px;border-radius:9px;background:currentColor;opacity:.45}
+.phone .scr{position:absolute;inset:0;overflow:hidden}
+.phone button,.phone .b{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer}
+.ic{display:inline-flex;flex:none}
+
+/* light / dark phone themes */
+.t-light{--p-paper:#FCF7F6;--p-card:#FFFFFF;--p-ink:#24130C;--p-muted:#6E5246;--p-line:#EEDFD7;--p-accent:#B5542E;--p-soft:#F6DDD0;--p-soft-ic:#B5542E;--p-mast:var(--clay-field);--p-tab:#2A140D;--p-tab-fg:#D8BCAE;--p-mini:#2A140D;--p-mini-fg:#FFF4EE;--p-mini-muted:#D8BCAE;--p-shadow:var(--shadow-card);--p-edge:0 0 0 0 transparent;--p-float:var(--shadow-float);--p-error:#C42A3C;--duo-sh:#4A1C0C;--duo-hi:#F6CDB6;--p-shelf:#F6DDD0}
+.t-dark{--p-paper:#140B07;--p-card:#1F120C;--p-ink:#FBEEE7;--p-muted:#CDB2A5;--p-line:#36231A;--p-accent:#F0875C;--p-soft:#3A1E14;--p-soft-ic:#F0875C;--p-mast:var(--night-field);--p-tab:#0D0705;--p-tab-fg:#CDB2A5;--p-mini:#2E1A12;--p-mini-fg:#FBEEE7;--p-mini-muted:#CDB2A5;--p-shadow:none;--p-edge:inset 0 0 0 1px #36231A;--p-float:0 18px 40px -14px #000000B3;--p-error:#FF8593;--duo-sh:#1A0B06;--duo-hi:#E58A62;--p-shelf:#3A2519}
+.phone.t-light,.phone.t-dark{background:var(--p-paper);color:var(--p-ink)}
+.phone.reader{background:var(--r-bg);color:var(--r-text)}
+.phone.room{background:var(--char-field);color:var(--on-char)}
+.phone.flood{background:var(--clay-field);color:#FFFFFF}
+
+/* masthead (Clay) */
+.mast{position:relative;background:var(--p-mast);color:#FFFFFF;padding:24px 0 18px;border-radius:0 0 var(--r-sheet) var(--r-sheet);overflow:hidden}
+.mast .sgm{position:absolute;right:78px;top:-46px;width:112px;pointer-events:none;z-index:0}
+.mast > *:not(.sgm){position:relative;z-index:1}
+.head{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;padding:14px 16px 12px}
+.head h1{margin:0;font-family:var(--ui);font-stretch:125%;font-weight:800;letter-spacing:-.03em;font-size:44px;line-height:.92}
+.head .count{font-size:13px;font-weight:600;padding-bottom:3px;font-variant-numeric:tabular-nums}
+.searchbar{margin:0 16px;height:48px;width:calc(100% - 32px);border-radius:var(--r-pill);display:flex;align-items:center;gap:10px;padding:0 16px;font-size:15px;line-height:1;background:#5A1E0A4D;color:#FFFFFF;box-shadow:inset 0 1px 2px #3A10044D}
+.segs{display:flex;gap:8px;padding:12px 16px 0}
+.seg{height:36px;padding:0 18px;border-radius:var(--r-pill);display:inline-flex;align-items:center;font-size:13px;font-weight:600;line-height:1;color:#FFFFFF;box-shadow:inset 0 0 0 1.5px #FFFFFF8C}
+.seg.on{background:#FFFFFF;color:#24130C;box-shadow:0 4px 10px -4px #3A100480}
+
+/* cards */
+.list{padding:14px 16px 170px}
+.card{position:relative;display:flex;gap:12px;padding:14px;background:var(--p-card);border-radius:var(--r-card);box-shadow:var(--p-shadow),var(--p-edge);margin-bottom:10px;overflow:hidden}
+.card.pr{padding-bottom:28px}
+.card .body{flex:1;min-width:0}
+.src{display:flex;align-items:center;gap:5px;font-size:13px;font-weight:600;color:var(--p-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2}
+.ctitle{font-size:16px;font-weight:650;line-height:1.28;letter-spacing:-.005em;margin:5px 0 8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.meta{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;font-size:13px;color:var(--p-muted);line-height:1.2}
+.meta .sep{width:3px;height:3px;border-radius:9px;background:currentColor;opacity:.7}
+.meta .hot{color:var(--p-accent);font-weight:650}
+.meta .lnk{color:var(--p-accent);font-weight:600;display:inline-flex;align-items:center;gap:4px}
+.card .duo{width:76px;height:76px}
+.shelf{position:absolute;left:14px;right:14px;bottom:11px;height:6px;border-radius:9px;background:var(--p-shelf);overflow:hidden}
+.shelf i{position:absolute;left:0;top:0;bottom:0;border-radius:9px;background:#B5542E}
+.pdot{width:8px;height:8px;border-radius:9px;background:var(--p-accent);flex:none;animation:breathe 1.2s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:.35}50%{opacity:1}}
+
+/* tab bar (Char) */
+.tabbar{position:absolute;left:0;right:0;bottom:0;height:64px;display:flex;background:var(--p-tab);color:var(--p-tab-fg);z-index:20}
+.tabbar .t{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:13px;font-weight:600;line-height:1}
+.tabbar .pill{width:60px;height:30px;border-radius:var(--r-pill);display:flex;align-items:center;justify-content:center}
+.tabbar .t.on{color:#FFFFFF}
+.tabbar .t.on .pill{background:var(--glaze);box-shadow:var(--glaze-edge)}
+.gb.char{background:var(--p-tab);color:#FFF4EE}
+
+/* the pour: two copies of a row, the upper one clipped to the position */
+.pourbox{position:relative;overflow:hidden;isolation:isolate}
+.pourbox > .lyr{position:absolute;inset:0;display:flex;align-items:center}
+.pourbox > .pour{clip-path:inset(0 calc(100% - var(--p,34%)) 0 0)}
+.pourbox > .pour::after{content:"";position:absolute;top:0;bottom:0;left:calc(var(--p,34%) - 2px);width:2px;background:var(--edge,transparent)}
+
+/* mini player (Char) */
+.mini{position:absolute;left:16px;right:16px;bottom:72px;height:64px;border-radius:var(--r-pill);box-shadow:var(--p-float);z-index:21}
+.mini > .lyr{gap:12px;padding:0 8px}
+.mini > .base{background:var(--p-mini);color:var(--p-mini-fg);box-shadow:var(--p-edge);border-radius:inherit}
+.mini > .pour{background:#B5542E;color:#FFFFFF}
+.pp{width:48px;height:48px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none;background:var(--glaze);box-shadow:var(--glaze-edge);color:#FFFFFF}
+.pour .pp{background:var(--white-glaze);box-shadow:var(--white-edge);color:#B5542E}
+.mini .info{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:3px}
+.mini .info b{font-size:13px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2}
+.mini .info span{font-size:13px;font-weight:500;font-variant-numeric:tabular-nums;color:var(--p-mini-muted);line-height:1.2}
+.mini .pour .info span{color:#FFFFFF}
+
+/* ---------- Reader ---------- */
+.reader{background:var(--r-bg);color:var(--r-text)}
+.rtop{position:absolute;left:0;right:0;top:24px;height:56px;z-index:5}
+.rtop .lyr{gap:2px;padding:0 8px}
+.rtop > .base{background:var(--r-bg);color:var(--r-text)}
+.rtop > .pour{background:var(--r-pour);color:#FFFFFF}
+.iconbtn{width:48px;height:48px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.rtop .host{flex:1;text-align:center;font-size:13px;font-weight:500;color:var(--r-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rtop .pour .host{color:#FFFFFF}
+.rtop .aa{font-weight:700;font-size:15px;letter-spacing:-.02em}
+.listenchip{height:36px;padding:0 12px 0 9px;border-radius:var(--r-pill);display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;line-height:1;flex:none;margin:0 4px;background:var(--r-soft);color:var(--r-text)}
+.listenchip .ic{color:var(--r-soft-ic)}
+.pour .listenchip{background:#3A10043D;color:#FFFFFF}
+.pour .listenchip .ic{color:#FFFFFF}
+.rbody{position:absolute;left:0;right:0;top:80px;bottom:0;overflow:hidden}
+.rbody::before{content:"";position:absolute;left:0;right:0;top:0;height:18px;background:linear-gradient(var(--r-bg),transparent);z-index:2}
+.rbody::after{content:"";position:absolute;left:0;right:0;bottom:0;height:72px;background:linear-gradient(transparent,var(--r-bg) 78%);z-index:2}
+.art{padding:0 20px 160px}
+.art .kick{font-size:13px;font-weight:600;color:var(--r-muted);margin:14px 0 8px}
+.art h1{font-family:var(--ui);font-stretch:112%;font-weight:700;font-size:28px;line-height:1.12;letter-spacing:-.02em;margin:0 0 12px}
+.art .by{font-size:13px;color:var(--r-muted);margin-bottom:22px}
+.prose{font-family:var(--read);font-size:18px;line-height:1.6;font-optical-sizing:auto}
+.prose p{margin:0 0 1em}
+.prose a{color:var(--r-link);text-decoration-thickness:1px;text-underline-offset:3px}
+.prose .on{background:var(--r-hl);border-radius:3px;box-shadow:0 0 0 2px var(--r-hl)}
+.fig{width:100%;aspect-ratio:3/2;border-radius:var(--r-img);object-fit:cover;display:block;margin:0 0 1em}
+.archfloat{position:absolute;right:16px;width:52px;height:52px;border-radius:50%;background:var(--r-surface);color:var(--r-text);display:inline-flex;align-items:center;justify-content:center;box-shadow:0 14px 30px -12px #5A241473,inset 0 0 0 1px var(--r-line);z-index:6}
+.dock{position:absolute;left:16px;right:16px;bottom:16px;height:64px;border-radius:var(--r-pill);z-index:21;box-shadow:0 18px 40px -14px #5A241466}
+.dock > .lyr{gap:2px;padding:0 8px}
+.dock > .base{background:var(--r-surface);color:var(--r-text);border-radius:inherit;box-shadow:inset 0 0 0 1px var(--r-line)}
+.dock > .pour{background:var(--r-pour);color:#FFFFFF}
+.dock .tt{flex:1;min-width:0;padding-left:8px;font-size:13px;font-weight:600;color:var(--r-muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.dock .pour .tt{color:#FFFFFF}
+.rate{height:36px;min-width:52px;padding:0 12px;border-radius:var(--r-pill);display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:650;font-variant-numeric:tabular-nums;line-height:1;flex:none;background:color-mix(in srgb,var(--r-muted) 15%,transparent)}
+.pour .rate{background:#3A10043D;color:#FFFFFF}
+
+[data-rp="bisque"]{--r-bg:#FBF6F2;--r-text:#2A1A12;--r-muted:#6E5246;--r-link:#A4471F;--r-hl:#F5D3C0;--r-pour:#B5542E;--r-edge:transparent;--r-surface:#FFFFFF;--r-line:#EEDFD7;--r-soft:#F6DDD0;--r-soft-ic:#B5542E}
+[data-rp="sand"]{--r-bg:#F1E4D3;--r-text:#3A2618;--r-muted:#6A5040;--r-link:#8E3A1A;--r-hl:#E6C3A6;--r-pour:#A64A26;--r-edge:transparent;--r-surface:#F8EEE2;--r-line:#E2CFB9;--r-soft:#E6CFB8;--r-soft-ic:#8E3A1A}
+[data-rp="char"]{--r-bg:#17100C;--r-text:#E9DDD5;--r-muted:#BFA79A;--r-link:#F0936A;--r-hl:#5A2A18;--r-pour:#7A3018;--r-edge:#E8865E;--r-surface:#241812;--r-line:#3A281E;--r-soft:#3A1E14;--r-soft-ic:#F0875C}
+
+/* ---------- Listen (the Char room) ---------- */
+.room{background:var(--char-field);color:var(--on-char)}
+.room .head .count{color:var(--on-char-muted)}
+.nowcard{position:relative;margin:2px 16px 22px;padding:16px;border-radius:var(--r-card);background:var(--clay-field);color:#FFFFFF;overflow:hidden;box-shadow:0 24px 40px -22px #000000B3}
+.nowcard .sgn{position:absolute;right:-30px;bottom:-26px;width:150px;pointer-events:none}
+.nowcard > *:not(.sgn){position:relative}
+.nowcard .lbl2{font-size:13px;font-weight:650;display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.eq{display:inline-flex;align-items:flex-end;gap:2px;height:12px}
+.eq i{width:3px;height:8px;background:currentColor;border-radius:1px;animation:eq 1s ease-in-out infinite}
+.eq i:nth-child(2){animation-delay:.2s}.eq i:nth-child(3){animation-delay:.4s}
+@keyframes eq{0%,100%{height:4px}50%{height:12px}}
+.nowcard .t{font-family:var(--ui);font-stretch:112%;font-weight:750;font-size:21px;line-height:1.14;letter-spacing:-.018em;margin-bottom:8px}
+.nowcard .s{font-size:13px;font-weight:500;margin-bottom:16px}
+.pbar{height:6px;border-radius:9px;background:#6B29147A;position:relative;overflow:hidden}
+.pbar i{position:absolute;left:0;top:0;bottom:0;border-radius:9px;background:#FFFFFF}
+.times{display:flex;justify-content:space-between;align-items:baseline;margin:8px 0 6px;font-variant-numeric:tabular-nums}
+.times .el{font-family:var(--ui);font-stretch:125%;font-weight:800;font-size:30px;letter-spacing:-.02em;line-height:1}
+.times .tot{font-size:13px;font-weight:600}
+.nctl{display:grid;grid-template-columns:1fr 48px 60px 48px 1fr;column-gap:8px;align-items:center}
+.ctl{width:48px;height:48px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.big{width:60px;height:60px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:var(--white-glaze);color:#B5542E;box-shadow:var(--white-edge),0 14px 24px -12px #3A1004}
+.nctl .rate{grid-column:5;justify-self:end;background:#5A1E0A59;color:#FFFFFF}
+.sectionhead{display:flex;align-items:center;justify-content:space-between;padding:0 16px 10px}
+.sectionhead h2{margin:0;font-family:var(--ui);font-stretch:125%;font-weight:800;font-size:22px;letter-spacing:-.02em;line-height:1}
+.pbtn{height:36px;padding:0 13px 0 10px;border-radius:var(--r-pill);display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:650;line-height:1;background:var(--char-soft);color:var(--on-char)}
+.pbtn .ic{color:var(--ember)}
+.lrow{position:relative;display:flex;align-items:center;gap:12px;padding:12px;margin:0 16px 10px;border-radius:var(--r-card);background:#3A1E14;box-shadow:inset 0 0 0 1px #4E2C1F;overflow:hidden;--duo-sh:#1A0B06;--duo-hi:#E58A62}
+.lrow.pr{padding-bottom:24px}
+.lrow .rp{width:48px;height:48px;border-radius:50%;background:var(--char-soft);color:var(--ember);display:inline-flex;align-items:center;justify-content:center;flex:none}
+.lrow .rp.live{background:var(--glaze);box-shadow:var(--glaze-edge);color:#FFFFFF}
+.lrow .body{flex:1;min-width:0}
+.lrow .src{color:var(--on-char-muted)}
+.lrow .ctitle{font-size:15px;color:var(--on-char);margin:4px 0 6px;-webkit-line-clamp:2}
+.lrow .meta{color:var(--on-char-muted)}
+.lrow .meta .hot{color:var(--ember)}
+.lrow .duo{width:56px;height:56px}
+.lrow .shelf{left:12px;right:12px;bottom:10px;background:#4E2C1F}
+.tabbar.deep{background:#1E0E08;color:#D8BCAE;box-shadow:inset 0 1px 0 #3A1E14}
+.gb.deep{background:#1E0E08;color:#FFF4EE}
+
+/* ---------- empty first-run (Clay floods the screen) ---------- */
+.flood{background:var(--clay-field);color:#FFFFFF}
+.flood .sgf{position:absolute;right:-150px;top:28px;width:440px;pointer-events:none}
+.emptyc{position:absolute;left:0;right:0;top:132px;display:flex;flex-direction:column;align-items:center;text-align:center;padding:0 28px}
+.illus{width:244px;border-radius:24px;background:#FBF6F2;color:#24130C;padding:16px 16px 18px;box-shadow:0 30px 40px -24px #3A1004E6,0 2px 0 #FFFFFF inset;transform:rotate(-4deg);margin:26px 0 52px}
+.illus .lb{font-size:12px;font-weight:600;color:#6E5246;text-align:left;margin-bottom:12px}
+.illus .apps{display:flex;justify-content:space-between}
+.illus .app{width:46px;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11px;font-weight:500;color:#6E5246}
+.illus .app i{width:44px;height:44px;border-radius:50%;display:block;background:#EADBD0}
+.illus .app:nth-child(2) i{background:#E3D4C4}
+.illus .app:nth-child(4) i{background:#EFE3D6}
+.illus .app.me{color:#24130C;font-weight:700}
+.illus .app.me i{overflow:hidden;box-shadow:0 6px 12px -4px #8E3A1C99}
+.illus .hand{height:6px;border-radius:9px;background:#EADBD0;margin:14px 0 0}
+.emptyc h2{margin:0;font-family:var(--ui);font-stretch:125%;font-weight:800;font-size:33px;line-height:.98;letter-spacing:-.03em}
+.emptyc p{margin:14px 0 26px;font-size:15px;line-height:1.5;max-width:28ch}
+.pbtnw{height:48px;padding:0 24px;border-radius:var(--r-pill);display:inline-flex;align-items:center;gap:8px;font-size:15px;font-weight:650;line-height:1;background:var(--white-glaze);color:#9A4022;box-shadow:var(--white-edge)}
+
+/* ---------- You (Sand masthead) ---------- */
+.sandmast{background:var(--sand);color:#24130C;padding:24px 0 16px;border-radius:0 0 var(--r-sheet) var(--r-sheet);position:relative;overflow:hidden}
+.score{display:flex;gap:22px;align-items:flex-end}
+.score div{display:flex;flex-direction:column}
+.score b{font-family:var(--ui);font-stretch:125%;font-weight:800;font-size:42px;line-height:.9;letter-spacing:-.03em;color:#B5542E;font-variant-numeric:tabular-nums}
+.score span{font-size:13px;font-weight:600;margin-top:5px}
+.spines{display:block}
+.bcard{margin:14px 16px 14px;padding:16px;border-radius:var(--r-card);background:var(--clay-field);color:#FFFFFF;position:relative;overflow:hidden;box-shadow:0 18px 30px -20px #8E3A1CCC}
+.bcard .h{display:flex;align-items:center;gap:10px;font-family:var(--ui);font-stretch:112%;font-weight:750;font-size:19px;letter-spacing:-.015em;line-height:1.1;margin-bottom:8px}
+.bcard p{margin:0 0 14px;font-size:13px;line-height:1.45}
+.bcard .row{display:flex;gap:8px;justify-content:flex-end}
+.bcard .btn{height:48px;padding:0 18px;border-radius:var(--r-pill);display:inline-flex;align-items:center;font-size:15px;font-weight:650;line-height:1;white-space:nowrap}
+.bcard .btn.later{background:#5A1E0A59;color:#FFFFFF}
+.bcard .btn.go{background:var(--white-glaze);color:#9A4022;box-shadow:var(--white-edge)}
+.ygroup{margin:0 16px 12px;border-radius:var(--r-card);background:var(--p-card);box-shadow:var(--p-shadow);overflow:hidden}
+.yrow{display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 14px 8px 10px;border-top:1px solid var(--p-line)}
+.yrow:first-child{border-top:0}
+.yrow .yi{width:36px;height:36px;border-radius:11px;background:var(--p-soft);color:var(--p-soft-ic);display:inline-flex;align-items:center;justify-content:center;flex:none}
+.yrow .yl{flex:1;min-width:0;font-weight:550;font-size:15px;line-height:1.25}
+.yrow .yl small{display:block;font-size:13px;color:var(--p-muted);font-weight:400;margin-top:1px}
+.yrow .yl small.warn{color:#9A4022;font-weight:600;display:flex;align-items:center;gap:6px}
+.yrow .yl small.warn::before{content:"";width:6px;height:6px;border-radius:9px;background:currentColor}
+.yrow .yv{font-size:13px;font-weight:650;color:var(--p-muted);font-variant-numeric:tabular-nums}
+.yrow .chev{color:var(--p-muted);display:inline-flex}
+.yrow.danger .yl{color:var(--p-error)}
+.yrow.danger .yi{background:#FBE3E5;color:var(--p-error)}
+
+/* ---------- home screens and the extension ---------- */
+.homes{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.home{border-radius:var(--r-sheet);overflow:hidden;position:relative;height:380px;display:flex;flex-direction:column;justify-content:flex-end;padding:0 34px 34px}
+.home.light{background:radial-gradient(90% 120% at 10% 0%,#E8F0F3 0%,#D7E2E6 45%,#C9D6CF 100%)}
+.home.dark{background:radial-gradient(90% 120% at 90% 0%,#28324A 0%,#141A28 50%,#0A0D14 100%)}
+.home .clock{position:absolute;left:34px;top:30px;font-size:64px;font-weight:300;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+.home .date{position:absolute;left:36px;top:102px;font-size:15px;font-weight:500}
+.home.light .clock,.home.light .date{color:#1D2A30}
+.home.dark .clock,.home.dark .date{color:#EEF1F6}
+.hrow{display:flex;justify-content:space-between}
+.app{width:76px;display:flex;flex-direction:column;align-items:center;gap:8px;font-size:13px;font-weight:500}
+.home.light .app{color:#1D2A30}
+.home.dark .app{color:#EEF1F6}
+.app .ico{width:60px;height:60px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 14px -6px #00000066}
+.dock2{margin-top:22px;height:64px;border-radius:32px;display:flex;align-items:center;justify-content:space-around;padding:0 10px}
+.home.light .dock2{background:#FFFFFF73}
+.home.dark .dock2{background:#FFFFFF1A}
+.dock2 .ico{width:48px;height:48px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.iconpair{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:24px}
+.iconpair .tile{background:var(--card);border-radius:var(--r-card);box-shadow:var(--shadow-card);padding:22px;display:flex;gap:22px;align-items:center}
+.iconpair .tile .big2{width:112px;height:112px;border-radius:50%;overflow:hidden;flex:none;box-shadow:0 16px 28px -14px #5A2414AA}
+.iconpair .tile b{font-size:19px;font-stretch:112%;display:block;margin-bottom:6px}
+.iconpair .tile div > span{font-size:14px;color:var(--muted);line-height:1.5;display:block}
+
+.browser{border-radius:16px;overflow:hidden;box-shadow:0 40px 80px -40px #46190ACC,0 0 0 1px #00000014;background:#FFFFFF}
+.tabs{height:42px;background:#E4E4E7;display:flex;align-items:flex-end;padding:0 10px;gap:6px}
+.tabs .tb{height:34px;width:250px;border-radius:10px 10px 0 0;background:#FFFFFF;display:flex;align-items:center;gap:8px;padding:0 12px;font:500 12.5px/1 system-ui,sans-serif;color:#2B2B2E;white-space:nowrap;overflow:hidden}
+.tabs .tb i{width:14px;height:14px;border-radius:3px;background:#1F1F1F;flex:none}
+.tabs .dots{display:flex;gap:7px;align-self:center;margin-right:10px}
+.tabs .dots i{width:11px;height:11px;border-radius:50%;background:#C8C8CC}
+.addr{height:46px;display:flex;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid #E6E6E9}
+.addr .url{flex:1;height:32px;border-radius:16px;background:#F1F1F3;display:flex;align-items:center;padding:0 14px;font:400 13.5px/1 system-ui,sans-serif;color:#3A3A3F}
+.addr .tbx{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#5F6368}
+.addr .shelfbtn{background:#F5E6DE}
+.addr .shelfbtn span{width:18px;height:18px;border-radius:50%;overflow:hidden;display:block}
+.pagearea{position:relative;height:560px;overflow:hidden;background:#FFFFFF;color:#1F1F1F}
+.site{max-width:620px;margin:0 auto;padding:40px 24px}
+.site .kick{font:600 12px/1 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#7A7A80;margin-bottom:12px}
+.site h1{font:600 34px/1.18 Georgia,serif;margin:0 0 14px}
+.site .by{font:400 13px/1 system-ui,sans-serif;color:#7A7A80;margin-bottom:24px}
+.site p{font:17px/1.65 Georgia,serif;margin:0 0 1em;color:#2A2A2A}
+.site a{color:#1A5FB4}
+.xtoast{position:absolute;right:20px;bottom:20px;width:336px;border-radius:var(--r-card);background:var(--clay-field);color:#FFFFFF;box-shadow:0 24px 44px -18px #5A2414B3;overflow:hidden;font-family:var(--ui)}
+.xtoast .row{display:flex;align-items:center;gap:12px;padding:12px 8px 12px 12px;min-height:66px;position:relative}
+.xtoast .ti{width:34px;height:34px;border-radius:50%;background:var(--white-glaze);color:#B5542E;display:inline-flex;align-items:center;justify-content:center;flex:none;box-shadow:var(--white-edge)}
+.xtoast .tx{flex:1;min-width:0}
+.xtoast .tx b{display:block;font-size:15px;font-weight:700;font-stretch:108%;line-height:1.25}
+.xtoast .tx span{display:block;font-size:13px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.xtoast .act{height:36px;padding:0 14px;border-radius:var(--r-pill);background:#5A1E0A59;font-size:13px;font-weight:650;display:inline-flex;align-items:center;line-height:1;flex:none}
+.xtoast .x{width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.xtoast .timer{height:3px;background:#5A1E0A59;position:relative}
+.xtoast .timer i{position:absolute;left:0;top:0;bottom:0;width:62%;background:#FFFFFF}
+.xtoast .sgx{position:absolute;right:56px;top:-30px;width:110px;opacity:1;pointer-events:none}
+.beyond2{display:grid;grid-template-columns:1fr 300px;gap:32px;align-items:start}
+
+/* ---------- notes ---------- */
+.notes{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.note{border-radius:var(--r-card);padding:24px 24px 18px}
+.note h4{font-size:26px;margin:0 0 16px}
+.note h5{font-size:15px;margin:16px 0 4px;font-stretch:112%;font-weight:750}
+.note p{margin:0;font-size:14.5px;line-height:1.55}
+.note.cool{background:var(--clay-field);color:#FFFFFF}
+.note.wrong{background:var(--char-field);color:var(--on-char)}
+.note.wrong p{color:var(--on-char-muted)}
+.note.wrong h5{color:var(--on-char)}
+.note.build{background:var(--card);box-shadow:var(--shadow-card)}
+.note.build p{color:var(--muted)}
+.ctab{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px;background:var(--card);border-radius:var(--r-card);overflow:hidden;box-shadow:var(--shadow-card)}
+.ctab th,.ctab td{text-align:left;padding:10px 14px;border-top:1px solid var(--line);vertical-align:middle}
+.ctab th{font-size:13px;color:var(--muted);font-weight:600;border-top:0;background:#FBF1EC}
+.ctab td.r{font-variant-numeric:tabular-nums;font-weight:700;text-align:right;white-space:nowrap}
+.ctab .pair{display:inline-flex;align-items:center;justify-content:center;height:26px;min-width:56px;padding:0 10px;border-radius:var(--r-pill);font-size:12.5px;font-weight:700;line-height:1;box-shadow:inset 0 0 0 1px #00000010}
+.ctab .pass{font-size:12.5px;font-weight:600;color:var(--success)}
+.foot{padding:64px 0 80px;color:var(--muted);font-size:14px}
+
+@media (max-width:1240px){.screens{grid-template-columns:repeat(2,360px);justify-content:space-around}.side{grid-column:1/-1;padding-top:0}.pal{grid-template-columns:repeat(4,1fr)}.infl{grid-template-columns:repeat(3,1fr)}}
+@media (max-width:900px){.wrap{padding:0 16px}.two,.three,.type,.rpals,.firings,.shapes,.tex,.icons,.notes,.homes,.sig,.beyond2,.iconpair{grid-template-columns:1fr}.screens{grid-template-columns:360px;justify-content:center}.pal{grid-template-columns:repeat(2,1fr)}.infl{grid-template-columns:1fr 1fr}.sh{grid-template-columns:1fr}.sh p{grid-column:1}.sh .n{font-size:56px}.sh h2{font-size:44px}.hero .heroicon{display:none}}
+@media (max-width:400px){.shot,.phone{zoom:.9}}
+@media (prefers-reduced-motion:reduce){.pdot,.eq i{animation:none;opacity:1}}
+</style>
+</head>
+<body>
+
+<!-- shared SVG paint servers (gradients for every app-icon drawing on the board) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="kTile" x1="0" y1="0" x2="0" y2="108" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#C25E36"/><stop offset=".55" stop-color="#A9492A"/><stop offset="1" stop-color="#7A3018"/></linearGradient>
+    <radialGradient id="kGlaze" cx="30" cy="20" r="72" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".30"/><stop offset=".6" stop-color="#FFFFFF" stop-opacity=".04"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></radialGradient>
+    <linearGradient id="oTile" x1="0" y1="18" x2="0" y2="90" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#BE6947"/><stop offset="1" stop-color="#944526"/></linearGradient>
+    <filter id="kDrop" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="2.6" stdDeviation="2.2" flood-color="#3A1004" flood-opacity=".42"/></filter>
+  </defs>
+</svg>
+
+<!-- ============================ 0. HERO ============================ -->
+<header class="hero">
+  <svg class="sg" viewBox="0 0 108 108" aria-hidden="true"><path d="M41 25H67A4 4 0 0 1 71 29V64.24A1.5 1.5 0 0 1 68.68 65.5L54 56L39.32 65.5A1.5 1.5 0 0 1 37 64.24V29A4 4 0 0 1 41 25Z" fill="#3A10041F"/><rect x="30" y="70" width="48" height="9" rx="4.5" fill="#3A100414"/><rect x="30" y="70" width="32" height="9" rx="4.5" fill="#3A10041F"/></svg>
+  <div class="wrap">
+    <div class="eyebrow"><span class="chip">Shelf · design study</span><span>Direction: Terracotta, turned up</span></div>
+    <h1 class="d">Kiln</h1>
+    <p class="pitch">Shelf’s own Terracotta, fired hotter: whole screens poured in clay and char, a wide poster face for every headline, and a reading page left calm.</p>
+  </div>
+</header>
+<div class="strip" aria-hidden="true"><i style="background:#F1E4D3"></i><i style="background:#F6DDD0"></i><i style="background:#B5542E"></i><i style="background:#8E3A1C"></i><i style="background:#3A1E14"></i><i style="background:#2A140D"></i><i style="background:#FF8A5B"></i></div>
+
+<main class="wrap">
+
+<!-- ============================ 1. CONCEPT ============================ -->
+<section id="concept">
+  <div class="sh"><span class="n d">01</span><h2 class="d">The concept</h2></div>
+  <p class="lede">Soft pills already owns a colour most apps would never risk: a burnt clay orange with a cream bookmark. Kiln uses it as a material. <strong>Screens that announce something are poured in Clay:</strong> the Saves masthead, an empty shelf, a page landing from the browser. <strong>Everything to do with sound lives in Char,</strong> a deep fired brown, like a radio dial in a dark room. Lists and settings sit on cream paper as matte white tiles, and anything you can press is glazed. A wide, heavy grotesk does the shouting in titles and numbers; Literata does the reading. Shelf has no feed, no covers and no social layer, so colour and type are the only voice it has. Kiln lets that voice run at full volume everywhere except the page you read on, which stays as quiet as a library.</p>
+
+  <div class="infl">
+    <div><i></i><b class="d2">Paperback and LP sleeves, 1968–78</b><span>Flat fields of one warm colour with a wide, heavy grotesk set huge. Gives Kiln its poured mastheads and poster titles.</span></div>
+    <div><i></i><b class="d2">Studio pottery</b><span>Matte bisque beside glossy glaze. Gives the rule that content is unglazed and anything you can press is glazed.</span></div>
+    <div><i></i><b class="d2">Plaster walls at dusk</b><span>Shadows that go brown and warm, never grey. Every shadow and hairline in Kiln is tinted with clay.</span></div>
+    <div><i></i><b class="d2">Hi-fi at night</b><span>One warm glow in a dark room. The Listen tab becomes a Char room with Terracotta controls.</span></div>
+    <div><i></i><b class="d2">Match-day programme numerals</b><span>Expanded, heavy figures used as graphics. The counts on You and the clock on Now playing are set this way.</span></div>
+  </div>
+
+  <h3 class="k d">What stays, what changes<small>The low-risk route: every ingredient below is something Richard has already approved, at a lower volume.</small></h3>
+  <div class="two">
+    <div class="cs stay"><h4 class="d">Stays</h4><ul>
+      <li>Terracotta <code>#B5542E</code> as the fill, with white on it in every theme and reading palette (decision 61)</li>
+      <li>Cream paper <code>#FCF7F6</code> and white cards in the light theme</li>
+      <li>Pills for every control, 48 px hit areas, labels vertically centred</li>
+      <li>The bookmark app icon and its geometry</li>
+      <li>Lucide icons, plus Shelf’s skip 15 pair and Speed read icon</li>
+      <li>One line per article for reading progress, read from one stored position</li>
+      <li>Every screen, flow, control and word of copy</li>
+    </ul></div>
+    <div class="cs change"><h4 class="d">Changes</h4><ul>
+      <li>Clay and Char become whole surfaces: mastheads, empty states, the Listen tab, toasts</li>
+      <li>Ink warms from <code>#181D27</code> to <code>#24130C</code>, muted from <code>#535862</code> to <code>#6E5246</code>, hairlines to <code>#EEDFD7</code></li>
+      <li>Archivo replaces Inter and Roboto (100 % width for UI, 125 % for display); Literata replaces Noto Serif</li>
+      <li>The gradient becomes a glaze, with a highlight and a warm shadow, on every primary and play button</li>
+      <li>Card radius 10 → 14; sheets and mastheads 24 → 28; shadows tinted brown</li>
+      <li>Thumbnails duotone; the progress line becomes the pour</li>
+      <li>The tab bar is Char; the toast is Clay in place of the inverted pill</li>
+      <li>Dark theme warms from blue-black <code>#0C0E12</code> to <code>#140B07</code></li>
+    </ul></div>
+  </div>
+</section>
+
+<!-- ============================ 2. SYSTEM ============================ -->
+<section id="system">
+  <div class="sh"><span class="n d">02</span><h2 class="d">The system</h2><p>Four surfaces, one fill rule, two type families, and one moving idea. Hex values are the proposal; ratios are measured (WCAG 2.1 relative luminance).</p></div>
+
+  <h3 class="k d" style="margin-top:0">Four firings<small>Every screen region is one of four surfaces, and each surface carries its own text, muted, accent and line roles. Each tab gets a firing of its own, so you know where you are before you read a word.</small></h3>
+  <div class="firings">
+    <div class="firing f-paper"><b class="d">Paper</b><p>Cream ground, matte white tiles. Where lists and settings live. Ink <code>#24130C</code> at 16.9:1.</p><div class="use"><span>Saves list</span><span>You rows</span><span>Sheets</span></div></div>
+    <div class="firing f-clay"><b class="d">Clay</b><p>Terracotta poured as a surface. For moments where Shelf speaks: arriving, empty, saved. White on it at 4.9:1 or better.</p><div class="use"><span>Saves masthead</span><span>Empty states</span><span>Toasts</span><span>Now playing</span></div></div>
+    <div class="firing f-char"><b class="d">Char</b><p>Deep fired brown. Everything to do with sound, and the tab bar that holds the app together. Cream on it at 16.1:1.</p><div class="use"><span>Listen room</span><span>Mini player</span><span>Tab bar</span></div></div>
+    <div class="firing f-sand"><b class="d">Sand</b><p>Unfired clay. The quiet tab: You and its settings get a pale masthead with the counts set big.</p><div class="use"><span>You masthead</span></div></div>
+  </div>
+  <div class="rule"><span class="dot" data-i="check" data-s="26" data-w="2.6"></span><p><b>One rule for content on the fill.</b> On Clay, glaze or the pour, content is white. Secondary text on Clay is white too, never a tint; hierarchy comes from size and weight. Anything on Clay that needs a colour of its own sits on a white pill (the selected segment, the empty-state button, the play button on Now playing). White on <code>#B5542E</code> is 4.92:1, and no Clay field is ever lighter than <code>#B5542E</code> behind text.</p></div>
+
+  <h3 class="k d">Palette<small>Light theme first, dark theme below. The Terracotta fill is the same in both themes; everything else warms.</small></h3>
+  <p class="lbl">Light</p>
+  <div class="pal" id="palLight"></div>
+  <div class="darkband" style="margin-top:18px"><p class="lbl">Dark</p><div class="pal darkpal" id="palDark"></div></div>
+
+  <h3 class="k d">Three reading palettes<small>Bisque, Sand and Char replace Light, Sepia and Dark in the Aa sheet. The chrome can be loud; these pages stay calm for twenty minutes at a time. Body text is Literata 18/1.6 in every one, at 7:1 or better.</small></h3>
+  <div class="rpals">
+    <div class="rpal" data-rp="bisque"><div class="pg"><div class="kick">Bitcoin Magazine</div><h5>Why relays, not servers, are the future of personal data</h5><p>Sync arrived so the reading could happen somewhere other than the saving. A <mark>voice</mark> arrived so the reading could happen with your hands on a <a href="#">steering wheel</a>.</p></div><div class="bar"><i></i></div>
+      <div class="spec"><h6 class="d2">Bisque</h6><span class="k" style="background:#FBF6F2"></span><span>Page <code>#FBF6F2</code></span><span class="v"></span><span class="k" style="background:#2A1A12"></span><span>Text <code>#2A1A12</code></span><span class="v">15.6:1</span><span class="k" style="background:#6E5246"></span><span>Muted <code>#6E5246</code></span><span class="v">6.6:1</span><span class="k" style="background:#A4471F"></span><span>Link <code>#A4471F</code></span><span class="v">5.6:1</span><span class="k" style="background:#F5D3C0"></span><span>Spoken word <code>#F5D3C0</code></span><span class="v">11.9:1</span><span class="k" style="background:#B5542E"></span><span>Pour <code>#B5542E</code></span><span class="v">4.6:1</span></div></div>
+    <div class="rpal" data-rp="sand"><div class="pg"><div class="kick">Bitcoin Magazine</div><h5>Why relays, not servers, are the future of personal data</h5><p>Sync arrived so the reading could happen somewhere other than the saving. A <mark>voice</mark> arrived so the reading could happen with your hands on a <a href="#">steering wheel</a>.</p></div><div class="bar"><i></i></div>
+      <div class="spec"><h6 class="d2">Sand</h6><span class="k" style="background:#F1E4D3"></span><span>Page <code>#F1E4D3</code></span><span class="v"></span><span class="k" style="background:#3A2618"></span><span>Text <code>#3A2618</code></span><span class="v">11.4:1</span><span class="k" style="background:#6A5040"></span><span>Muted <code>#6A5040</code></span><span class="v">5.9:1</span><span class="k" style="background:#8E3A1A"></span><span>Link <code>#8E3A1A</code></span><span class="v">6.1:1</span><span class="k" style="background:#E6C3A6"></span><span>Spoken word <code>#E6C3A6</code></span><span class="v">8.7:1</span><span class="k" style="background:#A64A26"></span><span>Pour <code>#A64A26</code></span><span class="v">4.6:1</span></div></div>
+    <div class="rpal" data-rp="char"><div class="pg"><div class="kick">Bitcoin Magazine</div><h5>Why relays, not servers, are the future of personal data</h5><p>Sync arrived so the reading could happen somewhere other than the saving. A <mark>voice</mark> arrived so the reading could happen with your hands on a <a href="#">steering wheel</a>.</p></div><div class="bar"><i></i></div>
+      <div class="spec"><h6 class="d2">Char</h6><span class="k" style="background:#17100C"></span><span>Page <code>#17100C</code></span><span class="v"></span><span class="k" style="background:#E9DDD5"></span><span>Text <code>#E9DDD5</code></span><span class="v">14.1:1</span><span class="k" style="background:#BFA79A"></span><span>Muted <code>#BFA79A</code></span><span class="v">8.3:1</span><span class="k" style="background:#F0936A"></span><span>Link <code>#F0936A</code></span><span class="v">8.1:1</span><span class="k" style="background:#5A2A18"></span><span>Spoken word <code>#5A2A18</code></span><span class="v">8.9:1</span><span class="k" style="background:#7A3018"></span><span>Pour <code>#7A3018</code> + edge <code>#E8865E</code></span><span class="v">7.2:1</span></div></div>
+  </div>
+
+  <h3 class="k d">Type<small>Two families from Google Fonts, both OFL. Archivo’s width axis gives Kiln two voices from one family: 125 % for display, 100 % for interface. Literata, drawn for long reading on screens, takes the page.</small></h3>
+  <div class="type">
+    <div class="tcard"><div class="tl"><span>Display</span><span>Archivo · 125 % width · 800</span></div>
+      <div class="d" style="font-size:64px;line-height:.9">Saves</div>
+      <div class="d" style="font-size:32px;line-height:1;margin-top:14px">Your shelf is empty</div>
+      <div class="d tnum" style="font-size:44px;line-height:1;margin-top:14px;color:var(--clay)">2:04 <span style="font-size:22px;color:var(--ink)">8 saves</span></div>
+      <dl><dt>44</dt><dd>tab titles (Saves, Listen, You)</dd><dt>32–33</dt><dd>empty-state headings</dd><dt>30–46</dt><dd>numerals: clocks and counts</dd><dt>19–22</dt><dd>card and sheet headings, at 112 % width, 750</dd></dl></div>
+    <div class="tcard"><div class="tl"><span>Interface</span><span>Archivo · 100 % · 400–650</span></div>
+      <div style="font-size:16px;font-weight:650;line-height:1.28">The quiet return of the read-it-later app, and why it matters this time</div>
+      <div style="font-size:15px;line-height:1.5;margin-top:12px;color:var(--muted)">Share any link from any app and it lands here, cleaned up and ready to read offline.</div>
+      <div style="font-size:13px;font-weight:650;margin-top:12px;color:var(--clay)">4 min left</div>
+      <dl><dt>16/650</dt><dd>card titles, 1.28</dd><dt>15</dt><dd>body and rows</dd><dt>13</dt><dd>meta, labels, times; nothing smaller</dd><dt>tnum</dt><dd>every clock and count</dd></dl></div>
+    <div class="tcard"><div class="tl"><span>Reading</span><span>Literata · 18/1.6 · 400</span></div>
+      <div style="font-family:var(--ui);font-stretch:112%;font-weight:700;font-size:24px;line-height:1.12;letter-spacing:-.02em;margin-bottom:12px">Aggregation theory, ten years on</div>
+      <p style="font-family:var(--read);font-size:18px;line-height:1.6;margin:0">What never changed was the shape of the shelf: a list, newest at the top, that belonged to one person and nobody else.</p>
+      <dl><dt>17–19</dt><dd>body range in the Aa sheet; 18 default</dd><dt>1.6</dt><dd>line height (minimum 1.5)</dd><dt>28/700</dt><dd>article titles in Archivo 112 %</dd></dl></div>
+  </div>
+
+  <h3 class="k d">Shape language<small>Pills stay for everything you press. Containers get chunkier corners, and drenched surfaces end in a lip.</small></h3>
+  <div class="shapes">
+    <div class="shape"><div class="demo" style="gap:8px"><span class="btnx sec">Undo</span><span class="btnx">Read now</span></div><b>Pills · 999</b><span>Buttons, chips, segments, players, the toast on the phone. Labels centred with line-height 1 and flex alignment.</span></div>
+    <div class="shape"><div class="demo"><div style="width:180px;height:92px;border-radius:14px;background:#FFFFFF;box-shadow:var(--shadow-card);position:relative"><span style="position:absolute;left:14px;right:14px;bottom:11px;height:6px;border-radius:9px;background:var(--blush)"><i style="position:absolute;left:0;top:0;bottom:0;width:34%;border-radius:9px;background:var(--clay)"></i></span></div></div><b>Cards · 14, images · 10</b><span>Up from 10. Warm shadow in light, a <code>#36231A</code> hairline in dark. No borders in light.</span></div>
+    <div class="shape"><div class="demo"><div style="width:190px;height:96px;border-radius:0 0 28px 28px;background:var(--clay-field)"></div></div><b>Lips · 28</b><span>Mastheads, sheets and illustrations. A drenched surface always ends in a lip, so it reads as poured.</span></div>
+    <div class="shape"><div class="demo" style="gap:14px"><span class="pp" style="width:60px;height:60px" data-i="play" data-s="24" data-f="1"></span><span class="pp" style="width:60px;height:60px;background:var(--white-glaze);box-shadow:var(--white-edge);color:var(--clay)" data-i="pause" data-s="24" data-f="1"></span></div><b>Glaze</b><span>Pressables carry a 1 px top highlight, a darker foot and a clay-tinted shadow. Content and containers stay matte.</span></div>
+  </div>
+
+  <h3 class="k d">Texture and imagery<small>Depth comes from glaze, warm light and one supergraphic. There is no grain, noise or frosted glass.</small></h3>
+  <div class="tex">
+    <div class="tile"><div class="vis" style="background:var(--clay-field)"><svg viewBox="0 0 108 108" style="position:absolute;right:-50px;top:-30px;width:280px" aria-hidden="true"><path d="M41 25H67A4 4 0 0 1 71 29V64.24A1.5 1.5 0 0 1 68.68 65.5L54 56L39.32 65.5A1.5 1.5 0 0 1 37 64.24V29A4 4 0 0 1 41 25Z" fill="#3A100429"/><rect x="30" y="70" width="48" height="9" rx="4.5" fill="#3A10041C"/><rect x="30" y="70" width="32" height="9" rx="4.5" fill="#3A100429"/></svg><span class="d" style="position:relative;color:#FFFFFF;font-size:30px;line-height:1;padding:0 24px;align-self:flex-end;margin:0 auto 26px 0">Your shelf<br>is empty</span></div>
+      <div class="cap"><b>Supergraphic and glaze light</b>The icon’s bookmark, enormous and tone on tone, may stand behind a Clay field. It only darkens the field, so white type over it gains contrast. Clay fields darken towards their edges and never lighten.</div></div>
+    <div class="tile"><div class="vis" style="background:var(--paper)"><span class="raw" style="width:96px;height:96px"><img src="https://picsum.photos/seed/shelf-relays/192/192" alt=""></span><span class="duo" style="width:96px;height:96px"><img src="https://picsum.photos/seed/shelf-relays/192/192" alt=""></span><span class="duo" style="width:96px;height:96px;--duo-sh:#1A0B06;--duo-hi:#E58A62"><img src="https://picsum.photos/seed/shelf-relays/192/192" alt=""></span></div>
+      <div class="cap"><b>Duotone thumbnails</b>Original, paper duotone (char to peach), Char duotone (ember). A list of mismatched article photos becomes one set. The Reader shows the article’s image in its real colours, because the page belongs to its author.</div></div>
+    <div class="tile"><div class="vis" style="background:var(--char-field);flex-direction:column;gap:14px"><div style="display:flex;gap:10px"><span class="duo" style="width:62px;height:62px;--duo-sh:#1A0B06;--duo-hi:#E58A62"><img src="https://picsum.photos/seed/shelf-guardian/124/124" alt=""></span><span class="duo" style="width:62px;height:62px;--duo-sh:#1A0B06;--duo-hi:#E58A62"><img src="https://picsum.photos/seed/shelf-atlantic/124/124" alt=""></span><span class="duo" style="width:62px;height:62px;--duo-sh:#1A0B06;--duo-hi:#E58A62"><img src="https://picsum.photos/seed/shelf-wired/124/124" alt=""></span></div><span style="color:var(--on-char-muted);font-size:13px;font-weight:600">Played · three sources, one set</span></div>
+      <div class="cap"><b>Warm depth</b>Shadows are <code>#5A2414</code> at low alpha, never grey-blue. On Char, glows replace shadows: the play button and the Now playing card sit in a pool of warm light.</div></div>
+  </div>
+
+  <h3 class="k d">Icons<small>Lucide at 2 px stays the workhorse, drawn as today. Kiln changes where icons sit and what they sit on.</small></h3>
+  <div class="icons">
+    <div class="tile"><div class="demo" style="background:#2A140D"><span style="display:flex;flex-direction:column;align-items:center;gap:4px;color:#FFFFFF;font-size:13px;font-weight:600"><span style="width:60px;height:30px;border-radius:99px;background:var(--glaze);box-shadow:var(--glaze-edge);display:flex;align-items:center;justify-content:center" data-i="bookmarkF" data-s="22"></span>Saves</span><span style="display:flex;flex-direction:column;align-items:center;gap:4px;color:#D8BCAE;font-size:13px;font-weight:600"><span style="width:60px;height:30px;display:flex;align-items:center;justify-content:center" data-i="headphones" data-s="22"></span>Listen</span></div><b>Active tabs fill</b><span>The selected tab’s icon fills and sits in a glazed Clay pill. Inactive icons stay outlined in muted cream.</span></div>
+    <div class="tile"><div class="demo"><span class="medalx" data-i="archive" data-s="28"></span><span class="medalx w" data-i="headphones" data-s="28"></span></div><b>Glazed medallions</b><span>Empty-state medallions become 64 px glazed tiles (radius 20) with white icons, or white tiles with Clay icons on a Clay field.</span></div>
+    <div class="tile"><div class="demo" style="background:var(--paper);gap:10px"><span class="yi" style="width:36px;height:36px;border-radius:11px;background:var(--blush);color:var(--clay);display:inline-flex;align-items:center;justify-content:center" data-i="keyboard" data-s="20"></span><span style="width:36px;height:36px;border-radius:11px;background:var(--blush);color:var(--clay);display:inline-flex;align-items:center;justify-content:center" data-i="laptop" data-s="20"></span><span style="width:36px;height:36px;border-radius:11px;background:#FBE3E5;color:var(--error);display:inline-flex;align-items:center;justify-content:center" data-i="trash" data-s="20"></span></div><b>Row tiles</b><span>Settings icons sit in 36 px blush tiles (Clay icon at 3.8:1). Delete keeps its own crimson tile.</span></div>
+    <div class="tile"><div class="demo" style="background:var(--clay-field);color:#FFFFFF;gap:6px"><span class="ctl" data-i="back15" data-s="24"></span><span class="big" data-i="pause" data-s="24" data-f="1"></span><span class="ctl" data-i="fwd15" data-s="24"></span></div><b>On Clay and Char</b><span>Icons go white on Clay and cream on Char. Ember marks the one live thing in the Char room. The custom skip 15 pair stays.</span></div>
+  </div>
+
+  <h3 class="k d">The signature move: the pour<small>Drag the position. One stored position, four surfaces, one behaviour.</small></h3>
+  <div class="sig">
+    <p class="para">An article has one stored position, and Kiln draws it as Terracotta poured in from the left. <strong>On a card it is a 6 px shelf</strong> under the title, the same two-tone bar the bookmark stands on in the app icon, so every card stands on its shelf. <strong>In the Reader the whole top bar fills as you read,</strong> and every icon or letter the pour reaches turns white. While you listen, the pour moves into the player at the bottom and the top bar goes quiet, so one position still has one indicator; the mini player on every other screen pours the same way. Speed read and the lock screen keep a plain bar. It is built as two copies of the same row, the upper one clipped to the position, so it costs one width animation and nothing else.</p>
+    <div class="pourdemo" id="pourdemo" style="--p:34%">
+      <div class="pctl"><input type="range" min="0" max="100" value="34" id="pourRange" aria-label="Reading position"><output id="pourOut">34 %</output></div>
+      <div class="row"><span>Card</span><div class="t-light" style="--p-card:#FFFFFF"><div class="card pr" style="margin:0;box-shadow:var(--shadow-card)"><div class="body"><div class="src">Bitcoin Magazine</div><div class="ctitle" style="-webkit-line-clamp:1">Why relays, not servers, are the future of personal data</div><div class="meta"><span class="hot" id="demoLeft">4 min left</span></div></div><span class="shelf"><i id="demoShelf" style="width:34%"></i></span></div></div></div>
+      <div class="row"><span>Reader bar</span><div data-rp="bisque" style="position:relative;height:56px;border-radius:14px;overflow:hidden;box-shadow:var(--shadow-card)"><div class="rtop" style="top:0" data-pour="reader-bisque"></div></div></div>
+      <div class="row"><span>Reader bar, Char</span><div data-rp="char" style="position:relative;height:56px;border-radius:14px;overflow:hidden"><div class="rtop" style="top:0" data-pour="reader-char"></div></div></div>
+      <div class="row"><span>Mini player</span><div class="t-light" style="position:relative;height:64px"><div class="mini" style="bottom:0;left:0;right:0" data-pour="mini"></div></div></div>
+      <div class="row"><span>Reader dock</span><div data-rp="bisque" style="position:relative;height:64px"><div class="dock" style="bottom:0;left:0;right:0" data-pour="dock"></div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 3. PHONES ============================ -->
+<section id="screens">
+  <div class="sh"><span class="n d">03</span><h2 class="d">The screens</h2><p>Real size, 360 × 760 CSS px, drawn in HTML and CSS. The prototype’s copy, articles and controls, unchanged; only the identity moves.</p></div>
+  <div class="screens">
+    <div class="shot"><div class="tag"><b class="d2">Saves</b><span>Unread · light</span></div><div id="ph-saves"></div>
+      <p>The masthead is poured Clay with the title at 125 % width; it folds into a 56 px Clay bar as the list scrolls. Cards are matte white tiles on cream. <strong>The part-read card stands on its shelf,</strong> the same two-tone bar as the icon. The mini player is Char, and its pour has passed the play button.</p></div>
+    <div class="shot"><div class="tag"><b class="d2">Reader</b><span>Listening · Bisque</span></div><div id="ph-reader"></div>
+      <p>The page stays quiet: Literata 18/1.6 on <code>#FBF6F2</code> at 15.6:1, the spoken word on a peach highlight. <strong>The dock carries the pour:</strong> everything left of 34 % has turned white, including half of the clock. The top bar goes plain while the dock plays.</p></div>
+    <div class="shot"><div class="tag"><b class="d2">Listen</b><span>Now playing</span></div><div id="ph-listen"></div>
+      <p>Listening gets its own room, Char in both themes. <strong>Now playing is a Clay card</strong> with the elapsed time as a programme numeral and a white glazed play button. Played rows are Char tiles whose thumbnails glow ember.</p></div>
+
+    <div class="shot"><div class="tag"><b class="d2">Saves, first run</b><span>Empty</span></div><div id="ph-empty"></div>
+      <p>With nothing to list, <strong>the masthead pours down the whole screen.</strong> The icon’s bookmark stands behind it, enormous and tone on tone. The share-sheet drawing is a cream label stuck on at an angle. The one button is white, because content on Clay is white.</p></div>
+    <div class="shot"><div class="tag"><b class="d2">You</b><span>Settings · light</span></div><div id="ph-you"></div>
+      <p>The boring screen gets a Sand masthead with the counts as programme numerals and <strong>the shelf drawn as spines,</strong> one per save, filled as far as you’ve read; archived saves are Char. The backup card is the screen’s one Clay moment. Rows keep their order and copy, icons in blush tiles. The spines are an addition, so they go on the flow map before anything is built.</p></div>
+    <div class="side"><h4 class="d">Boring screens, turned up</h4>
+      <p>Empty states, settings and lists are where most of the app’s hours go, so Kiln spends its loudest moves there. The populated Saves list is the quietest screen in the set.</p>
+      <div class="callout">Each tab has its own firing: <strong>Saves is Clay, Listen is Char, You is Sand.</strong> The Char tab bar runs under all three and holds them together. The Reader belongs to none of them; it takes the reading palette.</div></div>
+
+    <div class="shot"><div class="tag"><b class="d2">Saves</b><span>Unread · dark</span></div><div id="ph-saves-dark"></div>
+      <p>Night Clay is fired deeper, <code>#7A3018</code>, so the masthead glows without flaring (white on it 9.3:1). Cards are <code>#1F120C</code> with a warm hairline, and thumbnails turn ember. The mini player lifts to <code>#2E1A12</code> to clear the ground.</p></div>
+    <div class="shot"><div class="tag"><b class="d2">Reader</b><span>Reading · Char palette</span></div><div id="ph-reader-dark"></div>
+      <p>Not listening, so <strong>the pour lives in the top bar:</strong> deep clay with an ember leading edge, turning the back arrow and half the address white. Body <code>#E9DDD5</code> on <code>#17100C</code> at 14.1:1; the link is ember at 8.1:1. Archive floats, unglazed.</p></div>
+    <div class="side"><h4 class="d">Dark, fired warm</h4>
+      <p>Today’s dark theme borrows a cool blue-black from the UI kit. Kiln’s dark is brown-black, <code>#140B07</code>, so the Terracotta fill sits in the same family as the ground and never looks like a warning light.</p>
+      <div class="callout">The Char reading palette deepens the pour to <code>#7A3018</code> and marks its edge in ember, so a 56 px bar of colour at the top of the page stays dim at night and its position still reads at 7.2:1.</div></div>
+  </div>
+</section>
+
+<!-- ============================ 4. BEYOND ============================ -->
+<section id="beyond">
+  <div class="sh"><span class="n d">04</span><h2 class="d">Beyond the phone</h2><p>The icon on real wallpapers, light and dark, and the extension’s save toast on someone else’s white page.</p></div>
+  <div class="homes">
+    <div class="home light"><div class="clock">9:41</div><div class="date">Saturday 3 October</div>
+      <div class="hrow" data-row="light"></div><div class="dock2" data-dock="light"></div></div>
+    <div class="home dark"><div class="clock">9:41</div><div class="date">Saturday 3 October</div>
+      <div class="hrow" data-row="dark"></div><div class="dock2" data-dock="dark"></div></div>
+  </div>
+  <div class="iconpair">
+    <div class="tile"><span class="big2" data-icon="today"></span><div><b>Today</b><span>The approved icon: cream bookmark on a pale shelf bar, flat gradient.</span></div></div>
+    <div class="tile"><span class="big2" data-icon="kiln"></span><div><b>Kiln</b><span>Same geometry. The tile is glazed, the unread track turns Char so the read two thirds pour out in cream, and the bookmark casts a warm shadow.</span></div></div>
+    <div class="tile"><span class="big2" data-icon="mono" style="background:#DCE6E9"></span><div><b>Themed (monochrome)</b><span>Unchanged layer: Android tints it. The bookmark and shelf survive at 16 px because the geometry did not move.</span></div></div>
+  </div>
+
+  <h3 class="k d">The extension’s save toast<small>On someone else’s white page, the toast is a small Clay card. It is the one place a stranger’s site meets Shelf, so it gets the loudest fill on the board.</small></h3>
+  <div class="beyond2">
+    <div class="browser">
+      <div class="tabs"><span class="dots"><i></i><i></i><i></i></span><span class="tb"><i></i>What we lose when we stop reading long things</span></div>
+      <div class="addr"><span class="tbx" data-i="back" data-s="18"></span><span class="tbx" data-i="refresh" data-s="16"></span><span class="url">theatlantic.com/ideas/what-we-lose</span><span class="tbx shelfbtn"><span data-icon="kiln"></span></span><span class="tbx" data-i="more" data-s="18"></span></div>
+      <div class="pagearea">
+        <article class="site"><div class="kick">Ideas</div><h1>What we lose when we stop reading long things</h1><div class="by">By Megan Garber · 11 min read</div>
+          <p>There is a particular kind of attention that only long reading asks for. It is slower than scrolling and less rewarding at first, and it builds something that skimming never does.</p>
+          <p>For most of the past decade, the tools we use to read have been built to keep us moving: one more headline, one more thread. The <a href="#">read-it-later apps</a> were the exception, and their quiet decline tells us something about what we chose to value.</p>
+          <p>What they offered was modest. A list. A clean page. A promise that the thing you meant to read would still be there when you had the time to read it properly.</p></article>
+        <div class="xtoast" role="group" aria-label="Shelf">
+          <svg class="sgx" viewBox="0 0 108 108" aria-hidden="true"><path d="M41 25H67A4 4 0 0 1 71 29V64.24A1.5 1.5 0 0 1 68.68 65.5L54 56L39.32 65.5A1.5 1.5 0 0 1 37 64.24V29A4 4 0 0 1 41 25Z" fill="#3A100424"/></svg>
+          <div class="row"><span class="ti" data-i="check" data-s="17" data-w="3"></span><div class="tx"><b>Saved to Shelf</b><span>What we lose when we stop reading long things</span></div><span class="act">Undo</span><span class="x" data-i="x" data-s="16"></span></div>
+          <div class="timer"><i></i></div></div>
+      </div>
+    </div>
+    <div class="side" style="padding-top:0">
+      <p style="margin-top:0"><strong style="color:var(--ink)">Same anatomy, new fill.</strong> Icon, title, page title, Undo, ✕ and the countdown, exactly as decision 30 and spec 05 set them. The check sits on a white disc because content on Clay is white.</p>
+      <p>The countdown is a 3 px white pour draining from the right over a deep clay track, the same bar as everywhere else.</p>
+      <div class="callout">Contrast: title and page title white on <code>#B5542E</code> 4.92:1; Undo white on its chip (<code>#954121</code> composited) 6.9:1; check <code>#B5542E</code> on white 4.92:1. In a dark-scheme browser the toast stays Clay, since Clay reads on both.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 5. NOTES ============================ -->
+<section id="notes">
+  <div class="sh"><span class="n d">05</span><h2 class="d">Honest notes</h2></div>
+  <div class="notes">
+    <div class="note cool"><h4 class="d">What’s cool</h4>
+      <h5>You can spot it across a room</h5><p>One colour used as a surface, in every screenshot and every store tile. Shelf reads as Shelf in a thumbnail, before anyone sees the name.</p>
+      <h5>Each tab has a firing</h5><p>Clay, Char and Sand tell you where you are before you read a word, with the Char tab bar running under all three.</p>
+      <h5>The pour makes the one idea visible</h5><p>Shelf already had one position per article. Kiln turns it into a moving, legible thing on the card, the Reader, the mini and the dock, and ties it to the icon.</p>
+      <h5>The boring screens get the loudest moves</h5><p>An empty shelf floods with Clay, You gets programme numerals and a drawn shelf, the settings rows get tiles. The populated list stays the calmest screen, because it is the one you use most.</p>
+      <h5>Low risk</h5><p>Same colour, same icon, same controls, same copy. Everything is a dial Richard has already approved, turned further.</p></div>
+    <div class="note wrong"><h4 class="d">What could go wrong</h4>
+      <h5>Fatigue</h5><p>A Clay masthead on every open could tire. It folds to 56 px on scroll, Clay never sits behind long text, and the Reader is never drenched. If it still tires, Saves keeps a Clay bar and only empty states flood.</p>
+      <h5>The narrowest pass</h5><p>White on <code>#B5542E</code> is 4.92:1. Nothing lighter may sit behind text on Clay, which rules out highlights where words go. The pour splits words across two colour pairs; both pass, but test with TalkBack users that the split never reads as a glitch.</p>
+      <h5>Red next to Terracotta</h5><p>Error crimson <code>#C42A3C</code> sits close in hue. Errors always carry the alert icon and words, never colour alone.</p>
+      <h5>Duotone hides pictures</h5><p>Some people find an article by its photo. Test whether thumbnails need real colour; the Reader keeps it either way.</p>
+      <h5>Tab flash and old decisions</h5><p>Listen is dark in the light theme, so switching tabs swaps cream for Char. Crossfade the room over 150 ms (opacity only with reduced motion). Kiln reopens decisions 46 and 57 (toast and mini looks) and the spec’s radius 10 and medallion.</p></div>
+    <div class="note build"><h4 class="d">What it takes</h4>
+      <h5>Tokens, about two days</h5><p>tokens.json grows from two themes of ten roles to four surfaces × two themes, plus three reading palettes with a pour colour each. The generator emits React Native theme objects and CSS custom properties.</p>
+      <h5>Fonts, about 1 MB</h5><p>React Native can’t set variation axes, so the app ships static instances through expo-font: Archivo Regular, Medium, SemiBold, SemiExpanded Bold and Expanded ExtraBold; Literata Regular, Italic and SemiBold. The website uses the variable woff2s; the extension bundles them locally.</p>
+      <h5>The pour, about a day</h5><p>One shared component: the row twice, the top copy in an overflow-hidden View whose width Reanimated drives from the stored position. pointerEvents none, hidden from TalkBack. No Skia. CSS uses clip-path.</p>
+      <h5>Glaze, duotone, graphics</h5><p>React Native 0.76+ boxShadow (new architecture) gives inset highlights and brown shadows; expo-linear-gradient paints the fields. Duotone runs once per thumbnail in a react-native-skia ColorMatrix and is cached as a JPEG, so lists draw a plain Image. Supergraphic and spines are react-native-svg. App icon: edit two SVGs and rerun build-icons.cjs.</p></div>
+  </div>
+
+  <h3 class="k d">Measured contrast<small>Every pair below was computed with WCAG 2.1 relative luminance. AA asks 4.5:1 for normal text and 3:1 for large text and icons; reading text in Kiln asks 7:1.</small></h3>
+  <div style="overflow-x:auto;border-radius:var(--r-card)"><table class="ctab" id="ctab"><thead><tr><th>Pair</th><th>Where</th><th style="text-align:right">Ratio</th><th>Passes</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<p class="foot">Kiln · Shelf design study, direction “Terracotta, turned up” · 3 October 2026 · Fonts: Archivo and Literata (SIL Open Font Licence) via Google Fonts · Thumbnails: picsum.photos placeholders, as in the prototype.</p>
+</main>
+
+<script>
+/* ---------------- icons (Lucide paths, as in the prototype) ---------------- */
+const I = {
+  search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  back:'<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+  x:'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  more:'<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  play:'<polygon points="6 3 20 12 6 21 6 3"/>',
+  pause:'<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
+  archive:'<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
+  ext:'<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  bookmark:'<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>',
+  bookmarkF:'<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" fill="currentColor"/>',
+  headphones:'<path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/>',
+  headphonesF:'<path d="M3 15v-3a9 9 0 0 1 18 0v3"/><rect x="3" y="14" width="5" height="7" rx="2" fill="currentColor"/><rect x="16" y="14" width="5" height="7" rx="2" fill="currentColor"/>',
+  user:'<circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/>',
+  userF:'<circle cx="12" cy="8" r="5" fill="currentColor"/><path d="M20 21a8 8 0 0 0-16 0z" fill="currentColor"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  shield:'<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+  keyboard:'<path d="M10 8h.01M12 12h.01M14 8h.01M16 12h.01M18 8h.01M6 8h.01M7 16h10M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/>',
+  phone:'<rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/>',
+  laptop:'<path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>',
+  settings:'<path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>',
+  trash:'<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
+  chev:'<path d="m9 18 6-6-6-6"/>',
+  refresh:'<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+  back15:'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 5v3h3"/><path stroke-width="1.5" d="M9 10.5l1.125-1.125v5.25"/><path stroke-width="1.5" d="M15 9.375h-2.25v2.25h.75a1.5 1.5 0 0 1 0 3h-.75"/>',
+  fwd15:'<path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 5v3h-3"/><path stroke-width="1.5" d="M9 10.5l1.125-1.125v5.25"/><path stroke-width="1.5" d="M15 9.375h-2.25v2.25h.75a1.5 1.5 0 0 1 0 3h-.75"/>',
+};
+const ic = (n, s = 20, f = false, w = 2) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="${f ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[n]}</svg>`;
+
+/* ---------------- the app icon ---------------- */
+const BM = 'M41 25H67A4 4 0 0 1 71 29V64.24A1.5 1.5 0 0 1 68.68 65.5L54 56L39.32 65.5A1.5 1.5 0 0 1 37 64.24V29A4 4 0 0 1 41 25Z';
+// Android masks the adaptive icon's 108 canvas to its central 72: viewBox 18 18 72 72 shows what a launcher circle shows.
+const icon = kind => {
+  if (kind === 'today') return `<svg viewBox="18 18 72 72" width="100%" height="100%" aria-hidden="true"><rect width="108" height="108" fill="url(#oTile)"/><path d="${BM}" fill="#FCF7F6"/><rect x="30" y="70" width="48" height="9" rx="4.5" fill="#DAAA97"/><rect x="30" y="70" width="32" height="9" rx="4.5" fill="#FCF7F6"/></svg>`;
+  if (kind === 'mono') return `<svg viewBox="18 18 72 72" width="100%" height="100%" aria-hidden="true"><rect width="108" height="108" fill="#DCE6E9"/><path d="${BM}" fill="#2E4A55"/><rect x="30" y="70" width="48" height="9" rx="4.5" fill="#2E4A5566"/><rect x="30" y="70" width="32" height="9" rx="4.5" fill="#2E4A55"/></svg>`;
+  return `<svg viewBox="18 18 72 72" width="100%" height="100%" aria-hidden="true"><rect width="108" height="108" fill="url(#kTile)"/><rect width="108" height="108" fill="url(#kGlaze)"/><g filter="url(#kDrop)"><path d="${BM}" fill="#FCF7F6"/><rect x="30" y="70" width="48" height="9" rx="4.5" fill="#2A140D"/><rect x="30" y="70" width="32" height="9" rx="4.5" fill="#FCF7F6"/></g></svg>`;
+};
+const SGB = (cls, a = '24') => `<svg class="${cls}" viewBox="30 18 48 54" aria-hidden="true"><path d="${BM}" fill="#3A1004${a}"/></svg>`;
+const SG = (cls, a = '1F', b = '14') => `<svg class="${cls}" viewBox="0 0 108 108" aria-hidden="true"><path d="${BM}" fill="#3A1004${a}"/><rect x="30" y="70" width="48" height="9" rx="4.5" fill="#3A1004${b}"/><rect x="30" y="70" width="32" height="9" rx="4.5" fill="#3A1004${a}"/></svg>`;
+
+/* ---------------- shared phone parts ---------------- */
+const sb = color => `<div class="sb" style="color:${color}"><span>9:41</span><span class="ics"><svg width="15" height="11" viewBox="0 0 15 11" aria-hidden="true"><path d="M1 10h2V7H1zM5 10h2V5H5zM9 10h2V3H9zM13 10h2V0h-2z" fill="currentColor"/></svg><svg width="14" height="11" viewBox="0 0 14 11" aria-hidden="true"><path d="M7 10.5 0.6 3.6a9.2 9.2 0 0 1 12.8 0z" fill="currentColor"/></svg><svg width="22" height="11" viewBox="0 0 22 11" aria-hidden="true"><rect x=".5" y=".5" width="18" height="10" rx="3" fill="none" stroke="currentColor" opacity=".55"/><rect x="2" y="2" width="12" height="7" rx="1.6" fill="currentColor"/><rect x="19.6" y="3.5" width="1.6" height="4" rx=".8" fill="currentColor" opacity=".55"/></svg></span></div>`;
+const gb = cls => `<div class="gb ${cls}"><i></i></div>`;
+const tabbar = (on, cls = '') => {
+  const t = (id, icn, label) => `<span class="t ${on === id ? 'on' : ''}"><span class="pill">${ic(on === id ? icn + 'F' : icn, 22)}</span>${label}</span>`;
+  return `<nav class="tabbar ${cls}">${t('saves', 'bookmark', 'Saves')}${t('listen', 'headphones', 'Listen')}${t('you', 'user', 'You')}</nav>`;
+};
+const phone = (theme, inner) => `<div class="phone ${theme}">${inner}</div>`;
+
+/* ---------------- data: the prototype's seed ---------------- */
+const ITEMS = [
+  {src:'The Guardian', title:'The quiet return of the read-it-later app, and why it matters this time', mins:9, p:0, img:'shelf-guardian'},
+  {src:'Bitcoin Magazine', title:'Why relays, not servers, are the future of personal data', mins:6, p:.34, img:'shelf-relays'},
+  {src:'Stratechery', title:'Aggregation theory, ten years on', mins:14, p:0},
+  {src:'From Chrome', title:'Mozilla’s Readability library is quietly everywhere', mins:5, status:'browser'},
+  {src:'nytimes.com', title:'The Long Road Back to the Office', status:'failed'},
+  {src:'The Atlantic', title:'What we lose when we stop reading long things', mins:11, p:0, img:'shelf-atlantic'},
+];
+const minsLeft = it => Math.max(1, Math.round(it.mins * (1 - it.p)));
+const card = it => {
+  let src = it.src, meta;
+  if (it.status === 'browser') { src = `${ic('laptop', 14)}From Chrome`; meta = `<span class="pdot"></span>Getting the text…`; }
+  else if (it.status === 'failed') meta = `<span>Couldn’t get the text</span><span class="sep"></span><span class="lnk">Open original ${ic('ext', 14)}</span>`;
+  else meta = it.p > 0 ? `<span class="hot">${minsLeft(it)} min left</span>` : `${it.mins} min`;
+  const pr = it.p > 0 && it.p < 1;
+  const img = it.img ? `<span class="duo"><img src="https://picsum.photos/seed/${it.img}/152/152" alt=""></span>` : '';
+  return `<div class="card ${pr ? 'pr' : ''}"><div class="body"><div class="src">${src}</div><div class="ctitle">${it.title}</div><div class="meta">${meta}</div></div>${img}${pr ? `<span class="shelf"><i style="width:${it.p * 100}%"></i></span>` : ''}</div>`;
+};
+
+/* the pour: the same row twice; the upper copy is clipped to the position and hidden from assistive tech */
+const pourbox = (cls, p, row, extra = '') => `<div class="${cls} pourbox" style="--p:${p}%;${extra}"><div class="lyr base">${row(false)}</div><div class="lyr pour" aria-hidden="true">${row(true)}</div></div>`;
+const miniRow = () => `<span class="pp">${ic('pause', 20, true)}</span><span class="info"><b>Why relays, not servers, are the future of personal data</b><span>2:04 / 6:05</span></span>`;
+const dockRow = () => `<span class="pp">${ic('pause', 20, true)}</span><span class="tt">2:04 / 6:05</span><span class="ctl">${ic('back15', 24)}</span><span class="ctl">${ic('fwd15', 24)}</span><span class="rate">1×</span>`;
+const readerRow = listen => () => `<span class="iconbtn">${ic('back', 22)}</span><span class="host">bitcoinmagazine.com</span>${listen ? `<span class="listenchip">${ic('play', 14, true)}Listen</span>` : ''}<span class="iconbtn aa">Aa</span><span class="iconbtn">${ic('more', 22)}</span>`;
+
+const PROSE = [
+  'The first time a page disappears from the web while it is still on your list, you learn what a read-it-later app is actually for. It was never about saving time. It was about keeping the thing itself, the words, somewhere that belongs to you rather than to whoever happens to be hosting them this year.',
+  'Everything that followed was an elaboration of that one move. Sync arrived so the reading could happen somewhere other than the saving. A clean view arrived so the text could be read without the page fighting back. A <span class="on">voice</span> arrived so the reading could happen with your hands on a steering wheel.',
+  'What never changed was the shape of the shelf: a list, newest at the top, that belonged to one person and nobody else. The services that held those lists came and went. Some were bought, some were shut, one was quietly folded into a browser and then quietly folded away again.',
+  '<a href="#">Relays</a> change the arithmetic. If the list lives in several places at once, and only its owner can read it, then no single company closing its doors takes the list with it. The app becomes a window onto something the user already has, rather than the thing they are renting.',
+  'That sounds abstract until the day it matters. Then it sounds like the most practical idea in the world: the article you saved in 2026 is still there in 2036, readable offline, in a clean column, exactly where you left it.',
+];
+
+/* ---------------- 1. Saves, Unread ---------------- */
+const savesScreen = dark => phone(dark ? 't-dark' : 't-light', `
+  ${sb('#FFFFFF')}
+  <div class="vp"><div class="scr">
+    <header class="mast">${SGB('sgm', '26')}
+      <div class="head"><h1>Saves</h1><span class="count">6 unread</span></div>
+      <span class="searchbar">${ic('search', 18)}Search your saves</span>
+      <div class="segs"><span class="seg on">Unread</span><span class="seg">Archive</span></div>
+    </header>
+    <div class="list">${ITEMS.map(card).join('')}</div>
+  </div>
+  ${pourbox('mini', 34, miniRow)}
+  ${tabbar('saves')}</div>${gb('char')}`);
+
+/* ---------------- 2. Reader, playing (Bisque) ---------------- */
+const readerScreen = () => `<div class="phone t-light reader" data-rp="bisque">
+  ${sb('#2A1A12')}
+  <div class="vp">
+    <div class="rtop"><div class="lyr base" style="position:absolute;inset:0;display:flex;align-items:center;gap:2px;padding:0 8px">${readerRow(false)()}</div></div>
+    <div class="rbody"><div class="art" style="margin-top:-640px">
+      <div class="kick">Bitcoin Magazine</div><h1>Why relays, not servers, are the future of personal data</h1><div class="by">Shinobi · 6 min · Saved yesterday</div>
+      <div class="prose"><img class="fig" src="https://picsum.photos/seed/shelf-relays/720/480" alt="">${PROSE.map(p => `<p>${p.replace('<a href="#">Relays</a>', 'Relays')}</p>`).join('')}</div></div></div>
+    <span class="archfloat" style="bottom:88px">${ic('archive', 22)}</span>
+    ${pourbox('dock', 34, dockRow)}
+  </div>${gb('')}</div>`;
+
+/* ---------------- 3. Listen, Now playing (the Char room) ---------------- */
+const lrow = (it, live, mins, p) => `<div class="lrow ${p ? 'pr' : ''}"><span class="rp ${live ? 'live' : ''}">${ic(live ? 'pause' : 'play', 18, true)}</span>
+  <span class="body"><span class="src">${it.src}</span><span class="ctitle" style="display:-webkit-box">${it.title}</span><span class="meta">${p ? `<span class="hot">${mins} min left</span>` : `${mins} min`}</span></span>
+  <span class="duo"><img src="https://picsum.photos/seed/${it.img}/112/112" alt=""></span>${p ? `<span class="shelf"><i style="width:${p * 100}%"></i></span>` : ''}</div>`;
+const listenScreen = () => `<div class="phone t-light room">
+  ${sb('#FFF4EE')}
+  <div class="vp"><div class="scr" style="padding-top:24px">
+    <div class="head" style="padding-top:14px"><h1>Listen</h1><span class="count">3 played</span></div>
+    <div class="nowcard">
+      <div class="lbl2"><span class="eq"><i></i><i></i><i></i></span>Now playing</div>
+      <div class="t">Why relays, not servers, are the future of personal data</div>
+      <div class="s">Bitcoin Magazine</div>
+      <div class="pbar"><i style="width:34%"></i></div>
+      <div class="times"><span class="el">2:04</span><span class="tot">6:05</span></div>
+      <div class="nctl"><span class="ctl" style="grid-column:2">${ic('back15', 24)}</span><span class="big" style="grid-column:3">${ic('pause', 24, true)}</span><span class="ctl" style="grid-column:4">${ic('fwd15', 24)}</span><span class="rate">1×</span></div>
+    </div>
+    <div class="sectionhead"><h2>Played</h2><span class="pbtn">${ic('play', 14, true)}Play all</span></div>
+    ${lrow(ITEMS[1], true, 4, .34)}
+    ${lrow(ITEMS[0], false, 9, 0)}
+    ${lrow({src:'Wired', title:'Your bookmarks are a graveyard. Here is how to dig them up', img:'shelf-wired'}, false, 7, 0)}
+  </div>${tabbar('listen', 'deep')}</div>${gb('deep')}</div>`;
+
+/* ---------------- 4. Saves, first run (Clay floods the screen) ---------------- */
+const emptyScreen = () => `<div class="phone t-light flood">
+  ${sb('#FFFFFF')}
+  <div class="vp"><div class="scr">
+    ${SG('sgf', '26', '1A')}
+    <div class="head" style="padding-top:38px;position:relative"><h1>Saves</h1></div>
+    <div class="emptyc">
+      <div class="illus"><div class="lb">Share to</div><div class="apps">
+        <span class="app"><i></i>Messages</span><span class="app"><i></i>Mail</span><span class="app me"><i>${icon('kiln')}</i>Shelf</span><span class="app"><i></i>Notes</span></div><div class="hand"></div></div>
+      <h2>Your shelf<br>is empty</h2>
+      <p>Share any link from any app and it lands here, cleaned up and ready to read offline.</p>
+      <span class="pbtnw">${ic('laptop', 18)}Connect your browser</span>
+    </div>
+  </div>${tabbar('saves')}</div>${gb('char')}</div>`;
+
+/* ---------------- 5. You (Sand masthead, programme numerals, the shelf as spines) ---------------- */
+const SPINES = [ // one per save, in list order: minutes set the height, the stored position pours in from the foot; archived saves are Char
+  {m:9, w:26}, {m:6, w:22, p:.34}, {m:14, w:30}, {m:5, w:20, pend:true}, {m:3, w:22, fail:true}, {m:11, w:28}, {m:18, w:32, arch:true}, {m:7, w:24, arch:true, lean:true},
+];
+const spines = () => {
+  const H = 64, base = H - 5, G = 4;
+  let x = 0, out = '';
+  SPINES.forEach((s, i) => {
+    const W = s.w, h = Math.round(26 + s.m / 18 * 32), y = base - h;
+    const bands = c => `<rect x="4" y="6" width="${W - 8}" height="2" rx="1" fill="${c}"/><rect x="4" y="10" width="${W - 8}" height="2" rx="1" fill="${c}"/>`;
+    let g;
+    if (s.arch) g = `<rect width="${W}" height="${h}" rx="3" fill="#2A140D"/>${bands('#FF8A5B')}`;
+    else if (s.fail) g = `<rect x=".75" y=".75" width="${W - 1.5}" height="${h - 1.5}" rx="3" fill="none" stroke="#6E5246" stroke-width="1.5" stroke-dasharray="3 2.5"/>`;
+    else {
+      g = `<rect width="${W}" height="${h}" rx="3" fill="${s.pend ? '#F6DDD0' : '#FFFFFF'}" stroke="#24130C" stroke-opacity=".14"/>`;
+      if (s.p) { const ph = Math.round(h * s.p); g += `<path d="M0 ${h - ph}H${W}V${h - 3}a3 3 0 0 1-3 3H3a3 3 0 0 1-3-3z" fill="#B5542E"/>`; }
+      g += bands('#24130C24');
+      if (s.pend) g += `<circle cx="${W / 2}" cy="${h - 9}" r="3" fill="#B5542E"/>`;
+    }
+    if (s.lean) { x += 9; out += `<g transform="translate(${x},${y}) rotate(-13 ${W} ${h})">${g}</g>`; }
+    else out += `<g transform="translate(${x},${y})">${g}</g>`;
+    x += W + G;
+  });
+  const w = 328;
+  return `<svg class="spines" width="${w}" height="${H}" viewBox="0 0 ${w} ${H}" aria-hidden="true">${out}<rect x="0" y="${base}" width="${w}" height="5" rx="2.5" fill="#24130C"/></svg>`;
+};
+const yrow = (icn, label, opts = {}) => `<div class="yrow ${opts.danger ? 'danger' : ''}"><span class="yi">${ic(icn, 20)}</span><span class="yl">${label}${opts.sub ? `<small class="${opts.warn ? 'warn' : ''}">${opts.sub}</small>` : ''}</span>${opts.value ? `<span class="yv">${opts.value}</span>` : ''}${opts.chev === false ? '' : `<span class="chev">${ic('chev', 18)}</span>`}</div>`;
+const youScreen = () => `<div class="phone t-light">
+  ${sb('#24130C')}
+  <div class="vp"><div class="scr">
+    <header class="sandmast">
+      <div class="head" style="padding-bottom:14px;align-items:flex-end"><h1>You</h1><div class="score"><div><b>8</b><span>saves</span></div><div><b>12</b><span>listened</span></div></div></div>
+      <div style="padding:0 16px">${spines()}</div>
+    </header>
+    <div class="bcard">
+      <div class="h" style="position:relative">${ic('shield', 20)}Back up your shelf</div>
+      <p style="position:relative">Your saves are yours alone. A recovery code brings them back on any phone, even if this one is lost.</p>
+      <div class="row" style="position:relative"><span class="btn later">Later</span><span class="btn go">Show recovery code</span></div></div>
+    <div class="ygroup">
+      ${yrow('keyboard', 'Recovery code', {sub:'Not written down', warn:true})}
+      ${yrow('phone', 'Add another device')}
+      ${yrow('laptop', 'Connected browsers', {value:'1'})}
+    </div>
+    <div class="ygroup">${yrow('settings', 'Advanced')}</div>
+    <div class="ygroup">${yrow('trash', 'Delete my data', {danger:true})}</div>
+  </div>${tabbar('you')}</div>${gb('char')}</div>`;
+
+/* ---------------- 7. Reader, reading (Char palette, phone in dark theme) ---------------- */
+const readerDark = () => `<div class="phone t-dark reader" data-rp="char">
+  ${sb('#E9DDD5')}
+  <div class="vp">
+    ${pourbox('rtop', 34, readerRow(true), '--edge:var(--r-edge)')}
+    <div class="rbody"><div class="art" style="margin-top:-500px">
+      <div class="kick">Bitcoin Magazine</div><h1>Why relays, not servers, are the future of personal data</h1><div class="by">Shinobi · 6 min · Saved yesterday</div>
+      <div class="prose"><img class="fig" src="https://picsum.photos/seed/shelf-relays/720/480" alt="">${PROSE.map(p => `<p>${p.replace('<span class="on">voice</span>', 'voice')}</p>`).join('')}</div></div></div>
+    <span class="archfloat" style="bottom:16px">${ic('archive', 22)}</span>
+  </div>${gb('')}</div>`;
+
+/* ---------------- mount ---------------- */
+const $ = id => document.getElementById(id);
+$('ph-saves').innerHTML = savesScreen(false);
+$('ph-reader').innerHTML = readerScreen();
+$('ph-listen').innerHTML = listenScreen();
+$('ph-empty').innerHTML = emptyScreen();
+$('ph-you').innerHTML = youScreen();
+$('ph-saves-dark').innerHTML = savesScreen(true);
+$('ph-reader-dark').innerHTML = readerDark();
+document.querySelectorAll('#ph-reader .gb, #ph-reader-dark .gb').forEach(g => { g.style.background = 'var(--r-bg)'; g.style.color = 'var(--r-text)'; });
+
+/* signature demo rows */
+document.querySelectorAll('[data-pour]').forEach(el => {
+  const k = el.dataset.pour;
+  const row = k === 'mini' ? miniRow : k === 'dock' ? dockRow : readerRow(true);
+  el.classList.add('pourbox');
+  el.innerHTML = `<div class="lyr base">${row(false)}</div><div class="lyr pour" aria-hidden="true">${row(true)}</div>`;
+  if (k === 'reader-char') el.style.setProperty('--edge', 'var(--r-edge)');
+});
+const demo = $('pourdemo'), range = $('pourRange');
+const setPour = v => {
+  demo.style.setProperty('--p', v + '%');
+  demo.querySelectorAll('.pourbox').forEach(b => b.style.setProperty('--p', v + '%'));
+  $('pourOut').textContent = v + ' %';
+  $('demoShelf').style.width = v + '%';
+  $('demoLeft').textContent = v >= 100 ? 'Read' : `${Math.max(1, Math.round(6 * (1 - v / 100)))} min left`;
+};
+range.addEventListener('input', e => setPour(+e.target.value));
+setPour(34);
+
+/* data-i icons and app icons */
+document.querySelectorAll('[data-i]').forEach(el => { el.innerHTML = ic(el.dataset.i, +el.dataset.s || 20, el.dataset.f === '1', +el.dataset.w || 2); });
+document.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML = icon(el.dataset.icon); });
+
+/* home-screen rows: neutral neighbours, never another brand's mark */
+const glyph = (bg, inner) => `<span class="ico" style="background:${bg}"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg></span>`;
+const NEIGH = {
+  clock: glyph('#3B4A5C', '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>'),
+  camera: glyph('#5C6B73', '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>'),
+  notes: glyph('#C9A227', '<path d="M8 6h8M8 10h8M8 14h5"/><rect x="4" y="3" width="16" height="18" rx="2"/>'),
+  weather: glyph('#2F7FB0', '<circle cx="9" cy="10" r="3"/><path d="M17 18H8a4 4 0 0 1 0-8"/><path d="M17 18a3 3 0 0 0 0-6 5 5 0 0 0-8.5-2"/>'),
+  files: glyph('#3E7D6B', '<path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8l-2-2H4a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1z"/>'),
+  phone2: glyph('#2E8B57', '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>'),
+  msg: glyph('#4C6FBF', '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
+  web: glyph('#6B7280', '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>'),
+};
+const shelfIco = `<span class="ico">${icon('kiln')}</span>`;
+document.querySelectorAll('[data-row]').forEach(r => {
+  r.innerHTML = [['Clock', NEIGH.clock], ['Camera', NEIGH.camera], ['Shelf', shelfIco], ['Notes', NEIGH.notes]].map(([l, g]) => `<span class="app">${g}${l}</span>`).join('');
+});
+document.querySelectorAll('[data-dock]').forEach(d => {
+  d.innerHTML = [NEIGH.phone2, NEIGH.msg, NEIGH.web, NEIGH.files].join('');
+});
+
+/* palettes */
+const sw = (hex, name, role, fg) => `<div class="sw"><div class="c" style="background:${hex};color:${fg}">${name}</div><div class="m"><b>${role}</b><span class="hex">${hex}</span></div></div>`;
+$('palLight').innerHTML = [
+  ['#FCF7F6','paper','Background','#24130C'], ['#FFFFFF','card','Surface','#24130C'], ['#24130C','ink','Text','#FFFFFF'], ['#6E5246','muted','Secondary text','#FFFFFF'],
+  ['#EEDFD7','line','Hairline','#24130C'], ['#B5542E','clay','Fill, accent, links','#FFFFFF'], ['#8E3A1C','clay deep','Glaze foot, tracks','#FFFFFF'],
+  ['#F6DDD0','blush','Soft fill, shelf track','#24130C'], ['#F1E4D3','sand','You masthead','#24130C'], ['#2A140D','char','Listen, tab bar, mini','#FFF4EE'],
+  ['#3A1E14','char raised','Rows on Char','#FFF4EE'], ['#FF8A5B','ember','Accent on Char','#2A140D'], ['#C42A3C','error','Errors, Delete','#FFFFFF'], ['#1F7A4D','success','Done','#FFFFFF'],
+].map(a => sw(...a)).join('');
+$('palDark').innerHTML = [
+  ['#140B07','paper','Background','#FBEEE7'], ['#1F120C','card','Surface','#FBEEE7'], ['#FBEEE7','ink','Text','#140B07'], ['#CDB2A5','muted','Secondary text','#140B07'],
+  ['#36231A','line','Card hairline','#FBEEE7'], ['#F0875C','accent','Lines, links, min left','#140B07'], ['#B5542E','clay','Fill (unchanged)','#FFFFFF'],
+  ['#7A3018','night clay','Masthead, Char pour','#FFFFFF'], ['#3A1E14','soft','Soft fill','#FBEEE7'], ['#0D0705','char','Tab bar','#FBEEE7'],
+  ['#2E1A12','char raised','Mini player','#FBEEE7'], ['#E58A62','duotone','Thumbnail highlight','#140B07'], ['#FF8593','error','Errors, Delete','#140B07'], ['#5FD39A','success','Done','#140B07'],
+].map(a => sw(...a)).join('');
+
+/* measured contrast (computed live, the same maths as the report) */
+const lum = h => { const c = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255).map(v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4); return .2126 * c[0] + .7152 * c[1] + .0722 * c[2]; };
+const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05); };
+const PAIRS = [
+  ['#FFFFFF','#B5542E','White on Clay: every drenched label, the pour, glaze buttons', 4.5],
+  ['#FFFFFF','#954121','White on the chips over Clay (Later, Undo, speed), composited', 4.5], ['#FFFFFF','#9A4423','White on the search field over Clay, composited', 4.5],
+  ['#24130C','#FCF7F6','Ink on paper', 4.5], ['#6E5246','#FCF7F6','Muted on paper', 4.5], ['#6E5246','#FFFFFF','Muted on card', 4.5],
+  ['#B5542E','#FFFFFF','“4 min left”, links on card', 4.5], ['#9A4022','#FFFFFF','Clay text on white buttons, “Not written down”', 4.5],
+  ['#B5542E','#F6DDD0','Shelf fill on its blush track; row-tile icons', 3],
+  ['#24130C','#FFFFFF','Selected segment on the Clay masthead', 4.5],
+  ['#FFF4EE','#2A140D','Cream on Char (Listen, mini, tab bar)', 4.5], ['#D8BCAE','#2A140D','Muted cream on Char; inactive tabs', 4.5], ['#D8BCAE','#3A1E14','Muted on Char rows', 4.5],
+  ['#FF8A5B','#3A1E14','Ember “min left” on Char rows', 4.5], ['#FF8A5B','#4A2618','Ember play icon on its Char chip', 3], ['#B5542E','#3A1E14','Shelf fill on Char rows', 3],
+  ['#B5542E','#F1E4D3','Programme numerals on Sand (46 px)', 3], ['#24130C','#F1E4D3','Ink on Sand', 4.5],
+  ['#FFFFFF','#7A3018','White on night Clay (dark masthead, Char pour)', 4.5], ['#FBEEE7','#1F120C','Dark ink on dark card', 4.5], ['#CDB2A5','#1F120C','Dark muted on dark card', 4.5], ['#F0875C','#1F120C','Dark accent on dark card', 4.5],
+  ['#2A1A12','#FBF6F2','Reading: Bisque body', 7], ['#3A2618','#F1E4D3','Reading: Sand body', 7], ['#E9DDD5','#17100C','Reading: Char body', 7],
+  ['#2A1A12','#F5D3C0','Spoken word on Bisque highlight', 7], ['#E9DDD5','#5A2A18','Spoken word on Char highlight', 7],
+  ['#E8865E','#17100C','Char pour edge against the page', 3], ['#C42A3C','#FFFFFF','Error on card', 4.5], ['#FF8593','#1F120C','Dark error on card', 4.5],
+];
+document.querySelector('#ctab tbody').innerHTML = PAIRS.map(([f, b, where, need]) => {
+  const r = ratio(f, b);
+  return `<tr><td><span class="pair" style="color:${f};background:${b}">Aa</span> <code>${f}</code> on <code>${b}</code></td><td>${where}</td><td class="r">${r.toFixed(2)}:1</td><td class="pass">${r >= need ? (need === 7 ? 'Reading 7:1' : need === 3 ? 'AA large / icons' : 'AA') : 'Fails'}</td></tr>`;
+}).join('');
+</script>
+</body>
+</html>

@@ -1,0 +1,1116 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paperback</title>
+<meta name="description" content="Shelf design study: the library as a shelf of paperbacks, every save bound in the colour of its length.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700;800&family=Literata:ital,opsz,wght@0,7..72,400..800;1,7..72,400..600&display=swap" rel="stylesheet">
+<style>
+/* =====================================================================
+   PAPERBACK: tokens
+   Board chrome uses the light app tokens. Phones re-declare per theme.
+   ===================================================================== */
+:root{
+  color-scheme: light;
+  --ui: 'Jost', system-ui, sans-serif;
+  --read: 'Literata', Georgia, serif;
+
+  /* light app theme */
+  --paper:#F4EFE4; --stock:#FBF8F1; --ink:#1C1A16; --muted:#5A5246; --rule:#D3C9B6; --key:#1C1A16;
+  --imprint:#B5542E; --on-imprint:#FFFFFF; --imprint-text:#9A4524;
+  --short:#D69A2D; --med:#D8707F; --long:#2C6872;
+  --success:#2B7448; --error:#B42318;
+
+  /* dark app theme (for swatches on the board) */
+  --d-paper:#17150F; --d-stock:#211E18; --d-ink:#F2ECE0; --d-muted:#B6AD9C; --d-rule:#38332A; --d-key:#8C8372;
+  --d-imprint-text:#E08A66; --d-short:#E2B04F; --d-med:#E8909E; --d-long:#5FA6AE; --d-success:#6CC793; --d-error:#F28B7D;
+
+  /* halftone screen */
+  --dot:1.8px; --pitch:8px;
+  --r-rect:2px;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--ui);font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:default}
+img{display:block}
+
+/* ---------- the halftone binding (spines, bands, shelf books) ---------- */
+/* --sp is the article's series ink, --p its one stored position (0..1), --base the ground the dots print on */
+.ht{
+  background:
+    linear-gradient(var(--sp) 0 0) top / 100% calc(var(--p,0) * 100%) no-repeat,
+    radial-gradient(circle, var(--sp) 0 var(--dot), transparent calc(var(--dot) + .6px)) 0 0 / var(--pitch) var(--pitch),
+    radial-gradient(circle, var(--sp) 0 var(--dot), transparent calc(var(--dot) + .6px)) calc(var(--pitch) / 2) calc(var(--pitch) / 2) / var(--pitch) var(--pitch),
+    color-mix(in srgb, var(--sp) 16%, var(--base, var(--paper)));
+}
+.ht.h{
+  background:
+    linear-gradient(var(--sp) 0 0) left / calc(var(--p,0) * 100%) 100% no-repeat,
+    radial-gradient(circle, var(--sp) 0 var(--dot), transparent calc(var(--dot) + .6px)) 0 0 / var(--pitch) var(--pitch),
+    radial-gradient(circle, var(--sp) 0 var(--dot), transparent calc(var(--dot) + .6px)) calc(var(--pitch) / 2) calc(var(--pitch) / 2) / var(--pitch) var(--pitch),
+    color-mix(in srgb, var(--sp) 16%, var(--base, var(--paper)));
+}
+.ht.proof,.proof.ht.h{
+  background:
+    repeating-linear-gradient(135deg, color-mix(in srgb, var(--ink) 40%, transparent) 0 1.2px, transparent 1.2px 5px),
+    var(--base, var(--paper));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 50%, transparent);
+}
+.s-short{--sp:var(--short)} .s-med{--sp:var(--med)} .s-long{--sp:var(--long)}
+
+/* =====================================================================
+   BOARD LAYOUT
+   ===================================================================== */
+.board{max-width:1360px;margin:0 auto;padding:0 40px 120px}
+.cap{font:600 13px/1.2 var(--ui);letter-spacing:.12em;text-transform:uppercase}
+.muted{color:var(--muted)}
+
+/* masthead */
+.mast{padding-top:28px}
+.mast .topline{display:flex;justify-content:space-between;align-items:center;gap:24px;padding-bottom:18px;color:var(--muted)}
+.mast .topline .key{display:inline-flex;align-items:center;gap:10px}
+.mast .topline .key b{color:var(--ink);font-weight:700}
+.shelfstrip{position:relative;height:150px;display:flex;align-items:flex-end;gap:2px;overflow:hidden}
+.shelfstrip .bk{position:relative;flex:none;transform-origin:bottom right}
+.shelfstrip .bk::before,.shelfstrip .bk::after{content:"";position:absolute;left:0;right:0;height:2px;background:var(--paper)}
+.shelfstrip .bk::before{top:9px}.shelfstrip .bk::after{bottom:9px}
+.shelfstrip .bk.proof::before,.shelfstrip .bk.proof::after{display:none}
+.shelfstrip .bookend{flex:none;width:44px;height:96px;margin-left:6px;position:relative}
+.shelfstrip .bookend::before{content:"";position:absolute;left:0;bottom:0;width:8px;height:96px;background:var(--ink)}
+.shelfstrip .bookend::after{content:"";position:absolute;left:0;bottom:0;width:44px;height:8px;background:var(--ink)}
+.ledge{height:5px;background:var(--ink)}
+
+.concept{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:64px;padding:8px 0 72px;align-items:start}
+.wordmark{font:800 236px/.84 var(--read);font-variation-settings:'opsz' 72;letter-spacing:-.04em;margin:30px 0 70px -12px;white-space:nowrap}
+.pitch{font:italic 400 30px/1.25 var(--read);font-variation-settings:'opsz' 36;margin:0 0 26px;max-width:24em}
+.idea{font:400 18px/1.62 var(--read);max-width:36em;margin:0}
+.idea + .idea{margin-top:14px}
+.influences{border-top:3px solid var(--ink);padding-top:14px}
+.influences h3{margin:0 0 6px}
+.infl{display:grid;grid-template-columns:44px 1fr;gap:0 10px;padding:16px 0;border-bottom:1px solid var(--rule)}
+.infl .n{font:800 30px/1 var(--read);font-variation-settings:'opsz' 72;color:var(--imprint-text)}
+.infl b{display:block;font:600 13px/1.3 var(--ui);letter-spacing:.12em;text-transform:uppercase;margin:3px 0 6px}
+.infl p{margin:0;font:400 15.5px/1.55 var(--read);color:var(--muted)}
+
+/* section heads */
+section{padding-top:20px}
+.sh{display:grid;grid-template-columns:120px 1fr;align-items:end;border-top:3px solid var(--ink);padding:14px 0 30px;gap:24px}
+.sh .num{font:800 64px/.9 var(--read);font-variation-settings:'opsz' 72;color:var(--ink)}
+.sh h2{font:700 40px/1.05 var(--read);font-variation-settings:'opsz' 60;letter-spacing:-.015em;margin:0}
+.sh p{grid-column:2;margin:10px 0 0;max-width:62em;font:400 17px/1.55 var(--read);color:var(--muted)}
+.sub{display:flex;align-items:baseline;gap:14px;margin:0 0 16px;padding-top:18px;border-top:1px solid var(--ink)}
+.sub h3{margin:0;font:600 13px/1.2 var(--ui);letter-spacing:.12em;text-transform:uppercase}
+.sub span{font:400 15px/1.4 var(--read);color:var(--muted)}
+
+/* ---------- system: palettes ---------- */
+.sysgrid{display:grid;grid-template-columns:1fr 1fr;gap:40px 48px}
+.pal{border:1.5px solid var(--ink);border-radius:var(--r-rect);overflow:hidden}
+.pal .phead{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1.5px solid var(--ink)}
+.pal.dark{border-color:#000;background:var(--d-paper);color:var(--d-ink)}
+.pal.dark .phead{border-color:var(--d-rule)}
+.sw{display:grid;grid-template-columns:repeat(5,1fr)}
+.sw > div{padding:12px 12px 14px;border-right:1px solid var(--rule);border-bottom:1px solid var(--rule);min-height:118px;display:flex;flex-direction:column;gap:4px}
+.pal.dark .sw > div{border-color:var(--d-rule)}
+.sw > div:nth-child(5n){border-right:0}
+.sw .chip{height:40px;border-radius:var(--r-rect);margin-bottom:6px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.14)}
+.pal.dark .sw .chip{box-shadow:inset 0 0 0 1px rgba(255,255,255,.14)}
+.sw b{font:600 13px/1.2 var(--ui);letter-spacing:.08em;text-transform:uppercase}
+.sw code{font:500 13px/1.2 var(--ui);letter-spacing:.02em;opacity:.85}
+.sw small{font:400 13px/1.35 var(--read);opacity:.8}
+
+.series{grid-column:1 / -1;border:1.5px solid var(--ink);border-radius:var(--r-rect);display:grid;grid-template-columns:330px 1fr}
+.series .why{padding:22px 24px;border-right:1.5px solid var(--ink)}
+.series .why h4{margin:0 0 10px;font:700 26px/1.1 var(--read);font-variation-settings:'opsz' 48}
+.series .why p{margin:0 0 10px;font:400 15.5px/1.55 var(--read);color:var(--muted)}
+.series .why p strong{color:var(--ink);font-weight:600}
+.srows{display:grid;grid-template-columns:repeat(5,1fr)}
+.srow{display:flex;flex-direction:column;border-right:1px solid var(--rule)}
+.srow:last-child{border-right:0}
+.srow .sp2{position:relative;--base:var(--paper)}
+.srow .sp2.dk{--base:var(--d-paper)}
+.srow .pair{display:grid;grid-template-columns:1fr 1fr;flex:1;min-height:150px}
+.srow .lab{height:104px;padding:12px 14px 14px;display:flex;flex-direction:column;gap:3px;border-top:1.5px solid var(--ink)}
+.srow .lab b{font:600 13px/1.2 var(--ui);letter-spacing:.12em;text-transform:uppercase}
+.srow .lab span{font:400 15px/1.35 var(--read)}
+.srow .lab code{font:500 13px/1.3 var(--ui);color:var(--muted)}
+.srow .pair > div:last-child{background-color:var(--d-paper)}
+
+/* reading palettes */
+.rpals{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.rpal{border:1.5px solid var(--ink);border-radius:var(--r-rect);overflow:hidden;background:var(--r-bg);color:var(--r-text)}
+.rpal .rbar{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;font:500 13px/1 var(--ui);color:var(--r-muted)}
+.rpal .rbar b{font:600 13px/1 var(--ui);letter-spacing:.12em;text-transform:uppercase;color:var(--r-text)}
+.rpal .rband{height:6px;--base:var(--r-bg);border-bottom:1px solid color-mix(in srgb,var(--r-text) 30%,transparent)}
+.rpal .txt{padding:18px 22px 6px;font:400 18px/1.6 var(--read)}
+.rpal .txt p{margin:0 0 .9em}
+.rpal .txt a{color:var(--r-link);text-decoration-thickness:1px;text-underline-offset:3px}
+.rpal .txt .w{background:var(--hl);box-shadow:0 0 0 2px var(--hl);border-radius:1px}
+.rpal .vals{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;padding:12px 22px 18px;border-top:1px solid color-mix(in srgb,var(--r-text) 18%,transparent);font:500 13px/1.3 var(--ui)}
+.rpal .vals span{color:var(--r-muted)}
+.rpal .vals b{font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+[data-r=light]{--r-bg:#FBF8F1;--r-text:#1C1A16;--r-muted:#5A5246;--r-link:#9A4524;--r-stock:#F1EBDF;--r-key:#1C1A16;--hl:#EED7AC}
+[data-r=sepia]{--r-bg:#EFE3C8;--r-text:#2B2114;--r-muted:#645640;--r-link:#8A3B1E;--r-stock:#E5D6B4;--r-key:#2B2114;--hl:#E2C48D}
+[data-r=dark]{--r-bg:#15130E;--r-text:#E4DCCB;--r-muted:#ABA290;--r-link:#E39A78;--r-stock:#211E18;--r-key:#8C8372;--hl:#463A22}
+
+/* type specimen */
+.type{display:grid;grid-template-columns:1.25fr 1fr 1fr;border:1.5px solid var(--ink);border-radius:var(--r-rect)}
+.type > div{padding:22px 24px 24px;border-right:1px solid var(--rule)}
+.type > div:last-child{border-right:0}
+.type .role{display:flex;justify-content:space-between;color:var(--muted);margin-bottom:18px}
+.type .d1{font:800 72px/.95 var(--read);font-variation-settings:'opsz' 72;letter-spacing:-.03em}
+.type .d2{font:700 28px/1.15 var(--read);font-variation-settings:'opsz' 48;letter-spacing:-.01em;margin:16px 0 8px}
+.type .d3{font:600 16.5px/1.3 var(--read)}
+.type .u1{font:600 13px/1 var(--ui);letter-spacing:.12em;text-transform:uppercase}
+.type .u2{font:500 16px/1.4 var(--ui);margin-top:14px}
+.type .u3{font:400 15px/1.45 var(--ui);color:var(--muted);margin-top:6px}
+.type .u4{font:800 54px/1 var(--ui);letter-spacing:-.02em;margin-top:16px;font-variant-numeric:tabular-nums}
+.type .r1{font:400 18px/1.6 var(--read)}
+.type .r2{font:italic 400 18px/1.6 var(--read);margin-top:10px}
+.type .spec{margin-top:16px;padding-top:12px;border-top:1px solid var(--rule);font:400 14px/1.5 var(--read);color:var(--muted)}
+
+/* shape / texture / icons */
+.three{display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:24px}
+.card0{border:1.5px solid var(--ink);border-radius:var(--r-rect);padding:20px 22px 22px}
+.card0 p{margin:12px 0 0;font:400 15px/1.55 var(--read);color:var(--muted)}
+.card0 p strong{color:var(--ink);font-weight:600}
+.shapes{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.btn{height:48px;padding:0 20px;border-radius:var(--r-rect);display:inline-flex;align-items:center;justify-content:center;gap:8px;font:600 15px/1 var(--ui);text-box:trim-both cap alphabetic}
+.btn.primary{background:var(--imprint);color:var(--on-imprint)}
+.btn.secondary{background:var(--stock);border:1.5px solid var(--key);color:var(--ink)}
+.chipb{height:36px;padding:0 14px;border-radius:var(--r-rect);display:inline-flex;align-items:center;gap:7px;border:1.5px solid var(--key);font:600 13px/1 var(--ui);letter-spacing:.1em;text-transform:uppercase;text-box:trim-both cap alphabetic}
+.chipb.on{background:var(--imprint);border-color:var(--imprint);color:var(--on-imprint)}
+.roundel{width:48px;height:48px;border-radius:50%;display:inline-grid;place-items:center;background:var(--imprint);color:var(--on-imprint)}
+.roundel.soft{background:var(--stock);color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--key)}
+.stampbox{width:52px;height:52px;border-radius:var(--r-rect);border:1.5px solid var(--key);background:var(--stock);display:inline-grid;place-items:center}
+.duos{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.duos figure{margin:0}
+.duos figcaption{font:500 13px/1.3 var(--ui);color:var(--muted);margin-top:6px}
+.cover{position:relative;display:block;background:var(--sp);overflow:hidden;flex:none}
+.cover img{width:100%;height:100%;object-fit:cover;filter:grayscale(1) contrast(1.28) brightness(1.2);mix-blend-mode:multiply}
+.cover::after{content:"";position:absolute;inset:0;background:radial-gradient(circle,rgba(0,0,0,.16) 0 .7px,transparent 1.2px) 0 0/3px 3px;mix-blend-mode:multiply;pointer-events:none}
+.cover.raw{background:none}
+.cover.raw img{filter:none;mix-blend-mode:normal}
+.cover.raw::after{display:none}
+.duos .cover{aspect-ratio:3/4;border-radius:1px}
+.icons{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;align-items:center;justify-items:center}
+.icons .ib{width:48px;height:48px;display:grid;place-items:center}
+.icons .lbl{grid-column:1 / -1;justify-self:start;font:500 13px/1.3 var(--ui);color:var(--muted);margin:-2px 0 6px}
+.tabon{width:52px;height:30px;border-radius:var(--r-rect);background:var(--imprint);color:var(--on-imprint);display:grid;place-items:center}
+
+/* signature */
+.sig{display:grid;grid-template-columns:1fr 1.1fr;gap:48px;border:1.5px solid var(--ink);border-radius:var(--r-rect);padding:28px 32px 30px;background:var(--stock);--base:var(--stock)}
+.sig h4{margin:0 0 12px;font:700 34px/1.08 var(--read);font-variation-settings:'opsz' 60;letter-spacing:-.01em}
+.sig p{margin:0 0 12px;font:400 17px/1.6 var(--read)}
+.anat{display:flex;gap:18px;align-items:flex-end;justify-content:center}
+.anat figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:10px;width:84px}
+.anat .bspine{position:relative;width:36px;height:220px}
+.anat .bspine::before,.anat .bspine::after{content:"";position:absolute;left:0;right:0;height:2px;background:var(--stock)}
+.anat .bspine::before{top:10px}.anat .bspine::after{bottom:10px}
+.anat .bspine.proof::before,.anat .bspine.proof::after{display:none}
+.anat figcaption{text-align:center;font:600 13px/1.25 var(--ui);letter-spacing:.1em;text-transform:uppercase}
+.anat figcaption span{display:block;font:400 14px/1.3 var(--read);letter-spacing:0;text-transform:none;color:var(--muted);margin-top:3px}
+/* the binding moment, transform + opacity only */
+.bind{overflow:hidden}
+.bind .hatch{position:absolute;inset:0;background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--ink) 40%,transparent) 0 1.2px,transparent 1.2px 5px),var(--stock);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ink) 50%,transparent);animation:unbind 6s cubic-bezier(.2,.8,.2,1) infinite;z-index:1}
+.bind .ink{position:absolute;left:0;right:0;top:0;height:100%;background:var(--sp);transform-origin:top;transform:scaleY(0);animation:inkin 6s cubic-bezier(.2,.8,.2,1) infinite}
+@keyframes unbind{0%,18%{transform:translateY(0)}26%,100%{transform:translateY(101%)}}
+@keyframes inkin{0%,34%{transform:scaleY(0)}86%,100%{transform:scaleY(.62)}}
+@media (prefers-reduced-motion:reduce){
+  .bind .hatch{animation:none;transform:translateY(101%)}
+  .bind .ink{animation:none;transform:scaleY(.62)}
+}
+
+/* =====================================================================
+   PHONES
+   ===================================================================== */
+.phones{display:grid;grid-template-columns:repeat(3,376px);justify-content:space-between;row-gap:56px}
+.pcell{display:flex;flex-direction:column;gap:14px}
+.phone{width:376px;padding:8px;background:#0E0D0B;border-radius:38px}
+.pcell figcaption{padding:0 6px}
+.pcell figcaption b{display:block;font:600 13px/1.2 var(--ui);letter-spacing:.12em;text-transform:uppercase;margin-bottom:5px}
+.pcell figcaption span{font:400 15px/1.5 var(--read);color:var(--muted)}
+.notecell{border:1.5px solid var(--ink);border-radius:var(--r-rect);padding:24px 26px;align-self:start;background:var(--stock)}
+.notecell h4{margin:0 0 12px;font:700 26px/1.1 var(--read);font-variation-settings:'opsz' 48}
+.notecell p{margin:0 0 12px;font:400 15.5px/1.55 var(--read);color:var(--muted)}
+.notecell p strong{color:var(--ink);font-weight:600}
+
+.scr{
+  width:360px;height:760px;border-radius:30px;overflow:hidden;position:relative;display:flex;flex-direction:column;
+  background:var(--paper);color:var(--ink);font-family:var(--ui);font-size:16px;line-height:1.4;
+}
+.scr.dark{
+  --paper:#17150F; --stock:#211E18; --ink:#F2ECE0; --muted:#B6AD9C; --rule:#38332A; --key:#8C8372;
+  --imprint-text:#E08A66; --short:#E2B04F; --med:#E8909E; --long:#5FA6AE; --success:#6CC793; --error:#F28B7D;
+}
+.sb{height:24px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 18px 0 20px;font:600 12px/1 var(--ui);letter-spacing:.02em}
+.sb .sbi{display:flex;gap:6px;align-items:center}
+.scroll{flex:1;min-height:0;overflow:hidden;position:relative}
+
+/* tab screen header */
+.head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:14px 16px 14px}
+.head h1{margin:0;font:800 38px/.95 var(--read);font-variation-settings:'opsz' 72;letter-spacing:-.025em}
+.count{display:flex;align-items:flex-end;gap:10px;font:600 13px/1 var(--ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding-bottom:3px}
+.mark{display:flex;align-items:flex-end;gap:1.5px;height:22px}
+.mark i{display:block;width:var(--w);height:var(--h);background:linear-gradient(var(--sp) 0 0) top/100% calc(var(--p,0)*100%) no-repeat,color-mix(in srgb,var(--sp) 42%,var(--paper))}
+.mark i.proof{background:var(--paper);box-shadow:inset 0 0 0 1px var(--muted)}
+
+.searchbar{margin:0 16px;height:48px;border-radius:var(--r-rect);border:1.5px solid var(--key);background:var(--stock);display:flex;align-items:center;gap:10px;padding:0 14px;color:var(--muted);font:400 16px/1 var(--ui)}
+.segs{display:flex;gap:8px;padding:12px 16px 14px}
+.seg{height:36px;padding:0 16px;border-radius:var(--r-rect);border:1.5px solid var(--key);display:inline-flex;align-items:center;font:600 13px/1 var(--ui);letter-spacing:.1em;text-transform:uppercase;text-box:trim-both cap alphabetic;position:relative}
+.seg::before{content:"";position:absolute;inset:-8px -2px}
+.seg.on{background:var(--imprint);border-color:var(--imprint);color:var(--on-imprint)}
+
+/* the list: a stack of spines */
+.list{border-top:1.5px solid var(--key);margin:0 16px}
+.row{display:flex;gap:12px;border-bottom:1px solid var(--rule);min-height:94px;position:relative}
+.row .spine{width:28px;flex:none;align-self:stretch;position:relative}
+.row .spine::before,.row .spine::after{content:"";position:absolute;left:0;right:0;height:2px;background:var(--paper)}
+.row .spine::before{top:7px}.row .spine::after{bottom:7px}
+.row .spine.proof::before,.row .spine.proof::after{display:none}
+.rb{flex:1;min-width:0;padding:12px 0 13px}
+.src{display:flex;align-items:center;gap:5px;font:600 13px/1.2 var(--ui);letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ttl{font:600 16.5px/1.28 var(--read);letter-spacing:-.003em;margin:5px 0 8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.meta{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;font:500 13px/1.2 var(--ui);color:var(--muted)}
+.meta .hot{color:var(--imprint-text);font-weight:600}
+.meta .sep{width:3px;height:3px;background:currentColor}
+.meta .lnk{color:var(--imprint-text);font-weight:600;display:inline-flex;align-items:center;gap:4px}
+.pdot{width:8px;height:8px;border-radius:50%;background:var(--imprint);display:inline-block;flex:none}
+.row .cover{width:54px;height:72px;margin:12px 0 0;align-self:flex-start;border-radius:1px}
+
+/* tab bar */
+.tabbar{height:64px;flex:none;display:flex;border-top:1.5px solid var(--key);background:var(--paper)}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font:600 13px/1 var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.tab .tpill{width:52px;height:30px;border-radius:var(--r-rect);display:grid;place-items:center}
+.tab.on{color:var(--ink)}
+.tab.on .tpill{background:var(--imprint);color:var(--on-imprint)}
+
+/* mini player */
+.mini{position:absolute;left:16px;right:16px;bottom:72px;height:64px;z-index:20;background:var(--stock);border:1.5px solid var(--key);border-radius:var(--r-rect);display:flex;align-items:center;gap:12px;padding:0 8px;overflow:hidden;--base:var(--stock)}
+.mini .band{position:absolute;left:0;right:0;top:0;height:4px}
+.pp{width:48px;height:48px;border-radius:50%;background:var(--imprint);color:var(--on-imprint);display:grid;place-items:center;flex:none}
+.mini .info{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.mini .info b{font:600 13px/1.25 var(--ui);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini .info span{font:500 13px/1.2 var(--ui);color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* empty state */
+.empty{padding:44px 24px 0;text-align:center;display:flex;flex-direction:column;align-items:center}
+.empty h2{margin:22px 0 8px;font:700 25px/1.12 var(--read);font-variation-settings:'opsz' 48;letter-spacing:-.01em}
+.empty p{margin:0 0 22px;max-width:28ch;font:400 15.5px/1.5 var(--read);color:var(--muted)}
+.illus{width:272px;position:relative}
+.share{background:var(--stock);border:1.5px solid var(--key);border-radius:var(--r-rect);padding:10px 12px 12px;text-align:left}
+.share .l{font:500 11px/1 var(--ui);color:var(--muted);margin-bottom:10px}
+.share .apps{display:flex;justify-content:space-between}
+.share .app{width:44px;display:flex;flex-direction:column;align-items:center;gap:5px;font:500 11px/1 var(--ui);color:var(--muted)}
+.share .app i{width:40px;height:40px;border-radius:var(--r-rect);background:color-mix(in srgb,var(--ink) 12%,var(--stock));display:grid;place-items:center}
+.share .app.me{color:var(--ink);font-weight:600}
+.share .app.me i{background:var(--imprint);color:var(--on-imprint);box-shadow:0 0 0 2px var(--stock),0 0 0 3.5px var(--imprint)}
+.drop{height:34px;position:relative}
+.drop::before{content:"";position:absolute;left:var(--x,151px);top:2px;bottom:4px;border-left:1.5px dashed var(--imprint)}
+.drop::after{content:"";position:absolute;left:calc(var(--x,151px) - 4.5px);bottom:0;width:0;height:0;border-left:5.5px solid transparent;border-right:5.5px solid transparent;border-top:7px solid var(--imprint)}
+.eshelf{display:flex;align-items:flex-end;gap:3px;height:84px;padding:0 6px}
+.eshelf .end{margin-left:auto}
+.eshelf .g{width:var(--w);height:var(--h);border:1.5px dashed color-mix(in srgb,var(--ink) 45%,transparent);border-bottom:0}
+.eshelf .g.slot{border-color:var(--imprint);background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--ink) 34%,transparent) 0 1.2px,transparent 1.2px 5px)}
+.eshelf .end{margin-left:auto;width:30px;height:62px;position:relative}
+.eshelf .end::before{content:"";position:absolute;left:0;bottom:0;width:6px;height:62px;background:var(--ink)}
+.eshelf .end::after{content:"";position:absolute;left:0;bottom:0;width:30px;height:6px;background:var(--ink)}
+.eledge{height:4px;background:var(--ink)}
+
+/* Listen */
+.np{margin:0 16px;border:1.5px solid var(--key);border-radius:var(--r-rect);background:var(--stock);overflow:hidden;--base:var(--stock)}
+.np .npcov{height:118px;position:relative;border-bottom:1.5px solid var(--key)}
+.np .npcov .cover{position:absolute;inset:0}
+.np .nplabel{position:absolute;left:12px;bottom:12px;height:28px;padding:0 10px;background:var(--stock);color:var(--ink);border-radius:var(--r-rect);display:inline-flex;align-items:center;gap:7px;font:600 13px/1 var(--ui);letter-spacing:.1em;text-transform:uppercase;text-box:trim-both cap alphabetic}
+.np .nplabel i{width:7px;height:7px;border-radius:50%;background:var(--imprint)}
+.np .npb{padding:14px 16px 12px}
+.np .t{font:600 18px/1.28 var(--read);margin:0 0 6px}
+.np .s{font:600 13px/1.2 var(--ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.np .band{height:8px;margin:16px 0 8px;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sp) 70%,transparent)}
+.np .times{display:flex;justify-content:space-between;font:500 13px/1 var(--ui);color:var(--muted);font-variant-numeric:tabular-nums}
+.np .controls{display:grid;grid-template-columns:1fr 48px 60px 48px 1fr;column-gap:8px;align-items:center;margin-top:8px}
+.ctl{width:48px;height:48px;display:grid;place-items:center;color:var(--ink)}
+.np .big{width:60px;height:60px;border-radius:50%;background:var(--imprint);color:var(--on-imprint);display:grid;place-items:center}
+.rate{min-width:52px;height:36px;padding:0 12px;border-radius:var(--r-rect);background:var(--paper);border:1.5px solid var(--key);display:inline-flex;align-items:center;justify-content:center;font:600 13px/1 var(--ui);font-variant-numeric:tabular-nums;text-box:trim-both cap alphabetic;position:relative}
+.rate::before{content:"";position:absolute;inset:-8px -2px}
+.np .rate{grid-column:5;justify-self:end}
+.sectionhead{display:flex;align-items:center;justify-content:space-between;padding:20px 16px 12px}
+.sectionhead h2{margin:0;font:700 21px/1.1 var(--read);font-variation-settings:'opsz' 36}
+.lrow{display:flex;gap:12px;border-bottom:1px solid var(--rule);min-height:92px;align-items:stretch}
+.lrow .spine{width:28px;flex:none;position:relative}
+.lrow .spine::before,.lrow .spine::after{content:"";position:absolute;left:0;right:0;height:2px;background:var(--paper)}
+.lrow .spine::before{top:7px}.lrow .spine::after{bottom:7px}
+.lrow .rp{width:40px;height:40px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--key);display:grid;place-items:center;flex:none;align-self:center;position:relative}
+.lrow .rp::before{content:"";position:absolute;inset:-4px}
+.lrow .rp.on{background:var(--imprint);box-shadow:none;color:var(--on-imprint)}
+.lrow .cover{width:44px;height:58px;align-self:center;border-radius:1px}
+
+/* You */
+.youshelf{margin:2px 16px 0;padding-top:6px}
+.youshelf .books{display:flex;align-items:flex-end;gap:2px;height:78px}
+.youshelf .bk{position:relative;flex:none;--pitch:6px;--dot:1.4px}
+.youshelf .bk::before,.youshelf .bk::after{content:"";position:absolute;left:0;right:0;height:2px;background:var(--paper)}
+.youshelf .bk::before{top:6px}.youshelf .bk::after{bottom:6px}
+.youshelf .bk.proof::before,.youshelf .bk.proof::after{display:none}
+.youshelf .yend{margin-left:auto;width:26px;height:50px;position:relative}
+.youshelf .yend::before{content:"";position:absolute;left:0;bottom:0;width:5px;height:50px;background:var(--ink)}
+.youshelf .yend::after{content:"";position:absolute;left:0;bottom:0;width:26px;height:5px;background:var(--ink)}
+.youshelf .yl2{height:4px;background:var(--ink)}
+.plate{margin:14px 16px 0;padding:18px 18px 16px;background:var(--stock);border:1.5px solid var(--key);border-radius:var(--r-rect);position:relative}
+.plate::before{content:"";position:absolute;inset:5px;border:1px solid var(--imprint);pointer-events:none}
+.plate .c4{position:absolute;width:7px;height:7px;background:var(--imprint)}
+.plate .h{display:flex;align-items:center;gap:9px;font:700 19px/1.15 var(--read);font-variation-settings:'opsz' 36;color:var(--ink)}
+.plate .h svg{color:var(--imprint-text)}
+.plate p{margin:8px 0 14px;font:400 14.5px/1.5 var(--read);color:var(--muted)}
+.plate .row2{display:flex;justify-content:flex-end;gap:8px}
+.plate .btn{height:44px;padding:0 15px;font-size:15px}
+.ygroup{margin:12px 16px 0;background:var(--stock);border:1.5px solid var(--key);border-radius:var(--r-rect);position:relative;overflow:hidden}
+.ygroup::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--imprint)}
+.ygroup.quiet::before{display:none}
+.yrow{display:flex;align-items:center;gap:14px;min-height:58px;padding:0 10px 0 14px;border-top:1px solid var(--rule)}
+.yrow:first-child{border-top:0;padding-top:3px}
+.yrow .yl{flex:1;min-width:0;font:500 16px/1.25 var(--ui)}
+.yrow .yv{font:600 15px/1 var(--ui);color:var(--muted);font-variant-numeric:tabular-nums}
+.yrow .chev{color:var(--muted);display:grid}
+.yrow.danger{color:var(--error)}
+.stamp{display:inline-flex;align-items:center;height:22px;margin-top:6px;padding:0 7px;border:1.5px solid var(--error);color:var(--error);border-radius:1px;font:700 13px/1 var(--ui);letter-spacing:.1em;text-transform:uppercase;transform:rotate(-2.5deg);transform-origin:left center;text-box:trim-both cap alphabetic}
+
+/* Reader */
+.scr.reader{background:var(--r-bg);color:var(--r-text)}
+.scr.reader .sb{color:var(--r-text)}
+.rtop{height:56px;flex:none;display:flex;align-items:center;gap:0;padding:0 8px;background:var(--r-bg);position:relative;z-index:2}
+.rtop .host{flex:1;min-width:0;text-align:center;font:500 13px/1 var(--ui);color:var(--r-muted);letter-spacing:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.iconbtn{width:48px;height:48px;display:grid;place-items:center;color:var(--r-text);flex:none}
+.iconbtn.aa{font:600 18px/1 var(--read);letter-spacing:-.02em}
+.listenbtn{margin:0 4px;height:36px;padding:0 10px;border-radius:var(--r-rect);border:1.5px solid var(--r-key);display:inline-flex;align-items:center;gap:6px;font:600 13px/1 var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--r-text);text-box:trim-both cap alphabetic;flex:none}
+.rband{height:6px;flex:none;--base:var(--r-bg);border-bottom:1px solid color-mix(in srgb,var(--r-text) 28%,transparent)}
+.article{padding:16px 20px 170px}
+.article .kicker{display:flex;align-items:center;gap:9px;font:600 13px/1 var(--ui);letter-spacing:.12em;text-transform:uppercase;color:var(--r-text);margin-bottom:12px}
+.article .kicker i{width:22px;height:8px;background:var(--sp)}
+.article h1{margin:0 0 12px;font:700 28px/1.14 var(--read);font-variation-settings:'opsz' 60;letter-spacing:-.015em}
+.article .by{font:500 13px/1.3 var(--ui);color:var(--r-muted);margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid color-mix(in srgb,var(--r-text) 22%,transparent)}
+.prose{font:400 18px/1.6 var(--read)}
+.prose p{margin:0 0 1em}
+.prose a{color:var(--r-link);text-decoration-thickness:1px;text-underline-offset:3px}
+.prose .w{background:var(--hl);box-shadow:0 0 0 2px var(--hl);border-radius:1px}
+.fig{width:100%;aspect-ratio:3/2;object-fit:cover;margin:0 0 1em;border-radius:1px}
+.arch{position:absolute;right:16px;width:52px;height:52px;border-radius:var(--r-rect);background:var(--r-stock);border:1.5px solid var(--r-key);display:grid;place-items:center;color:var(--r-text);z-index:3}
+.dock{position:absolute;left:16px;right:16px;bottom:16px;height:64px;z-index:20;background:var(--r-stock);border:1.5px solid var(--r-key);border-radius:var(--r-rect);display:flex;align-items:center;gap:2px;padding:0 8px;overflow:hidden;--base:var(--r-stock)}
+.dock .band{position:absolute;left:0;right:0;top:0;height:4px}
+.dock .tt{flex:1;min-width:0;padding-left:10px;font:500 13px/1 var(--ui);color:var(--r-muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.dock .ctl{color:var(--r-text)}
+.dock .rate{background:color-mix(in srgb,var(--r-muted) 15%,transparent);border-color:transparent;color:var(--r-text)}
+
+/* =====================================================================
+   BEYOND THE PHONE
+   ===================================================================== */
+.beyond{display:grid;grid-template-columns:420px 1fr;gap:40px}
+.iconpanel{border:1.5px solid var(--ink);border-radius:var(--r-rect);padding:24px;background:var(--stock)}
+.iconpanel .big{display:flex;gap:22px;align-items:flex-end}
+.iconpanel .sizes{display:flex;gap:16px;align-items:flex-end;margin-top:20px}
+.iconpanel .sizes figure,.iconpanel .big figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:8px}
+.iconpanel figcaption{font:500 13px/1.3 var(--ui);color:var(--muted);text-align:center}
+.iconpanel p{margin:18px 0 0;font:400 15px/1.55 var(--read);color:var(--muted)}
+.homes{display:grid;grid-template-columns:1fr 1fr;gap:24px;height:100%}
+.home{min-height:260px;border-radius:var(--r-rect);position:relative;overflow:hidden;padding:26px 28px}
+.home{border-radius:24px}
+.home.lt{background:radial-gradient(55% 38% at 85% 18%,#EBCDB0 0,transparent 72%),radial-gradient(70% 45% at 8% 62%,#CBD6C8 0,transparent 72%),radial-gradient(60% 40% at 92% 96%,#E7D2C3 0,transparent 70%),#F0EAE0}
+.home.dk{background:radial-gradient(55% 38% at 85% 18%,#3D2C25 0,transparent 72%),radial-gradient(70% 45% at 8% 62%,#1C2925 0,transparent 72%),radial-gradient(60% 40% at 92% 96%,#2A2230 0,transparent 70%),#111215}
+.home .clock,.home .date,.home .apps{position:relative}
+.home .apps{position:absolute}
+.home .clock{font:300 54px/1 var(--ui);letter-spacing:-.02em;color:#1E1D1B}
+.home.dk .clock{color:#EDEBE6}
+.home .date{font:500 14px/1.3 var(--ui);color:#3C3A36;margin-top:6px}
+.home.dk .date{color:#BDBAB2}
+.home .apps{position:absolute;left:24px;right:24px;bottom:24px;display:flex;justify-content:space-between}
+.home .app{width:64px;display:flex;flex-direction:column;align-items:center;gap:7px;font:500 12px/1 system-ui,var(--ui);color:#1E1D1B}
+.home.dk .app{color:#EDEBE6}
+.home .app .ico{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;overflow:hidden}
+.toastbox{grid-column:1 / -1;display:grid;grid-template-columns:1fr 360px;gap:32px;align-items:start}
+.win{border:1.5px solid var(--ink);border-radius:8px;overflow:hidden;background:#fff;color:#1F1F1F}
+.win .chrome{height:40px;background:#E6E4E0;display:flex;align-items:flex-end;padding:0 10px;gap:8px}
+.win .dots{display:flex;gap:6px;align-self:center;margin-right:6px}
+.win .dots i{width:11px;height:11px;border-radius:50%;background:#BDB9B2}
+.win .wtab{height:32px;background:#fff;border-radius:8px 8px 0 0;padding:0 14px;display:flex;align-items:center;gap:8px;font:400 12.5px/1 system-ui;max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.win .wtab i{width:14px;height:14px;border-radius:3px;background:#C9C5BD;flex:none}
+.win .addr{height:44px;display:flex;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid #E3E1DC}
+.win .url{flex:1;height:30px;border-radius:15px;background:#F1F0EE;display:flex;align-items:center;padding:0 14px;font:400 13px/1 system-ui;color:#4A4A4A}
+.win .tbtn{width:30px;height:30px;border-radius:50%;display:grid;place-items:center}
+.win .tbtn.me{background:#F1F0EE}
+.page{position:relative;height:500px;overflow:hidden;background:#fff}
+.site{max-width:600px;margin:0 auto;padding:34px 24px}
+.site .kick{font:500 12px/1 system-ui;letter-spacing:.08em;text-transform:uppercase;color:#7A7A7A;margin-bottom:12px}
+.site h1{font:600 34px/1.15 Georgia,serif;margin:0 0 12px;color:#1F1F1F}
+.site .by{font:400 13px/1 system-ui;color:#7A7A7A;margin-bottom:22px}
+.site p{font:400 17px/1.6 Georgia,serif;margin:0 0 1em;color:#2A2A2A}
+.xtoast{position:absolute;right:16px;bottom:16px;width:360px;border-radius:var(--r-rect);overflow:hidden;background:var(--ink);color:var(--paper);display:flex;--base:var(--ink);font-family:var(--ui)}
+.xtoast .xs{width:10px;flex:none;position:relative;--pitch:6px;--dot:1.4px}
+.xtoast .xs .bindx{position:absolute;inset:0;background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--paper) 45%,transparent) 0 1.2px,transparent 1.2px 5px),var(--ink);animation:unbind 6s cubic-bezier(.2,.8,.2,1) infinite}
+.xtoast .xb{flex:1;min-width:0;position:relative}
+.xtoast .xr{display:flex;align-items:center;gap:12px;padding:12px 8px 12px 12px;min-height:64px}
+.xtoast .ti{width:32px;height:32px;border-radius:50%;background:#6CC793;color:#1C1A16;display:grid;place-items:center;flex:none}
+.xtoast .tx{flex:1;min-width:0}
+.xtoast .tx b{display:block;font:600 15px/1.3 var(--ui)}
+.xtoast .tx span{display:block;font:400 13px/1.35 var(--ui);color:#B6AD9C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.xtoast .act{height:36px;padding:0 10px;border-radius:var(--r-rect);border:1.5px solid color-mix(in srgb,var(--paper) 45%,transparent);display:inline-flex;align-items:center;font:600 13px/1 var(--ui);letter-spacing:.1em;text-transform:uppercase;text-box:trim-both cap alphabetic;flex:none}
+.xtoast .x{width:32px;height:32px;display:grid;place-items:center;color:#B6AD9C;flex:none}
+.xtoast .timer{height:3px;background:var(--imprint);width:62%}
+.toastnotes{font:400 15.5px/1.55 var(--read);color:var(--muted)}
+.toastnotes h4{margin:0 0 10px;font:700 26px/1.1 var(--read);font-variation-settings:'opsz' 48;color:var(--ink)}
+.toastnotes p{margin:0 0 12px}
+.toastnotes strong{color:var(--ink);font-weight:600}
+
+/* =====================================================================
+   NOTES
+   ===================================================================== */
+.notes{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border:1.5px solid var(--ink);border-radius:var(--r-rect)}
+.notes > div{padding:24px 26px 26px;border-right:1px solid var(--rule)}
+.notes > div:last-child{border-right:0}
+.notes h4{margin:0 0 14px;font:700 26px/1.1 var(--read);font-variation-settings:'opsz' 48}
+.notes ul{margin:0;padding:0;list-style:none}
+.notes li{position:relative;padding:0 0 12px 18px;font:400 15.5px/1.55 var(--read);color:var(--muted)}
+.notes li::before{content:"";position:absolute;left:0;top:.62em;width:8px;height:8px;background:var(--ink)}
+.notes .cool li::before{background:var(--short)}
+.notes .wrong li::before{background:var(--med)}
+.notes .build li::before{background:var(--long)}
+.notes li strong{color:var(--ink);font-weight:600}
+.ctable{margin-top:28px;border:1.5px solid var(--ink);border-radius:var(--r-rect);overflow:hidden}
+.ctable table{width:100%;border-collapse:collapse;font:400 14.5px/1.35 var(--ui)}
+.ctable th{font:600 13px/1.2 var(--ui);letter-spacing:.1em;text-transform:uppercase;text-align:left;padding:12px 14px;border-bottom:1.5px solid var(--ink);background:var(--stock)}
+.ctable td{padding:9px 14px;border-bottom:1px solid var(--rule);vertical-align:middle}
+.ctable tr:last-child td{border-bottom:0}
+.ctable td.r{text-align:right;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ctable .sw2{display:inline-flex;align-items:center;justify-content:center;width:64px;height:28px;border-radius:var(--r-rect);font:600 13px/1 var(--ui);margin-right:10px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12);vertical-align:middle}
+.ctable .pass{color:var(--success)}
+.ctable .cols{display:grid;grid-template-columns:1fr 1fr}
+.ctable .hex{display:inline-block;vertical-align:middle;font:500 12.5px/1.25 var(--ui);color:var(--muted)}
+.ctable .cols > div:first-child{border-right:1.5px solid var(--ink)}
+.foot{margin-top:40px;padding-top:14px;border-top:3px solid var(--ink);display:flex;justify-content:space-between;color:var(--muted)}
+</style>
+</head>
+<body>
+<main class="board">
+
+<!-- ============================ 1. CONCEPT ============================ -->
+<header class="mast">
+  <div class="topline cap"><span>Shelf · design study · concept board</span><span class="key">Direction key <b>paperback</b></span></div>
+  <div class="shelfstrip" id="strip" aria-hidden="true"></div>
+  <div class="ledge"></div>
+  <h1 class="wordmark">Paperback</h1>
+  <div class="concept">
+    <div>
+      <p class="pitch">A shelf of paperbacks: every save bound in the colour of its length, and every minute you read or listen inks its spine.</p>
+      <p class="idea">Shelf already calls itself a shelf, so Paperback takes it at its word. It borrows the confident economy of mid-century paperback publishing: flat ink on cream stock, a book face for the work and letter-spaced capitals for the publisher. Every save becomes a book with a spine, coloured by one rule, its length, so the Unread list reads from across the room as a stack of quick ones and long ones.</p>
+      <p class="idea">The unread part of a spine is printed as a halftone screen. Reading, or listening, turns it to solid ink, so progress becomes something you can see piling up, and Archive turns into a shelf of finished books. The chrome is loud print; the page you read on stays plain paper. That suits Shelf in particular: an app whose promise is that your library outlives the service should look like the most durable library object people know.</p>
+    </div>
+    <div class="influences">
+      <h3 class="cap muted">Influences</h3>
+      <div class="infl"><span class="n">01</span><div><b>Colour-coded paperback lists</b><p>Inter-war and post-war series where one flat colour told you what kind of book you held, readable from across a room. Shelf takes the habit of a colour that means one thing.</p></div></div>
+      <div class="infl"><span class="n">02</span><div><b>Two-colour offset printing</b><p>A black plate over a single flat ink, with tints made from halftone dots. Cheap, confident, and the source of the halftone-to-solid progress.</p></div></div>
+      <div class="infl"><span class="n">03</span><div><b>Mid-century jacket typography</b><p>Geometric capitals, generously spaced, for the publisher; a book face for the title; wide margins of bare paper around both.</p></div></div>
+      <div class="infl"><span class="n">04</span><div><b>Library ephemera</b><p>Catalogue cards with a red head rule, spine labels, bookplates, the date stamp. The furniture of owning books, reused for the screens about owning a shelf.</p></div></div>
+    </div>
+  </div>
+</header>
+
+<!-- ============================ 2. SYSTEM ============================ -->
+<section id="system">
+  <div class="sh"><span class="num">02</span><h2>The system</h2>
+    <p>Paper, ink and one imprint colour do almost all the work. Three series inks appear only where an article is bound: its spine, its reading band, its cover. Nothing else on the screen is coloured.</p></div>
+
+  <div class="sysgrid">
+    <div class="pal">
+      <div class="phead"><span class="cap">Light theme</span><span class="cap muted">App roles</span></div>
+      <div class="sw" id="sw-light"></div>
+    </div>
+    <div class="pal dark">
+      <div class="phead"><span class="cap">Dark theme</span><span class="cap" style="color:var(--d-muted)">App roles</span></div>
+      <div class="sw" id="sw-dark"></div>
+    </div>
+
+    <div class="series">
+      <div class="why">
+        <h4>Bound by length</h4>
+        <p><strong>The rule:</strong> under 8 minutes is Mustard, 8 to 12 is Rose, 13 and over is Petrol. A save with no text yet is a Proof, hatched in ink, and is bound when its text arrives.</p>
+        <p><strong>Why length:</strong> it is the one fact about an article that changes what you do with it. A mustard spine fits a bus stop; a petrol one wants the sofa or your headphones. Colour by source needs a colour per website, hundreds of them, hashed into collisions that mean nothing. Colour by hash is pretty noise.</p>
+        <p><strong>Why it stays calm:</strong> three inks at most; the longer the read, the deeper the ink, so the ladder still works in greyscale. Inks never sit behind words. Terracotta is the imprint and marks only Shelf’s own actions.</p>
+      </div>
+      <div class="srows" id="srows"></div>
+    </div>
+  </div>
+
+  <div class="sub" style="margin-top:44px"><h3>Three reading palettes</h3><span>Body text 18 px Literata at 1.6, at least 7:1 in each. The band under the top bar is the article’s ink; the spoken word takes a tint of it.</span></div>
+  <div class="rpals" id="rpals"></div>
+
+  <div class="sub" style="margin-top:44px"><h3>Type</h3><span>Two families, both OFL on Google Fonts. Literata for the work (titles and reading), Jost for the publisher (sources, labels, controls, numbers). No mono.</span></div>
+  <div class="type">
+    <div>
+      <div class="role cap"><span>Display</span><span>Literata 800 · opsz 72</span></div>
+      <div class="d1">Saves</div>
+      <div class="d2">Why relays, not servers, are the future of personal data</div>
+      <div class="d3">Aggregation theory, ten years on</div>
+      <div class="spec">Screen titles 38/0.95 at 800. Article titles 28/1.14 at 700. Row and card titles 16.5/1.28 at 600. Optical size follows the point size, so big titles get the hairline contrast of a jacket and row titles stay sturdy.</div>
+    </div>
+    <div>
+      <div class="role cap"><span>Interface</span><span>Jost 500–800</span></div>
+      <div class="u1">The Guardian · 6 unread</div>
+      <div class="u2">Connected browsers</div>
+      <div class="u3">Getting the text… · 4 min left</div>
+      <div class="u4">3:09</div>
+      <div class="spec">Capitals at 13/600 with 0.1–0.12em tracking for sources, segments, tabs and labels. Sentence case at 15–16/500 for rows and buttons that do something. Nothing under 13. Times in tabular figures.</div>
+    </div>
+    <div>
+      <div class="role cap"><span>Reading</span><span>Literata 400 · 18/1.6</span></div>
+      <div class="r1">Relays change the arithmetic. If the list lives in several places at once, and only its owner can read it, then no single company closing its doors takes the list with it.</div>
+      <div class="r2">Italic for emphasis and pull quotes.</div>
+      <div class="spec">Aa offers 17 to 21 px; 18 is the default. Measure about 34 characters on a 360 px phone with 20 px margins; line height never under 1.55 at any size.</div>
+    </div>
+  </div>
+
+  <div class="sub" style="margin-top:44px"><h3>Shape, texture, imagery, icons</h3><span>A printed look: flat ink and keylines, with no shadows, gradients or pills.</span></div>
+  <div class="three">
+    <div class="card0">
+      <div class="cap" style="margin-bottom:16px">Shape language</div>
+      <div class="shapes" id="shapes"></div>
+      <p><strong>Two shapes.</strong> Rectangles with a 2 px corner for everything you read or press (cards, fields, buttons, segments, sheets, the player). Roundels only for things that play. <strong>Two line weights:</strong> a 1.5 px ink keyline on anything interactive (3:1 or better in both themes) and a 1 px hairline between rows. Elevation comes from a keyline alone. The Terracotta gradient retires: imprint is one flat ink.</p>
+    </div>
+    <div class="card0">
+      <div class="cap" style="margin-bottom:16px">Texture and imagery</div>
+      <div class="duos" id="duos"></div>
+      <p><strong>Halftone:</strong> a 45° screen at 8 px pitch, dots 1.8 px, over a 16% tint of the ink (6 px for spines under 12 px wide). Unread is screen, read is solid. <strong>Covers:</strong> the lead image becomes a black plate (greyscale, contrast up) printed over the article’s ink, in lists and on Now playing only. Inside the Reader, images appear as published. No paper grain: on a phone, grain reads as dirt.</p>
+    </div>
+    <div class="card0">
+      <div class="cap" style="margin-bottom:16px">Icons</div>
+      <div class="icons" id="icons"></div>
+      <p><strong>Lucide, 2 px, in ink.</strong> The active tab’s icon sits in a Terracotta label, white. Play and pause are filled. Icons never take a series ink, and status icons keep their meaning colour. The one custom glyph is Speed read’s frame, already drawn for the prototype.</p>
+    </div>
+  </div>
+
+  <div class="sub" style="margin-top:44px"><h3>Signature move</h3><span>The line that already carries progress becomes the article’s binding.</span></div>
+  <div class="sig">
+    <div>
+      <h4>Reading inks the spine</h4>
+      <p>Every article is bound in one band of its series ink, and the band travels with it: the spine on its row, the band under the Reader’s top bar, the top edge of the player, the cover of Now playing, the bar in Speed read and the strip on the extension’s toast. The part you haven’t reached is a halftone screen; whatever you have read or heard is printed solid. One stored position drives every band, so ten minutes listened to in the car show up on the shelf.</p>
+      <p>A save arrives as a hatched Proof and is bound in its ink the moment its text lands, a 250 ms wipe from the top (opacity only with reduced motion). Over weeks, Archive fills with solid spines: the books you finished.</p>
+    </div>
+    <div class="anat" id="anat"></div>
+  </div>
+</section>
+
+<!-- ============================ 3. SCREENS ============================ -->
+<section id="screens" style="padding-top:64px">
+  <div class="sh"><span class="num">03</span><h2>On the phone</h2>
+    <p>Real size, 360 × 760, drawn in HTML and CSS with the prototype’s copy, articles and controls. Only the visual identity has changed.</p></div>
+  <div class="phones">
+    <figure class="pcell" style="margin:0"><div class="phone"><div class="scr" id="p-saves"></div></div>
+      <figcaption><b>Saves · Unread</b><span>A stack of spines. Mustard, Rose, Petrol by length; two Proofs still waiting for text. Bitcoin Magazine is a third inked.</span></figcaption></figure>
+    <figure class="pcell" style="margin:0"><div class="phone"><div class="scr reader" data-r="light" id="p-reader"></div></div>
+      <figcaption><b>Reader · mid-article, playing</b><span>Plain paper and Literata at 18/1.6. The player docks with the article’s band along its top edge; the spoken word wears a mustard tint.</span></figcaption></figure>
+    <figure class="pcell" style="margin:0"><div class="phone"><div class="scr" id="p-listen"></div></div>
+      <figcaption><b>Listen · Now playing</b><span>Now playing is the book face-out: a two-colour cover, a paper label, and the band filling as it speaks.</span></figcaption></figure>
+
+    <figure class="pcell" style="margin:0"><div class="phone"><div class="scr" id="p-empty"></div></div>
+      <figcaption><b>Saves · first run</b><span>An empty shelf with room on it. The share-sheet lesson drops a link into a slot, where it waits as a hatched Proof until its text arrives.</span></figcaption></figure>
+    <figure class="pcell" style="margin:0"><div class="phone"><div class="scr" id="p-you"></div></div>
+      <figcaption><b>You · the boring screen</b><span>Your shelf in miniature (thickness is length), the backup card as a bookplate, settings on a catalogue card, and “Not written down” as a date stamp.</span></figcaption></figure>
+    <figure class="pcell" style="margin:0"><div class="phone"><div class="scr reader" data-r="sepia" id="p-sepia"></div></div>
+      <figcaption><b>Reader · Sepia, top of an article</b><span>The opening is a title page: series mark, kicker, title, rule. The band under the bar is all screen because nothing is read yet.</span></figcaption></figure>
+
+    <figure class="pcell" style="margin:0"><div class="phone"><div class="scr dark" id="p-saves-d"></div></div>
+      <figcaption><b>Saves · dark, mini player</b><span>Inks lift for night stock; Terracotta stays the same value with white. The mini player is a slip with the article’s band on top.</span></figcaption></figure>
+    <figure class="pcell" style="margin:0"><div class="phone"><div class="scr reader dark" data-r="dark" id="p-reader-d"></div></div>
+      <figcaption><b>Reader · dark</b><span>Text #E4DCCB on #15130E, 13.6:1, softer than white for long sessions. The band and spoken-word tint follow the article’s ink.</span></figcaption></figure>
+    <div class="notecell">
+      <h4>What changes in the dark</h4>
+      <p><strong>Paper becomes night stock</strong> (#17150F), a warm black, so the inks keep their print character.</p>
+      <p><strong>Inks lift one step</strong> (Mustard #E2B04F, Rose #E8909E, Petrol #5FA6AE) and keep their light-to-deep order. Because inks never carry words, they can change per theme without breaking any text pair.</p>
+      <p><strong>Keylines soften</strong> to #8C8372 (4.9:1 on night stock): still a clear boundary, without a lattice of bright lines.</p>
+      <p><strong>Terracotta does not move.</strong> #B5542E with white content in every theme and reading palette, as decision 61 already says.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 4. BEYOND ============================ -->
+<section id="beyond" style="padding-top:64px">
+  <div class="sh"><span class="num">04</span><h2>Beyond the phone</h2>
+    <p>The spine is portable: it works as an app icon at 48 px and as a 10 px strip on someone else’s web page.</p></div>
+  <div class="beyond">
+    <div class="iconpanel">
+      <div class="cap" style="margin-bottom:16px">App icon</div>
+      <div class="big">
+        <figure><span id="icon-xl"></span><figcaption>Adaptive, 192 px</figcaption></figure>
+        <figure><span id="icon-mono"></span><figcaption>Themed (monochrome)</figcaption></figure>
+      </div>
+      <div class="sizes">
+        <figure><span id="icon-48"></span><figcaption>48</figcaption></figure>
+        <figure><span id="icon-32"></span><figcaption>32, simplified</figcaption></figure>
+        <figure><span id="icon-16"></span><figcaption>16, toolbar</figcaption></figure>
+      </div>
+      <p>Three spines on the imprint: a short Mustard, the cream bookmark (Shelf’s existing mark, now standing among books) and a Petrol long read leaning on it. Flat Terracotta replaces the gradient tile. Below 32 px the lean and bands drop out.</p>
+    </div>
+    <div>
+      <div class="homes">
+        <div class="home lt"><div class="clock">9:41</div><div class="date">Saturday 3 October</div><div class="apps" id="home-lt"></div></div>
+        <div class="home dk"><div class="clock">21:04</div><div class="date">Saturday 3 October</div><div class="apps" id="home-dk"></div></div>
+      </div>
+    </div>
+    <div class="toastbox">
+      <div class="win" aria-label="Browser window with Shelf's save toast">
+        <div class="chrome"><span class="dots"><i></i><i></i><i></i></span><span class="wtab"><i></i>What we lose when we stop reading long things</span></div>
+        <div class="addr">
+          <span class="tbtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></span>
+          <span class="url">theatlantic.com/ideas/archive/2026/09/reading-long-things</span>
+          <span class="tbtn me" id="tb-icon"></span>
+        </div>
+        <div class="page">
+          <div class="site">
+            <div class="kick">Ideas</div>
+            <h1>What we lose when we stop reading long things</h1>
+            <div class="by">By Megan Garber</div>
+            <p>Somewhere between the third tab and the fourth notification, a long article turns into a promise. You will get to it later: on the train, at the weekend, when things calm down.</p>
+            <p>The trouble is that later rarely arrives with the patience of the moment you found the piece. Long reading asks for an hour that has to be protected, and the web is very good at taking hours apart.</p>
+            <p>So we keep things instead. Tabs, bookmarks, screenshots, a folder called “read”.</p>
+          </div>
+          <div class="xtoast" role="status">
+            <span class="xs ht s-med" style="--p:0;--sp:#E8909E"><span class="bindx"></span></span>
+            <div class="xb">
+              <div class="xr">
+                <span class="ti"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span class="tx"><b>Saved to Shelf</b><span>What we lose when we stop reading long things</span></span>
+                <button class="act">Undo</button>
+                <button class="x" aria-label="Dismiss"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+              </div>
+              <div class="timer"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="toastnotes">
+        <h4>The save toast</h4>
+        <p>The house inverted toast, in ink on a light page. Its left edge is the new save’s spine: the extension parses the article, so it already knows the length and binds it in Rose (11 minutes) as the toast arrives.</p>
+        <p><strong>Same anatomy as today:</strong> success roundel, “Saved to Shelf”, the page title, Undo, ✕ and the countdown, now a 3 px Terracotta band.</p>
+        <p><strong>On a dark page</strong> the toast flips to paper, and the strip uses the dark inks.</p>
+        <p><strong>Build:</strong> plain CSS in the closed shadow root. Halftone is two radial gradients. The toast can stay in system-ui, as the extension spec asks, because the spine carries the identity.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 5. NOTES ============================ -->
+<section id="notes" style="padding-top:64px">
+  <div class="sh"><span class="num">05</span><h2>Honest notes</h2>
+    <p>What makes it cool, what could go wrong, and what it would take.</p></div>
+  <div class="notes">
+    <div class="cool">
+      <h4>What is cool</h4>
+      <ul>
+        <li><strong>The list has a picture.</strong> Before reading a word you can see the mix (two quick ones, a long one) and how far through you are.</li>
+        <li><strong>Progress becomes a collection.</strong> Archive gets a payoff: a row of solid spines, the books you finished.</li>
+        <li><strong>It is ownable.</strong> No read-it-later app looks like a bookshop. The spine works as an app icon, a website motif and a 10 px strip on a toast.</li>
+        <li><strong>Boring screens get real objects</strong> from the same world: an empty shelf, a bookplate for the backup, a catalogue card for settings, a date stamp for the warning.</li>
+        <li><strong>The colour carries meaning,</strong> and it is already in the data: the meta line says “9 min”, the spine says it at a glance.</li>
+      </ul>
+    </div>
+    <div class="wrong">
+      <h4>What could go wrong</h4>
+      <ul>
+        <li><strong>Fatigue.</strong> Three inks on every row could tip into a children’s library. Mitigation: colour lives only in a 28 px spine and never behind words; test with a 40-item list before committing.</li>
+        <li><strong>The rule is invisible at first.</strong> People may read colour as source or topic. The meta line repeats the length, so it is learnable in a day; a one-line legend on first run would need to go on the flow map first.</li>
+        <li><strong>Kitsch.</strong> Bookplate, catalogue card and stamp are each used once. More than that (wood, faux paper, page curls) turns it into a theme park.</li>
+        <li><strong>Moiré.</strong> An 8 px dot screen can shimmer while scrolling at some densities. Snap the pitch to whole device pixels and check on the spike phone.</li>
+        <li><strong>Accessibility.</strong> Colour is never the only cue, inks never carry text, keylines give 3:1 edges. The stamp is rotated 2.5°, which costs a little for low vision; it stays 13 px bold and reads normally to screen readers.</li>
+        <li><strong>Brand change.</strong> Pills, the gradient and soft shadows all go. Every component in the prototype changes shape, and the icon is new.</li>
+      </ul>
+    </div>
+    <div class="build">
+      <h4>What it would take</h4>
+      <ul>
+        <li><strong>Tokens:</strong> add series inks per theme, the length thresholds (in shared defaults, so the extension binds the same way), halftone pitch and dot, radius 2; remove the gradient and shadows.</li>
+        <li><strong>Spines and bands (React Native):</strong> a View with a tiled halftone (a 12 px PNG tile with resizeMode repeat, or a react-native-svg Pattern) under a solid View whose height follows the stored position, animated with Reanimated. No Skia needed.</li>
+        <li><strong>Covers:</strong> RN 0.77+ on the New Architecture has filter and mixBlendMode on Android; check them on the spike phone. Fallback: react-native-skia (a ColorMatrix and multiply over a fill) baking each cover once at save time into a cached JPEG, so lists scroll plain images. Skia adds several MB per ABI.</li>
+        <li><strong>Fonts:</strong> Jost and Literata static weights through expo-font, Latin subset. Literata is the heavier family; ship 400, 400 italic, 600, 700, 800 and nothing else.</li>
+        <li><strong>Extension and website:</strong> plain CSS; halftone and hatch are gradients. Fonts bundled locally in the extension (CSP).</li>
+        <li><strong>Effort:</strong> about a week to re-skin the prototype and tokens, a day for the icon set, then the spike check on covers and moiré.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="ctable"><div class="cols">
+    <table id="ctable-a"><thead><tr><th>Measured pair</th><th>Pair</th><th style="text-align:right">Ratio</th><th style="text-align:right">Needs</th></tr></thead><tbody></tbody></table>
+    <table id="ctable-b"><thead><tr><th>Measured pair</th><th>Pair</th><th style="text-align:right">Ratio</th><th style="text-align:right">Needs</th></tr></thead><tbody></tbody></table>
+  </div></div>
+  <div class="foot cap"><span>Paperback · Shelf design study</span><span>Contrast measured on this page from the tokens, WCAG 2.x relative luminance</span></div>
+</section>
+</main>
+
+<script>
+/* ---------------- icons (Lucide paths, from the prototype) ---------------- */
+const I = {
+  search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  back:'<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+  x:'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  more:'<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  play:'<polygon points="6 3 20 12 6 21 6 3"/>',
+  pause:'<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
+  archive:'<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
+  trash:'<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
+  ext:'<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  bookmark:'<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>',
+  headphones:'<path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/>',
+  user:'<circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  back15:'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 5v3h3"/><path stroke-width="1.5" d="M9 10.5l1.125-1.125v5.25"/><path stroke-width="1.5" d="M15 9.375h-2.25v2.25h.75a1.5 1.5 0 0 1 0 3h-.75"/>',
+  fwd15:'<path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 5v3h-3"/><path stroke-width="1.5" d="M9 10.5l1.125-1.125v5.25"/><path stroke-width="1.5" d="M15 9.375h-2.25v2.25h.75a1.5 1.5 0 0 1 0 3h-.75"/>',
+  phone:'<rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/>',
+  shield:'<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+  keyboard:'<path d="M10 8h.01M12 12h.01M14 8h.01M16 12h.01M18 8h.01M6 8h.01M7 16h10M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/>',
+  chev:'<path d="m9 18 6-6-6-6"/>',
+  settings:'<path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>',
+  laptop:'<path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>',
+  speedread:'<path d="M3 4h18"/><path d="M10 4v4"/><path d="M6 12h12"/><path d="M10 20v-4"/><path d="M3 20h18"/>',
+  clock:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  notes:'<path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"/><path d="M15 3v6h6"/>',
+  camera:'<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>',
+  folder:'<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+  mail:'<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
+  msg:'<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
+};
+const ic = (n, s = 20, fill = 'none') => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="${fill}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[n]}</svg>`;
+const fillIc = (n, s) => ic(n, s, 'currentColor');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---------------- the prototype's sample library ---------------- */
+const ITEMS = [
+  {id:1, src:'The Guardian', host:'theguardian.com', title:'The quiet return of the read-it-later app, and why it matters this time', mins:9, progress:0, img:'shelf-guardian', status:'ok', archived:false, by:'Alex Hern'},
+  {id:2, src:'Bitcoin Magazine', host:'bitcoinmagazine.com', title:'Why relays, not servers, are the future of personal data', mins:6, progress:.34, img:'shelf-relays', status:'ok', archived:false, by:'Shinobi'},
+  {id:3, src:'Stratechery', host:'stratechery.com', title:'Aggregation theory, ten years on', mins:14, progress:0, img:null, status:'ok', archived:false, by:'Ben Thompson'},
+  {id:4, src:'From Chrome', host:'arstechnica.com', title:'Mozilla’s Readability library is quietly everywhere', mins:5, progress:0, img:null, status:'browser', archived:false},
+  {id:5, src:'nytimes.com', host:'nytimes.com', title:'The Long Road Back to the Office', mins:0, progress:0, img:null, status:'failed', archived:false},
+  {id:6, src:'The Atlantic', host:'theatlantic.com', title:'What we lose when we stop reading long things', mins:11, progress:0, img:'shelf-atlantic', status:'ok', archived:false, by:'Megan Garber'},
+  {id:7, src:'Aeon', host:'aeon.co', title:'The case for boring technology in an age of constant upgrades', mins:18, progress:0, img:null, status:'ok', archived:true, by:'Claire Evans'},
+  {id:8, src:'Wired', host:'wired.com', title:'Your bookmarks are a graveyard. Here is how to dig them up', mins:7, progress:1, img:'shelf-wired', status:'ok', archived:true, by:'Lauren Goode'},
+];
+const PROSE = [
+  "Everything that followed was an elaboration of that one move. Sync arrived so the reading could happen somewhere other than the saving. A clean view arrived so the text could be read without the page fighting back. A voice arrived so the reading could happen with your hands on a steering wheel.",
+  "What never changed was the shape of the shelf: a list, newest at the top, that belonged to one person and nobody else. The services that held those lists came and went. Some were bought, some were shut, one was quietly folded into a browser and then quietly folded away again.",
+  "Relays change the arithmetic. If the list lives in several places at once, and only its owner can read it, then no single company closing its doors takes the list with it. The app becomes a window onto something the user already has, rather than the thing they are renting.",
+  "That sounds abstract until the day it matters. Then it sounds like the most practical idea in the world: the article you saved in 2026 is still there in 2036, readable offline, in a clean column, exactly where you left it.",
+];
+// the one rule: series by length; no text yet is a Proof
+const ser = it => it.status !== 'ok' ? 'proof' : it.mins < 8 ? 'short' : it.mins <= 12 ? 'med' : 'long';
+const minsLeft = (it, p) => Math.max(1, Math.round(it.mins * (1 - p)));
+const by = id => ITEMS.find(i => i.id === id);
+const pic = (seed, w, h) => `https://picsum.photos/seed/${seed}/${w}/${h}`;
+
+/* ---------------- shared phone parts ---------------- */
+const sb = (t = '9:41') => `<div class="sb"><span>${t}</span><span class="sbi" aria-hidden="true">
+  <svg width="15" height="11" viewBox="0 0 15 11"><path d="M0 11h3V8H0zM4 11h3V5.5H4zM8 11h3V3H8zM12 11h3V0h-3z" fill="currentColor"/></svg>
+  <svg width="22" height="11" viewBox="0 0 22 11"><rect x=".75" y=".75" width="18" height="9.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="2.5" y="2.5" width="12" height="6" fill="currentColor"/><rect x="20" y="3.5" width="1.6" height="4" fill="currentColor"/></svg></span></div>`;
+
+function tabbar(on){
+  const t = (id, icon, label) => `<div class="tab ${on === id ? 'on' : ''}"><span class="tpill">${ic(icon, 22)}</span>${label}</div>`;
+  return `<nav class="tabbar">${t('saves', 'bookmark', 'Saves')}${t('listen', 'headphones', 'Listen')}${t('you', 'user', 'You')}</nav>`;
+}
+
+function spineCls(it){ const s = ser(it); return s === 'proof' ? 'proof' : 's-' + s; }
+
+function row(it, p = it.progress){
+  let src = esc(it.src), meta;
+  if (it.status === 'browser') { src = `${ic('laptop', 14)}From Chrome`; meta = `<span class="pdot" aria-hidden="true"></span>Getting the text…`; }
+  else if (it.status === 'failed') { meta = `<span>Couldn’t get the text</span><span class="sep"></span><span class="lnk">Open original ${ic('ext', 14)}</span>`; }
+  else meta = p > 0 && p < 1 ? `<span class="hot">${minsLeft(it, p)} min left</span>` : `${it.mins} min`;
+  const cover = it.img && it.status === 'ok' ? `<span class="cover ${spineCls(it)}"><img src="${pic(it.img, 108, 144)}" alt=""></span>` : '';
+  return `<div class="row"><span class="spine ht ${spineCls(it)}" style="--p:${p}"></span>
+    <div class="rb"><div class="src">${src}</div><div class="ttl">${esc(it.title)}</div><div class="meta">${meta}</div></div>${cover}</div>`;
+}
+
+// tiny shelf beside the count: thickness is length
+function shelfmark(items, prog = {}){
+  return `<span class="mark" aria-hidden="true">${items.map(it => {
+    const s = ser(it), w = s === 'proof' ? 4 : Math.round(3 + it.mins * .32), h = 15 + ((it.id * 7) % 8);
+    const p = prog[it.id] ?? it.progress;
+    return s === 'proof' ? `<i class="proof" style="--w:${w}px;--h:${h}px"></i>` : `<i class="s-${s}" style="--w:${w}px;--h:${h}px;--p:${p}"></i>`;
+  }).join('')}</span>`;
+}
+
+function savesScreen(opts = {}){
+  const unread = ITEMS.filter(i => !i.archived);
+  const prog = opts.prog || {};
+  const mini = opts.mini ? miniHTML() : '';
+  return `${sb(opts.time)}<div class="scroll">
+    <div class="head"><h1>Saves</h1><span class="count">${shelfmark(unread, prog)}${unread.length} unread</span></div>
+    <div class="searchbar">${ic('search', 18)}Search your saves</div>
+    <div class="segs" role="tablist"><span class="seg on" role="tab" aria-selected="true">Unread</span><span class="seg" role="tab" aria-selected="false">Archive</span></div>
+    <div class="list">${unread.map(it => row(it, prog[it.id] ?? it.progress)).join('')}</div>
+  </div>${mini}${tabbar('saves')}`;
+}
+
+const NOW = { t:'3:09', total:'6:10', p:.51 };
+function miniHTML(){
+  const it = by(2);
+  return `<div class="mini s-short" role="region" aria-label="Player"><span class="band ht h s-short" style="--p:${NOW.p}"></span>
+    <span class="pp">${fillIc('pause', 20)}</span>
+    <span class="info"><b>${esc(it.title)}</b><span>${NOW.t} / ${NOW.total}</span></span></div>`;
+}
+
+function readerScreen(opts){
+  const it = by(opts.id);
+  const s = 's-' + ser(it);
+  const playing = !!opts.playing;
+  let content;
+  if (opts.top) {
+    content = `<div class="kicker"><i class="${s}" aria-hidden="true"></i>${esc(it.src)}</div>
+      <h1>${esc(it.title)}</h1><div class="by">${esc(it.by)} · ${it.mins} min · Saved yesterday</div>
+      <div class="prose"><img class="fig" src="${pic(it.img, 640, 427)}" alt=""><p>${PROSE[1]}</p><p>${PROSE[2]}</p></div>`;
+  } else {
+    const hlAt = opts.hl || 'several';
+    const paras = PROSE.slice(1).map((p, k) => {
+      let html = p;
+      if (k === 1) html = html.replace('Relays change the arithmetic', '<a href="#">Relays</a> change the arithmetic').replace(' ' + hlAt + ' ', ` <span class="w">${hlAt}</span> `);
+      return `<p>${html}</p>`;
+    }).join('');
+    content = `<div class="prose" style="margin-top:-102px">${paras}</div>`;
+  }
+  const listen = playing ? '' : `<span class="listenbtn">${fillIc('play', 13)}Listen</span>`;
+  const band = playing ? '' : `<div class="rband ht h ${s}" style="--p:${opts.top ? .02 : .5}"></div>`;
+  const dock = playing ? `<div class="dock ${s}" role="region" aria-label="Player"><span class="band ht h ${s}" style="--p:${NOW.p}"></span>
+      <span class="pp">${fillIc('pause', 20)}</span><span class="tt">${NOW.t} / ${NOW.total}</span>
+      <span class="ctl">${ic('back15', 24)}</span><span class="ctl">${ic('fwd15', 24)}</span><span class="rate">1×</span></div>` : '';
+  const arch = `<span class="arch" style="bottom:${playing ? 88 : 16}px" aria-label="Archive">${ic('archive', 22)}</span>`;
+  return `${sb()}<div class="rtop"><span class="iconbtn">${ic('back', 22)}</span><span class="host">${esc(it.host)}</span>${listen}<span class="iconbtn aa">Aa</span><span class="iconbtn">${ic('more', 22)}</span></div>
+    ${band}<div class="scroll"><div class="article ${s}">${content}</div></div>${arch}${dock}`;
+}
+
+function listenScreen(){
+  const cur = by(2);
+  const played = [{it:cur, p:NOW.p, on:true}, {it:by(6), p:.27}, {it:by(3), p:.58}];
+  const rows = played.map(({it, p, on}) => {
+    const cov = it.img ? `<span class="cover s-${ser(it)}"><img src="${pic(it.img, 88, 116)}" alt=""></span>` : '';
+    return `<div class="lrow"><span class="spine ht s-${ser(it)}" style="--p:${p}"></span>
+      <span class="rp ${on ? 'on' : ''}" aria-label="${on ? 'Pause' : 'Play'} ${esc(it.title)}">${fillIc(on ? 'pause' : 'play', 16)}</span>
+      <div class="rb"><div class="src">${esc(it.src)}</div><div class="ttl">${esc(it.title)}</div><div class="meta"><span class="hot">${minsLeft(it, p)} min left</span></div></div>${cov}</div>`;
+  }).join('');
+  return `${sb()}<div class="scroll">
+    <div class="head"><h1>Listen</h1><span class="count">3 played</span></div>
+    <div class="np s-short">
+      <div class="npcov"><span class="cover s-short"><img src="${pic(cur.img, 656, 236)}" alt=""></span><span class="nplabel"><i aria-hidden="true"></i>Now playing</span></div>
+      <div class="npb"><div class="t">${esc(cur.title)}</div><div class="s">${esc(cur.src)}</div>
+        <div class="band ht h s-short" style="--p:${NOW.p}"></div>
+        <div class="times"><span>${NOW.t}</span><span>${NOW.total}</span></div>
+        <div class="controls"><span class="ctl" style="grid-column:2">${ic('back15', 24)}</span><span class="big">${fillIc('pause', 24)}</span><span class="ctl">${ic('fwd15', 24)}</span><span class="rate">1×</span></div>
+      </div>
+    </div>
+    <div class="sectionhead"><h2>Played</h2><span class="chipb">${fillIc('play', 13)}Play all</span></div>
+    <div class="list" style="border-top-width:1.5px">${rows}</div>
+  </div>${tabbar('listen')}`;
+}
+
+function emptyScreen(){
+  const ghosts = [[14, 50], [20, 64], [12, 44], [17, 58], [22, 70], [13, 48], [18, 60], [16, 54], [16, 62], [19, 68], [13, 46]];
+  return `${sb()}<div class="scroll">
+    <div class="head"><h1>Saves</h1><span class="count"></span></div>
+    <div class="empty">
+      <div class="illus" aria-hidden="true">
+        <div class="share"><div class="l">Share to</div><div class="apps">
+          <span class="app"><i>${ic('msg', 18)}</i>Messages</span><span class="app"><i>${ic('mail', 18)}</i>Mail</span>
+          <span class="app me"><i>${ic('bookmark', 18)}</i>Shelf</span><span class="app"><i>${ic('notes', 18)}</i>Notes</span></div></div>
+        <div class="drop" style="--x:170px"></div>
+        <div class="eshelf">${ghosts.map(([w, h], k) => `<span class="g ${k === 8 ? 'slot' : ''}" style="--w:${w}px;--h:${h}px"></span>`).join('')}<span class="end"></span></div>
+        <div class="eledge"></div>
+      </div>
+      <h2>Your shelf is empty</h2>
+      <p>Share any link from any app and it lands here, cleaned up and ready to read offline.</p>
+      <span class="btn primary">${ic('laptop', 18)}Connect your browser</span>
+    </div>
+  </div>${tabbar('saves')}`;
+}
+
+function youScreen(){
+  // every save as a book; thickness is length, height is a stable per-article value
+  const books = ITEMS.map(it => {
+    const s = ser(it), w = s === 'proof' ? 11 : Math.round(8 + it.mins * .95), h = 52 + ((it.id * 13) % 22);
+    return s === 'proof' ? `<i class="bk ht proof" style="width:${w}px;height:${h}px"></i>` : `<i class="bk ht s-${s}" style="width:${w}px;height:${h}px;--p:${it.id === 2 ? NOW.p : it.progress}"></i>`;
+  });
+  return `${sb()}<div class="scroll">
+    <div class="head"><h1>You</h1><span class="count">8 saves · 12 listened</span></div>
+    <div class="youshelf" aria-hidden="true"><div class="books">${books.join('')}<span class="yend"></span></div><div class="yl2"></div></div>
+    <div class="plate"><span class="c4" style="left:5px;top:5px"></span><span class="c4" style="right:5px;top:5px"></span><span class="c4" style="left:5px;bottom:5px"></span><span class="c4" style="right:5px;bottom:5px"></span>
+      <div class="h">${ic('shield', 20)}Back up your shelf</div>
+      <p>Your saves are yours alone. A recovery code brings them back on any phone, even if this one is lost.</p>
+      <div class="row2"><span class="btn secondary">Later</span><span class="btn primary">Show recovery code</span></div></div>
+    <div class="ygroup">
+      <div class="yrow"><span>${ic('keyboard', 20)}</span><span class="yl">Recovery code<br><span class="stamp">Not written down</span></span><span class="chev">${ic('chev', 18)}</span></div>
+      <div class="yrow"><span>${ic('phone', 20)}</span><span class="yl">Add another device</span><span class="chev">${ic('chev', 18)}</span></div>
+      <div class="yrow"><span>${ic('laptop', 20)}</span><span class="yl">Connected browsers</span><span class="yv">1</span><span class="chev">${ic('chev', 18)}</span></div>
+    </div>
+    <div class="ygroup quiet"><div class="yrow"><span>${ic('settings', 20)}</span><span class="yl">Advanced</span><span class="chev">${ic('chev', 18)}</span></div></div>
+    <div class="ygroup quiet"><div class="yrow danger"><span>${ic('trash', 20)}</span><span class="yl">Delete my data</span></div></div>
+  </div>${tabbar('you')}`;
+}
+
+/* ---------------- app icon ---------------- */
+function iconSVG(size, opts = {}){
+  const mono = opts.mono, simple = opts.simple;
+  const bg = mono ? '#2A2622' : '#B5542E';
+  const cMust = mono ? '#E9E1D3' : '#E2B04F', cPaper = mono ? '#E9E1D3' : '#FBF8F1', cPet = mono ? '#E9E1D3' : '#1F555E', cInk = mono ? '#2A2622' : '#1C1A16';
+  const band = simple ? '' : `<rect x="30" y="47" width="13" height="2.5" fill="${bg}"/><rect x="30" y="74" width="13" height="2.5" fill="${bg}"/>`;
+  const petrol = simple
+    ? `<rect x="65" y="40" width="13" height="42" fill="${cPet}"/>`
+    : `<g transform="rotate(13 78 82)"><rect x="65" y="38" width="13" height="44" fill="${cPet}"/><rect x="65" y="45" width="13" height="2.5" fill="${bg}"/><rect x="65" y="73" width="13" height="2.5" fill="${bg}"/></g>`;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 108 108" role="img" aria-label="Shelf icon" style="display:block;border-radius:${opts.square ? 0 : '50%'}">
+    <rect width="108" height="108" fill="${bg}"/>
+    <rect x="30" y="41" width="13" height="41" fill="${cMust}"/>${band}
+    <path d="M46 26H63V82L54.5 75.5L46 82Z" fill="${cPaper}"/>
+    ${simple ? '' : `<rect x="46" y="33" width="17" height="5" fill="${cInk}"/>`}
+    ${petrol}
+  </svg>`;
+}
+
+/* ---------------- board: masthead strip ---------------- */
+function mulberry(a){ return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+(function strip(){
+  const r = mulberry(1954), el = document.getElementById('strip');
+  const inks = ['s-short', 's-med', 's-long'];
+  let html = '', x = 0;
+  while (x < 1150) {
+    const mins = 3 + Math.floor(r() * 22);
+    const cls = r() < .07 ? 'proof' : mins < 8 ? 's-short' : mins <= 12 ? 's-med' : 's-long';
+    const w = Math.round(14 + mins * 1.1), h = Math.round(92 + r() * 52);
+    const pr = r(), p = pr < .38 ? 1 : pr < .7 ? +(r() * .9).toFixed(2) : 0;
+    html += `<i class="bk ht ${cls}" style="width:${w}px;height:${h}px;--p:${p}"></i>`;
+    x += w + 2;
+  }
+  html += `<i class="bk ht s-long" style="width:30px;height:128px;--p:.3;transform:rotate(-11deg);margin-left:22px"></i><span class="bookend"></span>`;
+  el.innerHTML = html;
+})();
+
+/* ---------------- board: swatches ---------------- */
+const LIGHT = [
+  ['Paper', '#F4EFE4', 'Background'], ['Stock', '#FBF8F1', 'Fields, cards, players'], ['Ink', '#1C1A16', 'Text, keylines, icons'], ['Muted', '#5A5246', 'Meta and sub-lines'], ['Rule', '#D3C9B6', 'Hairlines between rows'],
+  ['Imprint', '#B5542E', 'Shelf’s actions (fill)'], ['On imprint', '#FFFFFF', 'Content on Terracotta'], ['Imprint text', '#9A4524', '“min left”, links'], ['Success', '#2B7448', 'Done, connected'], ['Error', '#B42318', 'Errors, delete'],
+];
+const DARK = [
+  ['Paper', '#17150F', 'Night stock'], ['Stock', '#211E18', 'Fields, cards, players'], ['Ink', '#F2ECE0', 'Text and icons'], ['Muted', '#B6AD9C', 'Meta and sub-lines'], ['Key', '#8C8372', 'Keylines (rule #38332A)'],
+  ['Imprint', '#B5542E', 'Unchanged'], ['On imprint', '#FFFFFF', 'Unchanged'], ['Imprint text', '#E08A66', '“min left”, links'], ['Success', '#6CC793', 'Done, connected'], ['Error', '#F28B7D', 'Errors, delete'],
+];
+const swHTML = list => list.map(([n, h, r]) => `<div><span class="chip" style="background:${h}"></span><b>${n}</b><code>${h}</code><small>${r}</small></div>`).join('');
+document.getElementById('sw-light').innerHTML = swHTML(LIGHT);
+document.getElementById('sw-dark').innerHTML = swHTML(DARK);
+
+const SERIES = [
+  ['Mustard', 'Short', 'under 8 min', '#D69A2D', '#E2B04F', 's-short', .34],
+  ['Rose', 'Medium', '8 to 12 min', '#D8707F', '#E8909E', 's-med', .62],
+  ['Petrol', 'Long', '13 min and over', '#2C6872', '#5FA6AE', 's-long', 0],
+  ['Proof', 'No text yet', 'pending or failed', 'hatch', 'hatch', 'proof', 0],
+  ['Terracotta', 'Imprint', 'Shelf’s own actions', '#B5542E', '#B5542E', 'imp', 1],
+];
+document.getElementById('srows').innerHTML = SERIES.map(([n, k, rule, l, d, cls, p]) => {
+  const one = (dark) => {
+    const st = dark ? `--base:var(--d-paper);--short:var(--d-short);--med:var(--d-med);--long:var(--d-long);--ink:var(--d-ink)` : '';
+    if (cls === 'imp') return `<div style="background:#B5542E"></div>`;
+    return `<div class="sp2 ht ${cls}" style="--p:${p};${st}"></div>`;
+  };
+  return `<div class="srow"><div class="pair">${one(false)}${one(true)}</div>
+    <div class="lab"><b>${n}</b><span>${k}, ${rule}</span><code>${l === 'hatch' ? 'Ink hatch at 40%' : l === d ? `${l} in both themes` : `${l} light · ${d} dark`}</code></div></div>`;
+}).join('');
+
+/* ---------------- board: reading palettes ---------------- */
+const RP = [
+  ['light', 'Light', 'White stock', '#FBF8F1', '#1C1A16', '#5A5246', '#9A4524'],
+  ['sepia', 'Sepia', 'Pulp', '#EFE3C8', '#2B2114', '#645640', '#8A3B1E'],
+  ['dark', 'Dark', 'Night', '#15130E', '#E4DCCB', '#ABA290', '#E39A78'],
+];
+const lin = c => { c /= 255; return c <= .03928 ? c / 12.92 : Math.pow((c + .055) / 1.055, 2.4); };
+const lum = h => { const v = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)); return .2126 * lin(v[0]) + .7152 * lin(v[1]) + .0722 * lin(v[2]); };
+const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05); };
+const HL = { light:'#EED7AC', sepia:'#E2C48D', dark:'#463A22' };
+document.getElementById('rpals').innerHTML = RP.map(([k, name, nick, bg, tx, mu, ln]) => `
+  <div class="rpal" data-r="${k}">
+    <div class="rbar"><b>${name}</b><span>${nick}</span></div>
+    <div class="rband ht h s-short" style="--p:.46;${k === 'dark' ? '--short:var(--d-short)' : ''}"></div>
+    <div class="txt"><p><a href="#">Relays</a> change the arithmetic. If the list lives in <span class="w">several</span> places at once, and only its owner can read it, then no single company closing its doors takes the list with it.</p></div>
+    <div class="vals">
+      <span>Page</span><b>${bg}</b><span>Text</span><b>${tx} · ${ratio(tx, bg).toFixed(1)}:1</b>
+      <span>Muted</span><b>${mu} · ${ratio(mu, bg).toFixed(1)}:1</b><span>Link</span><b>${ln} · ${ratio(ln, bg).toFixed(1)}:1</b>
+      <span>Spoken word</span><b>${HL[k]} · ${ratio(tx, HL[k]).toFixed(1)}:1</b>
+    </div>
+  </div>`).join('');
+
+/* ---------------- board: shapes, duotones, icons, anatomy ---------------- */
+document.getElementById('shapes').innerHTML = `
+  <span class="btn primary">${ic('laptop', 18)}Connect your browser</span>
+  <span class="btn secondary">Later</span>
+  <span class="chipb on">Unread</span><span class="chipb">Archive</span>
+  <span class="roundel">${fillIc('play', 20)}</span><span class="roundel soft">${fillIc('play', 18)}</span>
+  <span class="stampbox">${ic('archive', 22)}</span>
+  <span class="rate" style="background:var(--paper)">1.5×</span>`;
+document.getElementById('duos').innerHTML = [
+  ['raw', 'shelf-relays', 'As published'], ['s-short', 'shelf-relays', 'Mustard'], ['s-med', 'shelf-atlantic', 'Rose'], ['s-long', 'shelf-guardian', 'Petrol'],
+].map(([c, s, l]) => `<figure><span class="cover ${c}"><img src="${pic(s, 150, 200)}" alt=""></span><figcaption>${l}</figcaption></figure>`).join('');
+document.getElementById('icons').innerHTML = `
+  <span class="lbl">Rest, active, on Terracotta</span>
+  <span class="ib">${ic('bookmark', 22)}</span><span class="tabon">${ic('bookmark', 22)}</span><span class="ib">${ic('headphones', 22)}</span><span class="tabon">${ic('user', 22)}</span><span class="roundel">${fillIc('pause', 20)}</span><span class="ib">${ic('speedread', 22)}</span>
+  <span class="lbl" style="margin-top:8px">Player, article actions, status</span>
+  <span class="ib">${ic('back15', 24)}</span><span class="ib">${ic('fwd15', 24)}</span><span class="ib">${ic('archive', 22)}</span><span class="ib">${ic('more', 22)}</span><span class="ib" style="color:var(--success)">${ic('check', 22)}</span><span class="ib" style="color:var(--error)">${ic('trash', 22)}</span>`;
+document.getElementById('anat').innerHTML = [
+  ['proof', 0, 'Proof', 'No text yet'],
+  ['s-short', 0, 'Unread', 'All screen'],
+  ['s-med', .34, 'A third in', '“6 min left”'],
+  ['s-long', .78, 'Nearly done', 'by eye or ear'],
+  ['s-short', 1, 'Finished', 'Solid ink'],
+].map(([c, p, t, s]) => `<figure><span class="bspine ht ${c}" style="--p:${p};--base:var(--stock)"></span><figcaption>${t}<span>${s}</span></figcaption></figure>`).join('')
+ + `<figure><span class="bspine bind s-med" style="--base:var(--stock);background:radial-gradient(circle,var(--sp) 0 var(--dot),transparent calc(var(--dot) + .6px)) 0 0/var(--pitch) var(--pitch),radial-gradient(circle,var(--sp) 0 var(--dot),transparent calc(var(--dot) + .6px)) 4px 4px/var(--pitch) var(--pitch),color-mix(in srgb,var(--sp) 16%,var(--stock))"><span class="ink"></span><span class="hatch"></span></span><figcaption>Binding<span>live, loops</span></figcaption></figure>`;
+
+/* ---------------- phones ---------------- */
+document.getElementById('p-saves').innerHTML = savesScreen();
+document.getElementById('p-reader').innerHTML = readerScreen({id:2, playing:true});
+document.getElementById('p-listen').innerHTML = listenScreen();
+document.getElementById('p-empty').innerHTML = emptyScreen();
+document.getElementById('p-you').innerHTML = youScreen();
+document.getElementById('p-sepia').innerHTML = readerScreen({id:1, top:true});
+document.getElementById('p-saves-d').innerHTML = savesScreen({mini:true, prog:{2:NOW.p}, time:'21:04'});
+document.getElementById('p-reader-d').innerHTML = readerScreen({id:2, playing:true});
+document.querySelector('#p-reader-d .sb span').textContent = '21:04';
+
+/* ---------------- icon and home screens ---------------- */
+document.getElementById('icon-xl').innerHTML = `<span style="display:block;border-radius:44px;overflow:hidden">${iconSVG(192, {square:true})}</span>`;
+document.getElementById('icon-mono').innerHTML = iconSVG(112, {mono:true});
+document.getElementById('icon-48').innerHTML = iconSVG(48);
+document.getElementById('icon-32').innerHTML = iconSVG(32, {simple:true});
+document.getElementById('icon-16').innerHTML = `<span style="display:block;border-radius:50%;overflow:hidden">${iconSVG(16, {simple:true})}</span>`;
+document.getElementById('tb-icon').innerHTML = iconSVG(20, {simple:true});
+const neighbour = (glyph, bg, fg, label) => `<span class="app"><span class="ico" style="background:${bg};color:${fg}">${ic(glyph, 24)}</span>${label}</span>`;
+const homeRow = dark => [
+  neighbour('clock', dark ? '#3A3F44' : '#E4E1DA', dark ? '#E6E3DC' : '#3A3F44', 'Clock'),
+  neighbour('camera', dark ? '#2F3A35' : '#C9D3CC', dark ? '#DCE5DF' : '#2F3A35', 'Camera'),
+  `<span class="app"><span class="ico">${iconSVG(56)}</span>Shelf</span>`,
+  neighbour('notes', dark ? '#4A4232' : '#EADFC4', dark ? '#F1E7CF' : '#4A4232', 'Notes'),
+  neighbour('folder', dark ? '#3B3540' : '#DCD7DE', dark ? '#E8E3EA' : '#3B3540', 'Files'),
+].join('');
+document.getElementById('home-lt').innerHTML = homeRow(false);
+document.getElementById('home-dk').innerHTML = homeRow(true);
+
+/* ---------------- measured contrast table ---------------- */
+const PAIRS = [
+  ['Body text, Light reading', '#1C1A16', '#FBF8F1', 7], ['Body text, Sepia reading', '#2B2114', '#EFE3C8', 7], ['Body text, Dark reading', '#E4DCCB', '#15130E', 7],
+  ['Spoken word, Light', '#1C1A16', '#EED7AC', 7], ['Spoken word, Sepia', '#2B2114', '#E2C48D', 7], ['Spoken word, Dark', '#E4DCCB', '#463A22', 7],
+  ['White on Terracotta (every theme)', '#FFFFFF', '#B5542E', 4.5], ['Ink on paper, light app', '#1C1A16', '#F4EFE4', 4.5], ['Muted on paper, light app', '#5A5246', '#F4EFE4', 4.5],
+  ['Imprint text on paper, light', '#9A4524', '#F4EFE4', 4.5], ['Error on stock, light', '#B42318', '#FBF8F1', 4.5], ['Ink on night stock, dark app', '#F2ECE0', '#17150F', 4.5],
+  ['Muted on dark stock', '#B6AD9C', '#211E18', 4.5], ['Imprint text on dark stock', '#E08A66', '#211E18', 4.5], ['Error on dark stock', '#F28B7D', '#211E18', 4.5],
+  ['Keyline, light (UI edge)', '#1C1A16', '#F4EFE4', 3], ['Keyline, dark (UI edge)', '#8C8372', '#17150F', 3], ['Terracotta fill on night stock (edge)', '#B5542E', '#17150F', 3],
+  ['Toast text, ink toast', '#F4EFE4', '#1C1A16', 4.5], ['Toast sub-line', '#B6AD9C', '#1C1A16', 4.5], ['Reader muted, Dark', '#ABA290', '#15130E', 4.5],
+  ['Reader link, Sepia', '#8A3B1E', '#EFE3C8', 4.5], ['Reader link, Dark', '#E39A78', '#15130E', 4.5], ['Success icon on paper', '#2B7448', '#F4EFE4', 3], ['Imprint text on night stock', '#E08A66', '#17150F', 4.5], ['Dock time, Light (muted on dock)', '#5A5246', '#F1EBDF', 4.5], ['Dock time, Dark', '#ABA290', '#211E18', 4.5],
+];
+const trow = ([n, f, b, need]) => {
+  const r = ratio(f, b);
+  return `<tr><td>${n}</td><td><span class="sw2" style="background:${b};color:${f}" title="${f} on ${b}">Aa</span><span class="hex">${f}<br>${b}</span></td><td class="r ${r >= need ? 'pass' : ''}">${r.toFixed(2)}:1</td><td class="r">${need}:1 ${r >= need ? '✓' : '✗'}</td></tr>`;
+};
+const half = Math.ceil(PAIRS.length / 2);
+document.querySelector('#ctable-a tbody').innerHTML = PAIRS.slice(0, half).map(trow).join('');
+document.querySelector('#ctable-b tbody').innerHTML = PAIRS.slice(half).map(trow).join('');
+</script>
+</body>
+</html>

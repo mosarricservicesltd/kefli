@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shelf Design Study</title>
+<meta name="description" content="The front page of Shelf's colour and theme study: five directions compared on the same screens, the judges' scores, the recommendation and the decisions to make.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,400..800;1,400..600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#F4F2EE; --surface:#FFFFFF; --stage:#E7E4DE; --ink:#1B1A17; --muted:#57554F; --line:#DCD8D0; --line-strong:#827E77;
+  --accent:#B5542E; --on-accent:#FFFFFF; --accent-ink:#9A4524; --accent-soft:#F6E7E0; --pick:#B5542E;
+  --font:'Hanken Grotesk',system-ui,sans-serif; --mono:'DM Mono',ui-monospace,monospace;
+  --s:.66; --gap:20px; --max:1280px; --pad:24px;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){color-scheme:dark;
+    --bg:#161513; --surface:#201F1C; --stage:#0E0D0C; --ink:#EDEAE4; --muted:#ADA9A0; --line:#35322D; --line-strong:#77736B;
+    --accent:#B5542E; --on-accent:#FFFFFF; --accent-ink:#E39A78; --accent-soft:#33211A; --pick:#E08A66}
+}
+:root[data-theme="dark"]{color-scheme:dark;
+  --bg:#161513; --surface:#201F1C; --stage:#0E0D0C; --ink:#EDEAE4; --muted:#ADA9A0; --line:#35322D; --line-strong:#77736B;
+  --accent:#B5542E; --on-accent:#FFFFFF; --accent-ink:#E39A78; --accent-soft:#33211A; --pick:#E08A66}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.55 var(--font);font-feature-settings:"ss01"}
+a{color:inherit}
+.wrap{max-width:var(--max);margin:0 auto;padding:0 var(--pad)}
+.mono{font-family:var(--mono)}
+.kicker{font:500 13px/1.3 var(--mono);color:var(--muted);letter-spacing:.02em}
+h1,h2,h3{margin:0;font-weight:700;letter-spacing:-.015em}
+p{margin:0}
+section{padding:72px 0 0}
+.sh{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:24px 48px;align-items:end;border-top:1.5px solid var(--ink);padding-top:18px;margin-bottom:32px}
+.sh .n{font:500 13px/1 var(--mono);color:var(--muted);display:block;margin-bottom:10px}
+.sh h2{font-size:clamp(30px,3.6vw,44px);line-height:1.02;letter-spacing:-.03em}
+.sh p{color:var(--muted);max-width:62ch}
+
+/* masthead */
+.mast{padding-top:28px}
+.mast .bar{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.mast h1{font-size:clamp(44px,8.2vw,112px);line-height:.92;letter-spacing:-.045em;font-weight:800;margin:44px 0 0;max-width:12ch}
+.mast .strip{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:40px 0 0}
+.mast .strip a{display:block;text-decoration:none;padding:10px 0 0;border-top:6px solid var(--c);font:600 14px/1.2 var(--font)}
+.mast .strip a span{display:block;font:400 13px/1.3 var(--mono);color:var(--muted);margin-top:4px}
+nav.toc{display:flex;flex-wrap:wrap;gap:8px;margin:28px 0 0}
+nav.toc a{display:inline-flex;align-items:center;min-height:36px;padding:0 14px;border:1px solid var(--line-strong);border-radius:999px;text-decoration:none;font:500 14px/1 var(--font)}
+nav.toc a:hover{background:var(--surface)}
+nav.toc a:focus-visible,.cell:focus-visible,a.open:focus-visible{outline:3px solid var(--pick);outline-offset:3px}
+
+/* ask + recommendation */
+.ask{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:24px 48px;padding-top:56px}
+.ask .lede{font-size:clamp(18px,1.6vw,21px);line-height:1.52;max-width:62ch;margin-top:12px}
+.q{margin:0;display:flex;flex-direction:column;gap:14px;align-items:flex-start}
+.q blockquote{margin:0;font-size:clamp(30px,3.4vw,46px);line-height:1.04;letter-spacing:-.03em;font-weight:750;max-width:14ch;text-wrap:balance}
+.rec{background:var(--surface);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.rec .top{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:24px 48px;padding:32px}
+.rec .verdict{font-size:clamp(28px,3.4vw,42px);line-height:1.06;letter-spacing:-.03em;font-weight:800}
+.rec .verdict em{font-style:normal;color:var(--accent-ink)}
+.rec .body p+p{margin-top:14px}
+.rec .body p{max-width:64ch}
+.rec .body b{font-weight:650}
+.rec .alt{display:grid;grid-template-columns:auto minmax(0,1fr);gap:16px;padding:20px 32px;border-top:1px solid var(--line);background:var(--accent-soft)}
+.rec .alt .lbl{font:500 13px/1.6 var(--mono);color:var(--accent-ink);white-space:nowrap}
+table.chg{width:100%;border-collapse:collapse;font-size:15px}
+table.chg th,table.chg td{text-align:left;vertical-align:top;padding:12px 16px 12px 0;border-top:1px solid var(--line)}
+table.chg thead th{font:500 13px/1.3 var(--mono);color:var(--muted);border-top:0;padding-top:0}
+table.chg tbody th{font-weight:650;white-space:nowrap;width:1%}
+table.chg td:nth-child(2){color:var(--muted);width:30%}
+.chgwrap{padding:8px 32px 28px;border-top:1px solid var(--line)}
+.chgwrap h3{font-size:17px;margin:20px 0 14px}
+
+/* comparison */
+.cmpwrap{background:var(--stage);padding:28px 0 8px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.cmp-scroll{overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+.cmp{display:grid;grid-template-columns:repeat(6,calc(360px * var(--s)));gap:0 var(--gap);width:max-content;margin:0 auto;padding:0 24px 24px}
+.ch{padding:0 0 18px;display:flex;flex-direction:column;gap:8px}
+.ch-top{display:flex;justify-content:space-between;align-items:center;gap:6px 8px;font:500 13px/1 var(--mono);color:var(--muted)}
+.ch-top .tot b{font:600 15px/1 var(--mono);color:var(--ink)}
+.ch .rk{display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:999px;border:1px solid var(--line-strong);line-height:1}
+.rkw{display:inline-flex;align-items:center;gap:8px}
+.rtag{font:600 13px/1 var(--font);color:var(--accent-ink)}
+.ch.pick .rk{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.ch h3{font-size:24px;letter-spacing:-.025em;line-height:1.05}
+.ch p{font-size:14px;line-height:1.4;color:var(--muted);min-height:4.2em}
+a.open{font:500 14px/1 var(--font);text-decoration:none;display:inline-flex;align-items:center;gap:6px;min-height:32px;color:var(--ink);border-bottom:1px solid var(--line-strong);align-self:flex-start}
+a.open:hover{border-color:var(--ink)}
+.sw{display:flex;height:10px;border-radius:2px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+.sw i{flex:1}
+.rowlab{grid-column:1/-1;position:sticky;left:24px;width:min(100%, calc(100vw - 48px));display:flex;gap:16px;align-items:baseline;flex-wrap:wrap;padding:22px 0 12px;border-top:1px solid var(--line-strong)}
+.rowlab h3{font-size:19px}
+.rowlab p{font-size:14px;color:var(--muted)}
+.ch.today h3{color:var(--muted)}
+.fpnote{margin:0 0 20px;padding:12px 16px;border-left:3px solid var(--pick);background:var(--accent-soft);font-size:14px;line-height:1.5;max-width:90ch}
+.ask .orig{margin-top:16px;font-size:15px;line-height:1.55;color:var(--muted);max-width:65ch}
+.ask .orig a{color:var(--ink);text-underline-offset:3px}
+.cell{position:relative;display:block;width:calc(360px * var(--s));height:calc(760px * var(--s));border-radius:calc(34px * var(--s));overflow:hidden;overflow:clip;background:#000;box-shadow:0 0 0 calc(6px * var(--s)) #141311, 0 14px 30px -18px rgba(0,0,0,.5);isolation:isolate;transition:transform .18s ease}
+.cell iframe{position:absolute;left:calc(var(--x) * var(--s) * -1px);top:calc(var(--y) * var(--s) * -1px);width:1440px;height:calc(var(--fh) * 1px);border:0;transform:scale(var(--s));transform-origin:0 0;pointer-events:none;background:#fff}
+.cell .cap{position:absolute;left:8px;bottom:8px;font:500 12px/1 var(--mono);background:rgba(20,19,17,.82);color:#F4F2EE;padding:5px 8px;border-radius:3px;opacity:0;transition:opacity .15s ease}
+.cell:hover .cap,.cell:focus-visible .cap{opacity:1}
+.cell:hover{transform:translateY(-2px)}
+.cmpnote{display:flex;gap:8px 32px;flex-wrap:wrap;justify-content:space-between;max-width:calc(5 * 360px * var(--s) + 4 * var(--gap));margin:0 auto;padding:0 0 18px;font-size:14px;color:var(--muted)}
+.cmpnote b{color:var(--ink);font-weight:600}
+@media (prefers-reduced-motion:reduce){.cell,.cell .cap{transition:none}.cell:hover{transform:none}}
+
+/* scores */
+.tablewrap{overflow-x:auto}
+table.scores{width:100%;border-collapse:collapse;min-width:900px}
+table.scores th,table.scores td{text-align:left;vertical-align:top;padding:16px 18px 18px 0;border-top:1px solid var(--line)}
+table.scores thead th{border-top:0;padding-bottom:12px;font-weight:650;font-size:15px}
+table.scores thead th span{display:block;font:400 13px/1.35 var(--font);color:var(--muted);margin-top:4px;max-width:30ch}
+table.scores tbody th{width:150px}
+table.scores tbody th .tn{display:block;font-size:19px;font-weight:700;letter-spacing:-.02em;margin-bottom:8px}
+table.scores tbody th .sw{width:96px}
+table.scores td p{font-size:14px;line-height:1.45;color:var(--muted);max-width:36ch}
+.sc{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.sc b{font:600 22px/1 var(--mono);letter-spacing:-.02em;min-width:2.2ch}
+.srk{font:500 12px/1 var(--mono);display:inline-flex;align-items:center;height:22px;padding:0 8px;border:1px solid var(--line);border-radius:999px;color:var(--muted)}
+.srk.top{border-color:var(--ink);color:var(--ink)}
+td.total{width:90px;padding-right:0!important}
+td.total b{display:block;font:600 30px/1 var(--mono);letter-spacing:-.03em}
+td.total span{font:500 13px/1 var(--mono);color:var(--muted);display:block;margin-top:8px}
+tr.pick td.total b,tr.pick th .tn{color:var(--accent-ink)}
+.scorenote{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;margin-top:28px;padding-top:20px;border-top:1.5px solid var(--ink)}
+.scorenote p{font-size:15px;color:var(--muted)}
+.scorenote b{color:var(--ink);font-weight:650}
+
+/* grafts */
+.grafts{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.graft,.fix{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:20px;display:flex;flex-direction:column;gap:10px}
+.graft h3,.fix h3{font-size:18px;line-height:1.25;letter-spacing:-.015em}
+.graft p,.fix p{font-size:15px;line-height:1.5;color:var(--muted)}
+.g-from{display:flex;gap:6px;flex-wrap:wrap}
+.from{display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 10px;border-radius:999px;border:1px solid var(--line);font:500 13px/1 var(--font);color:var(--ink)}
+.from i{width:9px;height:9px;border-radius:50%;flex:none}
+.graft .cost{margin-top:auto;padding-top:10px;border-top:1px dashed var(--line);font-size:14px;color:var(--ink)}
+.graft .cost span{font:500 12px/1 var(--mono);color:var(--muted);margin-right:6px;text-transform:none}
+.subh{font-size:20px;margin:40px 0 16px;letter-spacing:-.02em}
+.fixes{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.fix{background:transparent;border-style:dashed;border-color:var(--line-strong)}
+
+/* decisions */
+.decs{list-style:none;margin:0;padding:0;display:grid;gap:0}
+.dec{display:grid;grid-template-columns:72px minmax(0,1fr);gap:0 24px;padding:28px 0;border-top:1px solid var(--line)}
+.dec:first-child{border-top:0;padding-top:4px}
+.dn{font:500 44px/1 var(--mono);color:var(--accent-ink);letter-spacing:-.04em}
+.db h3{font-size:24px;letter-spacing:-.025em;line-height:1.15}
+.db .ctx{color:var(--muted);margin-top:6px;max-width:72ch}
+.dgrid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:16px 40px;margin-top:16px;align-items:start}
+.opts{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.opts li{display:flex;align-items:center;gap:12px;min-height:48px;padding:10px 16px;border:1px solid var(--line-strong);border-radius:6px;font-size:15.5px;line-height:1.4}
+.opts li .o{flex:1}
+.opts li.rec{border:2px solid var(--accent);background:var(--accent-soft);padding:9px 15px}
+.opts .tag{order:2;flex:none;display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:999px;background:var(--accent);color:var(--on-accent);font:600 12.5px/1 var(--font);letter-spacing:.01em}
+.why{font-size:15.5px;line-height:1.55;padding-top:4px}
+.why b{font-weight:650}
+
+footer{margin:88px 0 0;padding:24px 0 48px;border-top:1.5px solid var(--ink);display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;font-size:14px;color:var(--muted)}
+footer h4{margin:0 0 8px;font:600 14px/1.3 var(--font);color:var(--ink)}
+footer ul{margin:0;padding:0;list-style:none;display:grid;gap:4px}
+footer a{color:var(--ink)}
+
+@media (max-width:1399px){:root{--s:.58}}
+@media (max-width:1199px){:root{--s:.5}}
+@media (max-width:1100px){.cmpnote{padding:0 24px 18px}}
+@media (max-width:1060px){
+  .sh,.ask,.rec .top{grid-template-columns:1fr}
+  .grafts{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .fixes{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .scorenote{grid-template-columns:1fr}
+  .dgrid{grid-template-columns:1fr}
+  footer{grid-template-columns:1fr}
+}
+@media (max-width:720px){
+  :root{--s:.5; --gap:12px; --pad:16px}
+  section{padding-top:56px}
+  .mast .strip{grid-template-columns:repeat(2,1fr);row-gap:14px}
+  .rec .top{padding:22px 18px}
+  .rec .alt{grid-template-columns:1fr;padding:18px}
+  .chgwrap{padding:4px 18px 20px}
+  table.chg, table.chg tbody, table.chg tr, table.chg th, table.chg td{display:block;width:auto}
+  table.chg thead{display:none}
+  table.chg tr{border-top:1px solid var(--line);padding:10px 0}
+  table.chg th,table.chg td{border:0;padding:2px 0}
+  table.chg td:nth-child(2){width:auto}
+  table.chg td:nth-child(2)::before{content:"Today: ";font-weight:600;color:var(--muted)}
+  table.chg td:nth-child(3)::before{content:"Paperback: ";font-weight:600}
+  .cmp{padding:0 16px 20px}
+  .cmpnote{padding:0 16px 14px}
+  .rowlab{left:16px;width:min(100%, calc(100vw - 32px))}
+  .grafts,.fixes{grid-template-columns:1fr}
+  .dec{grid-template-columns:1fr}
+  .dgrid{grid-template-columns:1fr}
+  .dn{font-size:32px;margin-bottom:8px}
+  .opts li{flex-wrap:wrap}
+  .opts .tag{order:0}
+  .ch-top{flex-wrap:wrap;row-gap:6px}
+  table.scores{min-width:0}
+  table.scores thead{display:none}
+  table.scores, table.scores tbody, table.scores tr, table.scores th, table.scores td{display:block;width:auto!important}
+  table.scores tr{border-top:1.5px solid var(--line-strong);padding:16px 0 8px}
+  table.scores th, table.scores td{border:0;padding:8px 0}
+  table.scores td::before{content:attr(data-l);display:block;font:500 12.5px/1.3 var(--mono);color:var(--muted);margin-bottom:6px}
+  table.scores td.total{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  table.scores td.total::before{width:100%}
+  table.scores td.total span{margin-top:0}
+  .tablewrap{overflow:visible}
+}
+</style>
+</head>
+<body>
+<header class="mast wrap">
+  <div class="bar"><span class="kicker">Shelf · design study · colours and themes</span><span class="kicker">3 October 2026 · for Richard</span></div>
+  <h1>Five ways to make Shelf cool</h1>
+  <div class="strip"><a href="paperback.html" target="_blank" rel="noopener" style="--c:#D69A2D">Paperback<span>22 of 30 · joint 1st</span></a><a href="fingerprint.html" target="_blank" rel="noopener" style="--c:#DB517D">Fingerprint<span>22 of 30 · joint 1st</span></a><a href="turned-up.html" target="_blank" rel="noopener" style="--c:#B5542E">Kiln<span>18 of 30 · 3rd</span></a><a href="instrument.html" target="_blank" rel="noopener" style="--c:#E04E14">Instrument<span>17 of 30 · 4th</span></a><a href="riso.html" target="_blank" rel="noopener" style="--c:#3346D3">Overprint<span>15 of 30 · 5th</span></a></div>
+  <nav class="toc" aria-label="On this page"><a href="#rec">Recommendation</a><a href="#compare">Side by side</a><a href="#scores">Scores</a><a href="#grafts">Grafts</a><a href="#decide">Your decisions</a></nav>
+</header>
+
+<main>
+<div class="wrap">
+  <section class="ask" id="ask" aria-labelledby="ask-h">
+    <figure class="q"><span class="kicker" id="ask-h">What you asked</span><blockquote>“How do we make this bloody cool, even for a boring app?”</blockquote><figcaption class="kicker">Richard, on the Soft pills design</figcaption></figure>
+    <div><span class="kicker">How the study ran</span><p class="lede">You said the design is good but perhaps not cool or funky enough, and asked for a conceptual study of colours and themes: how to make a deliberately plain app bloody cool. Five directions each got their own board, drawn from the same rules. Every screen, flow, word of copy and control stayed exactly as the prototype has it; only the visual identity was free to change, from colour, type and texture to the icon and one signature move. Each board covers light and dark themes, three reading palettes with body text at 7:1 or better, the phone screens with the prototype’s real articles, the app icon, the extension’s save toast, and its own risks and costs. Three judges then scored all five, each through one lens: cool factor, daily use and access (with their own contrast and colour-blindness checks), and fit with Shelf and cost to build in Expo. I opened every board and screenshot myself before writing this page.</p><p class="orig">Today’s design, Soft pills, sits in the first column of the side-by-side below for comparison. The full prototypes it was drawn from are here too: <a href="../mockups/prototype.html" target="_blank" rel="noopener">the phone</a> (every state is in its side panel) and <a href="../mockups/extension.html" target="_blank" rel="noopener">the browser extension</a>.</p></div>
+  </section>
+
+  <section id="rec" aria-labelledby="rec-h">
+    <div class="sh"><div><span class="n">01</span><h2 id="rec-h">The recommendation</h2></div><p>One direction as the base, with ideas taken from the other four. The decisions at the end are the parts only you can settle.</p></div>
+    <div class="rec">
+      <div class="top">
+        <p class="verdict">Build <em>Paperback</em>, and graft on the best ideas from the other four.</p>
+        <div class="body">
+          <p>Paperback turns every save into a book. Its spine is coloured by how long the article is: mustard under 8 minutes, rose for 8 to 12, petrol for 13 and over. The unread part of the spine is a halftone screen, and whatever you have read or heard prints solid, so progress is something you can see from across a room, and Archive slowly fills with finished books.</p>
+          <p>It came first on cool and second on both daily use and fit and build. It is the only direction in the top two on every lens, and its total of <b>22 of 30</b> is the joint highest, level with Fingerprint since that board was re-scored (below). It also answers your question most directly, because the boring screens get the best treatment in the study: You opens on a little shelf of your own saves, the backup card is a bookplate, “Not written down” is a date stamp, and the first run is an empty shelf waiting for its first book. The Reader stays plain stock and Literata at 18 px, 12.4:1 or better in all three palettes. Terracotta survives at its exact value as Shelf’s one action colour, with white on it, so decision 61 holds.</p>
+          <p><b>What it costs.</b> The gradient, the pills and the soft shadows go, so every component changes shape. The progress line turns on its side to become a spine on the card. The icon (decision 55) and two consistency-spec rules reopen. About a week to re-skin the prototype and the tokens; the spines need no Skia.</p>
+        </div>
+      </div>
+      <div class="alt"><span class="lbl">Level on points</span><p>Fingerprint was re-scored on 3 October after its screens were fixed, and it now ties Paperback on <b>22 of 30</b>. It is first on daily use and second on cool, but third on fit and build, because it gives up Terracotta and the approved icon and puts a drawn tile on every row. Paperback stays my pick because it is the only board in the top two on every lens. With the totals level, the choice between the two is yours (decision 1).</p></div>
+      <div class="alt"><span class="lbl">Runner-up</span><p>If you would rather keep the pills, the icon and the shapes you have already approved, take <b>Kiln</b>, with Paperback’s halftone-to-solid progress on its line. It is the cheapest and safest of the five, and it answers “cool” less well: below its Clay masthead, the Saves list looks much like today’s. Fingerprint’s drawn covers are its strongest part and its chrome is close to stock, so its best ideas appear below as grafts. My pick is Paperback.</p></div>
+      <div class="chgwrap">
+        <h3>What changes from today, if you pick Paperback</h3>
+        <table class="chg">
+          <thead><tr><th scope="col">Part</th><th scope="col">Today (Soft pills)</th><th scope="col">Paperback</th></tr></thead>
+          <tbody>
+        <tr><th scope="row">Colour</th><td>Cream #FCF7F6, white cards, Terracotta with a #BE6947 to #944526 gradient</td><td>Paper #F4EFE4 and stock #FBF8F1, ink #1C1A16, flat Terracotta #B5542E for Shelf’s own actions, and three series inks that only ever colour a spine: Mustard, Rose, Petrol. The gradient retires.</td></tr>
+        <tr><th scope="row">Dark</th><td>Cool blue-black #0C0E12</td><td>Warm night stock #17150F, inks lifted one step, Terracotta unchanged with white on it.</td></tr>
+        <tr><th scope="row">Reading</th><td>Noto Serif 18/1.55 on Light, Sepia and Dark</td><td>Literata 18/1.6 on Light 16.4:1, Sepia 12.4:1 and Dark 13.6:1 (the board calls the stocks White stock, Pulp and Night). The Aa sheet’s labels stay as they are.</td></tr>
+        <tr><th scope="row">Type</th><td>Inter for the interface, Noto Serif for reading</td><td>Literata for titles and reading (screen titles 800 at optical size 72), Jost for rows, buttons and short capital labels. Both OFL.</td></tr>
+        <tr><th scope="row">Shape</th><td>Pills, radius 10, soft shadows</td><td>2 px corners, 1.5 px ink keylines, no shadows. Only play is round.</td></tr>
+        <tr><th scope="row">Signature</th><td>One progress line per article, carried from card to Reader to player</td><td>The spine: halftone where you haven’t read, solid ink where you have. One stored position drives the card’s spine and the bands under the Reader bar, on the player and in Speed read.</td></tr>
+        <tr><th scope="row">Pictures</th><td>Real photos where the page has one</td><td>Two-colour covers in the article’s series ink in lists and on Now playing; images as published in the Reader (see decision 4 below).</td></tr>
+        <tr><th scope="row">Icon</th><td>Cream bookmark on a two-tone bar, on the gradient</td><td>Recommended: the same bookmark, flat, standing on a band that is half halftone and half solid (see decision 2 below).</td></tr>
+        <tr><th scope="row">Fill rule</th><td>Content on Terracotta is white (decision 61)</td><td>Unchanged: white on #B5542E, 4.92:1 in every theme and palette.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+</div>
+  <section id="compare" aria-labelledby="cmp-h">
+    <div class="wrap"><div class="sh"><div><span class="n">02</span><h2 id="cmp-h">Side by side</h2></div><p>Today’s design first, then the five boards themselves, embedded live and scaled down, cropped to the same screens. The boards run in order of total score, with Paperback and Fingerprint level on 22. Select any screen to open its board at that spot in a new tab.</p></div></div>
+    <div class="cmpwrap">
+      <div class="cmpnote"><span><b>The prototype’s own articles</b> on every board, so the same saves sit in every column.</span><span>On a narrow screen the rows scroll sideways.</span></div>
+      <div class="cmp-scroll" tabindex="0" role="region" aria-label="Today’s design and the five boards compared, scrolls sideways on narrow screens">
+        <div class="cmp">
+      <div class="ch today">
+        <div class="ch-top"><span class="rkw"><span class="rk">Today</span></span><span class="tot">not scored</span></div>
+        <h3>Soft pills</h3>
+        <span class="sw" aria-hidden="true"><i style="background:#FCF7F6"></i><i style="background:#FFFFFF"></i><i style="background:#181D27"></i><i style="background:#B5542E"></i><i style="background:#BE6947"></i><i style="background:#944526"></i></span>
+        <p>Today’s design: cream ground, white cards, Terracotta pills, Inter and Noto Serif.</p>
+        <a class="open" href="../mockups/prototype.html" target="_blank" rel="noopener">Open the prototype <span aria-hidden="true">↗</span></a>
+      </div>
+      <div class="ch pick">
+        <div class="ch-top"><span class="rkw"><span class="rk">Joint 1st</span><span class="rtag">Recommended</span></span><span class="tot"><b>22</b>/30</span></div>
+        <h3>Paperback</h3>
+        <span class="sw" aria-hidden="true"><i style="background:#F4EFE4"></i><i style="background:#1C1A16"></i><i style="background:#D69A2D"></i><i style="background:#D8707F"></i><i style="background:#2C6872"></i><i style="background:#B5542E"></i></span>
+        <p>Every save is a book bound in the colour of its length, and reading inks its spine.</p>
+        <a class="open" href="paperback.html" target="_blank" rel="noopener">Open the board <span aria-hidden="true">↗</span></a>
+      </div>
+      <div class="ch">
+        <div class="ch-top"><span class="rkw"><span class="rk">Joint 1st</span></span><span class="tot"><b>22</b>/30</span></div>
+        <h3>Fingerprint</h3>
+        <span class="sw" aria-hidden="true"><i style="background:#F3F2EE"></i><i style="background:#17171A"></i><i style="background:#DEF0FF"></i><i style="background:#B4CC87"></i><i style="background:#2D3C00"></i><i style="background:#DB517D"></i></span>
+        <p>Every save draws its own cover from its address, in an app that otherwise keeps to ink and paper.</p>
+        <a class="open" href="fingerprint.html" target="_blank" rel="noopener">Open the board <span aria-hidden="true">↗</span></a>
+      </div>
+      <div class="ch">
+        <div class="ch-top"><span class="rkw"><span class="rk">3rd</span></span><span class="tot"><b>18</b>/30</span></div>
+        <h3>Kiln</h3>
+        <span class="sw" aria-hidden="true"><i style="background:#FCF7F6"></i><i style="background:#F1E4D3"></i><i style="background:#B5542E"></i><i style="background:#7A3018"></i><i style="background:#2A140D"></i><i style="background:#FF8A5B"></i></span>
+        <p>Today’s Terracotta fired hotter: whole screens poured in clay and char, the page left calm.</p>
+        <a class="open" href="turned-up.html" target="_blank" rel="noopener">Open the board <span aria-hidden="true">↗</span></a>
+      </div>
+      <div class="ch">
+        <div class="ch-top"><span class="rkw"><span class="rk">4th</span></span><span class="tot"><b>17</b>/30</span></div>
+        <h3>Instrument</h3>
+        <span class="sw" aria-hidden="true"><i style="background:#E7E3DC"></i><i style="background:#F5F2EC"></i><i style="background:#12100D"></i><i style="background:#13110F"></i><i style="background:#E04E14"></i><i style="background:#2F8A4B"></i></span>
+        <p>A well-made reading machine: warm-grey faceplate, one signal orange, numbers lit in windows.</p>
+        <a class="open" href="instrument.html" target="_blank" rel="noopener">Open the board <span aria-hidden="true">↗</span></a>
+      </div>
+      <div class="ch">
+        <div class="ch-top"><span class="rkw"><span class="rk">5th</span></span><span class="tot"><b>15</b>/30</span></div>
+        <h3>Overprint</h3>
+        <span class="sw" aria-hidden="true"><i style="background:#F4EFE4"></i><i style="background:#1E1A4A"></i><i style="background:#3346D3"></i><i style="background:#FF4DA6"></i><i style="background:#FFE600"></i><i style="background:#331589"></i></span>
+        <p>A two-colour zine: fluoro pink and riso blue on newsprint, loud on the covers, calm on the page.</p>
+        <a class="open" href="riso.html" target="_blank" rel="noopener">Open the board <span aria-hidden="true">↗</span></a>
+      </div>
+      <div class="rowlab" id="cmp-saves"><h3>Saves</h3><p>Light, populated, a session playing. The screen you see most.</p></div>
+      <a class="cell" href="../mockups/prototype.html#mini" target="_blank" rel="noopener" style="--x:540;--y:32;--fh:840" aria-label="Today, Saves: open this state in the prototype"><iframe src="../mockups/prototype.html#mini" title="Today’s prototype, Saves" tabindex="-1" aria-hidden="true" inert scrolling="no"></iframe><span class="cap">Today</span></a>
+      <a class="cell pick" href="paperback.html#p-saves" target="_blank" rel="noopener" style="--x:88;--y:4570;--fh:5334" aria-label="Paperback, Saves: open this screen on the board"><iframe src="paperback.html" title="Paperback board, Saves" tabindex="-1" aria-hidden="true" inert scrolling="no"></iframe><span class="cap">Paperback</span></a>
+      <a class="cell" href="fingerprint.html#p-saves" target="_blank" rel="noopener" style="--x:108;--y:4967;--fh:5731" aria-label="Fingerprint, Saves: open this screen on the board"><iframe src="fingerprint.html" title="Fingerprint board, Saves" tabindex="-1" aria-hidden="true" inert scrolling="no"></iframe><span class="cap">Fingerprint</span></a>
+      <a class="cell" href="turned-up.html#ph-saves" target="_blank" rel="noopener" style="--x:130;--y:7146;--fh:7910" aria-label="Kiln, Saves: open this screen on the board"><iframe src="turned-up.html" title="Kiln board, Saves" tabindex="-1" aria-hidden="true" inert scrolling="no"></iframe><span class="cap">Kiln</span></a>
+      <a class="cell" href="instrument.html#screens-light" target="_blank" rel="noopener" style="--x:71;--y:5034;--fh:5798" aria-label="Instrument, Saves: open this screen on the board"><iframe src="instrument.html" title="Instrument board, Saves" tabindex="-1" aria-hidden="true" inert scrolling="no"></iframe><span class="cap">Instrument</span></a>
+      <a class="cell" href="riso.html#row1" target="_blank" rel="noopener" style="--x:105;--y:5509;--fh:6273" aria-label="Overprint, Saves: open this screen on the board"><iframe src="riso.html" title="Overprint board, Saves" tabindex="-1" aria-hidden="true" inert scrolling="no"></iframe><span class="cap">Overprint</span></a>
+      <div class="rowlab" id="cmp-reader"><h3>Reader, listening</h3><p>The article with the player docked (Fingerprint’s opens at the top, on its cover band). The page has to stay calm for twenty minutes.</p></div>
+      <a class="cell" href="../mockups/prototype.html#play" target="_blank" rel="noopener" style="--x:540;--y:32;--fh:840" aria-label="Today, Reader, listening: open this state in the prototype"><iframe src="../mockups/prototype.html#play" title="Today’s prototype, Reader, listening" tabindex="-1" aria-hidden="true" inert scrolling="no"></iframe><span class="cap">Today</span></a>
+      <a class="cell pick" href="paperback.html#p-reader" target="_blank" rel="noopener" style="--x:540;--y:4570;--fh:5334" aria-label="Paperback, Reader, listening: open this screen on the board"><iframe src="paperback.html" title="Paperback board, Reader, listening" tabindex="-1" aria-hidden="true" inert scrolling="no"></iframe><span class="cap">Paperback</span></a>
+      <a class="cell" href="fingerprint.html#p-reader" target="_blank" rel="noopener" style="--x:540;--y:4967;--fh:5731" aria-label="Fingerprint, Reader, listening: open this screen on the board"><iframe src="fingerprint.html" title="Fingerprint board, Reader, listening" tabindex="-1" aria-hidden="true" inert scrolling="no"></iframe><span class="cap">Fingerprint</span></a>
+      <a class="cell" href="turned-up.html#ph-reader" target="_blank" rel="noopener" style="--x:540;--y:7146;--fh:7910" aria-label="Kiln, Reader, listening: open this screen on the board"><iframe src="turned-up.html" title="Kiln board, Reader, listening" tabindex="-1" aria-hidden="true" inert scrolling="no"></iframe><span class="cap">Kiln</span></a>
+      <a class="cell" href="instrument.html#screens-light" target="_blank" rel="noopener" style="--x:540;--y:5034;--fh:5798" aria-label="Instrument, Reader, listening: open this screen on the board"><iframe src="instrument.html" title="Instrument board, Reader, listening" tabindex="-1" aria-hidden="true" inert scrolling="no"></iframe><span class="cap">Instrument</span></a>
+      <a class="cell" href="riso.html#row1" target="_blank" rel="noopener" style="--x:527;--y:5509;--fh:6273" aria-label="Overprint, Reader, listening: open this screen on the board"><iframe src="riso.html" title="Overprint board, Reader, listening" tabindex="-1" aria-hidden="true" inert scrolling="no"></iframe><span class="cap">Overprint</span></a>
+      <div class="rowlab" id="cmp-you"><h3>You</h3><p>Settings, backup and counts. The boring screen, and the real test of an identity.</p></div>
+      <a class="cell" href="../mockups/prototype.html#you" target="_blank" rel="noopener" style="--x:540;--y:32;--fh:840" aria-label="Today, You: open this state in the prototype"><iframe src="../mockups/prototype.html#you" title="Today’s prototype, You" tabindex="-1" aria-hidden="true" inert scrolling="no"></iframe><span class="cap">Today</span></a>
+      <a class="cell pick" href="paperback.html#p-you" target="_blank" rel="noopener" style="--x:540;--y:5508;--fh:6272" aria-label="Paperback, You: open this screen on the board"><iframe src="paperback.html" title="Paperback board, You" tabindex="-1" aria-hidden="true" inert scrolling="no"></iframe><span class="cap">Paperback</span></a>
+      <a class="cell" href="fingerprint.html#p-you" target="_blank" rel="noopener" style="--x:540;--y:5963;--fh:6727" aria-label="Fingerprint, You: open this screen on the board"><iframe src="fingerprint.html" title="Fingerprint board, You" tabindex="-1" aria-hidden="true" inert scrolling="no"></iframe><span class="cap">Fingerprint</span></a>
+      <a class="cell" href="turned-up.html#ph-you" target="_blank" rel="noopener" style="--x:540;--y:8162;--fh:8926" aria-label="Kiln, You: open this screen on the board"><iframe src="turned-up.html" title="Kiln board, You" tabindex="-1" aria-hidden="true" inert scrolling="no"></iframe><span class="cap">Kiln</span></a>
+      <a class="cell" href="instrument.html#screens-light" target="_blank" rel="noopener" style="--x:540;--y:5979;--fh:6743" aria-label="Instrument, You: open this screen on the board"><iframe src="instrument.html" title="Instrument board, You" tabindex="-1" aria-hidden="true" inert scrolling="no"></iframe><span class="cap">Instrument</span></a>
+      <a class="cell" href="riso.html#row2" target="_blank" rel="noopener" style="--x:527;--y:6380;--fh:7144" aria-label="Overprint, You: open this screen on the board"><iframe src="riso.html" title="Overprint board, You" tabindex="-1" aria-hidden="true" inert scrolling="no"></iframe><span class="cap">Overprint</span></a>
+      <div class="rowlab" id="cmp-empty"><h3>Saves, first run</h3><p>Nothing saved yet: the share-sheet lesson and Connect your browser.</p></div>
+      <a class="cell" href="../mockups/prototype.html#saves-empty" target="_blank" rel="noopener" style="--x:540;--y:32;--fh:840" aria-label="Today, Saves, first run: open this state in the prototype"><iframe src="../mockups/prototype.html#saves-empty" title="Today’s prototype, Saves, first run" tabindex="-1" aria-hidden="true" inert scrolling="no" loading="lazy"></iframe><span class="cap">Today</span></a>
+      <a class="cell pick" href="paperback.html#p-empty" target="_blank" rel="noopener" style="--x:88;--y:5508;--fh:6272" aria-label="Paperback, Saves, first run: open this screen on the board"><iframe src="paperback.html" title="Paperback board, Saves, first run" tabindex="-1" aria-hidden="true" inert scrolling="no" loading="lazy"></iframe><span class="cap">Paperback</span></a>
+      <a class="cell" href="fingerprint.html#p-empty" target="_blank" rel="noopener" style="--x:108;--y:5963;--fh:6727" aria-label="Fingerprint, Saves, first run: open this screen on the board"><iframe src="fingerprint.html" title="Fingerprint board, Saves, first run" tabindex="-1" aria-hidden="true" inert scrolling="no" loading="lazy"></iframe><span class="cap">Fingerprint</span></a>
+      <a class="cell" href="turned-up.html#ph-empty" target="_blank" rel="noopener" style="--x:130;--y:8162;--fh:8926" aria-label="Kiln, Saves, first run: open this screen on the board"><iframe src="turned-up.html" title="Kiln board, Saves, first run" tabindex="-1" aria-hidden="true" inert scrolling="no" loading="lazy"></iframe><span class="cap">Kiln</span></a>
+      <a class="cell" href="instrument.html#screens-light" target="_blank" rel="noopener" style="--x:71;--y:5979;--fh:6743" aria-label="Instrument, Saves, first run: open this screen on the board"><iframe src="instrument.html" title="Instrument board, Saves, first run" tabindex="-1" aria-hidden="true" inert scrolling="no" loading="lazy"></iframe><span class="cap">Instrument</span></a>
+      <a class="cell" href="riso.html#row2" target="_blank" rel="noopener" style="--x:105;--y:6380;--fh:7144" aria-label="Overprint, Saves, first run: open this screen on the board"><iframe src="riso.html" title="Overprint board, Saves, first run" tabindex="-1" aria-hidden="true" inert scrolling="no" loading="lazy"></iframe><span class="cap">Overprint</span></a>
+      <div class="rowlab" id="cmp-dark"><h3>Saves, dark</h3><p>The same list in the dark theme.</p></div>
+      <a class="cell" href="../mockups/prototype.html#mini-dark" target="_blank" rel="noopener" style="--x:540;--y:32;--fh:840" aria-label="Today, Saves, dark: open this state in the prototype"><iframe src="../mockups/prototype.html#mini-dark" title="Today’s prototype, Saves, dark" tabindex="-1" aria-hidden="true" inert scrolling="no" loading="lazy"></iframe><span class="cap">Today</span></a>
+      <a class="cell pick" href="paperback.html#p-saves-d" target="_blank" rel="noopener" style="--x:88;--y:6447;--fh:7211" aria-label="Paperback, Saves, dark: open this screen on the board"><iframe src="paperback.html" title="Paperback board, Saves, dark" tabindex="-1" aria-hidden="true" inert scrolling="no" loading="lazy"></iframe><span class="cap">Paperback</span></a>
+      <a class="cell" href="fingerprint.html#p-saves-d" target="_blank" rel="noopener" style="--x:972;--y:5963;--fh:6727" aria-label="Fingerprint, Saves, dark: open this screen on the board"><iframe src="fingerprint.html" title="Fingerprint board, Saves, dark" tabindex="-1" aria-hidden="true" inert scrolling="no" loading="lazy"></iframe><span class="cap">Fingerprint</span></a>
+      <a class="cell" href="turned-up.html#ph-saves-dark" target="_blank" rel="noopener" style="--x:130;--y:9201;--fh:9965" aria-label="Kiln, Saves, dark: open this screen on the board"><iframe src="turned-up.html" title="Kiln board, Saves, dark" tabindex="-1" aria-hidden="true" inert scrolling="no" loading="lazy"></iframe><span class="cap">Kiln</span></a>
+      <a class="cell" href="instrument.html#screens-dark" target="_blank" rel="noopener" style="--x:71;--y:7125;--fh:7889" aria-label="Instrument, Saves, dark: open this screen on the board"><iframe src="instrument.html" title="Instrument board, Saves, dark" tabindex="-1" aria-hidden="true" inert scrolling="no" loading="lazy"></iframe><span class="cap">Instrument</span></a>
+      <a class="cell" href="riso.html#row3" target="_blank" rel="noopener" style="--x:105;--y:7250;--fh:8014" aria-label="Overprint, Saves, dark: open this screen on the board"><iframe src="riso.html" title="Overprint board, Saves, dark" tabindex="-1" aria-hidden="true" inert scrolling="no" loading="lazy"></iframe><span class="cap">Overprint</span></a>
+        </div>
+      </div>
+    </div>
+  </section>
+<div class="wrap">
+
+  <section id="scores" aria-labelledby="sc-h">
+    <div class="sh"><div><span class="n">03</span><h2 id="sc-h">Scores</h2></div><p>Three judges, one lens each, scoring out of 10. Each line under a score is that judge’s verdict, cut down to one sentence or two. A point either way is within the noise, so read the verdicts as much as the numbers.</p></div>
+    <p class="fpnote" id="fp-rescore"><b>3 October:</b> Fingerprint was re-scored after its screens were fixed (photo rows no longer re-inked, a cover band on the light Reader, “minting” renamed “drawing”). It rose from 20.5 to 22, so the ranking changed: it now ties Paperback for first on total, and it passes Overprint for second on cool.</p>
+    <div class="tablewrap" tabindex="0" role="region" aria-label="Scores table, scrolls sideways on narrow screens">
+      <table class="scores">
+        <thead><tr><th scope="col">Direction</th><th scope="col">Cool factor<span>Is it ownable, does it reach the boring screens, would anyone screenshot it.</span></th><th scope="col">Daily use and access<span>Reading comfort, contrast re-measured, colour-blind simulation, fatigue after a week, dark mode.</span></th><th scope="col">Shelf fit and build<span>Says Shelf’s promise, scales to the icon and the extension, affordable in Expo.</span></th><th scope="col">Total<span>out of 30</span></th></tr></thead>
+        <tbody>
+        <tr class="pick">
+          <th scope="row"><span class="tn">Paperback</span><span class="sw" aria-hidden="true"><i style="background:#F4EFE4"></i><i style="background:#1C1A16"></i><i style="background:#D69A2D"></i><i style="background:#D8707F"></i><i style="background:#2C6872"></i><i style="background:#B5542E"></i></span></th>
+          <td data-l="Cool factor"><div class="sc"><b>8</b><span class="srk top">1st</span></div><p>The most ownable idea in the study, and it reaches every boring screen. It leans tasteful and literary, and could be louder.</p></td><td data-l="Daily use and access"><div class="sc"><b>7</b><span class="srk">2nd</span></div><p>Best for colour-blind users, because progress is pattern as well as colour. The 8 px dot screen may shimmer on scroll, and tinted covers lose recognition.</p></td><td data-l="Shelf fit and build"><div class="sc"><b>7</b><span class="srk">2nd</span></div><p>The best fit with the promise and the voice, with cheap spines and no Skia. It reopens the icon and turns the progress line on its side.</p></td>
+          <td class="total" data-l="Total"><b>22</b><span>Joint 1st</span></td>
+        </tr>
+        <tr>
+          <th scope="row"><span class="tn">Fingerprint</span><span class="sw" aria-hidden="true"><i style="background:#F3F2EE"></i><i style="background:#17171A"></i><i style="background:#DEF0FF"></i><i style="background:#B4CC87"></i><i style="background:#2D3C00"></i><i style="background:#DB517D"></i></span></th>
+          <td data-l="Cool factor"><div class="sc"><b>7.5</b><span class="srk">2nd</span></div><p>Every save now wears its own cover on every screen, so even You and the empty state are worth a screenshot. The chrome is close to stock and the Bauhaus tiles may date.</p></td><td data-l="Daily use and access"><div class="sc"><b>8</b><span class="srk top">1st</span></div><p>Calm ink-and-paper chrome and well-measured reading palettes, with Night tinted per article. The price is a loud cover on every row and a band at the top of every article.</p></td><td data-l="Shelf fit and build"><div class="sc"><b>6.5</b><span class="srk">3rd</span></div><p>The closest fit with the protocol, and cheaper now that lists do no image work. It still drops Terracotta and the icon, tiles every row and freezes its generator once shipped.</p></td>
+          <td class="total" data-l="Total"><b>22</b><span>Joint 1st</span></td>
+        </tr>
+        <tr>
+          <th scope="row"><span class="tn">Kiln</span><span class="sw" aria-hidden="true"><i style="background:#FCF7F6"></i><i style="background:#F1E4D3"></i><i style="background:#B5542E"></i><i style="background:#7A3018"></i><i style="background:#2A140D"></i><i style="background:#FF8A5B"></i></span></th>
+          <td data-l="Cool factor"><div class="sc"><b>5</b><span class="srk">5th</span></div><p>A confident turn-up with a bold empty state, and little a stranger would screenshot. The glaze will date.</p></td><td data-l="Daily use and access"><div class="sc"><b>5</b><span class="srk">4th</span></div><p>A calm list and the best dark theme, but white on Clay sits at 4.92:1 everywhere, and Listen puts light-theme users in a dark room.</p></td><td data-l="Shelf fit and build"><div class="sc"><b>8</b><span class="srk top">1st</span></div><p>Cheapest and safest: it keeps decision 61, the icon and the pills, and gets the motion ideas almost free. The pour must stop splitting clocks and hostnames.</p></td>
+          <td class="total" data-l="Total"><b>18</b><span>3rd</span></td>
+        </tr>
+        <tr>
+          <th scope="row"><span class="tn">Instrument</span><span class="sw" aria-hidden="true"><i style="background:#E7E3DC"></i><i style="background:#F5F2EC"></i><i style="background:#12100D"></i><i style="background:#13110F"></i><i style="background:#E04E14"></i><i style="background:#2F8A4B"></i></span></th>
+          <td data-l="Cool factor"><div class="sc"><b>6</b><span class="srk">4th</span></div><p>The best single screen in the study (the Now playing deck), in today’s default “cool hardware” look, close to famous audio brands.</p></td><td data-l="Daily use and access"><div class="sc"><b>6</b><span class="srk">3rd</span></div><p>Calm, with one orange used sparingly. The 13 px segment timers in the mini player and dock are the weakest small text in the study.</p></td><td data-l="Shelf fit and build"><div class="sc"><b>5</b><span class="srk">4th</span></div><p>Disciplined, with the clearest 16 px icon, but it reverses decision 61, its tuning dial suggests seeking, and it sits near well-known hardware looks.</p></td>
+          <td class="total" data-l="Total"><b>17</b><span>4th</span></td>
+        </tr>
+        <tr>
+          <th scope="row"><span class="tn">Overprint</span><span class="sw" aria-hidden="true"><i style="background:#F4EFE4"></i><i style="background:#1E1A4A"></i><i style="background:#3346D3"></i><i style="background:#FF4DA6"></i><i style="background:#FFE600"></i><i style="background:#331589"></i></span></th>
+          <td data-l="Cool factor"><div class="sc"><b>7</b><span class="srk">3rd</span></div><p>The funkiest and the most consistent, but riso pink and blue is a known 2016–2020 look, and the pink cards and dot thumbnails are weak.</p></td><td data-l="Daily use and access"><div class="sc"><b>4</b><span class="srk">5th</span></div><p>The Reader is protected, but the chrome is the loudest by far: pink cards everywhere, a fluoro yellow slab at night and doubled headings.</p></td><td data-l="Shelf fit and build"><div class="sc"><b>4</b><span class="srk">5th</span></div><p>A full reset that breaks the brief (blue and purple become the main inks), with dot thumbnails you can’t recognise and blend costs on mid-range phones.</p></td>
+          <td class="total" data-l="Total"><b>15</b><span>5th</span></td>
+        </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="scorenote">
+      <p><b>The lenses disagree, and that helps.</b> Each lens put a different direction first: Paperback on cool, Fingerprint on daily use, Kiln on fit and build. Paperback is the one that never dropped below second, and with the totals level that is what separates it from Fingerprint, which is third on fit and build.</p>
+      <p><b>No board fails a required ratio.</b> The daily-use judge re-measured the key pairs with their own script. The lowest reading body text in the study is Fingerprint’s Sepia at 10.78:1, so the scores separate on fatigue, texture, dark mode and small text.</p>
+      <p><b>Where Paperback lost points.</b> It leans tasteful and could be louder; its dot screen may shimmer; tinted covers cost recognition; and it reopens the icon and the shapes. Decisions 2 to 5 below deal with each of those.</p>
+    </div>
+  </section>
+
+  <section id="grafts" aria-labelledby="gr-h">
+    <div class="sh"><div><span class="n">04</span><h2 id="gr-h">Grafts</h2></div><p>The best ideas from the other boards, recast in Paperback’s flat ink and halftone so they belong to one system. None of them adds a screen, a control or a line of copy.</p></div>
+    <ul class="grafts">
+      <li class="graft"><div class="g-from"><span class="from"><i style="background:#DB517D"></i>Fingerprint</span></div><h3>A drawn cover for saves with no picture</h3><p>Seed a small pattern from the save’s address hash and draw it in Paperback’s own inks: the article’s series ink, ink and paper, halftone for the unread part. It appears only where a picture is needed, on Now playing and the lock screen, so rows without a photo keep the full-width title the brief asks for. A restored library comes back with the same covers on any phone.</p><p class="cost"><span>Cost</span> About 150 lines of shared TypeScript with golden fixtures in every platform’s CI. Two days.</p></li>
+      <li class="graft"><div class="g-from"><span class="from"><i style="background:#DB517D"></i>Fingerprint</span></div><h3>Lock-screen artwork while listening</h3><p>Hand the article’s cover to Android’s media session as a 512 px image, so the lock screen and the notification show the book face-out while the voice reads.</p><p class="cost"><span>Cost</span> Half a day.</p></li>
+      <li class="graft"><div class="g-from"><span class="from"><i style="background:#DB517D"></i>Fingerprint</span></div><h3>Contrast guards in code</h3><p>Run the colour rules as shared fixtures: every series ink against every reading palette, the spoken-word tint kept at 7:1 for the text on it, every band at 3:1 against its surface, with a fallback to ink when a pair fails.</p><p class="cost"><span>Cost</span> A day, then free on every change.</p></li>
+      <li class="graft"><div class="g-from"><span class="from"><i style="background:#E04E14"></i>Instrument</span></div><h3>A word meter and a minutes scale on Now playing</h3><p>Print a ruler numbered in minutes along the cover’s band, and a row of small marks that print solid, one per spoken word, driven by expo-speech’s onBoundary. If the spike shows no positions, the meter stays blank and nothing is faked. Display only, with no knob, because v1 has no seeking (decision 48).</p><p class="cost"><span>Cost</span> One to two days, after the spike.</p></li>
+      <li class="graft"><div class="g-from"><span class="from"><i style="background:#E04E14"></i>Instrument</span><span class="from"><i style="background:#3346D3"></i>Overprint</span></div><h3>Buttons that press</h3><p>On press, a button drops 1 to 2 px against its keyline with a light haptic: Instrument’s key travel and Overprint’s press into register, in Paperback’s flat print.</p><p class="cost"><span>Cost</span> An hour with expo-haptics.</p></li>
+      <li class="graft"><div class="g-from"><span class="from"><i style="background:#3346D3"></i>Overprint</span></div><h3>Stamps for real states, used sparingly</h3><p>Paperback already stamps “Not written down”. The same treatment can carry “Couldn’t get the text” on a failed save. Only existing copy gets stamped: new words such as SAVED or PLAYED would have to go on the flow map first.</p><p class="cost"><span>Cost</span> Trivial.</p></li>
+      <li class="graft"><div class="g-from"><span class="from"><i style="background:#3346D3"></i>Overprint</span></div><h3>Flatten the decoration when the phone asks</h3><p>When high-contrast text or remove animations is on, the stamp straightens, the halftone becomes a flat tint and the binding wipe becomes a fade.</p><p class="cost"><span>Cost</span> Half a day.</p></li>
+      <li class="graft"><div class="g-from"><span class="from"><i style="background:#3346D3"></i>Overprint</span><span class="from"><i style="background:#B5542E"></i>Kiln</span></div><h3>Bake every picture once, in the WebView that already exists</h3><p>Make the two-colour cover in the hidden Readability WebView’s canvas when a save is fetched, cache a small JPEG, and let lists scroll plain images. That avoids adding react-native-skia, which costs several MB per ABI.</p><p class="cost"><span>Cost</span> About a day, plus a check on the spike phone.</p></li>
+      <li class="graft"><div class="g-from"><span class="from"><i style="background:#B5542E"></i>Kiln</span></div><h3>Counts as big numerals, and gentle changes of light</h3><p>Set “8 saves” and “12 listened” on You as large Jost numerals beside the little shelf. Crossfade any big change in brightness (theme or reading palette) over 150 ms, with opacity only under reduced motion.</p><p class="cost"><span>Cost</span> Half a day.</p></li>
+    </ul>
+    <h3 class="subh">Fix these whichever way you go</h3>
+    <ul class="fixes">
+      <li class="fix"><h3>Errors always carry an icon and words</h3><p>Terracotta and error red are only ΔE 8.2 apart under deuteranopia, so colour alone can never say “error”.</p></li>
+      <li class="fix"><h3>A second cue for the spoken word</h3><p>Nearly every spoken-word tint in the study sits only 1.1 to 1.7:1 from its page. Add a 2 px underline in the line ink so colour-blind and low-vision listeners can follow the voice.</p></li>
+      <li class="fix"><h3>Snap the halftone to whole device pixels</h3><p>Check the 8 px screen for moiré on the spike phone while scrolling a 40-item list, in the dark theme too. At 6 px it read as a mesh on a 1x monitor.</p></li>
+      <li class="fix"><h3>Draw the screens no board drew</h3><p>None of the five shows onboarding (sign-in and the recovery flow), the extension popup or options page, or Speed read in full. Draw those in the chosen direction before the tokens freeze.</p></li>
+    </ul>
+  </section>
+
+  <section id="decide" aria-labelledby="de-h">
+    <div class="sh"><div><span class="n">05</span><h2 id="de-h">Your decisions</h2></div><p>Five choices, each with its options and the answer I recommend. Once they are settled, the next step is the tokens, then the prototype re-skin and a spike check on covers and halftone.</p></div>
+    <ol class="decs">
+      <li class="dec">
+        <div class="dn" aria-hidden="true">1</div>
+        <div class="db">
+          <h3>Which direction goes forward?</h3>
+          <p class="ctx">Everything else on this page assumes the first answer.</p>
+          <div class="dgrid"><ul class="opts"><li class="rec"><span class="tag">Recommended</span><span class="o">Paperback, with the grafts above</span></li><li><span class="o">Kiln: keep today’s pills and icon, turn the colour up, and add Paperback’s halftone-to-solid progress to its line</span></li><li><span class="o">Fingerprint as its board stands, level with Paperback on 22: ink-and-paper chrome, a drawn cover on every row, Terracotta and today’s icon retired</span></li><li><span class="o">Fingerprint’s drawn covers on today’s Soft pills</span></li><li><span class="o">Keep Soft pills as it is</span></li></ul>
+          <p class="why"><b>Why:</b> Paperback is the only direction in the top two on every lens, and since Fingerprint’s re-score it shares the highest total. Its look comes from an idea that carries meaning (length and progress), which is harder to copy and slower to date than a style. Fingerprint matches it on points and wins on daily use, but it is third on fit and build because it gives up Terracotta and the icon; with the totals tied, this call is yours. Kiln is the honest fallback if reopening the shapes and the icon feels like too much.</p></div>
+        </div>
+      </li>
+      <li class="dec">
+        <div class="dn" aria-hidden="true">2</div>
+        <div class="db">
+          <h3>The app icon</h3>
+          <p class="ctx">Decision 55 chose the Bookmark on Terracotta over the Ledge (books on a shelf). Paperback’s board proposes three spines.</p>
+          <div class="dgrid"><ul class="opts"><li class="rec"><span class="tag">Recommended</span><span class="o">Keep the decision-55 bookmark, redrawn flat: the cream bookmark standing on a band that is solid on one side and halftone on the other, on flat Terracotta</span></li><li><span class="o">Paperback’s board icon: three spines with the cream bookmark among them</span></li><li><span class="o">Keep today’s icon unchanged, gradient and all</span></li></ul>
+          <p class="why"><b>Why:</b> The bookmark is already proven at 16 px, and it already stands on a progress bar. Turning that bar into a spine band ties the icon to the new signature. The three spines read as a bar chart at 16 px and sit close to the Ledge you turned down, and a gradient icon would clash with a flat-ink app.</p></div>
+        </div>
+      </li>
+      <li class="dec">
+        <div class="dn" aria-hidden="true">3</div>
+        <div class="db">
+          <h3>Colour by length</h3>
+          <p class="ctx">Spines are Mustard under 8 minutes, Rose for 8 to 12 and Petrol for 13 and over. The length is also written in the meta line.</p>
+          <div class="dgrid"><ul class="opts"><li class="rec"><span class="tag">Recommended</span><span class="o">Three series inks by length, tested on a 40-item list before the tokens freeze</span></li><li><span class="o">One ink for every spine, with only halftone and solid carrying progress</span></li><li><span class="o">Colour by source</span></li></ul>
+          <p class="why"><b>Why:</b> Length is something you can act on (a short one for the bus stop), and it is what makes the list readable from across a room. If the 40-item test tips into a children’s library, fall back to one ink. Colour by source means hundreds of colours that mean nothing. Petrol is a blue-green, so the brief’s “no blue or purple” line needs a note either way.</p></div>
+        </div>
+      </li>
+      <li class="dec">
+        <div class="dn" aria-hidden="true">4</div>
+        <div class="db">
+          <h3>Pictures in the list</h3>
+          <p class="ctx">Paperback reprints article photos as two-colour covers in the series ink. The daily-use judge found that every recoloured thumbnail in the study costs some recognition.</p>
+          <div class="dgrid"><ul class="opts"><li class="rec"><span class="tag">Recommended</span><span class="o">Two-colour covers in the list and on Now playing, full colour in the Reader, then a week on your own library</span></li><li><span class="o">Real colour photos everywhere, and let the spine carry the identity</span></li><li><span class="o">Greyscale, with only the playing article in colour (Instrument’s rule)</span></li></ul>
+          <p class="why"><b>Why:</b> Two-colour covers turn a mismatched pile of photos into one series, which is a large part of why the list looks designed. Recognition is a real cost, so test it on saves you know: if you stop finding articles by their picture, switch to real colour, which costs nothing to build.</p></div>
+        </div>
+      </li>
+      <li class="dec">
+        <div class="dn" aria-hidden="true">5</div>
+        <div class="db">
+          <h3>Shapes and capital labels</h3>
+          <p class="ctx">Paperback retires pills for square corners and ink keylines, and sets sources, tabs, segments and chips in tracked Jost capitals. The consistency spec says radius 10 and no uppercase or letter-spacing.</p>
+          <div class="dgrid"><ul class="opts"><li class="rec"><span class="tag">Recommended</span><span class="o">Adopt the square corners and keylines, keep capitals for one- or two-word labels (sources, tabs, segments), and amend the consistency spec</span></li><li><span class="o">Adopt the shapes, keep every label in sentence case as the spec says today</span></li><li><span class="o">Keep today’s pills under the new colours</span></li></ul>
+          <p class="why"><b>Why:</b> The tracked capitals are the publisher’s voice that makes a spine read as a book, but Jost capitals at 13 px are hard work across a whole interface, so hold them to short labels. Pills under paperback colours would mix two systems and lose both.</p></div>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <footer>
+    <div><h4>The boards</h4><ul><li><a href="paperback.html" target="_blank" rel="noopener">Paperback</a> · paperback.html</li><li><a href="fingerprint.html" target="_blank" rel="noopener">Fingerprint</a> · fingerprint.html</li><li><a href="turned-up.html" target="_blank" rel="noopener">Kiln</a> · turned-up.html</li><li><a href="instrument.html" target="_blank" rel="noopener">Instrument</a> · instrument.html</li><li><a href="riso.html" target="_blank" rel="noopener">Overprint</a> · riso.html</li></ul></div>
+    <div><h4>Worth a look on the boards</h4><ul>
+      <li><a href="paperback.html#system" target="_blank" rel="noopener">Paperback: bound by length</a>, the rule and the inks</li>
+      <li><a href="fingerprint.html#pg" target="_blank" rel="noopener">Fingerprint: try any address</a>, a live cover generator</li>
+      <li><a href="instrument.html#macrodeck" target="_blank" rel="noopener">Instrument: the Now playing deck</a></li>
+      <li><a href="turned-up.html#pourdemo" target="_blank" rel="noopener">Kiln: the pour, with a working slider</a></li>
+      <li><a href="riso.html#press" target="_blank" rel="noopener">Overprint: press into register</a></li>
+    </ul></div>
+    <div><h4>About this page</h4><p>The screens above are the boards, embedded and cropped; nothing is redrawn. Scores and verdicts come from the three judges’ reports; Fingerprint’s are from their second look on 3 October, after its screens were fixed. One known glitch: Kiln’s title shows hairline seams in Chrome, from a text stroke on a variable font; the concept is unaffected. Today’s design is in <a href="../mockups/prototype.html" target="_blank" rel="noopener">the prototype</a>.</p></div>
+  </footer>
+</div>
+</main>
+</body>
+</html>

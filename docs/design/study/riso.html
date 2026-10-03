@@ -1,0 +1,1063 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shelf Overprint Study</title>
+<meta name="description" content="Riso direction for Shelf: two fluorescent inks overprinting on newsprint, loud chrome and a calm printed Reader.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Newsreader:ital,opsz,wght@0,6..72,200..800;1,6..72,200..800&display=swap" rel="stylesheet">
+<style>
+/* =====================================================================
+   OVERPRINT: a Riso direction for Shelf.
+   Colour values live in the JS object T at the bottom of the file; it
+   writes them into custom properties, the swatches and the contrast
+   table, so there is one source for every hex on this board.
+   ===================================================================== */
+*{box-sizing:border-box}
+html,body{margin:0}
+:root{
+  --f-disp:'Archivo',system-ui,sans-serif;
+  --f-ui:'Archivo',system-ui,sans-serif;
+  --f-read:'Newsreader',Georgia,serif;
+  --f-mono:'Martian Mono',ui-monospace,monospace;
+  --bd-paper:#EFE8DA; --bd-hi:#F8F3E9; --bd-ink:#1E1A4A; --bd-muted:#57516C; --bd-blue:#3346D3; --bd-pink:#FF4DA6; --bd-pinktxt:#B8106E; --bd-yellow:#FFE600;
+}
+body{position:relative;background:var(--bd-paper);color:var(--bd-ink);font-family:var(--f-ui);font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
+body::before{content:'';position:absolute;inset:0;background-image:var(--fibre);mix-blend-mode:multiply;pointer-events:none;z-index:0;opacity:.8}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer}
+.wrap{position:relative;z-index:1;max-width:1344px;margin:0 auto;padding:0 48px}
+.mono{font-family:var(--f-mono);font-variation-settings:'wdth' 87.5}
+
+/* ---------- shared print helpers ---------- */
+/* inkfill: a flat ink area with riso speckle. The fill sits on ::before so the grain never touches the text. */
+.inkfill{position:relative;isolation:isolate}
+.inkfill::before{content:'';position:absolute;inset:0;border-radius:inherit;background:var(--fill);-webkit-mask-image:var(--grain-fill);mask-image:var(--grain-fill);-webkit-mask-size:220px;mask-size:220px;z-index:-1;pointer-events:none}
+.inkfill.soft::before,.dark .inkfill::before,[data-reader="blackstock"] .inkfill::before{-webkit-mask-image:var(--grain-soft);mask-image:var(--grain-soft)}
+/* mis: display type printed in two plates, 2.5 px out of register. Only ever at 28 px and above. */
+.mis{position:relative;display:inline-block;margin:0;font-family:var(--f-disp);font-weight:900;font-variation-settings:'wdth' 125;letter-spacing:-.012em;line-height:.9}
+.mis .p1{display:block;color:var(--pink)}
+.mis .p2{position:absolute;left:0;right:0;top:0;color:var(--blue);mix-blend-mode:var(--blend);transform:translate(-2.5px,-2px)}
+.mis .p1,.mis .p2{-webkit-mask-image:var(--grain-type);mask-image:var(--grain-type);-webkit-mask-size:200px;mask-size:200px}
+.mis.up{text-transform:uppercase}
+.registered .mis .p2{transform:none}
+/* stamps: one ink, a double rule, a few degrees off true, heavy grain */
+.stamp{position:relative;display:inline-flex;align-items:center;justify-content:center;height:28px;padding:0 10px;border-radius:3px;font:700 13px/1 var(--f-mono);font-variation-settings:'wdth' 75;text-transform:uppercase;letter-spacing:.04em;color:var(--sc);transform:rotate(var(--rot,-3deg));white-space:nowrap}
+.stamp::before,.stamp::after{content:'';position:absolute;pointer-events:none;-webkit-mask-image:var(--grain-stamp);mask-image:var(--grain-stamp);-webkit-mask-size:160px;mask-size:160px}
+.stamp::before{inset:0;border-radius:3px;box-shadow:inset 0 0 0 2px var(--sc)}
+.stamp::after{inset:4px;border:1px solid var(--sc);border-radius:1px}
+.stamp.worn{-webkit-mask-image:var(--grain-stamp);mask-image:var(--grain-stamp);-webkit-mask-size:160px;mask-size:160px}
+.stamp.sm{height:26px;padding:0 9px}
+/* the signature strip: halftone dots for what's still to come, solid ink for where you've been */
+.strip{position:relative;height:5px;--sc:var(--blue);--sp:5px;background:radial-gradient(circle closest-side,var(--sc) 55%,transparent 72%) 0 50%/var(--sp) 100% repeat-x}
+.strip i{position:absolute;left:0;top:0;bottom:0;background:var(--sc)}
+.strip.s3{height:3px;--sp:4px}
+.strip.s4{height:4px;--sp:4px}
+
+/* ---------- board layout ---------- */
+.topline{display:flex;justify-content:space-between;align-items:center;gap:24px;padding:18px 0;border-bottom:2px solid var(--bd-ink);font:600 12px/1 var(--f-mono);font-variation-settings:'wdth' 87.5;text-transform:uppercase;letter-spacing:.06em}
+.colourbar{display:flex;gap:0}
+.colourbar i{width:18px;height:18px;display:block}
+.regmark{width:22px;height:22px;flex:none}
+section{padding:80px 0 88px;border-top:3px solid var(--bd-ink);position:relative}
+section:first-of-type{border-top:0}
+.sh{display:flex;align-items:flex-end;gap:24px;margin-bottom:40px}
+.sh .no{font:900 88px/.8 var(--f-disp);font-variation-settings:'wdth' 125;color:transparent;-webkit-text-stroke:2px var(--bd-ink)}
+.sh h2{margin:0;font:900 44px/1 var(--f-disp);font-variation-settings:'wdth' 118;letter-spacing:-.01em}
+.sh p{margin:0 0 4px auto;max-width:44ch;font:500 15px/1.45 var(--f-ui);color:var(--bd-muted)}
+.lbl{font:700 12px/1.2 var(--f-mono);font-variation-settings:'wdth' 80;text-transform:uppercase;letter-spacing:.06em;color:var(--bd-muted)}
+.copy{font-family:var(--f-read);font-size:19px;line-height:1.6;max-width:64ch}
+.copy p{margin:0 0 1em}
+h3.bh{margin:0 0 14px;font:900 22px/1.1 var(--f-disp);font-variation-settings:'wdth' 112}
+
+/* hero */
+.hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:56px;padding:56px 0 80px;align-items:start}
+.hero .kick{display:flex;gap:14px;align-items:center;margin-bottom:22px}
+.hero h1{font-size:104px;margin:0 0 30px -4px;--pink:#FF4DA6;--blue:#3346D3;--blend:multiply}
+.hero h1 .p2{transform:translate(-5px,-4px)}
+.pitch{font:italic 400 30px/1.25 var(--f-read);margin:0 0 28px;max-width:26ch;letter-spacing:-.005em}
+.infl{margin-top:36px;border-top:2px solid var(--bd-ink)}
+.infl li{list-style:none;display:grid;grid-template-columns:56px 1fr;gap:14px;padding:14px 0;border-bottom:1px solid #1E1A4A33;align-items:baseline}
+.infl ol{margin:0;padding:0}
+.infl .n{font:900 22px/1 var(--f-disp);font-variation-settings:'wdth' 125;color:var(--bd-blue)}
+.infl b{font:800 17px/1.25 var(--f-disp);font-variation-settings:'wdth' 106;display:block;margin-bottom:2px}
+.infl span{font:400 16px/1.45 var(--f-read);color:#3B3656}
+.herort{display:flex;flex-direction:column;gap:28px}
+.press{background:var(--bd-hi);padding:24px 26px 10px}
+.press .pr{display:grid;grid-template-columns:44px 1fr;gap:16px;align-items:center;padding:12px 0;border-top:1px solid #1E1A4A1F}
+.press .pr:first-of-type{border-top:0}
+.press .pr i{width:44px;height:44px;border-radius:50%;display:block}
+.press .pr b{display:block;font:900 18px/1.1 var(--f-disp);font-variation-settings:'wdth' 118}
+.press .pr span{font:400 15px/1.4 var(--f-read);color:#3B3656}
+.poster{position:relative;aspect-ratio:4/5;background:#FBF8F1;padding:34px;overflow:hidden;isolation:isolate}
+.poster .rm{position:absolute;width:26px;height:26px}
+.poster .sun{position:absolute;width:420px;height:420px;border-radius:50%;right:-70px;top:60px;background:#FFE600;-webkit-mask-image:var(--grain-fill);mask-image:var(--grain-fill)}
+.poster .photo{position:absolute;left:58px;top:112px;width:360px;height:350px;isolation:auto}
+.poster .photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:multiply}
+.poster .big{position:absolute;left:30px;bottom:146px;font-size:66px;--pink:#FF4DA6;--blue:#3346D3;--blend:multiply;line-height:.86}
+.poster .big .p2{transform:translate(-4px,-3px)}
+.poster .cap{position:absolute;left:36px;bottom:40px;right:150px;font:600 13px/1.4 var(--f-mono);font-variation-settings:'wdth' 87.5;color:#1E1A4A}
+.poster .icon{position:absolute;right:34px;bottom:34px;width:96px;height:96px;border-radius:50%;overflow:hidden}
+.poster .bar{position:absolute;left:34px;top:30px;display:flex}
+.poster .bar i{width:20px;height:12px}
+.poster .slug{position:absolute;right:34px;top:28px;font:700 12px/1 var(--f-mono);font-variation-settings:'wdth' 80;letter-spacing:.06em;text-transform:uppercase}
+
+/* system: swatches */
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px}
+.panel{background:var(--bd-hi);padding:28px;position:relative}
+.panel.dk{background:#15131A;color:#F2EDE3}
+.panel.dk .lbl{color:#ABA6BA}
+.sws{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 18px}
+.sw{display:grid;grid-template-columns:64px 1fr;gap:12px;align-items:start}
+.sw .chip{width:64px;height:64px;border-radius:3px;position:relative;isolation:isolate}
+.sw .chip.edge{box-shadow:inset 0 0 0 1px #1E1A4A26}
+.panel.dk .sw .chip.edge{box-shadow:inset 0 0 0 1px #F2EDE326}
+.sw b{display:block;font:800 15px/1.2 var(--f-disp);font-variation-settings:'wdth' 106}
+.sw .r{display:block;font:400 14px/1.35 var(--f-ui);opacity:.85;margin:2px 0 4px}
+.sw code{font:600 12px/1.2 var(--f-mono);font-variation-settings:'wdth' 87.5}
+.sw em{font:normal 600 12px/1.2 var(--f-mono);font-variation-settings:'wdth' 87.5;opacity:.75;display:block;margin-top:2px}
+.over{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;align-items:start;margin-top:24px;padding-top:22px;border-top:1px solid currentColor}
+.over .oi{display:flex;flex-direction:column;gap:10px}
+.over .ov{position:relative;width:142px;height:84px;isolation:isolate;flex:none}
+.over .ov i{position:absolute;width:84px;height:84px;border-radius:50%;top:0}
+.over .ov i:first-child{left:0}.over .ov i:last-child{left:54px;mix-blend-mode:var(--blend)}
+.over .ovl{font:600 12px/1.35 var(--f-mono);font-variation-settings:'wdth' 87.5;max-width:22ch}
+
+/* reading palettes */
+.rpal{border-radius:3px;padding:24px 22px 22px;position:relative;overflow:hidden}
+.rpal .nm{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px;font:700 12px/1.2 var(--f-mono);font-variation-settings:'wdth' 80;text-transform:uppercase;letter-spacing:.06em}
+.rpal .ratio{font:800 13px/1 var(--f-mono)}
+
+/* type specimen */
+.spec{border-top:2px solid var(--bd-ink)}
+.spec .tr{display:grid;grid-template-columns:260px 1fr;gap:28px;padding:22px 0;border-bottom:1px solid #1E1A4A33;align-items:center}
+.spec .tr .meta{font:600 12px/1.5 var(--f-mono);font-variation-settings:'wdth' 87.5;color:var(--bd-muted)}
+.spec .tr .meta b{display:block;font:800 15px/1.2 var(--f-disp);font-variation-settings:'wdth' 106;color:var(--bd-ink);margin-bottom:4px}
+
+/* shape sheet */
+.sheetgrid{display:grid;grid-template-columns:1.25fr 1fr;gap:28px}
+.compbox{display:flex;flex-wrap:wrap;gap:22px 26px;align-items:center}
+.compbox .c{display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.compbox .c .lbl{font-size:11px}
+.rules{margin:0;padding:0;list-style:none}
+.rules li{padding:10px 0 10px 28px;border-bottom:1px solid #1E1A4A26;position:relative;font:400 16px/1.45 var(--f-read)}
+.rules li::before{content:'';position:absolute;left:0;top:17px;width:12px;height:12px;border-radius:50%;background:var(--bd-pink)}
+.rules li b{font-family:var(--f-ui);font-weight:700}
+
+/* halftone ladder */
+.ladder{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+.ladder .st{display:flex;flex-direction:column;gap:10px}
+.ladder .im{position:relative;aspect-ratio:1;overflow:hidden;isolation:isolate;border-radius:2px}
+.ladder .im img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+
+/* signature */
+.sig{display:grid;grid-template-columns:1fr 1.1fr;gap:48px;align-items:start}
+.sigdemo{background:var(--bd-hi);padding:28px;display:grid;gap:18px}
+.sigdemo .srow{display:grid;grid-template-columns:120px 1fr 92px;gap:16px;align-items:center;font:600 12px/1.2 var(--f-mono);font-variation-settings:'wdth' 87.5}
+.sigdemo .strip{height:8px;--sp:7px}
+.ctxs{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:8px}
+.ctx{background:#F4EFE4;padding:12px;border-radius:3px;display:flex;flex-direction:column;gap:10px;min-height:118px;position:relative;overflow:hidden}
+.ctx .lbl{font-size:11px}
+
+/* phones */
+.prow{display:flex;gap:44px;align-items:flex-start;margin-bottom:64px}
+.pfig{margin:0;display:flex;flex-direction:column;gap:14px}
+.pfig figcaption{display:flex;gap:10px;align-items:baseline;font:700 12px/1.2 var(--f-mono);font-variation-settings:'wdth' 80;text-transform:uppercase;letter-spacing:.06em}
+.pfig figcaption span{color:var(--bd-muted);font-weight:500;text-transform:none;letter-spacing:0}
+.pnote{flex:1;min-width:0;padding-top:30px}
+.pnote .copy{font-size:17px}
+.pnote .lbl{margin-bottom:10px;display:block}
+.frame{padding:9px;border-radius:41px;background:#0E0C14;box-shadow:0 28px 50px -26px rgba(30,26,74,.6);width:max-content}
+
+.ph{width:360px;height:760px;border-radius:32px;overflow:hidden;position:relative;display:flex;flex-direction:column;background:var(--paper);color:var(--ink);font-family:var(--f-ui);font-size:15px;line-height:1.45;isolation:isolate}
+.ph.light:not([data-reader])::after{content:'';position:absolute;inset:0;background-image:var(--fibre);mix-blend-mode:multiply;pointer-events:none;z-index:95;opacity:.45}
+.ph[data-reader]{background:var(--r-bg);color:var(--r-text)}
+.sb{height:24px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 18px 0 22px;font:600 12px/1 var(--f-ui);font-variant-numeric:tabular-nums;position:relative;z-index:30}
+.sb .sbi{display:flex;gap:5px;align-items:center}
+.vp{flex:1;position:relative;overflow:hidden}
+.gb{height:16px;flex:none;display:flex;align-items:center;justify-content:center;position:relative;z-index:30}
+.gb i{width:108px;height:4px;border-radius:2px;background:currentColor;opacity:.42}
+.screen{position:absolute;inset:0;display:flex;flex-direction:column}
+.scroll{flex:1;overflow:hidden;position:relative}
+
+/* tab-screen header */
+.head{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;padding:18px 16px 12px}
+.head .mis{font-size:46px}
+.count{font:500 13px/1 var(--f-mono);font-variation-settings:'wdth' 87.5;color:var(--muted);padding-bottom:4px;white-space:nowrap}
+.search{margin:0 16px;height:48px;display:flex;align-items:center;gap:10px;padding:0 14px;border-radius:3px;background:var(--paper-hi);box-shadow:inset 0 0 0 2px var(--blue);color:var(--muted);font:500 15px/1 var(--f-ui);width:calc(100% - 32px);text-align:left}
+.search svg{color:var(--blue);flex:none}
+.segs{display:flex;gap:8px;padding:14px 16px 14px}
+.seg{position:relative;isolation:isolate;height:36px;padding:0 16px;display:inline-flex;align-items:center;justify-content:center;border-radius:3px;font:700 14px/1 var(--f-ui);color:var(--blue);box-shadow:inset 0 0 0 2px var(--blue)}
+.seg.on{color:var(--on-fill);box-shadow:none;--fill:var(--pink)}
+
+/* cards */
+.list{padding:0 16px}
+.card{display:flex;gap:12px;padding:12px;border-radius:3px;margin-bottom:10px;--fill:var(--blush);overflow:hidden;width:100%;text-align:left}
+.card .body{flex:1;min-width:0}
+.src{display:flex;align-items:center;gap:6px;font:700 13px/1.1 var(--f-mono);font-variation-settings:'wdth' 78;text-transform:uppercase;letter-spacing:.03em;color:var(--pink-txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.src svg{color:var(--blue);flex:none}
+.ctitle{font:650 16px/1.28 var(--f-ui);margin:7px 0 9px;color:var(--ink);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;letter-spacing:-.004em}
+.meta{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;font:500 13px/1.1 var(--f-mono);font-variation-settings:'wdth' 87.5;color:var(--muted)}
+.meta .hot{color:var(--blue);font-weight:800}
+.meta .sep{width:4px;height:4px;background:currentColor;opacity:.6;border-radius:50%}
+.thumb{width:72px;height:72px;flex:none;border-radius:2px;object-fit:cover;mix-blend-mode:var(--blend);filter:url(#ht-l-blue-4)}
+.dark .thumb{filter:url(#ht-d-blue-4)}
+.thumb.sm{width:56px;height:56px}
+.card .strip,.lrow .strip{position:absolute;left:0;right:0;bottom:0}
+.pdot{width:9px;height:9px;border-radius:50%;background:var(--pink-txt);flex:none}
+.lnk{color:var(--blue);font-weight:800;display:inline-flex;align-items:center;gap:4px}
+
+/* mini player: the voice plate */
+.mini{position:absolute;left:16px;right:16px;bottom:72px;height:64px;border-radius:3px;--fill:var(--yellow);display:flex;align-items:center;gap:12px;padding:0 8px;color:#1E1A4A;z-index:20}
+.pp{position:relative;isolation:isolate;width:48px;height:48px;flex:none;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:var(--on-fill);--fill:var(--flame)}
+.mini .info{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;text-align:left}
+.mini .info b{font:700 13px/1.2 var(--f-ui);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini .info span{font:500 13px/1 var(--f-mono);font-variation-settings:'wdth' 87.5;color:var(--mini-muted)}
+.mini .strip{position:absolute;left:28px;right:28px;bottom:5px;--sc:var(--olive)}
+
+/* tab bar */
+.tabbar{height:64px;flex:none;display:flex;background:var(--paper-hi);box-shadow:inset 0 2px 0 var(--blue);position:relative;z-index:10}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font:700 13px/1 var(--f-ui);color:var(--blue)}
+.tab .blob{width:56px;height:30px;display:inline-flex;align-items:center;justify-content:center;border-radius:15px}
+.tab.on{color:var(--ink)}
+.tab.on .blob{--fill:var(--pink);color:var(--on-fill);border-radius:46% 54% 42% 58% / 58% 48% 52% 42%}
+
+/* buttons */
+.btn{position:relative;isolation:isolate;height:48px;padding:0 22px;border-radius:3px;display:inline-flex;align-items:center;justify-content:center;gap:8px;font:700 15px/1 var(--f-ui);white-space:nowrap}
+.btn.primary{--fill:var(--pink);color:var(--on-fill)}
+.btn.primary::after{content:'';position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 2px var(--blue);transform:translate(3px,3px);mix-blend-mode:var(--blend);pointer-events:none;transition:transform 120ms cubic-bezier(.2,.8,.2,1)}
+.btn.primary:active::after,.btn.primary.pressed::after{transform:none}
+.btn.secondary{background:var(--paper-hi);box-shadow:inset 0 0 0 2px var(--blue);color:var(--blue)}
+.chip{position:relative;height:36px;padding:0 14px;display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:3px;box-shadow:inset 0 0 0 2px var(--blue);color:var(--blue);font:700 13px/1 var(--f-ui)}
+.chip::before{content:'';position:absolute;inset:-6px -2px}
+.rate{height:36px;min-width:52px;padding:0 12px;border-radius:3px;display:inline-flex;align-items:center;justify-content:center;font:800 13px/1 var(--f-mono);font-variation-settings:'wdth' 87.5;background:color-mix(in srgb,currentColor 13%,transparent);font-variant-numeric:tabular-nums}
+.ctl{width:48px;height:48px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:50%}
+
+/* reader */
+.reader{background:var(--r-bg);color:var(--r-text)}
+.rtop{height:56px;flex:none;display:flex;align-items:center;gap:4px;padding:0 8px;position:relative;z-index:5;background:var(--r-bg)}
+.rtop .host{flex:1;text-align:center;font:500 13px/1 var(--f-mono);font-variation-settings:'wdth' 87.5;color:var(--r-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ib{width:48px;height:48px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;color:var(--r-text)}
+.ib.aa{font:900 17px/1 var(--f-disp);font-variation-settings:'wdth' 112;letter-spacing:-.02em}
+.rbody{flex:1;overflow:hidden;position:relative}
+.article{padding:8px 20px 180px}
+.kicker{font:700 13px/1 var(--f-mono);font-variation-settings:'wdth' 78;text-transform:uppercase;letter-spacing:.04em;color:var(--r-kicker)}
+.rh1{font:800 27px/1.12 var(--f-disp);font-variation-settings:'wdth' 106;letter-spacing:-.012em;margin:12px 0 12px;color:var(--r-text)}
+.by{font:500 13px/1.4 var(--f-mono);font-variation-settings:'wdth' 87.5;color:var(--r-muted)}
+.fig{position:relative;margin:20px 0 22px;aspect-ratio:3/2;overflow:hidden;border-radius:2px;isolation:isolate}
+.fig img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:var(--r-blend)}
+.prose{font-family:var(--f-read);font-size:18px;line-height:1.6;color:var(--r-text);font-optical-sizing:auto}
+.prose p{margin:0 0 1em}
+.prose a{color:inherit;text-decoration:none;background:linear-gradient(var(--r-accent),var(--r-accent)) 0 94%/100% 2px no-repeat}
+.mk{position:relative;display:inline-block;z-index:0;color:var(--r-mark-text)}
+.mk::before{content:'';position:absolute;left:-3px;right:-4px;top:.2em;bottom:.06em;background:var(--r-mark);transform:rotate(-1.6deg) skewX(-9deg);border-radius:2px 6px 3px 7px;z-index:-1}
+.rline{height:3px;flex:none;position:relative;z-index:5}
+.farch{position:absolute;right:16px;bottom:88px;width:52px;height:52px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:var(--r-hi);box-shadow:inset 0 0 0 2px var(--r-accent);color:var(--r-accent);z-index:15}
+.dockp{position:absolute;left:16px;right:16px;bottom:16px;height:64px;border-radius:3px;display:flex;align-items:center;gap:2px;padding:0 8px;--fill:var(--r-voice);color:var(--r-voice-fg);z-index:20}
+.dockp .tt{flex:1;padding-left:10px;font:500 13px/1 var(--f-mono);font-variation-settings:'wdth' 87.5;white-space:nowrap}
+.dockp .pp{--fill:var(--r-pp)}
+.dockp .strip{position:absolute;left:28px;right:28px;bottom:5px;--sc:var(--r-voice-line)}
+.dockp.edge::after{content:'';position:absolute;left:0;right:0;top:0;height:3px;background:var(--r-mark);border-radius:3px 3px 0 0}
+
+/* listen */
+.nowcard{margin:2px 16px 24px;padding:16px;border-radius:3px;--fill:var(--yellow);color:#1E1A4A}
+.nowcard .lbl2{font:700 13px/1 var(--f-mono);font-variation-settings:'wdth' 78;text-transform:uppercase;letter-spacing:.05em}
+.nowcard .t{display:block;font:850 19px/1.18 var(--f-disp);font-variation-settings:'wdth' 108;margin:10px 0 6px;text-align:left;letter-spacing:-.008em}
+.nowcard .s{font:500 13px/1 var(--f-mono);font-variation-settings:'wdth' 87.5;color:var(--mini-muted)}
+.nowcard .strip{margin:20px 0 8px;--sc:var(--olive)}
+.times{display:flex;justify-content:space-between;font:500 13px/1 var(--f-mono);font-variation-settings:'wdth' 87.5;font-variant-numeric:tabular-nums}
+.controls{display:grid;grid-template-columns:1fr 48px 60px 48px 1fr;column-gap:8px;align-items:center;margin-top:12px}
+.controls .c2{grid-column:2}.controls .c3{grid-column:3}.controls .c4{grid-column:4}.controls .c5{grid-column:5;justify-self:end}
+.pp.big{width:60px;height:60px}
+.pp.big::after{content:'';position:absolute;inset:0;border-radius:50%;box-shadow:inset 0 0 0 2px var(--ringc,var(--olive));transform:translate(-3px,-3px);pointer-events:none}
+.shd{display:flex;align-items:center;justify-content:space-between;padding:0 16px 12px}
+.shd h2{margin:0;font:900 21px/1 var(--f-disp);font-variation-settings:'wdth' 118}
+.lrow{position:relative;display:flex;align-items:center;gap:10px;padding:10px 12px 10px 8px;border-radius:3px;--fill:var(--blush);margin-bottom:10px;overflow:hidden}
+.lrow .rp{width:48px;height:48px;flex:none;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:var(--paper-hi);box-shadow:inset 0 0 0 2px var(--blue);color:var(--blue)}
+.lrow .lb{flex:1;min-width:0;display:flex;gap:10px;align-items:center}
+.lrow .ctitle{font-size:15px;margin:5px 0 7px;-webkit-line-clamp:2}
+
+/* empty */
+.empty{padding:30px 24px 0;text-align:center;display:flex;flex-direction:column;align-items:center}
+.illus{position:relative;width:264px;height:208px;margin:4px 0 18px}
+.illus .sunht{position:absolute;width:204px;height:204px;left:56px;top:-14px;background:radial-gradient(circle closest-side,#000 0,#000 16%,#fff 100%);filter:url(#ht-l-pink-6);mix-blend-mode:multiply}
+.illus .shs{position:absolute;left:14px;right:14px;bottom:0;height:128px;border-radius:3px;background:var(--paper-hi);box-shadow:inset 0 0 0 2px var(--blue);padding:14px 16px 0;text-align:left}
+.illus .shs .l{font:700 13px/1 var(--f-mono);font-variation-settings:'wdth' 78;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.illus .apps{display:flex;justify-content:space-between;margin-top:18px}
+.illus .app{width:48px;display:flex;flex-direction:column;align-items:center;gap:7px;font:600 12px/1 var(--f-ui);color:var(--muted)}
+.illus .app b{width:44px;height:44px;border-radius:50%;display:block;background:radial-gradient(circle closest-side,var(--blue) 46%,transparent 60%) 0 0/5px 5px;opacity:.55}
+.illus .app.me{color:var(--ink);font-weight:800}
+.illus .app.me b{opacity:1;background:none;overflow:hidden}
+.illus .ring{position:absolute;pointer-events:none}
+.empty .mis{font-size:30px;line-height:.98}
+.empty p{margin:14px 0 22px;max-width:28ch;color:var(--muted);font-size:15px;line-height:1.45}
+
+/* you */
+.datestamp{--sc:var(--blue);--rot:-4deg;margin-bottom:6px}
+.bcard{margin:4px 16px 14px;padding:16px;border-radius:3px;--fill:var(--blush)}
+.bcard .h{display:flex;align-items:center;gap:8px;font:850 17px/1.2 var(--f-disp);font-variation-settings:'wdth' 108}
+.bcard .h svg{color:var(--blue)}
+.bcard p{margin:8px 0 14px;color:var(--muted);font-size:13px;line-height:1.45}
+.bcard .row{display:flex;justify-content:flex-end;gap:8px}
+.icard{margin:0 16px 12px;border-radius:3px;background:var(--paper-hi);position:relative;overflow:hidden;box-shadow:inset 0 4px 0 var(--pink)}
+.icard::before{content:'';position:absolute;top:0;bottom:0;left:49px;width:1.5px;background:var(--pink-txt);opacity:.5}
+.yrow{display:flex;align-items:center;gap:14px;min-height:56px;padding:4px 10px 0 15px;position:relative;width:100%;text-align:left}
+.yrow + .yrow{box-shadow:inset 0 1px 0 var(--rule)}
+.yrow.tall{min-height:72px}
+.yi{width:22px;color:var(--blue);display:inline-flex;flex:none}
+.yl{flex:1;font:600 15px/1.25 var(--f-ui);padding-left:6px;display:flex;flex-direction:column;align-items:flex-start;gap:7px}
+.yl .stamp{--sc:var(--red);--rot:-2deg;margin-left:-2px}
+.yv{font:600 13px/1 var(--f-mono);font-variation-settings:'wdth' 87.5;color:var(--muted)}
+.chev{color:var(--blue);display:inline-flex}
+.yrow.danger{color:var(--red)}
+.yrow.danger .yi,.yrow.danger .chev{color:var(--red)}
+.icard.danger{box-shadow:inset 0 4px 0 var(--red)}
+.colophon{display:flex;align-items:center;justify-content:space-between;margin:14px 16px 0;padding-top:12px}
+.colophon .colourbar i{width:14px;height:14px}
+
+/* beyond */
+.home{border-radius:18px;padding:26px 26px 22px;display:flex;justify-content:space-around;align-items:flex-start;position:relative;overflow:hidden}
+.home .app{display:flex;flex-direction:column;align-items:center;gap:8px;font:500 13px/1 system-ui,sans-serif;width:72px}
+.home .app .ic{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.iconplates{display:flex;gap:14px;align-items:center}
+.iconplates .pl{display:flex;flex-direction:column;gap:8px;align-items:center}
+.iconplates .pl .t{width:104px;height:104px;border-radius:24px;overflow:hidden;background:#FBF8F1;box-shadow:inset 0 0 0 1px #1E1A4A22}
+.iconplates .op{font:900 30px/1 var(--f-disp);color:var(--bd-muted)}
+.browser{border-radius:10px;overflow:hidden;background:#FFFFFF;box-shadow:0 30px 60px -30px rgba(30,26,74,.55),0 0 0 1px #1E1A4A1F}
+.browser .chrome{height:76px;background:#EDEDF0;display:flex;flex-direction:column}
+.browser .tabs{height:36px;display:flex;align-items:flex-end;padding:0 10px;gap:6px}
+.browser .tabs .bt{height:30px;width:260px;border-radius:8px 8px 0 0;background:#FFFFFF;display:flex;align-items:center;gap:8px;padding:0 12px;font:500 12px/1 system-ui,sans-serif;color:#333;white-space:nowrap;overflow:hidden}
+.browser .tabs .bt i{width:14px;height:14px;border-radius:3px;background:#C9C9CF;flex:none}
+.browser .addr{height:40px;background:#FFFFFF;display:flex;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid #E1E1E6}
+.browser .addr .url{flex:1;height:28px;border-radius:14px;background:#F1F1F4;display:flex;align-items:center;padding:0 14px;font:400 13px/1 system-ui,sans-serif;color:#444}
+.browser .addr .tb{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#555}
+.browser .addr .tb.shelf{position:relative}
+.browser .page{position:relative;height:560px;overflow:hidden;background:#FFFFFF;color:#1F1F1F}
+.site{max-width:640px;margin:0 auto;padding:40px 24px}
+.site .k{font:600 12px/1 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#8E9196;margin-bottom:10px}
+.site h1{font:600 34px/1.18 Georgia,serif;margin:0 0 12px;color:#111}
+.site .b{font:13px/1 system-ui,sans-serif;color:#8E9196;margin-bottom:22px}
+.site p{font:18px/1.62 Georgia,serif;margin:0 0 1em;color:#2A2A2A}
+.xtoast{position:absolute;right:20px;bottom:20px;width:340px;border-radius:3px;background:#1E1A4A;color:#F4EFE4;z-index:6;font-family:var(--f-ui)}
+.xtoast .row{display:flex;align-items:center;gap:12px;padding:14px 8px 14px 14px;min-height:68px}
+.xtoast .ti{position:relative;isolation:isolate;width:34px;height:34px;flex:none;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#1E1A4A;--fill:#FF4DA6}
+.xtoast .tx{flex:1;min-width:0}
+.xtoast .tx b{display:block;font:700 15px/1.25 var(--f-ui)}
+.xtoast .tx span{display:block;font:500 13px/1.35 var(--f-ui);color:#C9C4DD;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.xtoast .act{height:36px;padding:0 12px;border-radius:3px;font:800 13px/1 var(--f-ui);display:inline-flex;align-items:center;box-shadow:inset 0 0 0 2px #F4EFE4;color:#F4EFE4}
+.xtoast .x{width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#C9C4DD}
+.xtoast .timer{height:3px;background:#FF4DA6;width:58%}
+.xtoast .stampland{position:absolute;left:-18px;top:-20px;--sc:#FF4DA6;--rot:-9deg;height:34px;padding:0 12px;font-size:15px;background:transparent}
+@keyframes thunk{0%{opacity:0;transform:scale(1.35) rotate(-16deg)}60%{opacity:1;transform:scale(.96) rotate(-8deg)}100%{transform:scale(1) rotate(-9deg)}}
+.xtoast .stampland{animation:thunk 260ms cubic-bezier(.2,.8,.2,1) both}
+@media (prefers-reduced-motion:reduce){.xtoast .stampland{animation:none}.btn.primary::after{transition:none}}
+
+/* notes */
+.notes{display:grid;grid-template-columns:repeat(3,1fr);gap:28px}
+.notes .col{background:var(--bd-hi);padding:26px 26px 18px}
+.notes h3{margin:0 0 14px;display:flex;align-items:center;gap:10px}
+.notes ul{margin:0;padding:0;list-style:none}
+.notes li{font:400 16px/1.5 var(--f-read);padding:10px 0;border-top:1px solid #1E1A4A22}
+.notes li b{font-family:var(--f-ui);font-weight:700}
+table.ct{width:100%;border-collapse:collapse;font:500 13px/1.3 var(--f-mono);font-variation-settings:'wdth' 87.5}
+table.ct th{text-align:left;font-weight:800;padding:8px 10px;border-bottom:2px solid var(--bd-ink);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+table.ct td{padding:7px 10px;border-bottom:1px solid #1E1A4A1F;vertical-align:middle}
+table.ct td.sw2 span{display:inline-flex;align-items:center;justify-content:center;width:86px;height:26px;border-radius:3px;font:700 12px/1 var(--f-ui)}
+table.ct td.ok{color:#0A7A47;font-weight:800}
+table.ct td.no{color:#B3151F;font-weight:800}
+.ctwrap{columns:2;column-gap:28px;margin-top:28px}
+.ctwrap table{break-inside:avoid;margin-bottom:22px}
+footer{padding:28px 0 60px;border-top:3px solid var(--bd-ink);display:flex;justify-content:space-between;font:600 12px/1 var(--f-mono);font-variation-settings:'wdth' 87.5;text-transform:uppercase;letter-spacing:.06em}
+</style>
+</head>
+<body>
+<svg id="fx" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"></svg>
+<div class="wrap">
+
+  <div class="topline">
+    <span>Shelf · visual direction study · key: riso</span>
+    <span class="colourbar" id="cb-top" aria-hidden="true"></span>
+    <span>3 October 2026 · draft for Richard</span>
+  </div>
+
+  <!-- ============ 01 CONCEPT ============ -->
+  <section id="concept" style="border-top:0;padding-top:0">
+    <div class="hero">
+      <div>
+        <div class="kick"><span class="lbl" style="color:var(--bd-ink)">01 · The concept</span><span class="lbl">Riso direction</span></div>
+        <h1 class="mis" id="h-name"></h1>
+        <p class="pitch">Shelf printed like a two-colour zine: fluoro pink and riso blue on newsprint, loud on the covers and calm on the page.</p>
+        <div class="copy">
+          <p>A risograph prints one ink at a time, and its inks are translucent, so wherever two of them cross, a third colour appears for free. Overprint builds Shelf from that rule. Blue prints the line work, pink prints the fills, yellow prints only what is being read aloud, and a midnight key ink prints the words. The chrome gets the full print-shop treatment: chunky expanded type in two plates slightly out of register, every photo turned into halftone dots, states stamped on like a library’s date-due slip. Inside, the Reader drops to one ink on one stock, and the only thing that moves is a yellow highlighter on the spoken word.</p>
+          <p>It suits Shelf because Shelf’s promise is a library you keep, and print is the oldest format that outlives the press that made it. A zine costs almost nothing, belongs to whoever holds it and gets passed around for decades. That is the feeling a free, account-free library should have, and it lets a deliberately plain app (a list, a page, a voice) look like something a person made by hand.</p>
+        </div>
+        <div class="infl">
+          <div class="lbl" style="padding:14px 0 4px">Influences, as techniques</div>
+          <ol>
+            <li><span class="n">01</span><div><b>Risograph zines and small-press fairs</b><span>Two drums, cheap paper and the happy accident of overprint, where two cheap inks make a third.</span></div></li>
+            <li><span class="n">02</span><div><b>Library date-due slips and rubber stamps</b><span>A state you can read from across the room, inked at a slight angle.</span></div></li>
+            <li><span class="n">03</span><div><b>Mid-century poster grotesks, set wide</b><span>One big word in an expanded heavy weight, carrying the whole page.</span></div></li>
+            <li><span class="n">04</span><div><b>Newspaper halftone and comic dot screens</b><span>Tone made of dots you can count, so any photo prints in a single ink.</span></div></li>
+            <li><span class="n">05</span><div><b>Printers’ colour bars and registration marks</b><span>The working marks at the edge of a press sheet, kept as ornament.</span></div></li>
+          </ol>
+        </div>
+      </div>
+      <div class="herort"><div class="poster" id="poster" aria-label="Poster: the concept in one print">
+        <div class="bar" id="cb-poster" aria-hidden="true"></div>
+        <div class="slug">2 inks + voice · newsprint</div>
+        <div class="sun"></div>
+        <div class="photo"><img alt="" src="https://picsum.photos/seed/shelf-atlantic/720/880" style="filter:url(#ht-l-blue-6)"><img alt="" src="https://picsum.photos/seed/shelf-atlantic/720/880" style="filter:url(#ht-l-pink-6g);transform:translate(3px,2px)"></div>
+        <div class="big mis" id="h-poster"></div>
+        <div class="cap">Save anything from your phone or browser. Read it clean and offline, or listen to it.</div>
+        <div class="icon" id="poster-icon"></div>
+      </div>
+      <div class="press" id="press"></div></div>
+    </div>
+  </section>
+
+  <!-- ============ 02 SYSTEM ============ -->
+  <section id="system">
+    <div class="sh"><span class="no">02</span><h2>The system</h2><p>Four inks, two stocks, three overprints. Every value below is written into the screens from one token object in this file.</p></div>
+
+    <div class="grid2">
+      <div class="panel light" id="sw-light">
+        <div class="lbl" style="margin-bottom:6px">Light theme · newsprint stock</div>
+        <h3 class="bh">Ink on paper</h3>
+        <div class="sws" id="sws-light"></div>
+        <div class="over" id="ov-light"></div>
+      </div>
+      <div class="panel dk dark" id="sw-dark">
+        <div class="lbl" style="margin-bottom:6px">Dark theme · black stock</div>
+        <h3 class="bh">Ink on black card</h3>
+        <div class="sws" id="sws-dark"></div>
+        <div class="over" id="ov-dark"></div>
+      </div>
+    </div>
+
+    <div style="margin-top:56px">
+      <div class="lbl" style="margin-bottom:6px">Three reading palettes · the Reader’s Aa sheet</div>
+      <h3 class="bh">One ink, one stock, nothing loud</h3>
+      <div class="grid3" id="rpals"></div>
+    </div>
+
+    <div style="margin-top:56px" class="grid2">
+      <div>
+        <div class="lbl" style="margin-bottom:6px">Type specimen · two families and a mono</div>
+        <h3 class="bh">Archivo, Newsreader, Martian Mono</h3>
+        <div class="spec" id="spec"></div>
+      </div>
+      <div>
+        <div class="lbl" style="margin-bottom:6px">Shape language</div>
+        <h3 class="bh">Die-cut corners, no shadows</h3>
+        <div class="panel light" style="padding:24px">
+          <div class="compbox" id="comps"></div>
+        </div>
+        <ul class="rules" style="margin-top:18px">
+          <li><b>Radius 3</b> on every rectangle: cards, fields, buttons, chips, the player. Circles only for play, the floating Archive and dots. Sheets keep 12 on their top corners.</li>
+          <li><b>No shadows.</b> Ink doesn’t cast them. Elevation is a change of stock: bright stock for fields, sheets and the tab bar, a 14% pink tint for cards.</li>
+          <li><b>Lines are blue, 2 px</b> for controls and 1 px for ruled lines. <b>Fills are pink.</b> Content on any fluoro fill (pink, yellow, flame) is midnight ink in every theme and palette. Blue fills only the swipe reveal, and what sits on it prints in the paper colour.</li>
+          <li><b>Out of register by 3 px</b> on the screen’s one primary and the full-size play button only. Pressing slides the blue line into register, like a stamp coming down.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div style="margin-top:56px" class="grid2">
+      <div>
+        <div class="lbl" style="margin-bottom:6px">Texture and imagery</div>
+        <h3 class="bh">Every photo is printed</h3>
+        <div class="ladder" id="ladder"></div>
+        <ul class="rules" style="margin-top:18px">
+          <li><b>No photo appears in full colour.</b> Lists print it in one ink (blue, 4 px screen). The Reader prints two plates, blue and pink, 1.5 px out of register on a 3 px screen. On black stock the plates are made from the negative, so ink lands on the highlights and the picture reads the right way round.</li>
+          <li><b>Grain is for ink areas of 24 px and up</b>: fills, stamps and display type. Never behind text below 20 px, and never on the Reader page.</li>
+          <li><b>Articles without an image get no tile</b>, as today. There are no placeholder halftones.</li>
+        </ul>
+      </div>
+      <div>
+        <div class="lbl" style="margin-bottom:6px">Icon treatment</div>
+        <h3 class="bh">Lucide, printed in the line plate</h3>
+        <div class="panel light" style="padding:24px" id="icons"></div>
+        <ul class="rules" style="margin-top:18px">
+          <li><b>Lucide at 2.25 px stroke</b>, a touch heavier so it reads as printed, plus Shelf’s own skip 15 pair and Speed read frame.</li>
+          <li><b>Icons print blue or midnight</b>, never fluoro on paper. The selected tab gets a pink ink blot behind a midnight icon, a little irregular, as if inked by hand.</li>
+          <li><b>States become stamps</b>: a short word in a double rule, set in the mono at a slight angle. They sit beside the real copy and are hidden from screen readers.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div style="margin-top:56px" class="sig">
+      <div>
+        <div class="lbl" style="margin-bottom:6px">The signature move</div>
+        <h3 class="bh" style="font-size:34px">Solid ink is where you’ve been</h3>
+        <div class="copy" style="font-size:18px">
+          <p>Every progress mark in Shelf is a row of halftone dots that fills in to solid blue as you read or listen. It runs along the bottom edge of a part-read card, under the Reader’s top bar, along the player and across Speed read, all drawn from the one stored position. Dots are still to come and solid is done, so the strip reads at a glance without a number, and it is the same idea as the thumbnails: tone is made of dots, and reading fills them in. On the yellow player the blue prints over yellow and turns olive, which is the overprint rule doing its job.</p>
+        </div>
+      </div>
+      <div class="sigdemo" id="sigdemo"></div>
+    </div>
+  </section>
+
+  <!-- ============ 03 SCREENS ============ -->
+  <section id="screens">
+    <div class="sh"><span class="no">03</span><h2>The phone</h2><p>Real size, 360 × 760, drawn in HTML and CSS from the tokens. Copy, controls and layout are the prototype’s.</p></div>
+    <div class="prow" id="row1"></div>
+    <div class="prow" id="row2"></div>
+    <div class="prow" id="row3"></div>
+  </section>
+
+  <!-- ============ 04 BEYOND ============ -->
+  <section id="beyond">
+    <div class="sh"><span class="no">04</span><h2>Beyond the phone</h2><p>The app icon among other apps, and the browser extension’s save toast on someone else’s page.</p></div>
+    <div class="grid2" style="align-items:start">
+      <div>
+        <div class="lbl" style="margin-bottom:6px">App icon · two plates, one keyline out of register</div>
+        <h3 class="bh">A pink tile you can find</h3>
+        <div class="iconplates" id="iconplates"></div>
+        <div class="copy" style="font-size:17px;margin-top:20px"><p>The bookmark on its reading-progress bar stays, so the mark keeps its meaning. The tile is the pink plate; the bookmark and bar are the blue plate overprinting it, which is why they come out violet; the cream keyline is the paper showing where the knockout missed by 3 px. Unread progress is the halftone, read progress is solid, like the strip.</p></div>
+        <div style="display:grid;gap:16px;margin-top:22px" id="homes"></div>
+      </div>
+      <div>
+        <div class="lbl" style="margin-bottom:6px">Extension · save toast on a white article page</div>
+        <h3 class="bh">Stamped as saved</h3>
+        <div class="browser" id="browser"></div>
+        <div class="copy" style="font-size:17px;margin-top:20px"><p>The house inverted toast becomes a midnight slip with a pink dot for the tick and a SAVED stamp that lands on its corner in 260 ms (a fade with reduced motion). Copy, Undo, ✕ and the eight-second countdown, now a pink bar, are unchanged. The toast keeps its shadow-root contract and still never takes focus.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 05 NOTES ============ -->
+  <section id="notes">
+    <div class="sh"><span class="no">05</span><h2>Honest notes</h2><p>What earns the noise, what could go wrong, and what it would cost to build.</p></div>
+    <div class="notes">
+      <div class="col">
+        <h3 class="bh"><span class="stamp worn" style="--sc:#3346D3">Cool</span>What is good about it</h3>
+        <ul>
+          <li><b>It is unmistakable.</b> A pink tile on the home screen and a page of halftone dots belong to nobody else among reading apps, and both survive being shrunk to a thumbnail in a store listing.</li>
+          <li><b>The rules are physical, so they are easy to keep.</b> Lines are blue, fills are pink, the voice is yellow, words are midnight. A new screen nearly designs itself, and a wrong colour looks wrong at once.</li>
+          <li><b>Variety for free.</b> Violet, flame and olive only appear where two inks cross, so the palette feels richer than four colours without anyone choosing a fifth. They are precomputed tokens, not effects.</li>
+          <li><b>Progress gets a texture.</b> The strip says “still to come” with dots and “done” with ink, on every surface, from one position.</li>
+          <li><b>The noise stops at the Reader.</b> One ink on one stock, Newsreader at 18/1.6 and at least 11.8:1 in every palette, so the twenty-minute read is untouched.</li>
+        </ul>
+      </div>
+      <div class="col">
+        <h3 class="bh"><span class="stamp worn" style="--sc:#B3151F">Risk</span>What could go wrong</h3>
+        <ul>
+          <li><b>Fatigue.</b> Fluoro ink every day can wear thin. Keep it under a sixth of the screens people live in (measured on these boards: Saves 9%, the Reader 7%, You 5%, first run 7%) and let blue do most of the work. Listen is the exception at 26%, because its Now playing card is the voice plate’s one big moment; if that tires, the card can drop to a yellow band.</li>
+          <li><b>Contrast traps.</b> Fluoro pink is 2.7:1 on paper and yellow 1.1:1, so neither may carry information alone; pink text uses dense pink (5.5:1), and the words inside a stamp print clean, with only its rules worn. Misregistered type can look like blur or double vision to some people, so the plates register (offset 0) whenever the phone’s high-contrast text or remove-animations setting is on.</li>
+          <li><b>Halftone loses detail.</b> At 72 px faces, charts and screenshots become dots. Fine for recognising a save, less fine for a chart-heavy article; the Reader’s finer two-plate screen helps, and a long-press could show the original.</li>
+          <li><b>It could read as a trend.</b> Riso was everywhere in indie design in the late 2010s, and pink with blue is its most common pair. The yellow voice plate and the stamp system are the parts that belong to Shelf, so they should be the last things cut.</li>
+          <li><b>It resets the brand.</b> Terracotta, the gradient, Soft pills and the “no blue or purple” rule all go, and the app icon starts again.</li>
+          <li><b>Screens can’t fluoresce.</b> sRGB pink is a stand-in for real fluoro ink. Display P3 values could push saturation on phones that support it.</li>
+        </ul>
+      </div>
+      <div class="col">
+        <h3 class="bh"><span class="stamp worn" style="--sc:#1E1A4A">Build</span>What it would take</h3>
+        <ul>
+          <li><b>Tokens.</b> A <span class="mono">riso</span> style in tokens.json: four inks per theme, three overprints, three reader palettes. Overprints are precomputed hex values, so most screens need no blending at all.</li>
+          <li><b>Fonts.</b> Static instances of Archivo (Expanded Black, SemiExpanded ExtraBold, SemiBold, Medium), Newsreader (Regular, Italic, SemiBold) and Martian Mono (Medium and Bold at two widths): about 1 MB of TTF through expo-font. The extension bundles them as local @font-face (its CSP forbids remote fonts); the website can use Google Fonts.</li>
+          <li><b>Halftone.</b> Either one react-native-skia runtime shader that samples each 4 px cell and draws a dot (Skia adds roughly 4 to 6 MB to the Android download), or a one-off pass in the hidden WebView’s canvas when a save is fetched, cached as a small two-colour PNG, with no new native dependency. The extension and website use the SVG filter on this board.</li>
+          <li><b>Grain.</b> One 256 px noise PNG used as a mask, through Skia or a masked view. Nothing generated at run time.</li>
+          <li><b>Misregistered type.</b> Two Text layers 2.5 px apart. The violet overlap needs mixBlendMode (React Native 0.77 and later, New Architecture, which Expo uses by default) or Skia text with a multiply blend; without either, fall back to the overlap colour alone.</li>
+          <li><b>Stamps and motion.</b> react-native-svg with the grain mask; the landing is a 260 ms Reanimated scale and rotation, opacity only with reduced motion. Press into register is a 3 px translate on press-in.</li>
+          <li><b>Spoken-word highlight.</b> A skewed yellow rectangle behind the word needs the word’s box from onTextLayout, or a Skia paragraph.</li>
+          <li><b>Effort.</b> Roughly one to two weeks over the planned component work, most of it the halftone pipeline and testing blends on cheap Android phones.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="ctwrap" id="ctwrap"></div>
+  </section>
+
+  <footer><span>Shelf · Overprint · riso study</span><span>Fonts: Archivo, Newsreader, Martian Mono (OFL, Google Fonts) · Icons: Lucide · Photos: picsum.photos</span></footer>
+</div>
+
+<script>
+/* =====================================================================
+   TOKENS: the only place a hex value for the phone is written
+   ===================================================================== */
+const T = {
+  light: {
+    paper:'#F4EFE4', 'paper-hi':'#FBF8F1', blush:'#F4D8DA', ink:'#1E1A4A', muted:'#5A5470',
+    blue:'#3346D3', pink:'#FF4DA6', 'pink-txt':'#B8106E', yellow:'#FFE600',
+    violet:'#331589', flame:'#FF4500', olive:'#333F00', red:'#B3151F', green:'#0A7A47',
+    rule:'#C9CBEA', 'on-fill':'#1E1A4A', 'mini-muted':'#4A4462', blend:'multiply'
+  },
+  dark: {
+    paper:'#15131A', 'paper-hi':'#211E28', blush:'#2E1C2B', ink:'#F2EDE3', muted:'#ABA6BA',
+    blue:'#8F9BFF', pink:'#FF5AB0', 'pink-txt':'#FF5AB0', yellow:'#FFE14A',
+    violet:'#FFBEFF', flame:'#FF4500', olive:'#333F00', red:'#FF6B6B', green:'#4CD68A',
+    rule:'#36335A', 'on-fill':'#1E1A4A', 'mini-muted':'#4A4462', blend:'screen'
+  },
+  reader: {
+    newsprint: { bg:'#F6F2E9', hi:'#FDFBF6', text:'#211F27', muted:'#5E5866', accent:'#3346D3', kicker:'#B8106E', mark:'#FFE600', 'mark-text':'#211F27', voice:'#FFE600', 'voice-fg':'#1E1A4A', 'voice-line':'#333F00', pp:'#FF4500', blend:'multiply', ht:'l' },
+    manila:    { bg:'#EADFC8', hi:'#F3EBDA', text:'#2B2219', muted:'#5E4F3C', accent:'#2E3CB5', kicker:'#A10F5F', mark:'#EAC900', 'mark-text':'#2B2219', voice:'#EAC900', 'voice-fg':'#1E1A4A', 'voice-line':'#2F3500', pp:'#FF4500', blend:'multiply', ht:'l' },
+    blackstock:{ bg:'#18161C', hi:'#24212B', text:'#D9D3C7', muted:'#A39DAF', accent:'#8F9BFF', kicker:'#FF5AB0', mark:'#FFE14A', 'mark-text':'#18161C', voice:'#24212B', 'voice-fg':'#D9D3C7', 'voice-line':'#8F9BFF', pp:'#FF5AB0', blend:'screen', ht:'d' }
+  }
+};
+const READER_NAMES = { newsprint:'Newsprint', manila:'Manila', blackstock:'Black stock' };
+
+/* write tokens to CSS */
+(function(){
+  let css = '';
+  for (const th of ['light','dark']) css += `.${th}{${Object.entries(T[th]).map(([k,v]) => `--${k}:${v}`).join(';')}}\n`;
+  for (const [id, p] of Object.entries(T.reader)) css += `[data-reader="${id}"]{${Object.entries(p).map(([k,v]) => k === 'blend' ? `--r-blend:${v}` : `--r-${k}:${v}`).join(';')}}\n`;
+  const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
+})();
+
+/* =====================================================================
+   PRINT TEXTURES: grain masks, paper fibre and halftone filters
+   ===================================================================== */
+const enc = s => 'url("data:image/svg+xml,' + encodeURIComponent(s) + '")';
+// alpha = k * noise + c, multiplied by a slow mottle so solids print a little uneven
+const grain = (k, c, mott = .25, f = .9, seed = 3) => enc(`<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n' x='0' y='0' width='100%' height='100%'><feTurbulence type='fractalNoise' baseFrequency='${f}' numOctaves='2' seed='${seed}' stitchTiles='stitch' result='hi'/><feColorMatrix in='hi' values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  ${k} 0 0 0 ${c}' result='s'/><feTurbulence type='fractalNoise' baseFrequency='.018' numOctaves='2' seed='9' stitchTiles='stitch' result='lo'/><feColorMatrix in='lo' values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  ${mott * 2} 0 0 0 ${1 - mott * .6}' result='m'/><feComposite in='s' in2='m' operator='arithmetic' k1='1' k2='0' k3='0' k4='0'/></filter><rect width='100%' height='100%' filter='url(#n)'/></svg>`);
+const fibre = enc(`<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='f'><feTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' seed='11' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .16  0 0 0 0 .12  0 0 0 0 .28  0 0 0 -.55 .36'/></filter><rect width='100%' height='100%' filter='url(#f)'/></svg>`);
+const R = document.documentElement.style;
+R.setProperty('--grain-fill', grain(-16, 12.6, .22));
+R.setProperty('--grain-soft', grain(-22, 17.4, .12));
+R.setProperty('--grain-type', grain(-24, 19, .18, 1.1));
+R.setProperty('--grain-stamp', grain(-11, 8.2, .3, .7, 5));
+R.setProperty('--fibre', fibre);
+
+// Halftone: luminance (or a channel mix) + a tiled dot cell, thresholded, then coloured as one ink with alpha.
+// neg = true makes the plate from the negative, for black stock.
+function htFilter(id, cell, hex, { neg = false, mix = [.3, .59, .11], bias = -.5, gamma = 1.35, amp = .45 } = {}){
+  const [r, g, b] = [1, 3, 5].map(i => (parseInt(hex.slice(i, i + 2), 16) / 255).toFixed(3));
+  // positive plates: ink where the photo is dark. Negative plates (black stock): ink where it is light, capped by amp.
+  const m = neg ? mix.map(v => -(v * amp).toFixed(3)) : mix;
+  const o = neg ? 1 : 0;
+  const lum = `${m[0]} ${m[1]} ${m[2]} 0 ${o}  ${m[0]} ${m[1]} ${m[2]} 0 ${o}  ${m[0]} ${m[1]} ${m[2]} 0 ${o}  0 0 0 1 0`;
+  const gam = neg ? '' : `<feComponentTransfer in="g0" result="g"><feFuncR type="gamma" exponent="${gamma}"/><feFuncG type="gamma" exponent="${gamma}"/><feFuncB type="gamma" exponent="${gamma}"/></feComponentTransfer>`;
+  const dot = `data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='${cell}' height='${cell}'><radialGradient id='r' cx='.5' cy='.5' r='.71'><stop offset='0' stop-color='#000'/><stop offset='1' stop-color='#fff'/></radialGradient><rect width='${cell}' height='${cell}' fill='url(#r)'/></svg>`)}`;
+  return `<filter id="${id}" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB" primitiveUnits="userSpaceOnUse">
+    <feColorMatrix type="matrix" values="${lum}" result="${neg ? 'g' : 'g0'}"/>${gam}
+    <feImage width="${cell}" height="${cell}" href="${dot}" result="cell"/>
+    <feTile in="cell" result="dots"/>
+    <feComposite in="g" in2="dots" operator="arithmetic" k1="0" k2="1" k3="1" k4="${bias}" result="sum"/>
+    <feComponentTransfer in="sum" result="bw"><feFuncR type="discrete" tableValues="0 1"/><feFuncG type="discrete" tableValues="0 1"/><feFuncB type="discrete" tableValues="0 1"/></feComponentTransfer>
+    <feColorMatrix in="bw" type="matrix" values="0 0 0 0 ${r}  0 0 0 0 ${g}  0 0 0 0 ${b}  -1 0 0 0 1"/>
+  </filter>`;
+}
+const BLUE_MIX = [.62, .3, .08], PINK_MIX = [.12, .78, .1];   // blue plate from the red channel, pink from the green, like a real separation
+document.getElementById('fx').innerHTML = '<defs>' + [
+  htFilter('ht-l-blue-4', 4, T.light.blue, { bias:-.47, gamma:1.12 }),
+  htFilter('ht-d-blue-4', 4, T.dark.blue, { neg:true, bias:-.5, amp:.78 }),
+  htFilter('ht-l-blue-3', 3, T.light.blue, { mix:BLUE_MIX, bias:-.48, gamma:1.05 }),
+  htFilter('ht-l-pink-3', 3, T.light.pink, { mix:PINK_MIX, bias:-.48, gamma:1.05 }),
+  htFilter('ht-m-blue-3', 3, T.reader.manila.accent, { mix:BLUE_MIX, bias:-.48, gamma:1.05 }),
+  htFilter('ht-d-blue-3', 3, T.dark.blue, { neg:true, mix:BLUE_MIX, bias:-.5, amp:.66 }),
+  htFilter('ht-d-pink-3', 3, T.dark.pink, { neg:true, mix:PINK_MIX, bias:-.5, amp:.6 }),
+  htFilter('ht-l-blue-6', 6, T.light.blue, { mix:BLUE_MIX, bias:-.47, gamma:1.1 }),
+  htFilter('ht-l-pink-6g', 6, T.light.pink, { mix:PINK_MIX, bias:-.5, gamma:1.05 }),
+  htFilter('ht-l-pink-6', 6, T.light.pink, { bias:-.5, gamma:1 }),
+  htFilter('ht-l-blue-5', 5, T.light.blue, { bias:-.47 }),
+].join('') + '</defs>';
+
+/* =====================================================================
+   ICONS (Lucide, from the prototype) and small marks
+   ===================================================================== */
+const I = {
+  search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  back:'<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+  x:'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  more:'<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  play:'<polygon points="6 3 20 12 6 21 6 3"/>',
+  pause:'<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
+  archive:'<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
+  restore:'<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
+  trash:'<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
+  ext:'<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  wifioff:'<path d="M12 20h.01"/><path d="M8.5 16.43a5 5 0 0 1 7 0"/><path d="M5 12.86a10 10 0 0 1 5.17-2.69"/><path d="M19 12.86a10 10 0 0 0-2-1.52"/><path d="M2 8.82a15 15 0 0 1 4.18-2.64"/><path d="M22 8.82a15 15 0 0 0-11.29-3.76"/><path d="m2 2 20 20"/>',
+  bookmark:'<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>',
+  headphones:'<path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/>',
+  user:'<circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  back15:'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 5v3h3"/><path stroke-width="1.5" d="M9 10.5l1.125-1.125v5.25"/><path stroke-width="1.5" d="M15 9.375h-2.25v2.25h.75a1.5 1.5 0 0 1 0 3h-.75"/>',
+  fwd15:'<path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 5v3h-3"/><path stroke-width="1.5" d="M9 10.5l1.125-1.125v5.25"/><path stroke-width="1.5" d="M15 9.375h-2.25v2.25h.75a1.5 1.5 0 0 1 0 3h-.75"/>',
+  phone:'<rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/>',
+  speedread:'<path d="M3 4h18"/><path d="M10 4v4"/><path d="M6 12h12"/><path d="M10 20v-4"/><path d="M3 20h18"/>',
+  shield:'<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+  keyboard:'<path d="M10 8h.01M12 12h.01M14 8h.01M16 12h.01M18 8h.01M6 8h.01M7 16h10M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/>',
+  chev:'<path d="m9 18 6-6-6-6"/>',
+  laptop:'<path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>',
+  settings:'<path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>',
+  alert:'<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>',
+  link:'<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  msg:'<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
+  mail:'<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
+  camera:'<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>',
+  call:'<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>',
+  clock:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  puzzle:'<path d="M19.439 7.85c-.049.322.059.648.289.878l1.568 1.568c.47.47.706 1.087.706 1.704s-.235 1.233-.706 1.704l-1.611 1.611a.98.98 0 0 1-.837.276c-.47-.07-.802-.48-.968-.925a2.501 2.501 0 1 0-3.214 3.214c.446.166.855.497.925.968a.979.979 0 0 1-.276.837l-1.61 1.61a2.404 2.404 0 0 1-1.705.707 2.402 2.402 0 0 1-1.704-.706l-1.568-1.568a1.026 1.026 0 0 0-.877-.29c-.493.074-.84.504-1.02.968a2.5 2.5 0 1 1-3.237-3.237c.464-.18.894-.527.967-1.02a1.026 1.026 0 0 0-.289-.877l-1.568-1.568A2.402 2.402 0 0 1 1.998 12c0-.617.236-1.234.706-1.704L4.23 8.77c.24-.24.581-.353.917-.303.515.077.877.528 1.073 1.01a2.5 2.5 0 1 0 3.259-3.259c-.482-.196-.933-.558-1.01-1.073-.05-.336.062-.676.303-.917l1.525-1.525A2.402 2.402 0 0 1 12 1.998c.617 0 1.234.236 1.704.706l1.568 1.568c.23.23.556.338.877.29.493-.074.84-.504 1.02-.968a2.5 2.5 0 1 1 3.237 3.237c-.464.18-.894.527-.967 1.02Z"/>',
+};
+const ic = (n, s = 20, extra = '') => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" ${/fill=/.test(extra) ? '' : 'fill="none" '}stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${I[n]}</svg>`;
+const fic = (n, s) => ic(n, s, 'fill="currentColor"');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+const mis = (txt, cls = '', tag = 'h1') => `<${tag} class="mis ${cls}"><span class="p1">${txt}</span><span class="p2" aria-hidden="true">${txt}</span></${tag}>`;
+const strip = (p, cls = '') => `<div class="strip ${cls}" aria-hidden="true"><i style="width:${p * 100}%"></i></div>`;
+const regmark = (c = '#1E1A4A') => `<svg class="regmark" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="7" fill="none" stroke="${c}" stroke-width="1.2"/><path d="M13 0v26M0 13h26" stroke="${c}" stroke-width="1.2"/><circle cx="13" cy="13" r="3" fill="${c}"/></svg>`;
+const colourbar = (sz = 18) => [T.light.pink, T.light.blue, T.light.yellow, T.light.violet, T.light.flame, T.light.olive, T.light.ink].map(c => `<i style="background:${c};width:${sz}px;height:${sz}px"></i>`).join('');
+
+/* app icon: pink plate tile, blue plate overprinting it (violet), paper keyline 3 units out of register */
+const BM = 'M41 25H67A4 4 0 0 1 71 29V64.24A1.5 1.5 0 0 1 68.68 65.5L54 56L39.32 65.5A1.5 1.5 0 0 1 37 64.24V29A4 4 0 0 1 41 25Z';
+let iconN = 0;
+function appIcon(part = 'all'){
+  const id = 'ai' + (iconN++);
+  const dots = `<pattern id="${id}d" width="4.5" height="4.5" patternUnits="userSpaceOnUse"><circle cx="2.25" cy="2.25" r="1.45" fill="${T.light.blue}"/></pattern>`;
+  const pink = `<rect width="108" height="108" fill="${T.light.pink}"/>`;
+  const blue = `<g style="mix-blend-mode:multiply"><path d="${BM}" fill="${T.light.blue}"/><rect x="30" y="70" width="32" height="9" fill="${T.light.blue}"/><rect x="62" y="70" width="16" height="9" fill="url(#${id}d)"/></g>`;
+  const key = `<g transform="translate(-3 -3)" fill="none" stroke="${T.light.paper}" stroke-width="2.4" stroke-linejoin="round"><path d="${BM}"/><rect x="30" y="70" width="48" height="9"/></g>`;
+  const body = part === 'pink' ? pink : part === 'blue' ? `<rect width="108" height="108" fill="#FBF8F1"/>${blue}` : part === 'key' ? `<rect width="108" height="108" fill="#FBF8F1"/>${key.replace(T.light.paper, '#1E1A4A')}` : pink + blue + key;
+  return `<svg viewBox="0 0 108 108" width="100%" height="100%" aria-hidden="true"><defs>${dots}</defs>${body}</svg>`;
+}
+
+/* =====================================================================
+   PHONE PARTS
+   ===================================================================== */
+const sbIcons = `<svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M1 11h2V8H1zM5 11h2V6H5zM9 11h2V3.5H9zM13 11h2V1h-2z" fill="currentColor"/></svg><svg width="15" height="12" viewBox="0 0 15 12" aria-hidden="true"><path d="M7.5 11.2 14.6 4a10 10 0 0 0-14.2 0z" fill="currentColor"/></svg><svg width="24" height="12" viewBox="0 0 24 12" aria-hidden="true"><rect x=".6" y=".6" width="20" height="10.8" rx="2.6" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".55"/><rect x="2.3" y="2.3" width="13" height="7.4" rx="1.3" fill="currentColor"/><rect x="21.6" y="4" width="1.8" height="4" rx=".8" fill="currentColor" opacity=".55"/></svg>`;
+function phone(theme, inner, cap, sub, reader){
+  return `<figure class="pfig"><figcaption>${cap}<span>${sub}</span></figcaption><div class="frame"><div class="ph ${theme}" ${reader ? `data-reader="${reader}"` : ''} role="img" aria-label="${esc(cap)}">
+    <div class="sb"><span>9:41</span><span class="sbi">${sbIcons}</span></div>
+    <div class="vp">${inner}</div>
+    <div class="gb"><i></i></div></div></div></figure>`;
+}
+function tabbar(on){
+  const t = (id, icon, label) => `<button class="tab ${on === id ? 'on' : ''}"><span class="blob inkfill">${ic(icon, 22)}</span>${label}</button>`;
+  return `<nav class="tabbar">${t('saves', 'bookmark', 'Saves')}${t('listen', 'headphones', 'Listen')}${t('you', 'user', 'You')}</nav>`;
+}
+
+const ITEMS = [
+  { id:1, src:'The Guardian', title:'The quiet return of the read-it-later app, and why it matters this time', mins:9, progress:.72, img:'shelf-guardian' },
+  { id:2, src:'Bitcoin Magazine', title:'Why relays, not servers, are the future of personal data', mins:6, progress:.34, img:'shelf-relays' },
+  { id:3, src:'Stratechery', title:'Aggregation theory, ten years on', mins:14, progress:0 },
+  { id:4, status:'browser', title:'Mozilla’s Readability library is quietly everywhere', mins:5 },
+  { id:5, status:'failed', src:'nytimes.com', title:'The Long Road Back to the Office' },
+  { id:6, src:'The Atlantic', title:'What we lose when we stop reading long things', mins:11, progress:0, img:'shelf-atlantic' },
+];
+const minsLeft = it => Math.max(1, Math.round(it.mins * (1 - it.progress)));
+const partRead = it => it.progress > 0 && it.progress < 1;
+
+function card(it){
+  let src = esc(it.src || ''), meta = '', extra = '';
+  if (it.status === 'browser') { src = `${ic('laptop', 15)}From Chrome`; meta = `<span class="pdot" aria-hidden="true"></span>Getting the text…`; }
+  else if (it.status === 'failed') { meta = `<span class="stamp sm" style="--sc:var(--red);--rot:-2deg">Couldn’t get the text</span><span class="lnk">Open original ${ic('ext', 14)}</span>`; }
+  else { meta = partRead(it) ? `<span class="hot">${minsLeft(it)} min left</span>` : `${it.mins} min`; if (partRead(it)) extra = strip(it.progress); }
+  const img = it.img ? `<img class="thumb" alt="" src="https://picsum.photos/seed/${it.img}/144/144">` : '';
+  return `<div class="card inkfill soft" style="position:relative"><div class="body"><div class="src">${src}</div><div class="ctitle">${esc(it.title)}</div><div class="meta">${meta}</div></div>${img}${extra}</div>`;
+}
+const MINI = `<div class="mini inkfill" role="region" aria-label="Player"><button class="pp inkfill" aria-label="Pause">${fic('pause', 20)}</button><div class="info"><b>Why relays, not servers, are the future of personal data</b><span>2:01 / 5:56</span></div>${strip(.34, 's3')}</div>`;
+
+function savesScreen(){
+  return `<div class="screen"><div class="scroll">
+    <div class="head">${mis('Saves', 'up')}<span class="count">6 unread</span></div>
+    <button class="search">${ic('search', 18)}Search your saves</button>
+    <div class="segs" role="tablist"><button class="seg on inkfill">Unread</button><button class="seg">Archive</button></div>
+    <div class="list">${ITEMS.map(card).join('')}</div>
+  </div>${MINI}${tabbar('saves')}</div>`;
+}
+
+const PROSE = [
+  'The first time a page disappears from the web while it is still on your list, you learn what a read-it-later app is actually for. It was never about saving time. It was about keeping the thing itself, the words, somewhere that belongs to you rather than to whoever happens to be hosting them this year.',
+  'Everything that followed was an elaboration of that one move. Sync arrived so the reading could happen somewhere other than the saving. A clean view arrived so the <span class="mk">text</span> could be read without the page fighting back. A voice arrived so the reading could happen with your hands on a steering wheel.',
+  'What never changed was the shape of the shelf: a list, newest at the top, that belonged to one person and nobody else. The services that held those lists came and went. Some were bought, some were shut, one was quietly folded into a browser and then quietly folded away again.',
+  'Relays change the arithmetic. If the list lives in several places at once, and only its owner can read it, then no single company closing its doors takes the list with it.',
+];
+function readerScreen(pal, { scroll = 392 } = {}){
+  const p = T.reader[pal], ht = p.ht;
+  const blueF = pal === 'manila' ? 'ht-m-blue-3' : `ht-${ht}-blue-3`;
+  const fig = `<div class="fig"><img alt="" src="https://picsum.photos/seed/shelf-relays/720/480" style="filter:url(#${blueF})"><img alt="" src="https://picsum.photos/seed/shelf-relays/720/480" style="filter:url(#ht-${ht}-pink-3);transform:translate(1.5px,1px)"></div>`;
+  return `<div class="screen reader">
+    <div class="rtop"><button class="ib" aria-label="Back">${ic('back', 22)}</button><div class="host">bitcoinmagazine.com</div><button class="ib aa" aria-label="Text and theme">Aa</button><button class="ib" aria-label="More">${ic('more', 22)}</button></div>
+    <div class="rbody"><div class="article" style="transform:translateY(-${scroll}px)">
+      <div class="kicker">Bitcoin Magazine</div>
+      <div class="rh1">Why relays, not servers, are the future of personal data</div>
+      <div class="by">Shinobi · 6 min · Saved yesterday</div>
+      <div class="prose">${fig}${PROSE.map(t => `<p>${t}</p>`).join('')}</div>
+    </div></div>
+    <button class="farch" aria-label="Archive">${ic('archive', 22)}</button>
+    <div class="dockp inkfill ${pal === 'blackstock' ? 'edge' : ''}" role="region" aria-label="Player"><button class="pp inkfill" aria-label="Pause">${fic('pause', 20)}</button><span class="tt">2:01 / 5:56</span>
+      <button class="ctl" aria-label="Back 15 seconds">${ic('back15', 24)}</button><button class="ctl" aria-label="Forward 15 seconds">${ic('fwd15', 24)}</button><button class="rate" aria-label="Speed 1×">1×</button>${strip(.34, 's3')}</div>
+  </div>`;
+}
+
+function listenScreen(){
+  const rows = [
+    { it:ITEMS[1], on:true },
+    { it:ITEMS[5], on:false },
+    { it:ITEMS[0], on:false },
+  ].map(({ it, on }) => `<div class="lrow inkfill soft"><button class="rp" aria-label="${on ? 'Pause' : 'Play'} ${esc(it.title)}">${fic(on ? 'pause' : 'play', 18)}</button>
+      <div class="lb"><div class="body" style="flex:1;min-width:0"><div class="src">${esc(it.src)}</div><div class="ctitle">${esc(it.title)}</div><div class="meta">${partRead(it) ? `<span class="hot">${minsLeft(it)} min left</span>` : `${it.mins} min`}</div></div>${it.img ? `<img class="thumb sm" alt="" src="https://picsum.photos/seed/${it.img}/112/112">` : ''}</div>${partRead(it) ? strip(it.progress) : ''}</div>`).join('');
+  return `<div class="screen"><div class="scroll">
+    <div class="head">${mis('Listen', 'up')}<span class="count">3 played</span></div>
+    <div class="nowcard inkfill"><div class="lbl2">Now playing</div>
+      <button class="t">Why relays, not servers, are the future of personal data</button><div class="s">Bitcoin Magazine</div>
+      ${strip(.34)}
+      <div class="times"><span>2:01</span><span>5:56</span></div>
+      <div class="controls"><button class="ctl c2" aria-label="Back 15 seconds">${ic('back15', 24)}</button><button class="pp big inkfill c3" aria-label="Pause">${fic('pause', 24)}</button><button class="ctl c4" aria-label="Forward 15 seconds">${ic('fwd15', 24)}</button><button class="rate c5" aria-label="Speed 1×">1×</button></div>
+    </div>
+    <div class="shd"><h2>Played</h2><button class="chip">${fic('play', 14)}Play all</button></div>
+    <div class="list">${rows}</div>
+  </div>${tabbar('listen')}</div>`;
+}
+
+function emptyScreen(){
+  const ring = `<svg class="ring" width="84" height="100" viewBox="0 0 92 104" preserveAspectRatio="none" style="left:116px;top:100px" aria-hidden="true"><path d="M46 6C70 4 88 22 87 50c-1 30-20 50-43 49C20 98 4 78 5 51 6 26 22 9 50 7c8-.4 15 2 19 5" fill="none" stroke="${T.light['pink-txt']}" stroke-width="3" stroke-linecap="round"/></svg>`;
+  return `<div class="screen"><div class="scroll">
+    <div class="head">${mis('Saves', 'up')}<span class="count"></span></div>
+    <div class="empty">
+      <div class="illus" aria-hidden="true"><div class="sunht"></div>
+        <div class="shs"><div class="l">Share to</div><div class="apps"><span class="app"><b></b>Messages</span><span class="app"><b></b>Mail</span><span class="app me"><b>${appIcon()}</b>Shelf</span><span class="app"><b></b>Notes</span></div></div>
+        ${ring}
+      </div>
+      ${mis('Your shelf<br>is empty', '', 'h2')}
+      <p>Share any link from any app and it lands here, cleaned up and ready to read offline.</p>
+      <button class="btn primary inkfill">${ic('laptop', 18)}Connect your browser</button>
+    </div>
+  </div>${tabbar('saves')}</div>`;
+}
+
+function youScreen(){
+  const yrow = (icon, label, value = '', opts = {}) => `<button class="yrow ${opts.danger ? 'danger' : ''} ${opts.tall ? 'tall' : ''}"><span class="yi">${ic(icon, 20)}</span><span class="yl">${label}${opts.stamp ? `<span class="stamp sm">${opts.stamp}</span>` : ''}</span>${value ? `<span class="yv">${value}</span>` : ''}<span class="chev">${ic('chev', 18)}</span></button>`;
+  return `<div class="screen"><div class="scroll">
+    <div class="head">${mis('You', 'up')}<span class="stamp datestamp">8 saves · 3 listened</span></div>
+    <div class="bcard inkfill soft"><div class="h">${ic('shield', 20)}Back up your shelf</div>
+      <p>Your saves are yours alone. A recovery code brings them back on any phone, even if this one is lost.</p>
+      <div class="row"><button class="btn secondary">Later</button><button class="btn primary inkfill">Show recovery code</button></div></div>
+    <div class="icard">${yrow('keyboard', 'Recovery code', '', { tall:true, stamp:'Not written down' })}${yrow('phone', 'Add another device')}${yrow('laptop', 'Connected browsers', '1')}</div>
+    <div class="icard">${yrow('settings', 'Advanced')}</div>
+    <div class="icard danger">${yrow('trash', 'Delete my data', '', { danger:true })}</div>
+    <div class="colophon" aria-hidden="true"><span class="colourbar">${colourbar(14)}</span>${regmark(T.light.blue)}</div>
+  </div>${tabbar('you')}</div>`;
+}
+
+/* =====================================================================
+   MOUNT THE BOARD
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+$('cb-top').innerHTML = colourbar(16);
+$('cb-poster').innerHTML = colourbar(20).replace(/height:20px/g, 'height:12px');
+$('h-name').innerHTML = mis('Overprint').replace(/^<h1 class="mis ">|<\/h1>$/g, '');
+$('h-poster').innerHTML = mis('Save<br>anything.', '', 'div').replace(/^<div class="mis ">|<\/div>$/g, '');
+$('poster-icon').innerHTML = appIcon();
+$('press').innerHTML = `<div class="lbl" style="margin-bottom:6px">The rules of the press</div>` + [
+  [T.light.blue, 'Blue prints lines', 'Rules, outlines, icons, progress, links and every photo in a list.'],
+  [T.light.pink, 'Pink prints fills', 'The one primary, live play, the selected segment and tab, stamps. Never text on paper.'],
+  [T.light.yellow, 'Yellow prints the voice', 'The player, Now playing and the spoken word. No other control or state is yellow.'],
+  [T.light.ink, 'Midnight prints words', 'All text, and anything that sits on pink, yellow or flame, in every theme.'],
+].map(([c, b, t]) => `<div class="pr"><i class="${c === T.light.ink ? '' : 'inkfill'}" style="${c === T.light.ink ? `background:${c}` : `--fill:${c}`}"></i><div><b>${b}</b><span>${t}</span></div></div>`).join('');
+['tl', 'tr', 'bl', 'br'].forEach(k => { const d = document.createElement('div'); d.className = 'rm'; d.style.cssText = `${k[0] === 't' ? 'top:6px' : 'bottom:6px'};${k[1] === 'l' ? 'left:6px' : 'right:6px'}`; d.innerHTML = regmark(); $('poster').appendChild(d); });
+
+/* swatches */
+const SW = {
+  light: [
+    ['paper', 'Newsprint', 'The stock every screen prints on'],
+    ['paper-hi', 'Bright stock', 'Fields, the tab bar, index cards, sheets'],
+    ['blush', 'Pink 14% tint', 'Article cards and the backup card'],
+    ['ink', 'Midnight key', 'Words, and content on every fluoro fill'],
+    ['muted', 'Midnight 70%', 'Meta, captions, counts'],
+    ['blue', 'Riso blue', 'Line plate: rules, outlines, icons, progress, links, photos'],
+    ['pink', 'Fluoro pink', 'Fill plate: the primary, live play, active segment and tab'],
+    ['pink-txt', 'Dense pink', 'Pink that must be read: sources, kickers, focus letter'],
+    ['yellow', 'Fluoro yellow', 'Voice plate: the player, Now playing, the spoken word'],
+    ['red', 'Signal red', 'Errors, Delete my data, the Not written down stamp'],
+  ],
+  dark: [
+    ['paper', 'Black stock', 'The dark card everything prints on'],
+    ['paper-hi', 'Raised stock', 'Fields, the tab bar, index cards, sheets'],
+    ['blush', 'Pink 12% on black', 'Article cards and the backup card'],
+    ['ink', 'White ink', 'Words; the key swaps to opaque white'],
+    ['muted', 'White ink 70%', 'Meta, captions, counts'],
+    ['blue', 'Cornflower', 'Blue mixed with white so it shows on black'],
+    ['pink', 'Fluoro pink', 'Full strength; legible as text on black'],
+    ['yellow', 'Fluoro yellow', 'The player stays yellow; Reader dock goes dark'],
+    ['on-fill', 'Midnight on fills', 'Content on pink and yellow, unchanged in dark'],
+    ['red', 'Signal red', 'Errors and Delete my data'],
+  ],
+};
+const FLUORO = ['pink', 'yellow', 'blush'];
+function lum(hex){ const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(v => v <= .04045 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4)); return .2126 * c[0] + .7152 * c[1] + .0722 * c[2]; }
+function cr(a, b){ const x = lum(a), y = lum(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05); }
+for (const th of ['light', 'dark']) {
+  $(`sws-${th}`).innerHTML = SW[th].map(([k, name, role]) => {
+    const hex = T[th][k], ratio = cr(hex, T[th].paper);
+    const SURF = ['paper', 'paper-hi', 'blush'];
+    const note = SURF.includes(k) ? `${th === 'light' ? 'midnight' : 'white ink'} ${cr(T[th].ink, hex).toFixed(1)}:1 · meta ${cr(T[th].muted, hex).toFixed(1)}:1`
+      : k === 'on-fill' ? `${cr(hex, T[th].pink).toFixed(1)}:1 on pink · ${cr(hex, T[th].yellow).toFixed(1)}:1 on yellow`
+      : ['pink', 'yellow'].includes(k) ? `${ratio.toFixed(1)}:1 on ${th === 'light' ? 'newsprint' : 'black stock'}${ratio < 3 ? ' · fill only, never text or lines' : ''} · midnight on it ${cr(T[th]['on-fill'], hex).toFixed(1)}:1`
+      : `${ratio.toFixed(1)}:1 on ${th === 'light' ? 'newsprint' : 'black stock'}`;
+    return `<div class="sw"><div class="chip edge ${FLUORO.includes(k) ? 'inkfill' : ''}" style="${FLUORO.includes(k) ? `--fill:${hex}` : `background:${hex}`}"></div><div><b>${name}</b><span class="r">${role}</span><code>${hex}</code><em>${note}</em></div></div>`;
+  }).join('');
+  const P = T[th];
+  const ov = (a, b, res, label) => `<div class="oi"><div class="ov"><i style="background:${a}"></i><i style="background:${b}"></i></div><div class="ovl"><b style="font-family:var(--f-disp);font-size:14px">${label}</b><br>${res}</div></div>`;
+  $(`ov-${th}`).style.setProperty('--blend', P.blend);
+  $(`ov-${th}`).innerHTML = th === 'light'
+    ? ov(P.pink, P.blue, `${P.violet} · display type`, 'Pink × blue = violet') + ov(P.pink, P.yellow, `${P.flame} · play on the player`, 'Pink × yellow = flame') + ov(P.blue, P.yellow, `${P.olive} · progress on the player`, 'Blue × yellow = olive')
+    : ov(P.pink, P.blue, `${P.violet} · display type`, 'Pink + cornflower = lilac') + `<div class="ovl" style="grid-column:span 2;font-family:var(--f-read);font-size:15px;line-height:1.5;font-variation-settings:normal">On black stock the inks behave like light: where two plates cross they screen and get lighter. Photos print from the negative with a ceiling on ink, so a bright picture never becomes a bright slab at night.</div>`;
+}
+
+/* reading palettes */
+$('rpals').innerHTML = Object.entries(T.reader).map(([id, p]) => {
+  const r = cr(p.text, p.bg);
+  return `<div class="rpal" data-reader="${id}" style="background:var(--r-bg);color:var(--r-text)">
+    <div class="nm"><span>${READER_NAMES[id]}</span><span class="ratio">${r.toFixed(1)}:1</span></div>
+    <div class="kicker">The Atlantic</div>
+    <div class="rh1" style="font-size:24px;margin:10px 0 8px">What we lose when we stop reading long things</div>
+    <div class="by" style="margin-bottom:14px">Megan Garber · 11 min · Saved yesterday</div>
+    <div class="prose"><p style="margin:0 0 .8em">What never changed was the shape of the shelf: a list, newest at the top, that belonged to one person and <span class="mk">nobody</span> else. <a href="#">Relays</a> change the arithmetic.</p></div>
+    ${strip(.62, 's3').replace('class="strip', 'style="--sc:var(--r-accent);margin:14px 0 16px" class="strip')}
+    <div style="font:600 12px/1.55 var(--f-mono);font-variation-settings:'wdth' 87.5;color:var(--r-muted)">bg ${p.bg} · text ${p.text} ${r.toFixed(1)}:1<br>muted ${p.muted} ${cr(p.muted, p.bg).toFixed(1)}:1 · line ${p.accent} ${cr(p.accent, p.bg).toFixed(1)}:1<br>highlight ${p.mark} · word ${cr(p['mark-text'], p.mark).toFixed(1)}:1</div>
+  </div>`;
+}).join('');
+
+/* type specimen */
+$('spec').innerHTML = [
+  ['Display XL', 'Archivo 900, width 125 · 46/0.9 · capitals, two plates · tab titles only', `<div class="light" style="--blend:multiply">${mis('Saves', 'up').replace('class="mis', 'style="font-size:46px" class="mis')}</div>`],
+  ['Display M', 'Archivo 900, width 125 · 30/1.0 · empty states and sheet headings', `<div class="light">${mis('Your shelf is empty', '', 'div').replace('class="mis', 'style="font-size:30px" class="mis')}</div>`],
+  ['Headline', 'Archivo 800, width 106 · 27/1.12 · article titles in the Reader', `<div style="font:800 27px/1.12 var(--f-disp);font-variation-settings:'wdth' 106;letter-spacing:-.012em;max-width:22ch">Why relays, not servers, are the future of personal data</div>`],
+  ['Card title', 'Archivo 650 · 16/1.28 · rows and cards, three lines at most', `<div style="font:650 16px/1.28 var(--f-ui);max-width:30ch">The quiet return of the read-it-later app, and why it matters this time</div>`],
+  ['UI', 'Archivo 500–700 · 15/1.45 and 13 · labels, buttons, body copy in the chrome', `<div style="font:600 15px/1.45 var(--f-ui)">Search your saves · Connected browsers · <span style="font-weight:700">Connect your browser</span></div>`],
+  ['Meta and stamps', 'Martian Mono 500–800, width 75–87 · 13 · times, counts, sources, stamps', `<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;white-space:nowrap;font:500 13px/1 var(--f-mono);font-variation-settings:'wdth' 87.5"><span style="color:${T.light['pink-txt']};font-weight:700;font-variation-settings:'wdth' 78;letter-spacing:.03em">BITCOIN MAGAZINE</span><span style="color:${T.light.blue};font-weight:800">4 min left</span><span>2:01 / 5:56</span><span class="stamp" style="--sc:${T.light.pink}">Saved</span></div>`],
+  ['Reading', 'Newsreader 400, optical size auto · 18/1.6, 17–19 in Aa · 20 px gutter', `<div style="font:400 18px/1.6 var(--f-read);max-width:36ch">The first time a page disappears from the web while it is still on your list, you learn what a read-it-later app is actually for.</div>`],
+].map(([n, m, s]) => `<div class="tr"><div class="meta"><b>${n}</b>${m}</div><div>${s}</div></div>`).join('');
+
+/* components */
+$('comps').innerHTML = `<div class="light" style="display:contents;--blend:multiply">
+  <div class="c"><span class="lbl">Primary · rest</span><button class="btn primary inkfill">${ic('laptop', 18)}Connect your browser</button></div>
+  <div class="c"><span class="lbl">Primary · pressed</span><button class="btn primary inkfill pressed">${ic('laptop', 18)}Connect your browser</button></div>
+  <div class="c"><span class="lbl">Secondary</span><button class="btn secondary">Later</button></div>
+  <div class="c"><span class="lbl">Segments</span><div style="display:flex;gap:8px"><button class="seg on inkfill">Unread</button><button class="seg">Archive</button></div></div>
+  <div class="c"><span class="lbl">Chip · speed</span><div style="display:flex;gap:8px;align-items:center;color:var(--ink)"><button class="chip">${fic('play', 14)}Play all</button><span class="rate">1.2×</span></div></div>
+  <div class="c"><span class="lbl">Play 48 · 60 · Archive 52</span><div style="display:flex;gap:12px;align-items:center"><span class="pp inkfill" style="--fill:var(--pink)">${fic('play', 20)}</span><span class="pp big inkfill" style="--fill:var(--pink);--ringc:var(--blue)">${fic('pause', 24)}</span><span class="farch" style="position:relative;right:auto;bottom:auto;--r-hi:${T.light['paper-hi']};--r-accent:${T.light.blue}">${ic('archive', 22)}</span></div></div>
+  <div class="c" style="flex-basis:100%"><span class="lbl">States as stamps</span><div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;padding:4px 0">
+    <span class="stamp" style="--sc:${T.light.pink};--rot:-5deg">Saved</span>
+    <span class="stamp" style="--sc:${T.light.blue};--rot:2deg">Archived</span>
+    <span class="stamp" style="--sc:${T.light.ink};--rot:-2deg">${ic('wifioff', 14)}&nbsp;Offline</span>
+    <span class="stamp" style="--sc:${T.light.blue};--rot:-3deg">Played</span>
+    <span class="stamp" style="--sc:${T.light.green};--rot:3deg">All read</span>
+    <span class="stamp" style="--sc:${T.light.red};--rot:-2deg">Not written down</span></div></div>
+  <div class="c" style="flex-basis:100%"><span class="lbl">Swipe an archived card · the blue plate shows through</span>
+    <div style="position:relative;width:100%;max-width:440px;height:104px;border-radius:3px;overflow:hidden">
+      <div class="inkfill" style="--fill:${T.light.blue};position:absolute;inset:0;border-radius:3px;display:flex;align-items:center;justify-content:flex-start;padding-left:16px;color:${T.light.paper}"><span class="stamp" style="--sc:${T.light.paper};--rot:-4deg">${ic('restore', 14)}&nbsp;Back to Unread</span></div>
+      <div class="card inkfill" style="--fill:${T.light.blush};position:absolute;inset:0;left:178px;right:-178px;margin:0;width:auto"><div class="body"><div class="src">Aeon</div><div class="ctitle" style="-webkit-line-clamp:2">The case for boring technology in an age of constant upgrades</div><div class="meta">18 min</div></div></div>
+    </div></div>
+</div>`;
+
+/* halftone ladder */
+const L = 'https://picsum.photos/seed/shelf-wired/320/320';
+$('ladder').innerHTML = [
+  ['Source', `<img alt="" src="${L}">`, ''],
+  ['One ink · lists', `<img alt="" src="${L}" style="filter:url(#ht-l-blue-4);mix-blend-mode:multiply">`, `background:${T.light.blush}`],
+  ['Two plates · Reader', `<img alt="" src="${L}" style="filter:url(#ht-l-blue-3);mix-blend-mode:multiply"><img alt="" src="${L}" style="filter:url(#ht-l-pink-3);mix-blend-mode:multiply;transform:translate(1.5px,1px)">`, `background:${T.reader.newsprint.bg}`],
+  ['Black stock · negative', `<img alt="" src="${L}" style="filter:url(#ht-d-blue-3);mix-blend-mode:screen"><img alt="" src="${L}" style="filter:url(#ht-d-pink-3);mix-blend-mode:screen;transform:translate(1.5px,1px)">`, `background:${T.reader.blackstock.bg}`],
+].map(([n, im, bg]) => `<div class="st"><div class="im" style="${bg}">${im}</div><span class="lbl">${n}</span></div>`).join('');
+
+/* icons */
+const ICONROW = ['bookmark', 'headphones', 'user', 'search', 'archive', 'restore', 'back15', 'fwd15', 'speedread', 'laptop', 'shield', 'trash'];
+$('icons').innerHTML = `<div class="light" style="display:flex;flex-wrap:wrap;gap:18px 22px;align-items:center;color:${T.light.blue}">
+  ${ICONROW.map(n => `<span style="display:inline-flex;width:28px;justify-content:center">${ic(n, 24)}</span>`).join('')}
+  </div><div class="light" style="display:flex;gap:28px;align-items:center;margin-top:22px;padding-top:18px;border-top:1px solid #1E1A4A22">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:4px;font:700 13px/1 var(--f-ui);color:${T.light.ink}"><span class="blob inkfill" style="--fill:${T.light.pink};width:56px;height:30px;display:inline-flex;align-items:center;justify-content:center;border-radius:46% 54% 42% 58% / 58% 48% 52% 42%;color:${T.light.ink}">${ic('bookmark', 22)}</span>Saves</div>
+  <div style="display:flex;flex-direction:column;align-items:center;gap:4px;font:700 13px/1 var(--f-ui);color:${T.light.blue}"><span style="width:56px;height:30px;display:inline-flex;align-items:center;justify-content:center">${ic('headphones', 22)}</span>Listen</div>
+  <span class="lbl" style="max-width:30ch;text-transform:none;letter-spacing:0;font-size:12px">Selected tab: a pink blot, a midnight icon. Others: blue on bright stock.</span></div>`;
+
+/* signature demo */
+const ctx = (label, body) => `<div class="ctx light"><span class="lbl">${label}</span>${body}</div>`;
+$('sigdemo').innerHTML = `
+  ${[[0, 'Unread', '14 min'], [.34, 'Part read', '4 min left'], [.72, 'Nearly done', '3 min left'], [1, 'Finished', 'end card']].map(([p, a, b]) => `<div class="srow light"><span>${a}</span>${strip(p).replace('class="strip ', 'class="strip " style="height:8px;--sp:7px"')}<span style="color:${T.light.blue};font-weight:800">${b}</span></div>`).join('')}
+  <div class="ctxs">
+    ${ctx('Card edge', `<div style="font:650 13px/1.25 var(--f-ui)">Why relays, not servers…</div><div style="font:800 13px/1 var(--f-mono);font-variation-settings:'wdth' 87.5;color:${T.light.blue}">4 min left</div><div style="position:absolute;left:0;right:0;bottom:0">${strip(.34)}</div>`)}
+    ${ctx('Reader line', `<div style="display:flex;justify-content:space-between;color:${T.light.ink}">${ic('back', 16)}<span style="font:500 11px/1 var(--f-mono);font-variation-settings:'wdth' 75;flex:1;min-width:0;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 4px">bitcoinmagazine.com</span>${ic('more', 16)}</div>${strip(.34, 's3')}<div style="font:400 13px/1.5 var(--f-read);color:${T.reader.newsprint.text}">Sync arrived so the reading could happen…</div>`)}
+    ${ctx('Player', `<div class="inkfill" style="--fill:${T.light.yellow};border-radius:3px;padding:12px 10px 10px;color:${T.light.ink};font:500 12px/1 var(--f-mono);font-variation-settings:'wdth' 80;white-space:nowrap;display:flex;flex-direction:column;gap:10px"><span>2:01 / 5:56</span>${strip(.34, 's3').replace('class="strip', `style="--sc:${T.light.olive}" class="strip`)}</div>`)}
+    ${ctx('Speed read', `<div style="text-align:center;font:600 24px/1 var(--f-read);color:${T.reader.newsprint.text};letter-spacing:.01em">re<span style="color:${T.light['pink-txt']}">a</span>ding</div>${strip(.34, 's3')}<div style="font:500 12px/1 var(--f-mono);text-align:center">300 wpm</div>`)}
+  </div>`;
+
+/* phones */
+$('row1').innerHTML =
+  phone('light', savesScreen(), 'Saves', 'Unread, populated, player running') +
+  phone('light', readerScreen('newsprint'), 'Reader', 'Newsprint, mid-article, docked and playing', 'newsprint') +
+  phone('light', listenScreen(), 'Listen', 'Now playing');
+$('row2').innerHTML =
+  phone('light', emptyScreen(), 'Saves · first run', 'Empty state') +
+  phone('light', youScreen(), 'You', 'The settings screen') +
+  `<div class="pnote"><span class="lbl">How the boring screens get good</span><div class="copy">
+    <p><b style="font-family:var(--f-disp)">The empty state is a poster.</b> The share sheet is drawn as a two-ink diagram, Shelf’s tile is circled in marker, a halftone sun sits behind it and the heading prints in two plates. The copy and the single button are the prototype’s.</p>
+    <p><b style="font-family:var(--f-disp)">You becomes a library card.</b> Each group is an index card with a pink header rule, a margin line and blue ruled lines. The counts are a date stamp in the corner, “Not written down” is a red stamp you notice without reading, and Delete my data gets a red header rule of its own. A printer’s colour bar closes the page like the back of a zine. Same rows, same order, same words.</p>
+    <p><b style="font-family:var(--f-disp)">Lists stay scannable.</b> Every card has the same tint, the same type and the same place for the photo, so the loud parts are the header, the photos and the one active control. Measured on these boards, fluoro ink covers 9% of Saves, 7% of the Reader and 5% of You. Listen runs to 26%, because the Now playing card is the one place yellow is allowed to be big.</p>
+  </div></div>`;
+$('row3').innerHTML =
+  phone('dark', savesScreen(), 'Saves · dark', 'Black stock') +
+  phone('dark', readerScreen('blackstock'), 'Reader · dark', 'Black stock palette, same moment', 'blackstock') +
+  `<div class="pnote"><span class="lbl">How dark mode works for ink on paper</span><div class="copy">
+    <p><b style="font-family:var(--f-disp)">It is printed on black card.</b> On dark stock only opaque inks show, so the key becomes a warm white ink, blue is mixed with white to a cornflower that still reads (7.3:1), and fluoro pink and yellow stay at full strength.</p>
+    <p><b style="font-family:var(--f-disp)">Overlaps get lighter.</b> Where two plates cross they screen instead of multiplying, so the display type glows lilac at its overlap, the way coloured light does.</p>
+    <p><b style="font-family:var(--f-disp)">Photos print from the negative.</b> Ink lands on the highlights, so a picture still reads the right way round in dots of cornflower and pink.</p>
+    <p><b style="font-family:var(--f-disp)">The player stays yellow in the chrome</b>, because it is the one thing you need to find. Inside the black-stock Reader the dock goes dark with a yellow top rule, so nothing bright sits under the page at night.</p>
+  </div></div>`;
+
+/* beyond: icon */
+$('iconplates').innerHTML = `
+  <div class="pl"><div class="t">${appIcon('pink')}</div><span class="lbl">Pink plate</span></div><span class="op">+</span>
+  <div class="pl"><div class="t">${appIcon('blue')}</div><span class="lbl">Blue plate</span></div><span class="op">+</span>
+  <div class="pl"><div class="t">${appIcon('key')}</div><span class="lbl">Paper keyline</span></div><span class="op">=</span>
+  <div class="pl"><div class="t" style="border-radius:50%">${appIcon()}</div><span class="lbl">Shelf</span></div>`;
+const homeApp = (label, inner, bg) => `<div class="app"><span class="ic" style="background:${bg}">${inner}</span>${label}</div>`;
+const homeRow = (fg) => [
+  homeApp('Phone', `<span style="color:#fff">${ic('call', 24)}</span>`, '#5E7A6A'),
+  homeApp('Messages', `<span style="color:#fff">${ic('msg', 24)}</span>`, '#5A6E92'),
+  homeApp('Shelf', appIcon(), 'transparent'),
+  homeApp('Camera', `<span style="color:#fff">${ic('camera', 24)}</span>`, '#5D5A66'),
+  homeApp('Clock', `<span style="color:#fff">${ic('clock', 24)}</span>`, '#7A6A5E'),
+].join('');
+$('homes').innerHTML = `
+  <div class="home" style="background:radial-gradient(120% 140% at 10% 0%,#F3EEF8 0,#E7E1EF 45%,#F1E6DC 100%);color:#2A2633">${homeRow()}</div>
+  <div class="home" style="background:radial-gradient(120% 140% at 90% 0%,#2D2547 0,#17142A 55%,#0E0D16 100%);color:#ECE8F4">${homeRow()}</div>
+  <div style="display:flex;gap:18px;align-items:center;margin-top:4px"><span class="lbl">Small sizes</span>
+    ${[48, 32, 24, 16].map(s => `<span style="width:${s}px;height:${s}px;border-radius:${s > 24 ? '50%' : '4px'};overflow:hidden;display:inline-block">${appIcon()}</span>`).join('')}
+    <span class="lbl" style="text-transform:none;letter-spacing:0">48 launcher · 32 and 24 notifications · 16 browser toolbar</span></div>`;
+
+/* beyond: browser with the toast */
+$('browser').innerHTML = `
+  <div class="chrome"><div class="tabs"><div class="bt"><i></i>What we lose when we stop reading long things</div></div>
+    <div class="addr"><span class="tb">${ic('back', 16)}</span><span class="tb">${ic('restore', 16)}</span><div class="url">theatlantic.com/ideas/archive/2026/09/reading-long-things</div>
+      <span class="tb">${ic('puzzle', 16)}</span><span class="tb shelf"><span style="width:18px;height:18px;border-radius:4px;overflow:hidden;display:inline-block">${appIcon()}</span></span></div></div>
+  <div class="page"><div class="site">
+    <div class="k">Ideas</div>
+    <h1>What we lose when we stop reading long things</h1>
+    <div class="b">By Megan Garber</div>
+    <p>The first time a page disappears from the web while it is still on your list, you learn what a read-it-later app is actually for. It was never about saving time. It was about keeping the thing itself, the words, somewhere that belongs to you rather than to whoever happens to be hosting them this year.</p>
+    <p>Everything that followed was an elaboration of that one move. Sync arrived so the reading could happen somewhere other than the saving. A clean view arrived so the text could be read without the page fighting back.</p>
+    <p>What never changed was the shape of the shelf: a list, newest at the top, that belonged to one person and nobody else.</p>
+  </div>
+  <div class="xtoast" role="status"><span class="stamp worn stampland" aria-hidden="true">Saved</span>
+    <div class="row"><span class="ti inkfill">${ic('check', 18)}</span><div class="tx"><b>Saved to Shelf</b><span>What we lose when we stop reading long things</span></div><button class="act">Undo</button><button class="x" aria-label="Dismiss">${ic('x', 18)}</button></div>
+    <div class="timer"></div></div>
+  </div>`;
+
+/* contrast tables, measured from T */
+const pairs = {
+  'Light theme · newsprint': [
+    ['Body and titles', T.light.ink, T.light.paper, 4.5], ['Titles on a card', T.light.ink, T.light.blush, 4.5], ['Text on bright stock', T.light.ink, T.light['paper-hi'], 4.5],
+    ['Meta on paper', T.light.muted, T.light.paper, 4.5], ['Meta on a card', T.light.muted, T.light.blush, 4.5], ['Source on a card', T.light['pink-txt'], T.light.blush, 4.5],
+    ['Min left, links on a card', T.light.blue, T.light.blush, 4.5], ['Tab labels, outlines', T.light.blue, T.light['paper-hi'], 4.5], ['Midnight on pink', T.light['on-fill'], T.light.pink, 4.5],
+    ['Midnight on yellow', T.light['on-fill'], T.light.yellow, 4.5], ['Player time on yellow', T.light['mini-muted'], T.light.yellow, 4.5], ['Icon on flame play', T.light['on-fill'], T.light.flame, 3],
+    ['Olive line on yellow', T.light.olive, T.light.yellow, 3], ['Violet display type', T.light.violet, T.light.paper, 3], ['Red stamp, Delete', T.light.red, T.light['paper-hi'], 4.5], ['Red stamp on a card', T.light.red, T.light.blush, 4.5],
+    ['Dense pink on paper', T.light['pink-txt'], T.light.paper, 4.5], ['Icons, search glyph', T.light.blue, T.light.paper, 3], ['Placeholder in a field', T.light.muted, T.light['paper-hi'], 4.5],
+    ['Toast text, Undo', T.light.paper, T.light.ink, 4.5], ['Toast sub-line', '#C9C4DD', T.light.ink, 4.5], ['Countdown on toast', T.light.pink, T.light.ink, 3],
+    ['Paper on blue, swipe reveal', T.light.paper, T.light.blue, 4.5], ['Fluoro pink on paper', T.light.pink, T.light.paper, 0], ['Fluoro yellow on paper', T.light.yellow, T.light.paper, 0],
+  ],
+  'Dark theme · black stock': [
+    ['Body and titles', T.dark.ink, T.dark.paper, 4.5], ['Titles on a card', T.dark.ink, T.dark.blush, 4.5], ['Text on raised stock', T.dark.ink, T.dark['paper-hi'], 4.5],
+    ['Meta on paper', T.dark.muted, T.dark.paper, 4.5], ['Meta on a card', T.dark.muted, T.dark.blush, 4.5], ['Source on a card', T.dark['pink-txt'], T.dark.blush, 4.5],
+    ['Min left on a card', T.dark.blue, T.dark.blush, 4.5], ['Tab labels', T.dark.blue, T.dark['paper-hi'], 4.5], ['Midnight on pink', T.dark['on-fill'], T.dark.pink, 4.5],
+    ['Midnight on yellow', T.dark['on-fill'], T.dark.yellow, 4.5], ['Icon on flame play', T.dark['on-fill'], T.dark.flame, 3], ['Lilac display overlap', T.dark.violet, T.dark.paper, 3],
+    ['Red, Delete my data', T.dark.red, T.dark['paper-hi'], 4.5], ['Red stamp on a card', T.dark.red, T.dark.blush, 4.5], ['Player time on yellow', T.dark['mini-muted'], T.dark.yellow, 4.5], ['Paper on cornflower, swipe', T.dark.paper, T.dark.blue, 4.5],
+  ],
+  'Reading palettes (body needs 7:1)': Object.entries(T.reader).flatMap(([id, p]) => [
+    [`${READER_NAMES[id]} body`, p.text, p.bg, 7], [`${READER_NAMES[id]} meta`, p.muted, p.bg, 4.5], [`${READER_NAMES[id]} kicker`, p.kicker, p.bg, 4.5],
+    [`${READER_NAMES[id]} spoken word`, p['mark-text'], p.mark, 7], [`${READER_NAMES[id]} reading line`, p.accent, p.bg, 3], [`${READER_NAMES[id]} dock text`, p['voice-fg'], p.voice, 4.5],
+  ]),
+};
+$('ctwrap').innerHTML = `<div class="lbl" style="margin-bottom:12px;column-span:all">Contrast, measured from the tokens above (WCAG 2.x relative luminance)</div>` + Object.entries(pairs).map(([h, rows]) => `<table class="ct"><thead><tr><th>${h}</th><th>Sample</th><th>Ratio</th><th>Needs</th></tr></thead><tbody>${rows.map(([n, fg, bg, need]) => { const r = cr(fg, bg); const ok = need === 0 ? null : r >= need; return `<tr><td>${n}</td><td class="sw2"><span style="background:${bg};color:${fg};box-shadow:inset 0 0 0 1px #1E1A4A1A">Aa ${fg}</span></td><td><b>${r.toFixed(2)}</b></td><td class="${ok === null ? '' : ok ? 'ok' : 'no'}">${need === 0 ? 'decorative only' : `${need}:1 ${ok ? 'pass' : 'FAIL'}`}</td></tr>`; }).join('')}</tbody></table>`).join('');
+window.__contrast = pairs;
+</script>
+</body>
+</html>

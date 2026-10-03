@@ -41,6 +41,12 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .scroll::-webkit-scrollbar{display:none}
 .gesturebar{height:16px;flex:none;display:flex;align-items:center;justify-content:center;background:var(--surface)}
 .gesturebar i{width:108px;height:4px;border-radius:var(--radius-pill);background:var(--text);opacity:.35}
+/* embedded in the design study's side-by-side: the phone alone, 360 x 760 at the top centre */
+html.embed body{margin:0;background:transparent}
+html.embed .panel{display:none}
+html.embed .stage{padding:32px 0}
+html.embed .phone{height:760px}
+html.embed .gesturebar{display:none}
 
 /* tab bar */
 .tabbar{height:64px;flex:none;display:flex;background:var(--surface);border-top:1px solid var(--line)}
@@ -2548,6 +2554,20 @@ document.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => {
 });
 
 render();
+
+/* Deep links: prototype.html#play opens that panel state, and #mini-dark opens it in the dark theme.
+   Inside an iframe (the design study's side-by-side) the side panel is hidden. */
+(function(){
+  if (window.self !== window.top) document.documentElement.classList.add('embed');
+  const go = () => {
+    const h = decodeURIComponent(location.hash.slice(1)); if (!h) return;
+    const dark = /-dark$/.test(h), b = document.querySelector(`[data-jump="${CSS.escape(dark ? h.slice(0, -5) : h)}"]`);
+    if (!b) return;
+    document.querySelector(`[data-theme-set="${dark ? 'dark' : 'light'}"]`).click();
+    b.click();
+  };
+  go(); window.addEventListener('hashchange', go);
+})();
 </script>
 </body>
 </html>
