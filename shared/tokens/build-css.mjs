@@ -32,6 +32,7 @@ const block = (selector, vars, indent = '') =>
 
 const ty = t.type;
 const rf = t.shadow.float.reader;
+const kebab = (k) => k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
 const ms = (m) => `${m.duration}ms ${m.easing}`;
 const pct = (o) => `${Math.round(o * 100)}%`;
 
@@ -74,15 +75,28 @@ const staticVars = [
   `--font-display-stretch: ${ty.display.stretch};`,
   `--font-display-weight: ${ty.display.weight};`,
   `--font-display-tracking: ${ty.display.letterSpacing};`,
+  `--font-article-title: ${ty.articleTitle.stack};`,
+  `--font-article-title-stretch: ${ty.articleTitle.stretch};`,
+  `--font-article-title-weight: ${ty.articleTitle.weight};`,
+  `--font-article-title-tracking: ${ty.articleTitle.letterSpacing};`,
   `--font-mono: ${ty.mono.stack};`,
+  `--font-mono-weight: ${ty.mono.weight};`,
   `--font-mono-tracking: ${ty.mono.letterSpacing};`,
   `--font-reader: ${ty.reader.stack};`,
   ...ty.ui.sizes.map((s) => `--text-${s}: ${s}px;`),
   `--leading-ui: ${ty.ui.lineHeight};`,
   `--leading-display: ${ty.display.lineHeight};`,
-  ...Object.entries(ty.ui.weights).map(([k, v]) => `--weight-${k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}: ${v};`),
+  `--leading-article-title: ${ty.articleTitle.lineHeight};`,
+  ...Object.entries(ty.ui.weights).map(([k, v]) => `--weight-${kebab(k)}: ${v};`),
   `--reader-size: ${ty.reader.size}px;`,
   `--reader-leading: ${ty.reader.lineHeight};`,
+  // Literata's optical sizes are fixed (tokens 1.0.1): set font-variation-settings: 'opsz' from these, not font-optical-sizing: auto.
+  `--reader-opsz: ${ty.reader.opticalSize};`,
+  ...Object.entries(ty.reader.weights).map(([k, v]) => `--reader-weight-${kebab(k)}: ${v};`),
+  `--reader-word-size: ${ty.reader.word.size}px;`,
+  `--reader-word-leading: ${ty.reader.word.lineHeight};`,
+  `--reader-word-opsz: ${ty.reader.word.opticalSize};`,
+  ...Object.entries(ty.reader.word.weights).map(([k, v]) => `--reader-word-weight-${kebab(k)}: ${v};`),
   ...t.space.map((s) => `--space-${s}: ${s}px;`),
   `--gap-card: ${t.gap.card}px;`,
   `--radius: ${t.radius.container}px;`,

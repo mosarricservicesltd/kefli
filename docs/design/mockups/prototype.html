@@ -237,9 +237,11 @@ svg .arc{transform-box:view-box;transform-origin:center}
 .article .band .cv{border-radius:0}
 .article .band .cv::after{box-shadow:inset 0 -1px 0 var(--cover-edge)}
 .article .kicker{font-size:var(--text-13);font-weight:var(--weight-meta);color:var(--reader-muted);margin-bottom:var(--space-8)}
-.article h1{font-family:var(--font-ui);font-size:var(--text-28);line-height:var(--leading-display);font-weight:var(--font-display-weight);letter-spacing:-.022em;margin:0 0 var(--space-12)}
+.article h1{font-family:var(--font-article-title);font-stretch:var(--font-article-title-stretch);font-size:var(--text-28);line-height:var(--leading-article-title);font-weight:var(--font-article-title-weight);letter-spacing:var(--font-article-title-tracking);margin:0 0 var(--space-12)}
 .article .by{font-size:var(--text-13);color:var(--reader-muted);margin-bottom:var(--space-24)}
-.article .prose{font-family:var(--font-reader);line-height:var(--reader-leading);font-optical-sizing:auto}
+/* Literata's optical size is fixed (tokens 1.0.1, decision 92): article text at opsz 18 whatever the Aa size, as the app's
+   static cut is; at the default 18 px this is what automatic optical sizing gave */
+.article .prose{font-family:var(--font-reader);line-height:var(--reader-leading);font-weight:var(--reader-weight-regular);font-variation-settings:"opsz" var(--reader-opsz)}
 .article .prose p{margin:0 0 1em}
 /* links keep the reading colour; the underline takes the article's ink */
 .article .prose a{color:var(--reader-link);text-decoration:underline;text-decoration-color:var(--reader-ink);text-decoration-thickness:2px;text-underline-offset:4px}
@@ -274,7 +276,15 @@ svg .arc{transform-box:view-box;transform-origin:center}
 .iab .bar .u{flex:1;min-width:0;font-size:var(--text-13);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .iab .bar .u b{display:block;font-size:var(--text-15);font-weight:var(--weight-title);color:var(--text);overflow:hidden;text-overflow:ellipsis}
 .iab .notice{margin:var(--space-12) var(--gutter)}
-.iab .scroll{background:#FFFFFF}
+/* the page area: the drawn web page on its own white; while it loads, the Reader's skeleton under the bar (decision 81);
+   a page that won't load, or no connection, leaves it empty under the notice */
+.iab .iabin{flex:1;min-height:0;display:flex;flex-direction:column}
+.iab .web{background:#FFFFFF;min-height:100%}
+.iab .banner{margin:var(--space-12) var(--gutter)}
+.iab .iabslot{margin:var(--space-12) var(--gutter) 0}
+.iab .iabslot .errline{margin-bottom:var(--space-12)}
+.iab .skels{padding:var(--space-16) var(--gutter)}
+.iab .skel{background:color-mix(in srgb, var(--muted) 18%, transparent)}
 .fakepage{padding:var(--space-16) var(--space-16) 156px}
 .fakepage .l{height:10px;border-radius:4px;background:#E9EAEB;margin-bottom:10px}
 .fakepage .h{height:22px;width:85%;border-radius:4px;background:#D5D7DA;margin-bottom:16px}
@@ -298,6 +308,7 @@ svg .arc{transform-box:view-box;transform-origin:center}
 .saveditem .cv{--s:48px;border-radius:var(--radius-control)}
 .saveditem .t{font-weight:var(--weight-title);line-height:1.35}
 .saveditem .s{font-size:var(--text-13);color:var(--muted)}
+.saveditem .t.url{color:var(--muted);font-weight:var(--weight-meta);overflow-wrap:anywhere}
 .sheet .row{display:flex;gap:var(--space-8)}
 .sheet .row .btn{flex:1}
 .check{width:28px;height:28px;border-radius:var(--radius-pill);background:var(--success);color:var(--on-fill);display:inline-flex;align-items:center;justify-content:center;flex:none}
@@ -332,6 +343,8 @@ svg .arc{transform-box:view-box;transform-origin:center}
    lights and clears in one frame with the voice (motion.instant). */
 .w{border-radius:3px}
 .w.on{background:var(--reader-highlight);box-shadow:0 0 0 2px var(--reader-highlight)}
+/* a voice with no word timing marks the whole sentence (decision 91 (h)): one wash per sentence, each of its lines rounded */
+.w.sent{-webkit-box-decoration-break:clone;box-decoration-break:clone}
 
 /* the article's face on a play button: its cover at 48 with a 30 px fill disc on it (compact tiers and Listen rows) */
 .ppc{width:48px;height:48px;border-radius:var(--radius-control);position:relative;flex:none;display:block;padding:0}
@@ -345,8 +358,8 @@ svg .arc{transform-box:view-box;transform-origin:center}
 .mini{position:absolute;left:var(--gutter);right:var(--gutter);bottom:72px;height:64px;z-index:20;border-radius:var(--radius);background:var(--surface);color:var(--text);box-shadow:var(--shadow-float);display:flex;align-items:center;gap:var(--space-12);padding:0 var(--space-8);overflow:hidden;text-align:left}
 .mini .info{flex:1;min-width:0;text-align:left;color:inherit;align-self:stretch;display:flex;flex-direction:column;justify-content:center;gap:2px}
 .mini .info b{display:block;font-size:var(--text-13);font-weight:var(--weight-title);line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-/* player clocks are the one job for Martian Mono, so the digits never shuffle */
-.mini .info span,.pdock .tt,.times{font-family:var(--font-mono);font-size:var(--text-13);font-weight:var(--weight-meta);letter-spacing:var(--font-mono-tracking);line-height:1.3}
+/* player clocks and the word meter's minute numerals are Martian Mono's only jobs, so the digits never shuffle */
+.mini .info span,.pdock .tt,.times{font-family:var(--font-mono);font-size:var(--text-13);font-weight:var(--font-mono-weight);letter-spacing:var(--font-mono-tracking);line-height:1.3}
 .mini .info span{color:var(--muted)}
 .mini .line{position:absolute;left:28px;right:28px;bottom:5px;height:2px;border-radius:var(--radius-pill);background:color-mix(in srgb, var(--muted) 25%, transparent);overflow:hidden}
 .mini .line i{border-radius:var(--radius-pill);background:var(--ink,var(--text))}
@@ -379,7 +392,7 @@ svg .arc{transform-box:view-box;transform-origin:center}
 .nowcard .art > .cv{border-radius:0}
 .nowcard .art > .cv::after{box-shadow:inset 0 -1px 0 var(--cover-edge)}
 .nowcard .in{position:relative;padding:14px var(--space-16) var(--space-12)}
-.nowcard .lbl{font-size:var(--text-13);font-weight:600;color:var(--muted);margin-bottom:6px;padding-right:48px}
+.nowcard .lbl{font-size:var(--text-13);font-weight:var(--weight-group-label);color:var(--muted);margin-bottom:6px;padding-right:48px}
 .nowcard .pclose{position:absolute;top:4px;right:4px}
 .nowcard .t{display:block;width:100%;text-align:left;font-size:var(--text-17);font-weight:var(--weight-heading);line-height:1.3;letter-spacing:-.01em;margin-bottom:var(--space-4);min-height:48px}
 .nowcard .s{font-size:var(--text-13);color:var(--muted);margin-bottom:var(--space-12)}
@@ -497,7 +510,7 @@ svg .arc{transform-box:view-box;transform-origin:center}
 /* a field's error edge is a layer over its own edge that fades in and out (motion.quick); nothing shakes */
 .cfw{position:relative;display:block}
 .ering{position:absolute;inset:0;border:1px solid var(--error);border-radius:var(--radius-button);pointer-events:none;opacity:0;transition:opacity var(--motion-quick-out)}
-.bad + .ering,.wf.bad > .ering{opacity:1;transition:opacity var(--motion-quick-in)}
+.bad + .ering,.wf.bad > .ering,.field1.bad > .ering{opacity:1;transition:opacity var(--motion-quick-in)}
 .cfw + .fielderr{margin-top:var(--space-8)}
 /* an outcome error: error at 10% over the surface, an error icon, the words in the text colour (consistency spec; the
    extension's options page uses the same notice) */
@@ -519,8 +532,10 @@ svg .arc{transform-box:view-box;transform-origin:center}
 .dots i{width:10px;height:10px;border-radius:2px;background:var(--text);animation:breathe var(--motion-ambient-breathe) var(--motion-ambient-delay) infinite}
 .dots i:nth-child(2){animation-delay:calc(var(--motion-ambient-delay) + var(--motion-ambient-breathe-phase))}
 .dots i:nth-child(3){animation-delay:calc(var(--motion-ambient-delay) + 2 * var(--motion-ambient-breathe-phase))}
-.field1{display:flex;align-items:center;height:48px;border-radius:var(--radius-button);background:var(--surface);border:1px solid var(--line-strong);padding:0 var(--space-16);margin-bottom:var(--space-12)}
-.field1 input{flex:1;border:0;outline:0;background:none;font:inherit;color:var(--text)}
+.field1{position:relative;display:flex;align-items:center;height:48px;border-radius:var(--radius-button);background:var(--surface);border:1px solid var(--line-strong);padding:0 var(--space-16);margin-bottom:var(--space-12)}
+.field1 input{flex:1;min-width:0;border:0;outline:0;background:none;font:inherit;color:var(--text)}
+.field1 > .ering{inset:-1px}
+.field1 + .fielderr{margin-top:calc(-1 * var(--space-4))}
 .restore{margin:var(--space-4) var(--gutter) var(--space-12);padding:var(--space-16);border-radius:var(--radius);background:var(--surface);border:var(--card-edge);position:relative;overflow:hidden}
 .restore .h{display:flex;align-items:center;justify-content:space-between;gap:var(--space-8);font-weight:var(--weight-heading);font-size:var(--text-17);margin-bottom:var(--space-8)}
 .restore .h span{font-size:var(--text-13);color:var(--muted);font-weight:var(--weight-meta);font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -553,7 +568,7 @@ svg .arc{transform-box:view-box;transform-origin:center}
 .bcard .h{display:flex;align-items:center;gap:var(--space-8);font-weight:var(--weight-heading);font-size:var(--text-17);margin-bottom:var(--space-4)}
 .bcard p{margin:0 0 var(--space-16);color:var(--muted);font-size:var(--text-13)}
 .bcard .row{display:flex;gap:var(--space-8);justify-content:flex-end}
-.gtitle{padding:0 var(--gutter) var(--space-8);font-size:var(--text-13);font-weight:600;color:var(--muted)}
+.gtitle{padding:0 var(--gutter) var(--space-8);font-size:var(--text-13);font-weight:var(--weight-group-label);color:var(--muted)}
 .ygroup{margin:0 var(--gutter) var(--space-20);border-radius:var(--radius);background:var(--surface);border:var(--card-edge);overflow:hidden}
 .onbbody .ygroup{margin-left:0;margin-right:0}
 .onbbody .gtitle{padding-left:0;padding-right:0}
@@ -624,7 +639,7 @@ svg .arc{transform-box:view-box;transform-origin:center}
 .swrow[aria-checked="true"] .sw{background:var(--fill);border-color:var(--fill)}
 .swrow[aria-checked="true"] .sw::after{background:var(--on-fill);transform:translateX(18px)}
 @media (prefers-reduced-motion:reduce){.sw::after{transition:none}}
-.label{display:block;font-size:var(--text-13);font-weight:600;margin-bottom:var(--space-8)}
+.label{display:block;font-size:var(--text-13);font-weight:var(--weight-group-label);margin-bottom:var(--space-8)}
 .steps{list-style:none;margin:0;padding:0}
 .steps li{display:flex;align-items:center;gap:var(--space-12);min-height:48px;border-top:1px solid var(--line)}
 .steps li:first-child{border-top:0}
@@ -655,11 +670,11 @@ svg .arc{transform-box:view-box;transform-origin:center}
 .rsvp .frame{position:relative;height:120px;display:flex;align-items:center;border-top:1px solid color-mix(in srgb, var(--reader-muted) 18%, transparent);border-bottom:1px solid color-mix(in srgb, var(--reader-muted) 18%, transparent)}
 .rsvp .frame::before,.rsvp .frame::after{content:"";position:absolute;left:50%;width:2px;height:14px;margin-left:-1px;background:var(--reader-ink)}
 .rsvp .frame::before{top:0}.rsvp .frame::after{bottom:0}
-.word{display:flex;width:100%;font-family:var(--font-reader);font-size:var(--text-32);line-height:1.1;white-space:pre}
+.word{display:flex;width:100%;font-family:var(--font-reader);font-size:var(--reader-word-size);line-height:var(--reader-word-leading);font-weight:var(--reader-word-weight-regular);font-variation-settings:"opsz" var(--reader-word-opsz);white-space:pre}
 /* the focus letter sits on the article's spoken-word wash at the fixed point (the reading text keeps 7:1 on it,
    ShelfCover.highlight); the ticks above and below are the article's ink. A letter in the ink alone would vanish
    whenever an article's ink is its deep colour, which is near the reading text. */
-.word .pre{flex:1;text-align:right}.word .orp{font-weight:600;background:var(--reader-highlight);border-radius:3px;box-shadow:0 0 0 2px var(--reader-highlight)}.word .post{flex:1;text-align:left}
+.word .pre{flex:1;text-align:right}.word .orp{font-weight:var(--reader-word-weight-focus);background:var(--reader-highlight);border-radius:3px;box-shadow:0 0 0 2px var(--reader-highlight)}.word .post{flex:1;text-align:left}
 .context{min-height:112px;margin-top:var(--space-24);font-family:var(--font-reader);font-size:var(--text-17);line-height:1.5;color:var(--reader-muted);text-align:center;opacity:0}
 .context.show{opacity:1}
 .rsvp .rstage > .stagein{position:relative}
@@ -693,7 +708,7 @@ svg .arc{transform-box:view-box;transform-origin:center}
 .rowmenu-title{font-weight:var(--weight-title);margin:0 0 var(--space-8);font-size:var(--text-15)}
 /* pushed screens without an action bar leave room for the mini player */
 .onb.withmini .scroll .onbbody{padding-bottom:96px}
-.onbbody .banner{margin:0 0 var(--space-16)}
+.onbbody .banner,.onbbody .notice{margin:0 0 var(--space-16)}
 /* voice picker rows are single radio targets */
 .vpick{flex:1;display:flex;align-items:center;gap:var(--space-12);min-height:60px;text-align:left;font-weight:var(--weight-label)}
 /* offline, not yet fetched */
@@ -756,9 +771,11 @@ svg .arc{transform-box:view-box;transform-origin:center}
       <button data-jump="saves-arrive">A save arrives from Chrome</button>
       <button data-jump="saves-empty">Empty, first run</button>
       <button data-jump="saves-first-arrive">…the first save lands</button>
+      <button data-jump="saves-empty-offline">Empty, first run, offline</button>
       <button data-jump="saves-cleared">Empty, all read</button>
       <button data-jump="saves-loading">Loading</button>
       <button data-jump="saves-offline">Offline</button>
+      <button data-jump="saves-embedfail">X post waiting for X</button>
       <button data-jump="archive">Archive</button>
       <button data-jump="archive-empty">Archive, empty</button>
       <button data-jump="archive-menu">Archive, row menu</button>
@@ -770,10 +787,12 @@ svg .arc{transform-box:view-box;transform-origin:center}
     <div class="btns">
       <button data-jump="share">Saved</button>
       <button data-jump="share-undone">…after Undo</button>
+      <button data-jump="share-again">Already saved, unread</button>
       <button data-jump="share-offline">Offline</button>
       <button data-jump="share-nolink">Not a link</button>
       <button data-jump="share-checking">X post: checking it</button>
       <button data-jump="share-noarticle">X post with no article</button>
+      <button data-jump="share-embedfail">X post: X not answering</button>
     </div>
     <h2>Reader</h2>
     <div class="btns">
@@ -786,12 +805,16 @@ svg .arc{transform-box:view-box;transform-origin:center}
       <button data-jump="reader-aa">Aa sheet</button>
       <button data-jump="reader-menu">⋯ menu</button>
       <button data-jump="reader-original">Open original</button>
+      <button data-jump="reader-original-loading">…loading</button>
+      <button data-jump="reader-original-failed">…the page won’t load</button>
+      <button data-jump="reader-original-offline">…offline</button>
       <button data-jump="reader-offline">Not fetched yet, offline</button>
     </div>
     <h2>Listening (batch 2)</h2>
     <div class="btns">
       <button data-jump="play">Reader, playing (player at the bottom)</button>
       <button data-jump="play-paused">Reader, paused</button>
+      <button data-jump="play-sentence">Reader, a voice without word timing</button>
       <button data-jump="mini-reader">Another article’s Reader</button>
       <button data-jump="mini">Mini player on Saves</button>
       <button data-jump="listen">Listen tab</button>
@@ -804,6 +827,7 @@ svg .arc{transform-box:view-box;transform-origin:center}
     <div class="btns">
       <button data-jump="welcome">Welcome</button>
       <button data-jump="welcome-early">Welcome, after an early share</button>
+      <button data-jump="welcome-early-many">…after several early shares</button>
       <button data-jump="return">Bring back your shelf</button>
       <button data-jump="return-offline">…offline</button>
     </div>
@@ -832,6 +856,9 @@ svg .arc{transform-box:view-box;transform-origin:center}
       <button data-jump="nostr-waiting">Waiting for the app</button>
       <button data-jump="nostr-none">No nostr app</button>
       <button data-jump="nostr-declined">Declined</button>
+      <button data-jump="nostr-timeout">The app didn’t answer</button>
+      <button data-jump="nostr-badlink">A sign-in link that doesn’t work</button>
+      <button data-jump="nostr-probe">The app can’t keep saves private</button>
       <button data-jump="nostr-import">Import bookmarks</button>
     </div>
     <h2>Restoring</h2>
@@ -839,6 +866,7 @@ svg .arc{transform-box:view-box;transform-origin:center}
       <button data-jump="restoring">Watch it restore</button>
       <button data-jump="restoring-mid">Halfway</button>
       <button data-jump="restoring-offline">Paused offline</button>
+      <button data-jump="restore-nothing">Nothing to bring back</button>
     </div>
     <h2>You (batch 4)</h2>
     <div class="btns">
@@ -878,11 +906,16 @@ svg .arc{transform-box:view-box;transform-origin:center}
       <button data-jump="adv">Advanced</button>
       <button data-jump="adv-down">…a relay not responding</button>
       <button data-jump="adv-offline">…offline</button>
+      <button data-jump="adv-notbacked">…saves not backed up yet</button>
+      <button data-jump="adv-exportfail">…the export failed</button>
       <button data-jump="sw">Use my nostr app instead</button>
+      <button data-jump="sw-none">…no nostr app</button>
       <button data-jump="sw-waiting">…waiting for the nostr app</button>
       <button data-jump="sw-declined">…declined</button>
+      <button data-jump="sw-probe">…the app can’t keep saves private</button>
       <button data-jump="sw-offline">…offline</button>
       <button data-jump="sw-moving">…moving saves</button>
+      <button data-jump="sw-newer">…a save from a newer Shelf</button>
       <button data-jump="del">Delete my data</button>
       <button data-jump="del-typed">…DELETE typed</button>
       <button data-jump="del-running">…deleting</button>
@@ -904,7 +937,9 @@ svg .arc{transform-box:view-box;transform-origin:center}
       <p><strong>Player:</strong> one listening session, three sizes. The mini player sits at the bottom of every screen (8 px above the tab bar, or 16 px above the screen edge). In the playing article’s Reader it expands in place into the full row: play, time, ±15 s, speed, and ✕ once paused. Its line replaces the reading line. On Listen the Now playing card is the player; the mini slides in once the card has scrolled mostly away. Only play controls play: a Listen row’s body opens the article, its round button plays.</p>
       <p><strong>Bottom stack:</strong> tab bar or screen edge, then the player, then the screen’s own bar or floating Archive, then the toast, 8 px apart. Back from a Reader returns to whatever opened it.</p>
       <p><strong>Motion (decision 73, motion-spec.md):</strong> everything fades by default and travels only to show where something went, on the motion tokens, and only transform and opacity animate. A cover draws once, when its save lands in front of you (the share sheet, “A save arrives from Chrome”, a restore, “…the first save lands”). Each article’s line is carried at its place: open a part-read row, read on, and come back to see it catch up; Archive from the Reader to see it finish before the row leaves. With reduced motion every meaning stays and the travel goes. Jumps land in place.</p>
-      <p><strong>Build notes:</strong> Android Back is swallowed while switching accounts moves saves and while a deletion runs. Mark the recovery-code clip as sensitive (ClipDescription.EXTRA_IS_SENSITIVE); on Android 13+ the system confirms copies, so Shelf shows its own copy toast only below API 33. Toasts use getRecommendedTimeoutMillis(5000) and never auto-dismiss while a screen reader is on. In a Custom Tab, Archive is the tab’s action button and Copy link and Delete are menu items.</p>
+      <p><strong>Build notes:</strong> Android Back is swallowed while switching accounts moves saves and while a deletion runs. Mark the recovery-code clip as sensitive (ClipDescription.EXTRA_IS_SENSITIVE); on Android 13+ the system confirms copies, so Shelf shows its own copy toast only below API 33. Toasts use getRecommendedTimeoutMillis(5000) and never auto-dismiss while a screen reader is on.</p>
+      <p><strong>Original page (decision 81):</strong> Open original, and a save whose text couldn’t be fetched, show the page in Shelf’s own view: a WebView under Shelf’s bar, with its notice, ⋯ and the floating Archive. It has no bridge, no injected script, no file access and no new windows. Open in browser covers sites where you’re signed in, since the view doesn’t carry the browser’s sign-ins.</p>
+      <p><strong>Round 23 (decisions 79 to 93):</strong> the states the mobile spec met that no screen drew, drawn as approved on 5 October 2026: the original page loading, failing and offline; nothing to bring back; a sign-in link or nostr app that doesn’t work; switching with no nostr app, a refusing app or a save from a newer Shelf; a step per backup server in Delete my data; several early saves; first-run Saves offline; a voice without word timing; X not answering; saves not backed up and a failed export in Advanced. You for a nostr user has no Add another device.</p>
     </div>
   </aside>
 </div>
@@ -1075,6 +1110,9 @@ const HASH = {
   aeon: '340732b408a9f0f2e531a95f3c3be03d89fc3f51f5c74e3372ae7fae25e8e79c',        // https://aeon.co/essays/the-case-for-boring-technology-in-an-age-of-constant-upgrades
   wired: '11ac0d2ee6159446a9271841f8dc2e330c9a9c1d64d74d96be0b8519a7e46389',       // https://www.wired.com/story/your-bookmarks-are-a-graveyard
   bbc: 'bf288ef54ebc4c6fa247adf846c48c057d3f9e9d1051a7957468d87e2e5a0c12',         // https://www.bbc.com/future/article/20260923-why-the-web-keeps-losing-its-memory (the shared link, item 99)
+  nautilus: 'b918006bec6e3eb07f9ce774a8b52bd95859f03f8f84a914738664f738d93fbe',    // https://nautil.us/the-archivists-dilemma-2026 (an early save, welcome-early-many)
+  noema: 'eeba0c53a59d7b8b15283f329f4fd8d9552d9729efa5d25e260e5e1761dbdf93',       // https://www.noemamag.com/the-long-now-of-the-web (an early save, welcome-early-many)
+  xpost: '635e880af0dd71266e6a2b721d665a6b9daa06cca06bb14a848516910b75a058',       // https://x.com/sample_reader/status/1839655107733281247 (a shared X post still to be checked, item 95)
 };
 const seed = () => ([
   {id:1, src:'The Guardian', host:'theguardian.com', title:'The quiet return of the read-it-later app, and why it matters this time', mins:9, progress:0, img:'shelf-guardian', status:'ok', archived:false, by:'Tom Hallett', hash:HASH.guardian},
@@ -1088,6 +1126,9 @@ const seed = () => ([
   {id:8, src:'Wired', host:'wired.com', title:'Your bookmarks are a graveyard. Here is how to dig them up', mins:7, progress:1, img:'shelf-wired', status:'ok', archived:true, by:'Priya Desai', hash:HASH.wired},
 ]);
 // the link shared from X in the share and saves-offline states: a sample article with no byline, so the Reader credits the source
+// a post shared from X while X's embed service isn't answering (G3): saved as its own address, pending, keyed and drawn by
+// that address until the check finds its article (decision 80)
+const XPOST = () => ({id:95, src:'x.com', host:'x.com', url:'x.com/sample_reader/status/1839655107733281247', title:'x.com/sample_reader/status/1839655107733281247', mins:0, progress:0, img:null, status:'xwait', archived:false, hash:HASH.xpost, fresh:true});
 const SHARED = () => ({id:99, src:'BBC Future', host:'bbc.com', url:'bbc.com/future/article/20260923-why-the-web-keeps-losing-its-memory', title:'Why the web keeps losing its memory', mins:8, progress:0, img:'shelf-webmemory', status:'pending', archived:false, hash:HASH.bbc, fresh:true});
 
 const S = {
@@ -1095,13 +1136,17 @@ const S = {
   screen:'saves', query:'', readerId:2, readerMode:'ok', readerTheme:'light', readerSize:18,
   sheet:null, toast:null, scrollToEnd:false,
   audio:null, played:[], playAll:false, lock:false, scrollToWord:false,
-  early:false, restoring:null, onbOffline:false, scan:'prime', six:'', nostr:'intro', keepCopies:true,
+  early:0, restoring:null, onbOffline:false, scan:'prime', six:'', nostr:'intro', keepCopies:true,
   rate:1, queue:null, host:false, rowId:null, sheetOpener:null,
   readerBack:null,        // where ← from the Reader goes: the screen that opened it (Q7); null = Saves
   listenMini:false,       // Listen shows the mini once the Now playing card has mostly scrolled away (Q3a)
   playerEnter:false,      // slide the player in on this render only: session start or the Listen chip (Q3b)
   stack:{ mini:72, dock:16, pad:24, toast:72 },   // last offsets placeStack() applied
-  restoreScroll:null, searchFocus:false, shareRemoved:false, shareT:null
+  restoreScroll:null, searchFocus:false, shareRemoved:false, shareT:null,
+  iab:'page',             // the original page's view: 'loading', 'page' or 'failed' (offline is S.online)
+  noWordTiming:false,     // the voice reports sentence starts only: the sentence is marked, the word meter stays unlit
+  nostrLink:'',           // what was pasted in the sign-in link field
+  importCount:23,         // web links in the person's lists that aren't saves yet (decision 82)
 };
 let toastTimer=null, sheetTimer=null;
 // Search is a pushed screen (Q8): it hides the tab bar
@@ -1116,6 +1161,9 @@ const partRead = it => it.progress > 0 && it.progress < 1;
 const isPlaying = it => !!(S.audio && S.audio.id === it.id);
 const busyDots = () => '<span class="dots inbtn" aria-hidden="true" data-mk="busydots"><i></i><i></i><i></i></span>';
 const offlineNotice = text => `<div class="banner" data-fk="notice">${ic('wifioff', 16)}<span>${text}</span></div>`;
+// counts in running copy: one to nine in words, 10 and up in figures ("one article", "three saves", "23 bookmarks")
+const say = n => n >= 1 && n <= 9 ? ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'][n - 1] : String(n);
+const Say = n => { const w = say(n); return w.charAt(0).toUpperCase() + w.slice(1); };
 
 // 'N min left' and the card bar both read it.progress, the one stored position (fix 11).
 // The playing article always carries both, so they can follow the audio between renders.
@@ -1144,6 +1192,12 @@ function cardHTML(it, o = {}){
     src = esc(it.host);
     title = `<div class="title url" data-xf="title-${it.id}" data-xv="url">${esc(it.url || it.host)}</div>`;
     meta = S.online ? `<span class="pdot" aria-hidden="true" data-mk="pdot-${it.id}"></span>Getting the text…` : `${ic('hourglass',14)}Will fetch when you’re online`;
+  } else if (it.status === 'xwait') {
+    // a shared X post whose check is still to come (G3): its own address, waiting with the hourglass like an offline save,
+    // and its own line; offline, the offline line
+    src = esc(it.host);
+    title = `<div class="title url" data-xf="title-${it.id}" data-xv="url">${esc(it.url)}</div>`;
+    meta = `${ic('hourglass',14)}${S.online ? 'Will check the post when X answers' : 'Will fetch when you’re online'}`;
   } else if (it.status === 'browser') {
     src = `${ic('laptop',14)}From Chrome`;
     meta = `<span class="pdot" aria-hidden="true" data-mk="pdot-${it.id}"></span>Getting the text…`;
@@ -1185,6 +1239,12 @@ function exitingFor(screen){
 function withExiting(ex){
   return ex && !S.items.includes(ex.item) ? [...S.items.slice(0, ex.idx), ex.item, ...S.items.slice(ex.idx)] : S.items;
 }
+// offline is said once, in the notice slot: with saves, they still open; on the first run, the one thing it blocks is
+// connecting a browser, whose button is disabled and doesn't repeat the reason (decision 91 (g))
+function savesOffline(){
+  if (S.savesMode !== 'first') return offlineNotice('Offline · showing saved copies');
+  return S.you.browsers.length ? '' : offlineNotice('Connecting a browser needs a connection');
+}
 function savesScreen(){
   const unread = S.items.filter(i => !i.archived);
   const archived = S.items.filter(i => i.archived);
@@ -1205,7 +1265,7 @@ function savesScreen(){
         <span class="app me"><b>${appIcon(40)}</b>Shelf</span><span class="app"><b></b>Notes</span></div></div></div>
       <h2>Your shelf is empty</h2>
       <p>Share any link from any app and it lands here, cleaned up and ready to read offline.</p>
-      ${S.you.browsers.length ? '' : `<button class="btn primary" data-you-go="connect" data-first="1">${ic('laptop',18)}Connect your browser</button>`}
+      ${S.you.browsers.length ? '' : `<button class="btn primary" data-you-go="connect" data-first="1" ${S.online ? '' : 'disabled'}>${ic('laptop',18)}Connect your browser</button>`}
     </div>`;
   } else if (S.list === 'unread' && !showing.length) {
     // All read's check is an earned mark: it lands only when you have just emptied Unread
@@ -1228,7 +1288,7 @@ function savesScreen(){
       ${S.savesMode === 'loading' ? '<div style="height:12px"></div><div class="refresh" data-mk="refresh"><i></i></div>' : ''}
       ${S.savesMode === 'first' ? '' : `<div class="segs" role="tablist" aria-label="Which list">${seg('unread', 'Unread')}${seg('archive', 'Archive')}</div>`}
       ${restoreCard()}
-      ${!S.online && !restoringNow ? offlineNotice('Offline · showing saved copies') : ''}
+      ${!S.online && !restoringNow ? savesOffline() : ''}
       ${body}
     </div>
     ${tabbar()}
@@ -1289,6 +1349,16 @@ function proseHTML(it){
   if (!(S.audio && S.audio.id === it.id) && S.flashWord == null) {
     return PROSE.map((p, k) => `<p>${k === 3 ? p.replace('Relays change the arithmetic', '<a href="#">Relays</a> change the arithmetic') : p}</p>`).join('');
   }
+  // a voice that reports sentence starts only (decision 91 (h)): one span per sentence, keyed by its first word, so the
+  // whole sentence is marked while it is read
+  if (S.noWordTiming && S.audio && S.audio.id === it.id) {
+    let n = 0;
+    return PROSE.map(p => {
+      const ws = p.split(' '), out = [];
+      ws.forEach(w => { const i = n++; if (SENT.includes(i) || !out.length) out.push([i]); out[out.length - 1].push(w); });
+      return `<p>${out.map(([i, ...w]) => `<span class="w sent" data-sent="${i}">${w.join(' ')}</span>`).join(' ')}</p>`;
+    }).join('');
+  }
   let n = 0;
   return PROSE.map(p => `<p>${p.split(' ').map(w => `<span class="w" data-w="${n++}">${w}</span>`).join(' ')}</p>`).join('');
 }
@@ -1316,15 +1386,17 @@ function rulerHTML(){
   return `<div class="ruler" aria-hidden="true"><div class="nums">${nums}</div><div class="tk">${tk}</div>
     <div class="pline"><i class="js-bar" data-mk="pl-now" data-line data-lid="${S.audio.id}" style="--p:${S.audio.t / DUR}"></i></div></div>`;
 }
+// without word timing the marks are drawn for the sentence's words and stay unlit (decisions 68 and 91 (h))
+const meterLit = (s0, k, w) => !S.noWordTiming && s0 + k <= w;
 function meterMarks(t){
   const w = wordAt(t), [s0, s1] = sentenceAt(w);
-  return { s0, html: Array.from({ length: s1 - s0 }, (_, k) => `<i class="${s0 + k <= w ? 'on' : ''}"></i>`).join('') };
+  return { s0, html: Array.from({ length: s1 - s0 }, (_, k) => `<i class="${meterLit(s0, k, w) ? 'on' : ''}"></i>`).join('') };
 }
 function updateMeter(t){
   const m = vp.querySelector('.js-meter'); if (!m) return;
   const w = wordAt(t), [s0] = sentenceAt(w);
   if (+m.dataset.s0 !== s0) { const M = meterMarks(t); m.dataset.s0 = M.s0; m.innerHTML = M.html; return; }
-  [...m.children].forEach((e, k) => e.classList.toggle('on', s0 + k <= w));
+  [...m.children].forEach((e, k) => e.classList.toggle('on', meterLit(s0, k, w)));
 }
 function controlsHTML(){
   const a = S.audio, M = meterMarks(a.t);
@@ -1447,7 +1519,9 @@ function updatePlayer(forceScroll){
   if (S.screen === 'reader' && S.readerId === a.id && !S.rsvp) {
     const w = wordAt(a.t);
     const prev = vp.querySelector('.w.on');
-    const el = vp.querySelector(`.w[data-w="${w}"]`);
+    // the spoken word lights in one frame; a voice without word timing marks its sentence instead, and the line moves on
+    // across the sentence's estimated duration (here the clock is continuous, so it already glides)
+    const el = S.noWordTiming ? vp.querySelector(`.w[data-sent="${sentenceAt(w)[0]}"]`) : vp.querySelector(`.w[data-w="${w}"]`);
     if (prev && prev !== el) prev.classList.remove('on');
     const rs = document.getElementById('rs');
     if (el && rs) {
@@ -1507,6 +1581,12 @@ let restoreTimers = [];
 const laterR = (fn, ms) => restoreTimers.push(setTimeout(fn, ms));
 const clearRestore = () => { restoreTimers.forEach(clearTimeout); restoreTimers = []; };
 
+// saves shared before the first open (decision 6); S.early counts them, newest first
+const EARLY_MANY = () => [
+  {id:97, src:'Nautilus', host:'nautil.us', title:'The archivist’s dilemma', mins:12, progress:0, img:null, status:'ok', archived:false, by:'Mara Quill', hash:HASH.nautilus},
+  {id:96, src:'Noema', host:'noemamag.com', title:'The long now of the web', mins:15, progress:0, img:null, status:'ok', archived:false, by:'Idris Hale', hash:HASH.noema},
+];
+const earlyItems = () => S.early > 1 ? [...EARLY_MANY().slice(0, S.early - 1), EARLY()] : S.early ? [EARLY()] : [];
 const EARLY = () => ({id:98, src:'The Atlantic', host:'theatlantic.com', title:'What we lose when we stop reading long things', mins:11, progress:0, img:'shelf-atlantic', status:'ok', archived:false, by:'Clara Vance', hash:HASH.atlantic});
 
 // Pushed screens: pinned 56 px bar with ← at x=8, large title, bottom action bar, no tab bar.
@@ -1530,9 +1610,9 @@ function onbVersion(){
   switch (S.screen) {
     case 'scan': return { prime: 'prime', prompt: 'prime', wrong: 'code' }[S.scan] || S.scan;
     case 'code': return S.code.notFound ? 'nf' : 'f';
-    case 'nostr': return S.nostr;
+    case 'nostr': return S.nostr === 'badlink' ? 'none' : S.nostr;
     case 'connect': return { typewrong: 'type', busy: 'confirm', prompt: 'ask' }[Y.conn] || Y.conn;
-    case 'switchnostr': return Y.sw + (S.online ? '' : '-off');
+    case 'switchnostr': return (Y.sw === 'badlink' ? 'none' : Y.sw) + (S.online ? '' : '-off');
     case 'delete': return Y.del === 'running' || Y.del === 'partial' ? Y.del : Y.del + (S.online ? '' : '-off');
     case 'browsers': return String(Y.browsers.length);
     case 'return': return S.onbOffline ? 'off' : 'on';
@@ -1550,6 +1630,8 @@ function welcomeDraw(){
   const e = now - S.welcomeT0;
   return e < coverDrawMs(HASH.relays) + MT.catchup.duration ? e : null;
 }
+// the note under Welcome after saves shared before the first open: the newest one's cover, the count in words (decision 91 (f))
+const earlyNote = n => n > 1 ? `You’ve already saved ${say(n)} articles. They’ll be on your shelf either way.` : 'You’ve already saved one article. It’ll be on your shelf either way.';
 function welcomeScreen(){
   const drawT = welcomeDraw();
   // three saves fanned out, each wearing its cover; the front one is part read, its line in its own ink
@@ -1565,7 +1647,7 @@ function welcomeScreen(){
     <div class="onbbody" style="flex:none">
       <h1>Shelf</h1>
       <p class="lead" style="margin-bottom:var(--space-16)">Save anything from your phone or browser. Read it clean and offline, or listen to it.</p>
-      ${S.early ? `<div class="notecard">${coverHTML(S.items[0] || HASH.atlantic, { size: 36 })}<span>You’ve already saved one article. It’ll be on your shelf either way.</span></div>` : ''}
+      ${S.early ? `<div class="notecard">${coverHTML(S.items[0] || HASH.atlantic, { size: 36 })}<span>${earlyNote(S.early)}</span></div>` : ''}
     </div>
     <div class="onbactions" style="padding-top:0">
       <button class="btn primary full" data-new>New here</button>
@@ -1694,6 +1776,18 @@ function bindCode(){
     inp.onblur = () => setTimeout(() => { if (S.code.focus === i && document.activeElement !== inp) { S.code.focus = null; codeRefresh(); } }, 120);
   });
   if (S.code.focus != null) { const f = vp.querySelector(`input[data-word="${S.code.focus}"]`); if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); } }
+  const nl = document.getElementById('nlink');
+  if (nl) {
+    // a link that didn't work keeps its value, selected, so pasting again replaces it; typing clears the error
+    const bad = () => S.screen === 'nostr' ? S.nostr === 'badlink' : S.you.sw === 'badlink';
+    if (bad()) { nl.focus(); nl.select(); }
+    nl.oninput = () => {
+      S.nostrLink = nl.value;
+      if (!bad()) return;
+      if (S.screen === 'nostr') S.nostr = 'none'; else S.you.sw = 'none';
+      nl.parentElement.classList.remove('bad'); nl.removeAttribute('aria-invalid'); const er = document.getElementById('nlinkerr'); if (er) swapText(er, '');
+    };
+  }
   const six = document.getElementById('six');
   if (six) {
     // a wrong code keeps its value, selected, so retyping replaces it (fix 22)
@@ -1709,6 +1803,15 @@ function bindCode(){
   }
 }
 
+// No nostr app on this phone, at sign-in and when switching (decision 91 (c)): install one, or paste a sign-in link. A link
+// that is malformed, or whose app can't be reached, is a field error with the link kept and selected (decision 91 (b)).
+const LINK_ERR = 'That link didn’t work. Copy it again from your nostr app.';
+const noAppBody = bad => `<h1>No nostr app on this phone</h1><p class="lead">Install a nostr sign-in app, or paste a sign-in link from the one you use elsewhere.</p>
+      <div class="field1 ${bad ? 'bad' : ''}"><input id="nlink" placeholder="bunker://…" aria-label="Sign-in link" autocomplete="off" spellcheck="false" aria-describedby="nlinkerr" ${bad ? 'aria-invalid="true"' : ''} value="${esc(S.nostrLink)}"><i class="ering" data-op="ering-nlink" aria-hidden="true"></i></div>
+      <div class="fielderr" id="nlinkerr" data-xf="ferr-nlink">${bad ? LINK_ERR : ''}</div>`;
+// a bunker:// link names the app's key in 64 hex characters and at least one wss:// relay (contract section 2); an empty
+// field carries on, so the prototype's happy path still runs
+const linkOK = v => !v.trim() || /^bunker:\/\/[0-9a-f]{64}\?(.*&)?relay=wss(:|%3A)/i.test(v.trim());
 // contract 3.1: with it on, Shelf's server and one default backup join the user's own server list (decision 76)
 const keepCopiesRow = () => `<button class="swrow" role="switch" aria-checked="${S.keepCopies}" data-keep-copies><span class="yl"><b>Keep backup copies</b><small>Adds Shelf’s server and one independent backup to the list your nostr apps share, so your saves survive any one server closing.</small></span><span class="sw" aria-hidden="true"></span></button>`;
 function nostrScreen(){
@@ -1719,15 +1822,20 @@ function nostrScreen(){
       <b>Waiting for your nostr app</b><p class="lead" style="margin-top:var(--space-8)">Approve the request there, then come back to Shelf.</p></div>`,
       `<button class="btn secondary full" data-nostr="intro">Cancel</button>`, { attr: 'data-nostr="intro"' });
   }
-  if (st === 'none') {
-    return onbShell(`<h1>No nostr app on this phone</h1><p class="lead">Install a nostr sign-in app, or paste a sign-in link from the one you use elsewhere.</p>
-      <div class="field1"><input placeholder="bunker://…" aria-label="Sign-in link" autocomplete="off" spellcheck="false"></div>`,
-      `<button class="btn primary full" data-nostr="waiting">Connect with the link</button>`, 'return');
+  if (st === 'none' || st === 'badlink') {
+    return onbShell(noAppBody(st === 'badlink'), `<button class="btn primary full" data-link-go="nostr">Connect with the link</button>`, 'return');
   }
-  const declined = st === 'declined' ? `<div class="errline">${ic('alert', 16)}<span>The request was declined in your nostr app. Nothing has changed.</span></div>` : '';
+  // outcome errors return to the start, in the notice slot: declined, no answer within two minutes (or a timeout), and the
+  // capability probe refusing (decision 91 (b) and (d))
+  const err = { declined: 'The request was declined in your nostr app. Nothing has changed.', timeout: 'Your nostr app didn’t answer. Nothing has changed.',
+    probe: 'Your nostr app can’t keep your saves private yet. Try another app, or start a new shelf on this phone.' }[st];
+  const declined = err ? `<div class="errline">${ic('alert', 16)}<span>${err}</span></div>` : '';
+  // the probe's refusal suggests a new shelf on this phone, so the screen offers one: Start a new shelf goes where New
+  // here goes, to first-run Saves (decision 91 (d))
+  const fresh = st === 'probe' ? '<button class="btn secondary full" data-new>Start a new shelf</button>' : '';
   return onbShell(`<h1>Sign in with your nostr app</h1>${declined}
     <p class="lead">Shelf asks your nostr app to confirm it’s you. Your saves stay private: only you can read them.</p>${keepCopiesRow()}`,
-    `<button class="btn primary full" data-nostr="waiting">${ic('login', 18)}Open my nostr app</button><button class="btn quiet full" data-nostr="none">Use a sign-in link instead</button>`, 'return');
+    `<button class="btn primary full" data-nostr="waiting">${ic('login', 18)}Open my nostr app</button>${fresh}<button class="btn quiet full" data-nostr="none">Use a sign-in link instead</button>`, 'return');
 }
 
 // 'N of M' changes in one frame; the bar glides to each new value, retargeting; offline, the line crossfades to 'Paused…';
@@ -1738,7 +1846,7 @@ function restoreCard(){
   const paused = S.onbOffline || !S.online;
   return `<div class="restore" data-fk="restore"><div class="rin" data-xf="restore" data-xv="run"><div class="h"><b>Bringing back your shelf</b><span>${R.found} of ${R.total}</span></div>
     <div class="bar"><i data-mk="pl-restore" data-line data-line-glide style="--p:${R.found / R.total}"></i></div>
-    <p data-xf="restore-p" data-xv="${paused ? 'p' : 'n'}">${paused ? 'Paused. It will carry on when you’re online.' : 'Your saves are kept in several independent places, so this works even if Shelf’s own server is down.'}${R.early ? ' Your one save from before is included.' : ''}</p></div></div>`;
+    <p data-xf="restore-p" data-xv="${paused ? 'p' : 'n'}">${paused ? 'Paused. It will carry on when you’re online.' : 'Your saves are kept in several independent places, so this works even if Shelf’s own server is down.'}${R.early > 1 ? ` Your ${say(R.early)} saves from before are included.` : R.early ? ' Your one save from before is included.' : ''}</p></div></div>`;
 }
 
 function startRestore(opts = {}){
@@ -1747,8 +1855,8 @@ function startRestore(opts = {}){
   // signed in or restored, the shelf replaces the flow in place: a root swap (nothing went deeper)
   if (S.screen !== 'saves') S.navHint = 'root';
   S.screen = 'saves'; S.tab = 'saves'; S.savesMode = 'normal'; S.list = 'unread'; S.sheet = null;
-  S.items = S.early ? [EARLY()] : [];
-  S.restoring = { found: 0, total: all.length, done: false, early: !!S.early };
+  S.items = earlyItems();
+  S.restoring = { found: 0, total: all.length, done: false, early: S.early || 0 };
   const step = k => {
     if (k >= all.length) {
       S.restoring.done = true; if (S.screen === 'saves') render();
@@ -1770,7 +1878,7 @@ const freshYou = () => ({
   backupDone: false, backupHidden: false, nostrUser: false, voices: 1, voiceSel: 0, speed: 1, sampling: null,
   codeShown: false, copied: false, browsers: [{ name: 'Chrome on a Windows laptop', when: 'Connected 27 September' }], disconnect: null,
   conn: 'scan', connectFrom: 'browsers', camOK: true, typed: '', dev: 'show', countdown: 298, relayDown: false, sw: 'explain', swDone: 0,
-  del: 'explain', delTyped: '', steps: [],
+  del: 'explain', delTyped: '', steps: [], notBacked: 0, exportFail: false,
 });
 S.you = freshYou();
 const VOICES = ['UK English · voice 1', 'UK English · voice 2', 'US English · voice 1'];
@@ -1812,7 +1920,8 @@ function youScreen(){
   const first = Y.nostrUser
     ? yrow(null, 'login', 'Your nostr app', 'Signed in')
     : yrow('recovery', 'keyboard', 'Recovery code', '', { warn: !done, sub: done ? 'Written down' : 'Not written down', xf: 'sub-recovery', xfDelay: after });
-  // offline: no banner on You; the rows carry the reason (fix 27)
+  // offline: no banner on You; the rows carry the reason (fix 27). A nostr user has no Add another device: their nostr app
+  // holds the identity, so there are no twelve words to pass on, and a second phone signs in with it (decision 90)
   return `<div class="screen" data-mk="screen-you"><div class="scroll">
       <div class="head"><h1>You</h1><span class="count">${count}</span></div>
       ${profile}
@@ -1820,7 +1929,7 @@ function youScreen(){
       ${backup}
       <div class="ygroup" data-fk="yg-1">
         ${first}
-        ${yrow('adddevice', 'phone', 'Add another device', '', { disabled: off, sub: off ? 'Needs a connection' : '' })}
+        ${Y.nostrUser ? '' : yrow('adddevice', 'phone', 'Add another device', '', { disabled: off, sub: off ? 'Needs a connection' : '' })}
         ${yrow('browsers', 'laptop', 'Connected browsers', String(Y.browsers.length))}
         ${Y.voices > 1 ? yrow('voice', 'headphones', 'Voice', VOICES[Y.voiceSel].split(' · ')[0]) : ''}
       </div>
@@ -1925,7 +2034,7 @@ function voiceScreen(){
     <button class="sample" data-you-act="sample" data-i="${i}" aria-label="Play a sample of ${v}"><span class="g" data-xf="sample-${i}" data-xv="${Y.sampling === i ? 'eq' : 'play'}">${Y.sampling === i ? `<span class="eq" data-mk="eq-${i}"><i></i><i></i><i></i></span>` : ic('play', 16, 'fill="currentColor"')}</span></button></div>`).join('');
   return onbShell(`<h1>Voice</h1><p class="lead">These voices come from your phone and work offline.</p>
     <div class="ygroup" role="radiogroup" aria-label="Voice">${rows}</div>
-    <div class="ygroup"><div class="stepper"><span style="font-weight:500">Default speed</span><div class="ctrl"><button data-you-act="speed" data-i="-1" aria-label="Slower">−</button>${rollHTML('dspeed', Y.speed, `${Y.speed}×`)}<button data-you-act="speed" data-i="1" aria-label="Faster">+</button></div></div></div>
+    <div class="ygroup"><div class="stepper"><span style="font-weight:var(--weight-meta)">Default speed</span><div class="ctrl"><button data-you-act="speed" data-i="-1" aria-label="Slower">−</button>${rollHTML('dspeed', Y.speed, `${Y.speed}×`)}<button data-you-act="speed" data-i="1" aria-label="Faster">+</button></div></div></div>
     <p class="gnote" style="margin-top:0">To add more voices, open Android settings, then Text-to-speech output.</p>`, '', 'you');
 }
 
@@ -1935,15 +2044,21 @@ function advancedScreen(){
     const st = off ? '<span class="status off">Unreachable</span>' : (Y.relayDown && i === 2 ? '<span class="status down">Not responding</span>' : '<span class="status">Connected</span>');
     return `<div class="yrow"><span class="yi">${ic('server', 20)}</span><span class="yl">${label}<small>${host}</small></span>${st}</div>`;
   }).join('');
-  // offline, the switch row is disabled and says why (fix 27)
-  return onbShell(`<h1>Advanced</h1>
+  // the notice slot, error first: an export that failed, with Try again in the action bar (G9), then the count of saves no
+  // backup server holds yet (decision 93; a save is backed up once a relay Shelf doesn't run has accepted its newest change
+  // and, for a save with text, a mirror holds its text). While any aren't, the note under the relays speaks of the other
+  // saves only. Offline, the switch row is disabled and says why (fix 27)
+  const nb = Y.notBacked;
+  const slot = (Y.exportFail ? `<div class="errline" data-fk="notice-export">${ic('alert', 16)}<span>The export didn’t save. Check the phone has space, then try again.</span></div>` : '')
+    + (nb ? `<div class="notice info" data-fk="notice-backup">${ic('info', 16)}<span>${Say(nb)} ${nb === 1 ? 'save isn’t' : 'saves aren’t'} backed up yet. Shelf keeps trying until a backup server accepts ${nb === 1 ? 'it' : 'them'}.</span></div>` : '');
+  return onbShell(`<h1>Advanced</h1>${slot}
     <div class="gtitle">Relays</div>
     <div class="ygroup">${relays}</div>
-    <p class="gnote">Your saves are copied to all three. Any one of them is enough to bring your shelf back.${Y.relayDown && !off ? ' Saves will reach relay.damus.io when it answers again.' : ''}</p>
+    <p class="gnote">Your ${nb ? 'other ' : ''}saves are copied to all three. Any one of them is enough to bring your shelf back.${Y.relayDown && !off ? ' Saves will reach relay.damus.io when it answers again.' : ''}</p>
     <div class="ygroup">
       <button class="yrow" data-you-act="export"><span class="yi">${ic('download', 20)}</span><span class="yl">Export my saves<small>One file with every link and its text</small></span></button>
       ${Y.nostrUser ? '' : `<button class="yrow" data-you-go="switchnostr" ${off ? 'disabled' : ''}><span class="yi">${ic('login', 20)}</span><span class="yl">Use my nostr app instead<small>${off ? 'Needs a connection' : 'Move your saves to your nostr account'}</small></span><span class="chev">${ic('chev', 18)}</span></button>`}
-    </div>`, '', 'you');
+    </div>`, Y.exportFail ? `<button class="btn primary full" data-you-act="export">Try again</button>` : '', 'you');
 }
 
 function switchScreen(){
@@ -1954,7 +2069,16 @@ function switchScreen(){
   // can't be left: no ←, and Android Back is swallowed (build note)
   if (Y.sw === 'moving') return onbShell(`<h1>Moving your saves</h1><div class="restore" style="margin:var(--space-16) 0"><div class="h"><b>Moving to your nostr account</b><span>${Y.swDone} of 8</span></div>
       <div class="bar"><i data-mk="pl-move" data-line data-line-glide style="--p:${Y.swDone / 8}"></i></div><p>Keep Shelf open until this finishes.</p></div>`, '', null);
-  const declined = Y.sw === 'declined' ? `<div class="errline">${ic('alert', 16)}<span>The request was declined in your nostr app. Nothing has changed.</span></div>` : '';
+  // no nostr app on the phone: built like the sign-in's (decision 91 (c)); ← and Android Back return to the explain step
+  if (Y.sw === 'none' || Y.sw === 'badlink') return onbShell(noAppBody(Y.sw === 'badlink'), `<button class="btn primary full" data-link-go="switch">Connect with the link</button>`, { attr: 'data-you-act="sw-cancel"' });
+  // a save from a newer Shelf, met while collecting either library, stops the move before any save is copied (decision
+  // 91 (i)): nothing has moved, and the nostr app's registration and server lists stay as they are for the next try
+  if (Y.sw === 'newer') return onbShell(`<h1>Use my nostr app instead</h1><div class="errline">${ic('alert', 16)}<span>Some saves come from a newer version of Shelf. Update Shelf, then try again.</span></div>
+    <p class="lead">Your saves are still on this phone, and your recovery code still works.</p>`,
+    `<button class="btn primary full" data-you-act="sw-update">Update Shelf</button>`, 'advanced');
+  // outcome errors return to the explain step, in the notice slot: declined, and the capability probe refusing (decision 91 (c))
+  const err = { declined: 'The request was declined in your nostr app. Nothing has changed.', probe: 'Your nostr app can’t keep your saves private yet. Try another app. Nothing has changed.' }[Y.sw];
+  const declined = err ? `<div class="errline">${ic('alert', 16)}<span>${err}</span></div>` : '';
   return onbShell(`<h1>Use my nostr app instead</h1>${declined}${off ? offlineNotice('Moving your saves needs a connection') : ''}
     <p class="lead">Your saves move to your nostr account, and your nostr app keeps you signed in from then on.</p>
     <ul class="plist"><li class="ask">${ic('check', 18)}<span>Every save and its text comes with you<small>Nothing is lost, and it stays private.</small></span></li>
@@ -1970,40 +2094,56 @@ function deleteScreen(){
   if (Y.del === 'running' || Y.del === 'partial') {
     // as each request resolves, its result mark lands in the square's place (motion.mark) and its note fades in; rows never move
     const rows = Y.steps.map((s, k) => `<li class="${s.state}"><span class="st" data-xf="st-${k}" data-xv="${s.state}" ${s.state === 'wait' ? '' : 'data-xf-in="mark"'}>${s.state === 'done' ? ic('check', 14) : s.state === 'fail' ? ic('x', 14) : ''}</span><span class="t">${s.label}</span><small data-xf="sn-${k}" data-xv="${esc(s.note || '')}">${s.note || ''}</small></li>`).join('');
+    // names each server that didn't confirm (7.2)
+    const left = Y.steps.filter(x => x.state === 'fail').map(x => x.label.replace(/^[^:]*: /, ''));
+    const who = left.length > 1 ? left.slice(0, -1).join(', ') + ' and ' + left[left.length - 1] : left[0];
     const partial = Y.del === 'partial'
-      ? `<div class="errline" style="margin-top:var(--space-16)">${ic('alert', 16)}<span>${Y.nostrUser ? "relay.damus.io didn’t confirm the deletion. What’s left there is encrypted, and only the key in your nostr app could open it." : "relay.damus.io didn’t confirm the deletion. What’s left there is encrypted, and only your recovery code could open it. To be sure, destroy any copy of your recovery code."}</span></div>` : '';
+      ? `<div class="errline" style="margin-top:var(--space-16)">${ic('alert', 16)}<span>${who} didn’t confirm the deletion. ${Y.nostrUser ? "What’s left there is encrypted, and only the key in your nostr app could open it." : "What’s left there is encrypted, and only your recovery code could open it. To be sure, destroy any copy of your recovery code."}</span></div>` : '';
     return onbShell(`<h1>${Y.del === 'partial' ? 'Almost everything is gone' : 'Deleting your data'}</h1><div class="ygroup" style="padding:0 var(--space-16)"><ul class="steps">${rows}</ul></div>${partial}`,
       Y.del === 'partial' ? `<button class="btn primary full" data-you-act="del-finish">Finish</button>` : '', null);
   }
   const failed = Y.del === 'failed' ? `<div class="errline">${ic('alert', 16)}<span>Couldn’t reach Shelf’s server, so nothing has been deleted. Check your connection and try again.</span></div>`
     : Y.del === 'declined' ? `<div class="errline">${ic('alert', 16)}<span>The request was declined in your nostr app. Nothing has been deleted.</span></div>` : '';
   const ok = Y.delTyped === 'DELETE' && S.online;
+  // the explain line says the library goes from every device (contract 4.7), and the backup servers are counted from the
+  // person's real lists (G8, decision 91 (e)), a nostr user's own servers included
+  const srv = delServers(), own = srv.filter(x => x.own).length;
+  const ask = own
+    ? `Copies on ${say(srv.length)} other servers<small>${Say(own)} of them ${own === 1 ? 'is' : 'are'} your own. We ask each to delete your copies. Each server decides for itself.</small>`
+    : `Copies on ${say(srv.length)} independent backup servers<small>We ask each to delete your copies. Each server decides for itself.</small>`;
   return onbShell(`<h1>Delete my data</h1>${failed}
     ${!S.online ? offlineNotice('Deleting needs a connection') : ''}
+    <p class="lead">This removes your library from all your devices and from Shelf’s server.</p>
     <ul class="plist">
       <li class="go">${ic('trash', 18)}<span>Your saves and their text on Shelf’s server</span></li>
       <li class="go">${ic('trash', 18)}<span>Everything on this phone<small>Shelf starts fresh afterwards, as if just installed.</small></span></li>
-      <li class="ask">${ic('server', 18)}<span>Copies on two independent backup servers<small>We ask both to delete your copies. Each server decides for itself.</small></span></li>
+      <li class="ask">${ic('server', 18)}<span>${ask}</span></li>
     </ul>
     <label class="label" for="deltype">Type DELETE to confirm</label>
     <input class="codefield caps" id="deltype" autocomplete="off" spellcheck="false" autocapitalize="characters" value="${esc(Y.delTyped)}" ${S.online ? '' : 'disabled'}>`,
     `<button class="btn danger full" id="delgo" data-you-act="del-go" ${ok ? '' : 'disabled'}>Delete everything</button>`, 'you');
 }
 
+// The servers a deletion asks after Shelf's own (G8, 7.2, decision 91 (e)): every write relay in the person's list other
+// than Shelf's, a nostr user's own included, and the mirror that holds the text, each counted once. A relay can only be
+// asked; the mirror deletes the text. Steps run Shelf's server first and this phone last (decision 28, contract 4.7).
+function delServers(){
+  return S.you.nostrUser
+    ? [{ host: 'nos.lol' }, { host: 'blossom.primal.net', mirror: true }, { host: 'relay.nostr.band', own: true }, { host: 'nostr.wine', own: true }]
+    : [{ host: 'nos.lol' }, { host: 'relay.damus.io' }, { host: 'blossom.primal.net', mirror: true }];
+}
+const delSteps = () => [{ label: "Shelf’s server", result: 'Deleted' },
+  ...delServers().map(x => ({ label: `${x.own ? 'Your server' : 'Backup'}: ${x.host}`, result: x.mirror ? 'Deleted' : 'Asked to delete' })),
+  { label: 'This phone', result: 'Deleted' }].map(x => ({ ...x, state: 'wait' }));
 function runDelete(partial){
   const Y = S.you;
   if (Y.nostrUser && Y.del !== 'approve') { Y.del = 'approve'; render(); later(() => { if (S.screen === 'delete' && Y.del === 'approve') runDelete(partial); }, 2000); return; }
   Y.del = 'running';
-  Y.steps = [
-    { label: "Shelf’s server", state: 'wait' },
-    { label: 'Backup: nos.lol', state: 'wait' },
-    { label: 'Backup: relay.damus.io', state: 'wait' },
-    { label: 'This phone', state: 'wait' },
-  ];
+  Y.steps = delSteps();
   render();
   Y.steps.forEach((s, k) => later(() => {
-    if (partial && k === 2) { s.state = 'fail'; s.note = "Didn’t confirm"; } else { s.state = 'done'; s.note = (k === 1 || k === 2) ? 'Asked to delete' : 'Deleted'; }
-    if (k === 3) {
+    if (partial && k === 2) { s.state = 'fail'; s.note = "Didn’t confirm"; } else { s.state = 'done'; s.note = s.result; }
+    if (k === Y.steps.length - 1) {
       if (partial) { Y.del = 'partial'; render(); return; }
       // a 400 ms hold lets the last mark register, then a root swap to Welcome
       render(); later(() => { if (S.screen === 'delete') finishDelete(); }, 400); return;
@@ -2014,7 +2154,7 @@ function runDelete(partial){
 
 function finishDelete(){
   clearOnb(); clearRestore();
-  S.items = []; S.played = []; S.audio = null; S.early = false; S.you = freshYou(); S.readerBack = null;
+  S.items = []; S.played = []; S.audio = null; S.early = 0; S.you = freshYou(); S.readerBack = null;
   // Shelf starts fresh, as if just installed: a root swap to Welcome, whose covers draw as on a first launch
   S.screen = 'welcome'; S.tab = 'saves'; S.navHint = 'root'; S.firstLaunch = true; S.welcomeT0 = null; S.welcomeLine = false;
   showToast('Your data is deleted');
@@ -2112,13 +2252,14 @@ vp.addEventListener('click', e => {
     case 'sample': Y.sampling = i; later(() => { if (Y.sampling === i) { Y.sampling = null; render(); } }, 1800); break;
     // one speed list; the stepper clamps within it (fix 7)
     case 'speed': { const k = RATES.indexOf(Y.speed) + i; Y.speed = RATES[Math.max(0, Math.min(RATES.length - 1, k))]; S.rate = Y.speed; if (S.audio) S.audio.rate = S.rate; break; }
-    case 'export': showToast('Saved shelf-export.html to Downloads'); break;
+    case 'export': Y.exportFail = false; showToast('Saved shelf-export.html to Downloads'); break;
     case 'sw-start':
       if (!S.online) return;
       Y.sw = 'waiting';
       later(() => { if (S.screen === 'switchnostr' && Y.sw === 'waiting') { Y.sw = 'moving'; Y.swDone = 0; render(); moveStep(); } }, 2000);
       break;
     case 'sw-cancel': clearOnb(); Y.sw = 'explain'; break;
+    case 'sw-update': showToast('Would open Shelf in Google Play'); break;
     case 'del-cancel': clearOnb(); Y.del = 'explain'; Y.delTyped = ''; break;
     case 'del-go': runDelete(false); return;
     case 'del-finish': finishDelete(); return;
@@ -2161,18 +2302,23 @@ function youJump(j){
   else if (j === 'adv') at('advanced');
   else if (j === 'adv-down') { at('advanced'); Y.relayDown = true; }
   else if (j === 'adv-offline') { at('advanced'); S.online = false; }
+  else if (j === 'adv-notbacked') { at('advanced'); Y.notBacked = 2; }
+  else if (j === 'adv-exportfail') { at('advanced'); Y.exportFail = true; }
   else if (j === 'sw') { at('switchnostr'); Y.sw = 'explain'; }
   else if (j === 'sw-waiting') { at('switchnostr'); Y.sw = 'waiting'; }
   else if (j === 'sw-declined') { at('switchnostr'); Y.sw = 'declined'; }
   else if (j === 'sw-offline') { at('switchnostr'); Y.sw = 'explain'; S.online = false; }
   else if (j === 'sw-moving') { at('switchnostr'); Y.sw = 'moving'; Y.swDone = 3; }
+  else if (j === 'sw-none') { at('switchnostr'); Y.sw = 'none'; }
+  else if (j === 'sw-probe') { at('switchnostr'); Y.sw = 'probe'; }
+  else if (j === 'sw-newer') { at('switchnostr'); Y.sw = 'newer'; }
   else if (j === 'del') at('delete');
   else if (j === 'del-typed') { at('delete'); Y.delTyped = 'DELETE'; }
   else if (j === 'del-nostr') { at('delete'); Y.nostrUser = true; Y.del = 'approve'; }
   else if (j === 'del-declined') { at('delete'); Y.nostrUser = true; Y.del = 'declined'; Y.delTyped = ''; }
   else if (j === 'del-failed') { at('delete'); Y.del = 'failed'; Y.delTyped = 'DELETE'; }
-  else if (j === 'del-running') { at('delete'); runDelete(false); onbTimers.forEach(clearTimeout); onbTimers = []; Y.steps[0].state = 'done'; Y.steps[0].note = 'Deleted'; Y.steps[1].state = 'done'; Y.steps[1].note = 'Asked to delete'; render(); return true; }
-  else if (j === 'del-partial') { at('delete'); Y.del = 'partial'; Y.steps = [{ label: "Shelf’s server", state: 'done', note: 'Deleted' }, { label: 'Backup: nos.lol', state: 'done', note: 'Asked to delete' }, { label: 'Backup: relay.damus.io', state: 'fail', note: "Didn’t confirm" }, { label: 'This phone', state: 'done', note: 'Deleted' }]; }
+  else if (j === 'del-running') { at('delete'); runDelete(false); onbTimers.forEach(clearTimeout); onbTimers = []; Y.steps.slice(0, 2).forEach(x => { x.state = 'done'; x.note = x.result; }); render(); return true; }
+  else if (j === 'del-partial') { at('delete'); Y.del = 'partial'; Y.steps = delSteps().map((x, k) => k === 2 ? { ...x, state: 'fail', note: "Didn’t confirm" } : { ...x, state: 'done', note: x.result }); }
   else return false;
   render();
   return true;
@@ -2367,7 +2513,7 @@ function bindRsvp(){
 
 function flashWord(){
   if (S.flashWord == null || S.screen !== 'reader' || S.rsvp) return;
-  const w = S.flashWord, el = vp.querySelector(`.w[data-w="${w}"]`);
+  const w = S.flashWord, el = vp.querySelector(`.w[data-w="${w}"]`) || vp.querySelector(`.w[data-sent="${sentenceAt(w)[0]}"]`);
   S.flashWord = null;
   const rs = document.getElementById('rs');
   if (!el || !rs) return;
@@ -2383,7 +2529,10 @@ function flashWord(){
   setTimeout(() => el.classList.remove('on'), 1600);
 }
 
-const modeFor = it => it.status === 'failed' ? 'error' : (it.status === 'ok' ? 'ok' : (S.online ? 'loading' : 'offlinewait'));
+// the Reader's skeleton: source, two title lines and nine of text, pulsing in opacity once the wait passes 150 ms (fix 28).
+// The original page's view shows the same lines under its bar while the page loads (decision 81).
+const skelLines = () => `<div class="skel" style="height:12px;width:40%"></div><div class="skel" style="height:28px;width:95%"></div><div class="skel" style="height:28px;width:70%;margin-bottom:24px"></div>${Array.from({length:9},(_,k)=>`<div class="skel" style="height:14px;width:${[100,96,92,98,60,100,94,97,72][k]}%"></div>`).join('')}`;
+const modeFor = it => it.status === 'failed' ? 'error' : (it.status === 'ok' ? 'ok' : (S.online && it.status !== 'xwait' ? 'loading' : 'offlinewait'));
 
 function readerScreen(){
   const it = S.items.find(i => i.id === S.readerId) || S.items[0];
@@ -2392,11 +2541,20 @@ function readerScreen(){
   const pl = platesHTML('arch');
   const dock = `<div class="dock" data-mk="dock" style="bottom:${RS.dock}px">${it.archived ? `<button class="arch ${pl ? 'plating' : ''}" data-unarchive-open aria-label="Back to Unread">${pl}${ic('restore',22)}</button>` : `<button class="arch ${pl ? 'plating' : ''}" data-archive-open aria-label="Archive">${pl}${ic('archive',22)}</button>`}</div>`;
   if (S.readerMode === 'error' || S.readerMode === 'original') {
-    // the in-app browser view of a save keeps Shelf's article actions: ⋯ and the floating Archive (fix 26)
+    // the in-app browser view of a save keeps Shelf's article actions: ⋯ and the floating Archive (fix 26). It is Shelf's
+    // own view, a WebView under Shelf's bar (decision 81). While the page loads, the Reader's skeleton sits under the bar;
+    // a page that won't load (an HTTP or TLS error, or a site that refuses to open in an app) gets a notice pointing to
+    // Open in browser; offline, the view says it needs a connection (G4). The bar, ⋯ and Archive stay throughout.
+    const st = !S.online ? 'off' : S.readerMode === 'original' ? S.iab : 'page';
+    const slot = st === 'off' ? offlineNotice('Opening the original needs a connection')
+      : st === 'failed' ? `<div class="iabslot"><div class="errline">${ic('alert', 16)}<span>This page won’t load here. Your browser may still open it.</span></div><button class="btn primary full" data-openbrowser>${ic('ext', 18)}Open in browser</button></div>`
+      : S.readerMode === 'error' ? `<div class="notice info">${ic('info',16)}<span>We couldn’t get a clean copy of this page, so here’s the original. It won’t be available offline.</span></div>` : '';
+    const page = st === 'page' ? `<div class="web"><div class="fakepage"><div class="h"></div><div class="l"></div><div class="l" style="width:92%"></div><div class="l" style="width:80%"></div><div class="im"></div><div class="l"></div><div class="l" style="width:88%"></div><div class="l" style="width:95%"></div><div class="l" style="width:70%"></div></div></div>`
+      : st === 'loading' ? `<div class="skels" data-mk="iab-skels" aria-hidden="true">${skelLines()}</div><span class="srlive" role="status">Loading the page</span>` : '';
     return `<div class="screen iab" data-mk="screen-iab">
       <div class="bar"><button class="iconbtn" ${S.readerMode === 'original' ? 'data-orig-close' : 'data-back'} aria-label="Close">${ic('x',22)}</button><div class="u"><b>${esc(it.title)}</b>${esc(it.host)}</div><button class="iconbtn" data-sheet="iabmenu" aria-label="More">${ic('more',22)}</button></div>
-      ${S.readerMode === 'error' ? `<div class="notice info">${ic('info',16)}<span>We couldn’t get a clean copy of this page, so here’s the original. It won’t be available offline.</span></div>` : ''}
-      <div class="scroll"><div class="fakepage"><div class="h"></div><div class="l"></div><div class="l" style="width:92%"></div><div class="l" style="width:80%"></div><div class="im"></div><div class="l"></div><div class="l" style="width:88%"></div><div class="l" style="width:95%"></div><div class="l" style="width:70%"></div></div></div>
+      <div class="iabin" data-xf="iab" data-xv="${st}">${slot}
+      <div class="scroll">${page}</div></div>
       ${dock}
     </div>`;
   }
@@ -2408,10 +2566,12 @@ function readerScreen(){
   const band = `<div class="band">${coverHTML(it, { cols: 3 })}</div>`;
   let content;
   if (S.readerMode === 'offlinewait') {
-    content = `${band}<div class="offwait"><span class="ic">${ic('hourglass', 22)}</span><b>${esc(it.url || it.title)}</b><p>This page will be fetched when you’re online. Then it’s here to read, offline too.</p></div>`;
+    // a waiting save: offline, the page is fetched once you're online; an X post still to be checked waits for X (G3)
+    const why = it.status === 'xwait' && S.online ? 'Shelf will check this post when X answers. If it links to an article, the article will be here to read, offline too.' : 'This page will be fetched when you’re online. Then it’s here to read, offline too.';
+    content = `${band}<div class="offwait"><span class="ic">${ic('hourglass', 22)}</span><b>${esc(it.url || it.title)}</b><p>${why}</p></div>`;
   } else if (S.readerMode === 'loading') {
     // skeleton lines appear only if the text hasn't arrived within 150 ms, then pulse like the arriving images do (fix 28)
-    content = `${band}<div class="skels" data-mk="skels"><div class="skel" style="height:12px;width:40%"></div><div class="skel" style="height:28px;width:95%"></div><div class="skel" style="height:28px;width:70%;margin-bottom:24px"></div>${Array.from({length:9},(_,k)=>`<div class="skel" style="height:14px;width:${[100,96,92,98,60,100,94,97,72][k]}%"></div>`).join('')}</div>`;
+    content = `${band}<div class="skels" data-mk="skels">${skelLines()}</div>`;
   } else {
     // [secondary][primary]. 'Archive and next' says that it archives, and appears only when there is a next (Q10, fix 24)
     const next = !it.archived && S.items.some(i => !i.archived && i.status === 'ok' && i.id !== it.id);
@@ -2443,6 +2603,9 @@ function hostApp(){
   return `<div class="hostapp"><div class="top">${ic('share',16)}Back in the app you shared from</div><div class="h"></div><div class="l"></div><div class="l" style="width:90%"></div><div class="l" style="width:84%"></div><div class="l" style="width:95%"></div><div class="l" style="width:60%"></div></div>`;
 }
 
+// the import sheet's count is the web links found that aren't saves yet, worded for one or several (decisions 82 and 91 (f))
+const importLine = n => n === 1 ? 'We found one bookmark in your nostr account. On your shelf it’ll be private, like everything else.'
+  : `We found ${say(n)} bookmarks in your nostr account. On your shelf they’ll be private, like everything else.`;
 function sheetHTML(){
   if (!S.sheet) return '';
   const it = S.items.find(i => i.id === S.readerId) || S.items[0];
@@ -2483,7 +2646,7 @@ function sheetHTML(){
   if (S.sheet === 'recovery') return recoverySheet();
   if (S.sheet === 'disconnect') return disconnectSheet();
   if (S.sheet === 'import') {
-    return `<div class="scrim"><div class="sheet" role="dialog" aria-modal="true" aria-label="Bring in your bookmarks?" data-stop><div class="grab"></div><h3>Bring in your bookmarks?</h3><p class="sub">We found 23 bookmarks in your nostr account. On your shelf they’ll be private, like everything else.</p><div class="row"><button class="btn secondary" data-import="no">Not now</button><button class="btn primary" data-import="yes">Bring them in</button></div></div></div>`;
+    return `<div class="scrim"><div class="sheet" role="dialog" aria-modal="true" aria-label="Bring in your bookmarks?" data-stop><div class="grab"></div><h3>Bring in your bookmarks?</h3><p class="sub">${importLine(S.importCount)}</p><div class="row"><button class="btn secondary" data-import="no">Not now</button><button class="btn primary" data-import="yes">Bring them in</button></div></div></div>`;
   }
   if (S.sheet.startsWith('share')) {
     const mode = S.sheet.split('-')[1];
@@ -2503,17 +2666,26 @@ function sheetHTML(){
     if (S.shareRemoved) {
       return `<div class="scrim"><div class="sheet" role="dialog" aria-modal="true" aria-label="Removed from Shelf" data-stop><div class="sbody" data-xf="share-body" data-xv="r"><div class="grab"></div><h3 role="status">Removed from Shelf</h3></div></div></div>`;
     }
-    const off = mode === 'offline';
+    // offline, and an X post while X's embed service isn't answering (G3), the save waits: no countdown and no Read now,
+    // and each says what it waits for in its own line ('when you're online' is only for offline)
+    const off = mode === 'offline', xwait = mode === 'embedfail', waits = off || xwait;
+    // re-sharing a save that is still unread changes nothing (G2, decision 89): the sheet says it is already there, with
+    // Done and Read now and no Undo, since there is nothing to undo (decision 38). Its cover was drawn long ago, so it
+    // is simply there, and the check sits still; the countdown runs as for any save, since nothing waits.
+    const again = mode === 'again';
     const T = S.shareT;
     // the new save's cover draws itself in the sheet from its first frame (offline too: it needs only the address), the
     // heading's check lands with its last leaf (at most 1 s in), and the countdown runs along the top edge in its ink
-    const saved = S.items.find(i => i.id === 99) || { ...SHARED(), fresh: false };
-    const bar = off || !T ? '' : `<div class="timer" style="${inkStyle(saved, 'surface')}"><i style="animation-delay:-${SHARE_MS - shareLeft()}ms;animation-play-state:${T.running ? 'running' : 'paused'}"></i></div>`;
-    return `<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" aria-label="Saved to Shelf" data-stop data-share>${bar}<div class="sbody" data-xf="share-body" data-xv="s"><div class="grab"></div>
-      <h3><span class="check" data-sharecheck>${ic('check',16)}</span>Saved to Shelf</h3>
-      <p class="sub">${off ? 'Saved · will fetch when you’re online' : 'Private. Ready to read offline in a moment.'}</p>
-      <div class="saveditem">${coverHTML(saved, { size: 48, draw: drawIn(saved, sheetLanded) })}<div><div class="t">${esc(saved.title)}</div><div class="s">${esc(saved.host)}</div></div></div>
-      <div class="row"><button class="btn secondary" data-undo-share>Undo</button>${off ? '<button class="btn primary" data-close>Done</button>' : '<button class="btn primary" data-readnow>Read now</button>'}</div></div></div></div>`;
+    const saved = S.items.find(i => i.id === shareId()) || { ...(xwait ? XPOST() : SHARED()), fresh: false };
+    const bar = waits || !T ? '' : `<div class="timer" style="${inkStyle(saved, 'surface')}"><i style="animation-delay:-${SHARE_MS - shareLeft()}ms;animation-play-state:${T.running ? 'running' : 'paused'}"></i></div>`;
+    const head = again ? 'Already on your shelf' : 'Saved to Shelf';
+    const acts = again ? '<button class="btn secondary" data-close>Done</button><button class="btn primary" data-readnow>Read now</button>'
+      : `<button class="btn secondary" data-undo-share>Undo</button>${waits ? '<button class="btn primary" data-close>Done</button>' : '<button class="btn primary" data-readnow>Read now</button>'}`;
+    return `<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" aria-label="${head}" data-stop data-share>${bar}<div class="sbody" data-xf="share-body" data-xv="s"><div class="grab"></div>
+      <h3><span class="check" data-sharecheck>${ic('check',16)}</span>${head}</h3>
+      <p class="sub">${again ? 'Still in Unread, where you left it.' : off ? 'Saved · will fetch when you’re online' : xwait ? 'Saved · will check the post when X answers' : 'Private. Ready to read offline in a moment.'}</p>
+      <div class="saveditem">${coverHTML(saved, { size: 48, draw: drawIn(saved, sheetLanded) })}<div><div class="t ${saved.status === 'xwait' ? 'url' : ''}">${esc(saved.title)}</div><div class="s">${esc(saved.host)}</div></div></div>
+      <div class="row">${acts}</div></div></div></div>`;
   }
   return '';
 }
@@ -3387,7 +3559,7 @@ function exitTo(it, kind, idx){
 /* ----- the rest of the signature moves ----- */
 function shareCheck(){
   const ck = vp.querySelector(':scope > .scrim [data-sharecheck]'); if (!ck || ck.getAnimations().length) return;
-  const it = S.items.find(i => i.id === 99), t0 = it && sheetLanded.get(it); if (t0 == null) return;
+  const it = S.items.find(i => i.id === shareId()), t0 = it && sheetLanded.get(it); if (t0 == null) return;
   // the check lands with the cover's last leaf, and never later than 1 s after the drawing starts
   const e = performance.now() - t0, end = Math.min(coverDrawMs(it.hash), 1000);
   if (e < end) RM() ? (e < 150 && fadeIn(ck, MT.quickIn)) : mark(ck, end - MT.mark.duration - e);
@@ -3766,7 +3938,7 @@ function openItem(id, back){
 
 /* ---------------- events ---------------- */
 vp.addEventListener('click', e => {
-  const t = e.target.closest('[data-keep-copies],[data-tab],[data-list],[data-go],[data-back],[data-clear],[data-sheet],[data-close],[data-rtheme],[data-size],[data-delete],[data-undo],[data-undo-share],[data-readnow],[data-archive-open],[data-next],[data-stop],[data-play],[data-skip],[data-rate],[data-listen],[data-playall],[data-playitem],[data-open-audio],[data-stop-audio],[data-rsvp],[data-rsvp-exit],[data-rsvp-toggle],[data-rsvp-sent],[data-wpm],[data-rsvp-archive],[data-rsvp-unarchive],[data-new],[data-onb-go],[data-allow-camera],[data-perm],[data-open-settings],[data-paste],[data-sugg],[data-code-continue],[data-code-retry],[data-nostr],[data-import],[data-open],[data-rowmenu],[data-row-restore],[data-row-delete],[data-unarchive-open],[data-orig],[data-orig-close],[data-copylink],[data-openbrowser]');
+  const t = e.target.closest('[data-keep-copies],[data-tab],[data-list],[data-go],[data-back],[data-clear],[data-sheet],[data-close],[data-rtheme],[data-size],[data-delete],[data-undo],[data-undo-share],[data-readnow],[data-archive-open],[data-next],[data-stop],[data-play],[data-skip],[data-rate],[data-listen],[data-playall],[data-playitem],[data-open-audio],[data-stop-audio],[data-rsvp],[data-rsvp-exit],[data-rsvp-toggle],[data-rsvp-sent],[data-wpm],[data-rsvp-archive],[data-rsvp-unarchive],[data-new],[data-onb-go],[data-allow-camera],[data-perm],[data-open-settings],[data-paste],[data-sugg],[data-code-continue],[data-code-retry],[data-nostr],[data-link-go],[data-import],[data-open],[data-rowmenu],[data-row-restore],[data-row-delete],[data-unarchive-open],[data-orig],[data-orig-close],[data-copylink],[data-openbrowser]');
   if (!t || t.closest('.ghost')) return;
   const d = t.dataset;
   if (d.stop !== undefined) return;
@@ -3820,8 +3992,13 @@ vp.addEventListener('click', e => {
     leaveReader();
     deleteItem(it, () => { S.exiting = null; reopenReader(it.id, back); });
   }
-  if (d.orig !== undefined) { S.sheet = null; S.readerMode = 'original'; }
-  if (d.origClose !== undefined) { S.readerMode = 'ok'; }
+  if (d.orig !== undefined) {
+    // the page loads under Shelf's bar with the Reader's skeleton, then crossfades in (decision 81); offline, the view says
+    // it needs a connection instead (G4)
+    S.sheet = null; S.readerMode = 'original'; S.iab = 'loading';
+    const id = S.readerId; later(() => { if (S.screen === 'reader' && S.readerId === id && S.readerMode === 'original' && S.iab === 'loading' && S.online) { S.iab = 'page'; render(); } }, 900);
+  }
+  if (d.origClose !== undefined) { clearOnb(); S.readerMode = 'ok'; S.iab = 'page'; }
   if (d.copylink !== undefined) { S.sheet = null; showToast('Link copied', null, S.items.find(i => i.id === S.readerId)); }
   if (d.openbrowser !== undefined) { S.sheet = null; showToast('Would open in your browser', null, S.items.find(i => i.id === S.readerId)); }
   if (d.tab && d.tab !== S.screen && TAB_SCREENS.includes(S.screen) && !S.host) {
@@ -3856,12 +4033,12 @@ vp.addEventListener('click', e => {
   if (d.undoShare !== undefined) {
     // Undo is told apart from the timeout: 'Removed from Shelf' for 1.5 s, then back to the host app (fix 5)
     clearTimeout(sheetTimer); S.shareT = null;
-    S.items = S.items.filter(i => i.id !== 99);
+    const sid = shareId(); S.items = S.items.filter(i => i.id !== sid);
     S.shareRemoved = true;
     sheetTimer = setTimeout(() => { S.shareRemoved = false; S.sheet = null; render(); }, 1500);
   }
-  if (d.readnow !== undefined) { clearTimeout(sheetTimer); S.shareT = null; S.sheet = null; S.host = false; S.tab = S.screen = 'saves'; openItem(99, null); return; }
-  if (d.new !== undefined) { clearOnb(); clearRestore(); S.restoring = null; S.navHint = 'root'; S.tab = S.screen = 'saves'; S.list = 'unread'; S.you.browsers = []; if (S.early) { S.items = [EARLY()]; S.savesMode = 'normal'; } else { S.items = []; S.savesMode = 'first'; } }
+  if (d.readnow !== undefined) { const sid = shareId(); clearTimeout(sheetTimer); S.shareT = null; S.sheet = null; S.host = false; S.tab = S.screen = 'saves'; openItem(sid, null); return; }
+  if (d.new !== undefined) { clearOnb(); clearRestore(); S.restoring = null; S.navHint = 'root'; S.tab = S.screen = 'saves'; S.list = 'unread'; S.you.browsers = []; if (S.early) { S.items = earlyItems(); S.savesMode = 'normal'; } else { S.items = []; S.savesMode = 'first'; } }
   if (d.onbGo) { clearOnb(); const g = d.onbGo; if (g === 'scan') { S.scan = 'prime'; S.six = ''; } if (g === 'code') S.code = freshCode(); if (g === 'nostr') S.nostr = 'intro'; if (TAB_SCREENS.includes(g)) S.tab = g; S.screen = g; }
   if (d.allowCamera !== undefined) S.scan = 'prompt';
   // once the QR is read, the six digits are asked for (Q9)
@@ -3874,6 +4051,15 @@ vp.addEventListener('click', e => {
   if (d.keepCopies !== undefined) S.keepCopies = !S.keepCopies;
   if (d.nostr) { clearOnb(); S.nostr = d.nostr; if (d.nostr === 'waiting') later(() => { if (S.screen === 'nostr' && S.nostr === 'waiting') { S.sheet = 'import'; render(); } }, 2200); }
   if (d.import) { S.you.nostrUser = true; startRestore(); return; }
+  if (d.linkGo) {
+    // Connect with the link: a link that doesn't work stays in the field, marked, with the error under it (decision 91 (b))
+    const f = document.getElementById('nlink'); S.nostrLink = f ? f.value : S.nostrLink;
+    const sw = d.linkGo === 'switch', Y = S.you;
+    clearOnb();
+    if (!linkOK(S.nostrLink)) { if (sw) Y.sw = 'badlink'; else S.nostr = 'badlink'; }
+    else if (sw) { Y.sw = 'waiting'; later(() => { if (S.screen === 'switchnostr' && Y.sw === 'waiting') { Y.sw = 'moving'; Y.swDone = 0; render(); moveStep(); } }, 2000); }
+    else { S.nostr = 'waiting'; later(() => { if (S.screen === 'nostr' && S.nostr === 'waiting') { S.sheet = 'import'; render(); } }, 2200); }
+  }
   if (d.rsvp !== undefined) { startRsvp(); return; }
   if (d.rsvpExit !== undefined) { exitRsvp(); return; }
   if (d.rsvpToggle !== undefined) { rsvpToggle(); return; }
@@ -3931,6 +4117,9 @@ vp.addEventListener('click', e => {
   render();
 });
 
+// the save the Saved sheet is about: the shared link, the X post waiting for X (G3), or the unread save shared again (G2)
+const AGAIN_ID = 1;
+const shareId = () => S.sheet === 'share-embedfail' ? 95 : S.sheet === 'share-again' ? AGAIN_ID : 99;
 function addSharedItem(){
   // the shared link is a new article, so it carries its own address's hash and a face of its own. Its cover draws in the
   // share sheet, where it lands in front of you; Saves wasn't on screen when it joined, so its row there is simply drawn.
@@ -3964,7 +4153,7 @@ function jumpTo(b){
   Object.keys(LG).forEach(k => delete LG[k]);
   document.querySelectorAll('.statusbar .plates').forEach(p => p.remove()); document.querySelectorAll('.plating').forEach(p => p.classList.remove('plating'));
   S.items = seed(); S.toast = null; S.sheet = null; S.online = true; S.savesMode = 'normal'; S.list = 'unread'; S.query = '';
-  S.readerMode = 'ok'; S.readerId = 2; S.screen = 'saves'; S.readerBack = null;
+  S.readerMode = 'ok'; S.readerId = 2; S.screen = 'saves'; S.readerBack = null; S.iab = 'page'; S.noWordTiming = false; S.nostrLink = '';
   S.audio = null; S.played = []; S.playAll = false; S.queue = null; S.rate = 1; S.lock = false; S.tab = 'saves'; S.host = false; S.rowId = null; S.sheetOpener = null;
   S.listenMini = false; S.playerEnter = false; S.restoreScroll = null; S.restoreListenMini = false; S.searchFocus = false;
   S.shareRemoved = false; S.shareT = null; S.lastKey = null; S.lastSheet = null; S.lastNav = null; S.navHint = null;
@@ -3972,12 +4161,13 @@ function jumpTo(b){
   S.searchNone = false; S.searchLast = null; S.listScroll = {}; S.tabScroll = {}; S.firstLaunch = false; S.welcomeT0 = null; S.welcomeLine = false; S.sheetRelease = null;
   clearTimeout(rsvpTimer); S.rsvp = null; S.flashWord = null;
   S.you = freshYou();
-  clearOnb(); clearRestore(); S.early = false; S.restoring = null; S.onbOffline = false; S.scan = 'prime'; S.six = ''; S.nostr = 'intro'; S.keepCopies = true; S.code = freshCode();
+  clearOnb(); clearRestore(); S.early = 0; S.restoring = null; S.onbOffline = false; S.scan = 'prime'; S.six = ''; S.nostr = 'intro'; S.keepCopies = true; S.code = freshCode();
   const j = b.dataset.jump;
   if (youJump(j)) return;
   // Welcome on first launch: its covers draw and the front card's line catches up, once
   if (j === 'welcome') { S.screen = 'welcome'; S.items = []; S.firstLaunch = true; }
-  if (j === 'welcome-early') { S.screen = 'welcome'; S.early = true; S.items = [EARLY()]; S.firstLaunch = true; }
+  if (j === 'welcome-early') { S.screen = 'welcome'; S.early = 1; S.items = earlyItems(); S.firstLaunch = true; }
+  if (j === 'welcome-early-many') { S.screen = 'welcome'; S.early = 3; S.items = earlyItems(); S.firstLaunch = true; }
   if (j === 'saves-arrive') {
     // a save arrives from the browser while Saves is on screen: it joins the top by row in and its cover draws
     S.items = S.items.filter(i => i.id !== 4);
@@ -4000,7 +4190,15 @@ function jumpTo(b){
     if (j === 'code-ready' || j === 'code-checking') { S.code.words = [...SAMPLE_CODE]; S.code.focus = null; S.code.checking = j === 'code-checking'; }
     if (j === 'code-notfound') S.code.notFound = true;
   }
-  if (j.startsWith('nostr')) { S.screen = 'nostr'; S.nostr = { nostr: 'intro', 'nostr-waiting': 'waiting', 'nostr-none': 'none', 'nostr-declined': 'declined', 'nostr-import': 'waiting' }[j]; if (j === 'nostr-import') S.sheet = 'import'; }
+  if (j.startsWith('nostr')) {
+    S.screen = 'nostr';
+    S.nostr = { nostr: 'intro', 'nostr-waiting': 'waiting', 'nostr-none': 'none', 'nostr-declined': 'declined', 'nostr-import': 'waiting', 'nostr-timeout': 'timeout', 'nostr-badlink': 'badlink', 'nostr-probe': 'probe' }[j];
+    if (j === 'nostr-import') S.sheet = 'import';
+    if (j === 'nostr-badlink') S.nostrLink = 'bunker://8635d45d2f8d6d4ef88446ebe103327d';   // cut short when copied: no full key, no relay
+  }
+  // a sign-in, a Block Store restore or a pairing that finds nothing lands on first-run Saves, with no restore card
+  // (decision 91 (a)); here, a nostr sign-in with nothing saved yet
+  if (j === 'restore-nothing') { S.items = []; S.savesMode = 'first'; S.you.browsers = []; S.you.nostrUser = true; }
   if (j === 'restoring') { startRestore(); return; }
   if (j === 'restoring-mid') { startRestore({ freezeAt: 4 }); return; }
   if (j === 'restoring-offline') { S.onbOffline = true; S.online = false; startRestore({ freezeAt: 4 }); return; }
@@ -4011,6 +4209,8 @@ function jumpTo(b){
     S.items.find(i => i.id === id).progress = frac;   // one stored position
   };
   if (j === 'play' || j === 'play-paused') { S.screen = 'reader'; listenSeed(2, .34, j === 'play'); S.scrollToWord = true; }
+  // a voice without word timing: the sentence is marked; on Listen the word meter stays unlit (decision 91 (h))
+  if (j === 'play-sentence') { S.screen = 'reader'; S.noWordTiming = true; listenSeed(2, .34); S.scrollToWord = true; }
   if (j === 'mini-reader') { listenSeed(2, .34); S.screen = 'reader'; S.readerId = 1; }
   if (j === 'mini') listenSeed(2, .34);
   if (j === 'listen' || j === 'listen-scrolled' || j === 'listen-reader') { S.tab = S.screen = 'listen'; listenSeed(2, .34); }
@@ -4025,6 +4225,9 @@ function jumpTo(b){
   if (j === 'lock') { S.screen = 'reader'; listenSeed(2, .34); S.lock = true; }
   if (j.startsWith('rsvp')) { S.screen = 'reader'; S.items[1].progress = j.startsWith('rsvp-done') ? .99 : 58 / TOK.length; if (j === 'rsvp-done-archived') S.items[1].archived = true; }
   if (j === 'saves-empty') { S.items = []; S.savesMode = 'first'; S.you.browsers = []; }
+  if (j === 'saves-empty-offline') { S.items = []; S.savesMode = 'first'; S.you.browsers = []; S.online = false; }
+  // shared from X while X's embed service wasn't answering (G3): the post's row is there, drawn, waiting for X
+  if (j === 'saves-embedfail') { const x = XPOST(); S.items.unshift(x); landed.set(x, -Infinity); }
   if (j === 'saves-cleared') S.items.forEach(i => i.archived = true);
   if (j === 'saves-loading') S.savesMode = 'loading';
   // shared while offline, in another app: the row is there, drawn, waiting for a connection
@@ -4037,8 +4240,12 @@ function jumpTo(b){
   if (j.startsWith('share')) {
     S.host = true; addSharedItem();
     S.sheet = j === 'share' || j === 'share-undone' ? 'share-saved' : j;
-    if (j === 'share-nolink' || j === 'share-checking' || j === 'share-noarticle') S.items = S.items.filter(i => i.id !== 99);
+    if (j === 'share-nolink' || j === 'share-checking' || j === 'share-noarticle' || j === 'share-again') S.items = S.items.filter(i => i.id !== 99);
+    // the link shared is one already on the shelf and unread (G2): nothing changes, and the sheet counts down as usual
+    if (j === 'share-again') { S.shareT = freshShareT(); render(); shareRun(); return; }
     if (j === 'share-offline') S.online = false;
+    // X's embed service failing while online (G3): the post's address is saved, pending, and the sheet says what it waits for
+    if (j === 'share-embedfail') { S.items = S.items.filter(i => i.id !== 99); const x = XPOST(); S.items.unshift(x); joinSave(x); }
     if (j === 'share') { S.shareT = freshShareT(); render(); shareRun(); return; }
     if (j === 'share-undone') { S.items = S.items.filter(i => i.id !== 99); S.shareRemoved = true; render(); sheetTimer = setTimeout(() => { S.shareRemoved = false; S.sheet = null; render(); }, 1500); return; }
   }
@@ -4050,6 +4257,9 @@ function jumpTo(b){
   if (j === 'reader-aa') S.sheet = 'aa';
   if (j === 'reader-menu') S.sheet = 'menu';
   if (j === 'reader-original') S.readerMode = 'original';
+  if (j === 'reader-original-loading') { S.readerMode = 'original'; S.iab = 'loading'; }
+  if (j === 'reader-original-failed') { S.readerMode = 'original'; S.iab = 'failed'; }
+  if (j === 'reader-original-offline') { S.readerMode = 'original'; S.online = false; }
   if (j === 'reader-offline') { S.online = false; S.readerId = 4; S.readerMode = 'offlinewait'; }
   if (j.startsWith('rsvp')) {
     render(); startRsvp();

@@ -10,7 +10,7 @@ Run on 5 October 2026 by Richard and Claude, on a real phone over USB. This is t
 - the phone's voice reported the exact position of every word it spoke;
 - audio played to the end of a six-minute file behind the lock screen, with the lock-screen controls showing.
 
-Following CLAUDE.md, the Android spec (`03-android.md`, written for Kotlin and Compose) is to be rewritten as an Expo mobile spec.
+Following CLAUDE.md, the Android spec, written for Kotlin and Compose, has since been rewritten as the Expo mobile spec `03-mobile.md`; the old one is archived as `archive/03-android-v1.0.md`.
 
 The locked tests ran with the phone on USB power. Android exempts a charging phone from its battery restrictions (Doze), so a locked run on battery is still to be done before listening is settled (see Next).
 
@@ -91,7 +91,7 @@ On this Pixel, with Google's engine, `expo-speech`'s `onBoundary` reported `char
 | … | | | |
 | them | 173 | 4 | 10,895 |
 
-Events arrived about every 240 ms (the median gap), and the first word came about 2 s after the call on a cold start. That is enough for the spoken-word highlight, the word stream Speed read shares with listening (flow decision 21), and the word meter (flow decision 68). The native module CLAUDE.md held in reserve for missing positions isn't needed on this engine. The positions come from Android's `onRangeStart`, which needs API 26, while Expo's default minimum is 24, so the app has to set its minimum SDK to 26, as `03-android.md` already says. Other engines, such as Samsung's, are untested; `03-android.md`'s fallback to paragraph highlighting for engines without word timing still applies.
+Events arrived about every 240 ms (the median gap), and the first word came about 2 s after the call on a cold start. That is enough for the spoken-word highlight, the word stream Speed read shares with listening (flow decision 21), and the word meter (flow decision 68). The native module CLAUDE.md held in reserve for missing positions isn't needed on this engine. The positions come from Android's `onRangeStart`, which needs API 26, while Expo's default minimum is 24, so the app has to set its minimum SDK to 26, as `archive/03-android-v1.0.md` already says. Other engines, such as Samsung's, are untested; for engines without word timing the mobile spec marks the sentence being spoken (`play-sentence`, flow decision 91 (h)).
 
 ## 3. Five minutes behind the lock screen
 
@@ -141,15 +141,15 @@ A 2.6 s freeze after typing a code, or 14 s without the freeze, is too slow, so 
 
 ## Next
 
-1. Rewrite `03-android.md` as an Expo mobile spec, with these results, the media-session module, the native scrypt and a minimum SDK of 26.
-2. Specify the media-session module:
+1. Rewrite the Android spec as an Expo mobile spec, with these results, the media-session module, the native scrypt and a minimum SDK of 26. Done: `03-mobile.md`.
+2. Specify the media-session module (done: `03-mobile.md` section 8.1, `shelf-voice`):
    - a foreground `mediaPlayback` service;
    - Android `TextToSpeech` fed sentence by sentence from the spoken-text version of the normalised Markdown (contract 4.2), with word positions mapped back to the Markdown for highlighting (contract 7);
    - play, pause and the ±15 s skips mapped onto the text, with the exact rule settled in the spec;
    - the cover as artwork, and word positions passed to JavaScript;
    - the session released when listening ends.
 3. Add the typed-code vectors to the shared fixtures, with code, lookup, key and offer.
-4. Specify flow decisions 77 and 78 (now on the flow map and in the prototype): a shared X post is checked through X's embed service and saves the article it links to; one with no outside link saves nothing ("No article in that post"). A page Readability marks not readable, with very little text, gets "Couldn't get the text".
+4. Specify flow decisions 77 and 78 (now on the flow map and in the prototype): a shared X post is checked through X's embed service and saves the article it links to; one with no outside link saves nothing ("No article in that post"). A page Readability marks not readable, with very little text, gets "Couldn't get the text". Done: `03-mobile.md` section 5.4, with contract sections 4.2 (the guard) and 4.3 (the X rule).
 5. Still to test on a phone:
    - a locked run on battery, off USB, for both the file and the voice;
    - a share made in the X app itself with its `share` line logged (the two posts above were sent over USB);

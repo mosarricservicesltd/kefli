@@ -1,4 +1,4 @@
-/* Generated from shared/tokens/tokens.json (v1.0.0, fingerprint) by build-css.mjs. Do not edit. */
+/* Generated from shared/tokens/tokens.json (v1.0.1, fingerprint) by build-css.mjs. Do not edit. */
 /* Web fonts for the mockups and the website only; the app and the extension bundle the font files. */
 @import url('https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Literata:ital,opsz,wght@0,7..72,200..900;1,7..72,200..900&family=Martian+Mono:wght@400..600&display=swap');
 :root, [data-theme="light"] {
@@ -75,7 +75,12 @@
   --font-display-stretch: 125%;
   --font-display-weight: 750;
   --font-display-tracking: -0.025em;
+  --font-article-title: 'Archivo', Roboto, 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  --font-article-title-stretch: 100%;
+  --font-article-title-weight: 750;
+  --font-article-title-tracking: -0.022em;
   --font-mono: 'Martian Mono', 'Roboto Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --font-mono-weight: 500;
   --font-mono-tracking: -0.03em;
   --font-reader: 'Literata', 'Noto Serif', Georgia, 'Times New Roman', serif;
   --text-13: 13px;
@@ -86,14 +91,24 @@
   --text-32: 32px;
   --leading-ui: 1.45;
   --leading-display: 1.2;
+  --leading-article-title: 1.2;
   --weight-body: 400;
   --weight-meta: 500;
   --weight-label: 550;
+  --weight-group-label: 600;
   --weight-title: 620;
   --weight-heading: 650;
   --weight-empty-heading: 680;
   --reader-size: 18px;
   --reader-leading: 1.6;
+  --reader-opsz: 18;
+  --reader-weight-regular: 400;
+  --reader-weight-bold: 700;
+  --reader-word-size: 32px;
+  --reader-word-leading: 1.1;
+  --reader-word-opsz: 32;
+  --reader-word-weight-regular: 400;
+  --reader-word-weight-focus: 600;
   --space-4: 4px;
   --space-8: 8px;
   --space-12: 12px;
