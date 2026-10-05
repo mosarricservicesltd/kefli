@@ -613,6 +613,17 @@ svg .arc{transform-box:view-box;transform-origin:center}
 .plist li.go svg{color:var(--error)}
 .plist li.ask svg{color:var(--muted)}
 .plist li small{display:block;color:var(--muted);font-size:var(--text-13)}
+/* the one switch (decision 76): an on/off choice as a card-edged row. The track is ink when on and an outline when off;
+   only the knob travels (quick in), and colours change at once */
+.swrow{display:flex;align-items:center;gap:var(--space-12);width:100%;min-height:64px;padding:var(--space-12) var(--space-16);margin:0 0 var(--space-20);border-radius:var(--radius);background:var(--surface);border:var(--card-edge);text-align:left}
+.swrow .yl{flex:1;min-width:0}
+.swrow b{display:block;font-weight:var(--weight-title);font-size:var(--text-15)}
+.swrow small{display:block;margin-top:2px;color:var(--muted);font-size:var(--text-13);line-height:1.4}
+.sw{position:relative;flex:none;width:44px;height:26px;border-radius:var(--radius-pill);border:2px solid var(--muted)}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--muted);transition:transform var(--motion-quick-in)}
+.swrow[aria-checked="true"] .sw{background:var(--fill);border-color:var(--fill)}
+.swrow[aria-checked="true"] .sw::after{background:var(--on-fill);transform:translateX(18px)}
+@media (prefers-reduced-motion:reduce){.sw::after{transition:none}}
 .label{display:block;font-size:var(--text-13);font-weight:600;margin-bottom:var(--space-8)}
 .steps{list-style:none;margin:0;padding:0}
 .steps li{display:flex;align-items:center;gap:var(--space-12);min-height:48px;border-top:1px solid var(--line)}
@@ -1082,7 +1093,7 @@ const S = {
   screen:'saves', query:'', readerId:2, readerMode:'ok', readerTheme:'light', readerSize:18,
   sheet:null, toast:null, scrollToEnd:false,
   audio:null, played:[], playAll:false, lock:false, scrollToWord:false,
-  early:false, restoring:null, onbOffline:false, scan:'prime', six:'', nostr:'intro',
+  early:false, restoring:null, onbOffline:false, scan:'prime', six:'', nostr:'intro', keepCopies:true,
   rate:1, queue:null, host:false, rowId:null, sheetOpener:null,
   readerBack:null,        // where ← from the Reader goes: the screen that opened it (Q7); null = Saves
   listenMini:false,       // Listen shows the mini once the Now playing card has mostly scrolled away (Q3a)
@@ -1696,6 +1707,8 @@ function bindCode(){
   }
 }
 
+// contract 3.1: with it on, Shelf's server and one default backup join the user's own server list (decision 76)
+const keepCopiesRow = () => `<button class="swrow" role="switch" aria-checked="${S.keepCopies}" data-keep-copies><span class="yl"><b>Keep backup copies</b><small>Adds Shelf’s server and one independent backup to the list your nostr apps share, so your saves survive any one server closing.</small></span><span class="sw" aria-hidden="true"></span></button>`;
 function nostrScreen(){
   const st = S.nostr;
   if (st === 'waiting') {
@@ -1711,7 +1724,7 @@ function nostrScreen(){
   }
   const declined = st === 'declined' ? `<div class="errline">${ic('alert', 16)}<span>The request was declined in your nostr app. Nothing has changed.</span></div>` : '';
   return onbShell(`<h1>Sign in with your nostr app</h1>${declined}
-    <p class="lead">Shelf asks your nostr app to confirm it’s you. Your saves stay private: only you can read them.</p>`,
+    <p class="lead">Shelf asks your nostr app to confirm it’s you. Your saves stay private: only you can read them.</p>${keepCopiesRow()}`,
     `<button class="btn primary full" data-nostr="waiting">${ic('login', 18)}Open my nostr app</button><button class="btn quiet full" data-nostr="none">Use a sign-in link instead</button>`, 'return');
 }
 
@@ -1943,7 +1956,7 @@ function switchScreen(){
   return onbShell(`<h1>Use my nostr app instead</h1>${declined}${off ? offlineNotice('Moving your saves needs a connection') : ''}
     <p class="lead">Your saves move to your nostr account, and your nostr app keeps you signed in from then on.</p>
     <ul class="plist"><li class="ask">${ic('check', 18)}<span>Every save and its text comes with you<small>Nothing is lost, and it stays private.</small></span></li>
-    <li class="go">${ic('alert', 18)}<span>Your recovery code stops working<small>Afterwards you can throw it away. Your nostr app is how you get back in.</small></span></li></ul>`,
+    <li class="go">${ic('alert', 18)}<span>Your recovery code stops working<small>Afterwards you can throw it away. Your nostr app is how you get back in.</small></span></li></ul>${keepCopiesRow()}`,
     `<button class="btn primary full" data-you-act="sw-start" ${off ? 'disabled' : ''}>${ic('login', 18)}Continue with my nostr app</button>`, 'advanced');
 }
 
@@ -3743,7 +3756,7 @@ function openItem(id, back){
 
 /* ---------------- events ---------------- */
 vp.addEventListener('click', e => {
-  const t = e.target.closest('[data-tab],[data-list],[data-go],[data-back],[data-clear],[data-sheet],[data-close],[data-rtheme],[data-size],[data-delete],[data-undo],[data-undo-share],[data-readnow],[data-archive-open],[data-next],[data-stop],[data-play],[data-skip],[data-rate],[data-listen],[data-playall],[data-playitem],[data-open-audio],[data-stop-audio],[data-rsvp],[data-rsvp-exit],[data-rsvp-toggle],[data-rsvp-sent],[data-wpm],[data-rsvp-archive],[data-rsvp-unarchive],[data-new],[data-onb-go],[data-allow-camera],[data-perm],[data-open-settings],[data-paste],[data-sugg],[data-code-continue],[data-code-retry],[data-nostr],[data-import],[data-open],[data-rowmenu],[data-row-restore],[data-row-delete],[data-unarchive-open],[data-orig],[data-orig-close],[data-copylink],[data-openbrowser]');
+  const t = e.target.closest('[data-keep-copies],[data-tab],[data-list],[data-go],[data-back],[data-clear],[data-sheet],[data-close],[data-rtheme],[data-size],[data-delete],[data-undo],[data-undo-share],[data-readnow],[data-archive-open],[data-next],[data-stop],[data-play],[data-skip],[data-rate],[data-listen],[data-playall],[data-playitem],[data-open-audio],[data-stop-audio],[data-rsvp],[data-rsvp-exit],[data-rsvp-toggle],[data-rsvp-sent],[data-wpm],[data-rsvp-archive],[data-rsvp-unarchive],[data-new],[data-onb-go],[data-allow-camera],[data-perm],[data-open-settings],[data-paste],[data-sugg],[data-code-continue],[data-code-retry],[data-nostr],[data-import],[data-open],[data-rowmenu],[data-row-restore],[data-row-delete],[data-unarchive-open],[data-orig],[data-orig-close],[data-copylink],[data-openbrowser]');
   if (!t || t.closest('.ghost')) return;
   const d = t.dataset;
   if (d.stop !== undefined) return;
@@ -3848,6 +3861,7 @@ vp.addEventListener('click', e => {
   if (d.sugg && S.code.focus != null) { const i = S.code.focus; S.code.words[i] = d.sugg; S.code.focus = i < 11 ? i + 1 : null; }
   if (d.codeContinue !== undefined) { if (S.code.checking) return; const ok = S.code.words.join(' ') === SAMPLE_CODE.join(' '); S.code.checking = true; S.code.focus = null; render(); later(() => { S.code.checking = false; if (ok) startRestore(); else { S.code.notFound = true; render(); } }, 1400); return; }
   if (d.codeRetry !== undefined) S.code = freshCode();
+  if (d.keepCopies !== undefined) S.keepCopies = !S.keepCopies;
   if (d.nostr) { clearOnb(); S.nostr = d.nostr; if (d.nostr === 'waiting') later(() => { if (S.screen === 'nostr' && S.nostr === 'waiting') { S.sheet = 'import'; render(); } }, 2200); }
   if (d.import) { S.you.nostrUser = true; startRestore(); return; }
   if (d.rsvp !== undefined) { startRsvp(); return; }
@@ -3948,7 +3962,7 @@ function jumpTo(b){
   S.searchNone = false; S.searchLast = null; S.listScroll = {}; S.tabScroll = {}; S.firstLaunch = false; S.welcomeT0 = null; S.welcomeLine = false; S.sheetRelease = null;
   clearTimeout(rsvpTimer); S.rsvp = null; S.flashWord = null;
   S.you = freshYou();
-  clearOnb(); clearRestore(); S.early = false; S.restoring = null; S.onbOffline = false; S.scan = 'prime'; S.six = ''; S.nostr = 'intro'; S.code = freshCode();
+  clearOnb(); clearRestore(); S.early = false; S.restoring = null; S.onbOffline = false; S.scan = 'prime'; S.six = ''; S.nostr = 'intro'; S.keepCopies = true; S.code = freshCode();
   const j = b.dataset.jump;
   if (youJump(j)) return;
   // Welcome on first launch: its covers draw and the front card's line catches up, once

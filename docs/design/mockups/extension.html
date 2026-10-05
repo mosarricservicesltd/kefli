@@ -38,6 +38,10 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .panel .note p:last-child{margin:0}
 .panel .jnote{margin:var(--space-12) 0 0}
 .panel details.note summary{cursor:pointer;font-weight:620}
+/* embedded in an iframe (the Stage 0 tour, docs/design/tour.html): the browser window alone, 1040 x 696 */
+html.embed body{background:transparent}
+html.embed .panel{display:none}
+html.embed .wrap{padding:var(--space-16)}
 .panel details.note ul{margin:var(--space-8) 0 0;padding-left:1.2em}
 .panel details.note li{margin-bottom:var(--space-4)}
 .panel code{font-family:var(--font-mono);font-size:11.5px;letter-spacing:-.02em}
@@ -1569,6 +1573,20 @@ document.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => {
 
 syncToggles();
 render();
+
+/* Deep links, as in prototype.html: extension.html#full opens that panel state, and #full-dark opens it in the dark theme.
+   Inside an iframe (the Stage 0 tour) the panels are hidden. */
+(function(){
+  if (window.self !== window.top) document.documentElement.classList.add('embed');
+  const go = () => {
+    const h = decodeURIComponent(location.hash.slice(1)); if (!h) return;
+    const dark = /-dark$/.test(h), b = document.querySelector(`[data-jump="${CSS.escape(dark ? h.slice(0, -5) : h)}"]`);
+    if (!b) return;
+    document.querySelector(`[data-theme-set="${dark ? 'dark' : 'light'}"]`).click();
+    b.click();
+  };
+  go(); window.addEventListener('hashchange', go);
+})();
 </script>
 </body>
 </html>

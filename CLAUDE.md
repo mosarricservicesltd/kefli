@@ -4,10 +4,10 @@ Working name **Shelf** (placeholder; the name appears in the protocol only as th
 
 ## Source of truth
 
-1. `shared/contract/contract.md` — contract v1.1. Protocol, event kinds, API, limits. It wins over every other document. Change it only deliberately, bump its version, and add a changelog entry.
+1. `shared/contract/contract.md` — contract v1.2. Protocol, event kinds, API, limits. It wins over every other document. Change it only deliberately, bump its version, and add a changelog entry.
 2. `docs/specs/01-project-plan.md` — sequence, gates, testing. Read the scope revision at the top.
 3. `docs/specs/` — backend, extension and Android specs. They were written against contract v1.0; apply the contract's section 11 changelog where they differ. The iOS spec is parked.
-4. `docs/design/pocket-on-nostr-flow.html` — UX flow map rev. 2, weight audit, state matrix. Nothing gets built that isn't on the map; additions go on the map first.
+4. `docs/design/flow-map-rev3.html` — UX flow map rev. 3, weight audit, state matrix, with the decision log `docs/design/flow-decisions.md` (later decisions override the map). Nothing gets built that isn't on the map; additions go on the map first.
 
 ## Current decisions
 
@@ -18,14 +18,14 @@ Working name **Shelf** (placeholder; the name appears in the protocol only as th
 - **Listening:** on-device text-to-speech only in v1 (flow decision 22). The Kokoro TTS worker and audio API in the backend spec are deferred to a later subscription feature set; don't build them for v1.
 - **Protocol essentials:** private saves are NIP-78 kind 30078, `d` = `shelf/item/<sha256 normalised URL>`, `t` = `shelf`, NIP-44 self-encrypted. Article text is an AES-GCM encrypted Blossom blob, mirrored. Saves go to three relays by default (ours plus two public ones). The extension has its own device key and never holds the user's key; it sends NIP-59 gift wraps carrying only a blob hash and key. No event over 16 KB.
 - **Parser:** `@mozilla/readability` 0.6.0 plus `turndown` 7.2.4, vendored in `shared/vendor/`. The same JS runs in the extension and in a hidden WebView on the phone, so article hashes match.
-- **Visual style:** Fingerprint, chosen by Richard in October 2026 from a five-way design study (`docs/design/study/`, flow decisions 65 to 68). Every save draws its own cover from the sha256 in its d tag, identical on every device and versioned forever (cover v1). The chrome is ink, paper, two greys and hairlines with no brand colour (Terracotta is retired); Archivo and Archivo Expanded for the interface, Literata for reading, Martian Mono for player clocks; Lucide icons at 1.75 stroke. Values are in `shared/tokens/tokens.json` (draft until the Stage 0 screens are approved), generated out to every platform. Screens are local HTML prototypes in `docs/design/mockups/` (Figma was dropped).
+- **Visual style:** Fingerprint, chosen by Richard in October 2026 from a five-way design study (`docs/design/study/`, flow decisions 65 to 68). Every save draws its own cover from the sha256 in its d tag, identical on every device and versioned forever (cover v1). The chrome is ink, paper, two greys and hairlines with no brand colour (Terracotta is retired); Archivo and Archivo Expanded for the interface, Literata for reading, Martian Mono for player clocks; Lucide icons at 1.75 stroke. Values are in `shared/tokens/tokens.json` (1.0.0, frozen at the Stage 0 sign-off, flow decision 75), generated out to every platform. Screens are local HTML prototypes in `docs/design/mockups/` (Figma was dropped), signed off on 5 October 2026 as the reference the build is checked against.
 
 ## Repo layout (target)
 
 ```
 apps/mobile      Expo app (Android first)
 apps/extension   WebExtension (Chrome + Firefox)
-apps/web         website: landing, privacy, extension install guide, /open; later the web reader (React + Untitled UI)
+apps/web         website: landing, privacy, extension install guide; later the web reader (React + Untitled UI)
 server/          api (Go), tts (Kokoro), deploy (Ansible, strfry.conf, Caddy)
 packages/protocol  shared TS: normalise, event builders, encryption, types
 packages/ui      Untitled UI wrappers for web + extension
@@ -34,6 +34,8 @@ docs/            specs, design, research
 ```
 
 ## First task: the Android spike (one evening)
+
+Resumes after contract v1.2, now written (flow decision 75). The scaffold in `apps/mobile` and `shared/vendor/` is uncommitted and none of the three tests has run yet.
 
 In a bare Expo development build on a real Android phone:
 1. Receive a link shared from X and parse it with Readability in a hidden WebView.
@@ -53,4 +55,3 @@ If all three work, Expo is confirmed and the Android spec is rewritten as an Exp
 ## Open items for Richard
 
 - Name, and the licence (open-sourcing the clients supports the "outlives the service" story; AGPL stops a closed fork).
-- Queue model is currently a flat Unread list plus Archive; confirm.

@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shelf Stage 0 Tour</title>
+<link rel="icon" href="../../shared/brand/out/web/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- the Fingerprint tokens (follows the system's light or dark setting) and cover v1, for the chapter covers -->
+<link rel="stylesheet" href="mockups/tokens.css">
+<script src="mockups/cover-v1.js"></script>
+<style>
+/* The Stage 0 walkthrough: a guided route through prototype.html and extension.html, plus the brand outputs, with a
+   verdict and a note per stop. It is a review board, not Shelf UI; its own chrome still uses the tokens. Marks are kept
+   in this browser's localStorage only, and Copy notes turns them into text to paste into the chat. */
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html,body{margin:0;height:100%}
+body{font-family:var(--font-ui);font-size:var(--text-15);line-height:var(--leading-ui);background:var(--background);color:var(--text);-webkit-font-smoothing:antialiased}
+button,textarea,input{font:inherit;color:inherit}
+button{background:none;border:0;padding:0;cursor:pointer}
+:focus-visible{outline:var(--focus-width) solid var(--focus);outline-offset:var(--focus-offset)}
+.sr{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+.app{display:grid;grid-template-columns:256px minmax(0,1fr) 368px;height:100vh}
+
+/* ---------- route (left) ---------- */
+.rail{border-right:1px solid var(--line);overflow:auto;padding:var(--space-20) var(--space-12) var(--space-32)}
+.brand{display:flex;gap:var(--space-12);align-items:center;padding:0 var(--space-4) var(--space-16)}
+.brand h1{margin:0;font-family:var(--font-display);font-stretch:var(--font-display-stretch);font-weight:var(--font-display-weight);letter-spacing:var(--font-display-tracking);font-size:var(--text-20);line-height:var(--leading-display)}
+.brand p{margin:2px 0 0;font-size:var(--text-13);color:var(--muted)}
+.progress{margin:0 var(--space-4) var(--space-16);font-size:var(--text-13);color:var(--muted)}
+.progress .bar{height:3px;border-radius:2px;background:var(--line);margin-top:6px;overflow:hidden}
+.progress .bar i{display:block;height:100%;background:var(--text);transform-origin:left;transform:scaleX(0);transition:transform var(--motion-reflow)}
+.rail h2{display:flex;align-items:center;gap:var(--space-8);margin:var(--space-16) var(--space-4) var(--space-4);font-size:var(--text-13);font-weight:var(--weight-label);color:var(--muted)}
+.rail h2 .cv{width:18px;height:18px;border-radius:4px;overflow:hidden;flex:none;box-shadow:inset 0 0 0 1px var(--cover-edge)}
+.rail h2 .cv svg{display:block;width:100%;height:100%}
+.rail ol{list-style:none;margin:0;padding:0}
+.rail li button{width:100%;display:flex;align-items:center;gap:var(--space-8);min-height:34px;padding:6px var(--space-8);border-radius:var(--radius-control);text-align:left;font-size:var(--text-13);line-height:1.3}
+.rail li button:hover{background:var(--surface)}
+.rail li button[aria-current="step"]{background:var(--fill);color:var(--on-fill)}
+.rail li .num{font-family:var(--font-mono);letter-spacing:var(--font-mono-tracking);font-size:11px;opacity:.7;min-width:26px}
+.rail li .t{flex:1}
+.mk{width:16px;height:16px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;box-shadow:inset 0 0 0 1px var(--line-strong)}
+.mk svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.mk.ok{background:var(--success);box-shadow:none;color:var(--background)}
+.mk.change{background:var(--warning);box-shadow:none;color:var(--background)}
+.mk.unsure{box-shadow:inset 0 0 0 1.5px var(--text)}
+[aria-current="step"] .mk:not(.ok):not(.change){box-shadow:inset 0 0 0 1px currentColor}
+
+/* ---------- stage (middle) ---------- */
+.stage{display:flex;flex-direction:column;min-width:0;min-height:0}
+.tools{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-8) var(--space-16);padding:var(--space-12) var(--space-16);border-bottom:1px solid var(--line);min-height:57px}
+.seg{display:inline-flex;flex-wrap:wrap;gap:4px}
+.seg button,.btn{height:32px;padding:0 12px;border-radius:var(--radius-control);border:1px solid var(--line-strong);background:var(--surface);display:inline-flex;align-items:center;justify-content:center;gap:6px;line-height:1;font-size:var(--text-13);font-weight:var(--weight-meta);white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--fill);color:var(--on-fill);border-color:var(--fill)}
+.btn svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:var(--icon-stroke);stroke-linecap:round;stroke-linejoin:round}
+.tools .lbl{font-size:12px;color:var(--muted);margin-right:2px}
+.tools .grp{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
+.tools .spacer{flex:1}
+.view{flex:1;min-height:0;position:relative;display:flex;align-items:flex-start;justify-content:center;overflow:hidden;padding:var(--space-8) var(--space-12)}
+.holder{position:relative;flex:none}
+.holder iframe{position:absolute;left:0;top:0;border:0;transform-origin:0 0;background:transparent}
+.holder iframe[hidden]{display:none}
+.panelview{position:absolute;inset:0;overflow:auto;padding:var(--space-24) var(--space-24) var(--space-32)}
+.panelview[hidden]{display:none}
+
+/* ---------- notes (right) ---------- */
+.notes{border-left:1px solid var(--line);overflow:auto;padding:var(--space-20) var(--space-20) var(--space-32);display:flex;flex-direction:column}
+.kicker{display:flex;align-items:center;gap:var(--space-8);font-size:var(--text-13);color:var(--muted)}
+.kicker .cv{width:22px;height:22px;border-radius:5px;overflow:hidden;box-shadow:inset 0 0 0 1px var(--cover-edge)}
+.kicker .cv svg{display:block;width:100%;height:100%}
+.kicker .of{margin-left:auto;font-family:var(--font-mono);letter-spacing:var(--font-mono-tracking);font-size:11px}
+.notes h2{margin:var(--space-12) 0 var(--space-8);font-family:var(--font-display);font-stretch:var(--font-display-stretch);font-weight:var(--font-display-weight);letter-spacing:var(--font-display-tracking);font-size:var(--text-28);line-height:var(--leading-display)}
+.notes .see{margin:0 0 var(--space-16);color:var(--muted)}
+.notes h3{margin:var(--space-16) 0 var(--space-4);font-size:var(--text-13);font-weight:var(--weight-label);text-transform:none;color:var(--text)}
+.notes ul{margin:0;padding-left:18px}
+.notes li{margin:0 0 6px}
+.notes .dec{margin:var(--space-16) 0 0;font-size:var(--text-13);color:var(--muted)}
+.notes .flag{margin:var(--space-16) 0 0;padding:var(--space-12);border-radius:var(--radius-control);background:var(--surface);border:var(--card-edge);font-size:var(--text-13)}
+.verdict{margin-top:var(--space-24);padding-top:var(--space-16);border-top:1px solid var(--line)}
+.verdict .q{font-size:var(--text-13);font-weight:var(--weight-label);margin:0 0 var(--space-8)}
+.vbtns{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.vbtns button{min-height:44px;padding:6px 8px;border-radius:var(--radius-button);border:1px solid var(--line-strong);background:var(--surface);display:flex;align-items:center;justify-content:center;gap:6px;line-height:1.15;font-size:var(--text-13);font-weight:var(--weight-label);text-align:center}
+.vbtns button svg{width:15px;height:15px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.vbtns button[aria-pressed="true"][data-v="ok"]{background:var(--success);border-color:var(--success);color:var(--background)}
+.vbtns button[aria-pressed="true"][data-v="change"]{background:var(--warning);border-color:var(--warning);color:var(--background)}
+.vbtns button[aria-pressed="true"][data-v="unsure"]{background:var(--fill);border-color:var(--fill);color:var(--on-fill)}
+.notes label{display:block;margin:var(--space-16) 0 6px;font-size:var(--text-13);font-weight:var(--weight-label)}
+textarea{width:100%;min-height:96px;resize:vertical;padding:10px 12px;border-radius:var(--radius-control);border:1px solid var(--line-strong);background:var(--surface);line-height:1.45}
+textarea::placeholder{color:var(--muted);opacity:1}
+.saved{font-size:12px;color:var(--muted);min-height:18px;margin-top:4px}
+.pager{display:flex;gap:var(--space-8);margin-top:auto;padding-top:var(--space-24)}
+.pager .btn{flex:1;height:44px;border-radius:var(--radius-button);font-size:var(--text-15)}
+.pager .btn.primary{background:var(--fill);color:var(--on-fill);border-color:var(--fill)}
+.keys{margin-top:var(--space-8);font-size:12px;color:var(--muted);text-align:center}
+
+/* ---------- intro, brand boards and sign-off (in the middle panel) ---------- */
+.board{max-width:880px;margin:0 auto}
+.board h3{margin:var(--space-32) 0 var(--space-12);font-size:var(--text-15);font-weight:var(--weight-title)}
+.board h3:first-child{margin-top:0}
+.board .cap{font-size:var(--text-13);color:var(--muted);margin:6px 0 0}
+.row{display:flex;flex-wrap:wrap;gap:var(--space-16);align-items:flex-end}
+.fig{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.missing .needsrv{display:block}
+.needsrv{display:none;margin:0 0 var(--space-16);padding:var(--space-12) var(--space-16);border-radius:var(--radius-control);border:1px solid var(--warning);color:var(--text);font-size:var(--text-13)}
+/* Presentation colours below are the context the brand files sit in (wallpapers, Chrome's toolbar, launch-screen
+   backgrounds fixed by the brand README), not Shelf UI. */
+.home{display:flex;gap:28px;padding:28px 32px 22px;border-radius:var(--radius);flex-wrap:wrap}
+.home.l{background:linear-gradient(160deg,#D9D5CB,#BFC6C9)}
+.home.d{background:linear-gradient(160deg,#2B2C31,#1A1D22)}
+.app-ic{display:flex;flex-direction:column;align-items:center;gap:7px;font-size:12px;width:64px}
+.home.l .app-ic{color:#1F1F1F}
+.home.d .app-ic{color:#F1F1F1}
+.mask{position:relative;width:56px;height:56px;overflow:hidden;flex:none}
+.mask img,.mask .mono{position:absolute;left:-25%;top:-25%;width:150%;height:150%}
+.mask svg.mono{display:block}
+.ghost{width:56px;height:56px;border-radius:50%;background:#FFFFFF59}
+.home.d .ghost{background:#FFFFFF1F}
+.shapes .mask{width:72px;height:72px}
+.r-circle{border-radius:50%}.r-squircle{border-radius:32%}.r-rounded{border-radius:22%}.r-square{border-radius:10%}
+.chrome{display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:var(--radius-control);min-width:300px}
+.chrome.l{background:#FFFFFF;color:#1F1F1F;box-shadow:inset 0 0 0 1px #DADCE0}
+.chrome.d{background:#35363A;color:#E8EAED}
+.chrome .omni{flex:1;height:28px;border-radius:14px;padding:0 12px;display:flex;align-items:center;font-size:12px}
+.chrome.l .omni{background:#F1F3F4}.chrome.d .omni{background:#202124}
+.chrome .tab{display:flex;align-items:center;gap:8px;height:30px;padding:0 12px;border-radius:8px 8px 0 0;font-size:12px}
+.chrome.l .tab{background:#DFE1E5}.chrome.d .tab{background:#202124}
+.chrome img{width:16px;height:16px;display:block}
+.status{display:flex;align-items:center;gap:10px;height:28px;padding:0 14px;border-radius:var(--radius-control);background:#000000;color:#FFFFFF;font-size:13px}
+.status img{width:24px;height:24px}
+.mag img{image-rendering:pixelated;display:block;box-shadow:0 0 0 1px var(--line)}
+.splashes{display:flex;gap:var(--space-24);flex-wrap:wrap}
+.splash{width:240px;height:507px;border-radius:28px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 1px var(--line)}
+.splash img{width:133px;height:133px}
+.splash.l{background:#F3F2EE}.splash.d{background:#111112}
+.wide img{display:block;max-width:100%;height:auto;border-radius:var(--radius-image);box-shadow:0 0 0 1px var(--line)}
+.store-ic img{width:128px;height:128px;border-radius:20%;display:block;box-shadow:0 0 0 1px var(--line)}
+
+.intro p{max-width:62ch}
+.intro .lede{font-size:var(--text-17)}
+.intro ol{max-width:62ch;padding-left:20px}
+.intro li{margin-bottom:6px}
+.chapters{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:var(--space-8);margin-top:var(--space-16)}
+.chapters button{display:flex;align-items:center;gap:var(--space-12);padding:var(--space-12);border-radius:var(--radius);background:var(--surface);border:var(--card-edge);text-align:left;line-height:1.3}
+.chapters .cv{width:40px;height:40px;border-radius:6px;overflow:hidden;flex:none;box-shadow:inset 0 0 0 1px var(--cover-edge)}
+.chapters .cv svg{display:block;width:100%;height:100%}
+.chapters small{display:block;color:var(--muted);font-size:12px}
+
+.sum{display:flex;gap:var(--space-24);flex-wrap:wrap;margin:var(--space-8) 0 var(--space-16)}
+.sum div{font-size:var(--text-13);color:var(--muted)}
+.sum b{display:block;font-family:var(--font-display);font-stretch:var(--font-display-stretch);font-weight:var(--font-display-weight);font-size:var(--text-32);line-height:1.1;color:var(--text)}
+.items{list-style:none;padding:0;margin:0}
+.items li{padding:var(--space-12) 0;border-top:1px solid var(--line)}
+.items button{text-decoration:underline;text-underline-offset:3px;font-weight:var(--weight-label)}
+.items p{margin:4px 0 0;color:var(--muted);white-space:pre-wrap}
+fieldset{border:0;margin:0 0 var(--space-20);padding:0}
+legend{font-weight:var(--weight-title);margin-bottom:var(--space-8);padding:0}
+.choices{display:flex;flex-wrap:wrap;gap:6px}
+.choices label{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:0 14px;border-radius:var(--radius-button);border:1px solid var(--line-strong);background:var(--surface);font-size:var(--text-13);cursor:pointer;line-height:1}
+.choices input{margin:0;accent-color:var(--text)}
+.choices label:has(input:checked){border-color:var(--text);box-shadow:inset 0 0 0 1px var(--text)}
+.copyrow{display:flex;gap:var(--space-8);align-items:center;flex-wrap:wrap;margin:var(--space-12) 0}
+.copyrow .btn{height:44px;padding:0 18px;border-radius:var(--radius-button);font-size:var(--text-15)}
+.copyrow .btn.primary{background:var(--fill);color:var(--on-fill);border-color:var(--fill)}
+#out{min-height:220px;font-family:var(--font-mono);letter-spacing:var(--font-mono-tracking);font-size:12px}
+.danger{color:var(--error)}
+
+/* ---------- narrower windows ---------- */
+.mobilebar{display:none}
+@media (max-width:1180px){
+  .app{grid-template-columns:minmax(0,1fr) 340px;grid-template-rows:auto minmax(0,1fr)}
+  .rail{display:none}
+  .mobilebar{display:flex;grid-column:1 / -1;align-items:center;gap:var(--space-12);padding:var(--space-8) var(--space-16);border-bottom:1px solid var(--line)}
+  .mobilebar strong{font-family:var(--font-display);font-stretch:var(--font-display-stretch);font-weight:var(--font-display-weight);letter-spacing:var(--font-display-tracking);font-size:var(--text-17);white-space:nowrap}
+  .mobilebar select{flex:1;min-width:0;height:36px;border-radius:var(--radius-control);border:1px solid var(--line-strong);background:var(--surface);color:var(--text);font:inherit;font-size:var(--text-13);padding:0 8px}
+}
+@media (max-width:820px){
+  .app{display:block;height:auto}
+  .mobilebar{position:sticky;top:0;z-index:2;background:var(--background)}
+  .stage{height:78vh;min-height:520px}
+  .notes{border-left:0;border-top:1px solid var(--line);padding:var(--space-16)}
+}
+@media (prefers-reduced-motion:reduce){.progress .bar i{transition:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="mobilebar">
+    <strong>Shelf tour</strong>
+    <label class="sr" for="jumpSel">Go to a stop</label>
+    <select id="jumpSel"></select>
+  </div>
+
+  <nav class="rail" aria-label="Tour stops">
+    <div class="brand"><div><h1>Shelf · Stage 0 tour</h1><p>Fingerprint, phone and extension</p></div></div>
+    <div class="progress"><span id="progText"></span><div class="bar"><i id="progBar"></i></div></div>
+    <div id="route"></div>
+  </nav>
+
+  <main class="stage">
+    <div class="tools" id="tools">
+      <div class="grp" id="themeGrp"><span class="lbl" id="themeLbl">Prototype theme</span>
+        <div class="seg" role="group" aria-labelledby="themeLbl">
+          <button data-theme-btn="light" aria-pressed="true">Light</button><button data-theme-btn="dark" aria-pressed="false">Dark</button>
+        </div>
+      </div>
+      <div class="grp" id="altGrp"><span class="lbl" id="altLbl">States</span><div class="seg" id="alts" role="group" aria-labelledby="altLbl"></div></div>
+      <span class="spacer"></span>
+      <button class="btn" id="reopen" title="Open this stop's screen again, from the start"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Reopen</button>
+    </div>
+    <div class="view" id="view">
+      <div class="holder" id="holder"></div>
+      <div class="panelview" id="panel" hidden></div>
+    </div>
+  </main>
+
+  <aside class="notes" id="notes" aria-live="off"></aside>
+</div>
+
+<script>
+/* ---------------- the route ---------------- */
+const P = 'mockups/prototype.html', X = 'mockups/extension.html', B = '../../shared/brand/out/';
+const SIZE = { [P]: { w: 392, h: 824 }, [X]: { w: 1040, h: 696 } };
+
+const CHAPTERS = [
+  { id: 'look', title: 'The look', blurb: 'One idea carries the style: every save draws its own cover from its address.', stops: [
+    { id: 'saves', src: P, jump: 'saves', l: 'Populated', title: 'Your saves',
+      see: 'The Unread list with six saves. Each row wears the cover that cover v1 draws from the sha256 of its address, the hash already in its d tag.',
+      look: [
+        'The covers are the only colour. Everything else is ink, paper, two greys and hairlines.',
+        'The Bitcoin Magazine row is part-read: a thin line under it in that article’s own ink, and “4 min left”.',
+        'One stamp, “Couldn’t get the text”, on the nytimes.com row, whose cover is drawn in the greys. The Mozilla row is still “Getting the text…” with its waiting dot.',
+        'Archivo Expanded for the Saves heading, Archivo for everything else.'],
+      try: ['Drag a row to the left to archive it, then press Undo.', 'Set the prototype to Dark above the frame: the covers keep their colours on ink.'],
+      dec: [65, 66, 68] },
+  ] },
+  { id: 'first', title: 'First launch', blurb: 'Nothing to sign up for, and the empty shelf teaches the first save.', stops: [
+    { id: 'welcome', src: P, jump: 'welcome', l: 'Welcome', title: 'Welcome',
+      see: 'The first screen after install. No account and no email.',
+      look: ['Three cards fanned out, each with a cover. Once the front cover has drawn, its line catches up to where that article was left.', 'Two ways in: New here, and I already have a shelf.', 'The small line under the buttons: no account, no email, private to you.'],
+      try: ['Press Reopen above the frame to watch the covers draw again.', 'Press New here.'],
+      dec: [73] },
+    { id: 'empty', src: P, jump: 'saves-empty', l: 'Empty', title: 'An empty shelf',
+      see: 'Where New here lands.',
+      look: ['The empty state teaches the first save: share any link from any app, with Shelf in a drawn share row.', 'Connect your browser is the one button, for saving from a laptop.'],
+      try: ['Press Connect your browser to see where it leads, then come back with Reopen.'],
+      dec: [] },
+    { id: 'first-save', src: P, jump: 'saves-first-arrive', l: 'First save', title: 'The first save lands',
+      see: 'The moment the first save arrives on an empty shelf.',
+      look: ['Drawn once, the first of the two signature moves: the cover draws itself as the save appears, then stays still on every surface.', 'While its text is fetched, the row waits with its cover drawn and its waiting dot. Nothing loops.'],
+      try: ['Press Reopen to watch it again.'],
+      dec: [69, 73] },
+  ] },
+  { id: 'saving', title: 'Saving', blurb: 'Share a link from any app and a sheet confirms it. Saves from a browser arrive by themselves.', stops: [
+    { id: 'share', src: P, jump: 'share', l: 'Saved', alts: [['After Undo', 'share-undone'], ['Offline', 'share-offline'], ['Not a link', 'share-nolink']], title: 'Saved from another app',
+      see: 'What appears after sharing a page to Shelf from another app, which stays dimmed behind.',
+      look: ['The save’s cover draws in the sheet, the same face it will have in the list.', 'One line says what happened and what comes next: “Private. Ready to read offline in a moment.”', 'Undo and Read now. Offline, Read now becomes Done. Sharing something that isn’t a page explains why, with one OK.'],
+      try: ['Press Undo.', 'Try the Offline and Not a link states above the frame.'],
+      dec: [] },
+    { id: 'arrive', src: P, jump: 'saves-arrive', l: 'Arriving', title: 'A save arrives from your laptop',
+      see: 'A page saved in Chrome reaches the phone while the list is open.',
+      look: ['It lands at the top, marked “From Chrome”, and its cover draws once as it arrives.', 'The rows below move down to make room. Nothing else moves.'],
+      try: ['Press Reopen to watch it again.'],
+      dec: [73] },
+  ] },
+  { id: 'list', title: 'The list', blurb: 'Unread and Archive, with search and the states around them.', stops: [
+    { id: 'menu', src: P, jump: 'archive-menu', l: 'Row menu', alts: [['Archive', 'archive'], ['Archive, empty', 'archive-empty']], title: 'A row’s menu',
+      see: 'The Archive, with a row’s ⋯ menu open as a bottom sheet.',
+      look: ['The article’s title at the top of the sheet, so you know which row it belongs to.', 'Two actions: Back to Unread, and Delete. Delete goes straight through and offers Undo.'],
+      try: ['Press Delete, then Undo.', 'Open another row’s ⋯.'],
+      dec: [63] },
+    { id: 'offline', src: P, jump: 'saves-offline', l: 'Offline', alts: [['Refreshing', 'saves-loading']], title: 'Offline, and refreshing',
+      see: 'The list without a connection, and while it refreshes.',
+      look: ['A slim line at the top, “Offline · showing saved copies”. The list stays fully usable.', 'A save that hasn’t been fetched yet shows its address and “Will fetch when you’re online”.', 'Refreshing shows a quiet breathing bar above the list, never a spinner.'],
+      try: [],
+      dec: [] },
+    { id: 'search', src: P, jump: 'search', l: 'Results', alts: [['No results', 'search-none'], ['Reader from Search', 'search-reader']], title: 'Search',
+      see: 'Search across your saves.',
+      look: ['Search takes the whole screen and hides the tab bar. Results are the same rows.', 'Back from a Reader opened here returns to the results.'],
+      try: ['Type into the field.'],
+      dec: [] },
+    { id: 'cleared', src: P, jump: 'saves-cleared', l: 'All read', title: 'Everything read',
+      see: 'The list after the last unread save is archived.',
+      look: ['All read, one line, and a way to the Archive.'],
+      try: [],
+      dec: [] },
+  ] },
+  { id: 'reading', title: 'Reading', blurb: 'A clean column in Literata, lent the article’s ink.', stops: [
+    { id: 'reader', src: P, jump: 'reader', l: 'Reading', alts: [['Aa sheet', 'reader-aa'], ['Images arriving', 'reader-images'], ['Loading', 'reader-loading']], title: 'The Reader',
+      see: 'An article opened from Saves.',
+      look: ['Literata at 18 px with generous leading. The photo appears as published, never recoloured.', 'The reading line under the top bar is in the article’s ink, and so are link underlines.', 'Listen, Aa and ⋯ in the top bar. Archive floats at the bottom right.', 'In Dark, the Night paper is tinted for each article: this piece reads on a warm dark brown.'],
+      try: ['Scroll, then open Aa and try Sepia and Dark.', 'Set the prototype to Dark above the frame.'],
+      dec: [65] },
+    { id: 'reader-error', src: P, jump: 'reader-error', l: 'Notice', alts: [['Its ⋯ menu', 'reader-error-menu']], title: 'Couldn’t get the text',
+      see: 'When Shelf couldn’t get a clean copy, the original page opens inside Shelf.',
+      look: ['A short notice above the page. It has no stamp, since its sentence says the same. The Saves row keeps its stamp.'],
+      try: [],
+      dec: [69] },
+    { id: 'reader-end', src: P, jump: 'reader-end', l: 'End card', title: 'The end of an article',
+      see: 'Scrolled to the end.',
+      look: ['The end card: Archive and next, or Archive.', 'One line, carried, the second signature move: press Archive and the progress line finishes before the row leaves the list.'],
+      try: ['Press Archive and watch the row go.', 'Open a part-read row from Saves, scroll a little, then go back: its line catches up to where you stopped.'],
+      dec: [73] },
+    { id: 'reader-offline', src: P, jump: 'reader-offline', l: 'Offline', title: 'Not fetched yet, offline',
+      see: 'A save opened offline before its text arrived.',
+      look: ['The cover band, the title, and a plain promise that it will be here to read offline once it has been fetched.'],
+      try: [],
+      dec: [] },
+  ] },
+  { id: 'listening', title: 'Listening', blurb: 'One listening session in three sizes: the row in the Reader, the mini player, and Now playing.', stops: [
+    { id: 'play', src: P, jump: 'play', l: 'Playing', alts: [['Paused', 'play-paused'], ['Another article', 'mini-reader']], title: 'Listening in the Reader',
+      see: 'The article being read aloud by the phone’s own voice.',
+      look: ['The spoken word sits on the article’s wash, the same tint everywhere it appears.', 'The player row: play, the clock in Martian Mono, back and forward 15 s, and speed. ✕ appears once paused. Its line replaces the reading line.'],
+      try: ['Press pause, then go back to Saves.'],
+      dec: [] },
+    { id: 'mini', src: P, jump: 'mini', l: 'Mini player', title: 'The mini player',
+      see: 'Saves while something is playing.',
+      look: ['The mini player sits just above the tab bar on every screen, with the playing article’s cover.'],
+      try: ['Tap its title: the Reader opens at the word being read.'],
+      dec: [] },
+    { id: 'listen', src: P, jump: 'listen', l: 'Now playing', alts: [['Card scrolled away', 'listen-scrolled'], ['Nothing played yet', 'listen-empty']], title: 'Now playing',
+      see: 'The Listen tab.',
+      look: ['The Now playing card is the player, with the cover drawn wide.', 'The word meter: a ruler in minutes over the progress bar, and a row of marks that fill one per spoken word of the current sentence. It is display only, and stays empty unless Android reports word positions (one of the Android test build’s checks).', 'The Played list below. A row’s round button plays it; the rest of the row opens the article.'],
+      try: ['Scroll the list until the card leaves: the mini player slides in.'],
+      dec: [68, 69] },
+    { id: 'lock', src: P, jump: 'lock', l: 'Lock screen', title: 'The lock screen',
+      see: 'Android’s media controls while Shelf plays with the screen locked.',
+      look: ['The cover as the media artwork, and Shelf’s one-colour glyph in the app slot, as Android 13 and later show it.'],
+      try: [],
+      dec: [72] },
+    { id: 'rsvp', src: P, jump: 'rsvp', l: 'Running', alts: [['Paused', 'rsvp-paused'], ['Finished', 'rsvp-done']], title: 'Speed read',
+      see: 'One word at a time, at a fixed point.',
+      look: ['The focus letter keeps the reading text colour and sits on the article’s wash. The ticks above and below are in the article’s ink.', 'Tap to pause shows the whole sentence.'],
+      try: ['Tap the word to pause.'],
+      dec: [71] },
+  ] },
+  { id: 'you', title: 'You', blurb: 'Backup, devices and browsers, and leaving.', stops: [
+    { id: 'you', src: P, jump: 'you', l: 'Backup not done', alts: [['Backed up', 'you-done'], ['Signed in with nostr', 'you-nostr'], ['Offline', 'you-offline']], title: 'You',
+      see: 'The You tab before the recovery code is written down.',
+      look: ['Big counts beside a quilt of your covers: 8 saves, 12 listened.', 'The backup card, and the “Not written down” stamp on the Recovery code row.'],
+      try: ['Press Show recovery code, then Done. The card goes, and focus lands on the Recovery code row.'],
+      dec: [68, 74] },
+    { id: 'code', src: P, jump: 'rec-shown', l: 'Shown', alts: [['Hidden', 'rec-hidden'], ['Copied', 'rec-copied']], title: 'The recovery code',
+      see: 'The twelve words that bring the shelf back on any phone.',
+      look: ['Twelve numbered words in two columns, with Copy and Done.'],
+      try: [],
+      dec: [] },
+    { id: 'connect', src: P, jump: 'conn-type', l: 'Type the code', alts: [['Connected browsers', 'br'], ['Wrong code', 'conn-typewrong'], ['Connect this browser?', 'conn-confirm']], title: 'Connect a browser',
+      see: 'Pairing the browser extension from the phone.',
+      look: ['Type the eight characters the extension shows, or scan its QR code.', 'The phone asks before it trusts a browser, and names it.'],
+      flag: 'Pairing by typed code is agreed but not yet in the contract. It goes into contract v1.2 before any code.',
+      try: [],
+      dec: [] },
+    { id: 'delete', src: P, jump: 'del', l: 'Start', alts: [['DELETE typed', 'del-typed'], ['Deleting', 'del-running'], ['A server didn’t confirm', 'del-partial']], title: 'Delete my data',
+      see: 'Leaving Shelf.',
+      look: ['What goes, listed plainly, and DELETE typed to confirm. This is the one confirmation in the app, because Undo can’t bring the data back.', 'If a backup server doesn’t confirm, the screen says which one and what that means.'],
+      try: ['Type DELETE and press Delete everything. When it finishes, Welcome’s covers draw in again, as on a fresh install.'],
+      dec: [74] },
+  ] },
+  { id: 'return', title: 'A new phone', blurb: 'Bringing the shelf back, with every cover the same as before.', stops: [
+    { id: 'return', src: P, jump: 'return', l: 'Choose', alts: [['Offline', 'return-offline']], title: 'Bring back your shelf',
+      see: 'I already have a shelf, from Welcome.',
+      look: ['Three ways back: scan from your other phone, your recovery code, or your nostr app.'],
+      try: [],
+      dec: [] },
+    { id: 'words', src: P, jump: 'code-ready', l: 'Recovery code', alts: [['Word not on the list', 'code-wrong'], ['Scan: type the code', 'scan-code'], ['Nostr app', 'nostr']], title: 'Getting back in',
+      see: 'The recovery code, the scan, and the nostr app.',
+      look: ['Twelve numbered fields, Paste, and one button.', 'Nostr appears only as “your nostr app”, never as relays or keys.', 'The nostr sign-in screen has the app’s one switch, Keep backup copies, on by default (decision 76).'],
+      try: [],
+      dec: [] },
+    { id: 'restoring', src: P, jump: 'restoring', l: 'Restoring', alts: [['Halfway', 'restoring-mid'], ['Paused offline', 'restoring-offline']], title: 'Restoring',
+      see: 'Saves coming back onto the new phone.',
+      look: ['Saves come into the list as they arrive, each cover drawing once, with the same face it had on the old phone.', 'A card counts them in and says why this works even when Shelf’s own server is down.'],
+      try: ['Press Reopen to watch from the start.'],
+      dec: [65, 73] },
+  ] },
+  { id: 'ext', title: 'The browser extension', blurb: 'A toast on the page you saved, a popup where no toast can run, and an options page.', stops: [
+    { id: 'toast', src: X, jump: 'saved', l: 'Saved', alts: [['Undo reached', 'reach'], ['After Undo', 'undone'], ['Phone will fetch the text', 'notext']], title: 'Saved from the toolbar',
+      see: 'Chrome, after pressing Shelf’s toolbar button on an article.',
+      look: ['The toast wears the article’s cover, the same face The Atlantic piece has on the phone.', 'It never takes focus. Pressing the shortcut again reaches Undo.', 'Shelf’s toolbar button is the app icon’s 16 and 32 px cuts.'],
+      try: ['Click Shelf’s button in the toolbar.', 'Click in the page, then press Alt+Shift+S twice.'],
+      dec: [] },
+    { id: 'ext-offline', src: X, jump: 'offline', l: 'Saved offline', alts: [['Ninth offline save', 'full'], ['After Undo, offline', 'unqueued']], title: 'Saving offline',
+      see: 'Saving without a connection.',
+      look: ['The toast says it will send when you’re online, and the badge counts the saves waiting. The badge counts offline saves only.', 'With eight waiting, a ninth is refused with a clear message, so nothing you save is ever lost without you knowing.'],
+      try: [],
+      dec: [31, 64] },
+    { id: 'ext-failed', src: X, jump: 'failed', l: 'Toast', alts: [['On the options page', 'o-failed']], title: 'Couldn’t send',
+      see: 'When a save can’t reach Shelf’s server.',
+      look: ['The toast offers Options. The options page lists what didn’t send, each with Retry.', 'Retry keeps the width of its busy label, “Sending”, so the row doesn’t shift while it sends.'],
+      try: ['On the options page, press Retry.'],
+      dec: [74] },
+    { id: 'popup', src: X, jump: 'popup', l: 'Popup', alts: [['Tick only (Chrome before 127)', 'restricted']], title: 'On a browser page',
+      see: 'Saving from a page where no toast can run, such as Chrome’s settings.',
+      look: ['A small popup opens under Shelf’s button instead, with the same words and Undo.'],
+      try: [],
+      dec: [] },
+    { id: 'rclick', src: X, jump: 'menu', l: 'Menu', title: 'Right-click a link',
+      see: 'Saving a link without opening it.',
+      look: ['“Save link to Shelf” in Chrome’s own menu, with the 16 px icon.'],
+      try: [],
+      dec: [] },
+    { id: 'pair', src: X, jump: 'o-pair', l: 'Not connected', alts: [['Phone scans the code', 'o-scanned'], ['Code expired', 'o-expired'], ['Can’t connect', 'o-offline'], ['Not pinned yet', 'o-unpinned']], title: 'Connect to your phone',
+      see: 'The options page before the browser is connected.',
+      look: ['The QR code and the typed code together, four numbered steps, and a countdown.', 'The steps start on the phone, because the phone decides which browsers it trusts.'],
+      try: ['Choose Phone scans the code above the frame.'],
+      dec: [] },
+    { id: 'connected', src: X, jump: 'o-connected', l: 'Connected', alts: [['3 waiting', 'o-waiting'], ['Something blocking', 'o-blocked'], ['Disconnect, unsent saves', 'o-unsent']], title: 'Connected',
+      see: 'The options page once connected.',
+      look: ['The three ways to save, Advanced, and Disconnect.', 'With saves waiting or blocked, the page says so at the top, in a sentence.'],
+      try: [],
+      dec: [] },
+  ] },
+  { id: 'brand', title: 'Icon and launch screens', blurb: 'The frozen icon, C·L·063 with the paper mark, at the sizes people meet it.', stops: [
+    { id: 'icon', board: 'icon', title: 'The app icon',
+      see: 'The files in shared/brand/out, shown where they will appear.',
+      look: ['On a home screen, light and dark, inside Android’s mask shapes, and as a themed icon.', 'The toolbar cuts at real size: the 16 px cut on a standard screen, the 32 px cut on a high-density one. Magnified copies show every pixel.'],
+      try: [],
+      dec: [67, 70, 72] },
+    { id: 'splash', board: 'splash', title: 'Launch screens',
+      see: 'What shows for a moment while the app starts.',
+      look: ['The paper mark on paper in the light theme, and the paper-only mark on the dark background, in the same place.'],
+      try: [],
+      dec: [72] },
+    { id: 'store', board: 'store', title: 'Store and social cards',
+      see: 'The Play listing and the card shown when someone shares the website.',
+      look: ['The store icon, the feature graphic and the social card, each with a strip of covers.'],
+      flag: '“Shelf” on these is the working name. They are rebuilt from the brand script once the name is chosen.',
+      try: [],
+      dec: [] },
+  ] },
+  { id: 'motion', title: 'With reduced motion', blurb: 'Optional: the same screens with animation turned off in Windows.', stops: [
+    { id: 'reduced', src: P, jump: 'saves-first-arrive', l: 'First save', alts: [['A save arrives', 'saves-arrive'], ['Restoring', 'restoring']], title: 'Reduced motion',
+      see: 'Optional. Turn off animation effects in Windows (Settings, Accessibility, Visual effects, Animation effects), then press Reopen.',
+      look: ['Covers appear already drawn, and lines take their place without travelling.', 'Every meaning stays: the waiting dot, the order, what changed.'],
+      try: ['Turn animation effects back on afterwards.'],
+      dec: [73] },
+  ] },
+];
+
+const STOPS = [{ id: 'intro', intro: true, title: 'Start here', ch: null }];
+CHAPTERS.forEach((c, ci) => c.stops.forEach((s, si) => STOPS.push({ ...s, ch: c, n: `${ci + 1}.${si + 1}` })));
+STOPS.push({ id: 'signoff', signoff: true, title: 'Sign off', ch: null });
+const REAL = STOPS.filter(s => !s.intro && !s.signoff);
+
+/* ---------------- state, kept in this browser only ---------------- */
+const KEY = 'shelf-stage0-tour-1';
+let S = { cur: 'intro', dark: false, v: {}, sign: {}, signNote: '' };
+try { const raw = localStorage.getItem(KEY); if (raw) S = { ...S, ...JSON.parse(raw) }; } catch (e) { /* private window or blocked storage: the tour still works, unsaved */ }
+let saveTimer = null;
+const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); return true; } catch (e) { return false; } };
+const $ = id => document.getElementById(id);
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const ICON = {
+  ok: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>',
+  change: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.4 3.6a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+  unsure: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>',
+  left: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>',
+  right: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>',
+};
+const VLABEL = { ok: 'Looks right', change: 'Needs a change', unsure: 'Not sure' };
+
+/* ---------------- chapter covers (decorative), drawn by cover v1 from sha256("shelf/tour/<chapter>") ---------------- */
+const covers = {};
+async function drawCovers(){
+  if (!window.ShelfCover || !(window.crypto && crypto.subtle)) return;
+  for (const c of CHAPTERS) {
+    try {
+      const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('shelf/tour/' + c.id));
+      const hex = [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, '0')).join('');
+      covers[c.id] = ShelfCover.svg(hex, { depth: 2 });
+    } catch (e) { /* no cover: the chapter shows without one */ }
+  }
+  document.querySelectorAll('[data-cv]').forEach(el => { el.innerHTML = covers[el.dataset.cv] || ''; });
+}
+const cv = id => `<span class="cv" data-cv="${id}" aria-hidden="true">${covers[id] || ''}</span>`;
+
+/* ---------------- the route list ---------------- */
+function mark(id){ const v = S.v[id] && S.v[id].mark; return `<span class="mk ${v || ''}" aria-hidden="true">${v ? ICON[v] : ''}</span>`; }
+function renderRoute(){
+  const item = s => `<li><button data-go="${s.id}" ${s.id === S.cur ? 'aria-current="step"' : ''}>${s.n ? `<span class="num">${s.n}</span>` : '<span class="num"></span>'}<span class="t">${esc(s.title)}</span>${s.intro || s.signoff ? '' : mark(s.id)}${s.intro || s.signoff || !(S.v[s.id] && S.v[s.id].mark) ? '' : `<span class="sr">, ${VLABEL[S.v[s.id].mark]}</span>`}</button></li>`;
+  let h = `<ol>${item(STOPS[0])}</ol>`;
+  CHAPTERS.forEach((c, ci) => { h += `<h2>${cv(c.id)}${ci + 1} · ${esc(c.title)}</h2><ol>${STOPS.filter(s => s.ch === c).map(item).join('')}</ol>`; });
+  h += `<h2>Finish</h2><ol>${item(STOPS[STOPS.length - 1])}</ol>`;
+  $('route').innerHTML = h;
+  const done = REAL.filter(s => S.v[s.id] && S.v[s.id].mark).length;
+  $('progText').textContent = `${done} of ${REAL.length} stops marked`;
+  $('progBar').style.transform = `scaleX(${done / REAL.length})`;
+  $('jumpSel').innerHTML = STOPS.map(s => `<option value="${s.id}" ${s.id === S.cur ? 'selected' : ''}>${s.n ? s.n + '  ' : ''}${esc(s.title)}${S.v[s.id] && S.v[s.id].mark ? ' · ' + VLABEL[S.v[s.id].mark] : ''}</option>`).join('');
+}
+
+/* ---------------- the prototype frames ---------------- */
+const frames = {};
+function frameFor(src){
+  if (frames[src]) return frames[src];
+  const el = document.createElement('iframe');
+  el.title = src === P ? 'Phone prototype' : 'Browser extension prototype';
+  el.width = SIZE[src].w; el.height = SIZE[src].h;
+  el.setAttribute('allow', 'clipboard-write');
+  const f = frames[src] = { el, src, loaded: false, hash: null, abs: new URL(src, location.href).href };
+  el.addEventListener('load', () => { if (el.src !== 'about:blank') f.loaded = true; });
+  $('holder').appendChild(el);
+  return f;
+}
+// Same origin (served over http): move by fragment, so the prototype keeps running. From file:// the frame is a
+// different origin, so it can only be pointed at a URL; a repeated fragment needs a reload there.
+function navFrame(f, h, force){
+  let cur;
+  try { cur = f.el.contentWindow.location.href; } catch (e) { cur = undefined; }
+  if (!f.loaded || cur === 'about:blank') { f.el.src = f.abs + '#' + h; f.hash = h; return; }
+  if (cur === undefined) {
+    if (force || f.hash === h) { f.loaded = false; f.el.src = 'about:blank'; setTimeout(() => { f.el.src = f.abs + '#' + h; }, 30); }
+    else f.el.contentWindow.location.replace(f.abs + '#' + h);
+  } else {
+    const w = f.el.contentWindow;
+    if (w.location.hash === '#' + h) w.dispatchEvent(new HashChangeEvent('hashchange'));
+    else w.location.replace(cur.split('#')[0] + '#' + h);
+  }
+  f.hash = h;
+}
+let curJump = null;
+function showFrame(s, jump, force){
+  const f = frameFor(s.src);
+  Object.values(frames).forEach(o => { o.el.hidden = o !== f; });
+  $('holder').hidden = false; $('panel').hidden = true;
+  curJump = jump;
+  navFrame(f, jump + (S.dark && s.src ? '-dark' : ''), force);
+  fit();
+}
+function fit(){
+  const s = STOPS.find(x => x.id === S.cur); if (!s || !s.src) return;
+  const { w, h } = SIZE[s.src], v = $('view'), cs = getComputedStyle(v);
+  const aw = v.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), ah = v.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  const k = Math.max(.3, Math.min(1, aw / w, ah / h));
+  const hd = $('holder'); hd.style.width = w * k + 'px'; hd.style.height = h * k + 'px';
+  frames[s.src].el.style.transform = `scale(${k})`;
+}
+new ResizeObserver(fit).observe($('view'));
+
+/* ---------------- boards in the middle panel ---------------- */
+const img = (p, alt, attrs = '') => `<img src="${B + p}" alt="${esc(alt)}" ${attrs} onerror="document.getElementById('panel').classList.add('missing')">`;
+const NEEDSRV = '<p class="needsrv">The brand files live in shared/brand/out, outside docs/design. Open the tour through the “tour” server (the repository root, port 4322) or straight from disk to see them.</p>';
+// The themed icon tints the one-colour layer with an SVG filter (a CSS mask would need CORS, which file:// can't give)
+let tintN = 0;
+function adaptive(cls, label, mono){
+  const id = 'tint' + (++tintN);
+  const inner = mono
+    ? `<svg class="mono" viewBox="0 0 108 108" aria-hidden="true"><filter id="${id}"><feFlood flood-color="${mono[1]}"/><feComposite in2="SourceAlpha" operator="in"/></filter><image href="${B}android/adaptive-monochrome.png" width="108" height="108" filter="url(#${id})"/></svg>`
+    : img('android/adaptive-background.png', '') + img('android/adaptive-foreground.png', '');
+  return `<div class="app-ic"><div class="mask ${cls}" ${mono ? `style="background:${mono[0]}"` : ''}>${inner}</div>${label}</div>`;
+}
+const BOARDS = {
+  icon: () => `${NEEDSRV}<div class="board">
+    <h3>On a home screen</h3>
+    <div class="home l">${adaptive('r-circle', 'Shelf')}<div class="app-ic"><span class="ghost"></span>&nbsp;</div><div class="app-ic"><span class="ghost"></span>&nbsp;</div>${adaptive('r-circle', 'Themed', ['#E7E1D2', '#3B362B'])}</div>
+    <div class="home d" style="margin-top:12px">${adaptive('r-circle', 'Shelf')}<div class="app-ic"><span class="ghost"></span>&nbsp;</div><div class="app-ic"><span class="ghost"></span>&nbsp;</div>${adaptive('r-circle', 'Themed', ['#3B362B', '#E7E1D2'])}</div>
+    <p class="cap">The adaptive icon’s two layers, masked as a launcher would at 56 px. The themed icon is the one-colour layer in the system’s tones (Android 13 and later).</p>
+    <h3>Android’s mask shapes</h3>
+    <div class="row shapes">${['r-circle', 'r-squircle', 'r-rounded', 'r-square'].map(c => `<div class="fig">${adaptive(c, '')}${c.slice(2)}</div>`).join('')}<div class="fig"><div class="app-ic"><div class="mask"><img src="${B}android/icon.png" alt="" style="left:0;top:0;width:100%;height:100%" onerror="document.getElementById('panel').classList.add('missing')"></div></div>legacy icon</div></div>
+    <h3>In the browser, at real size</h3>
+    <div class="row" style="flex-direction:column;align-items:flex-start;gap:10px">
+      <div class="chrome l"><span class="tab"><img src="${B}web/favicon.svg" alt="" onerror="document.getElementById('panel').classList.add('missing')">Shelf</span><span class="omni">shelf.example</span><img src="${B}extension/icon-16.png" srcset="${B}extension/icon-16.png 1x, ${B}extension/icon-32.png 2x" alt="Shelf toolbar button"></div>
+      <div class="chrome d"><span class="tab"><img src="${B}web/favicon.svg" alt="">Shelf</span><span class="omni">shelf.example</span><img src="${B}extension/icon-16.png" srcset="${B}extension/icon-16.png 1x, ${B}extension/icon-32.png 2x" alt="Shelf toolbar button, dark"></div>
+      <div class="status">9:41 ${img('android/notification-icon.png', 'Notification glyph')} <span style="opacity:.7">status bar glyph</span></div>
+    </div>
+    <p class="cap">Your screen is showing the ${devicePixelRatio >= 1.5 ? '32 px cut (a high-density screen)' : '16 px cut (a standard-density screen)'} in the toolbar.</p>
+    <h3>Magnified, one square per pixel</h3>
+    <div class="row mag">
+      <div class="fig">${img('extension/icon-16.png', '16 px cut, magnified', 'style="width:128px;height:128px"')}16 px × 8</div>
+      <div class="fig">${img('extension/icon-32.png', '32 px cut, magnified', 'style="width:128px;height:128px"')}32 px × 4</div>
+      <div class="fig">${img('extension/icon-48.png', '48 px cut, magnified', 'style="width:144px;height:144px"')}48 px × 3</div>
+      <div class="fig">${img('extension/icon-128.png', '128 px icon', 'style="width:128px;height:128px"')}128 px</div>
+    </div></div>`,
+  splash: () => `${NEEDSRV}<div class="board">
+    <h3>Launch screens, two thirds of phone size</h3>
+    <div class="splashes">
+      <div class="fig"><div class="splash l">${img('android/splash-icon.png', 'Light launch screen')}</div>Light: paper, #F3F2EE</div>
+      <div class="fig"><div class="splash d">${img('android/splash-icon-dark.png', 'Dark launch screen')}</div>Dark: #111112</div>
+    </div>
+    <p class="cap">The mark is about 200 dp wide in the build. Android picks the dark pair from the phone’s dark theme before the app runs, so the launch screen matches the theme the app opens in.</p></div>`,
+  store: () => `${NEEDSRV}<div class="board">
+    <h3>Play store icon</h3>
+    <div class="store-ic">${img('android/play-store-icon.png', 'Play store icon')}</div>
+    <h3>Play feature graphic</h3>
+    <div class="wide">${img('android/play-feature-graphic.png', 'Play feature graphic')}</div>
+    <h3>Social card (website links)</h3>
+    <div class="wide" style="max-width:600px">${img('web/og-card.png', 'Social sharing card')}</div></div>`,
+};
+
+/* ---------------- intro and sign-off ---------------- */
+function introBoard(){
+  return `<div class="board intro">
+    <h3 style="font-family:var(--font-display);font-stretch:var(--font-display-stretch);font-weight:var(--font-display-weight);letter-spacing:var(--font-display-tracking);font-size:var(--text-32);line-height:1.15;margin-bottom:12px">The Stage 0 tour</h3>
+    <p class="lede">A walk through the Fingerprint screens in the order someone meets them, from first launch to the browser extension and the icon. ${REAL.length} stops, about half an hour.</p>
+    <ol>
+      <li>Each stop opens the prototype at the right screen. It stays fully clickable, so wander off whenever you like. Reopen brings the stop back.</li>
+      <li>The notes on the right say what to look for and what to try. Above the frame you can switch between Light and Dark, and between the stop’s other states.</li>
+      <li>Mark each stop: Looks right, Needs a change, or Not sure, with a note if you have one. Looks right moves you on to the next stop.</li>
+      <li>At the end, answer four sign-off questions and press Copy notes, then paste the result into the chat.</li>
+    </ol>
+    <p>Your marks stay in this browser until you clear them, so you can stop and pick up again later. The arrow keys move between stops when you aren’t typing.</p>
+    <p>Signing off here makes these screens the Stage 0 reference for the build, takes the tokens out of draft, and lets the Android test build resume.</p>
+    <div class="chapters">${CHAPTERS.map(c => `<button data-go="${STOPS.find(s => s.ch === c).id}">${cv(c.id)}<span>${esc(c.title)}<small>${c.stops.length} stop${c.stops.length > 1 ? 's' : ''}</small></span></button>`).join('')}</div>
+  </div>`;
+}
+const SIGN = [
+  ['screens', 'The phone and extension screens', ['Done', 'Done once my changes are made', 'Not yet']],
+  ['motion', 'Motion as built', ['Right', 'Right once my changes are made', 'Not yet']],
+  ['brand', 'The icon and launch screens', ['Done', 'Done once my changes are made', 'Not yet']],
+  ['resume', 'Resume the Android test build', ['Yes, now', 'Yes, after my changes', 'Not yet']],
+];
+function summaryText(){
+  const by = k => REAL.filter(s => S.v[s.id] && S.v[s.id].mark === k);
+  const unmarked = REAL.filter(s => !(S.v[s.id] && S.v[s.id].mark));
+  const line = s => `- ${s.n} ${s.title} (${s.src ? (s.src === P ? 'phone' : 'extension') + ' #' + s.jump : 'brand board'})${S.v[s.id].note ? ': ' + S.v[s.id].note.trim().replace(/\n+/g, ' / ') : ''}`;
+  const d = new Date();
+  let t = `Shelf Stage 0 tour notes, ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}\n\n`;
+  const ok = by('ok').length, ch = by('change').length;
+  t += `Marked ${REAL.length - unmarked.length} of ${REAL.length} stops: ${ok} ${ok === 1 ? 'looks' : 'look'} right, ${ch} ${ch === 1 ? 'needs' : 'need'} a change, ${by('unsure').length} not sure.\n`;
+  if (by('change').length) t += `\nNeeds a change\n${by('change').map(line).join('\n')}\n`;
+  if (by('unsure').length) t += `\nNot sure\n${by('unsure').map(line).join('\n')}\n`;
+  const okNotes = by('ok').filter(s => S.v[s.id].note && S.v[s.id].note.trim());
+  if (okNotes.length) t += `\nNotes on stops that look right\n${okNotes.map(line).join('\n')}\n`;
+  if (unmarked.length) t += `\nNot marked: ${unmarked.map(s => s.n).join(', ')}\n`;
+  t += `\nSign-off\n${SIGN.map(([k, q]) => `- ${q}: ${S.sign[k] || 'no answer'}`).join('\n')}\n`;
+  if (S.signNote && S.signNote.trim()) t += `\nAnything else\n${S.signNote.trim()}\n`;
+  return t;
+}
+function signBoard(){
+  const by = k => REAL.filter(s => S.v[s.id] && S.v[s.id].mark === k);
+  const open = [...by('change'), ...by('unsure')];
+  return `<div class="board">
+    <h3 style="font-family:var(--font-display);font-stretch:var(--font-display-stretch);font-weight:var(--font-display-weight);letter-spacing:var(--font-display-tracking);font-size:var(--text-28);line-height:1.2">Sign off</h3>
+    <div class="sum"><div><b>${by('ok').length}</b>look right</div><div><b>${by('change').length}</b>need a change</div><div><b>${by('unsure').length}</b>not sure</div><div><b>${REAL.length - by('ok').length - by('change').length - by('unsure').length}</b>not marked</div></div>
+    ${open.length ? `<h3>To come back to</h3><ul class="items">${open.map(s => `<li><button data-go="${s.id}">${s.n} ${esc(s.title)}</button> · ${VLABEL[S.v[s.id].mark]}${S.v[s.id].note ? `<p>${esc(S.v[s.id].note)}</p>` : ''}</li>`).join('')}</ul>` : ''}
+    <h3>Four questions</h3>
+    ${SIGN.map(([k, q, opts]) => `<fieldset><legend>${q}</legend><div class="choices">${opts.map(o => `<label><input type="radio" name="sg-${k}" value="${esc(o)}" ${S.sign[k] === o ? 'checked' : ''}>${esc(o)}</label>`).join('')}</div></fieldset>`).join('')}
+    <label for="signNote" style="display:block;font-weight:var(--weight-title);margin-bottom:6px">Anything else</label>
+    <textarea id="signNote" placeholder="Anything the stops didn’t cover">${esc(S.signNote || '')}</textarea>
+    <h3>Send it to Claude</h3>
+    <div class="copyrow"><button class="btn primary" id="copy">Copy notes</button><span id="copied" class="saved" role="status"></span></div>
+    <textarea id="out" readonly aria-label="Your notes as text">${esc(summaryText())}</textarea>
+    <p class="cap">Paste it into the chat. If Copy doesn’t work here, select the text above and copy it.</p>
+    <div class="copyrow" style="margin-top:32px"><button class="btn" id="clear"><span class="danger">Clear all marks and notes</span></button></div>
+  </div>`;
+}
+
+/* ---------------- the notes column ---------------- */
+function renderNotes(s){
+  const n = $('notes');
+  if (s.intro || s.signoff) {
+    const i = STOPS.indexOf(s);
+    n.innerHTML = s.intro
+      ? `<div class="kicker">Before you start</div><h2>Start here</h2><p class="see">The middle of the screen explains how the tour works. Press Begin when you’re ready.</p><div class="pager"><button class="btn primary" data-go="${STOPS[1].id}">Begin ${ICON.right}</button></div>`
+      : `<div class="kicker">Last step</div><h2>Sign off</h2><p class="see">Your marks and notes are summarised in the middle. Answer the four questions, then Copy notes and paste them into the chat.</p><div class="pager"><button class="btn" data-go="${STOPS[i - 1].id}">${ICON.left} Previous</button></div>`;
+    return;
+  }
+  const v = S.v[s.id] || {}, i = STOPS.indexOf(s), ri = REAL.indexOf(s);
+  n.innerHTML = `
+    <div class="kicker">${cv(s.ch.id)}<span>${CHAPTERS.indexOf(s.ch) + 1} · ${esc(s.ch.title)}</span><span class="of">${ri + 1} / ${REAL.length}</span></div>
+    <h2>${esc(s.title)}</h2>
+    <p class="see">${esc(s.see)}</p>
+    ${s.look && s.look.length ? `<h3>Look for</h3><ul>${s.look.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
+    ${s.try && s.try.length ? `<h3>Try</h3><ul>${s.try.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
+    ${s.flag ? `<p class="flag">${esc(s.flag)}</p>` : ''}
+    ${s.dec && s.dec.length ? `<p class="dec">Flow decision${s.dec.length > 1 ? 's' : ''} ${s.dec.join(', ').replace(/, (\d+)$/, ' and $1')}</p>` : ''}
+    <div class="verdict">
+      <p class="q" id="vq">How does this stop look?</p>
+      <div class="vbtns" role="group" aria-labelledby="vq">${['ok', 'change', 'unsure'].map(k => `<button data-v="${k}" aria-pressed="${v.mark === k}">${ICON[k]}${VLABEL[k]}</button>`).join('')}</div>
+      <label for="note">Notes</label>
+      <textarea id="note" placeholder="What should change, or anything you noticed">${esc(v.note || '')}</textarea>
+      <div class="saved" id="savedMsg" role="status"></div>
+    </div>
+    <div class="pager">
+      <button class="btn" data-go="${STOPS[i - 1].id}">${ICON.left} Previous</button>
+      <button class="btn primary" data-go="${STOPS[i + 1].id}">Next ${ICON.right}</button>
+    </div>
+    <p class="keys">← and → move between stops</p>`;
+}
+
+/* ---------------- moving between stops ---------------- */
+function go(id, opts = {}){
+  const s = STOPS.find(x => x.id === id) || STOPS[0];
+  S.cur = s.id; persist();
+  try { history.replaceState(null, '', '#' + s.id); } catch (e) { /* file:// in some browsers */ }
+  renderRoute(); renderNotes(s);
+  const alts = s.src ? [[s.l || 'Main', s.jump], ...(s.alts || [])] : [];
+  $('tools').hidden = !s.src;
+  $('altGrp').hidden = alts.length < 2;
+  $('alts').innerHTML = alts.map(([l, j], k) => `<button data-alt="${j}" aria-pressed="${k === 0}">${esc(l)}</button>`).join('');
+  if (s.src) showFrame(s, s.jump, opts.force);
+  else {
+    Object.values(frames).forEach(o => { o.el.hidden = true; });
+    $('holder').hidden = true;
+    const p = $('panel'); p.hidden = false; p.classList.remove('missing'); p.scrollTop = 0;
+    p.innerHTML = s.intro ? introBoard() : s.signoff ? signBoard() : BOARDS[s.board]();
+  }
+  if (opts.focus) { const h = $('notes').querySelector('h2'); if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); } }
+  $('notes').scrollTop = 0;
+}
+const step = d => { const i = STOPS.findIndex(x => x.id === S.cur); const j = Math.min(STOPS.length - 1, Math.max(0, i + d)); if (j !== i) go(STOPS[j].id, { focus: true }); };
+
+document.addEventListener('click', e => {
+  const g = e.target.closest('[data-go]'); if (g) { go(g.dataset.go, { focus: !g.closest('.rail') }); return; }
+  const a = e.target.closest('[data-alt]');
+  if (a) { const s = STOPS.find(x => x.id === S.cur); document.querySelectorAll('[data-alt]').forEach(b => b.setAttribute('aria-pressed', b === a)); showFrame(s, a.dataset.alt); return; }
+  const t = e.target.closest('[data-theme-btn]');
+  if (t) { S.dark = t.dataset.themeBtn === 'dark'; persist(); syncTheme(); const s = STOPS.find(x => x.id === S.cur); if (s.src) showFrame(s, curJump || s.jump); return; }
+  if (e.target.closest('#reopen')) { const s = STOPS.find(x => x.id === S.cur); showFrame(s, curJump || s.jump, true); return; }
+  const v = e.target.closest('[data-v]');
+  if (v) {
+    const s = STOPS.find(x => x.id === S.cur), k = v.dataset.v, o = S.v[s.id] || (S.v[s.id] = {});
+    // a repeat click keeps the mark (a quick double-click on Looks right used to clear it and still move on)
+    o.mark = k; persist();
+    document.querySelectorAll('[data-v]').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === o.mark));
+    renderRoute();
+    if (o.mark === 'ok') setTimeout(() => { if (S.cur === s.id) step(1); }, 280);
+    else if (o.mark) $('note').focus();
+    return;
+  }
+  if (e.target.closest('#copy')) {
+    const txt = summaryText(), out = $('out'); out.value = txt;
+    const done = ok => { $('copied').textContent = ok ? 'Copied. Paste it into the chat.' : 'Select the text below and copy it.'; if (!ok) { out.focus(); out.select(); } };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(() => done(true), () => done(false)); else done(false);
+    return;
+  }
+  const c = e.target.closest('#clear');
+  if (c) {
+    if (!c.dataset.armed) { c.dataset.armed = '1'; c.querySelector('span').textContent = 'Press again to clear everything'; setTimeout(() => { if (c.isConnected) { delete c.dataset.armed; c.querySelector('span').textContent = 'Clear all marks and notes'; } }, 4000); return; }
+    S.v = {}; S.sign = {}; S.signNote = ''; persist(); go('signoff');
+  }
+});
+document.addEventListener('input', e => {
+  if (e.target.id === 'note') {
+    const s = STOPS.find(x => x.id === S.cur), o = S.v[s.id] || (S.v[s.id] = {});
+    o.note = e.target.value;
+    clearTimeout(saveTimer); saveTimer = setTimeout(() => { $('savedMsg').textContent = persist() ? 'Saved in this browser' : 'Couldn’t save in this browser: copy your notes before closing'; }, 400);
+  } else if (e.target.id === 'signNote') { S.signNote = e.target.value; persist(); $('out').value = summaryText(); }
+});
+document.addEventListener('change', e => {
+  const m = e.target.name && e.target.name.match(/^sg-(\w+)$/);
+  if (m) { S.sign[m[1]] = e.target.value; persist(); $('out').value = summaryText(); }
+});
+document.addEventListener('keydown', e => {
+  if (e.altKey || e.ctrlKey || e.metaKey || e.target.closest('textarea,input,select')) return;
+  if (e.key === 'ArrowRight') { e.preventDefault(); step(1); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1); }
+});
+$('jumpSel').addEventListener('change', e => go(e.target.value, { focus: true }));
+function syncTheme(){ document.querySelectorAll('[data-theme-btn]').forEach(b => b.setAttribute('aria-pressed', (b.dataset.themeBtn === 'dark') === S.dark)); }
+
+syncTheme();
+const start = decodeURIComponent(location.hash.slice(1));
+go(STOPS.some(s => s.id === start) ? start : S.cur);
+// a stop's address can be typed or pasted (tour.html#reader); go() itself uses replaceState, which doesn't fire this
+window.addEventListener('hashchange', () => { const id = decodeURIComponent(location.hash.slice(1)); if (id !== S.cur && STOPS.some(s => s.id === id)) go(id); });
+drawCovers();
+</script>
+</body>
+</html>

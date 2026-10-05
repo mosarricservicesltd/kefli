@@ -148,7 +148,7 @@ code{font-size:13px;background:var(--accent-soft);padding:1px 5px;border-radius:
       <li><span class="tag t-bg">Unhappy</span><div>A word not on the list is marked at that field. A valid code with nothing saved under it: "No saves found for this code" with <em>Try again</em> and <em>Start fresh instead</em>.</div></li>
     </ol>
   </li>
-  <li><span class="tag t-screen">Screen</span><div><strong>C · Sign in with your nostr app.</strong> Hands off to the signer app on the phone (NIP-55), with a remote signer (NIP-46) as the second choice. The only screen that says "nostr".</div>
+  <li><span class="tag t-screen">Screen</span><div><strong>C · Sign in with your nostr app.</strong> Hands off to the signer app on the phone (NIP-55), with a remote signer (NIP-46) as the second choice. The only screen that says "nostr". A <em>Keep backup copies</em> switch, on by default, adds Shelf’s server and one independent backup to the user’s own server list (contract 3.1, decision 76) <span class="changed">new</span>.</div>
     <ol class="flow">
       <li><span class="tag t-bg">Unhappy</span><div>No signer app installed → a short explanation and the remote-signer option. Request refused in the signer → back to this screen, nothing changed.</div></li>
       <li><span class="tag t-decision">Decision</span><div>Once, after first sign-in: "Bring in your existing bookmarks?" Private by default. Skippable.</div></li>
@@ -226,7 +226,7 @@ code{font-size:13px;background:var(--accent-soft);padding:1px 5px;border-radius:
   <li><span class="tag t-screen">Screen</span><div><strong>Add another device.</strong> QR plus six-digit code, five minutes. Expired → "Code expired, show a new one".</div></li>
   <li><span class="tag t-screen">Screen</span><div><strong>Connected browsers.</strong> List, Connect a browser, Disconnect with its dialog: "Pages saved from that browser will be ignored. Uninstall the extension there or connect it again."</div></li>
   <li><span class="tag t-screen">Screen</span><div><strong>Voice.</strong> Which better voice to use; the phone's voice as the fallback.</div></li>
-  <li><span class="tag t-screen">Screen</span><div><strong>Advanced.</strong> Relays (the one place the word appears), Export, <em>Use my nostr app instead</em> <span class="changed">new</span>, which moves every save across.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Advanced.</strong> Relays (the one place the word appears), Export, <em>Use my nostr app instead</em> <span class="changed">new</span>, which moves every save across, with the same <em>Keep backup copies</em> switch (decision 76).</div></li>
   <li><span class="tag t-screen">Screen</span><div><strong>Delete my data.</strong> What goes, and what can only be asked of independent relays. Type DELETE to confirm <span class="changed">new</span>. Done → Welcome.</div></li>
 </ol>
 </div>
@@ -300,7 +300,7 @@ code{font-size:13px;background:var(--accent-soft);padding:1px 5px;border-radius:
 
 <h2 id="open">Open items</h2>
 <ul>
-  <li><strong>Contract v1.2:</strong> typed-code variant of browser pairing (decision 11); extension spec loses "Open in app" and <code>/open</code> (decision 9); moving saves to a nostr identity (decisions 6 and 13) needs a re-encryption path written down.</li>
+  <li><strong>Contract v1.2 (written 5 October 2026):</strong> typed-code browser pairing (decision 11, contract 4.4), "Open in app" and <code>/open</code> out of v1 (decision 9), moving saves to another identity (decisions 6 and 13, contract 4.8), and server audio out of v1 (decision 22, contract 6.1).</li>
   <li><strong>Name and licence:</strong> still open. "Shelf" stays the working name in every mockup.</li>
 </ul>
 </main>
