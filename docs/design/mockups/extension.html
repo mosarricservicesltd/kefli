@@ -5,69 +5,83 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Shelf Extension</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- tokens.css v0.2 (Fingerprint) imports Archivo, Literata and Martian Mono from Google Fonts for the mockups only.
+     The extension bundles the font files locally: its content security policy blocks remote fonts. -->
 <link rel="stylesheet" href="tokens.css">
+<!-- Cover v1, the frozen generator (built copy of shared/cover/cover-v1.js): defines window.ShelfCover. -->
+<script src="cover-v1.js"></script>
 <style>
-/* House motion (consistency spec). tokens.css is generated, so these live here; in the build they go on .toast. */
-:root{--motion-enter:250ms cubic-bezier(.2,.8,.2,1);--motion-exit:200ms cubic-bezier(.4,0,1,1)}
 *{box-sizing:border-box}
 html,body{margin:0}
-body{font-family:var(--font-ui);font-size:var(--text-15);line-height:1.5;background:#E7E3E1;color:#181D27}
+/* The board's presentation colours, for the panel and the desk around the window only (not Shelf UI, so not tokens). */
+:root{--b-bg:#E6E4DE;--b-paper:#F3F2EE;--b-ink:#17171A;--b-muted:#56554F;--b-line:#CFCCC4;--b-faint:#DAD7CF;--b-strong:#8C8A83}
+body{font-family:var(--font-ui);font-size:var(--text-15);line-height:var(--leading-ui);background:var(--b-bg);color:var(--b-ink);-webkit-font-smoothing:antialiased}
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 .wrap{max-width:1040px;margin:0 auto;padding:var(--space-24) var(--space-16) var(--space-32)}
 .sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0}
 
 /* ---------- control panel (outside the mock) ---------- */
 .panel{font-size:var(--text-13);margin-bottom:var(--space-20)}
-.panel h1{font-size:var(--text-20);margin:0 0 var(--space-4);font-weight:600}
-.panel p{margin:0 0 var(--space-12);color:#535862;max-width:80ch}
+.panel h1{font-family:var(--font-display);font-stretch:var(--font-display-stretch);font-weight:var(--font-display-weight);letter-spacing:-.02em;font-size:var(--text-20);line-height:1.2;margin:0 0 var(--space-8)}
+.panel p{margin:0 0 var(--space-12);color:var(--b-muted);max-width:84ch}
 .panel .grid{display:flex;flex-wrap:wrap;gap:var(--space-16) var(--space-32)}
-.panel h2{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#535862;margin:0 0 var(--space-8)}
+.panel h2{font-family:var(--font-mono);letter-spacing:-.01em;font-size:12px;font-weight:500;color:var(--b-muted);margin:0 0 var(--space-8)}
 .panel .btns{display:flex;flex-wrap:wrap;gap:6px}
-.panel .btns button{height:32px;padding:0 12px;border-radius:var(--radius-pill);background:#FFFFFF;border:1px solid #D5D7DA;display:inline-flex;align-items:center}
-.panel .btns button.on{background:#181D27;color:#FFFFFF;border-color:#181D27}
-.panel .note{margin-top:var(--space-12);padding:var(--space-12);border-radius:var(--radius);background:#FFFFFF;border:1px solid #D5D7DA;color:#414651;max-width:80ch}
+.panel .btns button{height:32px;padding:0 12px;border-radius:var(--radius-control);background:var(--b-paper);border:1px solid var(--b-strong);display:inline-flex;align-items:center;line-height:1;font-weight:500}
+.panel .btns button:hover{background:#FFFFFF}
+.panel .btns button.on{background:var(--b-ink);color:var(--b-paper);border-color:var(--b-ink)}
+.panel button:focus-visible,.panel summary:focus-visible{outline:2px solid var(--b-ink);outline-offset:2px}
+.panel .note{margin-top:var(--space-12);padding:var(--space-12) var(--space-16);border-radius:var(--radius);background:var(--b-paper);border:1px solid var(--b-faint);color:var(--b-ink);max-width:84ch}
 .panel.after{margin:var(--space-20) 0 0}
 .panel .note p{margin:0 0 var(--space-8);color:inherit}
 .panel .note p:last-child{margin:0}
 .panel .jnote{margin:var(--space-12) 0 0}
-.panel details.note summary{cursor:pointer;font-weight:600}
+.panel details.note summary{cursor:pointer;font-weight:620}
 .panel details.note ul{margin:var(--space-8) 0 0;padding-left:1.2em}
 .panel details.note li{margin-bottom:var(--space-4)}
+.panel code{font-family:var(--font-mono);font-size:11.5px;letter-spacing:-.02em}
 
 /* ---------- browser window (system chrome, drawn as a reference) ---------- */
 .win{--chrome:#DFE1E5;--chrome-2:#FFFFFF;--chrome-text:#1F1F1F;--chrome-muted:#5F6368;--omni:#F1F3F4;
-  position:relative;border-radius:12px;overflow:hidden;box-shadow:0 24px 48px #10182833,0 0 0 1px #10182814;background:var(--chrome);color:var(--chrome-text)}
+  position:relative;border-radius:12px;overflow:hidden;box-shadow:0 0 0 1px var(--b-line),0 30px 60px -30px #00000066;background:var(--chrome);color:var(--chrome-text)}
 .win[data-theme="dark"]{--chrome:#202124;--chrome-2:#35363A;--chrome-text:#E8EAED;--chrome-muted:#9AA0A6;--omni:#202124}
 .tabs{height:40px;display:flex;align-items:flex-end;gap:4px;padding:0 var(--space-12)}
 .dotsw{display:flex;gap:8px;align-self:center;margin-right:var(--space-12)}
 .dotsw i{width:12px;height:12px;border-radius:50%;background:var(--chrome-muted);opacity:.35}
-.tab{height:32px;min-width:0;display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-12);border-radius:10px 10px 0 0;background:transparent;color:var(--chrome-muted);font-size:12px;max-width:240px;white-space:nowrap;overflow:hidden}
+.tab{height:32px;min-width:0;display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-12);border-radius:10px 10px 0 0;background:transparent;color:var(--chrome-muted);font:12px/1 system-ui,sans-serif;max-width:240px;white-space:nowrap;overflow:hidden}
 .tab:hover{background:color-mix(in srgb, var(--chrome-text) 8%, transparent)}
 .tab.on{background:var(--chrome-2);color:var(--chrome-text)}
 .tab .lbl{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .tab .fav{width:16px;height:16px;border-radius:4px;background:var(--chrome-muted);opacity:.5;flex:none}
-/* Shelf's app icon (shared/brand/src/small.svg) wherever Chrome shows the extension: tab favicon, toolbar, menu, omnibox. */
-.tab .fav.shelf{background:none;border-radius:0;opacity:1;display:inline-flex;color:var(--on-gradient)}
-svg.mark{display:block;flex:none}
+/* Shelf's icon wherever Chrome shows the extension: tab favicon, toolbar, menu, address bar (the frozen app icon, see MARK). */
+.tab .fav.shelf{background:none;border-radius:0;opacity:1;display:inline-flex}
+.mark{display:block;flex:none;position:relative;width:var(--m);height:var(--m)}
+.mark svg{display:block;width:100%;height:100%}
+/* A 16 px slot holds both tuned cuts and shows the one Chrome would use: icon-16 on a 1x screen, and icon-32 drawn at
+   16 on anything denser (Chrome asks for 16 times the screen's scale and takes the next size up). */
+.mark .c32{display:none}
+@media (min-resolution:1.01dppx){.mark .c16{display:none}.mark .c32{display:block}}
 .bar{height:44px;display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-8);background:var(--chrome-2)}
 .bar .nav{width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:var(--chrome-muted)}
-.omni{flex:1;min-width:0;height:32px;border-radius:16px;background:var(--omni);display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-12);font-size:13px;color:var(--chrome-muted);white-space:nowrap;overflow:hidden}
+.omni{flex:1;min-width:0;height:32px;border-radius:16px;background:var(--omni);display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-12);font:13px/1 system-ui,sans-serif;color:var(--chrome-muted);white-space:nowrap;overflow:hidden}
 .omni b{color:var(--chrome-text);font-weight:400}
 .tb{position:relative;width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:var(--chrome-muted);flex:none}
 .tb[hidden]{display:none}
 .tb:hover{background:#0000000F}
-.tb.shelf .ico{display:inline-flex;color:var(--on-gradient)}
-/* The badge is drawn by Chrome from the colours the build passes to setBadgeBackgroundColor / setBadgeTextColor. */
-.badge{position:absolute;right:0;bottom:1px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#079455;color:#FFFFFF;font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
-.badge.wait{background:#535862}
+.tb.shelf .ico{display:inline-flex}
+/* The badge is drawn by Chrome from the colours the build passes to setBadgeBackgroundColor / setBadgeTextColor
+   (drawn system UI, one colour set for every browser theme): the light theme's success for the tick, the light theme's
+   muted grey for the waiting count (decision 64), and the light paper for the text, by the fill rule. */
+.badge{position:absolute;right:0;bottom:1px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#1E7A4A;color:#F3F2EE;font:700 10px/1 system-ui,sans-serif;display:inline-flex;align-items:center;justify-content:center}
+.badge.wait{background:#5C5B56}
 .me{width:26px;height:26px;border-radius:50%;background:#8E9196;flex:none;margin-left:2px}
 
 /* ---------- the web page under the toast (someone else's site) ---------- */
 .page{position:relative;height:580px;overflow:hidden;background:#FFFFFF;color:#1F1F1F}
 .win[data-theme="dark"] .page{background:#16171A;color:#E8EAED}
 #content{height:100%}
-.site{max-width:640px;margin:0 auto;padding:var(--space-32) var(--space-24)}
+.site{max-width:640px;margin:0 auto;padding:var(--space-32) var(--space-24);font-family:system-ui,sans-serif}
 .site .kick{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#8E9196;margin-bottom:var(--space-8)}
 .site h1{font:600 30px/1.2 Georgia,serif;margin:0 0 var(--space-12)}
 .site .by{font-size:13px;color:#8E9196;margin-bottom:var(--space-20)}
@@ -79,153 +93,249 @@ svg.mark{display:block;flex:none}
 .chromeset .crow{font:14px/1 system-ui;padding:16px 0;border-bottom:1px solid color-mix(in srgb, currentColor 12%, transparent)}
 
 /* context menu (browser UI) */
-.cmenu{position:absolute;width:240px;padding:6px 0;border-radius:8px;background:#FFFFFF;box-shadow:0 8px 24px #00000033,0 0 0 1px #0000001A;font-size:13px;color:#1F1F1F;z-index:5}
+.cmenu{position:absolute;width:240px;padding:6px 0;border-radius:8px;background:#FFFFFF;box-shadow:0 8px 24px #00000033,0 0 0 1px #0000001A;font:13px/1 system-ui,sans-serif;color:#1F1F1F;z-index:5}
 .win[data-theme="dark"] .cmenu{background:#292A2D;color:#E8EAED}
 .cmenu div{height:30px;display:flex;align-items:center;gap:10px;padding:0 14px}
 .cmenu div.hr{height:1px;padding:0;margin:6px 0;background:#0000001A}
 .cmenu .hl{background:#0000000F}
-.cmenu .sico{width:16px;height:16px;display:inline-flex;color:var(--on-gradient)}
+.cmenu .sico{width:16px;height:16px;display:inline-flex}
 .cmenu .sp{width:16px}
+
+/* ---------- covers (cover v1; the draw-in CSS comes from ShelfCover.css, added by the script) ---------- */
+.cv{display:block;position:relative;overflow:hidden;flex:none;width:var(--s,40px);height:var(--s,40px);border-radius:var(--radius-image);background:var(--line)}
+.cv svg{display:block;width:100%;height:100%}
+/* a hairline inside every cover keeps a ground close to the surface from bleeding into it */
+.cv::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px var(--cover-edge);pointer-events:none}
 
 /* ---------- Shelf's toast (our UI, tokens only) ---------- */
 /* The house inverted toast (decisions 46 and 57): buildToast gives the toast the opposite token scheme, so every role colour
-   inside it (muted, success, error, accent, the focus ring) comes from one contrast-checked set. Its surface and text are the
+   inside it (muted, success, error, the fill, the focus ring) comes from one contrast-checked set. Its surface and text are the
    page scheme's text and background colours, exactly as on the phone, and its shadow is the page scheme's. The properties
    below resolve on .page, before the flip. */
 .page{--toast-bg:var(--text);--toast-fg:var(--background);--toast-shadow:var(--shadow-float)}
-.toast{position:absolute;right:var(--space-16);bottom:var(--space-16);width:320px;max-width:calc(100% - 32px);z-index:6;
+.toast{position:absolute;right:var(--space-16);bottom:var(--space-16);width:336px;max-width:calc(100% - 32px);z-index:6;--ring:var(--toast-bg);
   background:var(--toast-bg);color:var(--toast-fg);border-radius:var(--radius);box-shadow:var(--toast-shadow);
-  font-family:system-ui,var(--font-ui);overflow:hidden;animation:toastIn var(--motion-enter)}
-@keyframes toastIn{from{opacity:0;transform:translateY(24px)}}
-.toast.leave{transition:opacity var(--motion-exit),transform var(--motion-exit);opacity:0;transform:translateY(24px)}
-/* The toast and the browser-page popup share one anatomy: icon, title, sub-line, action, ✕ and the 2 px countdown. */
-:is(.toast,.popup) .row{display:flex;align-items:center;gap:var(--space-12);padding:var(--space-12) var(--space-8) var(--space-12) var(--space-12);min-height:64px}
-:is(.toast,.popup) .ti{width:32px;height:32px;border-radius:var(--radius-pill);display:inline-flex;align-items:center;justify-content:center;flex:none}
-/* one tone per meaning: success solid green, error solid, offline neutral, accent-soft only for progress and neutral info */
-:is(.toast,.popup) .ti.soft{background:var(--accent-soft);color:var(--accent)}
-:is(.toast,.popup) .ti.ok{background:var(--success);color:var(--on-accent)}
-:is(.toast,.popup) .ti.bad{background:var(--error);color:var(--on-accent)}
-:is(.toast,.popup) .ti.off{background:var(--surface);border:1px solid var(--line);color:var(--muted)}
+  font-family:system-ui,var(--font-ui);font-size:var(--text-15);line-height:var(--leading-ui);overflow:hidden;
+  transition:opacity var(--motion-enter),transform var(--motion-enter)}
+/* Rise and sink (motion spec, compositions): the toast rises 24 px into place as it fades in, on the enter curve, and leaves by
+   the exact reverse on the exit curve. Transitions rather than keyframes, so a reversal turns round from where it is and takes
+   only the time left; a leaving toast takes no input. */
+@starting-style{.toast{opacity:0;transform:translateY(24px)}}
+.toast.leave{opacity:0;transform:translateY(24px);transition:opacity var(--motion-exit),transform var(--motion-exit);pointer-events:none}
+/* The toast and the browser-page popup share one anatomy: the saved page's cover with a mark on its corner (or a plain tile
+   when there is no save to show), title, sub-line, action, ✕ and the 2 px countdown in the article's ink. */
+:is(.toast,.popup) .row{position:relative;display:flex;align-items:center;gap:var(--space-12);padding:var(--space-12) var(--space-8) var(--space-12) var(--space-12);min-height:64px}
+:is(.toast,.popup) .lead{position:relative;width:40px;height:40px;flex:none}
+:is(.toast,.popup) .lead .cv{--s:40px;border-radius:var(--radius-control)}
+/* no save to show (removed, refused): a hairline tile the cover's size, so nothing moves. Its edge is the muted icon colour:
+   line-strong falls to 2.9:1 on the light toast of a dark page, muted keeps 5.8:1 or more in both. */
+:is(.toast,.popup) .tile{width:40px;height:40px;border-radius:var(--radius-control);box-shadow:inset 0 0 0 1px var(--muted);display:flex;align-items:center;justify-content:center;color:var(--muted)}
+:is(.toast,.popup) .tile.bad{color:var(--error)}
+/* the corner mark says what happened: ok (sent), off (waiting offline), bad (couldn't send). It lands (motion.mark) with the
+   cover's last leaf, and never later than 1 s after the drawing starts. */
+.mk{position:absolute;right:-5px;bottom:-5px;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 0 2px var(--ring);animation:markIn var(--motion-mark) var(--mk-delay,0ms) both}
+.mk.ok{background:var(--success);color:var(--on-fill)}
+.mk.bad{background:var(--error);color:var(--on-fill)}
+.mk.off{background:var(--ring);color:var(--text);box-shadow:inset 0 0 0 1px var(--muted),0 0 0 2px var(--ring)}
+@keyframes markIn{from{opacity:0;transform:scale(.4)}}
+@keyframes markFade{from{opacity:0}}
 :is(.toast,.popup) .tx{flex:1;min-width:0}
-:is(.toast,.popup) .tx b{display:block;font-size:var(--text-15);font-weight:600;line-height:1.3}
-:is(.toast,.popup) .tx span{display:block;font-size:var(--text-13);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+:is(.toast,.popup) .tx b{display:block;font-size:var(--text-15);font-weight:var(--weight-title);line-height:1.3}
+:is(.toast,.popup) .tx span{display:block;font-size:var(--text-13);color:var(--muted);line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 :is(.toast,.popup) .tx span.wrap2{white-space:normal}
-:is(.toast,.popup) .act{height:36px;padding:0 var(--space-12);border-radius:var(--radius-pill);font-weight:600;font-size:var(--text-13);flex:none;display:inline-flex;align-items:center}
-:is(.toast,.popup) .x{width:32px;height:32px;border-radius:var(--radius-pill);display:inline-flex;align-items:center;justify-content:center;color:var(--muted);flex:none}
+:is(.toast,.popup) .act{height:36px;padding:0 var(--space-12);border-radius:var(--radius-control);font-weight:var(--weight-title);font-size:var(--text-13);line-height:1;flex:none;display:inline-flex;align-items:center}
+:is(.toast,.popup) .x{width:32px;height:32px;border-radius:var(--radius-control);display:inline-flex;align-items:center;justify-content:center;color:var(--muted);flex:none}
 .toast .act{color:var(--toast-fg)}
 .toast .act:hover,.toast .x:hover{background:color-mix(in srgb, var(--toast-fg) 12%, transparent)}
-:is(.toast,.popup) button:focus-visible,:is(.toast,.popup).viakey button:focus{outline:2px solid var(--accent);outline-offset:-2px}
-:is(.toast,.popup) .timer{height:2px;background:var(--accent);animation:shrink linear forwards}
-.paused .timer{animation-play-state:paused}
-@keyframes shrink{from{width:100%}to{width:0}}
-.saving{display:inline-flex;gap:4px}
-.saving i{width:6px;height:6px;border-radius:50%;background:currentColor;animation:breathe 1.2s ease-in-out infinite}
-.saving i:nth-child(2){animation-delay:.2s}.saving i:nth-child(3){animation-delay:.4s}
-@keyframes breathe{0%,100%{opacity:.35}50%{opacity:1}}
+:is(.toast,.popup) button:focus-visible,:is(.toast,.popup).viakey button:focus{outline:var(--focus-width) solid var(--focus);outline-offset:-2px}
+/* the countdown takes the article's ink (ShelfCover.lineInk, 3:1 on the surface under it); with no cover, the text colour.
+   motion.countdown: a full-width fill translated left inside a clipped 2 px strip (never width or scaleX), held by
+   animation-play-state while the toast is hovered or holds focus the person gave it. */
+:is(.toast,.popup) .timer{height:2px;overflow:hidden}
+:is(.toast,.popup) .timer i{display:block;height:100%;background:var(--ink, var(--text));animation:countdown var(--motion-countdown-extension) forwards}
+:is(.toast,.popup) .timer.ghost{position:absolute;left:0;right:0;bottom:0}
+.paused .timer i{animation-play-state:paused}
+@keyframes countdown{to{transform:translateX(-100%)}}
+/* motion.ambient breathe: waiting loops only, from full opacity down to 30 % and back */
+@keyframes breathe{0%,100%{opacity:1}50%{opacity:.3}}
+/* crossfades leave the old layer in place as an inert ghost while it fades out (motion.quick) */
+.ghost{pointer-events:none}
 
 /* ---------- Shelf's action popup on browser pages (our UI, tokens only; Chrome draws the bubble it sits in) ---------- */
-.popup{position:absolute;top:84px;right:44px;width:320px;max-width:calc(100% - 16px);z-index:8;background:var(--surface);color:var(--text);
-  border-radius:var(--radius);box-shadow:var(--shadow-float);border:var(--card-edge);font-family:var(--font-ui);overflow:hidden}
+.popup{position:absolute;top:84px;right:44px;width:336px;max-width:calc(100% - 16px);z-index:8;--ring:var(--surface);background:var(--surface);color:var(--text);
+  border-radius:var(--radius);box-shadow:var(--shadow-float);font-family:var(--font-ui);font-size:var(--text-15);line-height:var(--leading-ui);overflow:hidden}
 .popup[hidden]{display:none}
 .popup:focus{outline:none}
-.popup .act{color:var(--accent)}
+.popup .act{color:var(--text)}
 .popup .act:hover,.popup .x:hover{background:var(--background)}
 
 /* ---------- options page (our UI, tokens only) ---------- */
-.opts{height:100%;overflow-y:auto;background:var(--background);color:var(--text);font-family:var(--font-ui)}
+/* the scrollbar's gutter is kept, so a page that grows or shrinks past the fold never shifts sideways */
+.opts{height:100%;overflow-y:auto;scrollbar-gutter:stable;background:var(--background);color:var(--text);font-family:var(--font-ui);font-size:var(--text-15);line-height:var(--leading-ui)}
 .opts .in{max-width:520px;margin:0 auto;padding:var(--space-32) var(--space-24)}
-.opts :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.brandrow{display:flex;align-items:center;gap:var(--space-8);font-weight:600;margin-bottom:var(--space-24)}
-.brandrow .lg{display:inline-flex;color:var(--on-gradient)}
-/* one title slot: a 28/1.2 h1 and a muted lead; notices and outcome errors sit between them */
-.opts h1{font-size:var(--text-28);line-height:1.2;letter-spacing:-.02em;font-weight:600;margin:0 0 var(--space-8)}
+/* Every keyed element is a containing block, so a crossfade's ghost can sit exactly where the old layer was. */
+.opts [data-k]{position:relative}
+/* Screen swap: the old page's content fades out over the new one, which fades in (opacity only). */
+.opts.swapghost{position:absolute;inset:0;overflow:hidden;background:none;z-index:1}
+.opts :focus-visible{outline:var(--focus-width) solid var(--focus);outline-offset:var(--focus-offset)}
+.brandrow{display:flex;align-items:center;gap:10px;margin-bottom:var(--space-24);font-family:var(--font-display);font-stretch:var(--font-display-stretch);font-weight:var(--font-display-weight);letter-spacing:var(--font-display-tracking);font-size:var(--text-17);line-height:1}
+/* On Shelf's own page the app icon is a cover too, so it carries the covers' inset hairline (consistency spec, Covers):
+   its cream ground sits close to paper. The corner is the small cuts' 7 in 32. */
+.brandrow .lg{display:inline-flex}
+.brandrow .mark::after{content:"";position:absolute;inset:0;border-radius:calc(var(--m) * 7 / 32);box-shadow:inset 0 0 0 1px var(--cover-edge);pointer-events:none}
+/* one title slot: the display face at 28/1.2 and a muted lead; notices and outcome errors sit between them */
+.opts h1{font-family:var(--font-display);font-stretch:var(--font-display-stretch);font-weight:var(--font-display-weight);letter-spacing:var(--font-display-tracking);font-size:var(--text-28);line-height:var(--leading-display);margin:0 0 var(--space-8)}
 .opts .lead{color:var(--muted);margin:0 0 var(--space-20)}
 .titlerow{display:flex;align-items:center;gap:var(--space-12);margin-bottom:var(--space-8)}
 .titlerow h1{margin:0}
-.titlerow .ok{width:40px;height:40px;border-radius:50%;background:var(--success);color:var(--on-accent);display:inline-flex;align-items:center;justify-content:center;flex:none}
-.card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);border:var(--card-edge);padding:var(--space-24)}
+.titlerow .ok{width:40px;height:40px;border-radius:50%;background:var(--success);color:var(--on-fill);display:inline-flex;align-items:center;justify-content:center;flex:none}
+/* Cards and row groups draw their surface per row (a plate per .li in a .list, per .seg in a .card), so when a row leaves, the
+   rows below and the group's bottom edge glide up by transform and nothing animates height. The first plate carries the top
+   edge and corners (edge-t), the last the bottom ones (edge-b); classes set after each render, and held back from the row
+   taking over an edge until the gap has closed, so the hand-over is seamless. */
+.card{position:relative;z-index:0}
+:is(.list > .li,.card > .seg,.plate-fill){background:var(--surface);border-left:var(--card-edge);border-right:var(--card-edge)}
+:is(.list > .li,.card > .seg,.plate-fill).edge-t{border-top:var(--card-edge);border-top-left-radius:var(--radius);border-top-right-radius:var(--radius)}
+:is(.list > .li,.card > .seg,.plate-fill).edge-b{border-bottom:var(--card-edge);border-bottom-left-radius:var(--radius);border-bottom-right-radius:var(--radius)}
+/* a leaving row keeps its plate under the rows that close over it; a crossfading row fades its content on a still plate */
+:is(.list > .li,.card > .seg).ghost:not(.ghost-c),.plate-fill{z-index:-1}
+:is(.list > .li,.card > .seg).ghost-c{background:none;border-color:transparent}
+.list > .li.ghost-c::before{display:none}
+.card > .seg{padding:0 var(--space-24)}
+.card > .seg.first{padding-top:var(--space-24)}
+.card > .seg.last{padding-bottom:var(--space-24)}
+.card > .seg.pinseg{padding-bottom:var(--space-20)}
 .pair{display:flex;gap:var(--space-24);align-items:center}
-/* the code sits under the QR, as on the phone's showing side; .qr stays dark on white in every theme so it scans */
-.qr{flex:none;padding:var(--space-12);border-radius:var(--radius);background:#FFFFFF;color:#181D27;line-height:0;display:flex;flex-direction:column;align-items:center;gap:var(--space-12)}
+/* the code sits under the QR, as on the phone's showing side; .qr takes the light scheme in every theme so it scans */
+.qr{flex:none;padding:var(--space-12);border-radius:var(--radius);background:var(--surface);color:var(--text);line-height:0;display:flex;flex-direction:column;align-items:center;gap:var(--space-12)}
+.win[data-theme="dark"] .qr{box-shadow:0 0 0 1px var(--line)}
 .qr.faded svg{opacity:.12}
-.qr .code{font:600 var(--text-20)/1 var(--font-ui);letter-spacing:.2em;padding-left:.2em;font-variant-numeric:tabular-nums}
+.qr .code{font:var(--weight-title) var(--text-20)/1 var(--font-ui);letter-spacing:.2em;padding-left:.2em;font-variant-numeric:tabular-nums}
 .qr.faded .code{opacity:.4}
 .steps{margin:0;padding-left:1.2em;font-size:var(--text-15)}
 .steps li{margin-bottom:var(--space-8)}
+.steps strong{font-weight:var(--weight-title)}
 .status{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-8);margin-top:var(--space-16);padding-top:var(--space-16);border-top:1px solid var(--line);font-size:var(--text-13);color:var(--muted)}
 .status.plain{border-top:0}
 .status .cd{margin-left:auto;font-variant-numeric:tabular-nums}
-/* waiting line: one 8 px breathing dot at the start */
-.pdot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none;animation:breathe 1.2s ease-in-out infinite}
-.errline{display:flex;gap:var(--space-8);align-items:flex-start;padding:var(--space-12) var(--space-16);border-radius:var(--radius);background:color-mix(in srgb, var(--error) 10%, var(--surface));color:var(--text);font-size:var(--text-13);font-weight:500;margin-bottom:var(--space-16)}
+/* waiting line: one 8 px breathing square at the start, in the text colour (the board's waiting mark); it starts breathing
+   once the wait has lasted 150 ms */
+.pdot{width:8px;height:8px;border-radius:2px;background:var(--text);flex:none;animation:breathe var(--motion-ambient-breathe) var(--motion-ambient-delay) infinite}
+/* outcome error: the phone's errline (consistency spec): error at 10% over the surface and an error icon; the words stay
+   in the text colour */
+.errline{display:flex;gap:var(--space-8);align-items:flex-start;padding:var(--space-12) var(--space-16);border-radius:var(--radius);background:color-mix(in srgb, var(--error) 10%, var(--surface));color:var(--text);font-size:var(--text-13);font-weight:var(--weight-meta);margin-bottom:var(--space-16)}
 .errline svg{color:var(--error);flex:none;margin-top:1px}
 /* offline and waiting: the neutral notice */
-.notice{display:flex;gap:var(--space-8);align-items:flex-start;padding:var(--space-12) var(--space-16);border-radius:var(--radius);background:var(--surface);border:1px solid var(--line);color:var(--text);font-size:var(--text-13);font-weight:500;margin:0 0 var(--space-16)}
+.notice{display:flex;gap:var(--space-8);align-items:flex-start;padding:var(--space-12) var(--space-16);border-radius:var(--radius);background:var(--surface);border:1px solid var(--line);color:var(--text);font-size:var(--text-13);font-weight:var(--weight-meta);margin:0 0 var(--space-16)}
 .notice svg{color:var(--muted);flex:none;margin-top:1px}
-.btn{height:44px;padding:0 var(--space-20);border-radius:var(--radius-pill);display:inline-flex;align-items:center;justify-content:center;gap:var(--space-8);font-weight:600;font-size:var(--text-15);line-height:1}
-/* content on Terracotta is white in every theme (decision 61) */
-.btn.primary{background:var(--gradient-primary);color:var(--on-gradient)}
-.btn.secondary{background:var(--surface);color:var(--text);box-shadow:var(--shadow-card);border:var(--card-edge)}
+.btn{height:48px;padding:0 var(--space-20);border-radius:var(--radius-button);display:inline-flex;align-items:center;justify-content:center;gap:var(--space-8);font-weight:var(--weight-title);font-size:var(--text-15);line-height:1;white-space:nowrap}
+/* the fill rule (decision 66): ink on paper, paper on ink in dark; content on a fill is the page colour */
+.btn.primary{background:var(--fill);color:var(--on-fill)}
+.btn.primary:hover{background:color-mix(in srgb, var(--fill) 86%, var(--background))}
+.btn.secondary{background:var(--surface);color:var(--text);border:1px solid var(--line)}
+.btn.secondary:hover{border-color:var(--line-strong)}
 /* destructive: solid only on the confirm; the control that opens it is quieter (the phone's red text button) */
 .btn.secondary.destructive{color:var(--error)}
 .btn.danger{background:var(--surface);color:var(--error);border:1.5px solid var(--error)}
-.btn.danger:not([disabled]){background:var(--error);color:var(--on-accent)}
+.btn.danger:not([disabled]){background:var(--error);color:var(--on-fill)}
 .btn.danger[disabled]{opacity:.45;cursor:default}
 .sect{margin-top:var(--space-24)}
 .sect h2{font-size:var(--text-13);font-weight:600;color:var(--muted);margin:0 0 var(--space-8)}
 /* inline confirm before disconnecting (same pattern as the phone's Disconnect sheet): [Cancel][named consequence], right-aligned */
-.confirm{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);border:var(--card-edge);padding:var(--space-16)}
-.confirm h2{font-size:var(--text-17);font-weight:600;color:var(--text);margin:0 0 var(--space-4)}
+.confirm{background:var(--surface);border-radius:var(--radius);border:var(--card-edge);padding:var(--space-16)}
+.confirm h2{font-size:var(--text-17);font-weight:var(--weight-heading);color:var(--text);margin:0 0 var(--space-4)}
 .confirm p{color:var(--muted);margin:0 0 var(--space-16)}
 .confirm .row{display:flex;flex-wrap:wrap;gap:var(--space-8);justify-content:flex-end}
-.list{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);border:var(--card-edge);overflow:hidden}
-.li{display:flex;align-items:center;gap:var(--space-12);min-height:52px;padding:var(--space-8) var(--space-16);border-top:1px solid var(--line);font-size:var(--text-15)}
-.li:first-child{border-top:0}
+/* groups of rows, as the phone's You groups: hairline group (drawn by the rows' plates, above), hairlines between rows inset
+   to the label */
+.list{position:relative;z-index:0}
+.li{position:relative;display:flex;align-items:center;gap:14px;min-height:52px;padding:6px var(--space-8) 6px var(--space-16);font-size:var(--text-15);line-height:1.3}
+/* the group's edge now sits on its first and last rows, so they take the extra pixel to keep 52 inside */
+.list > .li.edge-t,.list > .li.edge-b{min-height:53px}
+.list > .li.edge-t.edge-b{min-height:54px}
+.li+.li::before{content:"";position:absolute;left:50px;right:0;top:0;height:1px;background:var(--line)}
+.list.saves .li+.li::before{left:70px}
 .li .ic{color:var(--muted);display:inline-flex;flex:none}
-.li .t{flex:1;min-width:0}
-.li .t small{display:block;font-size:var(--text-13);color:var(--muted)}
-/* the pin line at the top of the pairing card, ruled off from the pairing steps */
-.card .pinline{padding:0 0 var(--space-16);margin:0 0 var(--space-20);min-height:0;border-top:0;border-bottom:1px solid var(--line)}
-.keys{display:inline-flex;gap:var(--space-4);flex:none}
-.kbd{display:inline-flex;align-items:center;height:24px;padding:0 var(--space-8);border-radius:var(--radius-image);background:var(--background);border:1px solid var(--line);font-size:var(--text-13);font-weight:600}
-.li .retry{height:36px;padding:0 var(--space-12);border-radius:var(--radius-pill);color:var(--accent);font-weight:600;font-size:var(--text-13);flex:none;display:inline-flex;align-items:center;gap:var(--space-8)}
-.li .retry:hover{background:var(--background)}
-/* busy: keeps its colour, three 6 px dots and an '-ing' label, aria-busy, never looks disabled */
-.li .retry[aria-busy="true"]{pointer-events:none}
+.li .t{flex:1;min-width:0;font-weight:var(--weight-label);padding:var(--space-4) 0}
+.li .t small{display:block;font-size:var(--text-13);font-weight:var(--weight-body);color:var(--muted);margin-top:2px}
+.li .cv{--s:40px}
+/* the pin line at the top of the pairing card, ruled off from the pairing steps (its segment holds the 20 px below the rule) */
+.card .pinline{padding:0 0 var(--space-16);margin:0;min-height:0;border-bottom:1px solid var(--line)}
+.keys{display:inline-flex;gap:var(--space-4);flex:none;padding-right:var(--space-8)}
+.kbd{display:inline-flex;align-items:center;height:24px;padding:0 var(--space-8);border-radius:var(--radius-control);background:var(--background);border:1px solid var(--line);font-size:var(--text-13);font-weight:600;line-height:1}
+/* row actions are chips: 36 visual with a 48 hit area, hairline edge in line-strong */
+.chip{position:relative;height:36px;padding:0 var(--space-12);border-radius:var(--radius-control);border:1px solid var(--line-strong);color:var(--text);font-weight:600;font-size:var(--text-13);line-height:1;flex:none;display:inline-flex;align-items:center;gap:var(--space-8)}
+.chip::before{content:"";position:absolute;inset:-6px -2px}
+.chip:hover{background:var(--background)}
+/* busy: keeps its colour, three 6 px dots and an '-ing' label, aria-busy, never looks disabled. aria-busy and no pointer events
+   come from the tap; the label crossfades to the dots only once the wait has lasted 150 ms. Both labels share one grid cell,
+   so the chip keeps its size. */
+.chip[aria-busy="true"]{pointer-events:none}
+.chip.stack{display:inline-grid;justify-items:center}
+.chip.stack > span{grid-area:1/1;display:inline-flex;align-items:center;gap:var(--space-8)}
+.chip.stack:not(.showbusy) > .lbl-busy,.chip.stack.showbusy > .lbl-idle{opacity:0}
 .dots{display:inline-flex;gap:4px}
-.dots.inbtn i{width:6px;height:6px;border-radius:50%;background:currentColor;animation:breathe 1.2s ease-in-out infinite}
-.dots.inbtn i:nth-child(2){animation-delay:.2s}.dots.inbtn i:nth-child(3){animation-delay:.4s}
+.dots.inbtn i{width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.showbusy .dots.inbtn i{animation:breathe var(--motion-ambient-breathe) infinite}
+.chip.showbusy .dots.inbtn i:nth-child(2){animation-delay:var(--motion-ambient-breathe-phase)}
+.chip.showbusy .dots.inbtn i:nth-child(3){animation-delay:calc(var(--motion-ambient-breathe-phase) * 2)}
 .li .sent{color:var(--success);display:inline-flex;flex:none;padding:0 var(--space-12)}
 .list :focus-visible{outline-offset:-2px}
-/* Advanced is a row: bare muted icon, 500 label, 18 px chevron that turns when open */
+/* Advanced is a row: bare muted icon, 550 label, 18 px chevron that turns when open */
 details.adv{margin-top:var(--space-24)}
-details.adv summary{display:flex;align-items:center;gap:var(--space-12);min-height:52px;padding:var(--space-8) var(--space-16);background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);border:var(--card-edge);font-size:var(--text-15);font-weight:500;color:var(--text);cursor:pointer;list-style:none}
+details.adv summary{display:flex;align-items:center;gap:14px;min-height:52px;padding:6px var(--space-8) 6px var(--space-16);background:var(--surface);border-radius:var(--radius);border:var(--card-edge);font-size:var(--text-15);font-weight:var(--weight-label);color:var(--text);cursor:pointer;list-style:none}
 details.adv summary::-webkit-details-marker{display:none}
 details.adv summary .ic{color:var(--muted);display:inline-flex}
-details.adv summary > svg:last-child{margin-left:auto;color:var(--muted);transition:transform var(--motion-enter)}
-details.adv[open] summary > svg:last-child{transform:rotate(90deg)}
-.sdot{display:inline-flex;align-items:center;gap:var(--space-8);font-size:var(--text-13);color:var(--muted)}
+details.adv summary .t{flex:1}
+details.adv summary > .chev{color:var(--muted);display:inline-flex;width:28px;justify-content:center}
+/* the chevron turns a quarter on the enter curve (played by the page's morph, since the page redraws from state) */
+details.adv summary .chevr{display:inline-flex}
+details.adv[open] summary .chevr{transform:rotate(90deg)}
+.sdot{display:inline-flex;align-items:center;gap:var(--space-8);font-size:var(--text-13);color:var(--muted);padding-right:var(--space-8)}
 .sdot::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--success)}
 .sdot.bad::before{background:var(--error)}
 .fine{font-size:var(--text-13);color:var(--muted);margin:var(--space-12) 0 0}
 @media (max-width:640px){.pair{flex-direction:column;align-items:flex-start}}
-/* reduced motion: fades keep their durations, and bars that carry information (the toast's countdown) keep running */
-@media (prefers-reduced-motion:reduce){@keyframes toastIn{from{opacity:0}} .toast.leave{transform:none} .saving i,.pdot,.dots i{animation:none;opacity:1} details.adv summary svg{transition:none}}
+/* motion.press: a flat state layer on the control's shape, in at once when pressed and out on quick out; no ripple, no scale.
+   Ink at 8 % on paper and surfaces, the page colour at 12 % on fills (the toast is the fill). */
+.toast{--press-layer:color-mix(in srgb, var(--toast-fg) var(--motion-press-layer-fill), transparent)}
+.popup,.opts{--press-layer:color-mix(in srgb, var(--text) var(--motion-press-layer), transparent)}
+.opts :is(.btn.primary,.btn.danger:not([disabled])){--press-layer:color-mix(in srgb, var(--on-fill) var(--motion-press-layer-fill), transparent)}
+:is(.toast,.popup) :is(.act,.x),.opts .btn,details.adv summary{position:relative}
+:is(.toast,.popup) :is(.act,.x)::after,.opts :is(.btn,.chip)::after,details.adv summary::after{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--press-layer);opacity:0;pointer-events:none;transition:opacity var(--motion-quick-out)}
+:is(.toast,.popup) :is(.act,.x):active::after,.opts :is(.btn,.chip):active::after,details.adv summary:active::after{opacity:1;transition:none}
+/* reduced motion keeps every meaning and drops the travel: the toast fades in place at the same durations, covers appear
+   drawn (ShelfCover.css), marks fade in over 150 ms without scaling, waiting loops rest at full opacity, the chevron turns at
+   once and gaps close at once (in the script); the countdown keeps running, since it carries information */
+@media (prefers-reduced-motion:reduce){
+  @starting-style{.toast{transform:none}}
+  .toast.leave{transform:none}
+  .mk{animation:markFade var(--motion-quick-in) both}
+  .pdot,.chip.showbusy .dots.inbtn i{animation:none;opacity:1}
+}
 @media (forced-colors: active){
-  .toast,.popup,.card,.list,.confirm,.errline,.notice,.toast .ti,.popup .ti,.titlerow .ok,details.adv summary{border:1px solid CanvasText}
-  .btn,.toast .act,.toast .x,.popup .act,.popup .x,.li .retry{border:1px solid ButtonText}
-  .toast .timer,.popup .timer,.saving i,.pdot,.dots i,.sdot::before{forced-color-adjust:none;background:CanvasText}
-  .qr{forced-color-adjust:none}
+  .toast,.popup,.confirm,.errline,.notice,.titlerow .ok,details.adv summary,:is(.toast,.popup) .tile,.mk{border:1px solid CanvasText}
+  .btn,.toast .act,.toast .x,.popup .act,.popup .x,.chip{border:1px solid ButtonText}
+  .toast .timer i,.popup .timer i,.pdot,.dots i,.sdot::before{forced-color-adjust:none;background:CanvasText}
+  .qr,.cv,.mark{forced-color-adjust:none}
+  :is(.list > .li,.card > .seg){border-color:CanvasText}
+  :is(.list > .li,.card > .seg).ghost-c{border-color:transparent}
 }
 </style>
 </head>
 <body>
-<!-- The brand gradient for Shelf's app icon, defined once under its own id and shared by every inlined copy of the mark. -->
-<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><linearGradient id="shelfMarkTile" x1="0" y1="0" x2="0" y2="32" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#BE6947"/><stop offset="1" stop-color="#944526"/></linearGradient></defs></svg>
+<!-- The rounded tile of Shelf's app icon, defined once and shared by every inlined copy of the 16 and 32 px cuts.
+     shelfTile32 is those cuts' own clip (small.svg and small-32.svg, there called "tile"). The options page's 28 px logo
+     carries its own clip, shelfLogo28, inside options-logo-28.svg. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+  <clipPath id="shelfTile32" clipPathUnits="userSpaceOnUse"><rect width="32" height="32" rx="7"/></clipPath>
+</defs></svg>
 <div class="wrap">
   <div class="panel">
-    <h1>Shelf prototype · batch 5 · browser extension</h1>
+    <h1>Shelf prototype · batch 5 · browser extension · Fingerprint</h1>
     <p>Click the Shelf button in the toolbar or press Alt+Shift+S to save the page, or jump to any state below. The toast never takes focus: press the shortcut again while it says Saved to reach Undo, then Tab, Escape or ✕ to go back to the page. It pauses while the pointer is over it or focus you gave it is inside it. On a browser page, a small popup opens under Shelf’s button instead. Shelf’s options open in their own tab; click the article’s tab to go back. When Shelf isn’t pinned, click the puzzle piece to pin it. The browser window, tab strip, badge and right-click menu are Chrome’s, drawn only for context; the toast, the popup and the options page are Shelf’s. Decisions and build notes are under the window.</p>
+    <p>Every save wears its cover, drawn by cover v1 from the sha256 of its normalised address, so the Atlantic article has the same face here, on the board and on the phone. The options page and the popup use Archivo: the extension bundles it as local font files, because its content security policy blocks remote fonts, while this mockup loads it from Google Fonts. The injected toast keeps system-ui.</p>
     <div class="grid">
       <div><h2>Theme</h2><div class="btns"><button data-theme-set="light" class="on">Light</button><button data-theme-set="dark">Dark</button></div></div>
       <div><h2>Platform</h2><div class="btns"><button data-toggle="mac" aria-pressed="false">Mac</button><button data-toggle="nokey" aria-pressed="false">Shortcut not set</button></div></div>
@@ -279,16 +389,20 @@ details.adv[open] summary > svg:last-child{transform:rotate(90deg)}
              :host{all:initial !important;position:fixed;right:16px;bottom:16px;z-index:2147483647}.
            - Declared on the inner .toast element, not on :host, because page rules that match the host win for normal
              declarations and all:initial doesn't reset custom properties: the toast's tokens, --motion-enter and
-             --motion-exit, font:15px/1.5 system-ui, color, letter-spacing:normal, text-transform:none, text-align:left,
+             --motion-exit, font:15px/1.45 system-ui, color, letter-spacing:normal, text-transform:none, text-align:left,
              direction:ltr and color-scheme:light dark.
            - The scheme comes from @media (prefers-color-scheme: dark) on .toast, not from [data-theme]. The toast is the
              house inverted toast (decision 57): .toast declares the opposite scheme's values, its surface is the page
              scheme's text colour and its text the page scheme's background, and --toast-shadow takes the page scheme's shadow.
+           - The cover is cover v1's SVG, inlined in the shadow root with ShelfCover.css in the shadow root's stylesheet
+             (decorative, aria-hidden). The background sends the save's d-tag hash with the result, the same hash the phone
+             draws, so the toast needs no network and no image. --ink on .toast is ShelfCover.lineInk(hash, toast surface,
+             toast text), computed in the content script for the scheme in force.
            - Where the popover API exists (Chrome 114+, Firefox 125+), the host is popover="manual" and shown with
              showPopover(), so it sits above fullscreen video and the page's modal dialogs. Otherwise it is appended to
              document.fullscreenElement when one is set, or else to document.documentElement.
-           - Accepted as they are: bottom right, 320 wide, the 16 px inset, and system-ui first. Remote and shadow-root
-             @font-face are unreliable.
+           - Accepted as they are: bottom right, 336 wide (the board's width, for the 40 px cover), radius 14, the 16 px
+             inset, and system-ui first. Remote and shadow-root @font-face are unreliable.
            - Page CSS can still reach the host element (rules matching <shelf-toast>, and inheritance into the shadow tree),
              which is why the list above lives inside the shadow root. Spec 05's claim that page CSS cannot touch a closed
              shadow root needs correcting.
@@ -303,20 +417,25 @@ details.adv[open] summary > svg:last-child{transform:rotate(90deg)}
   </div>
   <div class="panel after">
     <div class="note">
-      <p><strong>For you to decide:</strong> the spec drops the oldest queued save when a ninth is made offline. Here the ninth is refused instead, with a clear message, so nothing you saved is ever silently lost (decision 31).</p>
-      <p><strong>Changed in this pass:</strong> the toast never takes focus; a second press of the shortcut reaches Undo (58, updates 44). Browser pages show a small popup as well as the tick (59). Offline saves offer Undo (60, changes 30). The badge, the button’s name and the options notice count offline saves only (30); saves that couldn’t send are listed on the options page. Disconnecting names every unsent save it would delete, including ones that couldn’t send.</p>
+      <p><strong>Settled (decision 31):</strong> a ninth save made offline while eight are waiting is refused with a clear message, so nothing you saved is ever silently lost. Spec 05 says the same.</p>
+      <p><strong>Changed in this pass (Fingerprint, decisions 65 to 67 and 70):</strong> the look only; flows, copy, controls and behaviour are as before. The toast’s leading circle becomes the saved page’s cover, drawing itself while Shelf saves, and a small mark on its corner says what happened: a tick once it is saved, the offline mark while it waits to send, the alert mark when it couldn’t send. A removed or refused save shows a plain tile the same size, since there is no save to show. The countdown runs in the article’s ink, chosen for 3:1 on the toast. Saves listed under Couldn’t send wear their covers too. Fills are ink on paper, or paper on ink in dark, with the page colour on them; there is no Terracotta and no gradient. The toolbar button, tab, address bar, menu and options logo show the app icon Richard chose (decision 70): C·L·063 with the paper mark, a paper bookmark and bar in an ink outline on orange bands and cream, with its own drawings for 16, 28 and 32 px. The badge stays neutral grey (decision 64).</p>
+      <p><strong>Motion (decision 73, motion-spec.md):</strong> the toast rises 24 px as it fades in and sinks by the exact reverse; a second save, Saving… becoming Saved, and Undo change it in place by crossfade. The cover draws itself once in the leading slot, and its corner mark lands with the last leaf, never more than a second in. The countdown runs by transform. The popup has no entrance of its own, since the browser opens it, but its cover draws as in the toast. On the options page, Retry turns busy at the tap and shows its dots after 150 ms; a sent row holds Sent for 1.5 s, then leaves and the rows below close the gap. Advanced, the Disconnect confirm and an expired code crossfade, Connected swaps the page, and the pin hint leaves like a row. With reduced motion everything fades in place and nothing travels; the countdown keeps running.</p>
+      <p><strong>Earlier pass (decisions 57 to 64):</strong> the toast never takes focus; a second press of the shortcut reaches Undo (58, updates 44). Browser pages show a small popup as well as the tick (59). Offline saves offer Undo (60, changes 30). The badge, the button’s name and the options notice count offline saves only (30); saves that couldn’t send are listed on the options page. Disconnecting names every unsent save it would delete, including ones that couldn’t send.</p>
     </div>
     <details class="note">
       <summary>Build notes</summary>
       <ul>
         <li><strong>Toast:</strong> the shadow-root contract is in the comment above the toast host in this file’s source.</li>
+        <li><strong>Motion:</strong> the toast’s rise and sink are CSS transitions on transform and opacity with <code>@starting-style</code>, declared on the inner toast with the motion tokens as custom properties, so a sink interrupted by a new save turns round from where it is. The countdown is a full-width fill translated left in a clipped strip, held with <code>animation-play-state</code>. Put <code>ShelfCover.css</code> and the reduced-motion rules in each shadow root. On the options page, neighbours move by FLIP through the Web Animations API, a group’s surface is drawn per row so its edge can glide, and nothing animates height.</li>
+        <li><strong>Covers:</strong> bundle <code>shared/cover/cover-v1.js</code> (frozen) in the toast script, the popup and the options page. The background already computes each save’s d-tag hash (contract 4.3) and sends it with the result. The toast draws <code>ShelfCover.svg(hash, {draw: true})</code>, keeps the same cover element when Saving… becomes Saved so the drawing isn’t restarted, and brings the corner mark in as the last leaf lands (520 ms plus 34 ms a leaf), or at 1 s if the drawing is longer (motion spec, Before build item 4). Covers in the Couldn’t send list are drawn still. The toast’s countdown takes <code>ShelfCover.lineInk(hash, surface, text)</code> for the toast’s colours, the popup’s for its surface.</li>
+        <li><strong>Icon:</strong> the app icon frozen under decision 70, C·L·063 with the paper mark, built from <code>shared/brand/src</code> into <code>shared/brand/out/extension/</code>. The manifest’s <code>icons</code> and <code>action.default_icon</code> take <code>icon-16.png</code>, <code>icon-32.png</code> and <code>icon-48.png</code> (the tuned cuts, <code>small.svg</code>, <code>small-32.svg</code> and <code>small-48.svg</code>) with <code>icon-128.png</code>; Firefox takes <code>icon-16.svg</code> and <code>icon-32.svg</code> for its 16 and 32 keys. Chrome picks the cut for the screen, 16 on a 1x screen and 32 drawn at 16 on anything denser, and this mockup does the same. The options page’s 28 px logo inlines <code>options-logo-28.svg</code>, the tuned 28 px cut built from <code>small-28.svg</code>, at the cuts’ 7 in 32 corner, with the covers’ hairline from the page’s CSS. It is static artwork: never draw it from cover v1.</li>
         <li><strong>Second press:</strong> while a Saved toast shows, the command handler asks the tab’s content script to reach Undo and passes the keyboard flag.</li>
         <li><strong>Install:</strong> on runtime.onInstalled with reason 'install', call runtime.openOptionsPage() so Connect opens by itself. The Firefox manifest overlay sets action.default_area:'navbar'.</li>
         <li><strong>Pin line:</strong> read action.getUserSettings().isOnToolbar (Chrome 91+, Firefox 118+); re-check on focus, visibilitychange and action.onUserSettingsChanged where it exists, and drop the line once Shelf is pinned.</li>
         <li><strong>Browser-page popup:</strong> in the command or click handler, action.setPopup({popup:'saved.html'}), then action.openPopup(), then setPopup({popup:''}) so the next click still saves. Needs Chrome 127+; below that the tick alone stays. Firefox allows openPopup() from the same user-action handler.</li>
-        <li><strong>Badge:</strong> setBadgeBackgroundColor '#535862' while saves wait to send and '#079455' for the tick; setBadgeTextColor('#FFFFFF') in both builds.</li>
+        <li><strong>Badge:</strong> setBadgeBackgroundColor '#5C5B56' (the light muted grey) while saves wait to send and '#1E7A4A' (the light success green, tokens 0.2.1) for the tick; setBadgeTextColor('#F3F2EE') in both builds.</li>
         <li><strong>Shortcut:</strong> read the live binding with commands.getAll() in both browsers. 'Set a shortcut' opens chrome://extensions/shortcuts with tabs.create (Edge and Brave redirect it); in Firefox, commands.openShortcutSettings() where it exists, otherwise the words 'Add-ons, then the gear, then Manage Extension Shortcuts'. In this mock it simulates setting Alt+Shift+S there and coming back.</li>
-        <li><strong>Fonts:</strong> the options page and the popup use Inter, bundled as a local @font-face (the extension’s CSP forbids remote fonts). The injected toast stays system-ui.</li>
+        <li><strong>Fonts:</strong> the options page and the popup use Archivo (Archivo Expanded, width 125, for the titles and the wordmark), bundled as local @font-face files, because the extension’s content security policy blocks remote fonts. Ship the static cuts the board lists (Regular, Medium, SemiBold, Expanded Bold). This mockup loads them from Google Fonts through tokens.css. The injected toast stays system-ui.</li>
         <li><strong>Browser name:</strong> the connected lead takes it from the pairing label; fall back to navigator.userAgent where navigator.userAgentData is missing (Firefox).</li>
         <li><strong>Firefox build:</strong> the menu item is titled 'Save Link to Shelf' (Title Case) and the options row repeats that wording; the options page lives at moz-extension://…/options.html; a save from about:reader?url=… sends the inner url. No Firefox window is drawn here.</li>
         <li><strong>Check:</strong> verify in a light and a dark Windows contrast theme (for example Desert and Night sky).</li>
@@ -326,16 +445,15 @@ details.adv[open] summary > svg:last-child{transform:rotate(90deg)}
 </div>
 
 <script>
-/* ---------------- icons (Lucide) ---------------- */
+/* ---------------- icons (Lucide at 1.75) ---------------- */
 const I = {
   bookmark:'<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>',
   check:'<path d="M20 6 9 17l-5-5"/>',
   x:'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   alert:'<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>',
+  bang:'<path d="M12 7v5M12 17h.01"/>',                 // circle-alert's mark alone, for the 20 px corner disc that stands for its circle
   wifioff:'<path d="M12 20h.01"/><path d="M8.5 16.43a5 5 0 0 1 7 0"/><path d="M5 12.86a10 10 0 0 1 5.17-2.69"/><path d="M19 12.86a10 10 0 0 0-2-1.52"/><path d="M2 8.82a15 15 0 0 1 4.18-2.64"/><path d="M22 8.82a15 15 0 0 0-11.29-3.76"/><path d="m2 2 20 20"/>',
-  text:'<path d="M17 6.1H3M21 12.1H3M15.1 18H3"/>',
   undo:'<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
-  phone:'<rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/>',
   mouse:'<rect x="5" y="2" width="14" height="20" rx="7"/><path d="M12 6v4"/>',
   keyboard:'<path d="M10 8h.01M12 12h.01M14 8h.01M16 12h.01M18 8h.01M6 8h.01M7 16h10M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/>',
   chev:'<path d="m9 18 6-6-6-6"/>',
@@ -345,21 +463,115 @@ const I = {
   settings:'<path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>',   // the phone's Advanced icon
 };
 // `extra` goes first: HTML keeps the first of two identical attributes, so a stroke-width passed in wins.
-const ic = (n, s = 18, extra = '') => `<svg ${extra} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[n]}</svg>`;
-/* Shelf's app icon, verbatim from shared/brand/src/small.svg (a brand asset with its own fixed colours); its gradient is #shelfMarkTile. */
-const MARK = s => `<svg class="mark" width="${s}" height="${s}" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="url(#shelfMarkTile)"/><path d="M10 4H22A2 2 0 0 1 24 6V20L16 12L8 20V6A2 2 0 0 1 10 4Z" fill="#FCF7F6"/><rect x="4" y="22" width="24" height="6" rx="3" fill="#DAAA97"/><path d="M7 22H20V28H7A3 3 0 0 1 7 22Z" fill="#FCF7F6"/></svg>`;
+const ic = (n, s = 20, extra = '') => `<svg ${extra} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[n]}</svg>`;
+
+/* ---------------- sample saves ----------------
+   hash = sha256 of the normalised address (contract 4.3), computed in Node with crypto.createHash('sha256'). The Atlantic,
+   Stratechery and Ars Technica hashes are the board's own (A.a, A.s, A.r in study/fingerprint.html), so each article wears
+   the same cover on the board, here and on the phone. The Atlantic article's "read-it-later apps" link goes to the Ars
+   Technica article, which is the phone's "From Chrome" save. */
+const SAVES = {
+  atlantic: { url: 'https://www.theatlantic.com/ideas/archive/2026/09/reading-long-things',                            hash: '02a662fcfb69bec8626bbd14b40ca01b06cfa05b3bb4af946c28168f03ff9e34' },
+  ars:      { url: 'https://arstechnica.com/gadgets/2026/09/mozillas-readability-library-is-quietly-everywhere',       hash: '08246b635f8db8e14834c0a17044949b490975582e1f61be89c8e6062ae4d30e' },
+  strat:    { url: 'https://stratechery.com/2026/aggregation-theory-ten-years-on',                                     hash: '9f40a2ca59c109dd3b5c4f5c3c88fd84ff5579309ebdec62e3294eebb5d4fbd4' },
+  settings: { url: 'chrome://settings',                                                                                hash: '8a2881da7438c0e112e1fc575190fdc3a0a2e76ec45b68fa880d99e43fe65cda' },
+  options:  { url: 'chrome-extension://shelf/options.html',                                                            hash: 'ba0e9d66f202c9756b3e154ef6dc9c997c4601be24c23dee7e76bc00d627ebaa' },
+};
+
+/* Shelf's icon: the app icon frozen under decision 70, C·L·063 with the paper mark (a paper bookmark and bar in an ink
+   outline, with the read part in ink, on cover v1's 2c7601c0… at depth 1). It is static artwork in shared/brand/src and is
+   never drawn from cover v1, so a change to the generator or a rename leaves it alone. The shapes below are those files'
+   own markup, copied unchanged; the 16 and 32 px cuts share the tile's clip, under the id defined at the top of the body.
+   The 16 px slots take those two tuned cuts (both are inlined and the CSS shows the one Chrome would use for the screen);
+   the options page's 28 px logo takes the tuned 28 px cut. Its colours are fixed in every theme. */
+const ICON_16 =                  // shared/brand/src/small.svg: 32 x 32, two units to the pixel at 16 px
+  '<g clip-path="url(#shelfTile32)"><rect width="32" height="32" fill="#E08200"/><circle cx="40" cy="40" r="32" fill="#F4ECD8"/></g><path d="M10 2H22A2 2 0 0 1 24 4V22L16 14L8 22V4A2 2 0 0 1 10 2Z" fill="#17171A"/><path d="M10 4H22V17.1716L16 11.1716L10 17.1716Z" fill="#F3F2EE"/><rect x="4" y="24" width="24" height="6" rx="3" fill="#17171A"/><path d="M20 26H25A1 1 0 0 1 25 28H20Z" fill="#F3F2EE"/>';
+const ICON_32 =                  // shared/brand/src/small-32.svg: 32 x 32, one unit to the pixel at 32 px
+  '<g clip-path="url(#shelfTile32)"><rect width="32" height="32" fill="#F4ECD8"/><circle cx="40" cy="40" r="48" fill="#E08200"/><circle cx="40" cy="40" r="32" fill="#F4ECD8"/><circle cx="40" cy="40" r="16" fill="#E08200"/></g><path d="M11 3H21A3 3 0 0 1 24 6V21L16 17L8 21V6A3 3 0 0 1 11 3Z" fill="#17171A"/><path d="M11 5H21A1 1 0 0 1 22 6V17.7639L16 14.7639L10 17.7639V6A1 1 0 0 1 11 5Z" fill="#F3F2EE"/><rect x="4" y="23" width="24" height="6" rx="3" fill="#17171A"/><path d="M19 25H25A1 1 0 0 1 25 27H19Z" fill="#F3F2EE"/>';
+/* shared/brand/out/extension/options-logo-28.svg, its <svg> exactly as the build writes it from src/small-28.svg: 28 x 28,
+   one unit to the pixel at 28 px, with its own clip (shelfLogo28) and aria-hidden, since the name sits beside it. */
+const LOGO_28 =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28" aria-hidden="true" focusable="false"><defs><clipPath id="shelfLogo28"><rect width="28" height="28" rx="6.125"/></clipPath></defs><g clip-path="url(#shelfLogo28)"><rect width="28" height="28" fill="#F4ECD8"/><circle cx="35" cy="35" r="42" fill="#E08200"/><circle cx="35" cy="35" r="28" fill="#F4ECD8"/><circle cx="35" cy="35" r="14" fill="#E08200"/></g><path d="M10 2H18A3 3 0 0 1 21 5V18L14 14.5L7 18V5A3 3 0 0 1 10 2Z" fill="#17171A"/><path d="M10 4H18A1 1 0 0 1 19 5V14.7639L14 12.2639L9 14.7639V5A1 1 0 0 1 10 4Z" fill="#F3F2EE"/><rect x="4" y="20" width="20" height="6" rx="3" fill="#17171A"/><path d="M17 22H21A1 1 0 0 1 21 24H17Z" fill="#F3F2EE"/></svg>';
+const iconSVG = (cls, vb, body) => `<svg class="${cls}" viewBox="${vb}" aria-hidden="true" focusable="false">${body}</svg>`;
+const MARK = s => `<span class="mark" style="--m:${s}px">${s < 24
+  ? iconSVG('c16', '0 0 32 32', ICON_16) + iconSVG('c32', '0 0 32 32', ICON_32)
+  : LOGO_28}</span>`;
+/* No nudging onto device pixels: Chrome already paints an inline <svg> on whole device pixels wherever layout puts it, so
+   the tuned cuts come out as sharp as the shipped icon-16.png and icon-32.png (checked in headless Chrome at 1x and 2x).
+   A translate to "snap" them moves them off the grid again and blurs them. */
+
+/* Covers: cover v1's draw-in CSS (with its reduced-motion rule), once per document; in the build, once per shadow root. */
+document.head.insertAdjacentHTML('beforeend', `<style id="covercss">${ShelfCover.css}</style>`);
+const coverHTML = (hash, o = {}) => `<span class="cv" data-hash="${hash}">${ShelfCover.svg(hash, o)}</span>`;
+/* How long a cover takes to draw: each leaf takes 520 ms and starts 34 ms after the one before. */
+const drawMs = hash => { const m = ShelfCover.motion.once; return m.durationMs + (ShelfCover.leaves(hash).length - 1) * m.staggerMs; };
+const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------------- motion (decision 73, docs/design/motion-spec.md) ----------------
+   Durations and curves come from the motion tokens in tokens.css. Only transform and opacity animate; every animation starts
+   from where the thing is now, so a second change retargets it; nothing waits for an animation, and nothing commits in one's
+   completion (a finished animation only tidies its ghost away). */
+const tok = name => {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const m = v.match(/^(-?[\d.]+)(ms|s)\s*(.*)$/);
+  return m ? { duration: parseFloat(m[1]) * (m[2] === 's' ? 1000 : 1), easing: m[3] || 'linear' } : { duration: 0, easing: 'linear' };
+};
+const MO = {};
+['enter', 'exit', 'quick-in', 'quick-out', 'reflow', 'mark', 'countdown-extension', 'ambient-delay'].forEach(n => { MO[n] = tok(`--motion-${n}`); });
+const CD = MO['countdown-extension'].duration;       // every toast and popup counts down 8 s (motion.countdown)
+const MARK_BY = 1000;                                 // a save's mark lands with the last leaf, and never more than 1 s in
+const SENT_HOLD = 1500;                               // a sent options row says Sent for 1.5 s, then leaves
+const TICK_HOLD = 4000;                               // the toolbar tick clears after 4 s
+
+/* A ghost is the old layer, kept where it was, inert and nameless, while it fades out. */
+function ghostify(n){
+  n.classList.add('ghost'); n.inert = true; n.setAttribute('aria-hidden', 'true');
+  for (const x of [n, ...n.querySelectorAll('[id],[data-k],[data-loop]')]) { x.removeAttribute('id'); x.removeAttribute('data-k'); x.removeAttribute('data-loop'); }
+  return n;
+}
+/* Takes a node out of the flow exactly where it is drawn now, inside its containing block. */
+function pinAt(n, rect){
+  n.style.position = 'absolute'; n.style.margin = '0';
+  n.style.width = `${rect.width}px`; n.style.height = `${rect.height}px`;
+  const cb = n.offsetParent || n.parentElement, cr = cb.getBoundingClientRect();
+  n.style.left = `${rect.left - cr.left - cb.clientLeft}px`; n.style.top = `${rect.top - cr.top - cb.clientTop}px`;
+}
+const cancelFades = n => n.getAnimations().forEach(a => { if (a.id === 'fade') a.cancel(); });
+/* The leaving leg of a crossfade: quick out, from the opacity it has now; the ghost goes when it has faded. */
+function fadeAway(n, t = MO['quick-out'], from){
+  const o = from !== undefined ? from : +getComputedStyle(n).opacity;
+  cancelFades(n);
+  const a = n.animate([{ opacity: o }, { opacity: 0 }], { duration: t.duration, easing: t.easing, fill: 'forwards' });
+  a.id = 'fade';
+  const gone = () => n.remove();
+  a.onfinish = gone; a.oncancel = gone;
+  return a;
+}
+/* The arriving leg: quick in from nothing to the opacity the layer's CSS gives it. */
+function fadeInto(n, t = MO['quick-in'], delay = 0){
+  cancelFades(n);
+  const a = n.animate([{ opacity: 0, offset: 0 }], { duration: t.duration, easing: t.easing, delay, fill: 'backwards' });
+  a.id = 'fade';
+  return a;
+}
+/* An earned mark lands (motion.mark, from 40 %); with reduced motion it fades in over 150 ms without scaling. */
+function land(n, delay = 0){
+  if (reduceMotion()) return n.animate([{ opacity: 0, offset: 0 }], { ...MO['quick-in'], fill: 'backwards' });
+  return n.animate([{ opacity: 0, transform: 'scale(.4)', offset: 0 }], { ...MO.mark, delay, fill: 'backwards' });
+}
+
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const $ = id => document.getElementById(id);
 const focusId = id => { const el = $(id); if (el) el.focus(); };
 const mmss = n => `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`;
 
-function qrSVG(size, label){
+function qrSVG(size, label, extra = ''){
   const cells = [], on = (x, y) => ((x * 7 + y * 13 + x * y) % 5) < 2;
   for (let y = 0; y < 11; y++) for (let x = 0; x < 11; x++) {
     const finder = (x < 3 && y < 3) || (x > 7 && y < 3) || (x < 3 && y > 7);
-    if (finder || on(x, y)) cells.push(`<rect x="${x * 10}" y="${y * 10}" width="9" height="9" rx="1.5"/>`);
+    if (finder || on(x, y)) cells.push(`<rect x="${x * 10}" y="${y * 10}" width="9" height="9" rx="1"/>`);
   }
-  return `<svg width="${size}" height="${size}" viewBox="0 0 110 110" fill="currentColor" role="img" aria-label="${label}">${cells.join('')}</svg>`;
+  return `<svg ${extra} width="${size}" height="${size}" viewBox="0 0 110 110" fill="currentColor" role="img" aria-label="${label}">${cells.join('')}</svg>`;
 }
 
 /* ---------------- state ---------------- */
@@ -377,9 +589,10 @@ const WHY = {
   stopped: 'Couldn’t reach Shelf’s server. Retry to send it.',
 };
 const FAILED = () => [
-  { id: 'f1', title: 'Aggregation theory, ten years on', host: 'stratechery.com', why: 'reach' },
-  { id: 'f2', title: 'Mozilla’s Readability library is quietly everywhere', host: 'arstechnica.com', why: 'stopped' },
+  { id: 'f1', title: 'Aggregation theory, ten years on', host: 'stratechery.com', hash: SAVES.strat.hash, why: 'reach' },
+  { id: 'f2', title: 'Mozilla’s Readability library is quietly everywhere', host: 'arstechnica.com', hash: SAVES.ars.hash, why: 'stopped' },
 ];
+const THIS_SAVE = () => ({ id: 'f0', title: TITLE, host: HOST, hash: SAVES.atlantic.hash, why: 'reach' });
 const FRESH = () => ({
   view: 'site',            // 'site' | 'restricted' | 'options': what the active tab shows
   base: 'site',            // what the first tab holds: the article, or a browser page
@@ -387,8 +600,8 @@ const FRESH = () => ({
   paired: true, pinned: true, online: true, waiting: 0,
   tick: false,             // false, or the kind of save the icon tick confirms ('notext' | 'offline')
   oldChrome: false,        // before Chrome 127 an extension can't open its popup, so browser pages get the tick only
-  toast: null, toastTimed: true, toastHost: HOST, toastLink: false, returnFocus: null, menu: false,
-  popup: null, popHost: '', popTimed: true, popReturn: null,
+  toast: null, toastTimed: true, toastHost: HOST, toastLink: false, toastHash: SAVES.atlantic.hash, returnFocus: null, menu: false,
+  popup: null, popHost: '', popHash: SAVES.settings.hash, popTimed: true, popReturn: null,
   pair: 'show', countdown: 298, connectedOn: '27 September',
   failed: [], blocked: false, advOpen: false, confirmUnpair: false,
 });
@@ -423,9 +636,9 @@ function say(el, msg){
 
 /* ---------------- rendering ---------------- */
 function siteHTML(){
-  return `<article class="site"><div class="kick">Ideas</div><h1>${TITLE}</h1><div class="by">By Megan Garber · 11 min read</div>
+  return `<article class="site"><div class="kick">Ideas</div><h1>${TITLE}</h1><div class="by">By Clara Vance · 11 min read</div>
     <p>There is a particular kind of attention that only long reading asks for. It is slower than scrolling and less rewarding at first, and it builds something that skimming never does.</p>
-    <p>For most of the past decade, the tools we use to read have been built to keep us moving: one more headline, one more thread. The <a href="#" id="alink">read-it-later apps</a> were the exception, and their quiet decline tells us something about what we chose to value.</p>
+    <p>For most of the past decade, the tools we use to read have been built to keep us moving: one more headline, one more thread. The <a href="#" id="alink" title="${SAVES.ars.url}">read-it-later apps</a> were the exception, and their quiet decline tells us something about what we chose to value.</p>
     <p>What they offered was modest. A list. A clean page. A promise that the thing you meant to read would still be there when you had the time to read it properly.</p></article>
     ${S.menu ? menuHTML() : ''}`;
 }
@@ -445,88 +658,103 @@ function menuHTML(){
 }
 
 /* Toast copy. Page-title sublines and one-line titles have no full stop; sentence sublines do. '·' joins, lower case after it.
-   `say` is what the persistent live region announces (text only, never the buttons). c = { host, link }: a link save
-   (right-click, or a browser page) names its host, because there is no page title yet. Every toast runs 8 s. */
-const CHECK = ic('check', 16, 'stroke-width="3"');
+   `say` is what the persistent live region announces (text only, never the buttons). c = { host, link, hash }: a link save
+   (right-click, or a browser page) names its host, because there is no page title yet. Every toast runs 8 s (CD).
+   cover: the save's hash, drawn in the leading slot; mark: what happened to it ('ok' | 'off' | 'bad'); tile: the glyph shown
+   instead when there is no save to show (removed, or refused), with tone 'bad' for the refusal. */
 const TOASTS = {
-  saving:   c => ({ icon: 'soft', glyph: `<span class="saving"><i></i><i></i><i></i></span>`, title: 'Saving…', sub: c.link ? c.host : TITLE, say: '' }),
-  saved:    c => ({ icon: 'ok', glyph: CHECK, title: 'Saved to Shelf', sub: TITLE, action: 'Undo', timer: 8000, say: 'Saved to Shelf' }),
-  notext:   c => ({ icon: 'ok', glyph: CHECK, title: 'Saved to Shelf', sub: `${c.host} · your phone will fetch the text`, wrap: true, action: 'Undo', timer: 8000, say: 'Saved to Shelf. Your phone will fetch the text.' }),
-  offline:  c => ({ icon: 'off', glyph: ic('wifioff', 16), title: 'Saved — will send when you’re online', sub: c.link ? c.host : TITLE, action: 'Undo', timer: 8000, say: 'Saved. It will send when you’re online.' }),
-  undone:   c => ({ icon: 'soft', glyph: ic('undo', 16), title: 'Removed from Shelf', sub: 'If your phone already has it, remove it there.', wrap: true, timer: 8000, say: 'Removed from Shelf. If your phone already has it, remove it there.' }),
+  saving:   c => ({ cover: c.hash, title: 'Saving…', sub: c.link ? c.host : TITLE, say: '' }),
+  saved:    c => ({ cover: c.hash, mark: 'ok', title: 'Saved to Shelf', sub: TITLE, action: 'Undo', timer: CD, say: 'Saved to Shelf' }),
+  notext:   c => ({ cover: c.hash, mark: 'ok', title: 'Saved to Shelf', sub: `${c.host} · your phone will fetch the text`, wrap: true, action: 'Undo', timer: CD, say: 'Saved to Shelf. Your phone will fetch the text.' }),
+  offline:  c => ({ cover: c.hash, mark: 'off', title: 'Saved — will send when you’re online', sub: c.link ? c.host : TITLE, action: 'Undo', timer: CD, say: 'Saved. It will send when you’re online.' }),
+  undone:   c => ({ tile: 'undo', title: 'Removed from Shelf', sub: 'If your phone already has it, remove it there.', wrap: true, timer: CD, say: 'Removed from Shelf. If your phone already has it, remove it there.' }),
   // Undo on an offline save: it was still in this browser's queue, so nothing needs doing on the phone (decision 60).
-  unqueued: c => ({ icon: 'soft', glyph: ic('undo', 16), title: 'Removed from Shelf', sub: c.link ? c.host : TITLE, timer: 8000, say: 'Removed from Shelf' }),
-  full:     c => ({ icon: 'bad', glyph: ic('alert', 16), title: `Not saved: ${CAP} are already waiting`, sub: 'They’ll send when you’re online. Save this again then.', wrap: true, timer: 8000, say: `Not saved: ${CAP} are already waiting. They’ll send when you’re online. Save this again then.` }),
-  failed:   c => ({ icon: 'bad', glyph: ic('alert', 16), title: 'Couldn’t send this save', sub: 'It’s kept here, and Shelf will keep trying.', wrap: true, action: 'Options', timer: 8000, say: 'Couldn’t send this save. It’s kept here, and Shelf will keep trying.' }),
+  unqueued: c => ({ tile: 'undo', title: 'Removed from Shelf', sub: c.link ? c.host : TITLE, timer: CD, say: 'Removed from Shelf' }),
+  full:     c => ({ tile: 'alert', tone: 'bad', title: `Not saved: ${CAP} are already waiting`, sub: 'They’ll send when you’re online. Save this again then.', wrap: true, timer: CD, say: `Not saved: ${CAP} are already waiting. They’ll send when you’re online. Save this again then.` }),
+  failed:   c => ({ cover: c.hash, mark: 'bad', title: 'Couldn’t send this save', sub: 'It’s kept here, and Shelf will keep trying.', wrap: true, action: 'Options', timer: CD, say: 'Couldn’t send this save. It’s kept here, and Shelf will keep trying.' }),
+};
+/* The corner marks: 12 px glyphs on a 20 px disc, heavier than 1.75 so they hold at that size. */
+const MK = {
+  ok: ic('check', 12, 'stroke-width="3"'),
+  bad: ic('bang', 12, 'stroke-width="3"'),
+  off: ic('wifioff', 12, 'stroke-width="2.25"'),
 };
 /* A Saved toast tells keyboard users how to reach Undo, using the live binding; with no binding the sentence is dropped. */
 const toastSay = t => t.action === 'Undo' && S.shortcut ? `${t.say.replace(/\.?$/, '.')} Press ${keySpoken()} again to reach Undo.` : t.say;
 
+/* Keys (data-k) let the page's morph match elements across a redraw; data-gap marks a row or block whose arrival or leaving
+   opens or closes a gap (row in, row out); data-keep stops a container crossfading, since its keyed children move themselves. */
 const failRow = f => {
+  // Retry is busy from the tap (aria-busy, no pointer events); after 150 ms its label crossfades to the dots and 'Sending'
   const end = f.sent
-    ? `<span class="sent">${ic('check', 18)}</span>`
-    : f.sending
-      ? `<button class="retry" id="retry-${f.id}" data-act="retry" data-id="${f.id}" aria-busy="true" aria-label="Sending ${esc(f.title)}"><span class="dots inbtn" aria-hidden="true"><i></i><i></i><i></i></span>Sending</button>`
-      : `<button class="retry" id="retry-${f.id}" data-act="retry" data-id="${f.id}" aria-label="Retry ${esc(f.title)}">Retry</button>`;
-  return `<div class="li"><span class="ic">${ic('alert', 18)}</span><span class="t">${esc(f.title)}<small>${esc(f.host)} · ${f.sent ? 'Sent' : WHY[f.why]}</small></span>${end}</div>`;
+    ? `<span class="sent" data-k="sent-${f.id}" data-land="mark">${ic('check', 20)}</span>`
+    : `<button class="chip stack${f.busyShown ? ' showbusy' : ''}" id="retry-${f.id}" data-k="chip-${f.id}" data-keep data-act="retry" data-id="${f.id}"${f.sending ? ' aria-busy="true"' : ''} aria-label="${f.sending ? 'Sending' : 'Retry'} ${esc(f.title)}"><span class="lbl-idle" data-k="chipi-${f.id}" data-op>Retry</span><span class="lbl-busy" data-k="chipb-${f.id}" data-op aria-hidden="true"><span class="dots inbtn" data-loop="busy-${f.id}"><i></i><i></i><i></i></span>Sending</span></button>`;
+  // every save wears its cover, still, as in the phone's rows
+  return `<div class="li" data-k="row-${f.id}" data-gap>${coverHTML(f.hash)}<span class="t">${esc(f.title)}<small data-k="sub-${f.id}">${esc(f.host)} · ${f.sent ? 'Sent' : WHY[f.why]}</small></span>${end}</div>`;
 };
 
-const PIN = `<span class="ic">${ic('puzzle', 18)}</span><span class="t">Pin Shelf to your toolbar: click the puzzle piece, then the pin next to Shelf.</span>`;
+const PIN = `<span class="ic">${ic('puzzle', 20)}</span><span class="t">Pin Shelf to your toolbar: click the puzzle piece, then the pin next to Shelf.</span>`;
 
 function shortcutRow(){
-  if (!S.shortcut) return `<div class="li"><span class="ic">${ic('keyboard', 18)}</span><span class="t">No shortcut set</span><button class="retry" id="setkey" data-act="setkey">Set a shortcut</button></div>`;
-  return `<div class="li"><span class="ic">${ic('keyboard', 18)}</span><span class="t">Press a shortcut<small>Press it again to reach Undo</small></span>${keysHTML()}</div>`;
+  if (!S.shortcut) return `<div class="li" data-k="keyrow"><span class="ic">${ic('keyboard', 20)}</span><span class="t">No shortcut set</span><button class="chip" id="setkey" data-act="setkey">Set a shortcut</button></div>`;
+  return `<div class="li" data-k="keyrow"><span class="ic">${ic('keyboard', 20)}</span><span class="t">Press a shortcut<small>Press it again to reach Undo</small></span>${keysHTML()}</div>`;
 }
 
 function optionsHTML(){
-  const head = `<div class="brandrow"><span class="lg">${MARK(28)}</span>Shelf</div>`;
+  const head = `<div class="brandrow" data-k="brand"><span class="lg">${MARK(28)}</span>Shelf</div>`;
   if (!S.paired) {
     const expired = S.pair === 'expired', offline = S.pair === 'offline', dim = expired || offline;
-    return `<div class="opts"><div class="in">${head}
-      <h1 id="connecthead" tabindex="-1">Connect to your phone</h1>
-      ${offline ? `<div class="errline">${ic('alert', 16)}<span>Can’t connect right now. Check your connection. Trying again every ten seconds.</span></div>` : ''}
-      <p class="lead">Pages you save here arrive in Shelf on your phone. Your phone decides which browsers it trusts, so you connect them from there.</p>
-      <div class="card">
-        ${S.pinned ? '' : `<div class="li pinline">${PIN}</div>`}
-        <div class="pair">
-          <div class="qr ${dim ? 'faded' : ''}">${qrSVG(168, dim ? 'Connection code, not available' : 'Connection code')}${dim ? `<div class="code" aria-hidden="true">––––-––––</div>` : `<div class="code" id="paircode" tabindex="-1">K7QM-4XPD</div>`}</div>
+    // the QR fades to 12 % and back (opacity only, so it never moves or scales); its digits and the status line crossfade
+    return `<div class="opts"><div class="in" data-k="root" data-keep>${head}
+      <h1 id="connecthead" tabindex="-1" data-k="title">Connect to your phone</h1>
+      ${offline ? `<div class="errline" data-k="err" data-gap>${ic('alert', 16)}<span>Can’t connect right now. Check your connection. Trying again every ten seconds.</span></div>` : ''}
+      <p class="lead" data-k="lead">Pages you save here arrive in Shelf on your phone. Your phone decides which browsers it trusts, so you connect them from there.</p>
+      <div class="card" data-k="paircard" data-keep>
+        ${S.pinned ? '' : `<div class="seg pinseg" data-k="pin" data-gap><div class="li pinline">${PIN}</div></div>`}
+        <div class="seg" data-k="pairmain" data-keep>
+        <div class="pair" data-k="pair" data-keep>
+          <div class="qr ${dim ? 'faded' : ''}" data-theme="light" data-k="qr" data-keep>${qrSVG(168, dim ? 'Connection code, not available' : 'Connection code', 'data-k="qrimg" data-op="enter"')}${dim ? `<div class="code" aria-hidden="true" data-k="qrcode">––––-––––</div>` : `<div class="code" id="paircode" tabindex="-1" data-k="qrcode">K7QM-4XPD</div>`}</div>
           <ol class="steps"><li>Open Shelf on your phone.</li><li>Go to <strong>You</strong>, then <strong>Connected browsers</strong>, then <strong>Connect a browser</strong>.</li><li>Scan the code, or type the code under it.</li><li>Check that your phone names this browser <strong>Chrome on a Windows laptop</strong>, then tap <strong>Connect</strong>.</li></ol>
         </div>
-        ${expired ? `<div class="status plain"><div class="errline" style="margin:0;flex:1">${ic('alert', 16)}<span>This code has expired.</span></div><button class="btn primary" id="newcode" data-act="newcode">${ic('refresh', 16)}Show a new one</button></div>`
-          : offline ? '' : `<div class="status"><span class="pdot" aria-hidden="true"></span>Waiting for your phone<span class="cd">Code expires in <span id="cd">${mmss(S.countdown)}</span></span></div>`}
+        ${expired ? `<div class="status plain" data-k="status"><div class="errline" style="margin:0;flex:1">${ic('alert', 16)}<span>This code has expired.</span></div><button class="btn primary" id="newcode" data-act="newcode">${ic('refresh', 18)}Show a new one</button></div>`
+          : offline ? '' : `<div class="status" data-k="status"><span class="pdot" aria-hidden="true" data-loop="pairwait"></span>Waiting for your phone<span class="cd">Code expires in <span id="cd">${mmss(S.countdown)}</span></span></div>`}
+        </div>
       </div></div></div>`;
   }
   const notice = S.waiting
-    ? `<div class="notice">${ic('wifioff', 16)}<span>${S.waiting === 1 ? '1 save waiting to send. It’ll send when you’re online.' : `${S.waiting} saves waiting to send. They’ll send when you’re online.`}</span></div>`
+    ? `<div class="notice" data-k="notice" data-gap>${ic('wifioff', 16)}<span>${S.waiting === 1 ? '1 save waiting to send. It’ll send when you’re online.' : `${S.waiting} saves waiting to send. They’ll send when you’re online.`}</span></div>`
     : '';
   const failed = S.failed.length
-    ? `<section class="sect" aria-labelledby="failhead"><h2 id="failhead" tabindex="-1">Couldn’t send</h2><div class="list">${S.failed.map(failRow).join('')}</div></section>`
+    ? `<section class="sect" aria-labelledby="failhead" data-k="failed" data-gap data-keep><h2 id="failhead" tabindex="-1">Couldn’t send</h2><div class="list saves" data-k="faillist" data-keep>${S.failed.map(failRow).join('')}</div></section>`
     : '';
   const relays = [['Shelf', 'relay.shelf.app', S.blocked], ['Backup 1', 'nos.lol', false], ['Backup 2', 'relay.damus.io', false]];
   const n = unsent();
+  // the button gives way to the inline confirm by crossfade (the whole 'unpair' block is one keyed layer)
   const unpair = S.confirmUnpair
     ? `<div class="confirm" role="group" aria-labelledby="unpairhead"><h2 id="unpairhead">Disconnect this browser?</h2>
         <p>${n ? `${n} ${n === 1 ? 'save hasn’t' : 'saves haven’t'} reached your phone yet. Disconnecting deletes ${n === 1 ? 'it' : 'them'} from this browser. ` : ''}This browser will stop sending saves to your phone. To stop it completely, also remove it under Connected browsers on your phone.</p>
         <div class="row"><button class="btn secondary" id="unpair-cancel" data-act="unpair-cancel">Cancel</button><button class="btn danger" id="unpair-yes" data-act="unpair-yes">${n ? `Disconnect and delete ${n === 1 ? '1 save' : `${n} saves`}` : 'Disconnect'}</button></div></div>`
     : `<button class="btn secondary destructive" id="unpair" data-act="unpair">Disconnect this browser</button>
       <p class="fine">To stop this browser completely, also remove it under Connected browsers on your phone. If you undo a save your phone already picked up, remove it there too.</p>`;
-  return `<div class="opts"><div class="in">${head}
-    <div class="titlerow"><span class="ok">${ic('check', 20, 'stroke-width="3"')}</span><h1 id="connhead" tabindex="-1">Connected to your phone</h1></div>
+  // Advanced: the summary toggles through the page's morph, so the chevron turns, the relay list fades in or out and the
+  // block below moves by transform; the list is only in the page while it is open
+  return `<div class="opts"><div class="in" data-k="root" data-keep>${head}
+    <div class="titlerow" data-k="title"><span class="ok">${ic('check', 20, 'stroke-width="2.5"')}</span><h1 id="connhead" tabindex="-1">Connected to your phone</h1></div>
     ${notice}
-    <p class="lead">Since ${S.connectedOn} · your phone shows this browser as “Chrome on a Windows laptop”</p>
+    <p class="lead" data-k="lead">Since ${S.connectedOn} · your phone shows this browser as “Chrome on a Windows laptop”</p>
     ${failed}
-    <section class="sect" aria-labelledby="wayshead"><h2 id="wayshead" tabindex="-1">Ways to save</h2><div class="list">
-      ${S.pinned ? '' : `<div class="li">${PIN}</div>`}
-      <div class="li"><span class="ic">${ic('bookmark', 18)}</span><span class="t">Click the Shelf button in the toolbar</span></div>
+    <section class="sect" aria-labelledby="wayshead" data-k="ways" data-keep><h2 id="wayshead" tabindex="-1">Ways to save</h2><div class="list" data-k="wayslist" data-keep>
+      ${S.pinned ? '' : `<div class="li" data-k="pinrow" data-gap>${PIN}</div>`}
+      <div class="li" data-k="clickrow"><span class="ic">${ic('bookmark', 20)}</span><span class="t">Click the Shelf button in the toolbar</span></div>
       ${shortcutRow()}
-      <div class="li"><span class="ic">${ic('mouse', 18)}</span><span class="t">Right-click a link, then Save link to Shelf</span></div>
+      <div class="li" data-k="mouserow"><span class="ic">${ic('mouse', 20)}</span><span class="t">Right-click a link, then Save link to Shelf</span></div>
     </div></section>
-    <details class="adv" ${S.advOpen ? 'open' : ''}><summary id="advsum"><span class="ic">${ic('settings', 18)}</span><span class="t">Advanced</span>${ic('chev', 18)}</summary>
-      <section class="sect" aria-labelledby="relayhead" style="margin-top:var(--space-8)"><h2 id="relayhead">Relays</h2><div class="list">
-        ${relays.map(([label, h, blocked]) => `<div class="li"><span class="ic">${ic('server', 18)}</span><span class="t">${label}<small>${h}</small></span><span class="sdot ${blocked ? 'bad' : ''}">${blocked ? 'Blocked in this browser' : 'Connected'}</span></div>`).join('')}</div>
-        <p class="fine">Set by your phone when you connected this browser.</p></section>
+    <details class="adv" data-k="adv" data-keep ${S.advOpen ? 'open' : ''}><summary id="advsum" data-act="adv"><span class="ic">${ic('settings', 20)}</span><span class="t">Advanced</span><span class="chev"><span class="chevr" data-k="chev" data-rot>${ic('chev', 18)}</span></span></summary>
+      ${S.advOpen ? `<section class="sect" aria-labelledby="relayhead" style="margin-top:var(--space-8)" data-k="relays" data-gap><h2 id="relayhead">Relays</h2><div class="list">
+        ${relays.map(([label, h, blocked]) => `<div class="li"><span class="ic">${ic('server', 20)}</span><span class="t">${label}<small>${h}</small></span><span class="sdot ${blocked ? 'bad' : ''}">${blocked ? 'Blocked in this browser' : 'Connected'}</span></div>`).join('')}</div>
+        <p class="fine">Set by your phone when you connected this browser.</p></section>` : ''}
     </details>
-    <div class="sect">${unpair}</div>
+    <div class="sect" data-k="unpair">${unpair}</div>
   </div></div>`;
 }
 
@@ -559,20 +787,218 @@ function renderChrome(){
   placePopup();
 }
 
-/* Page content of the active tab. Focus is kept on the same element (by id) across re-renders. */
-function renderContent(){
+/* Page content of the active tab. Focus is kept on the same element (by id) across re-renders, and a redraw of the same page
+   keeps its scroll, so nothing the reader is looking at moves (o.fresh, from the jumps, starts the page at the top). */
+function renderContent(o = {}){
   const ae = document.activeElement;
   const keep = ae && ae.id && content.contains(ae) ? ae.id : '';
+  const screen = S.view === 'options' ? `options-${S.paired}` : S.view;
+  const was = content.querySelector('.opts');
+  const top = !o.fresh && was && content.dataset.screen === screen ? was.scrollTop : 0;
   host.hidden = S.view === 'options';
   content.innerHTML = S.view === 'options' ? optionsHTML() : S.view === 'restricted' ? restrictedHTML() : siteHTML();
+  content.dataset.screen = screen;
+  const opts = content.querySelector('.opts');
+  if (opts) { platePass(opts); if (top) opts.scrollTop = top; syncLoops(opts); }
   const sl = $('savelink');
   if (sl) sl.onclick = () => { S.menu = false; renderContent(); save({ linkOnly: true }); };
   const adv = content.querySelector('details.adv');
   if (adv) adv.addEventListener('toggle', () => { S.advOpen = adv.open; });
-  if (keep) focusId(keep);
+  if (keep) { const k = $(keep); if (k) k.focus({ preventScroll: true }); }
 }
 
-function render(){ renderChrome(); renderContent(); }
+function render(o){ renderChrome(); renderContent(o); }
+
+/* The first and last plate of each card or row group carry its edge and corners. */
+function platePass(scope){
+  scope.querySelectorAll('.list, .card').forEach(g => {
+    const rows = [...g.children].filter(n => n.matches('.li, .seg') && !n.classList.contains('ghost'));
+    rows.forEach((n, i) => {
+      const f = i === 0, l = i === rows.length - 1;
+      n.classList.toggle('first', f); n.classList.toggle('last', l); n.classList.toggle('edge-t', f); n.classList.toggle('edge-b', l);
+    });
+  });
+}
+
+/* Waiting loops keep their phase across redraws: each loop's animations start when that wait first showed. */
+const LOOP0 = {};
+function syncLoops(scope){
+  const seen = new Set();
+  scope.querySelectorAll('[data-loop]').forEach(el => {
+    const id = el.dataset.loop;
+    const anims = [el, ...el.querySelectorAll('*')].flatMap(n => n.getAnimations()).filter(a => a.animationName === 'breathe');
+    if (!anims.length) return;
+    seen.add(id);
+    if (!(id in LOOP0)) LOOP0[id] = document.timeline.currentTime;
+    anims.forEach(a => { a.startTime = LOOP0[id]; });
+  });
+  for (const id in LOOP0) if (!seen.has(id)) delete LOOP0[id];
+}
+
+/* ---------------- motion on Shelf's options page ----------------
+   The page redraws from state. morph(update) measures every keyed element before and after the redraw and plays only the
+   difference, on transform and opacity:
+   - moved: glides back from where it was (FLIP, translateY); motion.reflow when a gap closes, after the leaving row's 100 ms
+     fade (row out), motion.enter when a gap opens (row in), motion.reflow for a height change;
+   - changed: crossfades (motion.quick, both legs together), the old layer left in place as an inert ghost; on a row's plate
+     only the content crossfades;
+   - new: fades in on quick in (from 100 ms when it opens a gap), or lands if it is an earned mark;
+   - gone: fades out on quick out; a row leaving a group keeps its plate under the rows that close over it, and a last row's
+     plate slides up behind the row above, so the group's bottom edge glides; nothing animates height;
+   - data-op: opacity eases from the old value to the new; data-rot: the transform turns (the Advanced chevron).
+   With reduced motion nothing travels: fades stay, a closing gap snaps shut once the row has faded, the chevron turns at once.
+   A redraw during a morph starts from what is on screen: positions are measured with their transforms, opacities with their
+   animations, and ghosts still fading are carried into the new page. */
+const sigOf = el => { const c = el.cloneNode(true); c.querySelectorAll('[data-k]').forEach(d => d.remove()); return c.innerHTML; };
+const keyedUp = el => el.parentElement && el.parentElement.closest('[data-k]');
+function snapKeys(scope){
+  const m = new Map();
+  [scope, ...scope.querySelectorAll('[data-k]')].forEach(el => {
+    if (el.closest('.ghost')) return;
+    const cs = getComputedStyle(el), p = el === scope ? null : keyedUp(el);
+    let next = el.nextElementSibling;
+    while (next && !next.dataset.k) next = next.nextElementSibling;
+    m.set(el.dataset.k, { el, r: el.getBoundingClientRect(), op: +cs.opacity, tf: cs.transform, sig: el.hasAttribute('data-keep') ? '' : sigOf(el),
+      parent: p ? p.dataset.k : null, next: next ? next.dataset.k : null, plated: el.matches('.list > .li, .card > .seg'),
+      first: el.classList.contains('first'), last: el.classList.contains('last') });
+  });
+  return m;
+}
+function morph(update){
+  const scope0 = content.querySelector('.opts .in');
+  if (!scope0) { update(); return; }
+  const B = snapKeys(scope0);
+  // ghosts still fading are carried over, at the place they are drawn now (less their own running travel)
+  const carried = [...scope0.querySelectorAll('.ghost')].filter(g => !g.parentElement.closest('.ghost')).map(g => {
+    const r = g.getBoundingClientRect(), ty = new DOMMatrixReadOnly(getComputedStyle(g).transform).m42;
+    return { g, pk: (g.parentElement.closest('[data-k]') || scope0).dataset.k, r: new DOMRect(r.left, r.top - ty, r.width, r.height) };
+  });
+  update();
+  const scope = content.querySelector('.opts .in');
+  if (!scope) return;
+  const reduce = reduceMotion(), qo = MO['quick-out'].duration;
+  const A = new Map();
+  [scope, ...scope.querySelectorAll('[data-k]')].forEach(el => A.set(el.dataset.k, el));
+  // what happened to each key
+  const xf = new Set(), ins = new Set(), under = new Set();
+  for (const [k, el] of A) {
+    if (el === scope) continue;
+    const p = keyedUp(el), pk = p && p.dataset.k;
+    if (pk && (xf.has(pk) || ins.has(pk) || under.has(pk))) { under.add(k); continue; }
+    if (!B.has(k)) ins.add(k);
+    else if (!el.hasAttribute('data-keep') && B.get(k).sig !== sigOf(el)) xf.add(k);
+  }
+  const outs = [...B.keys()].filter(k => { const b = B.get(k); return !A.has(k) && b.parent && A.has(b.parent) && !xf.has(b.parent) && !under.has(b.parent); });
+  // a row taking over a leaving row's edge of its group gets that edge once the gap has closed
+  const held = new Map();
+  for (const k of outs) {
+    const b = B.get(k);
+    if (!b.plated) continue;
+    const rows = [...A.get(b.parent).children].filter(n => n.matches('.li, .seg') && !n.classList.contains('ghost'));
+    const hold = [];
+    if (b.first && rows[0]) { rows[0].classList.remove('edge-t'); hold.push([rows[0], 'edge-t']); }
+    if (b.last && rows.length) { rows[rows.length - 1].classList.remove('edge-b'); hold.push([rows[rows.length - 1], 'edge-b']); }
+    held.set(k, hold);
+  }
+  const R = new Map([...A].map(([k, el]) => [k, el.getBoundingClientRect()]));
+  const gapOut = outs.some(k => B.get(k).el.hasAttribute('data-gap'));
+  const gapIn = [...ins].some(k => A.get(k).hasAttribute('data-gap'));
+  const move = gapOut ? { ...MO.reflow, delay: qo } : gapIn ? { ...MO.enter, delay: 0 } : { ...MO.reflow, delay: 0 };
+  // 1. moves (FLIP), relative to the nearest keyed ancestor that was there before, so nested blocks don't double up. The
+  //    page itself moves too when a shorter page pulls its scroll back, so that glides with the gap instead of jumping.
+  const absDy = k => B.get(k).r.top - R.get(k).top;
+  for (const [k, el] of A) {
+    if (!B.has(k) || under.has(k)) continue;
+    let p = el === scope ? null : keyedUp(el);
+    while (p && !B.has(p.dataset.k)) p = keyedUp(p);
+    const dy = absDy(k) - (p ? absDy(p.dataset.k) : 0);
+    // (a turning element's box changes with its angle, so it never moves by FLIP; its container carries it)
+    if (Math.abs(dy) >= 0.5 && !(reduce && !move.delay) && !el.hasAttribute('data-rot')) {
+      el.animate([{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }],
+        { duration: reduce ? 0 : move.duration, easing: move.easing, delay: move.delay, fill: 'backwards', composite: 'add' });
+    }
+    if (el.hasAttribute('data-op')) {
+      const o0 = B.get(k).op, o1 = +getComputedStyle(el).opacity;
+      if (Math.abs(o0 - o1) > 0.01) el.animate([{ opacity: o0 }, { opacity: o1 }], el.dataset.op === 'enter' ? MO.enter : o1 > o0 ? MO['quick-in'] : MO['quick-out']);
+    }
+    if (el.hasAttribute('data-rot') && !reduce) {
+      const t0 = B.get(k).tf, t1 = getComputedStyle(el).transform, id = 'matrix(1, 0, 0, 1, 0, 0)';
+      if (t0 !== t1) el.animate([{ transform: t0 === 'none' ? id : t0 }, { transform: t1 === 'none' ? id : t1 }], MO.enter);
+    }
+  }
+  // 1b. a row that got shorter leaves its old plate behind the rows closing over it (a last row's plate glides up to the
+  //     row's new bottom edge, which is held back until then), so the group never shows a gap
+  for (const [k, el] of A) {
+    if (!B.has(k) || under.has(k)) continue;
+    const b = B.get(k), dh = b.r.height - R.get(k).height;
+    if (!b.plated || dh < 0.5 || reduce) continue;
+    const fill = document.createElement('div');
+    fill.className = `plate-fill ghost${b.first ? ' edge-t' : ''}${b.last ? ' edge-b' : ''}`;
+    el.parentElement.append(fill);
+    pinAt(fill, b.r);
+    const end = move.delay + move.duration, hold = b.last && el.classList.contains('edge-b');
+    if (hold) {
+      el.classList.remove('edge-b');
+      let p = keyedUp(el);
+      while (p && !B.has(p.dataset.k)) p = keyedUp(p);
+      const rise = absDy(k) - (p ? absDy(p.dataset.k) : 0) + dh;
+      fill.animate([{ transform: 'translateY(0)' }, { transform: `translateY(${-rise}px)` }], { duration: move.duration, easing: move.easing, delay: move.delay, fill: 'forwards' });
+    }
+    fill.animate([{ opacity: 1 }, { opacity: 1 }], { duration: end }).onfinish = () => { if (hold) el.classList.add('edge-b'); fill.remove(); };
+  }
+  // 2. carried ghosts go back where they were drawn, in the same keyed parent
+  for (const c of carried) {
+    const parent = A.get(c.pk);
+    if (!parent) { c.g.remove(); continue; }
+    parent.append(c.g);
+    pinAt(c.g, c.r);
+  }
+  // 3. crossfades: the old layer on top, fading out, while the new one fades in
+  for (const k of xf) {
+    const el = A.get(k), b = B.get(k), g = ghostify(b.el);
+    if (b.plated) g.classList.add('ghost-c');
+    el.after(g);
+    pinAt(g, b.r);
+    fadeAway(g, MO['quick-out'], b.op);
+    if (b.plated) [...el.children].forEach(n => fadeInto(n)); else fadeInto(el);
+  }
+  // 4. arrivals
+  for (const k of ins) {
+    const el = A.get(k);
+    if (el.dataset.land === 'mark') land(el);
+    else fadeInto(el, MO['quick-in'], el.hasAttribute('data-gap') && !reduce ? qo : 0);
+  }
+  // 5. leavers (row out)
+  for (const k of outs) {
+    const b = B.get(k), g = ghostify(b.el), parent = A.get(b.parent);
+    const before = b.next && A.get(b.next) && A.get(b.next).parentElement === parent ? A.get(b.next) : null;
+    parent.insertBefore(g, before);
+    pinAt(g, b.r);
+    if (!b.plated) { fadeAway(g, MO['quick-out'], b.op); continue; }
+    [...g.children].forEach(n => n.animate([{ opacity: 1 }, { opacity: 0 }], { ...MO['quick-out'], fill: 'forwards' }));
+    const end = reduce ? qo : qo + MO.reflow.duration;
+    if (b.last && !reduce) g.animate([{ transform: 'translateY(0)' }, { transform: `translateY(${-b.r.height}px)` }], { ...MO.reflow, delay: qo, fill: 'forwards' });
+    g.animate([{ opacity: 1 }, { opacity: 1 }], { duration: end }).onfinish = () => { (held.get(k) || []).forEach(([n, c]) => n.classList.add(c)); g.remove(); };
+  }
+}
+
+/* Screen swap (the options page becoming Connected, or Connect again after Disconnect): the old page's content fades out on
+   quick out over the new one, which fades in on motion.enter, opacity only. */
+function swapScreen(update){
+  const oldIn = content.querySelector('.opts .in'), pr = page.getBoundingClientRect(), r = oldIn && oldIn.getBoundingClientRect();
+  update();
+  const nin = content.querySelector('.opts .in');
+  if (!oldIn || !nin) return;
+  const ov = document.createElement('div');
+  ov.className = 'opts swapghost';
+  ghostify(ov).append(ghostify(oldIn));
+  content.append(ov);
+  pinAt(oldIn, r);
+  fadeAway(ov);
+  fadeInto(nin, MO.enter);
+  const ok = nin.querySelector('.titlerow .ok');
+  if (ok) land(ok, MO['quick-out'].duration);           // the heading's check lands as the old page clears
+}
 
 /* ---------------- toast and popup ---------------- */
 /* A dismiss timer that pauses while the pointer is over its card or focus the person gave it is inside. */
@@ -598,36 +1024,117 @@ function popEl(){ return $('apopup'); }
 const TT = Hold(toastEl, () => dismissToast());
 const PT = Hold(popEl, () => closePopup());
 
-const cardShell = () => `<div class="row"><span class="ti" aria-hidden="true"></span><div class="tx"><b></b><span></span></div><button class="x" data-act="close" aria-label="Dismiss">${ic('x', 16)}</button></div>`;
+const cardShell = () => `<div class="row"><span class="lead" aria-hidden="true"></span><div class="tx"><b></b><span></span></div><button class="x" data-act="close" aria-label="Dismiss">${ic('x', 16)}</button></div>`;
 
-/* Updates a toast or popup in place: the element, its ✕ and its live region are kept. */
-function paintCard(el, t, timed){
-  const ti = el.querySelector('.ti');
-  ti.className = `ti ${t.icon}`; ti.innerHTML = t.glyph;
-  el.querySelector('.tx b').textContent = t.title;
-  const sub = el.querySelector('.tx span');
-  sub.textContent = t.sub; sub.className = t.wrap ? 'wrap2' : '';
-  const x = el.querySelector('.x');
-  let act = el.querySelector('.act');
-  if (t.action) {
-    if (!act) { act = document.createElement('button'); act.className = 'act'; x.before(act); }
-    act.dataset.act = t.action; act.textContent = t.action;
-  } else if (act) {
-    if (act === document.activeElement) x.focus();          // never drop focus onto the page
-    act.remove();
+/* A layer leaving a toast or popup in place: frozen where it is, made inert, faded out on quick out. Without `swap` (a card's
+   first paint) it simply goes. */
+function retire(n, swap){
+  if (!swap) { n.remove(); return; }
+  const r = n.getBoundingClientRect();
+  ghostify(n);
+  if (!n.classList.contains('timer') && !n.classList.contains('mk')) pinAt(n, r);
+  fadeAway(n);
+}
+
+/* The leading slot. A cover already showing for the same save is kept, so Saving… → Saved doesn't restart its drawing; a
+   cover replaced by another, or by the plain tile, crossfades, and a new save's cover draws itself from its first frame.
+   The corner mark lands as the last leaf does, and never later than 1 s after the drawing started (motion spec, Before
+   build item 4); with reduced motion it fades in at once. */
+function paintLead(el, t, swap){
+  const lead = el.querySelector('.lead');
+  const live = sel => lead.querySelector(`${sel}:not(.ghost)`);
+  let cv = live('.cv'), tile = live('.tile'), mk = live('.mk');
+  if (!t.cover) {
+    const kind = `${t.tile}|${t.tone || ''}`;
+    if (!tile || tile.dataset.kind !== kind) {
+      [cv, tile, mk].forEach(n => n && retire(n, swap));
+      const nt = document.createElement('span');
+      nt.className = `tile ${t.tone || ''}`; nt.dataset.kind = kind; nt.innerHTML = ic(t.tile, 18);
+      lead.prepend(nt);
+      if (swap) fadeInto(nt);
+    }
+    delete el.dataset.hash;
+    return;
   }
-  const bar = el.querySelector('.timer');
-  if (bar) bar.remove();
+  if (!cv || cv.dataset.hash !== t.cover) {
+    [cv, tile, mk].forEach(n => n && retire(n, swap));
+    mk = null;
+    lead.insertAdjacentHTML('afterbegin', coverHTML(t.cover, { draw: true }));
+    cv = lead.firstElementChild;
+    cv._t0 = performance.now(); cv._ms = drawMs(t.cover);
+  }
+  if (mk && mk.dataset.kind !== t.mark) { retire(mk, swap); mk = null; }
+  if (t.mark && !mk) {
+    mk = document.createElement('span');
+    mk.className = `mk ${t.mark}`; mk.dataset.kind = t.mark; mk.innerHTML = MK[t.mark];
+    // it finishes landing as the last leaf does (as the phone's share-sheet check does), or at 1 s; a mark whose save is
+    // confirmed later than that lands from the moment it is confirmed (the words have already said what happened)
+    const at = Math.min(cv._ms, MARK_BY) - MO.mark.duration;
+    const left = reduceMotion() ? 0 : Math.max(0, Math.round(at - (performance.now() - cv._t0)));
+    mk.style.setProperty('--mk-delay', `${left}ms`);
+    cv.after(mk);
+  }
+  el.dataset.hash = t.cover;
+}
+
+/* The article's ink for the countdown, picked for 3:1 on the surface it runs along (the toast's, or the popup's). */
+function paintInk(el){
+  if (!el) return;
+  const h = el.dataset.hash;
+  if (!h) { el.style.removeProperty('--ink'); return; }
+  const cs = getComputedStyle(el);
+  const surface = cs.getPropertyValue(el.classList.contains('popup') ? '--surface' : '--toast-bg').trim();
+  el.style.setProperty('--ink', ShelfCover.lineInk(h, surface, cs.getPropertyValue('--text').trim()));
+}
+
+/* Updates a toast or popup in place: the element, its cover, its ✕ and its live region are kept. With `swap` (a later state
+   of the same card) what changes crossfades (motion.quick): the title and page line, Undo fading in or out, the cover or
+   tile; a height change snaps under the crossfade, and the countdown refills. The first paint of a card is instant (the
+   toast's own rise carries it; the popup's bubble is the browser's). */
+function paintCard(el, t, timed, swap = false){
+  const row = el.querySelector('.row'), x = row.querySelector('.x');
+  const tx = row.querySelector('.tx:not(.ghost)'), b = tx.querySelector('b'), sub = tx.querySelector('span');
+  const wrap = t.wrap ? 'wrap2' : '';
+  let act = row.querySelector('.act:not(.ghost)');
+  // freeze the leaving layers where they are drawn now, before anything reflows
+  const textChanged = b.textContent !== t.title || sub.textContent !== t.sub || sub.className !== wrap;
+  let txGhost = null;
+  if (swap && textChanged) {
+    const r = tx.getBoundingClientRect(), from = +getComputedStyle(tx).opacity;
+    txGhost = ghostify(tx.cloneNode(true));
+    row.append(txGhost); pinAt(txGhost, r);
+    fadeAway(txGhost, MO['quick-out'], from);
+  }
+  const actChanged = (act ? act.dataset.act : '') !== (t.action || '');
+  if (act && actChanged) {
+    if (act === document.activeElement) x.focus();          // never drop focus onto the page
+    retire(act, swap);
+    act = null;
+  }
+  paintLead(el, t, swap);
+  paintInk(el);
+  b.textContent = t.title;
+  sub.textContent = t.sub; sub.className = wrap;
+  if (txGhost) fadeInto(tx);
+  if (t.action && !act) {
+    act = document.createElement('button'); act.className = 'act';
+    act.dataset.act = t.action; act.textContent = t.action;
+    x.before(act);
+    if (swap) fadeInto(act);
+  }
+  const bar = el.querySelector(':scope > .timer:not(.ghost)');
+  if (bar) retire(bar, swap);
   if (t.timer && timed) {
     const nb = document.createElement('div');
-    nb.className = 'timer'; nb.style.animationDuration = `${t.timer}ms`;
-    el.querySelector('.row').after(nb);
+    nb.className = 'timer'; nb.innerHTML = '<i></i>';
+    row.after(nb);
+    if (swap) fadeInto(nb);
   }
 }
 
 /* The toast is inverted: it takes the opposite token scheme to the page's (decision 57). */
 const toastFlip = () => win.dataset.theme === 'dark' ? 'light' : 'dark';
-const toastCtx = () => ({ host: S.toastHost, link: S.toastLink });
+const toastCtx = () => ({ host: S.toastHost, link: S.toastLink, hash: S.toastHash });
 
 function buildToast(){
   const el = document.createElement('div');
@@ -653,7 +1160,7 @@ function buildToast(){
     if (el !== toastEl()) return;
     if (e.key === 'Escape') { e.stopPropagation(); dismissToast(); return; }   // so the page's own Escape handlers don't fire
     if (e.key !== 'Tab') return;
-    const btns = [...el.querySelectorAll('button')];
+    const btns = [...el.querySelectorAll('button')].filter(n => !n.closest('.ghost'));
     if ((!e.shiftKey && e.target === btns[btns.length - 1]) || (e.shiftKey && e.target === btns[0])) { e.preventDefault(); leaveToast(); }
   });
   host.insertBefore(el, toastLive);
@@ -667,38 +1174,49 @@ function leaveToast(){
   if (r && r !== document.body && r.isConnected) r.focus(); else document.activeElement.blur();
 }
 
-/* The toast never takes focus on its own; it is announced through the persistent live region. */
+/* The toast never takes focus on its own; it is announced through the persistent live region. A toast already showing is
+   repainted in place (a second save, Saving… → Saved, Undo), and one still sinking turns round and rises again from where it
+   is; only o.fresh (the review jumps) starts a new one. */
+let leaving = null, leavingT = 0;
 function showToast(kind, o = {}){
   clearTimers('save');
   let el = toastEl();
-  const fresh = !(o.inPlace && el);
-  if (fresh) {
+  if (!el && leaving && !o.fresh) {                       // turn the sinking toast round: its transitions reverse from here
+    el = leaving; leaving = null; clearTimeout(leavingT);
+    el.classList.remove('leave'); el.inert = false; el.id = 'toast'; el.dataset.theme = toastFlip();
+    TT.hover = false; TT.focus = false;
+  }
+  const inPlace = !!el && !o.fresh;
+  if (!inPlace) {
     if (el) el.remove();
     TT.stop(); TT.hover = false; TT.focus = false;
     S.returnFocus = null;
   }
   S.toast = kind;
-  S.toastTimed = o.timed !== undefined ? o.timed : (fresh ? true : S.toastTimed);
+  S.toastTimed = o.timed !== undefined ? o.timed : (o.inPlace ? S.toastTimed : true);
   const t = TOASTS[kind](toastCtx());
-  paintCard(toastEl() || buildToast(), t, S.toastTimed);
+  paintCard(inPlace ? el : buildToast(), t, S.toastTimed, inPlace);
   say(toastLive, toastSay(t));
   if (t.timer && S.toastTimed) TT.begin(t.timer); else TT.stop();
 }
 
-/* ✕, Escape and the timer. Focus goes back to where it was before the person brought it into the toast. */
+/* ✕, Escape and the timer: the exact reverse of the rise. Focus goes back to where it was before the person brought it into
+   the toast, on the frame of the change; the leaving toast takes no input and is removed once it has sunk. */
 function dismissToast(){
   const el = toastEl();
   TT.stop(); clearTimers('save');
   S.toast = null;
   if (!el) return;
   const had = el.contains(document.activeElement);
-  el.id = ''; el.classList.add('leave');
-  setTimeout(() => el.remove(), 200);
   if (had) {
     const r = S.returnFocus;
     if (r && r !== document.body && r.isConnected) r.focus(); else document.activeElement.blur();
   }
   S.returnFocus = null;
+  el.id = ''; el.classList.add('leave'); el.inert = true;
+  if (leaving && leaving !== el) leaving.remove();
+  leaving = el; clearTimeout(leavingT);
+  leavingT = setTimeout(() => { if (leaving === el) leaving = null; el.remove(); }, MO.exit.duration + 50);
 }
 
 function removeToastNow(){
@@ -706,6 +1224,7 @@ function removeToastNow(){
   TT.stop(); clearTimers('save');
   S.toast = null;
   if (el) el.remove();
+  if (leaving) { leaving.remove(); leaving = null; clearTimeout(leavingT); }
 }
 
 /* Undo on a toast. An offline save is still in this browser's queue, so Undo takes it out and the count drops (decision 60). */
@@ -720,11 +1239,18 @@ function openPopup(kind, o = {}){
   const opening = pop.hidden;
   S.popup = kind;
   if (o.host) S.popHost = o.host;
+  if (o.hash) S.popHash = o.hash;
   if (o.timed !== undefined) S.popTimed = o.timed; else if (opening) S.popTimed = true;
-  if (opening) { S.popReturn = document.activeElement; PT.stop(); PT.hover = false; PT.focus = false; pop.classList.remove('viakey'); pop.hidden = false; }
+  // The browser opens and closes the bubble; Shelf's content inside has no entrance of its own, but its cover draws and its
+  // mark lands as in the toast, and later states (Undo) crossfade in place.
+  if (opening) {
+    S.popReturn = document.activeElement; PT.stop(); PT.hover = false; PT.focus = false; pop.classList.remove('viakey');
+    pop.querySelectorAll('.ghost').forEach(g => g.remove());
+    pop.querySelector('.lead').innerHTML = ''; pop.hidden = false;
+  }
   renderChrome();                                           // also places the popup under the (possibly popped-out) button
-  const t = TOASTS[kind]({ host: S.popHost, link: true });
-  paintCard(pop, t, S.popTimed);
+  const t = TOASTS[kind]({ host: S.popHost, link: true, hash: S.popHash });
+  paintCard(pop, t, S.popTimed, !opening);
   say($('poplive'), t.say);
   if (t.timer && S.popTimed) PT.begin(t.timer); else PT.stop();
   if (o.focus) pop.focus();
@@ -776,7 +1302,7 @@ function initPopup(){
   pop.addEventListener('keydown', e => {
     if (e.key === 'Escape') { e.stopPropagation(); closePopup(); return; }
     if (e.key !== 'Tab') return;                          // Tab cycles inside the popup's document
-    const btns = [...pop.querySelectorAll('button')];
+    const btns = [...pop.querySelectorAll('button')].filter(n => !n.closest('.ghost'));
     if (!e.shiftKey && e.target === btns[btns.length - 1]) { e.preventDefault(); btns[0].focus(); }
     else if (e.shiftKey && (e.target === btns[0] || e.target === pop)) { e.preventDefault(); btns[btns.length - 1].focus(); }
   });
@@ -799,7 +1325,7 @@ function secondPress(){
   if (!pop.hidden) {
     const ae = document.activeElement;
     if (pop.contains(ae) && ae !== pop) return true;       // already on one of its buttons
-    const a = pop.querySelector('.act[data-act="Undo"]');
+    const a = pop.querySelector('.act:not(.ghost)[data-act="Undo"]');
     if (a) { pop.classList.add('viakey'); a.focus(); return true; }
     if (pop.contains(ae)) return true;
   }
@@ -811,8 +1337,8 @@ function secondPress(){
   return true;
 }
 function reachUndo(){
-  const el = toastEl(), a = el && el.querySelector('.act[data-act="Undo"]');
-  if (!a) return;
+  const el = toastEl(), a = el && el.querySelector('.act:not(.ghost)[data-act="Undo"]');
+  if (!a) return;                                           // focus moves at once, with no motion
   S.returnFocus = document.activeElement;
   el.classList.add('viakey');
   a.focus();
@@ -825,17 +1351,19 @@ function openOptions(){
   render();
 }
 
-/* Four-second icon tick, for pages where no toast can be shown. */
+/* Four-second icon tick, for pages where no toast can be shown. The browser draws the badge: the tick and the waiting count
+   appear, change and clear in one step, and the icon never animates. */
 function tick(kind = 'notext'){
   clearTimers('tick');
   S.tick = kind; renderChrome();
-  later(() => { S.tick = false; renderChrome(); }, 4000, 'tick');
+  later(() => { S.tick = false; renderChrome(); }, TICK_HOLD, 'tick');
 }
 
 function save(o = {}){
   if (!S.paired) { openOptions(); return; }                 // first click with no phone: options open in a new tab
   if (S.view !== 'site') { browserPageSave(); return; }     // browser pages and Shelf's own options tab: no toast can run
   S.toastHost = o.linkOnly ? LINK_HOST : HOST; S.toastLink = !!o.linkOnly;
+  S.toastHash = o.linkOnly ? SAVES.ars.hash : SAVES.atlantic.hash;
   if (!S.online) {
     if (S.waiting >= CAP) { showToast('full'); return; }
     S.waiting++; renderChrome();
@@ -850,27 +1378,32 @@ function save(o = {}){
 /* No toast can run on browser pages (chrome:// and about: pages, the Web Store, PDFs, reader view): Shelf saves the address,
    the icon ticks for four seconds, and on Chrome 127+ and Firefox a small popup confirms the save under the button. */
 function browserPageSave(){
-  const where = S.view === 'options' ? 'chrome-extension://shelf' : 'chrome://settings';
+  const onOpts = S.view === 'options';
+  const where = onOpts ? 'chrome-extension://shelf' : 'chrome://settings';
   let kind = 'notext';
   if (!S.online) { if (S.waiting >= CAP) kind = 'full'; else { S.waiting++; kind = 'offline'; } }
   else if (S.waiting) S.waiting = 0;                        // back online: the queue has sent
   if (kind === 'full') renderChrome(); else tick(kind);
-  if (!S.oldChrome) openPopup(kind, { host: where, focus: true, timed: true });
+  if (!S.oldChrome) openPopup(kind, { host: where, hash: (onOpts ? SAVES.options : SAVES.settings).hash, focus: true, timed: true });
 }
 
+/* Retry: busy from the tap; the dots and 'Sending' only if the wait passes 150 ms; when it is sent the check lands in the
+   button's place and 'Sent' crossfades into the sub-line, holds 1.5 s, then the row leaves by row out. */
+const redrawOptions = () => { if (S.view === 'options') morph(renderContent); };
 function retry(id){
   const f = S.failed.find(x => x.id === id);
   if (!f || f.sending || f.sent) return;
   f.sending = true;
-  renderContent();
+  redrawOptions();
+  later(() => { if (!f.sending) return; f.busyShown = true; redrawOptions(); }, MO['ambient-delay'].duration, 'retry');
   later(() => {
     if (!S.failed.includes(f)) return;
     const hadFocus = document.activeElement && document.activeElement.id === `retry-${id}`;
-    f.sending = false; f.sent = true;
+    f.sending = false; f.busyShown = false; f.sent = true;
     if (f.why === 'blocked' && !S.failed.some(x => x.why === 'blocked' && !x.sent)) S.blocked = false;
     renderChrome();
     if (S.view === 'options') {
-      renderContent();
+      morph(renderContent);
       say(optLive, 'Sent');
       if (hadFocus) {                                       // the button is gone: next Retry, else the list's heading
         const i = S.failed.indexOf(f), ok = x => !x.sent && !x.sending;
@@ -884,20 +1417,21 @@ function retry(id){
       S.failed.splice(i, 1);
       if (S.view !== 'options') return;
       const onHead = document.activeElement && document.activeElement.id === 'failhead';
-      renderContent();
+      morph(renderContent);
       if (onHead && !S.failed.length) focusId('connhead');
-    }, 1500, 'retry');
+    }, SENT_HOLD, 'retry');
   }, 1200, 'retry');
 }
 
 $('shelfico').innerHTML = MARK(16);
-$('puzzle').innerHTML = ic('puzzle', 18);
+$('puzzle').innerHTML = ic('puzzle', 18, 'stroke-width="2"');   // Chrome's own icon, at Chrome's weight
 initPopup();
 $('shelfbtn').onclick = () => save();
 $('puzzle').onclick = () => {                              // stands for: puzzle piece, then the pin next to Shelf
   if (S.pinned) return;
   const had = document.activeElement === $('puzzle');
-  S.pinned = true; render();
+  S.pinned = true;
+  if (S.view === 'options') morph(render); else render();   // the pin hint leaves by row out
   if (had) $('shelfbtn').focus();                           // the puzzle piece goes back to being decoration here
 };
 $('tabs').addEventListener('click', e => {
@@ -916,19 +1450,24 @@ page.addEventListener('click', e => {
   if (act === 'close') dismissToast();
   else if (act === 'Undo') undoSave();
   else if (act === 'Options') {
-    if (!S.failed.some(f => f.id === 'f0')) S.failed.unshift({ id: 'f0', title: TITLE, host: HOST, why: 'reach' });
+    if (!S.failed.some(f => f.id === 'f0')) S.failed.unshift(THIS_SAVE());
     if (!S.failed.some(f => f.id === 'f1')) S.failed.push(FAILED()[0]);
     openOptions(); focusId('failhead');
   }
-  else if (act === 'newcode') { S.pair = 'show'; S.countdown = 298; renderContent(); focusId('paircode'); }
+  else if (act === 'newcode') { S.pair = 'show'; S.countdown = 298; morph(renderContent); focusId('paircode'); }
   else if (act === 'retry') retry(a.dataset.id);
-  else if (act === 'setkey') { S.shortcut = KEY; syncToggles(); render(); focusId('wayshead'); }
-  else if (act === 'unpair') { S.confirmUnpair = true; renderContent(); focusId('unpair-cancel'); }
-  else if (act === 'unpair-cancel') { S.confirmUnpair = false; renderContent(); focusId('unpair'); }
+  else if (act === 'setkey') { S.shortcut = KEY; syncToggles(); morph(render); focusId('wayshead'); }
+  else if (act === 'unpair') { S.confirmUnpair = true; morph(renderContent); focusId('unpair-cancel'); }
+  else if (act === 'unpair-cancel') { S.confirmUnpair = false; morph(renderContent); focusId('unpair'); }
   else if (act === 'unpair-yes') {
     clearTimers('retry');
     Object.assign(S, { paired: false, pair: 'show', countdown: 298, failed: [], waiting: 0, blocked: false, advOpen: false, confirmUnpair: false });
-    render(); focusId('connecthead');
+    swapScreen(render); focusId('connecthead');
+  }
+  else if (act === 'adv') {                                 // Advanced opens and closes through the morph, never by height
+    e.preventDefault();
+    S.advOpen = !S.advOpen;
+    morph(renderContent);
   }
 });
 page.addEventListener('contextmenu', e => { if (e.target.id === 'alink') { e.preventDefault(); S.menu = true; renderContent(); } });
@@ -952,17 +1491,19 @@ setInterval(() => {
   S.countdown = Math.max(0, S.countdown - 1);
   if (!S.countdown) {
     S.pair = 'expired';
-    if (S.view === 'options') { renderContent(); say(optLive, 'This code has expired'); }
+    if (S.view === 'options') { morph(renderContent); say(optLive, 'This code has expired'); }
     return;
   }
-  const el = $('cd'); if (el) el.textContent = mmss(S.countdown);
+  const el = $('cd'); if (el) el.textContent = mmss(S.countdown);   // each second, in one frame: no pulse, no red
 }, 1000);
 
 /* ---------------- panel ---------------- */
 const TOAST_JUMPS = ['saving', 'saved', 'undone', 'notext', 'offline', 'unqueued', 'full', 'failed'];
 const BROWSER_PAGE = 'Browser pages like this one don’t allow extensions to read them. Shelf saves the address, and your phone fetches the page.';
 const NOTES = {
+  saving: 'The address is known before the text, so the cover draws itself while Shelf saves, its leaves landing in hash order over about a second. When the save goes through, Saved crossfades in and its tick lands with the last leaf (never more than a second in), or as soon as the save is confirmed if that comes later. This state is held still: click the jump to replay the drawing, or click Shelf’s button to watch a whole save.',
   reach: 'Pressing the shortcut again while a Saved toast shows moves focus to Undo. Tab past the last button, Shift+Tab before the first, Escape or ✕ take focus back to where it was.',
+  menu: 'A link saved from this menu wears the cover of the page it points to, the same face the phone shows in its row while it fetches the text.',
   unqueued: 'The offline save was still in this browser’s queue, so Undo takes it out and the waiting count drops by one. Nothing needs doing on the phone.',
   popup: `${BROWSER_PAGE} On Chrome 127+ and Firefox a small popup confirms the save under Shelf’s button, with its own status message. It closes after 8 seconds, on Escape, or when you click away.`,
   restricted: `${BROWSER_PAGE} Before Chrome 127 an extension can’t open its popup from a shortcut, so the icon tick alone confirms the save, for 4 seconds.`,
@@ -983,6 +1524,7 @@ document.querySelectorAll('[data-toggle]').forEach(b => b.onclick = () => {
 document.querySelectorAll('[data-theme-set]').forEach(b => b.onclick = () => {
   win.dataset.theme = b.dataset.themeSet;
   const t = toastEl(); if (t) t.dataset.theme = toastFlip();
+  paintInk(toastEl()); paintInk(popEl());                   // the article's ink is re-chosen for the new surfaces
   document.querySelectorAll('[data-theme-set]').forEach(x => x.classList.toggle('on', x === b));
 });
 document.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => {
@@ -993,7 +1535,7 @@ document.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => {
   if (j === 'offline') { S.online = false; S.waiting = 3; }
   if (j === 'unqueued') { S.online = false; S.waiting = 2; }
   if (j === 'full') { S.online = false; S.waiting = CAP; }
-  if (j === 'failed') S.failed = [{ id: 'f0', title: TITLE, host: HOST, why: 'reach' }];
+  if (j === 'failed') S.failed = [THIS_SAVE()];
   if (j === 'restricted' || j === 'popup') { S.view = 'restricted'; S.base = 'restricted'; S.tick = 'notext'; S.oldChrome = j === 'restricted'; }
   if (j === 'menu') S.menu = true;
   if (j.startsWith('o-')) { S.optsOpen = true; S.view = 'options'; }
@@ -1003,16 +1545,24 @@ document.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => {
   if (j === 'o-failed') S.failed = FAILED();
   if (j === 'o-blocked') { S.failed = FAILED().map(f => ({ ...f, why: 'blocked' })); S.blocked = true; S.advOpen = true; }
   if (j === 'o-unsent') { S.failed = FAILED(); S.online = false; S.waiting = 1; S.confirmUnpair = true; }
-  render();
+  render({ fresh: true });
   if (TOAST_JUMPS.includes(j)) showToast(j, { timed: false });          // held still for review
   if (j === 'reach') { showToast('saved', { timed: false }); reachUndo(); }
-  if (j === 'popup') openPopup('notext', { host: 'chrome://settings', timed: false });
+  if (j === 'popup') openPopup('notext', { host: 'chrome://settings', hash: SAVES.settings.hash, timed: false });
   if (j === 'o-unsent') {                                  // bring the confirm into view inside the options tab
     const o = content.querySelector('.opts'), c = content.querySelector('.confirm');
     o.scrollTop += c.getBoundingClientRect().bottom - o.getBoundingClientRect().bottom + 24;
   }
   if (j === 'o-offline') say(optLive, 'Can’t connect right now');
-  if (j === 'o-scanned') later(() => { S.paired = true; S.connectedOn = 'today'; render(); if (S.view === 'options') say(optLive, 'Connected to your phone'); }, 1200, 'scan');
+  if (j === 'o-scanned') later(() => {
+    // the page swaps to the connected layout and focus moves to the heading at the start of the swap (when it was on the page)
+    const ae = document.activeElement, onPage = !ae || ae === document.body || content.contains(ae);
+    S.paired = true; S.connectedOn = 'today';
+    if (S.view !== 'options') { render(); return; }
+    swapScreen(render);
+    if (onPage) focusId('connhead');
+    say(optLive, 'Connected to your phone');
+  }, 1200, 'scan');
   const note = $('jnote');
   note.textContent = NOTES[j] || ''; note.hidden = !NOTES[j];
 });

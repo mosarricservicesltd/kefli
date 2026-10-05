@@ -4,157 +4,223 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Saves Card</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- tokens.css v0.2 (Fingerprint) imports Archivo, Literata and Martian Mono for the mockups -->
 <link rel="stylesheet" href="tokens.css">
+<script src="cover-v1.js"></script>
 <style>
 *{box-sizing:border-box}
-body{margin:0;font-family:var(--font-ui);font-size:var(--text-15);line-height:1.5;background:var(--background);color:var(--text)}
+html,body{margin:0}
+body{font-family:var(--font-ui);font-size:var(--text-15);line-height:var(--leading-ui);background:var(--background);color:var(--text);-webkit-font-smoothing:antialiased}
 .doc{max-width:820px;margin:0 auto;padding:var(--space-32) var(--space-16)}
-.doc h1{font-size:var(--text-28);font-weight:600;letter-spacing:-.02em;margin:0 0 var(--space-8)}
-.doc p{color:var(--muted);margin:0 0 var(--space-24);max-width:68ch}
+.doc h1{font-family:var(--font-display);font-stretch:var(--font-display-stretch);font-weight:var(--font-display-weight);letter-spacing:var(--font-display-tracking);font-size:var(--text-28);line-height:var(--leading-display);margin:0 0 var(--space-12)}
+.doc > p{color:var(--muted);margin:0 0 var(--space-12);max-width:68ch}
+.doc > p:last-of-type{margin-bottom:var(--space-24)}
 .cols{display:flex;flex-wrap:wrap;gap:var(--space-24);justify-content:center}
-.col{width:360px;max-width:100%;background:var(--background);color:var(--text);border-radius:var(--radius-sheet);padding:var(--space-20) var(--space-16);border:1px solid var(--line)}
-.col h2{font-size:var(--text-13);font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:0 0 var(--space-16)}
-.state{font-size:var(--text-13);color:var(--muted);margin:var(--space-16) 0 var(--space-8)}
-.state:first-of-type{margin-top:0}
+/* each column is a 360 px phone width: 16 px gutters, and its edges clip like the screen's (the swipe runs off it) */
+.col{width:360px;max-width:100%;background:var(--background);color:var(--text);border-radius:var(--radius-sheet);padding:var(--space-20) var(--space-16) var(--space-24);border:var(--card-edge);overflow:hidden}
+.col > h2{font-size:var(--text-13);font-weight:600;color:var(--muted);margin:0 0 var(--space-8)}
+.state{font-size:var(--text-13);color:var(--muted);margin:var(--space-24) 0 var(--space-4)}
+.col > h2 + .state{margin-top:0}
+.foot{margin-top:var(--space-32);font-size:var(--text-13);color:var(--muted)}
+.foot table{width:100%;border-collapse:collapse;margin-top:var(--space-8)}
+.foot th,.foot td{text-align:left;padding:6px 8px 6px 0;border-top:1px solid var(--line);vertical-align:top}
+.foot th{font-weight:600}
+.foot td.h{font-family:var(--font-mono);letter-spacing:var(--font-mono-tracking);font-size:12px;overflow-wrap:anywhere}
+.foot .ok{color:var(--success);font-weight:600}
+.foot .bad{color:var(--error);font-weight:600}
 
-/* ---------- the component ---------- */
-.card{position:relative;display:flex;gap:var(--space-12);padding:var(--space-12);background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);border:var(--card-edge);overflow:hidden;min-height:48px;text-decoration:none;color:inherit}
-.card + .card,.anchor + .card{margin-top:var(--gap-card)}
-.body{flex:1;min-width:0}
-.src{display:flex;align-items:center;gap:var(--space-4);font-size:var(--text-13);font-weight:500;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.title{font-size:var(--text-15);font-weight:600;line-height:1.35;margin:2px 0 var(--space-8);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-.meta{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-4) var(--space-8);font-size:var(--text-13);color:var(--muted)}
-.meta .sep{width:3px;height:3px;border-radius:var(--radius-pill);background:currentColor;opacity:.6}
-.meta .hot{color:var(--accent);font-weight:500}
-.thumb{width:72px;height:72px;border-radius:var(--radius-image);object-fit:cover;flex:none;background:var(--accent-soft)}
-.progress{position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--accent-soft)}
-.progress i{display:block;height:100%;background:var(--accent);border-radius:0 var(--radius-pill) var(--radius-pill) 0}
-.pending-dot{width:8px;height:8px;border-radius:var(--radius-pill);background:var(--accent);flex:none;animation:breathe 1.6s ease-in-out infinite}
-@keyframes breathe{0%,100%{opacity:.35}50%{opacity:1}}
-@media (prefers-reduced-motion:reduce){.pending-dot{animation:none;opacity:.7}}
-.url{font-size:var(--text-13);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:2px 0 var(--space-8)}
-.link{color:var(--accent);font-weight:500;text-decoration:none;display:inline-flex;align-items:center;gap:var(--space-4);min-height:24px}
-.warn{color:var(--error)}
-.muted-title{color:var(--muted);overflow-wrap:anywhere;font-weight:500}
+/* ---------- the component: a catalogue row (Fingerprint drops the card; the hairline is the row's edge) ---------- */
+.row{position:relative;display:flex;gap:var(--space-12);align-items:flex-start;padding:14px 0 15px;background:var(--background);color:inherit;text-decoration:none;border-radius:var(--radius-control)}
+.row .body{flex:1;min-width:0}
+.src{display:flex;align-items:center;gap:5px;font-size:var(--text-13);font-weight:var(--weight-meta);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
+.title{font-size:var(--text-15);font-weight:var(--weight-title);line-height:1.35;letter-spacing:-.005em;margin:3px 0 7px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.title.url{color:var(--muted);font-weight:var(--weight-meta);overflow-wrap:anywhere}
+.meta{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-4) var(--space-8);font-size:var(--text-13);color:var(--muted);line-height:1.3}
+.meta .sep{width:3px;height:3px;border-radius:2px;background:currentColor;opacity:.7}
+.meta .hot{color:var(--text);font-weight:600}
+.meta .link{color:var(--text);font-weight:var(--weight-label);display:inline-flex;align-items:center;gap:var(--space-4);min-height:24px;text-decoration:underline;text-decoration-color:var(--line-strong);text-underline-offset:3px}
+svg.i{flex:none}
 
-/* swipe-to-archive, frozen mid-gesture */
-.swipe{position:relative;border-radius:var(--radius);overflow:hidden;margin-top:var(--gap-card);background:var(--accent-fill)}
-.swipe .under{position:absolute;inset:0;display:flex;align-items:center;justify-content:flex-end;padding-right:var(--space-20);gap:var(--space-8);color:var(--on-gradient);font-size:var(--text-13);font-weight:600}
-.swipe .card{transform:translateX(-96px);margin:0;border-radius:var(--radius) 0 0 var(--radius)}
-svg{flex:none}
+/* the hairline under every row; on a part-read row it carries the progress, in the article's ink */
+.rule{position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--line)}
+.rule i{position:absolute;left:0;bottom:-1px;height:3px;background:var(--ink, var(--text));border-radius:0 2px 2px 0}
 
-/* archived row: the card still opens the Reader (a stretched link); a visible ⋯ opens the row sheet */
+/* the cover: 64 px, drawn by cover v1, decorative (the source and title already say what it is) */
+.cv{width:64px;height:64px;flex:none;position:relative;display:block;border-radius:var(--radius-image);overflow:hidden;background:var(--line)}
+.cv svg{display:block;width:100%;height:100%}
+.cv::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px var(--cover-edge);pointer-events:none}
+
+/* waiting: one breathing 8 px square in the row's ink, as in the prototype (consistency spec, waiting states) */
+.pdot{width:8px;height:8px;border-radius:2px;background:var(--ink, var(--text));flex:none;animation:breathe 1.2s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:.3}50%{opacity:1}}
+
+/* the stamp (decision 68): only for "Couldn't get the text" here and "Not written down" on You. The prototype's stamp and
+   the consistency spec's: one ink (muted, so the title stays dominant), a 1.5 px rule, 24 tall at radius 4, 13/650
+   capitals at 0.05em, turned 2 degrees and straight for high contrast. It is the copy itself, read normally by screen readers. */
+.stamp{display:inline-flex;align-items:center;height:24px;padding:0 7px;border:1.5px solid currentColor;border-radius:var(--radius-image);color:var(--muted);font-family:var(--font-ui);font-weight:var(--weight-heading);font-size:var(--text-13);line-height:1;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;transform:rotate(-2deg);transform-origin:left center}
+.row.failed .meta{gap:var(--space-8) var(--space-12)}
+
+/* swipe left to archive, frozen mid-gesture. Fill rule: ink with paper on it in light, paper with ink on it in dark. */
+.swipe{position:relative}
+.swipe .under{position:absolute;inset:0;border-radius:var(--radius);background:var(--fill);color:var(--on-fill);display:flex;align-items:center;justify-content:flex-end;gap:var(--space-8);padding-right:var(--space-20);font-size:var(--text-13);font-weight:var(--weight-title);line-height:1}
+.swipe .row{transform:translateX(-96px)}
+
+/* archived rows: the row still opens the Reader (a stretched link); a visible ⋯ opens the row sheet */
 .open{color:inherit;text-decoration:none}
-.open::after{content:"";position:absolute;inset:0}
+.open::after{content:"";position:absolute;inset:0;border-radius:inherit}
 .open:focus-visible{outline:none}
-.card:has(.open:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
-.more{position:relative;z-index:1;flex:none;align-self:center;width:48px;height:48px;margin:0 calc(-1 * var(--space-12)) 0 calc(-1 * var(--space-4));display:inline-flex;align-items:center;justify-content:center;border:0;padding:0;background:none;border-radius:var(--radius-pill);color:var(--muted);font:inherit;cursor:pointer}
-.more:hover{background:var(--background)}
-.more[aria-expanded="true"]{background:var(--accent-soft);color:var(--accent)}
-.more:focus-visible{outline:2px solid var(--accent);outline-offset:-4px}
-/* the row menu is the phone's bottom sheet, headed with the article (decision 63), drawn at the foot of a dimmed screen */
-.sheetframe{margin-top:var(--space-8);padding-top:var(--space-32);border-radius:var(--radius);overflow:hidden;background:#0C0E1266}
-.rsheet{background:var(--surface);color:var(--text);border-radius:var(--radius-sheet) var(--radius-sheet) 0 0;padding:var(--space-8) var(--space-16) var(--space-16)}
-.rsheet .grab{width:36px;height:4px;border-radius:var(--radius-pill);background:var(--line);margin:0 auto var(--space-16)}
-.rsheet .rowmenu-title{font-weight:600;margin:0 0 var(--space-8);font-size:var(--text-15)}
-.mi{width:100%;min-height:52px;display:flex;align-items:center;gap:var(--space-12);padding:0 var(--space-4);border:0;border-radius:var(--radius);background:none;color:inherit;font:inherit;font-size:var(--text-15);font-weight:500;text-align:left;cursor:pointer}
+/* rows have no side padding, so the ring stands outside the row at the token's offset, clear of the text (as in the prototype) */
+.row:has(.open:focus-visible),a.row:focus-visible,.row.focused{outline:var(--focus-width) solid var(--focus);outline-offset:var(--focus-offset)}
+.more{position:relative;z-index:1;flex:none;align-self:center;width:48px;height:48px;margin:0 -12px 0 -8px;display:inline-flex;align-items:center;justify-content:center;border:0;padding:0;background:none;border-radius:var(--radius-button);color:var(--muted);font:inherit;cursor:pointer}
+.more:hover{background:var(--surface)}
+.more[aria-expanded="true"]{background:var(--surface);color:var(--text);box-shadow:inset 0 0 0 1px var(--line)}
+.more:focus-visible{outline:var(--focus-width) solid var(--focus);outline-offset:-2px}
+
+/* the row menu is the phone's bottom sheet, headed with the article (decision 63), drawn at the foot of a dimmed screen.
+   The dimming is the --scrim token (tokens 0.2.1): ink at 46% in light, black at 60% in dark, as on the phone prototype. */
+.screenfoot{position:relative;margin:var(--space-4) calc(-1 * var(--space-16)) 0}
+.screenfoot .under-sheet{padding:0 var(--space-16);isolation:isolate}
+.screenfoot .scrim{position:absolute;inset:0;background:var(--scrim)}
+.rsheet{position:relative;background:var(--surface);color:var(--text);border-radius:var(--radius-sheet) var(--radius-sheet) 0 0;padding:var(--space-8) var(--space-16) var(--space-24);margin-top:var(--space-4)}
+.rsheet .grab{width:36px;height:4px;border-radius:var(--radius-pill);background:var(--line-strong);opacity:.6;margin:0 auto var(--space-16)}
+.rsheet .rowmenu-title{font-weight:var(--weight-title);margin:0 0 var(--space-8);font-size:var(--text-15);line-height:1.35}
+.mi{width:100%;min-height:52px;display:flex;align-items:center;gap:var(--space-12);padding:0 var(--space-4);border:0;border-radius:var(--radius-button);background:none;color:inherit;font:inherit;font-size:var(--text-15);font-weight:var(--weight-meta);line-height:1;text-align:left;cursor:pointer}
 .mi:hover{background:var(--background)}
-.mi:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.mi:focus-visible{outline:var(--focus-width) solid var(--focus);outline-offset:-2px}
 .mi.danger{color:var(--error)}
 
-/* the phone's toast after Delete: five seconds to undo, no confirmation (decision 7). Drawn still. */
-.toast{position:relative;display:flex;align-items:center;justify-content:space-between;gap:var(--space-8);min-height:56px;padding:var(--space-4) var(--space-4) var(--space-4) var(--space-20);border-radius:var(--radius-pill);background:var(--text);color:var(--background);font-size:var(--text-15);box-shadow:var(--shadow-float);overflow:hidden}
-.toast button{min-height:48px;padding:0 var(--space-16);border:0;border-radius:var(--radius-pill);background:none;color:inherit;font:inherit;font-weight:600;cursor:pointer}
-.toast button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
-.toast .timer{position:absolute;left:0;bottom:0;height:2px;background:var(--accent)}
+/* the phone's toast after Delete: five seconds to undo, no confirmation (decision 7). Drawn still.
+   The fill rule again; the 2 px countdown runs in the deleted article's ink, chosen for 3:1 on the toast. */
+.toast{position:relative;display:flex;align-items:center;justify-content:space-between;gap:var(--space-8);min-height:52px;padding:0 var(--space-4) 0 var(--space-16);border-radius:var(--radius);background:var(--fill);color:var(--on-fill);font-size:var(--text-15);font-weight:var(--weight-meta);line-height:1;box-shadow:var(--shadow-float);overflow:hidden}
+.toast button{min-height:48px;padding:0 var(--space-12);border:0;border-radius:var(--radius-control);background:none;color:inherit;font:inherit;font-weight:var(--weight-title);line-height:1;cursor:pointer}
+.toast button:focus-visible{outline:var(--focus-width) solid var(--on-fill);outline-offset:-6px}
+.toast .timer{position:absolute;left:0;bottom:0;height:2px;background:var(--ink, var(--on-fill))}
+
+@media (prefers-reduced-motion:reduce){.pdot{animation:none;opacity:.7}}
+@media (prefers-contrast:more){.stamp{transform:none}}
 </style>
 </head>
 <body>
 <div class="doc">
 <h1>Saves card</h1>
-<p>The first component, finished before anything else is built. One card, every state it can be in, light and dark. Tapping anywhere on the card opens the Reader; swipe left archives. Archived cards add a ⋯ button with Back to Unread and Delete; Delete has no confirmation, just five seconds to undo. Reading progress is the signature: a thin Terracotta bar along the bottom and time left in place of the total.</p>
+<p>The first component, finished before anything else is built: one Saves row in every state it can be in, light and dark. In Fingerprint the card becomes a catalogue row, flat on the page with a hairline under it and the article’s cover at 64 px on the right. Cover v1 draws it from the sha256 of the article’s normalised address, so the same save wears the same cover on every phone, in the extension and after a restore. Photos never appear in a row; they wait in the Reader, as published.</p>
+<p>Tapping anywhere on the row opens the Reader; swipe left archives. Archived rows add a ⋯ that opens a bottom sheet with Back to Unread and Delete. Delete has no confirmation, just five seconds to undo. Reading progress runs along the row’s hairline in the article’s own ink, with time left in place of the total.</p>
 
 <div class="cols">
-<!-- ================= LIGHT ================= -->
-<section class="col" data-theme="light">
-<h2>Light</h2>
+  <section class="col" data-theme="light" aria-label="Light"><h2>Light</h2></section>
+  <section class="col" data-theme="dark" aria-label="Dark"><h2>Dark</h2></section>
+</div>
 
-<div class="state">Unread, with the article’s image</div>
-<a class="card" href="#"><div class="body"><div class="src">The Guardian</div><div class="title">The quiet return of the read-it-later app, and why it matters this time</div><div class="meta">9 min</div></div><img class="thumb" src="https://picsum.photos/seed/shelf-guardian/144/144" alt=""></a>
-
-<div class="state">Unread, no image: the title takes the width</div>
-<a class="card" href="#"><div class="body"><div class="src">Stratechery</div><div class="title">Aggregation theory, ten years on</div><div class="meta">14 min</div></div></a>
-
-<div class="state">Part-read</div>
-<a class="card" href="#"><div class="body"><div class="src">Bitcoin Magazine</div><div class="title">Why relays, not servers, are the future of personal data</div><div class="meta"><span class="hot">4 min left</span></div></div><img class="thumb" src="https://picsum.photos/seed/shelf-relays/144/144" alt=""><span class="progress"><i style="width:34%"></i></span></a>
-
-<div class="state">Getting the text (just shared)</div>
-<a class="card" href="#"><div class="body"><div class="src"><span class="pending-dot" aria-hidden="true"></span>theatlantic.com</div><div class="title muted-title">theatlantic.com/ideas/archive/2026/09/reading-long-things</div><div class="meta">Getting the text…</div></div></a>
-
-<div class="state">Saved from your browser, still arriving</div>
-<a class="card" href="#"><div class="body"><div class="src"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>From Chrome</div><div class="title">Mozilla’s Readability library is quietly everywhere</div><div class="meta"><span class="pending-dot" aria-hidden="true"></span>Getting the text…</div></div></a>
-
-<div class="state">Couldn’t get the text: saved as a link</div>
-<a class="card" href="#"><div class="body"><div class="src">nytimes.com</div><div class="title">The Long Road Back to the Office</div><div class="meta"><span>Couldn’t get the text</span><span class="sep"></span><span class="link">Open original <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></span></div></div></a>
-
-<div class="state">Saved while offline</div>
-<a class="card" href="#"><div class="body"><div class="src">arstechnica.com</div><div class="title muted-title">arstechnica.com/science/2026/09/the-quiet-web</div><div class="meta"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></svg>Will fetch when you’re online</div></div></a>
-
-<div class="state">Swiping left to archive</div>
-<div class="swipe"><div class="under"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/></svg>Archive</div><a class="card" href="#"><div class="body"><div class="src">Stratechery</div><div class="title">Aggregation theory, ten years on</div><div class="meta">14 min</div></div></a></div>
-
-<div class="state">Archived: a visible ⋯ opens the row menu</div>
-<div class="card"><a class="body open" href="#"><div class="src">The Guardian</div><div class="title">The quiet return of the read-it-later app, and why it matters this time</div><div class="meta">9 min</div></a><img class="thumb" src="https://picsum.photos/seed/shelf-guardian/144/144" alt=""><button class="more" type="button" aria-label="More for The quiet return of the read-it-later app, and why it matters this time" aria-haspopup="dialog" aria-expanded="false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button></div>
-
-<div class="state">Archived, ⋯ tapped: the row menu rises as a sheet headed with the article, like the Reader’s ⋯ menu</div>
-<div class="card"><a class="body open" href="#"><div class="src">Stratechery</div><div class="title">Aggregation theory, ten years on</div><div class="meta">14 min</div></a><button class="more" type="button" aria-label="More for Aggregation theory, ten years on" aria-haspopup="dialog" aria-expanded="true" aria-controls="rowsheet-light"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button></div>
-<div class="sheetframe"><div class="rsheet" id="rowsheet-light" role="dialog" aria-modal="true" aria-label="Aggregation theory, ten years on"><div class="grab"></div><p class="rowmenu-title">Aggregation theory, ten years on</p><button class="mi" type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>Back to Unread</button><button class="mi danger" type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>Delete</button></div></div>
-
-<div class="state">After Delete: the row goes at once, with five seconds to undo</div>
-<div class="toast"><span>Deleted</span><button type="button">Undo</button><span class="timer" style="width:60%" aria-hidden="true"></span></div>
-</section>
-
-<!-- ================= DARK ================= -->
-<section class="col" data-theme="dark">
-<h2>Dark</h2>
-
-<div class="state">Unread, with the article’s image</div>
-<a class="card" href="#"><div class="body"><div class="src">The Guardian</div><div class="title">The quiet return of the read-it-later app, and why it matters this time</div><div class="meta">9 min</div></div><img class="thumb" src="https://picsum.photos/seed/shelf-guardian/144/144" alt=""></a>
-
-<div class="state">Unread, no image: the title takes the width</div>
-<a class="card" href="#"><div class="body"><div class="src">Stratechery</div><div class="title">Aggregation theory, ten years on</div><div class="meta">14 min</div></div></a>
-
-<div class="state">Part-read</div>
-<a class="card" href="#"><div class="body"><div class="src">Bitcoin Magazine</div><div class="title">Why relays, not servers, are the future of personal data</div><div class="meta"><span class="hot">4 min left</span></div></div><img class="thumb" src="https://picsum.photos/seed/shelf-relays/144/144" alt=""><span class="progress"><i style="width:34%"></i></span></a>
-
-<div class="state">Getting the text (just shared)</div>
-<a class="card" href="#"><div class="body"><div class="src"><span class="pending-dot" aria-hidden="true"></span>theatlantic.com</div><div class="title muted-title">theatlantic.com/ideas/archive/2026/09/reading-long-things</div><div class="meta">Getting the text…</div></div></a>
-
-<div class="state">Saved from your browser, still arriving</div>
-<a class="card" href="#"><div class="body"><div class="src"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>From Chrome</div><div class="title">Mozilla’s Readability library is quietly everywhere</div><div class="meta"><span class="pending-dot" aria-hidden="true"></span>Getting the text…</div></div></a>
-
-<div class="state">Couldn’t get the text: saved as a link</div>
-<a class="card" href="#"><div class="body"><div class="src">nytimes.com</div><div class="title">The Long Road Back to the Office</div><div class="meta"><span>Couldn’t get the text</span><span class="sep"></span><span class="link">Open original <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></span></div></div></a>
-
-<div class="state">Saved while offline</div>
-<a class="card" href="#"><div class="body"><div class="src">arstechnica.com</div><div class="title muted-title">arstechnica.com/science/2026/09/the-quiet-web</div><div class="meta"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></svg>Will fetch when you’re online</div></div></a>
-
-<div class="state">Swiping left to archive</div>
-<div class="swipe"><div class="under"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/></svg>Archive</div><a class="card" href="#"><div class="body"><div class="src">Stratechery</div><div class="title">Aggregation theory, ten years on</div><div class="meta">14 min</div></div></a></div>
-
-<div class="state">Archived: a visible ⋯ opens the row menu</div>
-<div class="card"><a class="body open" href="#"><div class="src">The Guardian</div><div class="title">The quiet return of the read-it-later app, and why it matters this time</div><div class="meta">9 min</div></a><img class="thumb" src="https://picsum.photos/seed/shelf-guardian/144/144" alt=""><button class="more" type="button" aria-label="More for The quiet return of the read-it-later app, and why it matters this time" aria-haspopup="dialog" aria-expanded="false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button></div>
-
-<div class="state">Archived, ⋯ tapped: the row menu rises as a sheet headed with the article, like the Reader’s ⋯ menu</div>
-<div class="card"><a class="body open" href="#"><div class="src">Stratechery</div><div class="title">Aggregation theory, ten years on</div><div class="meta">14 min</div></a><button class="more" type="button" aria-label="More for Aggregation theory, ten years on" aria-haspopup="dialog" aria-expanded="true" aria-controls="rowsheet-dark"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button></div>
-<div class="sheetframe"><div class="rsheet" id="rowsheet-dark" role="dialog" aria-modal="true" aria-label="Aggregation theory, ten years on"><div class="grab"></div><p class="rowmenu-title">Aggregation theory, ten years on</p><button class="mi" type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>Back to Unread</button><button class="mi danger" type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>Delete</button></div></div>
-
-<div class="state">After Delete: the row goes at once, with five seconds to undo</div>
-<div class="toast"><span>Deleted</span><button type="button">Undo</button><span class="timer" style="width:60%" aria-hidden="true"></span></div>
-</section>
+<div class="foot" id="foot">
+  <p style="margin:0">Sample saves, as in the prototype and the Fingerprint board. Each hash is the sha256 of the normalised address (contract 4.3), computed in Node and checked again in this page: <span id="verify">checking…</span></p>
+  <table><thead><tr><th>Save</th><th>Normalised address and sha256</th></tr></thead><tbody id="ledger"></tbody></table>
 </div>
 </div>
+
+<!-- One template, drawn into both columns, so the light and dark states can't drift apart.
+     data-art names a sample save; the script fills each cover and sets each article's ink from its hash. -->
+<template id="states">
+<div class="state">Unread. The row wears its cover whether or not the article has a photo</div>
+<a class="row" href="#" data-art="g"><div class="body"><div class="src">The Guardian</div><div class="title">The quiet return of the read-it-later app, and why it matters this time</div><div class="meta">9 min</div></div><span class="cv" data-cover="g"></span><span class="rule"></span></a>
+
+<div class="state">Unread, short title</div>
+<a class="row" href="#" data-art="s"><div class="body"><div class="src">Stratechery</div><div class="title">Aggregation theory, ten years on</div><div class="meta">14 min</div></div><span class="cv" data-cover="s"></span><span class="rule"></span></a>
+
+<div class="state">Part-read: the hairline carries the progress, in the article’s ink</div>
+<a class="row" href="#" data-art="b"><div class="body"><div class="src">Bitcoin Magazine</div><div class="title">Why relays, not servers, are the future of personal data</div><div class="meta"><span class="hot">4 min left</span></div></div><span class="cv" data-cover="b"></span><span class="rule"><i style="width:34%"></i></span></a>
+
+<div class="state">Getting the text (just shared): the cover is there at once, and draws itself once as the save lands</div>
+<a class="row" href="#" data-art="a"><div class="body"><div class="src">theatlantic.com</div><div class="title url">theatlantic.com/ideas/archive/2026/09/reading-long-things</div><div class="meta"><span class="pdot" aria-hidden="true"></span>Getting the text…</div></div><span class="cv" data-cover="a" data-draw="once"></span><span class="rule"></span></a>
+
+<div class="state">Saved from your browser, still arriving: drawn once as it lands, like every new save</div>
+<a class="row" href="#" data-art="r"><div class="body"><div class="src"><svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/></svg>From Chrome</div><div class="title">Mozilla’s Readability library is quietly everywhere</div><div class="meta"><span class="pdot" aria-hidden="true"></span>Getting the text…</div></div><span class="cv" data-cover="r" data-draw="once"></span><span class="rule"></span></a>
+
+<div class="state">Restoring on a new phone: the same face as the first row, drawn once, before the text arrives</div>
+<a class="row" href="#" data-art="g"><div class="body"><div class="src">The Guardian</div><div class="title">The quiet return of the read-it-later app, and why it matters this time</div><div class="meta"><span class="pdot" aria-hidden="true"></span>Getting the text…</div></div><span class="cv" data-cover="g" data-draw="once"></span><span class="rule"></span></a>
+
+<div class="state">Couldn’t get the text: saved as a link, its shapes in the chrome’s greys, and the stamp</div>
+<a class="row failed" href="#" data-art="n"><div class="body"><div class="src">nytimes.com</div><div class="title">The Long Road Back to the Office</div><div class="meta"><span class="stamp">Couldn’t get the text</span><span class="link">Open original <svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></span></div></div><span class="cv" data-cover="n" data-grey></span><span class="rule"></span></a>
+
+<div class="state">Saved while offline: the cover needs no network, so it is already whole</div>
+<a class="row" href="#" data-art="q"><div class="body"><div class="src">arstechnica.com</div><div class="title url">arstechnica.com/science/2026/09/the-quiet-web</div><div class="meta"><svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></svg>Will fetch when you’re online</div></div><span class="cv" data-cover="q"></span><span class="rule"></span></a>
+
+<div class="state">Swiping left to archive: the fill shows through</div>
+<div class="swipe"><div class="under" aria-hidden="true"><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>Archive</div><a class="row" href="#" data-art="s"><div class="body"><div class="src">Stratechery</div><div class="title">Aggregation theory, ten years on</div><div class="meta">14 min</div></div><span class="cv" data-cover="s"></span><span class="rule"></span></a></div>
+
+<div class="state">Focused from a keyboard or switch access</div>
+<a class="row focused" href="#" data-art="s"><div class="body"><div class="src">Stratechery</div><div class="title">Aggregation theory, ten years on</div><div class="meta">14 min</div></div><span class="cv" data-cover="s"></span><span class="rule"></span></a>
+
+<div class="state">Archived: a visible ⋯ opens the row menu</div>
+<div class="row" data-art="e"><a class="body open" href="#"><div class="src">Aeon</div><div class="title">The case for boring technology in an age of constant upgrades</div><div class="meta">18 min</div></a><span class="cv" data-cover="e"></span><button class="more" type="button" aria-label="More for The case for boring technology in an age of constant upgrades" aria-haspopup="dialog" aria-expanded="false"><svg class="i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button><span class="rule"></span></div>
+
+<div class="state">Archived, ⋯ tapped: the row menu rises as a bottom sheet headed with the article, like the Reader’s ⋯ menu</div>
+<div class="screenfoot">
+  <div class="under-sheet" inert aria-hidden="true">
+    <div class="row" data-art="w"><a class="body open" href="#" tabindex="-1"><div class="src">Wired</div><div class="title">Your bookmarks are a graveyard. Here is how to dig them up</div><div class="meta">7 min</div></a><span class="cv" data-cover="w"></span><button class="more" type="button" tabindex="-1" aria-expanded="true"><svg class="i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button><span class="rule"></span></div>
+  </div>
+  <div class="scrim" aria-hidden="true"></div>
+  <div class="rsheet" role="dialog" aria-modal="true" aria-label="Your bookmarks are a graveyard. Here is how to dig them up"><div class="grab"></div><p class="rowmenu-title">Your bookmarks are a graveyard. Here is how to dig them up</p><button class="mi" type="button"><svg class="i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>Back to Unread</button><button class="mi danger" type="button"><svg class="i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>Delete</button></div>
+</div>
+
+<div class="state">After Delete: the row goes at once, with five seconds to undo</div>
+<div class="toast" data-art="w" data-on="fill"><span>Deleted</span><button type="button">Undo</button><span class="timer" style="width:60%" aria-hidden="true"></span></div>
+</template>
+
+<script>
+/* Sample saves: the prototype's articles with their full addresses, and one more for the offline state.
+   Each hash is sha256(normalise(url)) from Node's crypto; the board's hashes are reused for the same articles. */
+const A = {
+  g:{src:'The Guardian', url:'https://www.theguardian.com/technology/2026/sep/21/the-quiet-return-of-the-read-it-later-app', hash:'5971c1f7c8fb6934c0db39d1cf17cfede14197bc087924dab4cc59ae13aa8cff'},
+  s:{src:'Stratechery', url:'https://stratechery.com/2026/aggregation-theory-ten-years-on', hash:'9f40a2ca59c109dd3b5c4f5c3c88fd84ff5579309ebdec62e3294eebb5d4fbd4'},
+  b:{src:'Bitcoin Magazine', url:'https://bitcoinmagazine.com/technical/why-relays-not-servers-are-the-future-of-personal-data', hash:'34331f690e10f4e9184b0c53e40388e8caeb8bd26c8f44a34ae11f7f9e62213d'},
+  a:{src:'The Atlantic (just shared)', url:'https://www.theatlantic.com/ideas/archive/2026/09/reading-long-things', hash:'02a662fcfb69bec8626bbd14b40ca01b06cfa05b3bb4af946c28168f03ff9e34'},
+  r:{src:'Ars Technica (from Chrome)', url:'https://arstechnica.com/gadgets/2026/09/mozillas-readability-library-is-quietly-everywhere', hash:'08246b635f8db8e14834c0a17044949b490975582e1f61be89c8e6062ae4d30e'},
+  n:{src:'The New York Times (failed)', url:'https://www.nytimes.com/2026/09/20/business/the-long-road-back-to-the-office.html', hash:'862030a9aef3d2bd9f5f93d4986d9c9029bbf72e7f574169014dda44a9fc93ca'},
+  q:{src:'Ars Technica (offline)', url:'https://arstechnica.com/science/2026/09/the-quiet-web', hash:'1fc585fd4a8815df074d62bfaf31ca7efb2ea16a7a42af65a609a0602f28c93e'},
+  e:{src:'Aeon', url:'https://aeon.co/essays/the-case-for-boring-technology-in-an-age-of-constant-upgrades', hash:'340732b408a9f0f2e531a95f3c3be03d89fc3f51f5c74e3372ae7fae25e8e79c'},
+  w:{src:'Wired', url:'https://www.wired.com/story/your-bookmarks-are-a-graveyard', hash:'11ac0d2ee6159446a9271841f8dc2e330c9a9c1d64d74d96be0b8519a7e46389'},
+};
+
+const C = window.ShelfCover;
+document.head.insertAdjacentHTML('beforeend', `<style>${C.css}</style>`);
+const tpl = document.getElementById('states').innerHTML;
+const tok = (el, name) => getComputedStyle(el).getPropertyValue(name).trim();
+
+document.querySelectorAll('.col').forEach(col => {
+  col.insertAdjacentHTML('beforeend', tpl);
+  const theme = col.dataset.theme;
+  // covers: the row's square, whole; grey for a failed fetch (the module's grey set matches the cover-grey tokens)
+  col.querySelectorAll('[data-cover]').forEach(el => {
+    const hash = A[el.dataset.cover].hash;
+    el.innerHTML = C.svg(hash, { grey: el.hasAttribute('data-grey') ? theme : null, draw: el.hasAttribute('data-draw') });
+    if (el.dataset.draw === 'loop') el.classList.add('loop');
+  });
+  // the article's ink: the first of its inks with 3:1 on the surface under the line, else the surface's text colour
+  col.querySelectorAll('[data-art]').forEach(el => {
+    const hash = A[el.dataset.art].hash;
+    const onFill = el.dataset.on === 'fill';
+    const surface = tok(col, onFill ? '--fill' : '--background');
+    const text = tok(col, onFill ? '--on-fill' : '--text');
+    el.style.setProperty('--ink', C.lineInk(hash, surface, text));
+  });
+});
+
+/* the page's own check of the embedded hashes (crypto.subtle works on file:// and localhost) */
+const hex = buf => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+(async () => {
+  const rows = [];
+  let ok = 0;
+  for (const it of Object.values(A)) {
+    let h = '';
+    try { h = hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(it.url))); } catch (e) { h = ''; }
+    const match = h === it.hash;
+    if (match) ok++; else if (h) console.error('Hash mismatch for', it.url, h);
+    rows.push(`<tr><td>${it.src}</td><td class="h">${it.url}<br>${it.hash}</td></tr>`);
+  }
+  document.getElementById('ledger').innerHTML = rows.join('');
+  const n = Object.keys(A).length;
+  document.getElementById('verify').innerHTML = ok === n ? `<span class="ok">all ${n} match</span>` : `<span class="bad">${ok} of ${n} match</span>`;
+})();
+</script>
 </body>
 </html>

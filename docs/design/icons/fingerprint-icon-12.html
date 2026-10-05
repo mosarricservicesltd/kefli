@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shelf Icon No. 12</title>
+<!-- tokens.css v0.2 (Fingerprint) imports Archivo, Literata and Martian Mono for the mockups -->
+<link rel="stylesheet" href="../mockups/tokens.css">
+<script src="../mockups/cover-v1.js"></script>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font-family:var(--font-ui);font-size:var(--text-15);line-height:var(--leading-ui);background:var(--background);color:var(--text);-webkit-font-smoothing:antialiased}
+main{max-width:1200px;margin:0 auto;padding:var(--space-32) var(--space-16) 96px}
+h1{font-family:var(--font-display);font-stretch:var(--font-display-stretch);font-weight:var(--font-display-weight);letter-spacing:var(--font-display-tracking);font-size:var(--text-32);line-height:var(--leading-display);margin:0 0 var(--space-12)}
+h2{font-family:var(--font-display);font-stretch:var(--font-display-stretch);font-weight:var(--font-display-weight);letter-spacing:var(--font-display-tracking);font-size:var(--text-20);line-height:var(--leading-display);margin:0 0 var(--space-8)}
+h3{font-size:var(--text-17);font-weight:var(--weight-heading);margin:0 0 var(--space-4)}
+p{margin:0 0 var(--space-12);max-width:76ch}
+.lead{font-size:var(--text-17);max-width:68ch}
+.muted{color:var(--muted)}
+.mono{font-family:var(--font-mono);letter-spacing:var(--font-mono-tracking);font-size:12px}
+section{margin-top:var(--space-32)}
+.panel{background:var(--surface);border:var(--card-edge);border-radius:var(--radius);padding:var(--space-20)}
+figure{margin:0}
+figcaption{font-size:var(--text-13);color:var(--muted);margin-top:6px;line-height:1.35}
+
+/* ---------- icon drawings ---------- */
+.ico{display:block;flex:none;overflow:hidden}
+.ico > svg{display:block;width:100%;height:100%}
+.circle{border-radius:50%}
+.squircle{clip-path:url(#sq)}
+.lay{display:block;position:relative;width:108px;height:108px;border:1px solid var(--line);background:var(--surface);overflow:hidden}
+.lay.check{background:repeating-conic-gradient(var(--line) 0 25%, var(--surface) 0 50%) 0 0/12px 12px}
+/* the 108 dp canvas with what the launcher shows: the central 72 (solid) and the 66 dp safe circle (dashed) */
+.canvas{display:block;position:relative;flex:none}
+.canvas .veil{position:absolute;inset:0;pointer-events:none}
+
+/* ---------- anatomy ---------- */
+.anat{display:flex;flex-wrap:wrap;gap:var(--space-20);align-items:flex-start}
+.anat figure{width:108px}
+.anat figure.wide{width:auto}
+
+/* ---------- top three ---------- */
+.top{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-16)}
+.top .panel{display:flex;flex-direction:column;gap:var(--space-12)}
+.top .rank{font-family:var(--font-display);font-stretch:var(--font-display-stretch);font-weight:var(--font-display-weight);font-size:var(--text-28);line-height:1;letter-spacing:var(--font-display-tracking)}
+.top .hero{display:flex;gap:var(--space-12);align-items:center}
+.top ul{margin:0;padding:0 0 0 18px}
+.top li{margin:0 0 6px;font-size:var(--text-15)}
+
+/* ---------- the contact sheet: one row per candidate, the same columns all the way down ---------- */
+.sheethead,.cand{display:grid;grid-template-columns:196px 212px 212px 124px 116px 150px;gap:var(--space-12);align-items:stretch}
+.sheethead{position:sticky;top:0;z-index:5;background:var(--background);padding:var(--space-12) var(--space-12) var(--space-8);font-size:var(--text-13);font-weight:600;color:var(--muted);border-bottom:1px solid var(--line);line-height:1.3}
+.sheethead span small{display:block;font-weight:400}
+.inv{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:var(--space-12)}
+.inv .card{background:var(--surface);border:var(--card-edge);border-radius:var(--radius);padding:var(--space-12);display:flex;flex-direction:column;gap:var(--space-8)}
+.inv .card.me{box-shadow:inset 0 0 0 2px var(--text)}
+.inv .code{font-family:var(--font-mono);font-size:12px}
+.inv .pair{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-8)}
+.inv .col{display:flex;flex-direction:column;gap:6px;align-items:center}
+.inv .col > small{font-size:11.5px;color:var(--muted);text-align:center;line-height:1.2}
+.inv .sw{display:flex;gap:8px;justify-content:center;padding:8px;border-radius:10px;width:100%}
+.inv .sw .ico{width:52px;height:52px}
+.inv .t48{display:flex;align-items:center;justify-content:center;border-radius:10px;height:60px}
+.mxwrap{overflow-x:auto}
+.mx{display:grid;grid-template-columns:40px repeat(8,64px);gap:8px 10px;align-items:center;padding:14px 16px;border-radius:12px;font-family:var(--font-mono);font-size:10.5px;width:max-content}
+.mx .h{font-size:10.5px;text-align:center;line-height:1.25}
+.mx .c{display:flex;flex-direction:column;align-items:center;gap:3px}
+.mx .c .ico{width:52px;height:52px}
+.mx .c.me .ico{outline:2px solid currentColor;outline-offset:3px;border-radius:16px}
+.list{display:flex;flex-direction:column;gap:var(--space-8);margin-top:var(--space-8)}
+.cand{background:var(--surface);border:var(--card-edge);border-radius:var(--radius);padding:var(--space-12)}
+.cand.pick{box-shadow:inset 0 0 0 2px var(--text)}
+.cmeta{display:flex;gap:var(--space-12);min-width:0}
+.cmeta .info{min-width:0;display:flex;flex-direction:column;gap:3px}
+.no{font-family:var(--font-display);font-stretch:var(--font-display-stretch);font-weight:var(--font-display-weight);font-size:var(--text-20);line-height:1;letter-spacing:var(--font-display-tracking)}
+.seed{font-family:var(--font-mono);letter-spacing:var(--font-mono-tracking);font-size:12px;overflow-wrap:anywhere;line-height:1.35}
+.hashs{font-family:var(--font-mono);letter-spacing:var(--font-mono-tracking);font-size:11px;color:var(--muted)}
+.pal{display:flex;gap:3px;margin-top:2px}
+.pal i{width:12px;height:12px;border-radius:3px;box-shadow:inset 0 0 0 1px var(--cover-edge)}
+.kind{font-size:var(--text-13);color:var(--muted);line-height:1.3}
+.badge{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:var(--radius-control);background:var(--fill);color:var(--on-fill);font-size:12px;font-weight:600;line-height:1;align-self:flex-start;margin-top:2px}
+
+/* drawn system UI: wallpapers, other apps, toolbars and the themed-icon tones are Android's and Chrome's, not Shelf's */
+.wall{border-radius:12px;padding:10px 8px 6px;display:grid;grid-template-rows:auto auto;gap:4px;font-family:system-ui,'Segoe UI',Roboto,sans-serif}
+.wall .r{display:flex;justify-content:space-around}
+.hi{width:62px;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;line-height:1.2}
+.hi .ico{width:52px;height:52px}
+.gen{width:52px;height:52px;display:flex;align-items:center;justify-content:center}
+.gen svg{width:26px;height:26px}
+.ext{display:flex;flex-direction:column;gap:6px;justify-content:center}
+.ext .t48{display:flex;align-items:center;justify-content:center;border-radius:10px;height:68px;gap:10px}
+.tbar{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:17px;font-family:system-ui,sans-serif}
+.tbar .u{flex:1;height:22px;border-radius:11px;min-width:24px}
+.tbar svg.g{width:16px;height:16px;flex:none}
+.tbar .sh{width:16px;height:16px;flex:none}
+.cuts{display:flex;flex-direction:column;gap:8px;justify-content:center}
+.cuts .lbl,.ext .lbl{font-size:12px;color:var(--muted);line-height:1.2}
+
+/* ---------- ledger ---------- */
+table.ledger{width:100%;border-collapse:collapse;font-size:var(--text-13)}
+table.ledger th,table.ledger td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--line);vertical-align:top}
+table.ledger th{color:var(--muted);font-weight:600}
+table.ledger td.h{font-family:var(--font-mono);letter-spacing:var(--font-mono-tracking);font-size:11.5px;overflow-wrap:anywhere}
+pre.json{font-family:var(--font-mono);letter-spacing:var(--font-mono-tracking);font-size:11.5px;line-height:1.5;background:var(--surface);border:var(--card-edge);border-radius:var(--radius);padding:var(--space-16);overflow:auto;max-height:360px;margin:0}
+.ok{color:var(--success);font-weight:600}
+.bad{color:var(--error);font-weight:600}
+
+@media (max-width:1240px){
+  .sheethead{display:none}
+  .cand{grid-template-columns:1fr 1fr;grid-auto-rows:auto}
+  .cand .cmeta{grid-column:1/-1}
+  .top{grid-template-columns:1fr}
+}
+@media (max-width:520px){
+  .cand{grid-template-columns:1fr}
+  .wall .r{justify-content:space-between}
+}
+</style>
+</head>
+<body>
+<!-- the squircle mask, in the masked box's own units (a superellipse, n = 4), drawn by the script -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><clipPath id="sq" clipPathUnits="objectBoundingBox"><path id="sqpath"/></clipPath></defs></svg>
+<main>
+<h1>No. 12, in other colours</h1>
+<p class="lead">Richard liked candidate No. 12 and asked to see it in other colour sets. At icon size No. 12 is one shape, bands on a ground, so only two of its four inks show: the ground and the signal. In cover v1 the first four bytes of the hash choose the colours (the hue in bytes 0 and 1, the scheme in byte 2, a light or dark ground in byte 3) and bytes 4 to 19 choose the shapes. Every icon on this page keeps No. 12’s shape bytes and changes only the colour bytes, so each one is still a genuine cover v1 output with exactly No. 12’s shape.</p>
+<p class="muted">The signal’s colour follows the hue. The ground follows the hue too, turned by the scheme (analogous −34°, complement +26°, triad +240°, split +210°), and is either dark or light. No. 12 itself is triad, dark ground, 63°: orange bands on aubergine. Each variant has a code: scheme (A analogous, C complement, T triad, S split), ground (D dark, L light) and hue in degrees, so No. 12 is T·D·063.</p>
+<p class="muted" id="verify">Checking the shapes…</p>
+<section>
+  <h2>The 63° row: ink mark or paper mark</h2>
+  <p class="muted">Richard picked the 63° row (orange bands) and asked whether the light grounds need the mark inverted. Each pair shows the same cover with the mark as it is now (ink bookmark and bar, paper keyline, paper read part) and inverted (paper bookmark and bar, ink outline, ink read part). Launcher icons at 52 dp on the light and dark wallpapers, the 48 px extension tile, and the 16 px toolbar cut on a light and a dark toolbar.</p>
+  <div class="inv" id="inv"></div>
+</section>
+<section>
+  <h2>How it’s built · No. 12 as drawn</h2>
+  <div class="panel"><div class="anat" id="anat"></div></div>
+</section>
+
+<section>
+  <h2>Every colour set</h2>
+  <p class="muted">All 96 variants: twelve hues down, the four schemes on a dark ground and then on a light ground across. Squircle mask at 52 dp, on the light wallpaper and then the dark one. The outlined icon is No. 12 as drawn. Name any code to see it at full detail.</p>
+  <div class="mxwrap"><div class="mx" id="mx-l"></div></div>
+  <div class="mxwrap" style="margin-top:var(--space-12)"><div class="mx" id="mx-d"></div></div>
+</section>
+
+<section>
+  <h2>Twenty-four at real size</h2>
+  <p class="muted">No. 12’s own scheme (triad) at twelve hues, first on a dark ground like No. 12, then on a light ground. No. 12 itself is first. Icons are drawn at 1 dp = 1 CSS px: launcher icons at 52, the extension tile at 48 and the toolbar cut at 16.</p>
+  <div class="sheethead" aria-hidden="true">
+    <span>Candidate<small>number, seed, hash, inks, 108 dp canvas</small></span>
+    <span>Light wallpaper<small>circle mask, then squircle</small></span>
+    <span>Dark wallpaper<small>circle mask, then squircle</small></span>
+    <span>Themed icon<small>light and dark</small></span>
+    <span>Extension tile<small>48 px, light and dark</small></span>
+    <span>Toolbar cut<small>16 px, light and dark</small></span>
+  </div>
+  <div class="list" id="list"></div>
+</section>
+
+<section>
+  <h2>Seeds and hashes, for freezing</h2>
+  <p class="muted">Each variant’s hash is No. 12’s hash (sha256 of “shelf/icon/2”) with its first four bytes replaced: two for the hue, one for the scheme (its lowest two bits), one for the ground (0C dark, C0 light). No. 12 itself keeps its real hash. Freeze whichever is picked under this exact hash.</p>
+  <div class="panel" style="padding:var(--space-12) var(--space-16)"><table class="ledger"><thead><tr><th>No.</th><th>Code</th><th>sha256</th><th>Palette</th><th>Leaves</th></tr></thead><tbody id="ledger"></tbody></table></div>
+  <div style="height:var(--space-16)"></div>
+  <pre class="json" id="json"></pre>
+</section>
+</main>
+
+<script>
+/* ======================================================================
+   Candidates: [seed, sha256(seed)] from Node's crypto. No. 01 is the board's icon.
+   ====================================================================== */
+const BASE = '2c76160cd38e939a7bffbe46ab3cdf5c88871873a92ec375b0fffb35a41eab13';   // No. 12: sha256("shelf/icon/2")
+const SCH = ['A', 'C', 'T', 'S'], SCHN = ['analogous', 'complement', 'triad', 'split'];
+const HUES = [0, 30, 63, 90, 120, 150, 180, 210, 240, 270, 300, 330];
+const hueWord = d => d === 63 ? 0x2c76 : Math.round(d * 65536 / 360) % 65536;          // 63° is No. 12's exact 0x2C76
+const hex = (n, w) => n.toString(16).padStart(w, '0');
+const variant = (d, s, dark) => (d === 63 && s === 2 && dark) ? BASE : hex(hueWord(d), 4) + hex(s, 2) + (dark ? '0c' : 'c0') + BASE.slice(8);
+const code = (d, s, dark) => `${SCH[s]}·${dark ? 'D' : 'L'}·${String(d).padStart(3, '0')}`;
+const ALL = [true, false].flatMap(dark => HUES.map(d => [(d === 63 && dark ? 'No. 12 as drawn · ' : '') + code(d, 2, dark), variant(d, 2, dark)]));
+const SEEDS = [...ALL.filter(x => x[1] === BASE), ...ALL.filter(x => x[1] !== BASE)];   // No. 12 first
+const pad = n => String(n).padStart(2, '0');
+
+/* How much of each icon's edge melts into the wallpaper: the share of the circle mask's outer 1 dp ring that sits
+   under 1.6:1 against the light (#E4DCCB) and dark (#14171E) wallpapers below. Measured outside this page, with
+   resvg at 4x of 52 dp from this page's own drawing (cover v1 at depth 1, plus the mark). [light %, dark %] by number. */
+const EDGE = [];
+
+/* The top three, judged from the renders on this page at 1x and 2x and from EDGE. */
+const TOP = [];
+
+/* ======================================================================
+   Drawing
+   ====================================================================== */
+const C = window.ShelfCover;
+// the icon's ink and paper are Shelf's light-theme text and page tokens, read from tokens.css
+const probe = document.createElement('div'); probe.setAttribute('data-theme', 'light'); document.body.appendChild(probe);
+const tok = n => getComputedStyle(probe).getPropertyValue(n).trim();
+const INK = tok('--text'), PAPER = tok('--background');
+
+// drawn system UI (Android launcher, Chrome toolbars, themed-icon tones). These belong to the drawn phone and browser.
+const SYS = {
+  wallL: '#E4DCCB', wallD: '#14171E', labelL: '#1F1F1F', labelD: '#F2F2F2',
+  themedL: { bg: '#D9E2F7', fg: '#22324F' }, themedD: { bg: '#2B3446', fg: '#C8D6F2' },
+  extL: '#FFFFFF', extD: '#292A2D', tbL: '#FFFFFF', tbD: '#35363A', urlL: '#F1F3F4', urlD: '#202124', glyphL: '#5F6368', glyphD: '#C4C7C5',
+  apps: {
+    clock: ['#FFFFFF', '#2B3140'], messages: ['#3D6FD9', '#FFFFFF'], notes: ['#E9D9B8', '#3A3020'], music: ['#F08A3C', '#FFFFFF'],
+  },
+};
+const GLYPH = {
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  messages: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
+  notes: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 13H8"/><path d="M16 17H8"/>',
+  music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+  puzzle: '<path d="M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z"/>',
+  user: '<circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/>',
+};
+const glyph = (n, cls = '') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${GLYPH[n]}</svg>`;
+
+/* today's mark, from shared/brand/src: foreground.svg (108 canvas), monochrome.svg, and small.svg (32 grid, tuned for 16 px) */
+const BM = 'M41 25H67A4 4 0 0 1 71 29V64.24A1.5 1.5 0 0 1 68.68 65.5L54 56L39.32 65.5A1.5 1.5 0 0 1 37 64.24V29A4 4 0 0 1 41 25Z';
+// inv = false: the ink mark (ink fill, paper keyline, paper read part). inv = true: the paper mark (paper fill, ink keyline, ink read part)
+const fgMark = (inv = false) => { const f = inv ? PAPER : INK, k = inv ? INK : PAPER;
+  return `<path d="${BM}" fill="${f}" stroke="${k}" stroke-width="3" stroke-linejoin="round" paint-order="stroke"/>`
+  + `<rect x="30" y="70" width="48" height="9" rx="4.5" fill="${f}" stroke="${k}" stroke-width="3" paint-order="stroke"/>`
+  + `<rect x="30" y="70" width="32" height="9" rx="4.5" fill="${k}"/>`; };
+const monoMark = fill => `<path d="${BM}" fill="${fill}"/><rect x="30" y="70" width="30" height="9" rx="4.5" fill="${fill}"/><rect x="65" y="70" width="13" height="9" rx="4.5" fill="${fill}"/>`;
+const smallMark = (inv = false) => { const f = inv ? PAPER : INK, k = inv ? INK : PAPER;
+  return `<path d="M10 4H22A2 2 0 0 1 24 6V20L16 12L8 20V6A2 2 0 0 1 10 4Z" fill="${f}" stroke="${k}" stroke-width="3" stroke-linejoin="round" paint-order="stroke"/>`
+  + `<rect x="4" y="22" width="24" height="6" rx="3" fill="${f}" stroke="${k}" stroke-width="3" paint-order="stroke"/>`
+  + `<path d="M7 22H20V28H7A3 3 0 0 1 7 22Z" fill="${k}"/>`; };
+
+// the background layer: the cover at depth 1 filling the 108 canvas
+const bgLayer = hash => C.svg(hash, { depth: 1, size: 108 });
+// one icon: 'full' shows the whole 108 canvas, 'view' the central 72 the launcher shows
+const icon = (hash, view = 'view', layer = 'all', inv = false) => {
+  const vb = view === 'full' ? '0 0 108 108' : '18 18 72 72';
+  const body = layer === 'bg' ? bgLayer(hash) : layer === 'fg' ? fgMark(inv) : layer === 'mono' ? monoMark(INK) : bgLayer(hash) + fgMark(inv);
+  return `<svg viewBox="${vb}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">${body}</svg>`;
+};
+const themed = (t) => `<svg viewBox="18 18 72 72" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><rect x="0" y="0" width="108" height="108" fill="${t.bg}"/>${monoMark(t.fg)}</svg>`;
+// the 16 px cut: small.svg's tuned mark on the cover's central 72, in small.svg's 7-unit corner
+const cut16 = (hash, inv = false) => `<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><svg x="0" y="0" width="32" height="32" viewBox="18 18 72 72">${bgLayer(hash)}</svg>${smallMark(inv)}</svg>`;
+// the 48 px extension tile, as build-icons.cjs makes it: 40 px of the 72 crop in a 48 box, corner 10
+const tile48 = (hash, inv = false) => `<span class="ico snap" style="width:40px;height:40px;border-radius:10px">${icon(hash, 'view', 'all', inv)}</span>`;
+// the canvas preview: whole 108, the outer 18 dp veiled, the 72 outlined, the 66 dp safe circle dashed
+const canvas = (hash, px, layer = 'all') => `<span class="canvas" style="width:${px}px;height:${px}px"><span class="ico" style="width:${px}px;height:${px}px">${icon(hash, 'full', layer)}</span>
+  <svg class="veil" viewBox="0 0 108 108" aria-hidden="true"><path fill="${PAPER}" fill-opacity=".72" fill-rule="evenodd" d="M0 0H108V108H0ZM18 18V90H90V18Z"/><rect x="18" y="18" width="72" height="72" fill="none" stroke="${INK}" stroke-width=".75"/><circle cx="54" cy="54" r="33" fill="none" stroke="${INK}" stroke-width=".6" stroke-dasharray="2 2"/></svg></span>`;
+
+/* the squircle path (|x|^4 + |y|^4 = 1) in 0..1 box units */
+(() => {
+  const n = 4, pts = [];
+  for (let i = 0; i < 96; i++) {
+    const t = i / 96 * 2 * Math.PI, c = Math.cos(t), s = Math.sin(t);
+    pts.push([0.5 + 0.5 * Math.sign(c) * Math.abs(c) ** (2 / n), 0.5 + 0.5 * Math.sign(s) * Math.abs(s) ** (2 / n)]);
+  }
+  document.getElementById('sqpath').setAttribute('d', 'M' + pts.map(p => p.map(v => v.toFixed(4)).join(' ')).join('L') + 'Z');
+})();
+
+/* ---------- pieces ---------- */
+const app = name => { const [bg, fg] = SYS.apps[name];
+  return `<span class="gen" style="background:${bg};color:${fg}">${glyph(name)}</span>`; };
+const home = (hash, mask, dark, left, right) => {
+  const lab = name => name[0].toUpperCase() + name.slice(1);
+  const cell = (inner, label) => `<span class="hi">${inner}${label}</span>`;
+  const other = n => cell(`<span class="ico ${mask}" style="width:52px;height:52px">${app(n)}</span>`, lab(n));
+  return `<div class="r">${other(left)}${cell(`<span class="ico ${mask}">${icon(hash)}</span>`, 'Shelf')}${other(right)}</div>`;
+};
+const wall = (hash, dark) => `<div class="wall" style="background:${dark ? SYS.wallD : SYS.wallL};color:${dark ? SYS.labelD : SYS.labelL}">
+  ${home(hash, 'circle', dark, 'clock', 'messages')}${home(hash, 'squircle', dark, 'notes', 'music')}</div>`;
+const themedCol = () => `<div class="wall" style="grid-template-rows:auto;align-content:center;background:linear-gradient(90deg, ${SYS.wallL} 50%, ${SYS.wallD} 50%)">
+  <div class="r"><span class="hi" style="color:${SYS.labelL}"><span class="ico circle">${themed(SYS.themedL)}</span>Shelf</span><span class="hi" style="color:${SYS.labelD}"><span class="ico circle">${themed(SYS.themedD)}</span>Shelf</span></div></div>`;
+const extCol = hash => `<div class="ext"><span class="t48" style="background:${SYS.extL};box-shadow:inset 0 0 0 1px ${SYS.urlL}">${tile48(hash)}</span><span class="t48" style="background:${SYS.extD}">${tile48(hash)}</span></div>`;
+const tbar = (hash, dark) => `<span class="tbar" style="background:${dark ? SYS.tbD : SYS.tbL};color:${dark ? SYS.glyphD : SYS.glyphL};${dark ? '' : `box-shadow:inset 0 0 0 1px ${SYS.urlL}`}"><span class="u" style="background:${dark ? SYS.urlD : SYS.urlL}"></span>${glyph('puzzle', 'g')}<span class="ico sh snap" style="border-radius:3.5px">${cut16(hash)}</span>${glyph('user', 'g')}</span>`;
+const cutCol = hash => `<div class="cuts">${tbar(hash, false)}${tbar(hash, true)}</div>`;
+const swatches = P => `<span class="pal">${['ground', 'deep', 'soft', 'signal'].map(k => `<i style="background:${P[k]}" title="${k} ${P[k]}"></i>`).join('')}</span>`;
+const kind = (hash, P) => `${P.scheme}, ${P.dark ? 'dark' : 'light'} ground, ${C.leaves(hash, { depth: 1 }).length === 1 ? 'one shape' : 'four shapes'}`;
+
+/* ---------- anatomy ---------- */
+(() => {
+  const h = SEEDS[0][1];
+  const f = (inner, cap, cls = '') => `<figure class="${cls}">${inner}<figcaption>${cap}</figcaption></figure>`;
+  document.getElementById('anat').innerHTML =
+    f(`<span class="lay">${icon(h, 'full', 'bg')}</span>`, 'Background: the cover at depth 1 on 108 dp') +
+    f(`<span class="lay check">${icon(h, 'full', 'fg')}</span>`, 'Foreground: bookmark and bar, ink with a paper keyline') +
+    f(`<span class="lay">${icon(h, 'full', 'mono')}</span>`, 'Monochrome: unchanged for themed icons') +
+    f(canvas(h, 108), 'Together. The launcher shows the central 72; the dashed circle is the 66 dp safe zone') +
+    f(`<span class="ico circle" style="width:108px;height:108px">${icon(h)}</span>`, 'Circle mask') +
+    f(`<span class="ico squircle" style="width:108px;height:108px">${icon(h)}</span>`, 'Squircle mask') +
+    f(`<span class="ico" style="width:32px;height:32px;border-radius:7px">${cut16(h)}</span>`, '16 px cut at 2×: small.svg’s tuned mark') ;
+})();
+
+/* ---------- the contact sheet ---------- */
+document.getElementById('list').innerHTML = SEEDS.map(([seed, hash], i) => {
+  const P = C.palette(hash), no = pad(i + 1), t = TOP.find(x => x.no === i + 1);
+  return `<article class="cand${t ? ' pick' : ''}" id="c${no}" aria-label="Candidate ${no}">
+    <div class="cmeta">${canvas(hash, 72)}<div class="info"><span class="no">${no}</span><span class="seed">${seed.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</span><span class="hashs">${hash.slice(0, 8)}…${hash.slice(-4)}</span>${swatches(P)}<span class="kind">${kind(hash, P)}</span>${t ? `<span class="badge">Top three: ${t.rank}</span>` : ''}${i === 0 ? '<span class="kind">No. 12 as drawn</span>' : ''}</div></div>
+    ${wall(hash, false)}${wall(hash, true)}${themedCol()}${extCol(hash)}${cutCol(hash)}
+  </article>`;
+}).join('');
+
+/* ---------- the 63° row, ink mark against paper mark ---------- */
+(() => {
+  const one = (h, inv) => `<div class="col"><small>${inv ? 'Paper mark (inverted)' : 'Ink mark (now)'}</small>
+    <span class="sw" style="background:${SYS.wallL}"><span class="ico squircle">${icon(h, 'view', 'all', inv)}</span><span class="ico circle">${icon(h, 'view', 'all', inv)}</span></span>
+    <span class="sw" style="background:${SYS.wallD}"><span class="ico squircle">${icon(h, 'view', 'all', inv)}</span><span class="ico circle">${icon(h, 'view', 'all', inv)}</span></span>
+    <span class="t48" style="background:${SYS.extL};box-shadow:inset 0 0 0 1px ${SYS.urlL};width:100%">${tile48(h, inv)}</span>
+    <span class="sw" style="background:${SYS.tbL};box-shadow:inset 0 0 0 1px ${SYS.urlL}"><span class="ico snap" style="width:16px;height:16px;border-radius:3.5px">${cut16(h, inv)}</span></span>
+    <span class="sw" style="background:${SYS.tbD}"><span class="ico snap" style="width:16px;height:16px;border-radius:3.5px">${cut16(h, inv)}</span></span></div>`;
+  document.getElementById('inv').innerHTML = [true, false].flatMap(gd => [0, 1, 2, 3].map(sc => {
+    const h = variant(63, sc, gd);
+    return `<div class="card${h === BASE ? ' me' : ''}"><span class="code">${code(63, sc, gd)} · ${SCHN[sc]}, ${gd ? 'dark' : 'light'} ground${h === BASE ? ' · No. 12 as drawn' : ''}</span><div class="pair">${one(h, false)}${one(h, true)}</div></div>`;
+  })).join('');
+})();
+
+/* ---------- every colour set ---------- */
+const matrix = dark => {
+  const el = document.getElementById(dark ? 'mx-d' : 'mx-l');
+  el.style.background = dark ? SYS.wallD : SYS.wallL; el.style.color = dark ? SYS.labelD : SYS.labelL;
+  const head = '<span></span>' + [true, false].flatMap(gd => SCHN.map(n => `<span class="h">${gd ? 'dark' : 'light'} ground<br>${n}</span>`)).join('');
+  const rows = HUES.map(d => `<span class="h">${d}°</span>` + [true, false].flatMap(gd => [0, 1, 2, 3].map(sc => {
+    const h = variant(d, sc, gd);
+    return `<span class="c${h === BASE ? ' me' : ''}"><span class="ico squircle">${icon(h)}</span>${code(d, sc, gd)}</span>`;
+  })).join('')).join('');
+  el.innerHTML = head + rows;
+};
+matrix(false); matrix(true);
+
+/* ---------- ledger and JSON ---------- */
+const recs = SEEDS.map(([seed, hash], i) => { const P = C.palette(hash);
+  return { no: i + 1, seed, sha256: hash, version: C.version, depth: 1, scheme: P.scheme, ground: P.dark ? 'dark' : 'light', hue: P.hue, inks: { ground: P.ground, deep: P.deep, soft: P.soft, signal: P.signal }, leaves: C.leaves(hash, { depth: 1 }).map(l => l.mod) }; });
+document.getElementById('ledger').innerHTML = recs.map(r => `<tr><td>${pad(r.no)}</td><td class="h">${r.seed}</td><td class="h">${r.sha256}</td><td>${r.scheme}, ${r.ground}, ${r.hue}°<br><span class="h mono" style="font-size:11.5px">${Object.values(r.inks).join(' ')}</span></td><td>${r.leaves.join(', ')}</td></tr>`).join('');
+document.getElementById('json').textContent = JSON.stringify(recs, null, 1);
+
+/* ---------- small sizes land on whole device pixels, as a real toolbar or launcher draws them ---------- */
+function snap(){
+  const dpr = window.devicePixelRatio || 1;
+  document.querySelectorAll('.snap').forEach(el => {
+    el.style.transform = '';
+    const r = el.getBoundingClientRect();
+    const dx = Math.round(r.left * dpr) / dpr - r.left, dy = Math.round(r.top * dpr) / dpr - r.top;
+    if (dx || dy) el.style.transform = `translate(${dx}px, ${dy}px)`;
+  });
+}
+document.fonts.ready.then(snap);
+addEventListener('resize', snap);
+
+/* ---------- check that every variant keeps No. 12's shape ---------- */
+(() => {
+  const shape = h => JSON.stringify(C.leaves(h, { depth: 1 }).map(l => [l.x, l.y, l.s, l.mod, l.rot, l.bg, l.fg]));
+  const want = shape(BASE); let ok = 0, n = 0;
+  for (const d of HUES) for (const sc of [0, 1, 2, 3]) for (const gd of [true, false]) { n++; if (shape(variant(d, sc, gd)) === want) ok++; }
+  document.getElementById('verify').innerHTML = ok === n ? `<span class="ok">Checked in this page: all ${n} variants draw exactly No. 12’s shape.</span>` : `<span class="bad">${n - ok} of ${n} variants change the shape.</span>`;
+})();
+</script>
+</body>
+</html>

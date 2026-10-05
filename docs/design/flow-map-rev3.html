@@ -86,7 +86,7 @@ code{font-size:13px;background:var(--accent-soft);padding:1px 5px;border-radius:
 </div>
 
 <h2 id="nav">Navigation</h2>
-<p>Three tabs, bottom bar: <strong>Saves</strong> (the core loop, where the app opens), <strong>Listen</strong>, <strong>You</strong>. Stack navigation inside each tab; Android back always pops one level and never exits from a deep screen. The mini player docks above the tab bar on every tab while audio is loaded. No drawer, no Home or discovery tab, no notifications.</p>
+<p>Three tabs, bottom bar: <strong>Saves</strong> (the core loop, where the app opens), <strong>Listen</strong>, <strong>You</strong>. Stack navigation inside each tab; Android back always pops one level and never exits from a deep screen. The mini player docks above the tab bar on every tab while audio is loaded. No drawer, no Home or discovery tab, no notifications. Each tab keeps its own scroll position when you switch away and back (decision 74).</p>
 <div class="grid2">
   <div class="card"><strong>Entry points</strong>
     <ul>

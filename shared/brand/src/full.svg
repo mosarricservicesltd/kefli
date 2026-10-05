@@ -1,12 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
-  <defs>
-    <linearGradient id="tile" x1="0" y1="18" x2="0" y2="90" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#BE6947"/>
-      <stop offset="1" stop-color="#944526"/>
-    </linearGradient>
-  </defs>
-  <rect width="108" height="108" fill="url(#tile)"/>
-  <path d="M41 25H67A4 4 0 0 1 71 29V64.24A1.5 1.5 0 0 1 68.68 65.5L54 56L39.32 65.5A1.5 1.5 0 0 1 37 64.24V29A4 4 0 0 1 41 25Z" fill="#FCF7F6"/>
-  <rect x="30" y="70" width="48" height="9" rx="4.5" fill="#DAAA97"/>
-  <rect x="30" y="70" width="32" height="9" rx="4.5" fill="#FCF7F6"/>
+  <!-- FROZEN ARTWORK (flow decision 70): background.svg, then foreground.svg, on the 108 dp canvas. build-icons.cjs checks that these shapes match the two layers. -->
+  <rect width="108" height="108" fill="#F4ECD8"/>
+  <path d="M108 108H0A108 108 0 0 1 108 0Z" fill="#E08200"/>
+  <path d="M108 108H36A72 72 0 0 1 108 36Z" fill="#F4ECD8"/>
+  <path d="M108 108H72A36 36 0 0 1 108 72Z" fill="#E08200"/>
+  <g transform="translate(54 54) scale(0.96) translate(-54 -54)">
+    <path d="M41 25H67A4 4 0 0 1 71 29V64.24A1.5 1.5 0 0 1 68.68 65.5L54 56L39.32 65.5A1.5 1.5 0 0 1 37 64.24V29A4 4 0 0 1 41 25Z" fill="none" stroke="#17171A" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M41 25H67A4 4 0 0 1 71 29V64.24A1.5 1.5 0 0 1 68.68 65.5L54 56L39.32 65.5A1.5 1.5 0 0 1 37 64.24V29A4 4 0 0 1 41 25Z" fill="#F3F2EE"/>
+    <rect x="30" y="70" width="48" height="9" rx="4.5" fill="#17171A" stroke="#17171A" stroke-width="3"/>
+    <path d="M57.5 70H73.5A4.5 4.5 0 0 1 73.5 79H57.5A4.5 4.5 0 0 0 57.5 70Z" fill="#F3F2EE"/>
+  </g>
 </svg>

@@ -1,14 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <defs>
-    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="32" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#BE6947"/>
-      <stop offset="1" stop-color="#944526"/>
-    </linearGradient>
-  </defs>
-  <rect width="32" height="32" rx="7" fill="url(#tile)"/>
-  <!-- edges on even units so they land on whole pixels at 16 px; notch deepened to 45 degrees to survive -->
-  <path d="M10 4H22A2 2 0 0 1 24 6V20L16 12L8 20V6A2 2 0 0 1 10 4Z" fill="#FCF7F6"/>
-  <!-- 3 px shelf at 16 px; read part square-ended so the split is a clean pixel edge -->
-  <rect x="4" y="22" width="24" height="6" rx="3" fill="#DAAA97"/>
-  <path d="M7 22H20V28H7A3 3 0 0 1 7 22Z" fill="#FCF7F6"/>
+  <!--
+    FROZEN ARTWORK (flow decision 70). The icon redrawn for 16 px: two units are one pixel, and every edge
+    except the notch's diagonals lies on a whole pixel. The ink outline is one whole pixel, three times the
+    108 dp drawing's at this size (a third of a pixel), so the paper bookmark stays distinct from the cream.
+    The cover is simplified to one arc: the signal #E08200 with the cream #F4ECD8 inside the r = 72 band edge
+    (here r = 32 about (40, 40)). The small cream corner and the orange core drop out: at 16 px they were a few
+    soft pixels that read as a chipped corner, not as shapes.
+  -->
+  <defs><clipPath id="tile"><rect width="32" height="32" rx="7"/></clipPath></defs>
+  <g clip-path="url(#tile)">
+    <rect width="32" height="32" fill="#E08200"/>
+    <circle cx="40" cy="40" r="32" fill="#F4ECD8"/>
+  </g>
+  <!-- bookmark: 8 x 10 px in a 1 px ink outline, notch 4 px deep at 45 degrees so it survives -->
+  <path d="M10 2H22A2 2 0 0 1 24 4V22L16 14L8 22V4A2 2 0 0 1 10 2Z" fill="#17171A"/>
+  <path d="M10 4H22V17.1716L16 11.1716L10 17.1716Z" fill="#F3F2EE"/>
+  <!-- bar: 12 x 3 px, ink outline and read part; the unread part is a 1 px paper slot, square at the split. The read
+       part is two thirds of the bar (8 of its 12 px), as on the 108 dp drawing and the 48 px cut -->
+  <rect x="4" y="24" width="24" height="6" rx="3" fill="#17171A"/>
+  <path d="M20 26H25A1 1 0 0 1 25 28H20Z" fill="#F3F2EE"/>
 </svg>

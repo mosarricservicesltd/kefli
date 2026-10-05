@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <!--
+    FROZEN ARTWORK (flow decision 70). The icon redrawn for 48 px (the extension's 48 px icon, which Chrome's
+    extensions page shows at 36 CSS px on the list and 24 on the details page, and the ICO's 48 entry): one unit is
+    one pixel and every edge except the notch's diagonals lies on a whole pixel. The full C·L·063 cover, as
+    background.svg shows it in the launcher's central 72 dp (cream ground, orange r = 72, cream r = 48, orange
+    r = 24 about (60, 60)). The ink outline is three whole pixels, a sixteenth of the tile as in small.svg and
+    small-32.svg, so the three cuts carry the same weight; the 108 dp drawing shrunk to this size had about 0.8 px.
+    The layout is small-32.svg's at 1.5 times, with the bookmark one pixel taller (24 x 28 px) so every edge lands
+    on a whole pixel; the master's shallow notch; the mark centred with 4 px above and below.
+  -->
+  <defs><clipPath id="tile"><rect width="48" height="48" rx="10.5"/></clipPath></defs>
+  <g clip-path="url(#tile)">
+    <rect width="48" height="48" fill="#F4ECD8"/>
+    <circle cx="60" cy="60" r="72" fill="#E08200"/>
+    <circle cx="60" cy="60" r="48" fill="#F4ECD8"/>
+    <circle cx="60" cy="60" r="24" fill="#E08200"/>
+  </g>
+  <!-- bookmark: 24 x 28 px in a 3 px ink outline -->
+  <path d="M16.5 4H31.5A4.5 4.5 0 0 1 36 8.5V32L24 26L12 32V8.5A4.5 4.5 0 0 1 16.5 4Z" fill="#17171A"/>
+  <path d="M16.5 7H31.5A1.5 1.5 0 0 1 33 8.5V27.1459L24 22.6459L15 27.1459V8.5A1.5 1.5 0 0 1 16.5 7Z" fill="#F3F2EE"/>
+  <!-- bar: 36 x 9 px, ink outline and read part; the unread part is a 3 px paper slot, square at the split. The read
+       part is two thirds of the bar (24 of its 36 px) -->
+  <rect x="6" y="35" width="36" height="9" rx="4.5" fill="#17171A"/>
+  <path d="M30 38H37.5A1.5 1.5 0 0 1 37.5 41H30Z" fill="#F3F2EE"/>
+</svg>

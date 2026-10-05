@@ -4,8 +4,8 @@
   "scope": "/",
   "name": "Shelf",
   "short_name": "Shelf",
-  "theme_color": "#B5542E",
-  "background_color": "#FCF7F6",
+  "theme_color": "#17171A",
+  "background_color": "#F3F2EE",
   "display": "standalone",
   "icons": [
     {

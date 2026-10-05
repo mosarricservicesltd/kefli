@@ -1,63 +1,99 @@
-/* Generated from shared/tokens/tokens.json (v0.1.5) by build-css.mjs. Do not edit. */
+/* Generated from shared/tokens/tokens.json (v0.2.2, fingerprint) by build-css.mjs. Do not edit. */
+/* Web fonts for the mockups and the website only; the app and the extension bundle the font files. */
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Literata:ital,opsz,wght@0,7..72,200..900;1,7..72,200..900&family=Martian+Mono:wght@400..600&display=swap');
 :root, [data-theme="light"] {
-  --background: #FCF7F6;
+  --background: #F3F2EE;
   --surface: #FFFFFF;
-  --line: #E9EAEB;
-  --text: #181D27;
-  --muted: #535862;
-  --accent: #B5542E;
-  --accent-soft: #F8EEEA;
-  --on-accent: #FFFFFF;
-  --success: #079455;
-  --error: #D92D20;
-  --shadow-card: 0px 1px 2px #1018280D, 0px 4px 12px #1018280F;
-  --card-edge: none;
-  --shadow-float: 0px 12px 32px #10182833;
+  --line: #DEDCD5;
+  --line-strong: #8C8A83;
+  --text: #17171A;
+  --muted: #5C5B56;
+  --fill: #17171A;
+  --on-fill: #F3F2EE;
+  --focus: #17171A;
+  --success: #1E7A4A;
+  --warning: #8A4A00;
+  --error: #B42318;
+  --card-edge: 1px solid #DEDCD5;
+  --shadow-float: 0px 12px 28px -10px #17171A4D, 0px 0px 0px 1px #DEDCD5;
+  --scrim: #17171A76;
+  --cover-edge: #17171A17;
+  --cover-grey-ground: #E4E2DC;
+  --cover-grey-soft: #CFCCC4;
+  --cover-grey-signal: #A9A69F;
+  --cover-grey-deep: #8C8A83;
 }
 [data-theme="dark"] {
-  --background: #0C0E12;
-  --surface: #13161B;
-  --line: #22262F;
-  --text: #F7F7F7;
-  --muted: #B4B7BD;
-  --accent: #CA8469;
-  --accent-soft: #311D18;
-  --on-accent: #0C0E12;
-  --success: #47CD89;
-  --error: #F97066;
-  --shadow-card: none;
-  --card-edge: 1px solid #22262F;
-  --shadow-float: 0px 12px 32px #000000B3;
+  --background: #111112;
+  --surface: #1A1A1C;
+  --line: #2E2E31;
+  --line-strong: #7A7983;
+  --text: #EDECE8;
+  --muted: #A7A59F;
+  --fill: #EDECE8;
+  --on-fill: #111112;
+  --focus: #EDECE8;
+  --success: #5DC68C;
+  --warning: #E9A65E;
+  --error: #FF8B7B;
+  --card-edge: 1px solid #2E2E31;
+  --shadow-float: 0px 0px 0px 1px #3A3A3E, 0px 12px 28px -10px #000000B3;
+  --scrim: #00000099;
+  --cover-edge: #EDECE81A;
+  --cover-grey-ground: #29292D;
+  --cover-grey-soft: #3A3A3E;
+  --cover-grey-signal: #55545A;
+  --cover-grey-deep: #7A7983;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --background: #0C0E12;
-    --surface: #13161B;
-    --line: #22262F;
-    --text: #F7F7F7;
-    --muted: #B4B7BD;
-    --accent: #CA8469;
-    --accent-soft: #311D18;
-    --on-accent: #0C0E12;
-    --success: #47CD89;
-    --error: #F97066;
-    --shadow-card: none;
-    --card-edge: 1px solid #22262F;
-    --shadow-float: 0px 12px 32px #000000B3;
+    --background: #111112;
+    --surface: #1A1A1C;
+    --line: #2E2E31;
+    --line-strong: #7A7983;
+    --text: #EDECE8;
+    --muted: #A7A59F;
+    --fill: #EDECE8;
+    --on-fill: #111112;
+    --focus: #EDECE8;
+    --success: #5DC68C;
+    --warning: #E9A65E;
+    --error: #FF8B7B;
+    --card-edge: 1px solid #2E2E31;
+    --shadow-float: 0px 0px 0px 1px #3A3A3E, 0px 12px 28px -10px #000000B3;
+    --scrim: #00000099;
+    --cover-edge: #EDECE81A;
+    --cover-grey-ground: #29292D;
+    --cover-grey-soft: #3A3A3E;
+    --cover-grey-signal: #55545A;
+    --cover-grey-deep: #7A7983;
   }
 }
 :root {
-  --on-gradient: #FFFFFF;
-  --accent-fill: #B5542E;
-  --gradient-primary: linear-gradient(180deg, #BE6947, #944526);
+  --font-ui: 'Archivo', Roboto, 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'Archivo', 'Archivo Expanded', 'Roboto Flex', Roboto, 'Segoe UI', system-ui, sans-serif;
+  --font-display-stretch: 125%;
+  --font-display-weight: 750;
+  --font-display-tracking: -0.025em;
+  --font-mono: 'Martian Mono', 'Roboto Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --font-mono-tracking: -0.03em;
+  --font-reader: 'Literata', 'Noto Serif', Georgia, 'Times New Roman', serif;
   --text-13: 13px;
   --text-15: 15px;
   --text-17: 17px;
   --text-20: 20px;
   --text-28: 28px;
   --text-32: 32px;
+  --leading-ui: 1.45;
+  --leading-display: 1.2;
+  --weight-body: 400;
+  --weight-meta: 500;
+  --weight-label: 550;
+  --weight-title: 620;
+  --weight-heading: 650;
+  --weight-empty-heading: 680;
   --reader-size: 18px;
-  --reader-leading: 1.55;
+  --reader-leading: 1.6;
   --space-4: 4px;
   --space-8: 8px;
   --space-12: 12px;
@@ -65,14 +101,81 @@
   --space-20: 20px;
   --space-24: 24px;
   --space-32: 32px;
-  --radius: 10px;
-  --radius-pill: 999px;
-  --radius-sheet: 24px;
-  --radius-image: 8px;
   --gap-card: 10px;
-  --font-ui: Inter, Roboto, system-ui, sans-serif;
-  --font-reader: 'Noto Serif', Georgia, serif;
+  --radius: 14px;
+  --radius-image: 4px;
+  --radius-control: 8px;
+  --radius-button: 12px;
+  --radius-sheet: 20px;
+  --radius-pill: 999px;
+  --focus-width: 2px;
+  --focus-offset: 2px;
+  --icon-stroke: 1.75;
+  --motion-enter: 250ms cubic-bezier(.2,.8,.2,1);
+  --motion-exit: 200ms cubic-bezier(.4,0,1,1);
+  --motion-quick-in: 150ms cubic-bezier(.2,.8,.2,1);
+  --motion-quick-out: 100ms cubic-bezier(.4,0,1,1);
+  --motion-reflow: 200ms cubic-bezier(.2,.8,.2,1);
+  --motion-press-delay: 60ms;
+  --motion-press-layer: 8%;
+  --motion-press-layer-fill: 12%;
+  --motion-press-layer-reader: 8%;
+  --motion-mark: 200ms cubic-bezier(.2,.8,.2,1);
+  /* motion.release is the spring from rest as linear(), for the prototypes; the app uses the spring itself */
+  --motion-release: 320ms linear(0, 0.11 8%, 0.31 17%, 0.5 25%, 0.654 33%, 0.768 42%, 0.847 50%, 0.901 58%, 0.937 67%, 0.96 75%, 0.975 83%, 0.984 92%, 1);
+  --motion-draw: 520ms cubic-bezier(.2,.8,.2,1);
+  --motion-draw-stagger: 34ms;
+  --motion-catchup: 400ms cubic-bezier(.2,.8,.2,1);
+  --motion-catchup-delay: 150ms;
+  --motion-catchup-finish: 200ms cubic-bezier(.2,.8,.2,1);
+  --motion-catchup-finish-delay: 100ms;
+  --motion-countdown-toast: 5000ms linear;
+  --motion-countdown-share: 4000ms linear;
+  --motion-countdown-extension: 8000ms linear;
+  --motion-ambient-delay: 150ms;
+  --motion-ambient-breathe: 1200ms ease-in-out;
+  --motion-ambient-breathe-phase: 200ms;
+  --motion-ambient-pulse: 1400ms ease-in-out;
+  --motion-ambient-sweep: 1200ms ease-in-out;
+  --motion-ambient-scan: 1800ms ease-in-out;
+  --motion-ambient-eq: 1000ms ease-in-out;
 }
-[data-reader="light"] { --reader-bg: #FCF7F6; --reader-text: #181D27; --reader-muted: #535862; --reader-link: #B5542E; --reader-highlight: #EDD5CA; --reader-accent: #B5542E; }
-[data-reader="sepia"] { --reader-bg: #F5EEDF; --reader-text: #3A2E22; --reader-muted: #6E5F4E; --reader-link: #944526; --reader-highlight: #EBD3C2; --reader-accent: #944526; }
-[data-reader="dark"] { --reader-bg: #0C0E12; --reader-text: #E4E4E6; --reader-muted: #B4B7BD; --reader-link: #CA8469; --reader-highlight: #4A2B20; --reader-accent: #CA8469; }
+[data-reader="light"] {
+  /* paper, labelled Light */
+  --reader-bg: #F7F6F2;
+  --reader-text: #1C1C1F;
+  --reader-muted: #5D5C57;
+  --reader-link: var(--reader-text);
+  --reader-ink: var(--reader-text);
+  --reader-highlight: #C3C2BD;
+  --reader-fill: var(--reader-text);
+  --reader-on-fill: var(--reader-bg);
+  --reader-focus: var(--reader-text);
+  --reader-float: 0px 0px 0px 1px color-mix(in srgb, var(--reader-muted) 28%, transparent), 0px 12px 28px -10px #00000059;
+}
+[data-reader="sepia"] {
+  /* sepia, labelled Sepia */
+  --reader-bg: #F2E9D8;
+  --reader-text: #3B2F22;
+  --reader-muted: #6A5B48;
+  --reader-link: var(--reader-text);
+  --reader-ink: var(--reader-text);
+  --reader-highlight: #C9BEAD;
+  --reader-fill: var(--reader-text);
+  --reader-on-fill: var(--reader-bg);
+  --reader-focus: var(--reader-text);
+  --reader-float: 0px 0px 0px 1px color-mix(in srgb, var(--reader-muted) 28%, transparent), 0px 12px 28px -10px #00000059;
+}
+[data-reader="dark"] {
+  /* night, labelled Dark */
+  --reader-bg: #191919;
+  --reader-text: #DFDFDF;
+  --reader-muted: #ACACAC;
+  --reader-link: var(--reader-text);
+  --reader-ink: var(--reader-text);
+  --reader-highlight: #454545;
+  --reader-fill: var(--reader-text);
+  --reader-on-fill: var(--reader-bg);
+  --reader-focus: var(--reader-text);
+  --reader-float: 0px 0px 0px 1px color-mix(in srgb, var(--reader-muted) 28%, transparent), 0px 12px 28px -10px #00000059;
+}

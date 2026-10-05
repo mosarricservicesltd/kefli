@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shelf Icon Candidates</title>
+<!-- tokens.css v0.2 (Fingerprint) imports Archivo, Literata and Martian Mono for the mockups -->
+<link rel="stylesheet" href="../mockups/tokens.css">
+<script src="../mockups/cover-v1.js"></script>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font-family:var(--font-ui);font-size:var(--text-15);line-height:var(--leading-ui);background:var(--background);color:var(--text);-webkit-font-smoothing:antialiased}
+main{max-width:1200px;margin:0 auto;padding:var(--space-32) var(--space-16) 96px}
+h1{font-family:var(--font-display);font-stretch:var(--font-display-stretch);font-weight:var(--font-display-weight);letter-spacing:var(--font-display-tracking);font-size:var(--text-32);line-height:var(--leading-display);margin:0 0 var(--space-12)}
+h2{font-family:var(--font-display);font-stretch:var(--font-display-stretch);font-weight:var(--font-display-weight);letter-spacing:var(--font-display-tracking);font-size:var(--text-20);line-height:var(--leading-display);margin:0 0 var(--space-8)}
+h3{font-size:var(--text-17);font-weight:var(--weight-heading);margin:0 0 var(--space-4)}
+p{margin:0 0 var(--space-12);max-width:76ch}
+.lead{font-size:var(--text-17);max-width:68ch}
+.muted{color:var(--muted)}
+.mono{font-family:var(--font-mono);letter-spacing:var(--font-mono-tracking);font-size:12px}
+section{margin-top:var(--space-32)}
+.panel{background:var(--surface);border:var(--card-edge);border-radius:var(--radius);padding:var(--space-20)}
+figure{margin:0}
+figcaption{font-size:var(--text-13);color:var(--muted);margin-top:6px;line-height:1.35}
+
+/* ---------- icon drawings ---------- */
+.ico{display:block;flex:none;overflow:hidden}
+.ico > svg{display:block;width:100%;height:100%}
+.circle{border-radius:50%}
+.squircle{clip-path:url(#sq)}
+.lay{display:block;position:relative;width:108px;height:108px;border:1px solid var(--line);background:var(--surface);overflow:hidden}
+.lay.check{background:repeating-conic-gradient(var(--line) 0 25%, var(--surface) 0 50%) 0 0/12px 12px}
+/* the 108 dp canvas with what the launcher shows: the central 72 (solid) and the 66 dp safe circle (dashed) */
+.canvas{display:block;position:relative;flex:none}
+.canvas .veil{position:absolute;inset:0;pointer-events:none}
+
+/* ---------- anatomy ---------- */
+.anat{display:flex;flex-wrap:wrap;gap:var(--space-20);align-items:flex-start}
+.anat figure{width:108px}
+.anat figure.wide{width:auto}
+
+/* ---------- top three ---------- */
+.top{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-16)}
+.top .panel{display:flex;flex-direction:column;gap:var(--space-12)}
+.top .rank{font-family:var(--font-display);font-stretch:var(--font-display-stretch);font-weight:var(--font-display-weight);font-size:var(--text-28);line-height:1;letter-spacing:var(--font-display-tracking)}
+.top .hero{display:flex;gap:var(--space-12);align-items:center}
+.top ul{margin:0;padding:0 0 0 18px}
+.top li{margin:0 0 6px;font-size:var(--text-15)}
+
+/* ---------- the contact sheet: one row per candidate, the same columns all the way down ---------- */
+.sheethead,.cand{display:grid;grid-template-columns:196px 212px 212px 124px 116px 150px;gap:var(--space-12);align-items:stretch}
+.sheethead{position:sticky;top:0;z-index:5;background:var(--background);padding:var(--space-12) var(--space-12) var(--space-8);font-size:var(--text-13);font-weight:600;color:var(--muted);border-bottom:1px solid var(--line);line-height:1.3}
+.sheethead span small{display:block;font-weight:400}
+.list{display:flex;flex-direction:column;gap:var(--space-8);margin-top:var(--space-8)}
+.cand{background:var(--surface);border:var(--card-edge);border-radius:var(--radius);padding:var(--space-12)}
+.cand.pick{box-shadow:inset 0 0 0 2px var(--text)}
+.cmeta{display:flex;gap:var(--space-12);min-width:0}
+.cmeta .info{min-width:0;display:flex;flex-direction:column;gap:3px}
+.no{font-family:var(--font-display);font-stretch:var(--font-display-stretch);font-weight:var(--font-display-weight);font-size:var(--text-20);line-height:1;letter-spacing:var(--font-display-tracking)}
+.seed{font-family:var(--font-mono);letter-spacing:var(--font-mono-tracking);font-size:12px;overflow-wrap:anywhere;line-height:1.35}
+.hashs{font-family:var(--font-mono);letter-spacing:var(--font-mono-tracking);font-size:11px;color:var(--muted)}
+.pal{display:flex;gap:3px;margin-top:2px}
+.pal i{width:12px;height:12px;border-radius:3px;box-shadow:inset 0 0 0 1px var(--cover-edge)}
+.kind{font-size:var(--text-13);color:var(--muted);line-height:1.3}
+.badge{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:var(--radius-control);background:var(--fill);color:var(--on-fill);font-size:12px;font-weight:600;line-height:1;align-self:flex-start;margin-top:2px}
+
+/* drawn system UI: wallpapers, other apps, toolbars and the themed-icon tones are Android's and Chrome's, not Shelf's */
+.wall{border-radius:12px;padding:10px 8px 6px;display:grid;grid-template-rows:auto auto;gap:4px;font-family:system-ui,'Segoe UI',Roboto,sans-serif}
+.wall .r{display:flex;justify-content:space-around}
+.hi{width:62px;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;line-height:1.2}
+.hi .ico{width:52px;height:52px}
+.gen{width:52px;height:52px;display:flex;align-items:center;justify-content:center}
+.gen svg{width:26px;height:26px}
+.ext{display:flex;flex-direction:column;gap:6px;justify-content:center}
+.ext .t48{display:flex;align-items:center;justify-content:center;border-radius:10px;height:68px;gap:10px}
+.tbar{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:17px;font-family:system-ui,sans-serif}
+.tbar .u{flex:1;height:22px;border-radius:11px;min-width:24px}
+.tbar svg.g{width:16px;height:16px;flex:none}
+.tbar .sh{width:16px;height:16px;flex:none}
+.cuts{display:flex;flex-direction:column;gap:8px;justify-content:center}
+.cuts .lbl,.ext .lbl{font-size:12px;color:var(--muted);line-height:1.2}
+
+/* ---------- ledger ---------- */
+table.ledger{width:100%;border-collapse:collapse;font-size:var(--text-13)}
+table.ledger th,table.ledger td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--line);vertical-align:top}
+table.ledger th{color:var(--muted);font-weight:600}
+table.ledger td.h{font-family:var(--font-mono);letter-spacing:var(--font-mono-tracking);font-size:11.5px;overflow-wrap:anywhere}
+pre.json{font-family:var(--font-mono);letter-spacing:var(--font-mono-tracking);font-size:11.5px;line-height:1.5;background:var(--surface);border:var(--card-edge);border-radius:var(--radius);padding:var(--space-16);overflow:auto;max-height:360px;margin:0}
+.ok{color:var(--success);font-weight:600}
+.bad{color:var(--error);font-weight:600}
+
+@media (max-width:1240px){
+  .sheethead{display:none}
+  .cand{grid-template-columns:1fr 1fr;grid-auto-rows:auto}
+  .cand .cmeta{grid-column:1/-1}
+  .top{grid-template-columns:1fr}
+}
+@media (max-width:520px){
+  .cand{grid-template-columns:1fr}
+  .wall .r{justify-content:space-between}
+}
+</style>
+</head>
+<body>
+<!-- the squircle mask, in the masked box's own units (a superellipse, n = 4), drawn by the script -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><clipPath id="sq" clipPathUnits="objectBoundingBox"><path id="sqpath"/></clipPath></defs></svg>
+<main>
+<h1>App icon candidates</h1>
+<p class="lead">Decision 67 makes the app icon a cover picked by hand from the generator and then frozen, with today’s bookmark and progress bar standing on it in ink with a paper keyline. This sheet draws 32 candidates so Richard can pick one.</p>
+<p class="muted">Each candidate is cover v1 at depth 1 (four big shapes, or one when the square doesn’t split), drawn on Android’s 108 dp adaptive canvas from the sha256 of a seed string. The foreground is <span class="mono">shared/brand/src/foreground.svg</span> with its colours changed to ink with a 1.5 dp paper keyline: the read part of the bar is paper, the rest ink. The launcher shows the central 72 dp. Until one is picked, everything that needs an icon uses No. 01, the board’s own (the cover of <span class="mono">https://shelf.app/</span>), and marks it provisional. Nothing in <span class="mono">shared/brand</span> changes yet.</p>
+<p class="muted" id="verify">Checking the hashes…</p>
+
+<section>
+  <h2>How one is built · No. 01, the board’s icon</h2>
+  <div class="panel"><div class="anat" id="anat"></div></div>
+</section>
+
+<section>
+  <h2>Top three</h2>
+  <p class="muted">Judged at the sizes people meet the icon: a 52 dp launcher icon between other apps, a 48 px extension tile and a 16 px toolbar cut. The tests were legibility at 16 px, the silhouette on light and dark wallpapers, calm against loud, and how it sits beside other apps. “Edge lost” is the share of the circle-masked icon’s outer edge that sits under 1.6:1 against the wallpaper, so lower is a firmer silhouette.</p>
+  <div class="top" id="top"></div>
+  <p class="muted" style="margin-top:var(--space-16)">No. 01, the board’s icon and today’s provisional one, misses the three: its mint and pale-green quarters lose the edge on the light wallpaper (19%), its dark green loses it on the dark one (26%), and at 16 px its four quarters are busy round the mark.</p>
+</section>
+
+<section>
+  <h2>All 32, at real size</h2>
+  <p class="muted">Seeds 01 to 10 are names; 11 to 32 are <span class="mono">shelf/icon/1</span> to <span class="mono">shelf/icon/22</span> in order, none skipped. Icons are drawn at 1 dp = 1 CSS px: launcher icons at 52, the extension tile at 48 and the toolbar cut at 16. The themed icon is Android’s monochrome layer, today’s bookmark and bar, so it is the same for every candidate.</p>
+  <div class="sheethead" aria-hidden="true">
+    <span>Candidate<small>number, seed, hash, inks, 108 dp canvas</small></span>
+    <span>Light wallpaper<small>circle mask, then squircle</small></span>
+    <span>Dark wallpaper<small>circle mask, then squircle</small></span>
+    <span>Themed icon<small>light and dark</small></span>
+    <span>Extension tile<small>48 px, light and dark</small></span>
+    <span>Toolbar cut<small>16 px, light and dark</small></span>
+  </div>
+  <div class="list" id="list"></div>
+</section>
+
+<section>
+  <h2>Seeds and hashes, for freezing</h2>
+  <p class="muted">The hash is sha256 over the seed’s UTF-8 bytes exactly as written, with no normalisation (No. 01’s seed is already a normalised address, so its hash is also that address’s d tag). Computed in Node and checked again in this page. To freeze a pick, its background layer becomes <span class="mono">ShelfCover.svg(hash, {depth: 1, size: 108})</span>, written out once as a fixed SVG in <span class="mono">shared/brand/src</span>, so renaming the app or a future cover version can’t change it.</p>
+  <div class="panel" style="padding:var(--space-12) var(--space-16)"><table class="ledger"><thead><tr><th>No.</th><th>Seed</th><th>sha256</th><th>Palette</th><th>Leaves</th><th style="white-space:nowrap">Edge lost<br>light / dark</th></tr></thead><tbody id="ledger"></tbody></table></div>
+  <div style="height:var(--space-16)"></div>
+  <pre class="json" id="json"></pre>
+</section>
+</main>
+
+<script>
+/* ======================================================================
+   Candidates: [seed, sha256(seed)] from Node's crypto. No. 01 is the board's icon.
+   ====================================================================== */
+const SEEDS = [
+  ["https://shelf.app/", '6b0a4097eb4a18ac842345a4b22ead3d7944d0b237e9ab3c3e0f8135c3f22511'],
+  ["shelf", '3eefa42d52064c480030a45d5813c250a9d15aeb1e6296eae68ca401e6bb1e6f'],
+  ["Shelf", '338c8ac89226e2ed9ceb32ee44d43a1f1d9651c2bed9e8d15612405bea5ccfd6'],
+  ["shelf.app", '219edc5ff24bece8a0b36675991216ef82e26f7a40cff6a4e138079fd2a9d3e5'],
+  ["SHELF", 'e07d7a41a25d20f149606b60df2b5381b740d40ede22fa4079c79b4bcfbb2d02'],
+  ["shelf/icon", '6516c55acd1610aa1d1d4206f6c72f9ea2d4a764b78e75fbb31a4ebf2ec1c688'],
+  ["Shelf icon", 'a5e58558a6daaeea35386a9cda406337294068343de2324d5112b6dd1d8a618c'],
+  ["read it later", '4523aafea67c1824fe675c67616f2a6580735ff9d434b3a93ebe6ca29434a103'],
+  ["save it, read it, listen", '06e2d28eea8eeba76d6dfb740e023188e43fbe2166de9dc3ae8a0f67e2645338'],
+  ["shelf/app-icon", '94d3bedbf5229947e8cd42cda5faa3f65e32670f4e96ff4e5d33385753adaa1d'],
+  ["shelf/icon/1", 'b8bca9720d652a3f67c79eb9280cd406d8f1d18e2cf7a83bf907dd30cd6f534a'],
+  ["shelf/icon/2", '2c76160cd38e939a7bffbe46ab3cdf5c88871873a92ec375b0fffb35a41eab13'],
+  ["shelf/icon/3", 'e38350f180a98f787e66cc744a32934cf8b1bb78feacb279fde9a546d4dac197'],
+  ["shelf/icon/4", '8155044536742227c5019195318cb33e6a06ab31522dc4dc214ee5392bda0516'],
+  ["shelf/icon/5", 'b912e94b980b024f8526980e42438a6e9db4818c9abfdf4e3d5c83ddfdebc2b6'],
+  ["shelf/icon/6", 'd36bab52aed888aaaf795269816aa7a29063119ff01452e6b4773016b7685e35'],
+  ["shelf/icon/7", '6bf46869f071aabb7f29aab0d187a5ff69d5713b996d042ca2e70d2be9f5af3d'],
+  ["shelf/icon/8", 'a76483e5cf17327b4cb7c0ba148cc593fcb99f78a6c886349dc1bbd318144744'],
+  ["shelf/icon/9", '495b75638be5bfd6b446e413e45749620a351f338a5b16f8f78176701f9b7495'],
+  ["shelf/icon/10", '7788093bc5a3aed1e6c40f7acfa904dd8e31ab3f218872625188ae2624fd410a'],
+  ["shelf/icon/11", 'd7f404a935e62ad97ebd47f710a211153a23638988f36515e602df6372b9cc15'],
+  ["shelf/icon/12", '12da1ad16f3c1da91e1679b5fec0337e4b3ac8f98b8b0c706a41b1213aaf5230'],
+  ["shelf/icon/13", '443d554f26972f89c067203ea58af78a9e74147007bd4187bd194ef76bd2d44b'],
+  ["shelf/icon/14", '21df11d47583c5605e9afabcd22b114fe425346d6a17c59de0c81ee0df7dfd27'],
+  ["shelf/icon/15", '9c94a709c635417a857a731323b3c2daee65b405122091af4ac1973c0bb9928b'],
+  ["shelf/icon/16", '26e21e0c6ccb9c785b92e7bd2d2e3a77d42b98082593ae45cc2f175c4ea78d05'],
+  ["shelf/icon/17", '8fa80bc0790162f9851fedbc076a4a1f1a1507c10a03d3751a5d84c83dbb2708'],
+  ["shelf/icon/18", '97617e61c422d8693eae1e990afa896b5649d50fe2d1d29781e317a15f1f0f05'],
+  ["shelf/icon/19", 'd2c500acff9128c11f55adc81be3b9dcd97fbc1cc5aa1a75b214609b5bbfee59'],
+  ["shelf/icon/20", '1c9627469d25f0213dd9c8c5491dbfc73ebb4c99b866116ad4bcdaf5b1dc5b9e'],
+  ["shelf/icon/21", 'e06ffe76764bff61e16c1cbcafcda797e8f5ba9fc94d2f64a7aa1d7d2bf5f2c5'],
+  ["shelf/icon/22", 'abc726fdfeacb71f8b99450f3959e4fc067d6ea0ca8d494b8bdf5bdd14b434ac'],
+];
+const pad = n => String(n).padStart(2, '0');
+
+/* How much of each icon's edge melts into the wallpaper: the share of the circle mask's outer 1 dp ring that sits
+   under 1.6:1 against the light (#E4DCCB) and dark (#14171E) wallpapers below. Measured outside this page, with
+   resvg at 4x of 52 dp from this page's own drawing (cover v1 at depth 1, plus the mark). [light %, dark %] by number. */
+const EDGE = [[19,26],[52,16],[32,24],[39,10],[13,41],[27,11],[49,0],[78,21],[61,25],[39,8],[77,0],[1,54],[14,5],[18,1],[32,0],[63,0],
+  [33,0],[50,32],[85,14],[11,17],[55,0],[61,0],[73,15],[45,0],[30,8],[13,12],[50,20],[1,0],[44,13],[27,54],[51,21],[1,16]];
+
+/* The top three, judged from the renders on this page at 1x and 2x and from EDGE. */
+const TOP = [
+  { no: 28, rank: '1st', why: [
+    'One shape, a teal ring, so the cover reads as a single frame round the bookmark, and the mark sits on cream like a record label.',
+    'The best silhouette of the 32: the teal is a mid-tone, so the edge clears both wallpapers all the way round (1% of the circle edge under 1.6:1 on the light wallpaper, none on the dark).',
+    'At 16 px the ring turns into a teal border and the bookmark and bar stay crisp on cream, on light and dark toolbars.',
+    'Calm: one hue on cream. Teal sits between the blue and orange neighbours without matching either.',
+    'To watch: teal is a common colour for utilities, and at 48 px the ring’s inner edge draws a second outline inside the tile.' ] },
+  { no: 32, rank: '2nd', why: [
+    'The cleanest toolbar cut of the 32: one field of blue with a dark corner, so the mark reads at 16 px on either toolbar.',
+    'Holds on the light wallpaper all round (1%). On the dark one the aubergine corner melts into the wallpaper at the top right (16% of the edge).',
+    'The loudest of the three, a saturated blue close to the Messages icon beside it, so at a glance it can blur with other blue apps.' ] },
+  { no: 13, rank: '3rd', why: [
+    'The only one of the three that shows the split square Fingerprint is built on: four quarters in two purples and a pink, with one dark sliver.',
+    'Holds on both wallpapers (14% light, 5% dark), and purple is rare on a home screen, so it stands apart from blue, green and orange apps.',
+    'Between calm and loud. At 16 px the quarters turn to speckle round the mark, which makes it the weakest of the three in the toolbar.' ] },
+];
+
+/* ======================================================================
+   Drawing
+   ====================================================================== */
+const C = window.ShelfCover;
+// the icon's ink and paper are Shelf's light-theme text and page tokens, read from tokens.css
+const probe = document.createElement('div'); probe.setAttribute('data-theme', 'light'); document.body.appendChild(probe);
+const tok = n => getComputedStyle(probe).getPropertyValue(n).trim();
+const INK = tok('--text'), PAPER = tok('--background');
+
+// drawn system UI (Android launcher, Chrome toolbars, themed-icon tones). These belong to the drawn phone and browser.
+const SYS = {
+  wallL: '#E4DCCB', wallD: '#14171E', labelL: '#1F1F1F', labelD: '#F2F2F2',
+  themedL: { bg: '#D9E2F7', fg: '#22324F' }, themedD: { bg: '#2B3446', fg: '#C8D6F2' },
+  extL: '#FFFFFF', extD: '#292A2D', tbL: '#FFFFFF', tbD: '#35363A', urlL: '#F1F3F4', urlD: '#202124', glyphL: '#5F6368', glyphD: '#C4C7C5',
+  apps: {
+    clock: ['#FFFFFF', '#2B3140'], messages: ['#3D6FD9', '#FFFFFF'], notes: ['#E9D9B8', '#3A3020'], music: ['#F08A3C', '#FFFFFF'],
+  },
+};
+const GLYPH = {
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  messages: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
+  notes: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 13H8"/><path d="M16 17H8"/>',
+  music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+  puzzle: '<path d="M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z"/>',
+  user: '<circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/>',
+};
+const glyph = (n, cls = '') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${GLYPH[n]}</svg>`;
+
+/* today's mark, from shared/brand/src: foreground.svg (108 canvas), monochrome.svg, and small.svg (32 grid, tuned for 16 px) */
+const BM = 'M41 25H67A4 4 0 0 1 71 29V64.24A1.5 1.5 0 0 1 68.68 65.5L54 56L39.32 65.5A1.5 1.5 0 0 1 37 64.24V29A4 4 0 0 1 41 25Z';
+const fgMark = () => `<path d="${BM}" fill="${INK}" stroke="${PAPER}" stroke-width="3" stroke-linejoin="round" paint-order="stroke"/>`
+  + `<rect x="30" y="70" width="48" height="9" rx="4.5" fill="${INK}" stroke="${PAPER}" stroke-width="3" paint-order="stroke"/>`
+  + `<rect x="30" y="70" width="32" height="9" rx="4.5" fill="${PAPER}"/>`;
+const monoMark = fill => `<path d="${BM}" fill="${fill}"/><rect x="30" y="70" width="30" height="9" rx="4.5" fill="${fill}"/><rect x="65" y="70" width="13" height="9" rx="4.5" fill="${fill}"/>`;
+const smallMark = () => `<path d="M10 4H22A2 2 0 0 1 24 6V20L16 12L8 20V6A2 2 0 0 1 10 4Z" fill="${INK}" stroke="${PAPER}" stroke-width="3" stroke-linejoin="round" paint-order="stroke"/>`
+  + `<rect x="4" y="22" width="24" height="6" rx="3" fill="${INK}" stroke="${PAPER}" stroke-width="3" paint-order="stroke"/>`
+  + `<path d="M7 22H20V28H7A3 3 0 0 1 7 22Z" fill="${PAPER}"/>`;
+
+// the background layer: the cover at depth 1 filling the 108 canvas
+const bgLayer = hash => C.svg(hash, { depth: 1, size: 108 });
+// one icon: 'full' shows the whole 108 canvas, 'view' the central 72 the launcher shows
+const icon = (hash, view = 'view', layer = 'all') => {
+  const vb = view === 'full' ? '0 0 108 108' : '18 18 72 72';
+  const body = layer === 'bg' ? bgLayer(hash) : layer === 'fg' ? fgMark() : layer === 'mono' ? monoMark(INK) : bgLayer(hash) + fgMark();
+  return `<svg viewBox="${vb}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">${body}</svg>`;
+};
+const themed = (t) => `<svg viewBox="18 18 72 72" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><rect x="0" y="0" width="108" height="108" fill="${t.bg}"/>${monoMark(t.fg)}</svg>`;
+// the 16 px cut: small.svg's tuned mark on the cover's central 72, in small.svg's 7-unit corner
+const cut16 = hash => `<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><svg x="0" y="0" width="32" height="32" viewBox="18 18 72 72">${bgLayer(hash)}</svg>${smallMark()}</svg>`;
+// the 48 px extension tile, as build-icons.cjs makes it: 40 px of the 72 crop in a 48 box, corner 10
+const tile48 = hash => `<span class="ico snap" style="width:40px;height:40px;border-radius:10px">${icon(hash)}</span>`;
+// the canvas preview: whole 108, the outer 18 dp veiled, the 72 outlined, the 66 dp safe circle dashed
+const canvas = (hash, px, layer = 'all') => `<span class="canvas" style="width:${px}px;height:${px}px"><span class="ico" style="width:${px}px;height:${px}px">${icon(hash, 'full', layer)}</span>
+  <svg class="veil" viewBox="0 0 108 108" aria-hidden="true"><path fill="${PAPER}" fill-opacity=".72" fill-rule="evenodd" d="M0 0H108V108H0ZM18 18V90H90V18Z"/><rect x="18" y="18" width="72" height="72" fill="none" stroke="${INK}" stroke-width=".75"/><circle cx="54" cy="54" r="33" fill="none" stroke="${INK}" stroke-width=".6" stroke-dasharray="2 2"/></svg></span>`;
+
+/* the squircle path (|x|^4 + |y|^4 = 1) in 0..1 box units */
+(() => {
+  const n = 4, pts = [];
+  for (let i = 0; i < 96; i++) {
+    const t = i / 96 * 2 * Math.PI, c = Math.cos(t), s = Math.sin(t);
+    pts.push([0.5 + 0.5 * Math.sign(c) * Math.abs(c) ** (2 / n), 0.5 + 0.5 * Math.sign(s) * Math.abs(s) ** (2 / n)]);
+  }
+  document.getElementById('sqpath').setAttribute('d', 'M' + pts.map(p => p.map(v => v.toFixed(4)).join(' ')).join('L') + 'Z');
+})();
+
+/* ---------- pieces ---------- */
+const app = name => { const [bg, fg] = SYS.apps[name];
+  return `<span class="gen" style="background:${bg};color:${fg}">${glyph(name)}</span>`; };
+const home = (hash, mask, dark, left, right) => {
+  const lab = name => name[0].toUpperCase() + name.slice(1);
+  const cell = (inner, label) => `<span class="hi">${inner}${label}</span>`;
+  const other = n => cell(`<span class="ico ${mask}" style="width:52px;height:52px">${app(n)}</span>`, lab(n));
+  return `<div class="r">${other(left)}${cell(`<span class="ico ${mask}">${icon(hash)}</span>`, 'Shelf')}${other(right)}</div>`;
+};
+const wall = (hash, dark) => `<div class="wall" style="background:${dark ? SYS.wallD : SYS.wallL};color:${dark ? SYS.labelD : SYS.labelL}">
+  ${home(hash, 'circle', dark, 'clock', 'messages')}${home(hash, 'squircle', dark, 'notes', 'music')}</div>`;
+const themedCol = () => `<div class="wall" style="grid-template-rows:auto;align-content:center;background:linear-gradient(90deg, ${SYS.wallL} 50%, ${SYS.wallD} 50%)">
+  <div class="r"><span class="hi" style="color:${SYS.labelL}"><span class="ico circle">${themed(SYS.themedL)}</span>Shelf</span><span class="hi" style="color:${SYS.labelD}"><span class="ico circle">${themed(SYS.themedD)}</span>Shelf</span></div></div>`;
+const extCol = hash => `<div class="ext"><span class="t48" style="background:${SYS.extL};box-shadow:inset 0 0 0 1px ${SYS.urlL}">${tile48(hash)}</span><span class="t48" style="background:${SYS.extD}">${tile48(hash)}</span></div>`;
+const tbar = (hash, dark) => `<span class="tbar" style="background:${dark ? SYS.tbD : SYS.tbL};color:${dark ? SYS.glyphD : SYS.glyphL};${dark ? '' : `box-shadow:inset 0 0 0 1px ${SYS.urlL}`}"><span class="u" style="background:${dark ? SYS.urlD : SYS.urlL}"></span>${glyph('puzzle', 'g')}<span class="ico sh snap" style="border-radius:3.5px">${cut16(hash)}</span>${glyph('user', 'g')}</span>`;
+const cutCol = hash => `<div class="cuts">${tbar(hash, false)}${tbar(hash, true)}</div>`;
+const swatches = P => `<span class="pal">${['ground', 'deep', 'soft', 'signal'].map(k => `<i style="background:${P[k]}" title="${k} ${P[k]}"></i>`).join('')}</span>`;
+const kind = (hash, P) => `${P.scheme}, ${P.dark ? 'dark' : 'light'} ground, ${C.leaves(hash, { depth: 1 }).length === 1 ? 'one shape' : 'four shapes'}`;
+
+/* ---------- anatomy ---------- */
+(() => {
+  const h = SEEDS[0][1];
+  const f = (inner, cap, cls = '') => `<figure class="${cls}">${inner}<figcaption>${cap}</figcaption></figure>`;
+  document.getElementById('anat').innerHTML =
+    f(`<span class="lay">${icon(h, 'full', 'bg')}</span>`, 'Background: the cover at depth 1 on 108 dp') +
+    f(`<span class="lay check">${icon(h, 'full', 'fg')}</span>`, 'Foreground: bookmark and bar, ink with a paper keyline') +
+    f(`<span class="lay">${icon(h, 'full', 'mono')}</span>`, 'Monochrome: unchanged for themed icons') +
+    f(canvas(h, 108), 'Together. The launcher shows the central 72; the dashed circle is the 66 dp safe zone') +
+    f(`<span class="ico circle" style="width:108px;height:108px">${icon(h)}</span>`, 'Circle mask') +
+    f(`<span class="ico squircle" style="width:108px;height:108px">${icon(h)}</span>`, 'Squircle mask') +
+    f(`<span class="ico" style="width:32px;height:32px;border-radius:7px">${cut16(h)}</span>`, '16 px cut at 2×: small.svg’s tuned mark') ;
+})();
+
+/* ---------- the contact sheet ---------- */
+document.getElementById('list').innerHTML = SEEDS.map(([seed, hash], i) => {
+  const P = C.palette(hash), no = pad(i + 1), t = TOP.find(x => x.no === i + 1);
+  return `<article class="cand${t ? ' pick' : ''}" id="c${no}" aria-label="Candidate ${no}">
+    <div class="cmeta">${canvas(hash, 72)}<div class="info"><span class="no">${no}</span><span class="seed">${seed.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</span><span class="hashs">${hash.slice(0, 8)}…${hash.slice(-4)}</span>${swatches(P)}<span class="kind">${kind(hash, P)}</span><span class="kind">Edge lost: ${EDGE[i][0]}% light, ${EDGE[i][1]}% dark</span>${t ? `<span class="badge">Top three: ${t.rank}</span>` : ''}${i === 0 ? '<span class="kind">Provisional icon until a pick</span>' : ''}</div></div>
+    ${wall(hash, false)}${wall(hash, true)}${themedCol()}${extCol(hash)}${cutCol(hash)}
+  </article>`;
+}).join('');
+
+/* ---------- top three ---------- */
+document.getElementById('top').innerHTML = TOP.map(t => {
+  const [seed, hash] = SEEDS[t.no - 1];
+  return `<div class="panel"><div class="hero"><span class="rank">${t.rank}</span><span class="ico squircle" style="width:72px;height:72px">${icon(hash)}</span><span class="ico circle" style="width:52px;height:52px">${icon(hash)}</span><span class="ico snap" style="width:16px;height:16px;border-radius:3.5px">${cut16(hash)}</span></div>
+    <h3>No. ${pad(t.no)} · <span class="mono" style="font-size:13px">${seed}</span></h3><ul>${t.why.map(w => `<li>${w}</li>`).join('')}</ul></div>`;
+}).join('');
+
+/* ---------- ledger and JSON ---------- */
+const recs = SEEDS.map(([seed, hash], i) => { const P = C.palette(hash);
+  return { no: i + 1, seed, sha256: hash, version: C.version, depth: 1, scheme: P.scheme, ground: P.dark ? 'dark' : 'light', hue: P.hue, inks: { ground: P.ground, deep: P.deep, soft: P.soft, signal: P.signal }, leaves: C.leaves(hash, { depth: 1 }).map(l => l.mod) }; });
+document.getElementById('ledger').innerHTML = recs.map(r => `<tr><td>${pad(r.no)}</td><td class="h">${r.seed}</td><td class="h">${r.sha256}</td><td>${r.scheme}, ${r.ground}, ${r.hue}°<br><span class="h mono" style="font-size:11.5px">${Object.values(r.inks).join(' ')}</span></td><td>${r.leaves.join(', ')}</td><td style="white-space:nowrap">${EDGE[r.no - 1][0]}% / ${EDGE[r.no - 1][1]}%</td></tr>`).join('');
+document.getElementById('json').textContent = JSON.stringify(recs, null, 1);
+
+/* ---------- small sizes land on whole device pixels, as a real toolbar or launcher draws them ---------- */
+function snap(){
+  const dpr = window.devicePixelRatio || 1;
+  document.querySelectorAll('.snap').forEach(el => {
+    el.style.transform = '';
+    const r = el.getBoundingClientRect();
+    const dx = Math.round(r.left * dpr) / dpr - r.left, dy = Math.round(r.top * dpr) / dpr - r.top;
+    if (dx || dy) el.style.transform = `translate(${dx}px, ${dy}px)`;
+  });
+}
+document.fonts.ready.then(snap);
+addEventListener('resize', snap);
+
+/* ---------- check the embedded hashes in this page ---------- */
+(async () => {
+  let ok = 0;
+  for (const [seed, hash] of SEEDS) {
+    try {
+      const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(seed));
+      if ([...new Uint8Array(d)].map(b => b.toString(16).padStart(2, '0')).join('') === hash) ok++; else console.error('Hash mismatch for seed', seed);
+    } catch (e) { break; }
+  }
+  document.getElementById('verify').innerHTML = ok === SEEDS.length ? `<span class="ok">sha256 checked in this page: all ${ok} seeds match Node.</span>` : `<span class="bad">sha256 checked in this page: ${ok} of ${SEEDS.length} match.</span>`;
+})();
+</script>
+</body>
+</html>

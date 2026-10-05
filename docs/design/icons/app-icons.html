@@ -5,69 +5,225 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Shelf In-App Icons</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../mockups/tokens.css">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Martian+Mono:wght@400..600&display=swap" rel="stylesheet">
 <style>
+/* Tokens. Copied from the Fingerprint board (study/fingerprint.html) until tokens.json is regenerated for it.
+   The board chrome is the presentation around the samples; the themed tokens are Shelf's own light and dark. */
+:root{
+  --b-bg:#E6E4DE; --b-paper:#F3F2EE; --b-ink:#17171A; --b-muted:#56554F; --b-line:#CFCCC4;
+  --f-ui:'Archivo', system-ui, sans-serif; --f-mono:'Martian Mono', ui-monospace, monospace;
+}
+[data-theme=light]{
+  --bg:#F3F2EE; --surface:#FFFFFF; --line:#DEDCD5; --line-2:#8C8A83; --text:#17171A; --muted:#5C5B56;
+  --fill:#17171A; --on-fill:#F3F2EE; --error:#B42318; --cv-edge:rgba(23,23,26,.09);
+  --float:0 12px 28px -10px rgba(23,23,26,.30), 0 0 0 1px #DEDCD5;
+  --art-ink:#003C4D; /* line ink of the sample cover on this surface, from the board's FP.lineInk */
+}
+[data-theme=dark]{
+  --bg:#111112; --surface:#1A1A1C; --line:#2E2E31; --line-2:#7A7983; --text:#EDECE8; --muted:#A7A59F;
+  --fill:#EDECE8; --on-fill:#111112; --error:#FF8B7B; --cv-edge:rgba(237,236,232,.10);
+  --float:0 0 0 1px #3A3A3E, 0 12px 28px -10px rgba(0,0,0,.7);
+  --art-ink:#E39700;
+}
 *{box-sizing:border-box}
-body{margin:0;font-family:var(--font-ui);background:#E7E3E1;color:#181D27}
-main{max-width:980px;margin:0 auto;padding:var(--space-32) var(--space-16)}
-h1{font-size:var(--text-28);margin:0 0 var(--space-4)}
-p.intro{color:#535862;margin:0 0 var(--space-24)}
-section{background:#FFFFFF;border-radius:var(--radius-sheet);padding:var(--space-24);margin-bottom:var(--space-16)}
-h2{font-size:var(--text-17);margin:0 0 var(--space-12)}
-table{border-collapse:collapse;width:100%}
-td,th{padding:var(--space-8) var(--space-12);text-align:left;vertical-align:middle;border-bottom:1px solid #E9EAEB;font-size:var(--text-13)}
-th{color:#535862;font-weight:600}
-.ic{display:inline-flex;color:#181D27}
-.strip .ic{color:inherit}
-.ic.lu{color:#535862}
-.strip{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:var(--radius);margin-top:var(--space-8)}
-.strip.light{background:#FCF7F6;color:#181D27}.strip.dark{background:#13161B;color:#F7F7F7}.strip.sepia{background:#F5EEDF;color:#3A2E22}
-.btn48{width:48px;height:48px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center}
-.pp{background:var(--gradient-primary);color:#FFFFFF}
-.pill{height:36px;padding:0 12px 0 8px;border-radius:999px;display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600}
-.strip.light .pill{background:var(--accent-soft)}.strip.dark .pill{background:#311D18}.strip.sepia .pill{background:#EBD3C2}
-.lbl{font-size:12px;color:#535862;margin-top:var(--space-16)}
+html,body{margin:0}
+body{background:var(--b-bg);color:var(--b-ink);font-family:var(--f-ui);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+main{max-width:1120px;margin:0 auto;padding:40px 16px 80px}
+h1{font-size:32px;font-weight:750;font-stretch:125%;letter-spacing:-.025em;line-height:1.15;margin:0 0 8px}
+p.intro{color:var(--b-muted);margin:0 0 28px;max-width:72ch}
+section.panel{background:var(--b-paper);border:1px solid var(--b-line);border-radius:14px;padding:24px;margin-bottom:16px}
+h2{font-size:17px;font-weight:650;margin:0 0 4px}
+p.note{color:var(--b-muted);font-size:13px;margin:0 0 16px;max-width:80ch}
+.k{font-family:var(--f-mono);font-size:11px;color:var(--b-muted);letter-spacing:-.01em}
+.err{font-family:var(--f-mono);font-size:12px;color:var(--b-ink);border:1px dashed var(--b-line);border-radius:8px;padding:12px}
+
+/* themed sample grounds */
+.duo{display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:16px}
+@media (max-width:520px){.duo{grid-template-columns:1fr} main{padding:24px 16px 48px} section.panel{padding:16px 12px} .ground{padding:12px 10px}}
+.stack{display:grid;gap:16px}
+.ground{background:var(--bg);color:var(--text);border-radius:14px;padding:16px;border:1px solid var(--line);min-width:0}
+.ground .tag{font-family:var(--f-mono);font-size:11px;color:var(--muted);margin:0 0 10px}
+.ic{display:inline-flex;flex:none}
+.ic svg{display:block}
+
+/* sizes table */
+table.sz{border-collapse:collapse;width:100%}
+table.sz th{font-family:var(--f-mono);font-size:11px;font-weight:450;color:var(--muted);text-align:left;padding:0 8px 8px;border-bottom:1px solid var(--line)}
+table.sz td{padding:12px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.sz tr:last-child td{border-bottom:0}
+table.sz td.name{font-size:13px;font-weight:600;line-height:1.3;white-space:nowrap}
+table.sz td.name small{display:block;font-family:var(--f-mono);font-size:10.5px;font-weight:400;color:var(--muted);margin-top:3px}
+.pair{display:inline-flex;align-items:center;gap:6px}
+.scroll-x{overflow-x:auto}
+
+/* players (structure and sizes from the board) */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px 12px;margin-bottom:12px}
+.card .lbl{font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px}
+.card .t{font-size:17px;font-weight:650;line-height:1.3;margin-bottom:4px;letter-spacing:-.01em}
+.card .s{font-size:13px;color:var(--muted);margin-bottom:12px}
+.pline{height:3px;border-radius:2px;background:color-mix(in srgb,var(--muted) 22%,transparent)}
+.pline i{display:block;height:100%;border-radius:2px;background:var(--art-ink)}
+.clock{font-family:var(--f-mono);font-size:13px;font-weight:450;color:var(--muted);letter-spacing:-.03em;white-space:nowrap;line-height:1.3}
+.times{display:flex;justify-content:space-between;margin:6px 0 4px}
+.controls{display:grid;grid-template-columns:1fr 48px 60px 48px 1fr;column-gap:8px;align-items:center}
+.controls .c2{grid-column:2}.controls .c3{grid-column:3}.controls .c4{grid-column:4}.controls .c5{grid-column:5;justify-self:end}
+.ctl{width:48px;height:48px;display:inline-flex;align-items:center;justify-content:center;flex:none;border-radius:12px}
+.pp60{width:60px;height:60px;border-radius:50%;background:var(--fill);color:var(--on-fill);display:inline-flex;align-items:center;justify-content:center}
+.rate{min-width:52px;height:36px;padding:0 12px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:620;background:var(--bg);color:var(--text);font-feature-settings:"tnum";line-height:1;flex:none}
+.mini{position:relative;height:64px;border-radius:14px;background:var(--surface);color:var(--text);box-shadow:var(--float);display:flex;align-items:center;gap:2px;padding:0 8px;overflow:hidden;margin:4px 0 8px}
+.mini .tt{flex:1;min-width:0;padding-left:10px;overflow:hidden}
+.mini .line{position:absolute;left:28px;right:28px;bottom:5px;height:2px;border-radius:2px;background:color-mix(in srgb,var(--muted) 25%,transparent)}
+.mini .line i{display:block;height:100%;border-radius:2px;background:var(--art-ink)}
+.ppc{width:48px;height:48px;border-radius:8px;overflow:hidden;position:relative;flex:none;display:block}
+.cv{position:absolute;inset:0;display:block}
+.cv svg{display:block;width:100%;height:100%}
+.ppc::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px var(--cv-edge);pointer-events:none}
+.ppc .disc{position:absolute;left:50%;top:50%;width:30px;height:30px;margin:-15px 0 0 -15px;border-radius:50%;background:var(--fill);color:var(--on-fill);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 1.5px var(--on-fill)}
+.onfill{display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;background:var(--fill);color:var(--on-fill);border-radius:12px;padding:12px 16px;margin-top:4px}
+.onfill .k2{font-family:var(--f-mono);font-size:11px;opacity:.75;margin-left:auto}
+
+/* Reader ⋯ sheet */
+.sheet{background:var(--surface);color:var(--text);border-radius:20px 20px 0 0;padding:8px 16px 16px;border:1px solid var(--line);border-bottom:0}
+.grab{width:36px;height:4px;border-radius:4px;background:var(--line);margin:0 auto 12px}
+.menuitem{width:100%;min-height:52px;display:flex;align-items:center;gap:12px;font-size:15px;font-weight:500;padding:0 4px;line-height:1.2}
+.menuitem.danger{color:var(--error)}
+
+/* numeral weight and centring */
+.trio{display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:16px}
+@media (max-width:520px){.trio{grid-template-columns:1fr}}
+.trio .ground{display:flex;flex-direction:column;gap:12px}
+.trio .big{display:flex;flex-wrap:wrap;align-items:center;gap:16px}
+.trio .small{display:flex;align-items:center;gap:10px}
+.trio .cap{font-size:13px;line-height:1.4}
+.trio .cap b{display:block;font-weight:650}
+.trio .cap span{color:var(--muted)}
+.guide{position:relative;display:inline-flex}
+.guide svg.g{position:absolute;inset:0}
+.guide .ic{position:relative}
+
+table.gaps{border-collapse:collapse;width:100%;font-size:13px}
+table.gaps th,table.gaps td{text-align:left;padding:8px 12px 8px 0;border-bottom:1px solid var(--b-line);vertical-align:top}
+table.gaps th{font-family:var(--f-mono);font-size:11px;font-weight:450;color:var(--b-muted)}
+table.gaps td.n{font-family:var(--f-mono);font-size:12px;white-space:nowrap}
 </style>
 </head>
 <body>
 <main>
 <h1>In-app icons</h1>
-<p class="intro">The five icons Lucide doesn't have, drawn to Lucide's rules. Each row shows the new icon at real sizes beside the Lucide icon it sits next to in the app, then in the places it's used.</p>
+<p class="intro">Shelf’s three own icons, redrawn for Fingerprint’s 1.75 stroke (decision 65). They keep variant C’s geometry exactly, with lighter strokes. Each sample sits beside the Lucide icons it appears with, at the same stroke, size and colour, on Shelf’s light and dark grounds.</p>
 
-<section><h2>Skip icons: three weights (A current, B lighter numerals, C Lucide circle + lighter numerals)</h2><div id="weights"></div></section>
+<section class="panel"><h2>Sizes, beside Lucide at 1.75</h2>
+<p class="note">Each cell shows Shelf’s icon first, then its Lucide reference at the same size: rotate-ccw and rotate-cw, whose geometry the skip pair keeps, and zap, the icon speed read replaced. The last column puts the icon among its neighbours at 24.</p>
+<div class="stack" id="sizes"></div></section>
 
-<section><h2>Sizes, beside Lucide</h2>
-<table><thead><tr><th>Icon</th><th>20</th><th>24</th><th>32</th><th>48</th><th>Next to (Lucide, grey)</th></tr></thead><tbody id="rows"></tbody></table></section>
+<section class="panel"><h2>In the player</h2>
+<p class="note">The Now playing card and the dock, laid out as on the board. The play button is the inverted disc (ink with a paper glyph in light, paper with an ink glyph in dark); the speed pill is text only (decision 62). The last strip puts the icons on the fill, ink in light and paper in dark, with content in the page colour.</p>
+<div class="duo" id="player"></div></section>
 
-<section><h2>In the player (light, dark, sepia)</h2><div id="player"></div></section>
-<section><h2>Speed read entry and the shelf empty state</h2><div id="misc"></div></section>
+<section class="panel"><h2>Speed read in the Reader’s ⋯ sheet</h2>
+<p class="note">The sheet’s rows at 20, with Lucide external-link, link and trash below speed read.</p>
+<div class="duo" id="menu"></div></section>
+
+<section class="panel"><h2>Numeral weight and centring</h2>
+<p class="note">The numerals were drawn at three quarters of the ring’s stroke (1.5 on 2). Left at 1.5 under a 1.75 ring, as the board first drew them, they read heavier than the ring. At 1.3125 they keep Richard’s chosen proportion. The guides at 96 px cross at the canvas centre (12, 12), which is also the centre of the numerals’ centreline box (9 to 15 by 9.375 to 14.625).</p>
+<div class="trio" id="trio"></div></section>
+
+<section class="panel"><h2>Measurements</h2>
+<p class="note">Edge to edge on the rendered stroke, in px at 24 px (one unit), sampled from the paths in Chrome. Ink is the icon’s rendered coverage divided by rotate-ccw’s at the same stroke and size.</p>
+<div class="scroll-x"><table class="gaps"><thead><tr><th>Icon</th><th>Between</th><th>Stroke 2 (numerals 1.5)</th><th>Stroke 1.75 (numerals 1.3125)</th></tr></thead><tbody>
+<tr><td>skip-back-15</td><td>head to the 1</td><td class="n">2.16</td><td class="n">2.37</td></tr>
+<tr><td>skip-back-15</td><td>ring to the 5</td><td class="n">3.26</td><td class="n">3.48</td></tr>
+<tr><td>skip-forward-15</td><td>head to the corner of the 5’s top bar</td><td class="n">1.55</td><td class="n">1.77</td></tr>
+<tr><td>skip-forward-15</td><td>ring to the 1</td><td class="n">3.90</td><td class="n">4.12</td></tr>
+<tr><td>both skips</td><td>the 1 to the 5 (inside the numeral group)</td><td class="n">1.13</td><td class="n">1.31</td></tr>
+<tr><td>speed-read</td><td>focus ticks to the word bar</td><td class="n">2.00</td><td class="n">2.25</td></tr>
+<tr><td>skip-back-15</td><td>ink against rotate-ccw, at 24 / 48 px</td><td class="n">1.17 / 1.17</td><td class="n">1.16 / 1.16</td></tr>
+<tr><td>skip-back-15</td><td>the same, with the numerals left at 1.5 under a 1.75 ring</td><td class="n">–</td><td class="n">1.20 / 1.20</td></tr>
+<tr><td>all three</td><td>stroke edges, nearest the canvas edge</td><td class="n">2.0</td><td class="n">2.125</td></tr>
+</tbody></table></div></section>
 </main>
 <script>
+// Lucide path data, drawn here at 1.75 like every Lucide icon in Fingerprint.
 const LU = {
   'rotate-ccw': '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+  'rotate-cw': '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',
+  zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
   play: '<polygon points="6 3 20 12 6 21 6 3"/>',
   pause: '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
-  zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
-  bookmark: '<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>',
+  ext: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
   more: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  archive: '<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
 };
-const lu = (n, s = 24) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${LU[n]}</svg>`;
-const ICONS = [['skip-back-15', ['rotate-ccw', 'play']], ['skip-forward-15', ['play', 'pause']], ['speed-read', ['zap', 'more']], ['speed', ['play', 'pause']], ['shelf', ['bookmark']]];
+const lu = (n, s = 24, sw = 1.75, extra = '') => `<span class="ic"><svg width="${s}" height="${s}" viewBox="0 0 24 24" ${/fill=/.test(extra) ? '' : 'fill="none"'} stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" ${extra}>${LU[n]}</svg></span>`;
+const solid = (n, s) => lu(n, s, 1.75, 'fill="currentColor"');
+
+// A cover drawn by the board's generator (cover v1) for its Bitcoin Magazine sample, copied as a static sample.
+const COVER_B = '<svg viewBox="0 0 800 800" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false"><g><rect width="800" height="800" fill="#EAEBFF"></rect><g transform="translate(0 0)"><rect fill="#E39700" width="802" height="802"></rect><g transform="rotate(90 400 400)"><circle fill="#003C4D" cx="400" cy="400" r="400"></circle><circle fill="#E39700" cx="400" cy="400" r="200"></circle></g></g></g></svg>';
+
+const NAMES = ['skip-back-15', 'skip-forward-15', 'speed-read'];
 const SRC = {};
-const VARS = ['skip-back-15-b', 'skip-forward-15-b', 'skip-back-15-c', 'skip-forward-15-c'];
-Promise.all([...ICONS.map(([n]) => fetch(`app/${['speed', 'shelf'].includes(n) ? 'unused/' : ''}${n}.svg`).then(r => r.text()).then(t => SRC[n] = t)), ...VARS.map(n => fetch(`app/variants/${n}.svg`).then(r => r.text()).then(t => SRC[n] = t))]).then(() => {
-  const own = (n, s) => `<span class="ic" style="width:${s}px;height:${s}px">${SRC[n].replace(/width="[^"]*"/, '').replace(/height="[^"]*"/, '').replace('<svg', `<svg width="${s}" height="${s}"`)}</span>`;
-  document.getElementById('rows').innerHTML = ICONS.map(([n, next]) => `<tr><td><b>${n}</b></td>${[20, 24, 32, 48].map(s => `<td>${own(n, s)}</td>`).join('')}<td>${own(n, 24)} ${next.map(x => `<span class="ic lu">${lu(x)}</span>`).join(' ')}</td></tr>`).join('');
-  const player = mode => `<div class="strip ${mode}"><span class="btn48 pp">${lu('pause', 20)}</span><span style="flex:1;font-size:13px;opacity:.75">0:33 / 1:36</span>
-    <span class="btn48">${own('skip-back-15', 24)}</span><span class="btn48">${own('skip-forward-15', 24)}</span><span class="pill">${own('speed', 16)}1.2×</span></div>`;
-  document.getElementById('player').innerHTML = ['light', 'dark', 'sepia'].map(player).join('');
-  const pair = (v, mode) => { const b = v ? 'skip-back-15-' + v : 'skip-back-15', f = v ? 'skip-forward-15-' + v : 'skip-forward-15'; return `<div class="strip ${mode}"><b style="width:24px;font-size:13px">${(v || 'a').toUpperCase()}</b><span class="btn48 pp">${lu('pause', 20)}</span><span class="btn48">${own(b, 24)}</span><span class="btn48">${own(f, 24)}</span><span style="width:12px"></span><span class="ic lu" style="color:inherit;opacity:.55">${lu('rotate-ccw')}</span><span style="font-size:12px;opacity:.6">Lucide rotate-ccw for weight</span><span style="flex:1"></span>${own(b, 20)}${own(b, 32)}</div>`; };
-  document.getElementById('weights').innerHTML = ['light', 'dark'].map(mode => ['', 'b', 'c'].map(v => pair(v, mode)).join('')).join('');
-  document.getElementById('misc').innerHTML = `<div class="strip light"><span class="btn48">${lu('more', 22)}</span><span style="font-size:15px;font-weight:500;display:inline-flex;gap:12px;align-items:center">${own('speed-read', 20)}Speed read</span></div>
-    <div class="strip light" style="flex-direction:column;align-items:center;padding:24px"><span class="btn48" style="background:var(--accent-soft);color:var(--accent);width:56px;height:56px">${own('shelf', 26)}</span><b>Your shelf is empty</b></div>
-    <p class="lbl">Speed read currently uses Lucide's zap (a lightning bolt) in the Reader's ⋯ menu; the new icon replaces it.</p>`;
+const load = (key, file) => fetch(file).then(r => { if (!r.ok) throw new Error(file); return r.text(); }).then(t => { SRC[key] = t; });
+
+Promise.all([
+  ...NAMES.map(n => load(n, `app/${n}.svg`)),
+  ...NAMES.map(n => load(n + '@2', `app/variants/stroke-2/${n}.svg`)),
+]).then(render).catch(() => {
+  document.querySelectorAll('#sizes,#player,#menu,#trio').forEach(el => el.innerHTML =
+    '<p class="err">This sheet reads the icon files from icons/app/. Open it through a local server with docs/design as the root (for example http://localhost:4321/icons/app-icons.html).</p>');
 });
+
+// Shelf's icon at size s, straight from its file (the root stroke and the numerals' stroke stay as drawn).
+const own = (key, s, swap) => {
+  let svg = SRC[key].replace(/\swidth="[^"]*"/, '').replace(/\sheight="[^"]*"/, '').replace('<svg', `<svg width="${s}" height="${s}" aria-hidden="true"`);
+  if (swap) svg = swap(svg);
+  return `<span class="ic">${svg}</span>`;
+};
+
+function render(){
+  const REF = { 'skip-back-15': ['rotate-ccw', 'rotate-ccw'], 'skip-forward-15': ['rotate-cw', 'rotate-cw'], 'speed-read': ['zap', 'zap, which it replaced'] };
+  const WITH = { 'skip-back-15': ['play', 'pause', 'more'], 'skip-forward-15': ['play', 'pause', 'more'], 'speed-read': ['ext', 'link', 'trash'] };
+  const sizes = theme => `<div class="ground" data-theme="${theme}"><p class="tag">${theme} · stroke 1.75</p><div class="scroll-x"><table class="sz">
+    <thead><tr><th></th>${[20, 24, 32, 48].map(s => `<th>${s}</th>`).join('')}<th>with</th></tr></thead><tbody>
+    ${NAMES.map(n => `<tr><td class="name">${n}<small>beside ${REF[n][1]}</small></td>
+      ${[20, 24, 32, 48].map(s => `<td><span class="pair">${own(n, s)}${lu(REF[n][0], s)}</span></td>`).join('')}
+      <td><span class="pair">${own(n, 24)}${WITH[n].map(x => lu(x, 24)).join('')}</span></td></tr>`).join('')}
+    </tbody></table></div></div>`;
+  document.getElementById('sizes').innerHTML = sizes('light') + sizes('dark');
+
+  const player = theme => `<div class="ground" data-theme="${theme}"><p class="tag">${theme} · Now playing, the dock, on the fill</p>
+    <div class="card"><div class="lbl">Now playing</div><div class="t">Why relays, not servers, are the future of personal data</div><div class="s">Bitcoin Magazine</div>
+      <div class="pline"><i style="width:34%"></i></div><div class="times clock"><span>2:00</span><span>5:52</span></div>
+      <div class="controls"><span class="ctl c2" aria-label="Back 15 seconds">${own('skip-back-15', 24)}</span><span class="pp60 c3" aria-label="Play">${solid('play', 24)}</span><span class="ctl c4" aria-label="Forward 15 seconds">${own('skip-forward-15', 24)}</span><span class="rate c5">1×</span></div></div>
+    <div class="mini" role="region" aria-label="Player"><span class="ppc"><span class="cv">${COVER_B}</span><span class="disc">${solid('pause', 14)}</span></span><span class="tt clock">2:00 / 5:52</span>
+      <span class="ctl" aria-label="Back 15 seconds">${own('skip-back-15', 24)}</span><span class="ctl" aria-label="Forward 15 seconds">${own('skip-forward-15', 24)}</span><span class="rate">1.2×</span><span class="line"><i style="width:34%"></i></span></div>
+    <div class="onfill">${own('skip-back-15', 24)}${solid('pause', 24)}${own('skip-forward-15', 24)}<span style="width:8px"></span>${own('skip-back-15', 32)}${own('skip-forward-15', 32)}<span class="k2">on the fill</span></div></div>`;
+  document.getElementById('player').innerHTML = player('light') + player('dark');
+
+  const menu = theme => `<div class="ground" data-theme="${theme}"><p class="tag">${theme} · Reader ⋯</p><div class="sheet" role="dialog" aria-label="More"><div class="grab"></div>
+    <div class="menuitem">${own('speed-read', 20)}Speed read</div><div class="menuitem">${lu('ext', 20)}Open original</div>
+    <div class="menuitem">${lu('link', 20)}Copy link</div><div class="menuitem danger">${lu('trash', 20)}Delete</div></div></div>`;
+  document.getElementById('menu').innerHTML = menu('light') + menu('dark');
+
+  // centring guides at 96: the canvas centre lines
+  const guides = s => `<svg class="g" width="${s}" height="${s}" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="var(--line-2)" stroke-width=".125"><path d="M12 0v24M0 12h24"/></g></svg>`;
+  const atBoard = svg => svg.replace(/stroke-width="1\.3125"/g, 'stroke-width="1.5"');
+  const col = (title, sub, key, ringSw, swap) => `<div class="ground" data-theme="light">
+    <div class="big"><span class="guide">${guides(96)}${own(key, 96, swap)}</span>${own(key, 48, swap)}${lu('rotate-ccw', 48, ringSw)}</div>
+    <div class="small">${own(key, 24, swap)}${lu('rotate-ccw', 24, ringSw)}${lu('play', 24, ringSw)}<span style="width:6px"></span>${own(key, 20, swap)}${lu('rotate-ccw', 20, ringSw)}</div>
+    <div class="cap"><b>${title}</b><span>${sub}</span></div></div>`;
+  const darkCol = `<div class="ground" data-theme="dark">
+    <div class="big"><span class="guide">${guides(96)}${own('skip-forward-15', 96)}</span>${own('skip-forward-15', 48)}${lu('rotate-cw', 48)}</div>
+    <div class="small">${own('skip-forward-15', 24)}${lu('rotate-cw', 24)}${lu('play', 24)}<span style="width:6px"></span>${own('skip-forward-15', 20)}${lu('rotate-cw', 20)}</div>
+    <div class="cap"><b>New, forward, dark</b><span>The same numerals, unmirrored, in the forward ring.</span></div></div>`;
+  document.getElementById('trio').innerHTML =
+    col('Before: stroke 2', 'Numerals at 1.5, beside Lucide at 2. Kept in icons/app/variants/stroke-2/.', 'skip-back-15@2', 2) +
+    col('New: stroke 1.75, numerals 1.3125', 'Beside Lucide at 1.75. Three quarters of the ring, as before.', 'skip-back-15', 1.75) +
+    col('Numerals left at 1.5 under a 1.75 ring', 'Beside Lucide at 1.75. The 15 gains on the ring.', 'skip-back-15', 1.75, atBoard) +
+    darkCol;
+}
 </script>
 </body>
 </html>

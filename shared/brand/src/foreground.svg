@@ -1,7 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
-  <!-- bookmark: the Saves glyph made chunky, square shoulders, deep notched tail -->
-  <path d="M41 25H67A4 4 0 0 1 71 29V64.24A1.5 1.5 0 0 1 68.68 65.5L54 56L39.32 65.5A1.5 1.5 0 0 1 37 64.24V29A4 4 0 0 1 41 25Z" fill="#FCF7F6"/>
-  <!-- shelf = reading-progress bar: the unread track, then the read two thirds -->
-  <rect x="30" y="70" width="48" height="9" rx="4.5" fill="#DAAA97"/>
-  <rect x="30" y="70" width="32" height="9" rx="4.5" fill="#FCF7F6"/>
+  <!--
+    FROZEN ARTWORK. The paper mark (flow decision 70): today's bookmark and reading-progress bar, inverted to
+    stand on the C·L·063 cover in background.svg. Paper fill #F3F2EE and ink #17171A are the light theme's
+    background and text tokens (tokens.json 0.2.0), copied in so that a token change never recolours the icon.
+    Drawn as Richard chose it on docs/design/icons/fingerprint-icon-12.html (fgMark(true)): each shape has a
+    3-unit ink stroke under its paper fill, so 1.5 units of ink outline show outside it, and the read two thirds
+    of the bar are ink. The stroke is its own layer under the fill (the picture paint-order="stroke" gives),
+    so tools that ignore paint-order still draw it right.
+    The group is scaled to 96% about the canvas centre. At full size the outline reaches 34.3 dp from the
+    centre at the bar's ends, outside Android's 66 dp safe circle; at 96% the farthest ink is 32.9 dp.
+  -->
+  <g transform="translate(54 54) scale(0.96) translate(-54 -54)">
+    <!-- bookmark: square shoulders, notched tail -->
+    <path d="M41 25H67A4 4 0 0 1 71 29V64.24A1.5 1.5 0 0 1 68.68 65.5L54 56L39.32 65.5A1.5 1.5 0 0 1 37 64.24V29A4 4 0 0 1 41 25Z" fill="none" stroke="#17171A" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M41 25H67A4 4 0 0 1 71 29V64.24A1.5 1.5 0 0 1 68.68 65.5L54 56L39.32 65.5A1.5 1.5 0 0 1 37 64.24V29A4 4 0 0 1 41 25Z" fill="#F3F2EE"/>
+    <!-- shelf = reading-progress bar (decision 72): one ink pill is the outline and the read two thirds, then the unread slot in paper on top,
+         its left end following the read part's round cap, so no two shapes share an edge and no hairline shows -->
+    <rect x="30" y="70" width="48" height="9" rx="4.5" fill="#17171A" stroke="#17171A" stroke-width="3"/>
+    <path d="M57.5 70H73.5A4.5 4.5 0 0 1 73.5 79H57.5A4.5 4.5 0 0 0 57.5 70Z" fill="#F3F2EE"/>
+  </g>
 </svg>

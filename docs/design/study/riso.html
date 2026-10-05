@@ -770,7 +770,7 @@ function readerScreen(pal, { scroll = 392 } = {}){
     <div class="rbody"><div class="article" style="transform:translateY(-${scroll}px)">
       <div class="kicker">Bitcoin Magazine</div>
       <div class="rh1">Why relays, not servers, are the future of personal data</div>
-      <div class="by">Shinobi · 6 min · Saved yesterday</div>
+      <div class="by">Rowan Pike · 6 min · Saved yesterday</div>
       <div class="prose">${fig}${PROSE.map(t => `<p>${t}</p>`).join('')}</div>
     </div></div>
     <button class="farch" aria-label="Archive">${ic('archive', 22)}</button>
@@ -901,7 +901,7 @@ $('rpals').innerHTML = Object.entries(T.reader).map(([id, p]) => {
     <div class="nm"><span>${READER_NAMES[id]}</span><span class="ratio">${r.toFixed(1)}:1</span></div>
     <div class="kicker">The Atlantic</div>
     <div class="rh1" style="font-size:24px;margin:10px 0 8px">What we lose when we stop reading long things</div>
-    <div class="by" style="margin-bottom:14px">Megan Garber · 11 min · Saved yesterday</div>
+    <div class="by" style="margin-bottom:14px">Clara Vance · 11 min · Saved yesterday</div>
     <div class="prose"><p style="margin:0 0 .8em">What never changed was the shape of the shelf: a list, newest at the top, that belonged to one person and <span class="mk">nobody</span> else. <a href="#">Relays</a> change the arithmetic.</p></div>
     ${strip(.62, 's3').replace('class="strip', 'style="--sc:var(--r-accent);margin:14px 0 16px" class="strip')}
     <div style="font:600 12px/1.55 var(--f-mono);font-variation-settings:'wdth' 87.5;color:var(--r-muted)">bg ${p.bg} · text ${p.text} ${r.toFixed(1)}:1<br>muted ${p.muted} ${cr(p.muted, p.bg).toFixed(1)}:1 · line ${p.accent} ${cr(p.accent, p.bg).toFixed(1)}:1<br>highlight ${p.mark} · word ${cr(p['mark-text'], p.mark).toFixed(1)}:1</div>
@@ -1022,7 +1022,7 @@ $('browser').innerHTML = `
   <div class="page"><div class="site">
     <div class="k">Ideas</div>
     <h1>What we lose when we stop reading long things</h1>
-    <div class="b">By Megan Garber</div>
+    <div class="b">By Clara Vance</div>
     <p>The first time a page disappears from the web while it is still on your list, you learn what a read-it-later app is actually for. It was never about saving time. It was about keeping the thing itself, the words, somewhere that belongs to you rather than to whoever happens to be hosting them this year.</p>
     <p>Everything that followed was an elaboration of that one move. Sync arrived so the reading could happen somewhere other than the saving. A clean view arrived so the text could be read without the page fighting back.</p>
     <p>What never changed was the shape of the shelf: a list, newest at the top, that belonged to one person and nobody else.</p>

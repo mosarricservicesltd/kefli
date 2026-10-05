@@ -1,0 +1,1024 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shelf Extension (Soft pills)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens-softpills.css">
+<style>
+/* House motion (consistency spec). tokens.css is generated, so these live here; in the build they go on .toast. */
+:root{--motion-enter:250ms cubic-bezier(.2,.8,.2,1);--motion-exit:200ms cubic-bezier(.4,0,1,1)}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font-family:var(--font-ui);font-size:var(--text-15);line-height:1.5;background:#E7E3E1;color:#181D27}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.wrap{max-width:1040px;margin:0 auto;padding:var(--space-24) var(--space-16) var(--space-32)}
+.sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0}
+
+/* ---------- control panel (outside the mock) ---------- */
+.panel{font-size:var(--text-13);margin-bottom:var(--space-20)}
+.panel h1{font-size:var(--text-20);margin:0 0 var(--space-4);font-weight:600}
+.panel p{margin:0 0 var(--space-12);color:#535862;max-width:80ch}
+.panel .grid{display:flex;flex-wrap:wrap;gap:var(--space-16) var(--space-32)}
+.panel h2{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#535862;margin:0 0 var(--space-8)}
+.panel .btns{display:flex;flex-wrap:wrap;gap:6px}
+.panel .btns button{height:32px;padding:0 12px;border-radius:var(--radius-pill);background:#FFFFFF;border:1px solid #D5D7DA;display:inline-flex;align-items:center}
+.panel .btns button.on{background:#181D27;color:#FFFFFF;border-color:#181D27}
+.panel .note{margin-top:var(--space-12);padding:var(--space-12);border-radius:var(--radius);background:#FFFFFF;border:1px solid #D5D7DA;color:#414651;max-width:80ch}
+.panel.after{margin:var(--space-20) 0 0}
+.panel .note p{margin:0 0 var(--space-8);color:inherit}
+.panel .note p:last-child{margin:0}
+.panel .jnote{margin:var(--space-12) 0 0}
+.panel details.note summary{cursor:pointer;font-weight:600}
+.panel details.note ul{margin:var(--space-8) 0 0;padding-left:1.2em}
+.panel details.note li{margin-bottom:var(--space-4)}
+
+/* ---------- browser window (system chrome, drawn as a reference) ---------- */
+.win{--chrome:#DFE1E5;--chrome-2:#FFFFFF;--chrome-text:#1F1F1F;--chrome-muted:#5F6368;--omni:#F1F3F4;
+  position:relative;border-radius:12px;overflow:hidden;box-shadow:0 24px 48px #10182833,0 0 0 1px #10182814;background:var(--chrome);color:var(--chrome-text)}
+.win[data-theme="dark"]{--chrome:#202124;--chrome-2:#35363A;--chrome-text:#E8EAED;--chrome-muted:#9AA0A6;--omni:#202124}
+.tabs{height:40px;display:flex;align-items:flex-end;gap:4px;padding:0 var(--space-12)}
+.dotsw{display:flex;gap:8px;align-self:center;margin-right:var(--space-12)}
+.dotsw i{width:12px;height:12px;border-radius:50%;background:var(--chrome-muted);opacity:.35}
+.tab{height:32px;min-width:0;display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-12);border-radius:10px 10px 0 0;background:transparent;color:var(--chrome-muted);font-size:12px;max-width:240px;white-space:nowrap;overflow:hidden}
+.tab:hover{background:color-mix(in srgb, var(--chrome-text) 8%, transparent)}
+.tab.on{background:var(--chrome-2);color:var(--chrome-text)}
+.tab .lbl{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.tab .fav{width:16px;height:16px;border-radius:4px;background:var(--chrome-muted);opacity:.5;flex:none}
+/* Shelf's app icon (shared/brand/src/small.svg) wherever Chrome shows the extension: tab favicon, toolbar, menu, omnibox. */
+.tab .fav.shelf{background:none;border-radius:0;opacity:1;display:inline-flex;color:var(--on-gradient)}
+svg.mark{display:block;flex:none}
+.bar{height:44px;display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-8);background:var(--chrome-2)}
+.bar .nav{width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:var(--chrome-muted)}
+.omni{flex:1;min-width:0;height:32px;border-radius:16px;background:var(--omni);display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-12);font-size:13px;color:var(--chrome-muted);white-space:nowrap;overflow:hidden}
+.omni b{color:var(--chrome-text);font-weight:400}
+.tb{position:relative;width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:var(--chrome-muted);flex:none}
+.tb[hidden]{display:none}
+.tb:hover{background:#0000000F}
+.tb.shelf .ico{display:inline-flex;color:var(--on-gradient)}
+/* The badge is drawn by Chrome from the colours the build passes to setBadgeBackgroundColor / setBadgeTextColor. */
+.badge{position:absolute;right:0;bottom:1px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#079455;color:#FFFFFF;font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.badge.wait{background:#535862}
+.me{width:26px;height:26px;border-radius:50%;background:#8E9196;flex:none;margin-left:2px}
+
+/* ---------- the web page under the toast (someone else's site) ---------- */
+.page{position:relative;height:580px;overflow:hidden;background:#FFFFFF;color:#1F1F1F}
+.win[data-theme="dark"] .page{background:#16171A;color:#E8EAED}
+#content{height:100%}
+.site{max-width:640px;margin:0 auto;padding:var(--space-32) var(--space-24)}
+.site .kick{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#8E9196;margin-bottom:var(--space-8)}
+.site h1{font:600 30px/1.2 Georgia,serif;margin:0 0 var(--space-12)}
+.site .by{font-size:13px;color:#8E9196;margin-bottom:var(--space-20)}
+.site p{font:17px/1.6 Georgia,serif;margin:0 0 1em;opacity:.85}
+.site a{color:#1A5FB4}
+.win[data-theme="dark"] .site a{color:#8AB4F8}
+/* Chrome's own Settings page (browser UI) */
+.chromeset h1{font:400 22px/1.3 system-ui;margin:0 0 var(--space-16)}
+.chromeset .crow{font:14px/1 system-ui;padding:16px 0;border-bottom:1px solid color-mix(in srgb, currentColor 12%, transparent)}
+
+/* context menu (browser UI) */
+.cmenu{position:absolute;width:240px;padding:6px 0;border-radius:8px;background:#FFFFFF;box-shadow:0 8px 24px #00000033,0 0 0 1px #0000001A;font-size:13px;color:#1F1F1F;z-index:5}
+.win[data-theme="dark"] .cmenu{background:#292A2D;color:#E8EAED}
+.cmenu div{height:30px;display:flex;align-items:center;gap:10px;padding:0 14px}
+.cmenu div.hr{height:1px;padding:0;margin:6px 0;background:#0000001A}
+.cmenu .hl{background:#0000000F}
+.cmenu .sico{width:16px;height:16px;display:inline-flex;color:var(--on-gradient)}
+.cmenu .sp{width:16px}
+
+/* ---------- Shelf's toast (our UI, tokens only) ---------- */
+/* The house inverted toast (decisions 46 and 57): buildToast gives the toast the opposite token scheme, so every role colour
+   inside it (muted, success, error, accent, the focus ring) comes from one contrast-checked set. Its surface and text are the
+   page scheme's text and background colours, exactly as on the phone, and its shadow is the page scheme's. The properties
+   below resolve on .page, before the flip. */
+.page{--toast-bg:var(--text);--toast-fg:var(--background);--toast-shadow:var(--shadow-float)}
+.toast{position:absolute;right:var(--space-16);bottom:var(--space-16);width:320px;max-width:calc(100% - 32px);z-index:6;
+  background:var(--toast-bg);color:var(--toast-fg);border-radius:var(--radius);box-shadow:var(--toast-shadow);
+  font-family:system-ui,var(--font-ui);overflow:hidden;animation:toastIn var(--motion-enter)}
+@keyframes toastIn{from{opacity:0;transform:translateY(24px)}}
+.toast.leave{transition:opacity var(--motion-exit),transform var(--motion-exit);opacity:0;transform:translateY(24px)}
+/* The toast and the browser-page popup share one anatomy: icon, title, sub-line, action, ✕ and the 2 px countdown. */
+:is(.toast,.popup) .row{display:flex;align-items:center;gap:var(--space-12);padding:var(--space-12) var(--space-8) var(--space-12) var(--space-12);min-height:64px}
+:is(.toast,.popup) .ti{width:32px;height:32px;border-radius:var(--radius-pill);display:inline-flex;align-items:center;justify-content:center;flex:none}
+/* one tone per meaning: success solid green, error solid, offline neutral, accent-soft only for progress and neutral info */
+:is(.toast,.popup) .ti.soft{background:var(--accent-soft);color:var(--accent)}
+:is(.toast,.popup) .ti.ok{background:var(--success);color:var(--on-accent)}
+:is(.toast,.popup) .ti.bad{background:var(--error);color:var(--on-accent)}
+:is(.toast,.popup) .ti.off{background:var(--surface);border:1px solid var(--line);color:var(--muted)}
+:is(.toast,.popup) .tx{flex:1;min-width:0}
+:is(.toast,.popup) .tx b{display:block;font-size:var(--text-15);font-weight:600;line-height:1.3}
+:is(.toast,.popup) .tx span{display:block;font-size:var(--text-13);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+:is(.toast,.popup) .tx span.wrap2{white-space:normal}
+:is(.toast,.popup) .act{height:36px;padding:0 var(--space-12);border-radius:var(--radius-pill);font-weight:600;font-size:var(--text-13);flex:none;display:inline-flex;align-items:center}
+:is(.toast,.popup) .x{width:32px;height:32px;border-radius:var(--radius-pill);display:inline-flex;align-items:center;justify-content:center;color:var(--muted);flex:none}
+.toast .act{color:var(--toast-fg)}
+.toast .act:hover,.toast .x:hover{background:color-mix(in srgb, var(--toast-fg) 12%, transparent)}
+:is(.toast,.popup) button:focus-visible,:is(.toast,.popup).viakey button:focus{outline:2px solid var(--accent);outline-offset:-2px}
+:is(.toast,.popup) .timer{height:2px;background:var(--accent);animation:shrink linear forwards}
+.paused .timer{animation-play-state:paused}
+@keyframes shrink{from{width:100%}to{width:0}}
+.saving{display:inline-flex;gap:4px}
+.saving i{width:6px;height:6px;border-radius:50%;background:currentColor;animation:breathe 1.2s ease-in-out infinite}
+.saving i:nth-child(2){animation-delay:.2s}.saving i:nth-child(3){animation-delay:.4s}
+@keyframes breathe{0%,100%{opacity:.35}50%{opacity:1}}
+
+/* ---------- Shelf's action popup on browser pages (our UI, tokens only; Chrome draws the bubble it sits in) ---------- */
+.popup{position:absolute;top:84px;right:44px;width:320px;max-width:calc(100% - 16px);z-index:8;background:var(--surface);color:var(--text);
+  border-radius:var(--radius);box-shadow:var(--shadow-float);border:var(--card-edge);font-family:var(--font-ui);overflow:hidden}
+.popup[hidden]{display:none}
+.popup:focus{outline:none}
+.popup .act{color:var(--accent)}
+.popup .act:hover,.popup .x:hover{background:var(--background)}
+
+/* ---------- options page (our UI, tokens only) ---------- */
+.opts{height:100%;overflow-y:auto;background:var(--background);color:var(--text);font-family:var(--font-ui)}
+.opts .in{max-width:520px;margin:0 auto;padding:var(--space-32) var(--space-24)}
+.opts :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.brandrow{display:flex;align-items:center;gap:var(--space-8);font-weight:600;margin-bottom:var(--space-24)}
+.brandrow .lg{display:inline-flex;color:var(--on-gradient)}
+/* one title slot: a 28/1.2 h1 and a muted lead; notices and outcome errors sit between them */
+.opts h1{font-size:var(--text-28);line-height:1.2;letter-spacing:-.02em;font-weight:600;margin:0 0 var(--space-8)}
+.opts .lead{color:var(--muted);margin:0 0 var(--space-20)}
+.titlerow{display:flex;align-items:center;gap:var(--space-12);margin-bottom:var(--space-8)}
+.titlerow h1{margin:0}
+.titlerow .ok{width:40px;height:40px;border-radius:50%;background:var(--success);color:var(--on-accent);display:inline-flex;align-items:center;justify-content:center;flex:none}
+.card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);border:var(--card-edge);padding:var(--space-24)}
+.pair{display:flex;gap:var(--space-24);align-items:center}
+/* the code sits under the QR, as on the phone's showing side; .qr stays dark on white in every theme so it scans */
+.qr{flex:none;padding:var(--space-12);border-radius:var(--radius);background:#FFFFFF;color:#181D27;line-height:0;display:flex;flex-direction:column;align-items:center;gap:var(--space-12)}
+.qr.faded svg{opacity:.12}
+.qr .code{font:600 var(--text-20)/1 var(--font-ui);letter-spacing:.2em;padding-left:.2em;font-variant-numeric:tabular-nums}
+.qr.faded .code{opacity:.4}
+.steps{margin:0;padding-left:1.2em;font-size:var(--text-15)}
+.steps li{margin-bottom:var(--space-8)}
+.status{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-8);margin-top:var(--space-16);padding-top:var(--space-16);border-top:1px solid var(--line);font-size:var(--text-13);color:var(--muted)}
+.status.plain{border-top:0}
+.status .cd{margin-left:auto;font-variant-numeric:tabular-nums}
+/* waiting line: one 8 px breathing dot at the start */
+.pdot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none;animation:breathe 1.2s ease-in-out infinite}
+.errline{display:flex;gap:var(--space-8);align-items:flex-start;padding:var(--space-12) var(--space-16);border-radius:var(--radius);background:color-mix(in srgb, var(--error) 10%, var(--surface));color:var(--text);font-size:var(--text-13);font-weight:500;margin-bottom:var(--space-16)}
+.errline svg{color:var(--error);flex:none;margin-top:1px}
+/* offline and waiting: the neutral notice */
+.notice{display:flex;gap:var(--space-8);align-items:flex-start;padding:var(--space-12) var(--space-16);border-radius:var(--radius);background:var(--surface);border:1px solid var(--line);color:var(--text);font-size:var(--text-13);font-weight:500;margin:0 0 var(--space-16)}
+.notice svg{color:var(--muted);flex:none;margin-top:1px}
+.btn{height:44px;padding:0 var(--space-20);border-radius:var(--radius-pill);display:inline-flex;align-items:center;justify-content:center;gap:var(--space-8);font-weight:600;font-size:var(--text-15);line-height:1}
+/* content on Terracotta is white in every theme (decision 61) */
+.btn.primary{background:var(--gradient-primary);color:var(--on-gradient)}
+.btn.secondary{background:var(--surface);color:var(--text);box-shadow:var(--shadow-card);border:var(--card-edge)}
+/* destructive: solid only on the confirm; the control that opens it is quieter (the phone's red text button) */
+.btn.secondary.destructive{color:var(--error)}
+.btn.danger{background:var(--surface);color:var(--error);border:1.5px solid var(--error)}
+.btn.danger:not([disabled]){background:var(--error);color:var(--on-accent)}
+.btn.danger[disabled]{opacity:.45;cursor:default}
+.sect{margin-top:var(--space-24)}
+.sect h2{font-size:var(--text-13);font-weight:600;color:var(--muted);margin:0 0 var(--space-8)}
+/* inline confirm before disconnecting (same pattern as the phone's Disconnect sheet): [Cancel][named consequence], right-aligned */
+.confirm{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);border:var(--card-edge);padding:var(--space-16)}
+.confirm h2{font-size:var(--text-17);font-weight:600;color:var(--text);margin:0 0 var(--space-4)}
+.confirm p{color:var(--muted);margin:0 0 var(--space-16)}
+.confirm .row{display:flex;flex-wrap:wrap;gap:var(--space-8);justify-content:flex-end}
+.list{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);border:var(--card-edge);overflow:hidden}
+.li{display:flex;align-items:center;gap:var(--space-12);min-height:52px;padding:var(--space-8) var(--space-16);border-top:1px solid var(--line);font-size:var(--text-15)}
+.li:first-child{border-top:0}
+.li .ic{color:var(--muted);display:inline-flex;flex:none}
+.li .t{flex:1;min-width:0}
+.li .t small{display:block;font-size:var(--text-13);color:var(--muted)}
+/* the pin line at the top of the pairing card, ruled off from the pairing steps */
+.card .pinline{padding:0 0 var(--space-16);margin:0 0 var(--space-20);min-height:0;border-top:0;border-bottom:1px solid var(--line)}
+.keys{display:inline-flex;gap:var(--space-4);flex:none}
+.kbd{display:inline-flex;align-items:center;height:24px;padding:0 var(--space-8);border-radius:var(--radius-image);background:var(--background);border:1px solid var(--line);font-size:var(--text-13);font-weight:600}
+.li .retry{height:36px;padding:0 var(--space-12);border-radius:var(--radius-pill);color:var(--accent);font-weight:600;font-size:var(--text-13);flex:none;display:inline-flex;align-items:center;gap:var(--space-8)}
+.li .retry:hover{background:var(--background)}
+/* busy: keeps its colour, three 6 px dots and an '-ing' label, aria-busy, never looks disabled */
+.li .retry[aria-busy="true"]{pointer-events:none}
+.dots{display:inline-flex;gap:4px}
+.dots.inbtn i{width:6px;height:6px;border-radius:50%;background:currentColor;animation:breathe 1.2s ease-in-out infinite}
+.dots.inbtn i:nth-child(2){animation-delay:.2s}.dots.inbtn i:nth-child(3){animation-delay:.4s}
+.li .sent{color:var(--success);display:inline-flex;flex:none;padding:0 var(--space-12)}
+.list :focus-visible{outline-offset:-2px}
+/* Advanced is a row: bare muted icon, 500 label, 18 px chevron that turns when open */
+details.adv{margin-top:var(--space-24)}
+details.adv summary{display:flex;align-items:center;gap:var(--space-12);min-height:52px;padding:var(--space-8) var(--space-16);background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-card);border:var(--card-edge);font-size:var(--text-15);font-weight:500;color:var(--text);cursor:pointer;list-style:none}
+details.adv summary::-webkit-details-marker{display:none}
+details.adv summary .ic{color:var(--muted);display:inline-flex}
+details.adv summary > svg:last-child{margin-left:auto;color:var(--muted);transition:transform var(--motion-enter)}
+details.adv[open] summary > svg:last-child{transform:rotate(90deg)}
+.sdot{display:inline-flex;align-items:center;gap:var(--space-8);font-size:var(--text-13);color:var(--muted)}
+.sdot::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--success)}
+.sdot.bad::before{background:var(--error)}
+.fine{font-size:var(--text-13);color:var(--muted);margin:var(--space-12) 0 0}
+@media (max-width:640px){.pair{flex-direction:column;align-items:flex-start}}
+/* reduced motion: fades keep their durations, and bars that carry information (the toast's countdown) keep running */
+@media (prefers-reduced-motion:reduce){@keyframes toastIn{from{opacity:0}} .toast.leave{transform:none} .saving i,.pdot,.dots i{animation:none;opacity:1} details.adv summary svg{transition:none}}
+@media (forced-colors: active){
+  .toast,.popup,.card,.list,.confirm,.errline,.notice,.toast .ti,.popup .ti,.titlerow .ok,details.adv summary{border:1px solid CanvasText}
+  .btn,.toast .act,.toast .x,.popup .act,.popup .x,.li .retry{border:1px solid ButtonText}
+  .toast .timer,.popup .timer,.saving i,.pdot,.dots i,.sdot::before{forced-color-adjust:none;background:CanvasText}
+  .qr{forced-color-adjust:none}
+}
+</style>
+</head>
+<body>
+<!-- The brand gradient for Shelf's app icon, defined once under its own id and shared by every inlined copy of the mark. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><linearGradient id="shelfMarkTile" x1="0" y1="0" x2="0" y2="32" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#BE6947"/><stop offset="1" stop-color="#944526"/></linearGradient></defs></svg>
+<div class="wrap">
+  <div class="panel">
+    <h1>Shelf prototype · batch 5 · browser extension</h1>
+    <p>Click the Shelf button in the toolbar or press Alt+Shift+S to save the page, or jump to any state below. The toast never takes focus: press the shortcut again while it says Saved to reach Undo, then Tab, Escape or ✕ to go back to the page. It pauses while the pointer is over it or focus you gave it is inside it. On a browser page, a small popup opens under Shelf’s button instead. Shelf’s options open in their own tab; click the article’s tab to go back. When Shelf isn’t pinned, click the puzzle piece to pin it. The browser window, tab strip, badge and right-click menu are Chrome’s, drawn only for context; the toast, the popup and the options page are Shelf’s. Decisions and build notes are under the window.</p>
+    <div class="grid">
+      <div><h2>Theme</h2><div class="btns"><button data-theme-set="light" class="on">Light</button><button data-theme-set="dark">Dark</button></div></div>
+      <div><h2>Platform</h2><div class="btns"><button data-toggle="mac" aria-pressed="false">Mac</button><button data-toggle="nokey" aria-pressed="false">Shortcut not set</button></div></div>
+      <div><h2>Save toast</h2><div class="btns">
+        <button data-jump="saving">Saving…</button>
+        <button data-jump="saved">Saved</button>
+        <button data-jump="reach">Second press: Undo focused</button>
+        <button data-jump="undone">After Undo</button>
+        <button data-jump="notext">Phone will fetch the text</button>
+        <button data-jump="offline">Saved offline</button>
+        <button data-jump="unqueued">After Undo, offline</button>
+        <button data-jump="full">Ninth offline save</button>
+        <button data-jump="failed">Couldn’t send</button>
+        <button data-jump="menu">Right-click a link</button>
+      </div></div>
+      <div><h2>Browser pages</h2><div class="btns">
+        <button data-jump="popup">Browser page (popup)</button>
+        <button data-jump="restricted">Browser page, tick only (Chrome before 127)</button>
+      </div></div>
+      <div><h2>Options page</h2><div class="btns">
+        <button data-jump="o-pair">Not connected yet</button>
+        <button data-jump="o-unpinned">Not pinned yet</button>
+        <button data-jump="o-expired">Code expired</button>
+        <button data-jump="o-offline">Can’t connect</button>
+        <button data-jump="o-connected">Connected</button>
+        <button data-jump="o-waiting">Connected, offline, 3 waiting</button>
+        <button data-jump="o-failed">Connected, some couldn’t send</button>
+        <button data-jump="o-blocked">Connected, something is blocking Shelf’s server</button>
+        <button data-jump="o-unsent">Disconnect with unsent saves</button>
+        <button data-jump="o-scanned">Simulate: phone scans the code</button>
+      </div></div>
+    </div>
+    <p class="note jnote" id="jnote" hidden></p>
+  </div>
+
+  <div class="win" id="win" data-theme="light">
+    <div class="tabs" id="tabs" role="tablist" aria-label="Tabs"></div>
+    <div class="bar">
+      <span class="nav" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></span>
+      <span class="nav" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></span>
+      <div class="omni" id="omni"></div>
+      <button class="tb shelf" id="shelfbtn" aria-label="Save to Shelf (Alt+Shift+S)" title="Save to Shelf (Alt+Shift+S)"><span class="ico" id="shelfico"></span><span id="badge"></span></button>
+      <!-- Chrome's Extensions menu (the puzzle piece). While Shelf isn't pinned, clicking it here pins Shelf. -->
+      <button class="tb" id="puzzle" aria-hidden="true" tabindex="-1"></button>
+      <span class="me" aria-hidden="true"></span>
+    </div>
+    <div class="page" id="page">
+      <div id="content"></div>
+      <!-- Build contract for the toast (spec 05 §4).
+           - The host is a custom element <shelf-toast> with a closed shadow root:
+             :host{all:initial !important;position:fixed;right:16px;bottom:16px;z-index:2147483647}.
+           - Declared on the inner .toast element, not on :host, because page rules that match the host win for normal
+             declarations and all:initial doesn't reset custom properties: the toast's tokens, --motion-enter and
+             --motion-exit, font:15px/1.5 system-ui, color, letter-spacing:normal, text-transform:none, text-align:left,
+             direction:ltr and color-scheme:light dark.
+           - The scheme comes from @media (prefers-color-scheme: dark) on .toast, not from [data-theme]. The toast is the
+             house inverted toast (decision 57): .toast declares the opposite scheme's values, its surface is the page
+             scheme's text colour and its text the page scheme's background, and --toast-shadow takes the page scheme's shadow.
+           - Where the popover API exists (Chrome 114+, Firefox 125+), the host is popover="manual" and shown with
+             showPopover(), so it sits above fullscreen video and the page's modal dialogs. Otherwise it is appended to
+             document.fullscreenElement when one is set, or else to document.documentElement.
+           - Accepted as they are: bottom right, 320 wide, the 16 px inset, and system-ui first. Remote and shadow-root
+             @font-face are unreliable.
+           - Page CSS can still reach the host element (rules matching <shelf-toast>, and inheritance into the shadow tree),
+             which is why the list above lives inside the shadow root. Spec 05's claim that page CSS cannot touch a closed
+             shadow root needs correcting.
+           - The toast never takes focus on its own. The live region below is created once and only its text changes. -->
+      <div id="toasthost"><div id="toastlive" class="sr" role="status" aria-live="polite"></div></div>
+      <!-- The options page's one persistent status region. -->
+      <div id="optlive" class="sr" role="status" aria-live="polite"></div>
+    </div>
+    <!-- Shelf's action popup (saved.html in the build), opened on pages where no toast can run. Chrome anchors it under the
+         toolbar button; its document takes focus as a browser popup does, but Undo is not focused. It has its own status region. -->
+    <div class="popup" id="apopup" role="dialog" aria-label="Shelf" tabindex="-1" hidden></div>
+  </div>
+  <div class="panel after">
+    <div class="note">
+      <p><strong>For you to decide:</strong> the spec drops the oldest queued save when a ninth is made offline. Here the ninth is refused instead, with a clear message, so nothing you saved is ever silently lost (decision 31).</p>
+      <p><strong>Changed in this pass:</strong> the toast never takes focus; a second press of the shortcut reaches Undo (58, updates 44). Browser pages show a small popup as well as the tick (59). Offline saves offer Undo (60, changes 30). The badge, the button’s name and the options notice count offline saves only (30); saves that couldn’t send are listed on the options page. Disconnecting names every unsent save it would delete, including ones that couldn’t send.</p>
+    </div>
+    <details class="note">
+      <summary>Build notes</summary>
+      <ul>
+        <li><strong>Toast:</strong> the shadow-root contract is in the comment above the toast host in this file’s source.</li>
+        <li><strong>Second press:</strong> while a Saved toast shows, the command handler asks the tab’s content script to reach Undo and passes the keyboard flag.</li>
+        <li><strong>Install:</strong> on runtime.onInstalled with reason 'install', call runtime.openOptionsPage() so Connect opens by itself. The Firefox manifest overlay sets action.default_area:'navbar'.</li>
+        <li><strong>Pin line:</strong> read action.getUserSettings().isOnToolbar (Chrome 91+, Firefox 118+); re-check on focus, visibilitychange and action.onUserSettingsChanged where it exists, and drop the line once Shelf is pinned.</li>
+        <li><strong>Browser-page popup:</strong> in the command or click handler, action.setPopup({popup:'saved.html'}), then action.openPopup(), then setPopup({popup:''}) so the next click still saves. Needs Chrome 127+; below that the tick alone stays. Firefox allows openPopup() from the same user-action handler.</li>
+        <li><strong>Badge:</strong> setBadgeBackgroundColor '#535862' while saves wait to send and '#079455' for the tick; setBadgeTextColor('#FFFFFF') in both builds.</li>
+        <li><strong>Shortcut:</strong> read the live binding with commands.getAll() in both browsers. 'Set a shortcut' opens chrome://extensions/shortcuts with tabs.create (Edge and Brave redirect it); in Firefox, commands.openShortcutSettings() where it exists, otherwise the words 'Add-ons, then the gear, then Manage Extension Shortcuts'. In this mock it simulates setting Alt+Shift+S there and coming back.</li>
+        <li><strong>Fonts:</strong> the options page and the popup use Inter, bundled as a local @font-face (the extension’s CSP forbids remote fonts). The injected toast stays system-ui.</li>
+        <li><strong>Browser name:</strong> the connected lead takes it from the pairing label; fall back to navigator.userAgent where navigator.userAgentData is missing (Firefox).</li>
+        <li><strong>Firefox build:</strong> the menu item is titled 'Save Link to Shelf' (Title Case) and the options row repeats that wording; the options page lives at moz-extension://…/options.html; a save from about:reader?url=… sends the inner url. No Firefox window is drawn here.</li>
+        <li><strong>Check:</strong> verify in a light and a dark Windows contrast theme (for example Desert and Night sky).</li>
+      </ul>
+    </details>
+  </div>
+</div>
+
+<script>
+/* ---------------- icons (Lucide) ---------------- */
+const I = {
+  bookmark:'<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  x:'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  alert:'<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>',
+  wifioff:'<path d="M12 20h.01"/><path d="M8.5 16.43a5 5 0 0 1 7 0"/><path d="M5 12.86a10 10 0 0 1 5.17-2.69"/><path d="M19 12.86a10 10 0 0 0-2-1.52"/><path d="M2 8.82a15 15 0 0 1 4.18-2.64"/><path d="M22 8.82a15 15 0 0 0-11.29-3.76"/><path d="m2 2 20 20"/>',
+  text:'<path d="M17 6.1H3M21 12.1H3M15.1 18H3"/>',
+  undo:'<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
+  phone:'<rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/>',
+  mouse:'<rect x="5" y="2" width="14" height="20" rx="7"/><path d="M12 6v4"/>',
+  keyboard:'<path d="M10 8h.01M12 12h.01M14 8h.01M16 12h.01M18 8h.01M6 8h.01M7 16h10M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/>',
+  chev:'<path d="m9 18 6-6-6-6"/>',
+  refresh:'<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+  server:'<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>',
+  puzzle:'<path d="M19.439 7.85c-.049.322.059.648.289.878l1.568 1.568c.47.47.706 1.087.706 1.704s-.235 1.233-.706 1.704l-1.611 1.611a.98.98 0 0 1-.837.276c-.47-.07-.802-.48-.968-.925a2.501 2.501 0 1 0-3.214 3.214c.446.166.855.497.925.968a.979.979 0 0 1-.276.837l-1.61 1.61a2.404 2.404 0 0 1-1.705.707 2.402 2.402 0 0 1-1.704-.706l-1.568-1.568a1.026 1.026 0 0 0-.877-.29c-.493.074-.84.504-1.02.968a2.5 2.5 0 1 1-3.237-3.237c.464-.18.894-.527.967-1.02a1.026 1.026 0 0 0-.289-.877l-1.568-1.568A2.402 2.402 0 0 1 1.998 12c0-.617.236-1.234.706-1.704L4.23 8.77c.24-.24.581-.353.917-.303.515.077.877.528 1.073 1.01a2.5 2.5 0 1 0 3.259-3.259c-.482-.196-.933-.558-1.01-1.073-.05-.336.062-.676.303-.917l1.525-1.525A2.402 2.402 0 0 1 12 1.998c.617 0 1.234.236 1.704.706l1.568 1.568c.23.23.556.338.877.29.493-.074.84-.504 1.02-.968a2.5 2.5 0 1 1 3.237 3.237c-.464.18-.894.527-.967 1.02Z"/>',
+  settings:'<path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>',   // the phone's Advanced icon
+};
+// `extra` goes first: HTML keeps the first of two identical attributes, so a stroke-width passed in wins.
+const ic = (n, s = 18, extra = '') => `<svg ${extra} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[n]}</svg>`;
+/* Shelf's app icon, verbatim from shared/brand/src/small.svg (a brand asset with its own fixed colours); its gradient is #shelfMarkTile. */
+const MARK = s => `<svg class="mark" width="${s}" height="${s}" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="url(#shelfMarkTile)"/><path d="M10 4H22A2 2 0 0 1 24 6V20L16 12L8 20V6A2 2 0 0 1 10 4Z" fill="#FCF7F6"/><rect x="4" y="22" width="24" height="6" rx="3" fill="#DAAA97"/><path d="M7 22H20V28H7A3 3 0 0 1 7 22Z" fill="#FCF7F6"/></svg>`;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const $ = id => document.getElementById(id);
+const focusId = id => { const el = $(id); if (el) el.focus(); };
+const mmss = n => `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`;
+
+function qrSVG(size, label){
+  const cells = [], on = (x, y) => ((x * 7 + y * 13 + x * y) % 5) < 2;
+  for (let y = 0; y < 11; y++) for (let x = 0; x < 11; x++) {
+    const finder = (x < 3 && y < 3) || (x > 7 && y < 3) || (x < 3 && y > 7);
+    if (finder || on(x, y)) cells.push(`<rect x="${x * 10}" y="${y * 10}" width="9" height="9" rx="1.5"/>`);
+  }
+  return `<svg width="${size}" height="${size}" viewBox="0 0 110 110" fill="currentColor" role="img" aria-label="${label}">${cells.join('')}</svg>`;
+}
+
+/* ---------------- state ---------------- */
+const TITLE = 'What we lose when we stop reading long things';
+const HOST = 'theatlantic.com';
+const LINK_HOST = 'arstechnica.com';                   // where the article's "read-it-later apps" link goes
+const URL_ = 'theatlantic.com/ideas/archive/2026/09/reading-long-things';
+const CAP = 8;                                        // offline queue limit (decision 31)
+const KEY = 'Alt+Shift+S';                            // the manifest's suggested binding
+/* "Couldn't send" lists every save no relay has accepted yet. 'Shelf' alone means the app; the server is "Shelf's server".
+   'stopped' is for entries past the 200-attempt cap, where Retry is the only way on; otherwise Retry means "try now". */
+const WHY = {
+  reach: 'Couldn’t reach Shelf’s server. It will keep trying.',
+  blocked: 'Something in this browser is blocking Shelf’s server. See Advanced.',
+  stopped: 'Couldn’t reach Shelf’s server. Retry to send it.',
+};
+const FAILED = () => [
+  { id: 'f1', title: 'Aggregation theory, ten years on', host: 'stratechery.com', why: 'reach' },
+  { id: 'f2', title: 'Mozilla’s Readability library is quietly everywhere', host: 'arstechnica.com', why: 'stopped' },
+];
+const FRESH = () => ({
+  view: 'site',            // 'site' | 'restricted' | 'options': what the active tab shows
+  base: 'site',            // what the first tab holds: the article, or a browser page
+  optsOpen: false,         // Shelf's options open in a second tab
+  paired: true, pinned: true, online: true, waiting: 0,
+  tick: false,             // false, or the kind of save the icon tick confirms ('notext' | 'offline')
+  oldChrome: false,        // before Chrome 127 an extension can't open its popup, so browser pages get the tick only
+  toast: null, toastTimed: true, toastHost: HOST, toastLink: false, returnFocus: null, menu: false,
+  popup: null, popHost: '', popTimed: true, popReturn: null,
+  pair: 'show', countdown: 298, connectedOn: '27 September',
+  failed: [], blocked: false, advOpen: false, confirmUnpair: false,
+});
+const S = Object.assign(FRESH(), { mac: false, shortcut: KEY });   // platform and live binding: panel toggles, kept across jumps
+
+/* Every save that hasn't reached a relay yet: offline ones waiting, and ones that couldn't send. Only the Disconnect confirm uses it;
+   the badge, the button's name and the options notice count offline saves only (decision 30, kept by Richard). */
+const unsent = () => S.waiting + S.failed.filter(f => !f.sent).length;
+
+/* The live binding (commands.getAll() in the build), in the platform's own glyphs. */
+const keys = () => S.mac ? ['⌥', '⇧', 'S'] : ['Alt', 'Shift', 'S'];
+const keyLabel = () => S.mac ? '⌥⇧S' : 'Alt+Shift+S';
+const keySpoken = () => S.mac ? 'Option+Shift+S' : 'Alt+Shift+S';
+const keysHTML = () => `<span class="keys"${S.mac ? ' aria-hidden="true"' : ''}>${keys().map(k => `<span class="kbd">${k}</span>`).join('')}</span>${S.mac ? '<span class="sr">Option Shift S</span>' : ''}`;
+
+let timers = [];
+const later = (fn, ms, group = 'misc') => {
+  const t = { group };
+  t.id = setTimeout(() => { timers = timers.filter(x => x !== t); fn(); }, ms);
+  timers.push(t);
+};
+const clearTimers = group => { timers = timers.filter(t => { if (group && t.group !== group) return true; clearTimeout(t.id); return false; }); };
+
+const win = $('win'), page = $('page'), content = $('content'), host = $('toasthost'), toastLive = $('toastlive'), optLive = $('optlive');
+
+/* One persistent region per surface: clear it, then set the new text. */
+function say(el, msg){
+  clearTimeout(el._t);
+  el.textContent = '';
+  if (msg) el._t = setTimeout(() => { el.textContent = msg; }, 80);
+}
+
+/* ---------------- rendering ---------------- */
+function siteHTML(){
+  return `<article class="site"><div class="kick">Ideas</div><h1>${TITLE}</h1><div class="by">By Clara Vance · 11 min read</div>
+    <p>There is a particular kind of attention that only long reading asks for. It is slower than scrolling and less rewarding at first, and it builds something that skimming never does.</p>
+    <p>For most of the past decade, the tools we use to read have been built to keep us moving: one more headline, one more thread. The <a href="#" id="alink">read-it-later apps</a> were the exception, and their quiet decline tells us something about what we chose to value.</p>
+    <p>What they offered was modest. A list. A clean page. A promise that the thing you meant to read would still be there when you had the time to read it properly.</p></article>
+    ${S.menu ? menuHTML() : ''}`;
+}
+
+/* Chrome's own Settings page, drawn only for context: a browser page where no extension can run. */
+function restrictedHTML(){
+  const rows = ['You and Google', 'Autofill and passwords', 'Privacy and security', 'Performance', 'Appearance', 'Search engine'];
+  return `<div class="site chromeset"><h1>Settings</h1>${rows.map(r => `<div class="crow">${r}</div>`).join('')}</div>`;
+}
+
+function menuHTML(){
+  return `<div class="cmenu" style="left:190px;top:238px" role="menu" aria-label="Link menu">
+    <div>Open link in new tab</div><div>Open link in new window</div><div>Open link in incognito window</div><div class="hr"></div>
+    <div>Copy link address</div><div class="hr"></div>
+    <div class="hl" role="menuitem" tabindex="0" id="savelink"><span class="sico">${MARK(16)}</span>Save link to Shelf</div>
+    <div class="hr"></div><div><span class="sp"></span>Inspect</div></div>`;
+}
+
+/* Toast copy. Page-title sublines and one-line titles have no full stop; sentence sublines do. '·' joins, lower case after it.
+   `say` is what the persistent live region announces (text only, never the buttons). c = { host, link }: a link save
+   (right-click, or a browser page) names its host, because there is no page title yet. Every toast runs 8 s. */
+const CHECK = ic('check', 16, 'stroke-width="3"');
+const TOASTS = {
+  saving:   c => ({ icon: 'soft', glyph: `<span class="saving"><i></i><i></i><i></i></span>`, title: 'Saving…', sub: c.link ? c.host : TITLE, say: '' }),
+  saved:    c => ({ icon: 'ok', glyph: CHECK, title: 'Saved to Shelf', sub: TITLE, action: 'Undo', timer: 8000, say: 'Saved to Shelf' }),
+  notext:   c => ({ icon: 'ok', glyph: CHECK, title: 'Saved to Shelf', sub: `${c.host} · your phone will fetch the text`, wrap: true, action: 'Undo', timer: 8000, say: 'Saved to Shelf. Your phone will fetch the text.' }),
+  offline:  c => ({ icon: 'off', glyph: ic('wifioff', 16), title: 'Saved — will send when you’re online', sub: c.link ? c.host : TITLE, action: 'Undo', timer: 8000, say: 'Saved. It will send when you’re online.' }),
+  undone:   c => ({ icon: 'soft', glyph: ic('undo', 16), title: 'Removed from Shelf', sub: 'If your phone already has it, remove it there.', wrap: true, timer: 8000, say: 'Removed from Shelf. If your phone already has it, remove it there.' }),
+  // Undo on an offline save: it was still in this browser's queue, so nothing needs doing on the phone (decision 60).
+  unqueued: c => ({ icon: 'soft', glyph: ic('undo', 16), title: 'Removed from Shelf', sub: c.link ? c.host : TITLE, timer: 8000, say: 'Removed from Shelf' }),
+  full:     c => ({ icon: 'bad', glyph: ic('alert', 16), title: `Not saved: ${CAP} are already waiting`, sub: 'They’ll send when you’re online. Save this again then.', wrap: true, timer: 8000, say: `Not saved: ${CAP} are already waiting. They’ll send when you’re online. Save this again then.` }),
+  failed:   c => ({ icon: 'bad', glyph: ic('alert', 16), title: 'Couldn’t send this save', sub: 'It’s kept here, and Shelf will keep trying.', wrap: true, action: 'Options', timer: 8000, say: 'Couldn’t send this save. It’s kept here, and Shelf will keep trying.' }),
+};
+/* A Saved toast tells keyboard users how to reach Undo, using the live binding; with no binding the sentence is dropped. */
+const toastSay = t => t.action === 'Undo' && S.shortcut ? `${t.say.replace(/\.?$/, '.')} Press ${keySpoken()} again to reach Undo.` : t.say;
+
+const failRow = f => {
+  const end = f.sent
+    ? `<span class="sent">${ic('check', 18)}</span>`
+    : f.sending
+      ? `<button class="retry" id="retry-${f.id}" data-act="retry" data-id="${f.id}" aria-busy="true" aria-label="Sending ${esc(f.title)}"><span class="dots inbtn" aria-hidden="true"><i></i><i></i><i></i></span>Sending</button>`
+      : `<button class="retry" id="retry-${f.id}" data-act="retry" data-id="${f.id}" aria-label="Retry ${esc(f.title)}">Retry</button>`;
+  return `<div class="li"><span class="ic">${ic('alert', 18)}</span><span class="t">${esc(f.title)}<small>${esc(f.host)} · ${f.sent ? 'Sent' : WHY[f.why]}</small></span>${end}</div>`;
+};
+
+const PIN = `<span class="ic">${ic('puzzle', 18)}</span><span class="t">Pin Shelf to your toolbar: click the puzzle piece, then the pin next to Shelf.</span>`;
+
+function shortcutRow(){
+  if (!S.shortcut) return `<div class="li"><span class="ic">${ic('keyboard', 18)}</span><span class="t">No shortcut set</span><button class="retry" id="setkey" data-act="setkey">Set a shortcut</button></div>`;
+  return `<div class="li"><span class="ic">${ic('keyboard', 18)}</span><span class="t">Press a shortcut<small>Press it again to reach Undo</small></span>${keysHTML()}</div>`;
+}
+
+function optionsHTML(){
+  const head = `<div class="brandrow"><span class="lg">${MARK(28)}</span>Shelf</div>`;
+  if (!S.paired) {
+    const expired = S.pair === 'expired', offline = S.pair === 'offline', dim = expired || offline;
+    return `<div class="opts"><div class="in">${head}
+      <h1 id="connecthead" tabindex="-1">Connect to your phone</h1>
+      ${offline ? `<div class="errline">${ic('alert', 16)}<span>Can’t connect right now. Check your connection. Trying again every ten seconds.</span></div>` : ''}
+      <p class="lead">Pages you save here arrive in Shelf on your phone. Your phone decides which browsers it trusts, so you connect them from there.</p>
+      <div class="card">
+        ${S.pinned ? '' : `<div class="li pinline">${PIN}</div>`}
+        <div class="pair">
+          <div class="qr ${dim ? 'faded' : ''}">${qrSVG(168, dim ? 'Connection code, not available' : 'Connection code')}${dim ? `<div class="code" aria-hidden="true">––––-––––</div>` : `<div class="code" id="paircode" tabindex="-1">K7QM-4XPD</div>`}</div>
+          <ol class="steps"><li>Open Shelf on your phone.</li><li>Go to <strong>You</strong>, then <strong>Connected browsers</strong>, then <strong>Connect a browser</strong>.</li><li>Scan the code, or type the code under it.</li><li>Check that your phone names this browser <strong>Chrome on a Windows laptop</strong>, then tap <strong>Connect</strong>.</li></ol>
+        </div>
+        ${expired ? `<div class="status plain"><div class="errline" style="margin:0;flex:1">${ic('alert', 16)}<span>This code has expired.</span></div><button class="btn primary" id="newcode" data-act="newcode">${ic('refresh', 16)}Show a new one</button></div>`
+          : offline ? '' : `<div class="status"><span class="pdot" aria-hidden="true"></span>Waiting for your phone<span class="cd">Code expires in <span id="cd">${mmss(S.countdown)}</span></span></div>`}
+      </div></div></div>`;
+  }
+  const notice = S.waiting
+    ? `<div class="notice">${ic('wifioff', 16)}<span>${S.waiting === 1 ? '1 save waiting to send. It’ll send when you’re online.' : `${S.waiting} saves waiting to send. They’ll send when you’re online.`}</span></div>`
+    : '';
+  const failed = S.failed.length
+    ? `<section class="sect" aria-labelledby="failhead"><h2 id="failhead" tabindex="-1">Couldn’t send</h2><div class="list">${S.failed.map(failRow).join('')}</div></section>`
+    : '';
+  const relays = [['Shelf', 'relay.shelf.app', S.blocked], ['Backup 1', 'nos.lol', false], ['Backup 2', 'relay.damus.io', false]];
+  const n = unsent();
+  const unpair = S.confirmUnpair
+    ? `<div class="confirm" role="group" aria-labelledby="unpairhead"><h2 id="unpairhead">Disconnect this browser?</h2>
+        <p>${n ? `${n} ${n === 1 ? 'save hasn’t' : 'saves haven’t'} reached your phone yet. Disconnecting deletes ${n === 1 ? 'it' : 'them'} from this browser. ` : ''}This browser will stop sending saves to your phone. To stop it completely, also remove it under Connected browsers on your phone.</p>
+        <div class="row"><button class="btn secondary" id="unpair-cancel" data-act="unpair-cancel">Cancel</button><button class="btn danger" id="unpair-yes" data-act="unpair-yes">${n ? `Disconnect and delete ${n === 1 ? '1 save' : `${n} saves`}` : 'Disconnect'}</button></div></div>`
+    : `<button class="btn secondary destructive" id="unpair" data-act="unpair">Disconnect this browser</button>
+      <p class="fine">To stop this browser completely, also remove it under Connected browsers on your phone. If you undo a save your phone already picked up, remove it there too.</p>`;
+  return `<div class="opts"><div class="in">${head}
+    <div class="titlerow"><span class="ok">${ic('check', 20, 'stroke-width="3"')}</span><h1 id="connhead" tabindex="-1">Connected to your phone</h1></div>
+    ${notice}
+    <p class="lead">Since ${S.connectedOn} · your phone shows this browser as “Chrome on a Windows laptop”</p>
+    ${failed}
+    <section class="sect" aria-labelledby="wayshead"><h2 id="wayshead" tabindex="-1">Ways to save</h2><div class="list">
+      ${S.pinned ? '' : `<div class="li">${PIN}</div>`}
+      <div class="li"><span class="ic">${ic('bookmark', 18)}</span><span class="t">Click the Shelf button in the toolbar</span></div>
+      ${shortcutRow()}
+      <div class="li"><span class="ic">${ic('mouse', 18)}</span><span class="t">Right-click a link, then Save link to Shelf</span></div>
+    </div></section>
+    <details class="adv" ${S.advOpen ? 'open' : ''}><summary id="advsum"><span class="ic">${ic('settings', 18)}</span><span class="t">Advanced</span>${ic('chev', 18)}</summary>
+      <section class="sect" aria-labelledby="relayhead" style="margin-top:var(--space-8)"><h2 id="relayhead">Relays</h2><div class="list">
+        ${relays.map(([label, h, blocked]) => `<div class="li"><span class="ic">${ic('server', 18)}</span><span class="t">${label}<small>${h}</small></span><span class="sdot ${blocked ? 'bad' : ''}">${blocked ? 'Blocked in this browser' : 'Connected'}</span></div>`).join('')}</div>
+        <p class="fine">Set by your phone when you connected this browser.</p></section>
+    </details>
+    <div class="sect">${unpair}</div>
+  </div></div>`;
+}
+
+/* Browser chrome: tab strip, omnibox, toolbar badge and the button's name (which mirrors the badge). */
+function renderChrome(){
+  const opts = S.view === 'options';
+  const ae = document.activeElement, keepTab = ae && ae.dataset && ae.dataset.tab;
+  const baseLabel = S.base === 'restricted' ? 'Settings' : TITLE;
+  $('tabs').innerHTML = `<span class="dotsw" aria-hidden="true"><i></i><i></i><i></i></span>
+    <button class="tab ${opts ? '' : 'on'}" role="tab" aria-selected="${!opts}" data-tab="base"><span class="fav"></span><span class="lbl">${esc(baseLabel)}</span></button>
+    ${S.optsOpen ? `<button class="tab ${opts ? 'on' : ''}" role="tab" aria-selected="${opts}" data-tab="options"><span class="fav shelf">${MARK(16)}</span><span class="lbl">${S.paired ? 'Shelf · Options' : 'Shelf · Connect'}</span></button>` : ''}`;
+  if (keepTab) { const t = document.querySelector(`[data-tab="${keepTab}"]`); if (t) t.focus(); }
+  $('omni').innerHTML = opts ? `${MARK(16)}<b>Shelf</b>&nbsp;·&nbsp;chrome-extension://shelf/options.html` : `<b>${S.base === 'restricted' ? 'chrome://settings' : URL_}</b>`;
+  const n = S.waiting;                                      // offline saves only (decision 30)
+  const b = $('badge');
+  if (S.tick) { b.className = 'badge ok'; b.textContent = '✓'; }
+  else if (n) { b.className = 'badge wait'; b.textContent = String(n); }
+  else { b.className = ''; b.textContent = ''; }
+  // chrome.action.setTitle in the build: the badge is visual only, so its meaning goes in the name too.
+  const k = S.shortcut ? ` (${keyLabel()})` : '';
+  const name = S.tick ? (S.tick === 'offline' ? 'Saved — will send when you’re online' : 'Saved to Shelf · your phone will fetch the text')
+    : n ? `Save to Shelf${k} · ${n} waiting to send`
+    : `Save to Shelf${k}`;
+  const btn = $('shelfbtn');
+  btn.title = name; btn.setAttribute('aria-label', name);
+  btn.hidden = !S.pinned && !S.popup;                       // unpinned: Chrome pops the button out only while its popup shows
+  const pz = $('puzzle');
+  if (S.pinned) { pz.setAttribute('aria-hidden', 'true'); pz.tabIndex = -1; pz.removeAttribute('aria-label'); pz.removeAttribute('title'); }
+  else { pz.removeAttribute('aria-hidden'); pz.tabIndex = 0; pz.setAttribute('aria-label', 'Extensions'); pz.title = 'Extensions'; }
+  placePopup();
+}
+
+/* Page content of the active tab. Focus is kept on the same element (by id) across re-renders. */
+function renderContent(){
+  const ae = document.activeElement;
+  const keep = ae && ae.id && content.contains(ae) ? ae.id : '';
+  host.hidden = S.view === 'options';
+  content.innerHTML = S.view === 'options' ? optionsHTML() : S.view === 'restricted' ? restrictedHTML() : siteHTML();
+  const sl = $('savelink');
+  if (sl) sl.onclick = () => { S.menu = false; renderContent(); save({ linkOnly: true }); };
+  const adv = content.querySelector('details.adv');
+  if (adv) adv.addEventListener('toggle', () => { S.advOpen = adv.open; });
+  if (keep) focusId(keep);
+}
+
+function render(){ renderChrome(); renderContent(); }
+
+/* ---------------- toast and popup ---------------- */
+/* A dismiss timer that pauses while the pointer is over its card or focus the person gave it is inside. */
+function Hold(getEl, onDone){
+  const h = { left: 0, start: 0, id: null, hover: false, focus: false };
+  h.sync = () => { const el = getEl(); if (el) el.classList.toggle('paused', h.hover || h.focus); };
+  h.stop = () => { clearTimeout(h.id); h.id = null; h.left = 0; };
+  h.resume = () => {
+    h.sync();
+    if (h.id || !h.left || h.hover || h.focus) return;
+    h.start = Date.now();
+    h.id = setTimeout(() => { h.id = null; h.left = 0; onDone(); }, h.left);
+  };
+  h.pause = () => {
+    if (h.id) { clearTimeout(h.id); h.id = null; h.left = Math.max(1, h.left - (Date.now() - h.start)); }
+    h.sync();
+  };
+  h.begin = ms => { h.stop(); h.left = ms; h.resume(); };
+  return h;
+}
+function toastEl(){ return $('toast'); }
+function popEl(){ return $('apopup'); }
+const TT = Hold(toastEl, () => dismissToast());
+const PT = Hold(popEl, () => closePopup());
+
+const cardShell = () => `<div class="row"><span class="ti" aria-hidden="true"></span><div class="tx"><b></b><span></span></div><button class="x" data-act="close" aria-label="Dismiss">${ic('x', 16)}</button></div>`;
+
+/* Updates a toast or popup in place: the element, its ✕ and its live region are kept. */
+function paintCard(el, t, timed){
+  const ti = el.querySelector('.ti');
+  ti.className = `ti ${t.icon}`; ti.innerHTML = t.glyph;
+  el.querySelector('.tx b').textContent = t.title;
+  const sub = el.querySelector('.tx span');
+  sub.textContent = t.sub; sub.className = t.wrap ? 'wrap2' : '';
+  const x = el.querySelector('.x');
+  let act = el.querySelector('.act');
+  if (t.action) {
+    if (!act) { act = document.createElement('button'); act.className = 'act'; x.before(act); }
+    act.dataset.act = t.action; act.textContent = t.action;
+  } else if (act) {
+    if (act === document.activeElement) x.focus();          // never drop focus onto the page
+    act.remove();
+  }
+  const bar = el.querySelector('.timer');
+  if (bar) bar.remove();
+  if (t.timer && timed) {
+    const nb = document.createElement('div');
+    nb.className = 'timer'; nb.style.animationDuration = `${t.timer}ms`;
+    el.querySelector('.row').after(nb);
+  }
+}
+
+/* The toast is inverted: it takes the opposite token scheme to the page's (decision 57). */
+const toastFlip = () => win.dataset.theme === 'dark' ? 'light' : 'dark';
+const toastCtx = () => ({ host: S.toastHost, link: S.toastLink });
+
+function buildToast(){
+  const el = document.createElement('div');
+  el.className = 'toast'; el.id = 'toast'; el.dataset.theme = toastFlip();
+  el.setAttribute('role', 'group'); el.setAttribute('aria-label', 'Shelf');
+  el.innerHTML = cardShell();
+  el.addEventListener('mouseenter', () => { if (el !== toastEl()) return; TT.hover = true; TT.pause(); });
+  el.addEventListener('mouseleave', () => { if (el !== toastEl()) return; TT.hover = false; TT.resume(); });
+  // a mouse click inside must not hold the toast open: only hover does, until the pointer leaves
+  el.addEventListener('pointerdown', () => { el.classList.remove('viakey'); TT.focus = false; });
+  el.addEventListener('focusin', e => {
+    if (el !== toastEl()) return;
+    if (!(e.target.matches(':focus-visible') || el.classList.contains('viakey'))) return;   // a mouse click focuses the button but shouldn't hold the toast open
+    if (!TT.focus && e.relatedTarget && !el.contains(e.relatedTarget)) S.returnFocus = e.relatedTarget;
+    TT.focus = true; TT.pause();
+  });
+  el.addEventListener('focusout', e => {
+    if (el !== toastEl() || (e.relatedTarget && el.contains(e.relatedTarget))) return;
+    el.classList.remove('viakey'); TT.focus = false; TT.resume();
+  });
+  // Leaving the toast returns focus to where the person was: Tab past the last button, Shift+Tab before the first, or Escape.
+  el.addEventListener('keydown', e => {
+    if (el !== toastEl()) return;
+    if (e.key === 'Escape') { e.stopPropagation(); dismissToast(); return; }   // so the page's own Escape handlers don't fire
+    if (e.key !== 'Tab') return;
+    const btns = [...el.querySelectorAll('button')];
+    if ((!e.shiftKey && e.target === btns[btns.length - 1]) || (e.shiftKey && e.target === btns[0])) { e.preventDefault(); leaveToast(); }
+  });
+  host.insertBefore(el, toastLive);
+  return el;
+}
+
+/* Focus goes back to where it was; the toast stays, and its timer resumes through focusout. */
+function leaveToast(){
+  const r = S.returnFocus;
+  S.returnFocus = null;
+  if (r && r !== document.body && r.isConnected) r.focus(); else document.activeElement.blur();
+}
+
+/* The toast never takes focus on its own; it is announced through the persistent live region. */
+function showToast(kind, o = {}){
+  clearTimers('save');
+  let el = toastEl();
+  const fresh = !(o.inPlace && el);
+  if (fresh) {
+    if (el) el.remove();
+    TT.stop(); TT.hover = false; TT.focus = false;
+    S.returnFocus = null;
+  }
+  S.toast = kind;
+  S.toastTimed = o.timed !== undefined ? o.timed : (fresh ? true : S.toastTimed);
+  const t = TOASTS[kind](toastCtx());
+  paintCard(toastEl() || buildToast(), t, S.toastTimed);
+  say(toastLive, toastSay(t));
+  if (t.timer && S.toastTimed) TT.begin(t.timer); else TT.stop();
+}
+
+/* ✕, Escape and the timer. Focus goes back to where it was before the person brought it into the toast. */
+function dismissToast(){
+  const el = toastEl();
+  TT.stop(); clearTimers('save');
+  S.toast = null;
+  if (!el) return;
+  const had = el.contains(document.activeElement);
+  el.id = ''; el.classList.add('leave');
+  setTimeout(() => el.remove(), 200);
+  if (had) {
+    const r = S.returnFocus;
+    if (r && r !== document.body && r.isConnected) r.focus(); else document.activeElement.blur();
+  }
+  S.returnFocus = null;
+}
+
+function removeToastNow(){
+  const el = toastEl();
+  TT.stop(); clearTimers('save');
+  S.toast = null;
+  if (el) el.remove();
+}
+
+/* Undo on a toast. An offline save is still in this browser's queue, so Undo takes it out and the count drops (decision 60). */
+function undoSave(){
+  if (S.toast === 'offline') { S.waiting = Math.max(0, S.waiting - 1); renderChrome(); showToast('unqueued', { inPlace: true, timed: true }); }
+  else showToast('undone', { inPlace: true, timed: true });
+}
+
+/* The browser-page popup (decision 59). Its document takes focus when it opens, as a browser popup does; Undo does not. */
+function openPopup(kind, o = {}){
+  const pop = popEl();
+  const opening = pop.hidden;
+  S.popup = kind;
+  if (o.host) S.popHost = o.host;
+  if (o.timed !== undefined) S.popTimed = o.timed; else if (opening) S.popTimed = true;
+  if (opening) { S.popReturn = document.activeElement; PT.stop(); PT.hover = false; PT.focus = false; pop.classList.remove('viakey'); pop.hidden = false; }
+  renderChrome();                                           // also places the popup under the (possibly popped-out) button
+  const t = TOASTS[kind]({ host: S.popHost, link: true });
+  paintCard(pop, t, S.popTimed);
+  say($('poplive'), t.say);
+  if (t.timer && S.popTimed) PT.begin(t.timer); else PT.stop();
+  if (o.focus) pop.focus();
+}
+
+/* Closes after 8 s, on Escape or ✕ (focus goes back), or on blur (focus has already moved on). */
+function closePopup(o = {}){
+  const pop = popEl();
+  if (pop.hidden) return;
+  PT.stop();
+  const had = pop.contains(document.activeElement);
+  pop.hidden = true; S.popup = null;
+  say($('poplive'), '');
+  renderChrome();
+  if (had && o.restore !== false) {
+    const r = S.popReturn;
+    if (r && r !== document.body && r.isConnected) r.focus(); else document.activeElement.blur();
+  }
+  S.popReturn = null;
+}
+
+/* Chrome anchors the popup under the toolbar button, right edges aligned. */
+function placePopup(){
+  const pop = popEl();
+  if (pop.hidden) return;
+  const btn = $('shelfbtn');
+  if (btn.hidden) return;
+  const w = win.getBoundingClientRect(), a = btn.getBoundingClientRect();
+  pop.style.top = `${Math.round(a.bottom - w.top + 6)}px`;
+  pop.style.right = `${Math.max(8, Math.round(w.right - a.right))}px`;
+}
+
+function initPopup(){
+  const pop = popEl();
+  pop.innerHTML = `${cardShell()}<div id="poplive" class="sr" role="status" aria-live="polite"></div>`;
+  pop.addEventListener('mouseenter', () => { PT.hover = true; PT.pause(); });
+  pop.addEventListener('mouseleave', () => { PT.hover = false; PT.resume(); });
+  pop.addEventListener('pointerdown', () => { pop.classList.remove('viakey'); PT.focus = false; });
+  pop.addEventListener('focusin', e => {
+    if (e.target === pop) return;                          // the popup's own document focus isn't focus the person gave it
+    if (!(e.target.matches(':focus-visible') || pop.classList.contains('viakey'))) return;
+    PT.focus = true; PT.pause();
+  });
+  pop.addEventListener('focusout', e => {
+    if (e.relatedTarget && pop.contains(e.relatedTarget)) return;
+    PT.focus = false; pop.classList.remove('viakey');
+    closePopup({ restore: false });                        // a browser popup closes when it loses focus
+  });
+  pop.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { e.stopPropagation(); closePopup(); return; }
+    if (e.key !== 'Tab') return;                          // Tab cycles inside the popup's document
+    const btns = [...pop.querySelectorAll('button')];
+    if (!e.shiftKey && e.target === btns[btns.length - 1]) { e.preventDefault(); btns[0].focus(); }
+    else if (e.shiftKey && (e.target === btns[0] || e.target === pop)) { e.preventDefault(); btns[btns.length - 1].focus(); }
+  });
+  pop.addEventListener('click', e => {
+    const a = e.target.closest('[data-act]');
+    if (!a) return;
+    if (a.dataset.act === 'close') closePopup();
+    else if (a.dataset.act === 'Undo') {
+      const queued = S.popup === 'offline';
+      if (queued) S.waiting = Math.max(0, S.waiting - 1);
+      clearTimers('tick'); S.tick = false;
+      openPopup(queued ? 'unqueued' : 'undone', { timed: true });
+    }
+  });
+}
+
+/* A second press of the shortcut while a Saved toast (or popup) shows moves focus to Undo instead of saving again. */
+function secondPress(){
+  const pop = popEl();
+  if (!pop.hidden) {
+    const ae = document.activeElement;
+    if (pop.contains(ae) && ae !== pop) return true;       // already on one of its buttons
+    const a = pop.querySelector('.act[data-act="Undo"]');
+    if (a) { pop.classList.add('viakey'); a.focus(); return true; }
+    if (pop.contains(ae)) return true;
+  }
+  const el = toastEl();
+  if (!el) return false;
+  if (el.contains(document.activeElement)) return true;    // focus is already inside the toast: do nothing
+  if (!S.toast || TOASTS[S.toast](toastCtx()).action !== 'Undo') return false;
+  reachUndo();
+  return true;
+}
+function reachUndo(){
+  const el = toastEl(), a = el && el.querySelector('.act[data-act="Undo"]');
+  if (!a) return;
+  S.returnFocus = document.activeElement;
+  el.classList.add('viakey');
+  a.focus();
+}
+
+/* ---------------- behaviour ---------------- */
+function openOptions(){
+  removeToastNow(); closePopup({ restore: false });
+  S.menu = false; S.optsOpen = true; S.view = 'options';
+  render();
+}
+
+/* Four-second icon tick, for pages where no toast can be shown. */
+function tick(kind = 'notext'){
+  clearTimers('tick');
+  S.tick = kind; renderChrome();
+  later(() => { S.tick = false; renderChrome(); }, 4000, 'tick');
+}
+
+function save(o = {}){
+  if (!S.paired) { openOptions(); return; }                 // first click with no phone: options open in a new tab
+  if (S.view !== 'site') { browserPageSave(); return; }     // browser pages and Shelf's own options tab: no toast can run
+  S.toastHost = o.linkOnly ? LINK_HOST : HOST; S.toastLink = !!o.linkOnly;
+  if (!S.online) {
+    if (S.waiting >= CAP) { showToast('full'); return; }
+    S.waiting++; renderChrome();
+    showToast('offline');
+    return;
+  }
+  if (S.waiting) { S.waiting = 0; renderChrome(); }         // back online: the queue has sent
+  showToast('saving');
+  later(() => showToast(o.linkOnly ? 'notext' : 'saved', { inPlace: true }), 900, 'save');
+}
+
+/* No toast can run on browser pages (chrome:// and about: pages, the Web Store, PDFs, reader view): Shelf saves the address,
+   the icon ticks for four seconds, and on Chrome 127+ and Firefox a small popup confirms the save under the button. */
+function browserPageSave(){
+  const where = S.view === 'options' ? 'chrome-extension://shelf' : 'chrome://settings';
+  let kind = 'notext';
+  if (!S.online) { if (S.waiting >= CAP) kind = 'full'; else { S.waiting++; kind = 'offline'; } }
+  else if (S.waiting) S.waiting = 0;                        // back online: the queue has sent
+  if (kind === 'full') renderChrome(); else tick(kind);
+  if (!S.oldChrome) openPopup(kind, { host: where, focus: true, timed: true });
+}
+
+function retry(id){
+  const f = S.failed.find(x => x.id === id);
+  if (!f || f.sending || f.sent) return;
+  f.sending = true;
+  renderContent();
+  later(() => {
+    if (!S.failed.includes(f)) return;
+    const hadFocus = document.activeElement && document.activeElement.id === `retry-${id}`;
+    f.sending = false; f.sent = true;
+    if (f.why === 'blocked' && !S.failed.some(x => x.why === 'blocked' && !x.sent)) S.blocked = false;
+    renderChrome();
+    if (S.view === 'options') {
+      renderContent();
+      say(optLive, 'Sent');
+      if (hadFocus) {                                       // the button is gone: next Retry, else the list's heading
+        const i = S.failed.indexOf(f), ok = x => !x.sent && !x.sending;
+        const next = S.failed.slice(i + 1).find(ok) || S.failed.slice(0, i).reverse().find(ok);
+        focusId(next ? `retry-${next.id}` : 'failhead');
+      }
+    }
+    later(() => {                                           // the visible 'Sent' stays for 1.5 s, then the row goes
+      const i = S.failed.indexOf(f);
+      if (i < 0) return;
+      S.failed.splice(i, 1);
+      if (S.view !== 'options') return;
+      const onHead = document.activeElement && document.activeElement.id === 'failhead';
+      renderContent();
+      if (onHead && !S.failed.length) focusId('connhead');
+    }, 1500, 'retry');
+  }, 1200, 'retry');
+}
+
+$('shelfico').innerHTML = MARK(16);
+$('puzzle').innerHTML = ic('puzzle', 18);
+initPopup();
+$('shelfbtn').onclick = () => save();
+$('puzzle').onclick = () => {                              // stands for: puzzle piece, then the pin next to Shelf
+  if (S.pinned) return;
+  const had = document.activeElement === $('puzzle');
+  S.pinned = true; render();
+  if (had) $('shelfbtn').focus();                           // the puzzle piece goes back to being decoration here
+};
+$('tabs').addEventListener('click', e => {
+  const t = e.target.closest('[data-tab]');
+  if (!t) return;
+  const v = t.dataset.tab === 'options' ? 'options' : S.base;
+  if (v === S.view) return;
+  removeToastNow(); closePopup({ restore: false });
+  S.menu = false; S.view = v; S.confirmUnpair = false;
+  render();
+});
+page.addEventListener('click', e => {
+  const a = e.target.closest('[data-act]');
+  if (!a) { if (S.menu && !e.target.closest('.cmenu')) { S.menu = false; renderContent(); } return; }
+  const act = a.dataset.act;
+  if (act === 'close') dismissToast();
+  else if (act === 'Undo') undoSave();
+  else if (act === 'Options') {
+    if (!S.failed.some(f => f.id === 'f0')) S.failed.unshift({ id: 'f0', title: TITLE, host: HOST, why: 'reach' });
+    if (!S.failed.some(f => f.id === 'f1')) S.failed.push(FAILED()[0]);
+    openOptions(); focusId('failhead');
+  }
+  else if (act === 'newcode') { S.pair = 'show'; S.countdown = 298; renderContent(); focusId('paircode'); }
+  else if (act === 'retry') retry(a.dataset.id);
+  else if (act === 'setkey') { S.shortcut = KEY; syncToggles(); render(); focusId('wayshead'); }
+  else if (act === 'unpair') { S.confirmUnpair = true; renderContent(); focusId('unpair-cancel'); }
+  else if (act === 'unpair-cancel') { S.confirmUnpair = false; renderContent(); focusId('unpair'); }
+  else if (act === 'unpair-yes') {
+    clearTimers('retry');
+    Object.assign(S, { paired: false, pair: 'show', countdown: 298, failed: [], waiting: 0, blocked: false, advOpen: false, confirmUnpair: false });
+    render(); focusId('connecthead');
+  }
+});
+page.addEventListener('contextmenu', e => { if (e.target.id === 'alink') { e.preventDefault(); S.menu = true; renderContent(); } });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (S.menu) { S.menu = false; renderContent(); return; }
+    if (S.popup) { closePopup(); return; }
+    if (S.toast) dismissToast();                            // focus is on the page: dismiss, and let the page see Escape too
+  }
+  if (e.altKey && e.shiftKey && (e.code === 'KeyS' || e.key === 'S' || e.key === 's')) {
+    if (!S.shortcut) return;                                // no binding: the key does nothing
+    e.preventDefault();
+    if (e.repeat) return;
+    if (secondPress()) return;                              // the toast never takes focus on its own; a second press while a Saved toast shows reaches Undo
+    save({ viaKey: true });
+  }
+});
+window.addEventListener('resize', placePopup);
+setInterval(() => {
+  if (!S.optsOpen || S.paired || S.pair !== 'show') return;
+  S.countdown = Math.max(0, S.countdown - 1);
+  if (!S.countdown) {
+    S.pair = 'expired';
+    if (S.view === 'options') { renderContent(); say(optLive, 'This code has expired'); }
+    return;
+  }
+  const el = $('cd'); if (el) el.textContent = mmss(S.countdown);
+}, 1000);
+
+/* ---------------- panel ---------------- */
+const TOAST_JUMPS = ['saving', 'saved', 'undone', 'notext', 'offline', 'unqueued', 'full', 'failed'];
+const BROWSER_PAGE = 'Browser pages like this one don’t allow extensions to read them. Shelf saves the address, and your phone fetches the page.';
+const NOTES = {
+  reach: 'Pressing the shortcut again while a Saved toast shows moves focus to Undo. Tab past the last button, Shift+Tab before the first, Escape or ✕ take focus back to where it was.',
+  unqueued: 'The offline save was still in this browser’s queue, so Undo takes it out and the waiting count drops by one. Nothing needs doing on the phone.',
+  popup: `${BROWSER_PAGE} On Chrome 127+ and Firefox a small popup confirms the save under Shelf’s button, with its own status message. It closes after 8 seconds, on Escape, or when you click away.`,
+  restricted: `${BROWSER_PAGE} Before Chrome 127 an extension can’t open its popup from a shortcut, so the icon tick alone confirms the save, for 4 seconds.`,
+  'o-unpinned': 'Installing Shelf opens this page by itself. Until Shelf is pinned, the pin line shows at the top of the pairing card, and first under Ways to save once connected. Here, click the puzzle piece in the toolbar to pin Shelf.',
+  'o-waiting': 'Saves made offline wait in this browser. The toolbar badge, the button’s name and this notice show the same count.',
+  'o-unsent': 'Saves that haven’t reached Shelf’s server live only in this browser, so the confirm counts them and the button names the consequence.',
+};
+function syncToggles(){
+  document.querySelectorAll('[data-toggle]').forEach(b => {
+    const on = b.dataset.toggle === 'mac' ? S.mac : !S.shortcut;
+    b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on));
+  });
+}
+document.querySelectorAll('[data-toggle]').forEach(b => b.onclick = () => {
+  if (b.dataset.toggle === 'mac') S.mac = !S.mac; else S.shortcut = S.shortcut ? '' : KEY;
+  syncToggles(); render();
+});
+document.querySelectorAll('[data-theme-set]').forEach(b => b.onclick = () => {
+  win.dataset.theme = b.dataset.themeSet;
+  const t = toastEl(); if (t) t.dataset.theme = toastFlip();
+  document.querySelectorAll('[data-theme-set]').forEach(x => x.classList.toggle('on', x === b));
+});
+document.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => {
+  document.querySelectorAll('[data-jump]').forEach(x => x.classList.toggle('on', x === b));
+  clearTimers(); removeToastNow(); closePopup({ restore: false }); say(toastLive, ''); say(optLive, '');
+  const j = b.dataset.jump;
+  Object.assign(S, FRESH(), { mac: S.mac, shortcut: S.shortcut });
+  if (j === 'offline') { S.online = false; S.waiting = 3; }
+  if (j === 'unqueued') { S.online = false; S.waiting = 2; }
+  if (j === 'full') { S.online = false; S.waiting = CAP; }
+  if (j === 'failed') S.failed = [{ id: 'f0', title: TITLE, host: HOST, why: 'reach' }];
+  if (j === 'restricted' || j === 'popup') { S.view = 'restricted'; S.base = 'restricted'; S.tick = 'notext'; S.oldChrome = j === 'restricted'; }
+  if (j === 'menu') S.menu = true;
+  if (j.startsWith('o-')) { S.optsOpen = true; S.view = 'options'; }
+  if (['o-pair', 'o-unpinned', 'o-expired', 'o-offline', 'o-scanned'].includes(j)) { S.paired = false; S.pair = { 'o-expired': 'expired', 'o-offline': 'offline' }[j] || 'show'; }
+  if (j === 'o-unpinned') S.pinned = false;
+  if (j === 'o-waiting') { S.online = false; S.waiting = 3; }
+  if (j === 'o-failed') S.failed = FAILED();
+  if (j === 'o-blocked') { S.failed = FAILED().map(f => ({ ...f, why: 'blocked' })); S.blocked = true; S.advOpen = true; }
+  if (j === 'o-unsent') { S.failed = FAILED(); S.online = false; S.waiting = 1; S.confirmUnpair = true; }
+  render();
+  if (TOAST_JUMPS.includes(j)) showToast(j, { timed: false });          // held still for review
+  if (j === 'reach') { showToast('saved', { timed: false }); reachUndo(); }
+  if (j === 'popup') openPopup('notext', { host: 'chrome://settings', timed: false });
+  if (j === 'o-unsent') {                                  // bring the confirm into view inside the options tab
+    const o = content.querySelector('.opts'), c = content.querySelector('.confirm');
+    o.scrollTop += c.getBoundingClientRect().bottom - o.getBoundingClientRect().bottom + 24;
+  }
+  if (j === 'o-offline') say(optLive, 'Can’t connect right now');
+  if (j === 'o-scanned') later(() => { S.paired = true; S.connectedOn = 'today'; render(); if (S.view === 'options') say(optLive, 'Connected to your phone'); }, 1200, 'scan');
+  const note = $('jnote');
+  note.textContent = NOTES[j] || ''; note.hidden = !NOTES[j];
+});
+
+syncToggles();
+render();
+</script>
+</body>
+</html>

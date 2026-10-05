@@ -1,13 +1,40 @@
-# UI brief: Soft pills (signed off 2026-09-27)
+# UI brief: Fingerprint (chosen 2026-10-04)
 
-Anchor: the Style Lab's Soft pills rendering in Terracotta (`style-lab.html`). A Warm paper alternative (serif titles, no cards) was shown side by side in `mockups/direction-compare.html`; Richard chose Soft pills.
+Anchor: the Fingerprint concept board (`study/fingerprint.html`). Its screens, system section, generator and honest notes are the spec, and flow decisions 65 to 68 are the brief. Richard chose it from the colour and theme study, where it tied with Paperback on 22 of 30 once its screens were fixed. It replaces Soft pills (signed off 2026-09-27). Everything settled before it still holds unless decisions 65 to 68 change it: the flows, copy, controls and behaviours of `mockups/prototype.html` and `mockups/extension.html`, decisions 1 to 64, and the structural rules in `consistency-spec.md`. Values are in `shared/tokens/tokens.json` (0.2.0, draft); the cover generator is in `shared/cover/`.
 
-- **Direction:** friendly, tactile, phone-native. Soft warm-white canvas, white cards floating on gentle shadows, pill-shaped controls, Terracotta used sparingly.
-- **Type:** Inter (Roboto on the phone) for the whole app. Noto Serif 18 / 1.55 only inside the Reader for article text.
-- **Colour:** canvas `background`, cards `surface`, `text` and `muted` from `shared/tokens/tokens.json`. Terracotta for the active control, play and links. The gradient appears on exactly two things: the one primary button on a screen, and the play button. The logo mark and app icon may also use it (added 2026-09-27 after review); nothing else does, not avatars and not status icons.
-- **Density:** 16 px screen gutter, 10 px between cards, 12 px inside, 10 px card corners, pills fully round.
-- **Active control:** the selected segment (Unread / Archive) is solid Terracotta (accent-fill, #B5542E in both themes) with white text. Anything on a Terracotta fill, gradient or solid, is white in every theme and reading palette (decision 61).
-- **Rows:** a real article image when the page has one; otherwise no tile and the title takes the full width.
-- **Signature:** reading progress. Part-read cards carry a thin Terracotta bar along the bottom edge and say "4 min left" instead of the total.
-- **Forbidden:** placeholder thumbnails; gradients beyond the two uses; grey-on-grey low-contrast text; blue or purple anywhere; bare spinners.
-- **Dark mode:** shadows don't read on dark, so dark cards use a `line` hairline instead of a shadow.
+**The idea.** Every save draws its own cover from its address, the same on every device for good, and the rest of the app keeps to ink, paper, two greys and hairlines. The covers are the only colour on screen, so the library carries the identity. A restored shelf comes back as the same mosaic, which makes the claim that the library outlives the service visible.
+
+## Covers
+
+- **Source:** the sha256 of the save's normalised URL, the hash already in its d tag (contract section 4.3). Same hash in, same picture out, on the phone, in the extension and on the website, offline included, with no network and no image server.
+- **Where:** every row in Saves, Archive and Search (64 px, at the right). The play button of the mini, the Reader dock and every Listen row (the cover at 48 with a 30 px fill disc on it). A full-width 3:1 band at the top of the Reader and of the Now playing card. The quilt on You. The share sheet, the extension toast, the lock screen's media art and the first-run scaffold.
+- **Photos:** an article's photos appear only in the Reader, under the band, exactly as published. They are never cropped into a tile, tinted or laid over a cover. Rows show the cover whether or not the article has a photo.
+- **Grey:** a save whose text couldn't be fetched keeps its shapes, drawn in the chrome's four greys (`cover-grey-*`), which follow the theme. Every other cover is identical in light and dark.
+- **Decorative:** covers are hidden from screen readers. No information rides on cover colour, no text sits on a cover, and the title stays the strongest thing in a row.
+- **Draw-in:** a new save's cover draws itself once, as the save lands (share sheet, a new row, a restore, the extension toast): the square splits and each shape scales in over 520 ms, 34 ms apart. It never draws on scroll or on a later render. The first-run scaffold is the only loop. With reduced motion the cover appears already drawn.
+- **Versioned:** the generator is cover v1. Once a build that draws covers ships, v1 is frozen and never edited, even to fix an ugly cover; any change ships as cover v2 with its own fixtures and a stated migration. The golden fixtures (`shared/cover/fixtures.json`) run in every platform's CI.
+
+## Chrome
+
+- **Colour roles:** `background` (paper #F3F2EE; graphite #111112 in dark), `surface`, `line`, `line-strong` for field and chip edges, `text` (ink #17171A; paper in dark) and `muted`. `success`, `warning` and `error` appear only where the words say the same thing. There is no brand colour.
+- **Fill rule:** the fill is the text colour and content on it is the page colour. Ink with paper on it in light, paper with ink on it in dark, and in the Reader the reading palette's own text and page. Primary buttons, the active segment, the active tab tile, play discs, the swipe reveal, the toast, radios, and success and error fills all follow it. This replaces decision 61's white on Terracotta (decision 66).
+- **The article's ink:** each article lends one ink from its cover to its progress lines, link underlines, the toast countdown, Speed read's ticks and the word meter. It is the first of the cover's inks that clears 3:1 on the surface underneath, otherwise the text colour, and it is for lines and marks only, never small text. The spoken-word highlight is the cover's signal ink washed into the page until the text on it keeps 7:1.
+- **Type:** Archivo for the interface: body and rows 15/1.45, row titles 15/620, card headings 17/650, empty-state and sheet headings 20/680, meta 13. Archivo Expanded (width 125, 750, −2.5%) for screen titles at 28/1.2 and You's big counts at 32. Reader titles are Archivo 750 at 28/1.2, normal width. Literata 18/1.6 with optical sizes for reading (15 to 24 from the Aa sheet). Martian Mono 13 for player clocks and the word meter's numerals, and nothing else. Nothing below 13 in Shelf's own UI. The app and the extension bundle static cuts; the extension's toast keeps system-ui.
+- **Shape:** four radii. 4 for covers and article images; 8 for chips, segments, the tab tile, the speed pill and cover play buttons; 12 for buttons, fields and icon buttons; 14 for cards, groups, players, the toast and Archive; 20 for sheets, illustrations and the viewfinder. Fully round ends only on play discs, switch tracks, progress lines and dots. Everything in the flow is flat, with 1 px hairlines: rows are catalogue rows, and the hairline under each row is where its progress runs. One float shadow, for what hovers over content (the mini, the Reader dock, Archive, the toast, sheets), which becomes a hairline ring in dark.
+- **Icons:** Lucide at 1.75 stroke with round caps, in the text or muted colour, never coloured. Shelf's own skip ±15 pair and speed-read icon (decision 62) are redrawn for 1.75 in `icons/app/`.
+- **Reading palettes:** Paper, Sepia and Night, labelled Light, Sepia and Dark on the Aa sheet; the Reader follows the app theme (decision 16). The page stays calm. Night is tinted with each article's hue at very low chroma, so every article reads in a dark room of its own.
+- **Motion:** one enter (250 ms) and one exit (200 ms), as the consistency spec sets out, plus the cover draw-in. Skeletons pulse in opacity. Reduced motion keeps fades only, shows covers drawn and lights the word meter's marks without a transition.
+- **Signature:** the cover, drawn once and then the same face everywhere: row, Reader band, play button, Listen row, lock screen and browser toast. Reading progress keeps one line per article in that article's ink, and part-read rows still say "4 min left".
+
+## Borrowed, and the icon
+
+- **Borrowed (decision 68):** big counts on You ("8 saves" and "12 listened" as 32 px display numerals beside the quilt), from Kiln. A word meter on Now playing, from Instrument: a ruler in minutes over the bar and one mark per spoken word between the clocks, display only with no seeking (decision 48); it stays unlit if the Android spike shows no word positions. Stamps for two existing states, "Not written down" and "Couldn't get the text", from Overprint, used sparingly and never for a state word that isn't on the flow map.
+- **App icon (decisions 67 and 70):** a cover picked by hand from the generator and frozen as a brand asset; the monochrome layer stays the bookmark and bar. Richard picked C·L·063: cover v1 `2c7601c0…` at depth 1, orange bands (#E08200) on a cream ground (#F4ECD8), with today's bookmark and progress bar standing on it inverted, in paper with an ink outline and an ink read part. It is static artwork in `shared/brand/src` (see its README), with tuned 16 and 32 px cuts. The candidates are in `icons/fingerprint-icons.html` and `icons/fingerprint-icon-12.html`.
+
+## Forbidden
+
+Gradients anywhere. Grain, blur, transparency or text inside a cover. Soft colour fills on chips, buttons or icons. Photos in rows, and photos cropped, tinted or recoloured anywhere. Colour that says more than the words beside it. Grey-on-grey low-contrast text. Bare spinners. Hard-coded hex in Shelf's UI outside the tokens, the cover module's own palette tables and drawn system UI.
+
+## Retired
+
+Soft pills and what belonged to it: Terracotta (#B5542E, and #CA8469 in dark), the brand gradient #BE6947 → #944526, accent-soft tints, card shadows, Inter and Noto Serif, the 10 and 24 radii, and the rule that a row has a tile only when the page has a real image. The "Bookmark on Terracotta" app icon (decision 55) is being replaced under decision 67. The Soft pills copies are frozen for comparison and must not be edited or re-pointed: `mockups/prototype-softpills.html`, `mockups/extension-softpills.html`, `mockups/tokens-softpills.css`, `mockups/choices.html` and everything in `study/`.
