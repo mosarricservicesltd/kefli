@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Shelf test",
+    "slug": "mobile",
+    "scheme": "shelf",
+    "version": "0.0.1",
+    "orientation": "portrait",
+    "icon": "./assets/brand/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "space.shelf.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/brand/adaptive-foreground.png",
+        "backgroundImage": "./assets/brand/adaptive-background.png",
+        "monochromeImage": "./assets/brand/adaptive-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      ["expo-audio", { "enableBackgroundPlayback": true }],
+      ["expo-share-intent", { "androidIntentFilters": ["text/*"] }]
+    ]
+  }
+}

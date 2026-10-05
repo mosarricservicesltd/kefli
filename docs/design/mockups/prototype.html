@@ -772,6 +772,8 @@ svg .arc{transform-box:view-box;transform-origin:center}
       <button data-jump="share-undone">…after Undo</button>
       <button data-jump="share-offline">Offline</button>
       <button data-jump="share-nolink">Not a link</button>
+      <button data-jump="share-checking">X post: checking it</button>
+      <button data-jump="share-noarticle">X post with no article</button>
     </div>
     <h2>Reader</h2>
     <div class="btns">
@@ -2485,6 +2487,14 @@ function sheetHTML(){
   }
   if (S.sheet.startsWith('share')) {
     const mode = S.sheet.split('-')[1];
+    // a shared X post (decision 78): Shelf reads the post through X's embed service to find the article it links to.
+    // Nothing is saved while it checks; Cancel leaves without saving. With no link outside X, nothing is saved.
+    if (mode === 'checking') {
+      return `<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" aria-label="Checking the post" data-stop><div class="grab"></div><h3 role="status"><span class="dots inbtn" data-mk="dots" aria-hidden="true"><i></i><i></i><i></i></span>Checking the post</h3><p class="sub">Looking for the article it links to.</p><div class="row"><button class="btn secondary" data-close>Cancel</button></div></div></div>`;
+    }
+    if (mode === 'noarticle') {
+      return `<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" data-stop><div class="grab"></div><h3>${ic('alert',22,'style="color:var(--error)"')}No article in that post</h3><p class="sub">Shelf saves web articles, and this post doesn’t link to one.</p><div class="row"><button class="btn secondary" data-close>OK</button></div></div></div>`;
+    }
     if (mode === 'nolink') {
       return `<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" data-stop><div class="grab"></div><h3>${ic('alert',22,'style="color:var(--error)"')}That wasn’t a link</h3><p class="sub">Shelf saves web pages. Try sharing the page itself, or copy its address and share that.</p><div class="row"><button class="btn secondary" data-close>OK</button></div></div></div>`;
     }
@@ -4027,7 +4037,7 @@ function jumpTo(b){
   if (j.startsWith('share')) {
     S.host = true; addSharedItem();
     S.sheet = j === 'share' || j === 'share-undone' ? 'share-saved' : j;
-    if (j === 'share-nolink') S.items = S.items.filter(i => i.id !== 99);
+    if (j === 'share-nolink' || j === 'share-checking' || j === 'share-noarticle') S.items = S.items.filter(i => i.id !== 99);
     if (j === 'share-offline') S.online = false;
     if (j === 'share') { S.shareT = freshShareT(); render(); shareRun(); return; }
     if (j === 'share-undone') { S.items = S.items.filter(i => i.id !== 99); S.shareRemoved = true; render(); sheetTimer = setTimeout(() => { S.shareRemoved = false; S.sheet = null; render(); }, 1500); return; }

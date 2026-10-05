@@ -12,7 +12,7 @@ Working name **Shelf** (placeholder; the name appears in the protocol only as th
 ## Current decisions
 
 - **First build:** Android app plus the browser extension (Chrome and Firefox). iOS is deferred until there is an iPhone to test on.
-- **Mobile stack:** Expo (React Native, TypeScript), confirmed by the Android spike below. Use development builds and EAS, not Expo Go.
+- **Mobile stack:** Expo (React Native, TypeScript), confirmed by the Android test build on 5 October 2026 (`docs/specs/07-android-test-build.md`). Two native modules come with it: a media session around the phone's voice, and a native scrypt for the pairing code. Use development builds and EAS, not Expo Go.
 - **Extension:** Manifest V3 WebExtension in TypeScript, one codebase, Chrome and Firefox builds. Test in developer mode (unpacked on Chromium, `web-ext run` and signed unlisted `.xpi` on Firefox) until launch; see extension spec section 11.
 - **Backend:** one VPS running strfry (relay), a Blossom server, and a Go API. See backend spec.
 - **Listening:** on-device text-to-speech only in v1 (flow decision 22). The Kokoro TTS worker and audio API in the backend spec are deferred to a later subscription feature set; don't build them for v1.
@@ -35,7 +35,7 @@ docs/            specs, design, research
 
 ## First task: the Android spike (one evening)
 
-Resumes after contract v1.2, now written (flow decision 75). The scaffold in `apps/mobile` and `shared/vendor/` is uncommitted and none of the three tests has run yet.
+Done on 5 October 2026 on a Pixel 10a: all three pass, with results in `docs/specs/07-android-test-build.md`. `apps/mobile` holds the test screen only. Next: rewrite `03-android.md` as an Expo mobile spec.
 
 In a bare Expo development build on a real Android phone:
 1. Receive a link shared from X and parse it with Readability in a hidden WebView.
