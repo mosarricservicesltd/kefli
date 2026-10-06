@@ -1,0 +1,17 @@
+{
+  "name": "shelf",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "tokens": "node shared/tokens/build-ts.mjs && node shared/tokens/build-css.mjs",
+    "tokens:check": "node shared/tokens/build-ts.mjs --check",
+    "test": "npm run tokens:check && npm test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "coverage": "jest -c packages/protocol/jest.config.js --coverage --coverageReporters=lcov --coverageReporters=cobertura --coverageReporters=text-summary"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

@@ -5,8 +5,8 @@ Written on 6 October 2026, when the work moved off the laptop it started on. Eve
 ## Where things stand
 
 - **Stage 0 design is signed off** (flow decision 75): the phone prototype `docs/design/mockups/prototype.html` (125 states), the extension prototype `extension.html`, the flow map `docs/design/flow-map-rev3.html` and the decision log `docs/design/flow-decisions.md` (decisions 1 to 93, later ones win).
-- **Contract v1.3** (`shared/contract/contract.md`) is the source of truth for the protocol.
-- **The mobile spec is written:** `docs/specs/03-mobile.md`, version 2.1, Expo with Android first. Its section 12 is the build timeline; week 0 still has to do the token generator, workspaces, the protocol skeleton, the normalise draft and the library gates listed there.
+- **Contract v1.4** (`shared/contract/contract.md`) is the source of truth for the protocol. v1.4 (6 October 2026) only settles what normalisation, the spoken projection and the typed-code offer left open (its section 11.1); Richard left those choices to Claude's judgement.
+- **The mobile spec is written:** `docs/specs/03-mobile.md`, version 2.1, Expo with Android first. Its section 12 is the build timeline. Of week 0's code, the token generator (`shared/tokens/build-ts.mjs`, emitting `packages/tokens`), the npm workspaces, the protocol skeleton (`packages/protocol`), the normalise draft (`shared/normalise.ts` with `shared/normalise.fixtures.json`, its open choices listed in the fixtures' `draft` notes) and `shared/turndown-rules.json` were done on 6 October 2026. The library gates listed there need the phone build and are still to do.
 - **The Android test build passed** on a Pixel 10a (`docs/specs/07-android-test-build.md`). `apps/mobile` holds that test screen only; the app proper starts from the spec.
 - **Tokens** are 1.0.1 (`shared/tokens/tokens.json`).
 
@@ -37,7 +37,8 @@ Host github.com
 |---|---|
 | Look at the prototypes | `npx serve docs/design -l 4321`, then open `http://localhost:4321/mockups/prototype.html` (or open the files directly). `.claude/launch.json` has this as "mockups", plus "tour" (the repo root on 4322, for `docs/design/tour.html`). |
 | Check the prototype after a change | `node tools/design-qa/jumps.mjs` (every state, both themes, no script errors, motion rule). See `tools/design-qa/README.md`. |
-| Rebuild the tokens CSS | `node shared/tokens/build-css.mjs` |
+| Install and test the shared code | `npm install` at the root, then `npm test` (tokens staleness check and the `packages/protocol` suite) and `npm run typecheck` |
+| Rebuild the tokens | `npm run tokens` (the CSS for the prototypes and `packages/tokens` for the app) |
 | Test the cover generator | `node shared/cover/test.cjs`, and `node shared/cover/build.mjs` to copy it into the mockups |
 | Rebuild the brand files | install `@resvg/resvg-js@2` somewhere outside the repo, then `NODE_PATH=<that folder>/node_modules node shared/brand/build-icons.cjs` |
 | Rebuild the parser bundle | `node shared/vendor/build-parser-bundle.mjs` (writes `apps/mobile/src/parser/bundle.generated.ts`) |

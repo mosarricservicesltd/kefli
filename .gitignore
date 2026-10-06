@@ -33,3 +33,6 @@ Thumbs.db
 
 # design QA output (tools/design-qa)
 tools/design-qa/out/
+
+# test coverage (code-gate reads it)
+coverage/

@@ -28,8 +28,8 @@ MS still says draft although FD 73 signed it off. Files that C§3.1, §4.2, §4.
 
 | File | Writer | By |
 |---|---|---|
-| `shared/normalise.ts` and its fixtures | Mobile engineer drafts; project engineer owns | End of week 0 |
-| `shared/turndown-rules.json` (C§4.2) | Project engineer, from `shared/vendor/parser-runner.js` | End of week 0 |
+| `shared/normalise.ts` and its fixtures | Mobile engineer drafts; project engineer owns. Written 6 October 2026; the choices the contract left open were settled in contract v1.4 (C§11.1) and are listed in the fixtures' `rulings` | End of week 0 |
+| `shared/turndown-rules.json` (C§4.2) | Project engineer, from `shared/vendor/parser-runner.js`. Written 6 October 2026, its sha256 in `shared/vendor/VERSIONS.md` | End of week 0 |
 | `shared/fixtures/` (C§9, covers included) | Project engineer; page fixtures from a pinned headless Chromium run of the vendored bundle, outside every client's CI, its version in `shared/vendor/VERSIONS.md` | Weeks 1–2 |
 | `shared/defaults.json` (schema in C§3.1) | Backend engineer, after the week-1 relay and mirror tests (C§3.1, C§5) | Week 1 |
 
@@ -39,7 +39,7 @@ MS still says draft although FD 73 signed it off. Files that C§3.1, §4.2, §4.
 |---|---|---|
 | Stack | Kotlin, Compose, Room, WorkManager, rust-nostr | Expo SDK 57, TypeScript, expo-sqlite, nostr-tools, six local native modules |
 | Protocol code | Kotlin modules | `packages/protocol`, shared with the extension and later iOS |
-| Kinds | 30979, 979, 978 | 30078 under `shelf/` d tags (C§11.3) |
+| Kinds | 30979, 979, 978 | 30078 under `shelf/` d tags (C§11.4) |
 | Listening | SystemVoice and CachedVoice | On-device voice in Shelf's own media session (FD 22, T§3) |
 | Screens | Library, Material 3 | Fingerprint and the signed-off prototype (FD 65, FD 75) |
 
@@ -90,7 +90,7 @@ Versions are the SDK 57 pins `npx expo install` resolves, unless stated.
 | Motion, drawing | `react-native-reanimated` 4.5.1, `react-native-worklets` 0.10.1, `react-native-gesture-handler` ~2.32.0, `@shopify/react-native-skia` 2.6.2, `react-native-svg` 15.15.4, `lucide-react-native` (pin at install) |
 | Data | `expo-sqlite` ~57.0.3 (SQLite 3.50.3 with FTS5), `expo-file-system` ~57.0.7, `expo-image` ~57.0.5 |
 | Platform | `expo-camera` ~57.0.5, `expo-background-task` ~57.0.20, `expo-task-manager`, `expo-haptics`, `expo-font`, `expo-splash-screen`, `expo-system-ui`, `expo-navigation-bar`, `expo-status-bar`, `expo-network`, `expo-keep-awake`, `expo-clipboard`, `react-native-keyboard-controller` 1.21.9, `react-native-webview` 13.16.1 |
-| Crypto, protocol | `react-native-quick-crypto` 1.1.7 with `react-native-nitro-modules` 0.33.x and `react-native-quick-base64` 3.0.1; `nostr-tools` 2.25.2 exactly; `@noble/curves` 2.0.1, `@noble/hashes` 2.0.1, `@noble/ciphers` 2.1.1, `@scure/bip39` 2.0.1, `@scure/bip32` 2.0.1, `@scure/base` 2.0.0 (nostr-tools' exact pins, so npm dedupes); `tr46` for the host step in normalise (pin at install). The app entry calls quick-crypto's `install()` before anything imports nostr-tools, since noble's signing and NIP-44 nonces read `globalThis.crypto.getRandomValues`, which Hermes lacks |
+| Crypto, protocol | `react-native-quick-crypto` 1.1.7 with `react-native-nitro-modules` 0.33.x and `react-native-quick-base64` 3.0.1; `nostr-tools` 2.25.2 exactly; `@noble/curves` 2.0.1, `@noble/hashes` 2.0.1, `@noble/ciphers` 2.1.1, `@scure/bip39` 2.0.1, `@scure/bip32` 2.0.1, `@scure/base` 2.0.0 (nostr-tools' exact pins, so npm dedupes); `whatwg-url` 17.2.0 with `tr46` 7.0.0 for normalise, which parses and serialises with them on every engine instead of the global `URL` (pinned 6 October 2026; `whatwg-url` brings `@exodus/bytes` 1.16, ESM only). The app entry calls quick-crypto's `install()` before anything imports nostr-tools, since noble's signing and NIP-44 nonces read `globalThis.crypto.getRandomValues`, which Hermes lacks |
 | Markdown | `mdast-util-from-markdown` 2.1.0, `micromark` 4.0.3 |
 | Vendored | Readability 0.6.0, Turndown 7.2.4, `cover-v1.js`, Nayuki `qrcodegen` (TypeScript, MIT) |
 | Test, build | `jest` ~29.7, `jest-expo` ~57.0.5 (its `transformIgnorePatterns` extended to `@noble`, `@scure`, `nostr-tools`, `micromark*`, `mdast-util-*`, `unist-util-*`, `decode-named-character-reference` and `devlop`, which ship ESM only), `@react-native/jest-preset` 0.86.3, `@testing-library/react-native` 14.0.1, Maestro CLI 2.11.0, `eas-cli` 24.10.0 |
@@ -112,8 +112,8 @@ Hash-critical steps are pinned to one engine, so the phone matches the extension
 | Step | Engine |
 |---|---|
 | Charset decoding, DOM parsing, Readability, Turndown, NFC, Markdown normalisation | Blink, in the parser bundle (section 9) |
-| `normalise` and so the `d` tag | Hermes; the host goes through UTS-46 and punycode by `tr46` inside `packages/protocol` rather than the global `URL` (Expo's does no IDNA), so V8 and Hermes run the same host code |
-| `text_hash`, the spoken projection, `words`, sentences, Reader blocks | Hermes, from the normalised string; Hermes never NFC-normalises hashed text |
+| `normalise` and so the `d` tag | Hermes; the whole URL is parsed and serialised by `whatwg-url`, whose host goes through UTS-46 and punycode by `tr46`, rather than the global `URL` (Expo's does no IDNA, and its path and query encoding is an older Standard's), so V8 and Hermes run the same code |
+| `text_hash`, the spoken projection, `words`, sentences, Reader blocks | Hermes, from the normalised string; Hermes never NFC-normalises hashed text (the one exception is a non-ASCII host in `normalise`, which `tr46` NFC-normalises as UTS-46 requires; the normalise fixtures on Hermes guard it) |
 | AES-256-GCM, scrypt, PBKDF2, SHA-256, random bytes | `react-native-quick-crypto` (OpenSSL) behind `CryptoPort`, and as `globalThis.crypto` for noble (2.4) |
 | Schnorr, ECDH, NIP-44 | `@noble/curves` through nostr-tools, subject to the week-0 timing gate (12) |
 | Speech, media session, key file, Block Store, signer intents, share activity | Kotlin modules (section 8) |
@@ -794,7 +794,7 @@ Devices: the Pixel 10a (Android 17), a Samsung with its own speech engine and ba
 
 ### 13.2 Contract v1.3: the requests as landed
 
-Contract v1.3 took in all eighteen requests, approved with section 14 on 5 October 2026 (C§11.1, whose item 19 also puts FD 86's rule for "nostr" into C§1). Each row records what landed.
+Contract v1.3 took in all eighteen requests, approved with section 14 on 5 October 2026 (C§11.2, whose item 19 also puts FD 86's rule for "nostr" into C§1). Each row records what landed.
 
 | CR | Request, as settled | Status |
 |---|---|---|
