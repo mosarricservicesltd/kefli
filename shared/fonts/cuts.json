@@ -1,0 +1,79 @@
+{
+  "$generated": "Generated from shared/tokens/tokens.json (v1.0.1, fingerprint) by shared/tokens/build-ts.mjs. Do not edit.",
+  "cuts": {
+    "Archivo-400": {
+      "source": "Archivo",
+      "wght": 400,
+      "wdth": 100
+    },
+    "Archivo-500": {
+      "source": "Archivo",
+      "wght": 500,
+      "wdth": 100
+    },
+    "Archivo-550": {
+      "source": "Archivo",
+      "wght": 550,
+      "wdth": 100
+    },
+    "Archivo-600": {
+      "source": "Archivo",
+      "wght": 600,
+      "wdth": 100
+    },
+    "Archivo-620": {
+      "source": "Archivo",
+      "wght": 620,
+      "wdth": 100
+    },
+    "Archivo-650": {
+      "source": "Archivo",
+      "wght": 650,
+      "wdth": 100
+    },
+    "Archivo-680": {
+      "source": "Archivo",
+      "wght": 680,
+      "wdth": 100
+    },
+    "Archivo-750": {
+      "source": "Archivo",
+      "wght": 750,
+      "wdth": 100
+    },
+    "ArchivoExpanded-750": {
+      "source": "Archivo",
+      "wght": 750,
+      "wdth": 125
+    },
+    "MartianMono-500": {
+      "source": "Martian Mono",
+      "wght": 500
+    },
+    "Literata-18-400": {
+      "source": "Literata",
+      "wght": 400,
+      "opsz": 18
+    },
+    "Literata-18-400-Italic": {
+      "source": "Literata Italic",
+      "wght": 400,
+      "opsz": 18
+    },
+    "Literata-18-700": {
+      "source": "Literata",
+      "wght": 700,
+      "opsz": 18
+    },
+    "Literata-32-400": {
+      "source": "Literata",
+      "wght": 400,
+      "opsz": 32
+    },
+    "Literata-32-600": {
+      "source": "Literata",
+      "wght": 600,
+      "opsz": 32
+    }
+  }
+}

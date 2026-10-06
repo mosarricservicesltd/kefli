@@ -1,0 +1,11 @@
+{
+  "threshold": 15,
+  "cc_limit": 10,
+  "branches": ["main", "master"],
+  "exclude": [
+    "*/apps/mobile/App.tsx",
+    "*/apps/mobile/src/Root.tsx",
+    "*/apps/mobile/src/gates/*",
+    "*/shared/fonts/cut-fonts.py"
+  ]
+}

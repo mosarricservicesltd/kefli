@@ -56,12 +56,13 @@ const fontFamily = {
     focus: `Literata-${ty.reader.word.opticalSize}-${ty.reader.word.weights.focus}`,
   },
 };
-// The cuts the font build must produce: family name to the variable-font axes it pins.
+// The cuts the font build must produce: family name to the variable-font axes it pins. An axis not named
+// stays at the font's default (Martian Mono's width is 112.5, as the prototype draws it).
 const fontCuts = {
   ...Object.fromEntries(Object.values(W).map((w) => [`Archivo-${w}`, { source: 'Archivo', wght: w, wdth: 100 }])),
   [`Archivo-${ty.articleTitle.weight}`]: { source: 'Archivo', wght: ty.articleTitle.weight, wdth: 100 },
   [fontFamily.display]: { source: 'Archivo', wght: ty.display.weight, wdth: parseFloat(ty.display.stretch) },
-  [fontFamily.mono]: { source: 'Martian Mono', wght: ty.mono.weight, wdth: 100 },
+  [fontFamily.mono]: { source: 'Martian Mono', wght: ty.mono.weight },
   [fontFamily.reader.regular]: { source: 'Literata', wght: ty.reader.weights.regular, opsz: ty.reader.opticalSize },
   [fontFamily.reader.italic]: { source: 'Literata Italic', wght: ty.reader.italicWeights[0], opsz: ty.reader.opticalSize },
   [fontFamily.reader.bold]: { source: 'Literata', wght: ty.reader.weights.bold, opsz: ty.reader.opticalSize },
@@ -237,11 +238,14 @@ export const ambient = {
 `;
 
 const files = { 'index.ts': index, 'reanimated.ts': reanimated };
+// The font build (shared/fonts/cut-fonts.py) reads the same list.
+const cutsPath = join(repo, 'shared', 'fonts', 'cuts.json');
+const cutsBody = `${JSON.stringify({ $generated: header.trim().replace(/^\/\/ /, ''), cuts: fontCuts }, null, 2)}\n`;
 const check = process.argv.includes('--check');
 let stale = 0;
 mkdirSync(outDir, { recursive: true });
-for (const [name, body] of Object.entries(files)) {
-  const path = join(outDir, name);
+const outputs = [...Object.entries(files).map(([name, body]) => [join(outDir, name), body]), [cutsPath, cutsBody]];
+for (const [path, body] of outputs) {
   if (check) {
     let current = '';
     try { current = readFileSync(path, 'utf8'); } catch {}

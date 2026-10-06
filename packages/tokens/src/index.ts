@@ -218,8 +218,7 @@ export const fontCuts = {
   },
   "MartianMono-500": {
     "source": "Martian Mono",
-    "wght": 500,
-    "wdth": 100
+    "wght": 500
   },
   "Literata-18-400": {
     "source": "Literata",

@@ -35,3 +35,16 @@ describe('the d tag', () => {
     expect(isItemD(`shelf/item/${'A'.repeat(64)}`)).toBe(false);
   });
 });
+
+describe('agreement with the cover fixtures', () => {
+  // shared/cover/fixtures.json was written before normalise existed; its board samples hash the normalised URL.
+  const cover: { cases: { id: string; kind: string; input?: string; hash: string }[] } = JSON.parse(
+    readFileSync(join(__dirname, '../../../shared/cover/fixtures.json'), 'utf8'),
+  );
+  const samples = cover.cases.filter((c) => c.kind === 'board-sample');
+
+  test('there are board samples to check', () => expect(samples.length).toBeGreaterThanOrEqual(8));
+  test.each(samples.map((c) => [c.id, c] as const))('%s', (_id, c) => {
+    expect(itemHash(c.input!)).toBe(c.hash);
+  });
+});

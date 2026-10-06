@@ -5,11 +5,15 @@
 // the platform's URL. Parsing and serialisation come from the whatwg-url package, which is the URL
 // Standard in plain JavaScript and takes its host through UTS-46 with tr46 (non-transitional, CheckBidi
 // and CheckJoiners on, the Standard's own settings). Every port must pass shared/normalise.fixtures.json.
+// It works on the Standard's URL record (basicURLParse, serializeURL) rather than the package's URL class,
+// whose webidl-conversions reads SharedArrayBuffer at load, which Hermes doesn't have.
 //
 // Where the contract text leaves a choice open, the choice is marked RULED: settled with contract 1.4
 // (section 11.1) and listed in the fixtures' rulings.
 
-import { URL } from 'whatwg-url';
+/// <reference path="./whatwg-url-state-machine.d.ts" />
+import type { URLRecord } from 'whatwg-url';
+import { basicURLParse, serializeHost, serializePath, serializeURL } from 'whatwg-url/lib/url-state-machine';
 
 /** Query parameters removed on every host (contract 4.3). Names starting utm_ go too. */
 const TRACKING = new Set(['fbclid', 'gclid', 'mc_cid', 'mc_eid', 'ref', 'igshid']);
@@ -26,15 +30,21 @@ export class NotALinkError extends Error {
   }
 }
 
-function parseHttp(input: string): URL {
-  let url: URL;
-  try {
-    url = new URL(input);
-  } catch {
-    throw new NotALinkError(input, 'unparseable');
-  }
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new NotALinkError(input, url.protocol);
+function parseHttp(input: string): URLRecord {
+  const url = basicURLParse(input);
+  if (!url) throw new NotALinkError(input, 'unparseable');
+  if (url.scheme !== 'http' && url.scheme !== 'https') throw new NotALinkError(input, `${url.scheme}:`);
   return url;
+}
+
+/** The parts of an http or https URL the protocol's rules look at, or null for anything else. */
+export function urlParts(input: string): { hostname: string; pathname: string } | null {
+  try {
+    const url = parseHttp(input);
+    return { hostname: url.host === null ? '' : serializeHost(url.host), pathname: serializePath(url) };
+  } catch {
+    return null;
+  }
 }
 
 // RULED: on the X hosts themselves and their subdomains (mobile.twitter.com, www.x.com).
@@ -70,8 +80,8 @@ function cleanQuery(search: string, xHost: boolean): string {
 }
 
 // The mobile and AMP forms that the canonical link replaces (contract 4.3).
-function isAlternateForm(url: URL): boolean {
-  return /^(m|amp)\./.test(url.hostname) || /\/amp\/?$/.test(url.pathname);
+function isAlternateForm(hostname: string, pathname: string): boolean {
+  return /^(m|amp)\./.test(hostname) || /\/amp\/?$/.test(pathname);
 }
 
 /**
@@ -81,8 +91,9 @@ function isAlternateForm(url: URL): boolean {
  */
 export function normalise(input: string, canonical?: string | null): string {
   const url = parseHttp(input);
+  const hostname = url.host === null ? '' : serializeHost(url.host);
 
-  if (canonical && isAlternateForm(url)) {
+  if (canonical && isAlternateForm(hostname, serializePath(url))) {
     try {
       return normalise(canonical);
     } catch (e) {
@@ -90,13 +101,13 @@ export function normalise(input: string, canonical?: string | null): string {
     }
   }
 
-  const query = cleanQuery(url.search, isXHost(url.hostname));
-  url.hash = '';
-  url.search = '';
+  const query = cleanQuery(url.query ? `?${url.query}` : '', isXHost(hostname));
+  url.fragment = null;
+  url.query = null;
   // A trailing slash goes except on a bare host, whose path is "/" and always serialises.
   // RULED: every trailing slash goes, so that normalise is idempotent ("/a//" would otherwise give "/a/"
-  // and then "/a"); a path of slashes only becomes "/".
-  const path = url.pathname.replace(/\/+$/, '');
-  if (path !== url.pathname) url.pathname = path === '' ? '/' : path;
-  return url.href + query;
+  // and then "/a"); a path of slashes only becomes "/". http and https paths are always segment lists.
+  const path = url.path as string[];
+  while (path.length > 1 && path[path.length - 1] === '') path.pop();
+  return serializeURL(url) + query;
 }

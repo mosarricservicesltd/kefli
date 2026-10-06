@@ -24,3 +24,4 @@ export function itemD(url: string, canonical?: string | null): string {
 export function isItemD(d: string): boolean {
   return ITEM_D.test(d);
 }
+export { urlParts } from '../../../shared/normalise';

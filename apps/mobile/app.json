@@ -20,8 +20,22 @@
       "predictiveBackGestureEnabled": false
     },
     "plugins": [
-      ["expo-audio", { "enableBackgroundPlayback": true }],
-      ["expo-share-intent", { "androidIntentFilters": ["text/*"] }]
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": true
+        }
+      ],
+      [
+        "expo-share-intent",
+        {
+          "androidIntentFilters": [
+            "text/*"
+          ]
+        }
+      ],
+      "react-native-quick-crypto",
+      "expo-font"
     ]
   }
 }

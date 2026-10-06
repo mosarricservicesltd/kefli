@@ -2,24 +2,19 @@
 // leaves X is. The network steps are the app's (the embed service with a 5 s timeout, and t.co followed
 // without a browser user agent for five hops at most); this module holds the rules around them.
 
-import { URL } from 'whatwg-url';
+import { urlParts } from '../../../shared/normalise';
 
 // RULED: www. forms too, so a post on www.x.com follows the rule rather than being saved as itself.
 const POST_HOSTS = new Set(['x.com', 'twitter.com', 'mobile.twitter.com', 'www.x.com', 'www.twitter.com']);
 const X_HOSTS = ['x.com', 'twitter.com', 'pic.x.com', 'pic.twitter.com', 't.co'];
 
-function parse(url: string): URL | null {
-  try {
-    return new URL(url);
-  } catch {
-    return null;
-  }
-}
+// The X rule only ever looks at http and https links, so anything else parses as null.
+const parse = urlParts;
 
 /** A post URL: x.com, twitter.com or mobile.twitter.com (and their www. forms) with the path /<user>/status/<id>. RULED: anything after the id (/photo/1) still counts. */
 export function isXPost(url: string): boolean {
   const u = parse(url);
-  return !!u && /^https?:$/.test(u.protocol) && POST_HOSTS.has(u.hostname) && /^\/[^/]+\/status\/\d+(\/.*)?$/.test(u.pathname);
+  return !!u && POST_HOSTS.has(u.hostname) && /^\/[^/]+\/status\/\d+(\/.*)?$/.test(u.pathname);
 }
 
 /** RULED: the listed hosts and their subdomains (www.x.com) are X's own. */
@@ -59,7 +54,7 @@ export async function pickXLink(links: string[], resolve: (tco: string) => Promi
   for (const link of links) {
     let url = link;
     const u = parse(url);
-    if (!u || !/^https?:$/.test(u.protocol)) continue;
+    if (!u) continue;
     if (u.hostname === 't.co') {
       try {
         url = await resolve(link);
@@ -69,7 +64,7 @@ export async function pickXLink(links: string[], resolve: (tco: string) => Promi
     }
     if (isXArticle(url)) return { nothing: 'article' };
     const final = parse(url);
-    if (final && /^https?:$/.test(final.protocol) && !isXHost(final.hostname)) return { save: url };
+    if (final && !isXHost(final.hostname)) return { save: url };
   }
   return { nothing: 'no-link' };
 }

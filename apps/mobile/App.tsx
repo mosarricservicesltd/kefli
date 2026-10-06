@@ -153,7 +153,7 @@ export default function App() {
     setKdf('Running…');
     await new Promise(r => setTimeout(r, 50));
     const runs: number[] = [];
-    let out = new Uint8Array();
+    let out: Uint8Array = new Uint8Array();
     for (let k = 0; k < 3; k++) {
       const t = Date.now();
       out = scrypt(ascii(CODE), ascii(SALT), { N: 16384, r: 8, p: 1, dkLen: 64 });
