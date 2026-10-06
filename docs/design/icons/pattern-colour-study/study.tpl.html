@@ -1,0 +1,311 @@
+<title>Shelf Icon Study</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Martian+Mono:wght@400..600&display=swap">
+<style>
+/* Layout: a review board in Shelf's own chrome. Two pickers on the left (patterns drawn in the chosen colour, colours
+   drawn on the chosen pattern), the chosen pair in context on the right (a tall sticky panel on wide screens, first on
+   phones). Page colours are Shelf's ink and paper tokens (tokens.json 1.0.1); icons, wallpapers and drawn system UI
+   carry their own colours as content. */
+:root{
+  --bg:#F3F2EE; --surface:#FFFFFF; --line:#DEDCD5; --line-strong:#8C8A83; --text:#17171A; --muted:#5C5B56;
+  --fill:#17171A; --on-fill:#F3F2EE; --focus:#17171A;
+  --font-ui:'Archivo',Roboto,'Segoe UI',system-ui,sans-serif;
+  --font-mono:'Martian Mono','Roboto Mono',ui-monospace,Consolas,monospace;
+  --wall-light:#E4DCCB; --wall-dark:#14171E;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111112; --surface:#1A1A1C; --line:#2E2E31; --line-strong:#7A7983; --text:#EDECE8; --muted:#A7A59F;
+  --fill:#EDECE8; --on-fill:#111112; --focus:#EDECE8; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111112; --surface:#1A1A1C; --line:#2E2E31; --line-strong:#7A7983; --text:#EDECE8; --muted:#A7A59F;
+  --fill:#EDECE8; --on-fill:#111112; --focus:#EDECE8; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--font-ui);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1280px;margin:0 auto;padding-inline:20px;padding-block:36px 64px}
+h1,h2,h3{margin:0;text-wrap:balance}
+h1{font-stretch:125%;font-weight:750;letter-spacing:-.025em;font-size:clamp(30px,4vw,44px);line-height:1.1}
+h2{font-stretch:125%;font-weight:720;letter-spacing:-.02em;font-size:22px;line-height:1.2}
+h3{font-size:13px;font-weight:600;color:var(--muted)}
+p{margin:0}
+.eyebrow{font-family:var(--font-mono);font-size:12px;letter-spacing:-.02em;color:var(--muted)}
+.mono{font-family:var(--font-mono);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
+header{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:32px 48px;align-items:start;padding-bottom:32px;border-bottom:1px solid var(--line)}
+header .lede{margin-top:14px;max-width:64ch;font-size:16px}
+header .lede + p{margin-top:10px;max-width:64ch}
+.stays{margin-top:20px;font-size:14px;display:grid;gap:6px;max-width:72ch}
+.stays b{font-weight:600}
+.learned{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;display:grid;gap:8px;font-size:14px}
+.learned ul{margin:0;padding-left:18px;display:grid;gap:6px}
+
+.layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,560px);gap:40px;margin-top:32px;align-items:start}
+/* pinned beside the pickers on wide screens, scrolling inside itself; on phones it sits above them, and a peek bar links back */
+.panel{position:sticky;top:16px;align-self:start;max-height:calc(100vh - 32px);overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;scroll-margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px}
+.peek{display:none}
+.pickers{display:grid;gap:40px}
+.group{display:grid;gap:12px}
+.group + .group{margin-top:6px}
+.group-head{display:grid;gap:4px}
+.group-head p{font-size:14px;color:var(--muted);max-width:62ch}
+.sub{font-size:13px;font-weight:600;color:var(--muted);margin-top:6px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(178px,1fr));gap:10px}
+.cand{display:flex;gap:12px;align-items:center;width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:inherit;font:inherit;text-align:left;cursor:pointer}
+.cand:hover{border-color:var(--line-strong)}
+.cand[aria-pressed="true"]{border-color:var(--text);box-shadow:inset 0 0 0 1px var(--text)}
+.cand .ic{width:52px;height:52px;border-radius:50%;overflow:hidden;flex:none;box-shadow:0 0 0 1px var(--line)}
+.cand .ic svg{display:block;width:100%;height:100%}
+.cand .meta{display:grid;gap:3px;min-width:0}
+.cand .meta b{font-weight:600;font-size:14px;line-height:1.25}
+.cand .meta .mono{font-size:11px;color:var(--muted)}
+.chips{display:flex;gap:4px}
+.chips i,.sw{border-radius:3px;box-shadow:inset 0 0 0 1px var(--line-strong)}
+.chips i{width:14px;height:14px}
+.sw{display:inline-block;width:14px;height:14px;flex:none}
+
+.panel .top{display:grid;gap:6px}
+.panel .pairname{display:grid;gap:2px}
+.tags{display:flex;gap:6px;flex-wrap:wrap}
+.tag{display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:999px;border:1px solid var(--line-strong);font-size:12px;font-weight:550;line-height:1}
+.notes{display:grid;gap:6px;font-size:14px}
+.notes .who{font-weight:600}
+.facts{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted)}
+.facts span{display:inline-flex;gap:6px;align-items:center}
+.sec{margin-top:24px;display:grid;gap:10px}
+.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.pair figure{margin:0;display:grid;gap:6px;font-size:12px;color:var(--muted)}
+.pair .walls{display:grid;grid-template-columns:1fr 1fr;border-radius:10px;overflow:hidden;box-shadow:0 0 0 1px var(--line)}
+.pair .walls div{display:flex;align-items:center;justify-content:center;padding:16px 0}
+.pair .walls svg{width:84px;height:84px;border-radius:50%;display:block}
+.home{border-radius:10px;padding:18px 10px 12px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;box-shadow:0 0 0 1px var(--line)}
+.home .app{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11px;line-height:1.2}
+.home .app span.i{width:48px;height:48px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.home .app span.i svg{display:block}
+.shapes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;max-width:360px}
+.shapes figure{margin:0;display:grid;justify-items:center;gap:6px;font-size:12px;color:var(--muted);text-align:center}
+.shapes .m{width:100%;max-width:68px;aspect-ratio:1;overflow:hidden;box-shadow:0 0 0 1px var(--line)}
+.shapes .m svg{display:block;width:100%;height:100%}
+.chrome{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;font-size:12px}
+.chrome .tab{display:flex;align-items:center;gap:7px;height:28px;padding:0 10px;border-radius:7px 7px 0 0}
+.chrome .omni{flex:1;min-width:0;height:26px;border-radius:13px;padding:0 10px;display:flex;align-items:center;white-space:nowrap;overflow:hidden}
+.chrome svg{width:16px;height:16px;display:block;flex:none}
+.pix{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end}
+.pix figure{margin:0;display:grid;gap:6px;font-size:12px;color:var(--muted)}
+.pix canvas{image-rendering:pixelated;display:block;border-radius:2px;box-shadow:0 0 0 1px var(--line)}
+.bare{display:flex;gap:14px;align-items:center;font-size:12px;color:var(--muted)}
+.bare span.b{width:84px;height:84px;border-radius:50%;overflow:hidden;flex:none;box-shadow:0 0 0 1px var(--line)}
+.bare span.b svg{display:block;width:100%;height:100%}
+.store{display:flex;gap:14px;align-items:center}
+.store .t{width:84px;height:84px;border-radius:20%;overflow:hidden;flex:none;box-shadow:0 0 0 1px var(--line)}
+.store .t svg{display:block;width:100%;height:100%}
+.store b{display:block;font-size:17px;font-weight:650}
+footer{margin-top:48px;padding-top:24px;border-top:1px solid var(--line);display:grid;gap:8px;max-width:76ch;font-size:14px}
+footer p:first-child{font-size:16px;font-weight:600}
+
+@media (max-width:1000px){
+  header{grid-template-columns:1fr}
+  .layout{grid-template-columns:1fr}
+  .panel{position:static;align-self:auto;order:-1;max-height:none;overflow:visible}
+  .peek{position:sticky;top:8px;z-index:2;display:flex;align-items:center;gap:10px;height:56px;padding:0 12px;border-radius:14px;background:var(--surface);border:1px solid var(--line-strong);color:inherit;text-decoration:none;font-size:14px}
+  .peek svg{width:40px;height:40px;border-radius:50%;flex:none}
+}
+@media (max-width:440px){
+  .wrap{padding-inline:16px}
+  .home .app span.i{width:42px;height:42px}
+  .pair .walls svg{width:64px;height:64px}
+}
+@media (prefers-reduced-motion:no-preference){.cand{transition:border-color .12s}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <p class="eyebrow">Shelf · app icon · pattern and colour</p>
+      <h1>Icon study</h1>
+      <p class="lede">Two choices this time: the pattern under the mark, and its colours. Every option is a real cover drawn by Shelf’s generator, cover v1, with today’s bookmark and progress bar standing on it, inked in ink or paper to suit each pair.</p>
+      <p class="muted">Pick a pattern and every colour redraws on it; pick a colour and every pattern redraws in it. The chosen pair is shown beside the pickers (above them on a phone), next to today’s icon, at real size in a browser toolbar, on home screens, in the launcher’s mask shapes and as a Play listing.</p>
+      <div class="stays">
+        <span><b>Changes with the choice:</b> the launcher icon, the Play store icon, every extension icon (toolbar, extensions page, Web Store and the options page logo), the website’s favicon and home-screen icons, and the icon tile on the Play feature graphic and the social card; for many pairs, also how the mark is inked (with or without its ink outline, with an ink or a paper bar).</span>
+        <span><b>Stays as it is:</b> the shapes of the bookmark and bar, both launch screens (the mark alone, on paper or the dark theme’s background), the themed icon and notification glyph (one colour from the phone), and every save’s own cover.</span>
+      </div>
+    </div>
+    <div class="learned">
+      <h3>How the 18 patterns were chosen</h3>
+      <ul>
+        <li>566 patterns came from the generator: seeds <span class="mono">shelf/icon/1</span> to <span class="mono">/600</span> and the first round’s 32, duplicates removed; a few still draw the same, such as a ring turned.</li>
+        <li>Three judges shortlisted them separately: how the mark sits, character, and range. Today’s bands, the hill and the ring were picked by all three.</li>
+        <li>Between them they picked 30. The 18 here are every pattern two or three judges picked, and six more that cover kinds the rest don’t; pairs of round lobes were left out, since one judge found they can read as anatomy.</li>
+        <li>The mark covers nearly half the visible circle, all of its middle, so a pattern shows mostly in the ring around it. Patterns with two or three big zones hold up; busy ones turn to noise at 16 px.</li>
+        <li>Single discs, quarters and lenses were dropped: under the crop a disc leaves a flat tile, and a quarter or lens only a hairline sliver at the rim.</li>
+      </ul>
+    </div>
+  </header>
+
+  <div class="layout">
+    <div class="pickers">
+      <a class="peek" id="peek" href="#panel"></a>
+      <section class="group" aria-labelledby="h-pat"><div class="group-head"><h2 id="h-pat">Patterns</h2><p>Drawn in the colour chosen below. Each keeps its generator seed, so the final icon is that seed’s shapes in that colour.</p></div>
+        <p class="sub" id="sub-one">One shape</p><div class="grid" id="pat-one" role="group" aria-labelledby="sub-one"></div>
+        <p class="sub" id="sub-four">Four shapes</p><div class="grid" id="pat-four" role="group" aria-labelledby="sub-four"></div>
+      </section>
+      <section class="group" aria-labelledby="h-col"><div class="group-head"><h2 id="h-col">Colours</h2><p>Drawn on the pattern chosen above. A palette has four colours: the ground, one loud colour, which every cover uses at least once, and two supporting colours (on a light ground one dark and one pale; on a dark ground one pale and one mid-tone). One-shape patterns use only the loud colour and the ground, except Hill and sky, whose sky is a supporting colour. Four-shape patterns can cover most of the ground, so a palette’s name describes the palette, not always what shows.</p></div>
+        <p class="sub" id="sub-dark">Dark grounds</p><div class="grid" id="col-dark" role="group" aria-labelledby="sub-dark"></div>
+        <p class="sub" id="sub-light">Light grounds</p><div class="grid" id="col-light" role="group" aria-labelledby="sub-light"></div>
+        <p class="sub" id="sub-grey">No colour</p><div class="grid" id="col-grey" role="group" aria-labelledby="sub-grey"></div>
+      </section>
+    </div>
+    <aside class="panel" id="panel" aria-live="polite" aria-label="The chosen pattern and colour in context"></aside>
+  </div>
+
+  <footer>
+    <p>To choose, tell Claude the pattern and colour codes, for example P315 with C·D·210.</p>
+    <p class="muted">The choice is frozen under its hash as static artwork in <span class="mono">shared/brand/src</span>, so the icon stays a cover drawn by cover v1 (decision 67) and never changes with the generator or a rename. A new flow decision replaces decision 70 and the parts of 72 that tune today’s cuts. The brand files are rebuilt with <span class="mono">build-icons.cjs</span>; if the chosen mark draws the bookmark or the bar in paper alone, the light launch screen keeps today’s mark as its own source file, since paper vanishes on a paper background. The 16, 28, 32 and 48 px cuts are tuned by hand. The small cuts on this page are drawn straight from the cover, so today’s icon looks slightly different here from its hand-tuned files. The mark for each pair was chosen by sampling the colours just outside the bookmark and the bar, where the mark meets the pattern; pairs where part of it still fades say so.</p>
+  </footer>
+</div>
+
+<script>/*COVER_JS*/</script>
+<script>
+/*DATA*/
+const C = window.ShelfCover, INK = '#17171A', PAPER = '#F3F2EE';
+// names and the judges' notes for the shortlisted patterns (DATA.pats holds seeds, hashes and marks)
+const PAT_META = /*PATMETA*/;
+const COLS = [
+  ['cl063', 'C·L·063', '2c7601c0', 'Orange on cream', 'today'],
+  ['cd030', 'C·D·030', '1555010c', 'Vermilion on brown-black', 'dark'],
+  ['cd090', 'C·D·090', '4000010c', 'Gold on dark olive', 'dark'],
+  ['cd135', 'C·D·135', '6000010c', 'Leaf green on forest black', 'dark'],
+  ['cd210', 'C·D·210', '9555010c', 'Teal on petrol', 'dark'],
+  ['cd255', 'C·D·255', 'b555010c', 'Cornflower on navy', 'dark'],
+  ['cd285', 'C·D·285', 'caab010c', 'Violet on plum', 'dark'],
+  ['cd345', 'C·D·345', 'f555010c', 'Raspberry on dark wine', 'dark'],
+  ['cl000', 'C·L·000', '000001c0', 'Rose on blush', 'light'],
+  ['cl030', 'C·L·030', '155501c0', 'Vermilion on peach', 'light'],
+  ['cl150', 'C·L·150', '6aab01c0', 'Green on mint', 'light'],
+  ['cl210', 'C·L·210', '955501c0', 'Teal on sky', 'light'],
+  ['cl255', 'C·L·255', 'b55501c0', 'Cornflower on lavender', 'light'],
+  ['cl300', 'C·L·300', 'd55501c0', 'Purple on lilac', 'light'],
+  ['greyl', 'Grey · L', null, 'Light greys', 'grey'],
+  ['greyd', 'Grey · D', null, 'Dark greys', 'grey'],
+];
+const COL = Object.fromEntries(COLS.map(([id, code, bytes, name, group]) => [id, { id, code, bytes, name, group, grey: id === 'greyl' ? 'light' : id === 'greyd' ? 'dark' : null }]));
+const PATS = PAT_META.map(m => ({ ...m, ...DATA[m.id] }));
+const PAT = Object.fromEntries(PATS.map(p => [p.id, p]));
+const state = { pat: 'P012', col: 'cl063' };
+
+const hashOf = (p, c) => (c.bytes || '2c7601c0') + p.hash.slice(8);
+const inks = (p, c) => { const P = c.grey ? C.grey[c.grey] : C.palette(hashOf(p, c)); return { ground: P.ground, signal: P.signal, deep: P.deep, soft: P.soft }; };
+const markOf = (p, c) => { const m = p.m[c.id] || '10'; return { outline: m[0] === '1', paperBar: m[1] === '1', fade: m[2] === '!' }; };
+
+/* ---------------- drawing ---------------- */
+const BM = 'M41 25H67A4 4 0 0 1 71 29V64.24A1.5 1.5 0 0 1 68.68 65.5L54 56L39.32 65.5A1.5 1.5 0 0 1 37 64.24V29A4 4 0 0 1 41 25Z';
+const G96 = 'translate(54 54) scale(0.96) translate(-54 -54)';
+// foreground.svg's paper mark and splash-dark.svg's paper-only mark, with the bookmark and bar chosen separately
+const bmInk = `<path d="${BM}" fill="none" stroke="${INK}" stroke-width="3" stroke-linejoin="round"/><path d="${BM}" fill="${PAPER}"/>`;
+const bmPaper = `<path d="${BM}" fill="none" stroke="${PAPER}" stroke-width="3" stroke-linejoin="round"/><path d="${BM}" fill="${PAPER}"/>`;
+const barInk = `<rect x="30" y="70" width="48" height="9" rx="4.5" fill="${INK}" stroke="${INK}" stroke-width="3"/><path d="M57.5 70H73.5A4.5 4.5 0 0 1 73.5 79H57.5A4.5 4.5 0 0 0 57.5 70Z" fill="${PAPER}"/>`;
+const barPaper = `<rect x="30" y="70" width="48" height="9" rx="4.5" fill="none" stroke="${PAPER}" stroke-width="3"/><rect x="30" y="70" width="32" height="9" rx="4.5" fill="${PAPER}"/>`;
+const coverSVG = (p, c) => C.svg(hashOf(p, c), { depth: 1, size: 108, grey: c.grey });
+// the cover's own SVG nests inside the icon's 72 viewport
+const icon = (p, c, size, withMark = true) => { const mk = markOf(p, c);
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="18 18 72 72"${size ? ` width="${size}" height="${size}"` : ''} aria-hidden="true" focusable="false"><svg x="0" y="0" width="108" height="108" viewBox="0 0 108 108">${coverSVG(p, c)}</svg>${withMark ? `<g transform="${G96}">${mk.outline ? bmInk : bmPaper}${mk.paperBar ? barPaper : barInk}</g>` : ''}</svg>`; };
+let uid = 0;
+// the 16 and 32 px cuts: the cover's central 72 in a 7-unit tile with small.svg's or small-32.svg's mark
+function cut(p, c, grid, size){ const id = 'k' + (++uid), mk = markOf(p, c);
+  const M = grid === 16
+    ? { bo: 'M10 2H22A2 2 0 0 1 24 4V22L16 14L8 22V4A2 2 0 0 1 10 2Z', bi: 'M10 4H22V17.1716L16 11.1716L10 17.1716Z', bar: '<rect x="4" y="24" width="24" height="6" rx="3" fill="F"/>', slot: 'M20 26H25A1 1 0 0 1 25 28H20Z', pill: 'M7 24H25A3 3 0 0 1 25 30H7A3 3 0 0 1 7 24Z' }
+    : { bo: 'M11 3H21A3 3 0 0 1 24 6V21L16 17L8 21V6A3 3 0 0 1 11 3Z', bi: 'M11 5H21A1 1 0 0 1 22 6V17.7639L16 14.7639L10 17.7639V6A1 1 0 0 1 11 5Z', bar: '<rect x="4" y="23" width="24" height="6" rx="3" fill="F"/>', slot: 'M19 25H25A1 1 0 0 1 25 27H19Z', pill: 'M7 23H25A3 3 0 0 1 25 29H7A3 3 0 0 1 7 23Z' };
+  const book = mk.outline ? `<path d="${M.bo}" fill="${INK}"/><path d="${M.bi}" fill="${PAPER}"/>` : `<path d="${M.bo}" fill="${PAPER}"/>`;
+  const bar = mk.paperBar ? `<path fill="${PAPER}" fill-rule="evenodd" d="${M.pill}${M.slot}"/>` : M.bar.replace('F', INK) + `<path d="${M.slot}" fill="${PAPER}"/>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"${size ? ` width="${size}" height="${size}"` : ''} aria-hidden="true" focusable="false"><defs><clipPath id="${id}"><rect width="32" height="32" rx="7"/></clipPath></defs><g clip-path="url(#${id})"><svg x="0" y="0" width="32" height="32" viewBox="18 18 72 72">${coverSVG(p, c)}</svg></g>${book}${bar}</svg>`; }
+
+const GLYPH = {
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  chat: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
+  notes: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+  music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+};
+// drawn neighbours on the home screen: generic apps, not real brands
+const APPS = [['Clock', 'clock', '#FFFFFF', '#2B3140'], ['Messages', 'chat', '#3D6FD9', '#FFFFFF'], ['Notes', 'notes', '#E9D9B8', '#3A3020'], ['Music', 'music', '#F08A3C', '#FFFFFF']];
+const appIcon = ([name, g, bg, fg]) => `<div class="app"><span class="i" style="background:${bg};color:${fg}"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${GLYPH[g]}</svg></span><span>${name}</span></div>`;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+const TODAY_P = 'P012', TODAY_C = 'cl063';
+
+function drawPickers(){
+  const c = COL[state.col], p = PAT[state.pat];
+  const patCard = q => `<button class="cand" type="button" data-pat="${q.id}" aria-pressed="${q.id === state.pat}"><span class="ic">${icon(q, c)}</span><span class="meta"><b>${esc(q.name)}</b><span class="mono">${q.id}${q.id === TODAY_P ? '<span style="white-space:nowrap"> · today</span>' : ''}</span></span></button>`;
+  $('pat-one').innerHTML = PATS.filter(q => q.n === 1).map(patCard).join('');
+  $('pat-four').innerHTML = PATS.filter(q => q.n !== 1).map(patCard).join('');
+  const colCard = k => { const ink = inks(p, k); return `<button class="cand" type="button" data-col="${k.id}" aria-pressed="${k.id === state.col}"><span class="ic">${icon(p, k)}</span><span class="meta"><b>${esc(k.name)}</b><span class="mono">${k.code}${k.id === TODAY_C ? '<span style="white-space:nowrap"> · today</span>' : ''}</span><span class="chips" aria-hidden="true"><i style="background:${ink.signal}"></i><i style="background:${ink.ground}"></i><i style="background:${ink.deep}"></i><i style="background:${ink.soft}"></i></span></span></button>`; };
+  $('col-dark').innerHTML = COLS.filter(k => k[4] === 'dark').map(k => colCard(COL[k[0]])).join('');
+  $('col-light').innerHTML = COLS.filter(k => k[4] === 'today' || k[4] === 'light').map(k => colCard(COL[k[0]])).join('');
+  $('col-grey').innerHTML = COLS.filter(k => k[4] === 'grey').map(k => colCard(COL[k[0]])).join('');
+}
+
+function pixels(svg, px, scale, holder){
+  const cv = document.createElement('canvas'); cv.width = px; cv.height = px; cv.style.width = px * scale + 'px'; cv.style.height = px * scale + 'px';
+  cv.setAttribute('role', 'img'); cv.setAttribute('aria-label', `The icon at ${px} pixels, magnified`);
+  const img = new Image();
+  img.onload = () => { const x = cv.getContext('2d'); x.clearRect(0, 0, px, px); x.drawImage(img, 0, 0, px, px); };
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  holder.appendChild(cv);
+}
+
+function drawPanel(){
+  const p = PAT[state.pat], c = COL[state.col], T = PAT[TODAY_P], TC = COL[TODAY_C];
+  const mk = markOf(p, c), ink = inks(p, c), isToday = p.id === TODAY_P && c.id === TODAY_C;
+  const homeRow = wall => `<div class="home" style="background:${wall === 'l' ? 'var(--wall-light)' : 'var(--wall-dark)'};color:${wall === 'l' ? '#1F1F1F' : '#F2F2F2'}">${appIcon(APPS[0])}${appIcon(APPS[1])}<div class="app"><span class="i">${icon(p, c, 48)}</span><span>Shelf</span></div>${appIcon(APPS[2])}${appIcon(APPS[3])}</div>`;
+  const tool = () => (window.devicePixelRatio >= 1.5 ? cut(p, c, 32, 16) : cut(p, c, 16, 16));
+  $('panel').innerHTML = `<div class="top">
+      <p class="eyebrow">${isToday ? 'Today' : 'Chosen'} · ${p.id} · ${c.code}</p>
+      <div class="pairname"><h2>${esc(p.name)}</h2><p class="muted">${esc(c.name)}</p></div>
+      <div class="tags"><span class="tag">${p.n === 1 ? 'One shape' : 'Four shapes'}</span><span class="tag">${c.grey ? 'Generator greys' : 'A cover from the generator'}</span></div>
+    </div>
+    <div class="sec"><h3>Next to today</h3><div class="pair">
+      <figure><div class="walls"><div style="background:var(--wall-light)">${icon(T, TC)}</div><div style="background:var(--wall-dark)">${icon(T, TC)}</div></div><figcaption>Today · P012 · C·L·063</figcaption></figure>
+      <figure><div class="walls"><div style="background:var(--wall-light)">${icon(p, c)}</div><div style="background:var(--wall-dark)">${icon(p, c)}</div></div><figcaption>${p.id} · ${c.code}</figcaption></figure>
+    </div><div class="bare"><span class="b">${icon(p, c, null, false)}</span><span>The pattern without the mark, as the launcher crops it.</span></div></div>
+    <div class="sec"><h3>In the browser, real size</h3>
+      <div class="chrome" style="background:#FFFFFF;color:#1F1F1F;box-shadow:inset 0 0 0 1px #DADCE0"><span class="tab" style="background:#DFE1E5">${tool()}Shelf</span><span class="omni" style="background:#F1F3F4">shelf.example/saves</span>${tool()}</div>
+      <div class="chrome" style="background:#35363A;color:#E8EAED"><span class="tab" style="background:#202124">${tool()}Shelf</span><span class="omni" style="background:#202124">shelf.example/saves</span>${tool()}</div>
+      <div class="pix" id="pix"></div>
+    </div>
+    <div class="sec"><h3>Notes</h3>
+      <div class="notes">${p.notes.map(([who, t]) => `<p><span class="who">${who}:</span> ${esc(t)}</p>`).join('')}${c.grey ? '<p class="muted">The app draws these greys for a save whose text couldn’t be fetched, so this icon would echo that state.</p>' : ''}</div>
+      <div class="facts mono"><span><i class="sw" style="background:${ink.signal}"></i>loud ${ink.signal}</span><span><i class="sw" style="background:${ink.ground}"></i>ground ${ink.ground}</span>${p.n !== 1 ? `<span><i class="sw" style="background:${ink.deep}"></i>supporting ${ink.deep}</span><span><i class="sw" style="background:${ink.soft}"></i>supporting ${ink.soft}</span>` : ''}<span>bookmark: ${mk.outline ? 'paper with ink outline' : 'paper'}</span><span>bar: ${mk.paperBar ? 'paper' : 'ink'}</span>${mk.fade ? '<span>part of the mark fades on this pair</span>' : ''}<span>seed ${esc(p.seed)}</span></div>
+      ${c.bytes ? `<p class="mono muted" style="font-size:11px;word-break:break-all">hash ${hashOf(p, c)}</p>` : ''}
+    
+    </div>
+    <div class="sec"><h3>On a home screen</h3>${homeRow('l')}${homeRow('d')}</div>
+    <div class="sec"><h3>Launcher shapes</h3><div class="shapes">
+      <figure><span class="m" style="border-radius:50%">${icon(p, c)}</span>Circle</figure>
+      <figure><span class="m" style="border-radius:32%">${icon(p, c)}</span>Squircle</figure>
+      <figure><span class="m" style="border-radius:22%">${icon(p, c)}</span>Rounded square</figure>
+      <figure><span class="m" style="border-radius:50% 50% 15% 50%">${icon(p, c)}</span>Teardrop</figure>
+    </div></div>
+    <div class="sec"><h3>Play listing</h3><div class="store"><span class="t">${icon(p, c)}</span><span><b>Shelf</b><span class="muted" style="font-size:13px">Working name</span></span></div></div>`;
+  $('peek').innerHTML = icon(p, c, 40) + `<span>${p.id} · ${c.code}</span><span class="muted" style="margin-left:auto">See it in context</span>`;
+  const pix = $('pix');
+  [['16 px at 16 px, ×8', cut(p, c, 16, 16), 16, 8], ['32 px at 32 px, ×4', cut(p, c, 32, 32), 32, 4]].forEach(([cap, svg, px, sc]) => {
+    const f = document.createElement('figure'); pixels(svg, px, sc, f); const cp = document.createElement('figcaption'); cp.textContent = cap; f.appendChild(cp); pix.appendChild(f);
+  });
+}
+
+function update(fromClick){
+  drawPickers(); drawPanel();
+  try { history.replaceState(null, '', '#' + state.pat.toLowerCase() + '-' + state.col); } catch (e) {}
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('.cand'); if (!b) return;
+  if (b.dataset.pat) state.pat = b.dataset.pat; if (b.dataset.col) state.col = b.dataset.col;
+  const key = b.dataset.pat ? '[data-pat="' + b.dataset.pat + '"]' : '[data-col="' + b.dataset.col + '"]';
+  update(true);
+  const again = document.querySelector('.cand' + key); if (again) again.focus({ preventScroll: true });
+});
+(() => { const m = (location.hash || '').slice(1).match(/^(p\d{3})-([a-z0-9]+)$/);
+  if (m && PAT[m[1].toUpperCase()] && COL[m[2]]) { state.pat = m[1].toUpperCase(); state.col = m[2]; } })();
+update(false);
+</script>

@@ -1,0 +1,21 @@
+<!doctype html><meta charset="utf-8"><script src="../../mockups/cover-v1.js"></script><script src="patterns.js"></script>
+<style>body{margin:0;background:#8f8e8a;font:11px/1.2 monospace;color:#111}.g{display:grid;grid-template-columns:repeat(10,96px);gap:8px 6px;padding:10px}.c{display:flex;flex-direction:column;align-items:center;gap:3px}.c svg{width:80px;height:80px;border-radius:50%;display:block}.c.big svg{width:160px;height:160px}</style>
+<div class="g" id="g"></div>
+<script>
+const C=window.ShelfCover, q=new URLSearchParams(location.search);
+const PAL={cl063:'2c7601c0',cd210:'9555010c'}; const pal=PAL[q.get('pal')||'cd210'];
+const ids=q.get('ids'); const from=+(q.get('from')||0), to=+(q.get('to')||60);
+const list=ids?ids.split(',').map(id=>PATTERNS.find(p=>p.id===id)):PATTERNS.slice(from,to);
+const INK='#17171A',PAPER='#F3F2EE',BM='M41 25H67A4 4 0 0 1 71 29V64.24A1.5 1.5 0 0 1 68.68 65.5L54 56L39.32 65.5A1.5 1.5 0 0 1 37 64.24V29A4 4 0 0 1 41 25Z',G='translate(54 54) scale(0.96) translate(-54 -54)';
+const dark=pal.endsWith('0c');
+const mk=dark?`<g transform="${G}"><path d="${BM}" fill="none" stroke="${PAPER}" stroke-width="3" stroke-linejoin="round"/><path d="${BM}" fill="${PAPER}"/><rect x="30" y="70" width="48" height="9" rx="4.5" fill="none" stroke="${PAPER}" stroke-width="3"/><rect x="30" y="70" width="32" height="9" rx="4.5" fill="${PAPER}"/></g>`
+ :`<g transform="${G}"><path d="${BM}" fill="none" stroke="${INK}" stroke-width="3" stroke-linejoin="round"/><path d="${BM}" fill="${PAPER}"/><rect x="30" y="70" width="48" height="9" rx="4.5" fill="${INK}" stroke="${INK}" stroke-width="3"/><path d="M57.5 70H73.5A4.5 4.5 0 0 1 73.5 79H57.5A4.5 4.5 0 0 0 57.5 70Z" fill="${PAPER}"/></g>`;
+const showMark=q.get('mark')!=='0';
+if(q.get('small')){ // 16 and 32 px: the cover's central 72 with a mark scaled to fit, rasterised by the browser, magnified
+ const sm=dark?`<path d="M10 2H22A2 2 0 0 1 24 4V22L16 14L8 22V4A2 2 0 0 1 10 2Z" fill="${PAPER}"/><rect x="4" y="24" width="24" height="6" rx="3" fill="${PAPER}"/>`:`<path d="M10 2H22A2 2 0 0 1 24 4V22L16 14L8 22V4A2 2 0 0 1 10 2Z" fill="${INK}"/><path d="M10 4H22V17.1716L16 11.1716L10 17.1716Z" fill="${PAPER}"/><rect x="4" y="24" width="24" height="6" rx="3" fill="${INK}"/><path d="M20 26H25A1 1 0 0 1 25 28H20Z" fill="${PAPER}"/>`;
+ const g=document.getElementById('g'); g.style.gridTemplateColumns='repeat(8,120px)';
+ list.forEach(p=>{const h=pal+p.hash.slice(8); const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32"><defs><clipPath id="t"><rect width="32" height="32" rx="7"/></clipPath></defs><g clip-path="url(#t)"><svg x="0" y="0" width="32" height="32" viewBox="18 18 72 72">${C.svg(h,{depth:1,size:108})}</svg></g>${sm}</svg>`;
+  const d=document.createElement('div'); d.className='c'; [16,32].forEach(px=>{const cv=document.createElement('canvas'); cv.width=px; cv.height=px; cv.style.width=(px===16?96:96)+'px'; cv.style.height='96px'; cv.style.imageRendering='pixelated'; const im=new Image(); im.onload=()=>cv.getContext('2d').drawImage(im,0,0,px,px); im.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg); d.appendChild(cv);}); const l=document.createElement('span'); l.textContent=p.id+' 16 / 32'; d.appendChild(l); g.appendChild(d);});
+} else
+document.getElementById('g').innerHTML=list.map(p=>{const h=pal+p.hash.slice(8);return `<div class="c${q.get('big')?' big':''}"><svg viewBox="18 18 72 72" xmlns="http://www.w3.org/2000/svg">${C.svg(h,{depth:1,size:108})}${showMark?mk:''}</svg><span>${p.id}${p.n===1?' ·1':''}</span></div>`}).join('');
+</script>

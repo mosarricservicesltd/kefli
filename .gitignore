@@ -30,3 +30,6 @@ apps/mobile/ios/
 Thumbs.db
 .idea/
 .vscode/
+
+# design QA output (tools/design-qa)
+tools/design-qa/out/

@@ -1,0 +1,167 @@
+[
+ {
+  "id": "P012",
+  "lens": "How the mark sits",
+  "text": "Today's icon works, but both band edges pass behind the mark: one cuts across the notch, and at 16 px the band breaks into pieces either side of the bookmark."
+ },
+ {
+  "id": "P012",
+  "lens": "Character",
+  "text": "Curved bands from the bottom-right corner leave one loud sweep across the middle and ground under the bar. Two colours only, so it held up in five palettes, and reads at 16 px."
+ },
+ {
+  "id": "P012",
+  "lens": "Range",
+  "text": "Today's icon and the best of the bands: nearly three quarters of the mark sits on one loud sweep, with ground only at the bottom right and the top-left rim. Reads at 16 px."
+ },
+ {
+  "id": "P021",
+  "lens": "How the mark sits",
+  "text": "One curve from the top left puts the mark's lower half on one colour, but a hairline crescent at the bottom-right rim shows as a fleck in the corner at small sizes."
+ },
+ {
+  "id": "P021",
+  "lens": "Character",
+  "text": "Today's bands turned half a turn, so the patch of ground moves from under the bar to behind the bookmark's top-left shoulder. Just as strong if the patch should sit high."
+ },
+ {
+  "id": "P315",
+  "lens": "How the mark sits",
+  "text": "The hill's crest hides behind the bookmark and its edge comes out at the bookmark's lower sides, so the notch and the whole bar sit on one colour; two calm bands at 16 and 32 px."
+ },
+ {
+  "id": "P315",
+  "lens": "Character",
+  "text": "A dome rising from the bottom edge shows either side of the bookmark, so the mark stands on a horizon. Symmetric, two colours, and the cleanest of the set at 16 and 32 px."
+ },
+ {
+  "id": "P315",
+  "lens": "Range",
+  "text": "The best half-disc pattern: the bar stands on a loud dome and the bookmark's top on plain ground. The least busy of any pick, with the cleanest two-colour read at 16 px."
+ },
+ {
+  "id": "P446",
+  "lens": "How the mark sits",
+  "text": "The Hill with a mid-tone sky, so on light grounds the bookmark never stands on a colour close to paper. On dark grounds the line between sky and hill is softer at 16 px."
+ },
+ {
+  "id": "P446",
+  "lens": "Character",
+  "text": "The Hill with its sky in a supporting colour, so it reads as a small landscape on light grounds. On dark grounds sky and hill are closer in tone."
+ },
+ {
+  "id": "P120",
+  "lens": "How the mark sits",
+  "text": "The cap's curve hides behind the bookmark, leaving the notch, the gap above the bar and the bar on one plain colour; at 16 px the cap is about a pixel tall."
+ },
+ {
+  "id": "P120",
+  "lens": "Character",
+  "text": "The Hill's dome hung from the top edge: a loud cap over the bookmark, just as clean at small sizes, though the mark then stands on nothing."
+ },
+ {
+  "id": "P022",
+  "lens": "How the mark sits",
+  "text": "Two big side-by-side fields read cleanly at 16 and 32 px, but the curve passes through the centre: it splits the notch and comes out under the bar, so colours meet at the bookmark's tip."
+ },
+ {
+  "id": "P022",
+  "lens": "Character",
+  "text": "A half disc from the right edge splits the circle along a curve just behind the mark, so the icon reads as two side-by-side fields, which looks lopsided under an upright mark."
+ },
+ {
+  "id": "P028",
+  "lens": "How the mark sits",
+  "text": "The ring frames the mark like a porthole, but its inner disc is barely bigger than the mark: the bookmark's top corners touch its edge and the bar's ends cross it."
+ },
+ {
+  "id": "P028",
+  "lens": "Character",
+  "text": "A loud ring round a plain disc makes a calm, symmetric halo behind the mark in every palette, though a circle in a round mask looks more like a frame than a cover."
+ },
+ {
+  "id": "P028",
+  "lens": "Range",
+  "text": "The plain centre backs the whole mark, a badge at 16 px, but the bookmark hides the ring's top, leaving a border; on a light ground the mark leans on its outline."
+ },
+ {
+  "id": "P415",
+  "lens": "How the mark sits",
+  "text": "A straight line runs from the bookmark's top-right shoulder to the bar's left end, its one awkward crossing. The notch and the rest of the bar sit on loud colour: the boldest at 16 px."
+ },
+ {
+  "id": "P196",
+  "lens": "Character",
+  "text": "Lines of ground part a big half circle on the right from two small discs on the left, a two-colour figure that held up in every palette. At 16 px the lines turn to specks."
+ },
+ {
+  "id": "P196",
+  "lens": "Range",
+  "text": "Two colours, mirrored top to bottom: a curved strip of ground runs down behind the mark like a book's spine. Very calm, but at 16 px the strip hides and it nearly flattens."
+ },
+ {
+  "id": "P560",
+  "lens": "Character",
+  "text": "A loud field with one disc in a supporting colour at the top right, like a moon behind the bookmark: one clear accent, though deliberately off-centre."
+ },
+ {
+  "id": "P560",
+  "lens": "Range",
+  "text": "One loud field backs about two thirds of the mark, with a single bite at the top right, a disc on ground that reads as a crescent: one accent, one flat backing."
+ },
+ {
+  "id": "P430",
+  "lens": "Character",
+  "text": "Three loud curved shapes and one in a supporting colour bite in from the corners, leaving the ground as a four-pointed star around the mark. One clear figure, but busy at 16 px."
+ },
+ {
+  "id": "P430",
+  "lens": "Range",
+  "text": "The best of the four-pointed stars: a star of ground between curved corner shapes, with the mark at its centre. Five changes of colour around the mark make it noisy at 16 px."
+ },
+ {
+  "id": "P314",
+  "lens": "Character",
+  "text": "Top and bottom halves meet along an S-shaped wave, lovely without the mark, but the wave crosses the centre and hides behind the mark, leaving a plain top-and-bottom split."
+ },
+ {
+  "id": "P314",
+  "lens": "Range",
+  "text": "An S-shaped horizon: the calmest four-shape pattern and the strongest at 16 px on a light ground. On a dark ground the lower half turns pale, so a paper bar would vanish there."
+ },
+ {
+  "id": "P303",
+  "lens": "Character",
+  "text": "Curved quarter and half discs form a yin-yang S across all four colours, distinctive without the mark, but the S sits in the centre, where the bookmark covers it."
+ },
+ {
+  "id": "P303",
+  "lens": "Range",
+  "text": "A loud curve on the left meets a cap of a supporting colour at the top right, the other two colours below: the most fluid four-colour pattern, but all four meet around the mark."
+ },
+ {
+  "id": "P096",
+  "lens": "Range",
+  "text": "A band in a supporting colour crosses behind the bookmark's lower half, and 89% of the mark sits on plain loud colour: the clearest backing of any four-shape pattern. Still reads at 16 px."
+ },
+ {
+  "id": "P150",
+  "lens": "Character",
+  "text": "A loud field with one cut-away corner at the top right, beside the bookmark, like a dog-eared page, which suits a reading app, but that corner is three slivers that go fussy at 16 px."
+ },
+ {
+  "id": "P205",
+  "lens": "Range",
+  "text": "Four plain quarters, loud in two opposite corners, with a disc in the top-right quarter. The plainest four-shape pattern: the mark sits on two colours with a clear cross around it."
+ },
+ {
+  "id": "P339",
+  "lens": "Range",
+  "text": "The opposite of Moon: nearly all plain ground, with a loud curve in the top-right corner. Elegant and still on dark grounds; pale on light ones, where the mark relies on its outline."
+ },
+ {
+  "id": "P063",
+  "lens": "Range",
+  "text": "A hard vertical split: one colour fills the right half, two share the left. Boldest at 16 px on a light ground, but on dark grounds the right half turns pale behind half the mark."
+ }
+]
