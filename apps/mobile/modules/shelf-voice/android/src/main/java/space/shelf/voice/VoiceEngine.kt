@@ -237,6 +237,12 @@ object VoiceEngine {
     firstOffset = s.wordStarts[(w - s.firstWord).coerceIn(0, s.wordStarts.size - 1)]
     nextSentence = si
     writeAhead()
+    // reset() stopped the word's clock along with the old audio; a skip or a rate change while playing restarts it
+    // here, or the word would stop following the voice (the battery hour, 7 October 2026)
+    if (playing) {
+      main.removeCallbacks(poll)
+      main.post(poll)
+    }
   }
 
   /** The segment playing now, by the track's head; -1 before the first is written. */
