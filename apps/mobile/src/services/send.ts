@@ -1,6 +1,6 @@
 // Sends the outbox (mobile spec 4.3): one due row at a time, through ports so the tests can stand in for the
-// network. It sends register, upload_blob, mirror_blob, publish_item, publish_lists and delete_blob.
-import { buildItemEvent, buildRelayList, buildServerList, deleteBlob, httpAuth, mirrorBlob, uploadBlob } from '@shelf/protocol';
+// network. It sends register, upload_blob, mirror_blob, publish_item, publish_lists, delete_item and delete_blob.
+import { buildDeletions, buildItemEvent, buildRelayList, buildServerList, deleteBlob, httpAuth, mirrorBlob, uploadBlob } from '@shelf/protocol';
 import type { CryptoPort, NostrEvent, Signer } from '@shelf/protocol';
 import type { SqlDb } from '../data/db';
 import { getItem, itemJson, markPublished } from '../data/items';
@@ -130,6 +130,26 @@ async function sendPublish(p: SendPorts, row: OutboxRow, signer: Signer, targets
   return results;
 }
 
+/** Kind 5s for the payload's d tags, up to 50 addresses each, to every write relay (4.3). */
+async function sendDeleteItem(p: SendPorts, row: OutboxRow, signer: Signer, targets: OutboxTarget[]): Promise<TargetResult[]> {
+  const { ds } = JSON.parse(row.payload ?? '{}') as { ds: string[] };
+  const events = await buildDeletions(signer, ds, p.now());
+  return Promise.all(
+    targets.map(async (t) => {
+      try {
+        let last: TargetResult = { target: t.target, kind: 'ok' };
+        for (const e of events) {
+          last = relayResult(t.target, await p.publish(t.target, e), e.id);
+          if (last.kind !== 'ok') return last;
+        }
+        return last;
+      } catch (e) {
+        return { target: t.target, kind: 'retry', error: err(e) } as TargetResult;
+      }
+    }),
+  );
+}
+
 /** The 10002 to every target, the 10063 to the write relays only (4.3); both built from the tables at send time. */
 async function sendLists(p: SendPorts, row: OutboxRow, signer: Signer, targets: OutboxTarget[]): Promise<TargetResult[]> {
   const now = p.now();
@@ -168,6 +188,8 @@ export async function sendOne(p: SendPorts): Promise<boolean> {
     results = await sendPublish(p, row, signer, targets);
   } else if (row.op === 'publish_lists') {
     results = await sendLists(p, row, signer, targets);
+  } else if (row.op === 'delete_item') {
+    results = await sendDeleteItem(p, row, signer, targets);
   } else {
     const one = { register: sendRegister, upload_blob: sendUpload, mirror_blob: sendMirror, delete_blob: sendDeleteBlob }[row.op];
     results = one ? (await Promise.all(targets.map((t) => one(p, row, signer, t)))).flat() : targets.map((t) => ({ target: t.target, kind: 'rejected', error: `unknown op ${row.op}` }));

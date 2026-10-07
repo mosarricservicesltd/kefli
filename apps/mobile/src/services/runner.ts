@@ -51,6 +51,20 @@ export function runOutbox(): Promise<number> {
 }
 
 let syncing: Promise<SyncResult> | null = null;
+let reading: string | null = null;
+
+/** The article open in the Reader: its text is fetched first and its remote position waits (4.5). */
+export function setReading(hash: string | null): void {
+  reading = hash;
+}
+
+const syncListeners = new Set<() => void>();
+
+/** Whether a sync is running, for Saves' sync line (5.6). */
+export const syncRunning = {
+  get: () => syncing !== null,
+  subscribe: (l: () => void) => (syncListeners.add(l), () => syncListeners.delete(l)),
+};
 
 /**
  * One sync (mobile spec 4.5): the outbox, then saves and deletions from the read relays, then their texts.
@@ -72,11 +86,14 @@ export function runSync(): Promise<SyncResult> {
         crypto: phoneCrypto,
         defaults: loadDefaults,
         files: textFiles,
+        openHash: () => reading,
       });
     } finally {
       syncing = null;
+      syncListeners.forEach((l) => l());
     }
   })();
+  syncListeners.forEach((l) => l());
   return syncing;
 }
 

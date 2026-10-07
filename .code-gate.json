@@ -21,6 +21,17 @@
     "*/apps/mobile/src/services/store.ts",
     "*/apps/mobile/src/services/identity.ts",
     "*/apps/mobile/src/services/config.ts",
-    "*/apps/mobile/src/data/expoDb.ts"
+    "*/apps/mobile/src/data/expoDb.ts",
+    "*/apps/mobile/src/app/*",
+    "*/apps/mobile/src/screens/*.tsx",
+    "*/apps/mobile/src/ui/*.tsx",
+    "*/apps/mobile/src/reader/*.tsx",
+    "*/apps/mobile/src/reader/prefs.ts",
+    "*/apps/mobile/src/ui/live.ts",
+    "*/apps/mobile/src/ui/online.ts",
+    "*/apps/mobile/src/ui/theme.ts",
+    "*/apps/mobile/src/services/app.ts",
+    "*/apps/mobile/src/services/textFiles.ts",
+    "*/apps/mobile/src/screens/actions.ts"
   ]
 }

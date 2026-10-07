@@ -9,7 +9,12 @@ Written on 6 October 2026, when the work moved off the laptop it started on. Eve
 - **The mobile spec is written:** `docs/specs/03-mobile.md`, version 2.1, Expo with Android first. Its section 12 is the build timeline. Of week 0's code, the token generator (`shared/tokens/build-ts.mjs`, emitting `packages/tokens`), the npm workspaces, the protocol skeleton (`packages/protocol`), the normalise draft (`shared/normalise.ts` with `shared/normalise.fixtures.json`, its open choices listed in the fixtures' `draft` notes) and `shared/turndown-rules.json` were done on 6 October 2026. The library gates listed there need the phone build and are still to do.
 - **The Android test build passed** on a Pixel 10a (`docs/specs/07-android-test-build.md`). `apps/mobile` holds that test screen only; the app proper starts from the spec.
 - **Tokens** are 1.0.1 (`shared/tokens/tokens.json`).
-- **The build:** weeks 0 and 1 of the mobile spec's timeline are done against the local stack. Week 2 started on 7 October 2026 with inbound sync (spec 4.5, phases 1, 3 and 5): the identity's lists, saves and deletions paged from every read relay, the merge rules in `packages/protocol/src/merge.ts`, and texts fetched, decrypted and indexed. A reinstalled phone gets its library back from the relays this way. Still to come in week 2: the screens, images and pending parses (phases 6 and 7), and `shelf-voice`.
+- **The build:** weeks 0 and 1 of the mobile spec's timeline are done against the local stack. Week 2 started on 7 October 2026 with inbound sync (spec 4.5, phases 1, 3 and 5): the identity's lists, saves and deletions paged from every read relay, the merge rules in `packages/protocol/src/merge.ts`, and texts fetched, decrypted and indexed. A reinstalled phone gets its library back from the relays this way. The first screens followed the same day:
+  - **Welcome:** Welcome and New here, plus Bring back your shelf, whose three routes are week 4.
+  - **Saves:** Unread and Archive, with swipe, the toast with Undo, the row menu, and the empty, offline and sync-line states.
+  - **The Reader:** laid out at the saved word, with the Aa sheet, the end card, the ⋯ menu, the loading and offline states, and the original-page view.
+  - **Where they live:** the screens are in `apps/mobile/src/screens`, their parts in `src/ui` and the Reader's logic in `src/reader`. The Android test build's gates moved to the `/gates` route (`adb shell am start -d shelf://gates`).
+  - **Still to come in week 2:** `shelf-voice` with the Listen chip, the player and highlighting; covers drawing in; images and pending parses (sync phases 6 and 7); and Search, which is drawn but not wired.
 
 ## Open with Richard
 

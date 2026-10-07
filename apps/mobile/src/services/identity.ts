@@ -82,3 +82,18 @@ export async function ensureSigner(): Promise<LocalSigner> {
   if (plan.use === 'mint' && plan.writeBlockStore) await ShelfKeystore.blockStoreSet(mnemonic).catch(() => undefined);
   return s;
 }
+
+/**
+ * New here (5.2, FD 2): keeps a key an early share made, otherwise makes one and puts it in Block Store; then
+ * Welcome is answered. Returns the identity's pubkey.
+ */
+export async function newHere(): Promise<string> {
+  const s = (await currentSigner()) ?? (await (async () => {
+    const mnemonic = newMnemonic(phoneCrypto);
+    const made = await adopt(mnemonic, 'new');
+    await ShelfKeystore.blockStoreSet(mnemonic).catch(() => undefined);
+    return made;
+  })());
+  setSetting(store(), WELCOME_ANSWERED, '1');
+  return s.pubkey();
+}

@@ -3,7 +3,7 @@ import { openDatabaseSync } from 'expo-sqlite';
 import type { Param, SqlDb } from './db';
 
 export function openExpoDb(name: string): SqlDb {
-  const raw = openDatabaseSync(name);
+  const raw = openDatabaseSync(name, { enableChangeListener: true });
   let depth = 0;
   const db: SqlDb = {
     exec: (sql) => raw.execSync(sql),

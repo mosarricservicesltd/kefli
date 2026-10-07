@@ -1,14 +1,24 @@
-// The root JS stack (mobile spec 6.1), as the week-0 gate needs it: the spec's push and pop (motion spec,
-// Navigation: fade with 24 px of travel, enter 250 ms, exit 200 ms), no swipe gesture, and the root-back
-// switch so Android's back-to-home preview plays on the root screen.
+// The root JS stack (mobile spec 6.1): Welcome until it is answered, then the tabs; the Reader once there is an
+// identity. Pushed screens sit in this stack over the tabs, with no tab bar on them. The sheet and toast hosts sit
+// above the navigator. The spec's push and pop (motion spec, Navigation: fade with 24 px of travel, enter 250 ms,
+// exit 200 ms), no swipe gesture, and the root-back switch so Android's back-to-home preview plays on root screens.
 import { useEffect } from 'react';
-import { Easing } from 'react-native';
+import { AppState, Easing, View } from 'react-native';
+import { useFonts } from 'expo-font';
 import { usePathname } from 'expo-router';
 import { Stack } from 'expo-router/js-stack';
 import type { StackCardInterpolationProps } from 'expo-router/js-stack';
+import { StatusBar } from 'expo-status-bar';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { motion } from '@shelf/tokens';
 import { ShelfSystem } from '../../modules/shelf-system/src';
+import { boot, useApp } from '../services/app';
 import { startSync } from '../services/runner';
+import { FONTS } from '../ui/fonts';
+import { SheetHost } from '../ui/sheet';
+import { ToastHost, settleToast } from '../ui/toast';
+import { useTheme } from '../ui/theme';
 
 const bezier = (e: 'linear' | readonly number[]) => (e === 'linear' ? Easing.linear : Easing.bezier(e[0], e[1], e[2], e[3]));
 
@@ -21,28 +31,62 @@ function fadeTravel({ current }: StackCardInterpolationProps) {
   };
 }
 
+const ROOTS = ['/', '/listen', '/you', '/welcome'];
+
 export default function Layout() {
   const path = usePathname();
+  const [fonts] = useFonts(FONTS);
+  const app = useApp();
+  const { c, name } = useTheme();
+  useEffect(() => {
+    boot();
+    // A toast still counting down when the app leaves the screen counts as closed without Undo.
+    const sub = AppState.addEventListener('change', (s) => s !== 'active' && settleToast());
+    return () => sub.remove();
+  }, []);
   // The resolver first (mobile spec 3.1), then a sync, and another at each return to the foreground (4.5).
   useEffect(startSync, []);
   useEffect(() => {
-    const ok = ShelfSystem.setRootBack(path === '/');
-    console.log(`[shelf-gates] ${JSON.stringify({ id: 'root-back', ok, detail: `at ${path}, system preview ${path === '/' ? 'on' : 'off'}`, ms: 0 })}`);
+    ShelfSystem.setRootBack(ROOTS.includes(path));
   }, [path]);
+  // Until the fonts and the resolver are ready, the splash stays (6.9).
+  if (!fonts || !app) return <View style={{ flex: 1, backgroundColor: c.background }} />;
+  const shelf = app.route === 'saves';
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        gestureEnabled: false,
-        detachPreviousScreen: false,
-        cardOverlayEnabled: false,
-        cardStyle: { backgroundColor: '#F3F2EE' },
-        cardStyleInterpolator: fadeTravel,
-        transitionSpec: {
-          open: { animation: 'timing', config: { duration: motion.enter.duration, easing: bezier(motion.enter.easing) } },
-          close: { animation: 'timing', config: { duration: motion.exit.duration, easing: bezier(motion.exit.easing) } },
-        },
-      }}
-    />
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: c.background }}>
+      <SafeAreaProvider>
+        <StatusBar style={name === 'dark' ? 'light' : 'dark'} />
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            gestureEnabled: false,
+            detachPreviousScreen: false,
+            cardOverlayEnabled: false,
+            cardStyle: { backgroundColor: c.background },
+            cardStyleInterpolator: fadeTravel,
+            transitionSpec: {
+              open: { animation: 'timing', config: { duration: motion.enter.duration, easing: bezier(motion.enter.easing) } },
+              close: { animation: 'timing', config: { duration: motion.exit.duration, easing: bezier(motion.exit.easing) } },
+            },
+          }}
+        >
+          <Stack.Protected guard={shelf}>
+            <Stack.Screen name="(tabs)" />
+          </Stack.Protected>
+          <Stack.Protected guard={!shelf}>
+            <Stack.Screen name="welcome" />
+            <Stack.Screen name="return" />
+          </Stack.Protected>
+          <Stack.Protected guard={!!app.owner}>
+            <Stack.Screen name="reader/[hash]/index" />
+            <Stack.Screen name="reader/[hash]/original" />
+          </Stack.Protected>
+          <Stack.Screen name="gates" />
+          <Stack.Screen name="back-test" />
+        </Stack>
+        <ToastHost />
+        <SheetHost />
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
