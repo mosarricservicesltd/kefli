@@ -4,7 +4,8 @@
 import { useSyncExternalStore } from 'react';
 import type { Sentence } from '@shelf/protocol';
 import { ShelfVoice, type VoiceState } from '../../modules/shelf-voice/src';
-import { setPosition, type LibRow } from '../data/library';
+import { rowByHash, setPosition, type LibRow } from '../data/library';
+import { playFrom, recordPlayed } from '../data/listen';
 import { getSetting, setSetting } from '../data/settings';
 import { readRate, readWps, nextRate } from '../voice/clock';
 import { appState } from './app';
@@ -16,6 +17,8 @@ import { artworkPath } from '../ui/artwork';
 export type Session = {
   hash: string; title: string; playing: boolean; word: number; rate: number; wordTiming: boolean; wps: number;
   ended: boolean; totalWords: number; sentences: Sentence[]; sentence: number;
+  /** Each sentence's first word, for the word meter (5.7). */
+  firstWords: number[];
 };
 
 let session: Session | null = null;
@@ -71,6 +74,9 @@ function wire() {
     // The article was heard to its end: its position is the last word; the player shows it rewound and paused.
     keep(session.totalWords - 1, true);
     set({ ...session, playing: false, ended: true, word: 0 });
+    // Play all moves to the next article of its snapshot, and stops after the last (FD 35)
+    const next = queue.shift();
+    if (next) playHash(next).catch(() => undefined);
   });
 }
 
@@ -94,7 +100,9 @@ export async function listen(row: Pick<LibRow, 'hash' | 'title' | 'site' | 'url'
   const wps = readWps(getSetting(store(), `voice.wps.${VOICE}`));
   const word = Math.max(0, Math.min(fromWord, totalWords - 1));
   const title = row.title ?? row.url;
-  set({ hash: row.hash, title, playing: true, word, rate, wordTiming: true, wps, ended: false, totalWords, sentences: list, sentence: 0 });
+  const owner = appState()?.owner;
+  if (owner) recordPlayed(store(), owner, row.hash, Math.floor(Date.now() / 1000));
+  set({ hash: row.hash, title, playing: true, word, rate, wordTiming: true, wps, ended: false, totalWords, sentences: list, sentence: 0, firstWords: list.map((x) => x.firstWord) });
   let art: string | null = null;
   try {
     art = artworkPath(row.hash);
@@ -102,6 +110,34 @@ export async function listen(row: Pick<LibRow, 'hash' | 'title' | 'site' | 'url'
     art = null; // the card shows without artwork rather than not at all
   }
   await ShelfVoice.start({ hash: row.hash, title, site: row.site ?? '', sentences: list, startWord: word, totalWords, rate, wps, artworkPath: art });
+}
+
+// Play all's snapshot of the Played list, the articles still to come (FD 35).
+let queue: string[] = [];
+
+async function playHash(hash: string): Promise<void> {
+  const owner = appState()?.owner;
+  const row = owner ? rowByHash(store(), owner, hash) : undefined;
+  if (row) await listen(row, playFrom(row));
+}
+
+/** Play all: the Played list as it stands, from the top to the end, then stop (FD 35). */
+export function playAll(hashes: string[]): void {
+  queue = hashes.slice(1);
+  if (hashes[0]) playHash(hashes[0]).catch(() => undefined);
+}
+
+/** Listen from the Reader: a different article ends Play all (FD 35). */
+export function startListening(row: Pick<LibRow, 'hash' | 'title' | 'site' | 'url'>, fromWord: number): Promise<void> {
+  if (session?.hash !== row.hash) queue = [];
+  return listen(row, fromWord);
+}
+
+/** A Played row's cover: plays or pauses its article; starting a different article ends Play all (FD 35). */
+export function toggleRow(row: LibRow): void {
+  if (session?.hash === row.hash && !session.ended) return toggle();
+  queue = [];
+  listen(row, playFrom(row)).catch(() => undefined);
 }
 
 export function toggle(): void {

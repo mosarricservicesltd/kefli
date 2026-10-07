@@ -18,7 +18,7 @@ export type LibRow = {
   x_state: string | null;
 };
 
-const COLS = 'id, hash, url, title, site, words, position_word, state, text_state, fail_reason, origin, saved_at, byline, lang, text_sha256, text_servers, hero, x_state';
+export const LIB_COLS = 'id, hash, url, title, site, words, position_word, state, text_state, fail_reason, origin, saved_at, byline, lang, text_sha256, text_servers, hero, x_state';
 
 export function activeOwner(db: SqlDb): string | null {
   return db.get<{ pubkey: string }>("SELECT pubkey FROM identities WHERE role = 'active'")?.pubkey ?? null;
@@ -26,7 +26,7 @@ export function activeOwner(db: SqlDb): string | null {
 
 /** A list, newest first, without saves waiting on a delete's Undo. */
 export function listRows(db: SqlDb, owner: string, list: ListName): LibRow[] {
-  return db.all<LibRow>(`SELECT ${COLS} FROM items WHERE owner = ? AND state = ? AND pending_delete_at IS NULL ORDER BY saved_at DESC, id DESC`, owner, list);
+  return db.all<LibRow>(`SELECT ${LIB_COLS} FROM items WHERE owner = ? AND state = ? AND pending_delete_at IS NULL ORDER BY saved_at DESC, id DESC`, owner, list);
 }
 
 export function counts(db: SqlDb, owner: string): { unread: number; archived: number } {
@@ -35,7 +35,7 @@ export function counts(db: SqlDb, owner: string): { unread: number; archived: nu
 }
 
 export function rowByHash(db: SqlDb, owner: string, hash: string): LibRow | undefined {
-  return db.get<LibRow>(`SELECT ${COLS} FROM items WHERE owner = ? AND hash = ?`, owner, hash);
+  return db.get<LibRow>(`SELECT ${LIB_COLS} FROM items WHERE owner = ? AND hash = ?`, owner, hash);
 }
 
 /** Minutes to read at WPM, at least one; null when the words aren't known. */

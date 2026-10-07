@@ -12,7 +12,7 @@ import { enter, exit } from '@shelf/tokens/reanimated';
 import type { ReaderColors } from '../reader/palette';
 import { closeVoice, cycleRate, skip, toggle, useVoice, type Session } from '../services/voice';
 import { clock, rateLabel, seconds } from '../voice/clock';
-import { useEffect } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { Cover } from '../ui/Cover';
 import { setToastLift } from '../ui/toast';
 import { ShelfCover } from '../ui/cover';
@@ -111,9 +111,20 @@ export function ReaderTier({ s, P, bottom }: { s: Session; P: ReaderColors; bott
   );
 }
 
+// Listen's Now playing card is the player while it is on screen; the mini appears once the card is under 40% in
+// view and leaves above 60% (5.7, FD 52). Listen reports which.
+let cardShowing = false;
+const cardListeners = new Set<() => void>();
+export function setListenCardShowing(on: boolean): void {
+  if (on === cardShowing) return;
+  cardShowing = on;
+  cardListeners.forEach((l) => l());
+}
+
 /** Where the mini shows (playerMode in the prototype): null where it doesn't, else its bottom. */
-export function miniBottom(path: string, s: Session | null, insetBottom: number): number | null {
+export function miniBottom(path: string, s: Session | null, insetBottom: number, listenCard = false): number | null {
   if (!s || NO_PLAYER.includes(path)) return null;
+  if (path === '/listen' && listenCard) return null;
   if (path === `/reader/${s.hash}`) return null;
   return insetBottom + (TAB_PATHS.includes(path) ? TAB_BAR_HEIGHT + 8 : 16);
 }
@@ -123,7 +134,8 @@ export function PlayerHost() {
   const s = useVoice();
   const path = usePathname();
   const insets = useSafeAreaInsets();
-  const bottom = miniBottom(path, s, insets.bottom);
+  const card = useSyncExternalStore((l) => (cardListeners.add(l), () => cardListeners.delete(l)), () => cardShowing);
+  const bottom = miniBottom(path, s, insets.bottom, card);
   const lift = bottom !== null && TAB_PATHS.includes(path) ? PLAYER_HEIGHT + 8 : 0;
   useEffect(() => setToastLift(lift), [lift]);
   if (bottom === null || !s) return null;

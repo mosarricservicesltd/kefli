@@ -51,6 +51,20 @@ export const S = {
     archiveEmptyTitle: 'Nothing archived yet',
     archiveEmptyBody: 'Swipe an article left, or tap Archive when you finish it, and it moves here.',
   },
+  // listen, listen-empty, listen-scrolled
+  listen: {
+    title: 'Listen',
+    played: (n: number) => `${n} played`,
+    nowPlaying: 'Now playing',
+    paused: 'Paused',
+    playedHead: 'Played',
+    playAll: 'Play all',
+    emptyTitle: 'Nothing played yet',
+    emptyBody: 'Tap Listen on any article to hear it here. It keeps playing when your screen is off.',
+    goToSaves: 'Go to your saves',
+    play: (t: string) => `Play ${t}`,
+    pause: (t: string) => `Pause ${t}`,
+  },
   // search, search-none, search-reader
   search: {
     field: 'Search your saves',

@@ -39,7 +39,7 @@ import { setToastFloor, showToast } from '../ui/toast';
 import { alpha, mix, useTheme } from '../ui/theme';
 import { archive, remove } from './actions';
 import { ReaderTier } from './Player';
-import { listen, stopIfPlaying, useVoice, warmVoice, type Session } from '../services/voice';
+import { startListening, stopIfPlaying, useVoice, warmVoice, type Session } from '../services/voice';
 import { startWord } from '../voice/clock';
 import { ArchiveDock, DOCK, DOCK_LIFTED } from './ArchiveDock';
 import { OriginalView } from './Original';
@@ -403,17 +403,17 @@ export default function Reader() {
   ));
   const waiting = !cached || !article;
   const playingHere = voice?.hash === row.hash;
-  const startListening = () => {
+  const onListen = () => {
     if (!article) return;
     const range = viewRange.current?.() ?? { first: row.position_word, last: row.position_word };
-    listen(row, startWord(row.position_word, range, article.words)).catch(() => undefined);
+    startListening(row, startWord(row.position_word, range, article.words)).catch(() => undefined);
   };
   return (
     <View style={{ flex: 1, backgroundColor: P.bg, paddingTop: insets.top }}>
       <StatusBar style={P.id === 'dark' ? 'light' : 'dark'} />
       <Bar
         row={row} P={P} onAa={() => openSheet(S.reader.aaSheet.title, () => <AaSheet hash={row.hash} />)} onMore={menu}
-        chip={waiting ? undefined : <ListenChip P={P} gone={playingHere} onPress={startListening} />}
+        chip={waiting ? undefined : <ListenChip P={P} gone={playingHere} onPress={onListen} />}
       />
       {waiting ? (
         <ScrollView contentContainerStyle={{ paddingTop: 16, paddingHorizontal: 20, paddingBottom: 140 }}>
