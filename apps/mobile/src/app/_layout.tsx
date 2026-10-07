@@ -73,6 +73,7 @@ export default function Layout() {
         >
           <Stack.Protected guard={shelf}>
             <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="search" />
           </Stack.Protected>
           <Stack.Protected guard={!shelf}>
             <Stack.Screen name="welcome" />

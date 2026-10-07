@@ -157,7 +157,7 @@ export default function Saves() {
     <View>
       <Head title={S.saves.title} count={first ? undefined : list === 'unread' ? S.saves.unreadCount(n.unread) : S.saves.archivedCount(n.archived)} />
       {!first && (
-        <Press accessibilityRole="search" onPress={() => undefined} layer={pressLayer(c.text)} style={{ marginTop: 4, marginHorizontal: 16, height: 48, borderRadius: radius.button, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16 }}>
+        <Press accessibilityRole="search" onPress={() => router.push({ pathname: '/search', params: { fresh: '1' } })} layer={pressLayer(c.text)} style={{ marginTop: 4, marginHorizontal: 16, height: 48, borderRadius: radius.button, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16 }}>
           <Icon name="search" size={18} color={c.muted} />
           <T muted style={ui(15, 'body', 1.45)}>{S.saves.search}</T>
         </Press>

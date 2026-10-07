@@ -51,6 +51,15 @@ export const S = {
     archiveEmptyTitle: 'Nothing archived yet',
     archiveEmptyBody: 'Swipe an article left, or tap Archive when you finish it, and it moves here.',
   },
+  // search, search-none, search-reader
+  search: {
+    field: 'Search your saves',
+    caption: 'Searches the full text of everything you’ve saved, on this phone.',
+    results: (n: number) => `${n} result${n > 1 ? 's' : ''}`,
+    noneTitle: (q: string) => `Nothing matches “${q}”`,
+    noneBody: 'Search looks through titles, sources and full text in Unread and Archive.',
+    clear: 'Clear search',
+  },
   row: {
     mins: (n: number) => `${n} min`,
     minsLeft: (n: number) => `${n} min left`,

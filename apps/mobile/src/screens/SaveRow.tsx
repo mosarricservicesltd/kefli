@@ -32,7 +32,7 @@ export function hostOf(url: string): string {
   }
 }
 
-function Meta({ r, online, ink }: { r: LibRow; online: boolean; ink: string }) {
+function Meta({ r, online, ink, tag }: { r: LibRow; online: boolean; ink: string; tag?: boolean }) {
   const { c } = useTheme();
   const status = rowStatus(r);
   const meta = ui(13, 'body', 1.3);
@@ -59,13 +59,28 @@ function Meta({ r, online, ink }: { r: LibRow; online: boolean; ink: string }) {
   }
   const left = progressOf(r) > 0 && progressOf(r) < 1 ? minutesLeft(r) : null;
   const mins = minutes(r.words);
-  if (left !== null) return <T style={[meta, ui(13, 'title', 1.3)]}>{S.row.minsLeft(left)}</T>;
-  return mins === null ? null : <T muted style={meta}>{S.row.mins(mins)}</T>;
+  const time = left !== null ? <T style={[meta, ui(13, 'title', 1.3)]}>{S.row.minsLeft(left)}</T>
+    : mins === null ? null : <T muted style={meta}>{S.row.mins(mins)}</T>;
+  // in Search, an archived result carries the Archive tag after its time (prototype rowMetaHTML)
+  if (!tag || r.state !== 'archived') return time;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      {time}
+      {time && <View style={{ width: 3, height: 3, borderRadius: 2, backgroundColor: c.muted, opacity: 0.7 }} />}
+      <View style={{ height: 24, paddingHorizontal: 8, borderRadius: radius.control, borderWidth: 1, borderColor: c.lineStrong, justifyContent: 'center' }}>
+        <T style={ui(13, 'meta', 1)}>{S.row.archive}</T>
+      </View>
+    </View>
+  );
 }
 
-type Props = { r: LibRow; online: boolean; onOpen: (r: LibRow) => void; onSwipe: (r: LibRow) => void; onMore?: (r: LibRow) => void; drawFrom?: number };
+type Props = {
+  r: LibRow; online: boolean; onOpen: (r: LibRow) => void; onSwipe: (r: LibRow) => void; onMore?: (r: LibRow) => void; drawFrom?: number;
+  /** Search: archived results are tagged, and a swipe changes the save in place, the row returning (5.6). */
+  inPlace?: boolean;
+};
 
-export const SaveRow = memo(function SaveRow({ r, online, onOpen, onSwipe, onMore, drawFrom = 0 }: Props) {
+export const SaveRow = memo(function SaveRow({ r, online, onOpen, onSwipe, onMore, drawFrom = 0, inPlace = false }: Props) {
   const { c } = useTheme();
   const { width } = useWindowDimensions();
   const archived = r.state === 'archived';
@@ -91,7 +106,10 @@ export const SaveRow = memo(function SaveRow({ r, online, onOpen, onSwipe, onMor
     })
     .onEnd((e) => {
       const flick = Math.abs(e.velocityX) > 800 && Math.abs(tx.value) > 32 && Math.sign(e.velocityX) === dir;
-      if (armed.value || flick) {
+      if ((armed.value || flick) && inPlace) {
+        runOnJS(onSwipe)(r);
+        tx.value = withSpring(0, { ...release, velocity: e.velocityX });
+      } else if (armed.value || flick) {
         tx.value = withSpring(dir * width, { ...release, velocity: e.velocityX }, (done) => done && runOnJS(onSwipe)(r));
       } else {
         tx.value = withSpring(0, { ...release, velocity: e.velocityX });
@@ -126,7 +144,7 @@ export const SaveRow = memo(function SaveRow({ r, online, onOpen, onSwipe, onMor
             <View style={{ flex: 1, minWidth: 0 }}>
               <T muted numberOfLines={1} style={ui(13, 'meta', 1.3)}>{status === 'waiting' && urlTitle ? hostOf(r.url) : r.site ?? hostOf(r.url)}</T>
               <T numberOfLines={3} style={[ui(15, urlTitle ? 'meta' : 'title', 1.35, -0.005), { marginTop: 3, marginBottom: 7 }, urlTitle && { color: c.muted }]}>{title}</T>
-              <Meta r={r} online={online} ink={ink} />
+              <Meta r={r} online={online} ink={ink} tag={inPlace} />
             </View>
             <Cover hash={r.hash} size={64} failed={status === 'failed'} drawFrom={drawFrom} />
             <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 1, backgroundColor: c.line }} />
