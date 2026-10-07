@@ -8,6 +8,7 @@ import { Stack } from 'expo-router/js-stack';
 import type { StackCardInterpolationProps } from 'expo-router/js-stack';
 import { motion } from '@shelf/tokens';
 import { ShelfSystem } from '../../modules/shelf-system/src';
+import { runOutbox } from '../services/runner';
 
 const bezier = (e: 'linear' | readonly number[]) => (e === 'linear' ? Easing.linear : Easing.bezier(e[0], e[1], e[2], e[3]));
 
@@ -22,6 +23,10 @@ function fadeTravel({ current }: StackCardInterpolationProps) {
 
 export default function Layout() {
   const path = usePathname();
+  // Whatever a share or an earlier run left in the outbox goes out when the app opens (mobile spec 4.3).
+  useEffect(() => {
+    runOutbox().catch(() => {});
+  }, []);
   useEffect(() => {
     const ok = ShelfSystem.setRootBack(path === '/');
     console.log(`[shelf-gates] ${JSON.stringify({ id: 'root-back', ok, detail: `at ${path}, system preview ${path === '/' ? 'on' : 'off'}`, ms: 0 })}`);

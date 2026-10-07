@@ -1,0 +1,145 @@
+// Sends the outbox (mobile spec 4.3): one due row at a time, through ports so the tests can stand in for the
+// network. Week 1 sends register, upload_blob, mirror_blob and publish_item.
+import { buildItemEvent, httpAuth, mirrorBlob, uploadBlob } from '@shelf/protocol';
+import type { CryptoPort, NostrEvent, Signer } from '@shelf/protocol';
+import type { SqlDb } from '../data/db';
+import { getItem, itemJson, markPublished } from '../data/items';
+import { begin, finish, nextDue } from '../data/outbox';
+import type { OutboxRow, OutboxTarget, TargetResult } from '../data/outbox';
+import type { Defaults } from './config';
+
+export type RelayAnswer = { ok: true } | { ok: false; reason: string };
+
+export type SendPorts = {
+  db: SqlDb;
+  now: () => number;
+  signer: (pubkey: string) => Promise<Signer | null>;
+  fetch: typeof fetch;
+  crypto: CryptoPort;
+  defaults: () => Defaults;
+  /** Publishes one event to one relay and returns its OK, or throws on a network failure. */
+  publish: (relay: string, event: NostrEvent) => Promise<RelayAnswer>;
+  /** The staged ciphertext for a blob, or null if it is gone. */
+  readBlob: (sha256: string) => Promise<Uint8Array | null>;
+};
+
+const DAY = 86_400;
+const err = (e: unknown) => String((e as Error)?.message ?? e);
+
+/** A relay's OK prefix decides the outcome (4.3). */
+export function relayResult(target: string, a: RelayAnswer, eventId: string): TargetResult {
+  if (a.ok) return { target, kind: 'ok', eventId };
+  const reason = a.reason;
+  if (/^duplicate:/.test(reason)) return { target, kind: 'ok', eventId };
+  if (/^rate-limited:/.test(reason)) return { target, kind: 'retry', error: reason, waitSec: 60 };
+  if (/^(invalid|blocked|pow|restricted|error):/.test(reason)) return { target, kind: 'rejected', error: reason };
+  return { target, kind: 'retry', error: reason };
+}
+
+async function sendRegister(p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
+  const body = JSON.stringify({ v: 1 });
+  try {
+    const res = await p.fetch(t.target, { method: 'POST', body, headers: { 'Content-Type': 'application/json', Authorization: await httpAuth(signer, t.target, 'POST', body, p.crypto) } });
+    if (res.ok) {
+      p.db.run('UPDATE identities SET registered_at = ? WHERE pubkey = ?', p.now(), row.signer);
+      return [{ target: t.target, kind: 'ok' }];
+    }
+    if (res.status === 401 || res.status === 429 || res.status >= 500) return [{ target: t.target, kind: 'retry', error: `HTTP ${res.status}` }];
+    return [{ target: t.target, kind: 'rejected', error: `HTTP ${res.status}` }];
+  } catch (e) {
+    return [{ target: t.target, kind: 'retry', error: err(e) }];
+  }
+}
+
+async function sendUpload(p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
+  const { sha256 } = JSON.parse(row.payload ?? '{}') as { sha256: string };
+  const blob = await p.readBlob(sha256);
+  if (!blob) return [{ target: t.target, kind: 'rejected', error: 'staged blob missing' }];
+  try {
+    const r = await uploadBlob(t.target, blob, sha256, signer, p.fetch);
+    if (r.ok) {
+      p.db.run('UPDATE blobs SET operator_at = ?, last_error = NULL WHERE sha256 = ?', p.now(), sha256);
+      return [{ target: t.target, kind: 'ok' }];
+    }
+    // A 413 from the operator is a full quota: the text stays on the phone and the upload retries daily (G5).
+    if (r.status === 413) return [{ target: t.target, kind: 'retry', error: r.reason, waitSec: DAY }];
+    return [r.permanent && r.status !== 401 ? { target: t.target, kind: 'rejected', error: `HTTP ${r.status} ${r.reason}` } : { target: t.target, kind: 'retry', error: `HTTP ${r.status} ${r.reason}` }];
+  } catch (e) {
+    return [{ target: t.target, kind: 'retry', error: err(e) }];
+  }
+}
+
+/** The mirror after this one in defaults, or the first again after a day once every entry has refused (4.2). */
+function nextMirror(p: SendPorts, current: string): { next: string; delaySec: number } {
+  const mirrors = p.defaults().mirrors;
+  const i = mirrors.indexOf(current);
+  if (i >= 0 && i + 1 < mirrors.length) return { next: mirrors[i + 1], delaySec: 0 };
+  return { next: mirrors[0], delaySec: DAY };
+}
+
+async function sendMirror(p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
+  const { sha256 } = JSON.parse(row.payload ?? '{}') as { sha256: string };
+  const from = `${p.defaults().operator.blossom.replace(/\/+$/, '')}/${sha256}`;
+  try {
+    const r = await mirrorBlob(t.target, from, sha256, signer, p.fetch);
+    if (r.ok) {
+      p.db.run('UPDATE blobs SET mirror_at = ?, mirror_url = ?, last_error = NULL WHERE sha256 = ?', p.now(), t.target, sha256);
+      return [{ target: t.target, kind: 'ok' }];
+    }
+    // A mirror refuses with any 4xx but 401 and 429, a 413 included: move to the next entry, never dead.
+    if (r.permanent) return [{ target: t.target, kind: 'retarget', error: `HTTP ${r.status} ${r.reason}`, ...nextMirror(p, t.target) }];
+    return [{ target: t.target, kind: 'retry', error: `HTTP ${r.status} ${r.reason}` }];
+  } catch (e) {
+    return [{ target: t.target, kind: 'retry', error: err(e) }];
+  }
+}
+
+async function sendPublish(p: SendPorts, row: OutboxRow, signer: Signer, targets: OutboxTarget[]): Promise<TargetResult[]> {
+  const item = getItem(p.db, row.signer, row.subject);
+  if (!item) return targets.map((t) => ({ target: t.target, kind: 'rejected' as const, error: 'item gone' }));
+  const blob = item.text_sha256 ? p.db.get<{ mirror_url: string | null }>('SELECT mirror_url FROM blobs WHERE sha256 = ?', item.text_sha256) : null;
+  const d = p.defaults();
+  // text.servers never lists the operator alone (contract 4.2): the mirror that holds it, else the one being tried.
+  const servers = [d.operator.blossom, blob?.mirror_url ?? d.mirrors[0]];
+  // Built at send time, created_at = max(now, last + 1), so a newer state always replaces the old one.
+  const createdAt = Math.max(p.now(), (item.event_created_at ?? 0) + 1);
+  const { event } = await buildItemEvent(signer, item.hash, itemJson(item, servers), createdAt);
+  const results = await Promise.all(
+    targets.map(async (t) => {
+      try {
+        return relayResult(t.target, await p.publish(t.target, event), event.id);
+      } catch (e) {
+        return { target: t.target, kind: 'retry', error: err(e) } as TargetResult;
+      }
+    }),
+  );
+  if (results.some((r) => r.kind === 'ok')) markPublished(p.db, row.signer, item.hash, event.id, createdAt);
+  return results;
+}
+
+/** Sends the next due row, if any. Returns whether it did anything. */
+export async function sendOne(p: SendPorts): Promise<boolean> {
+  const due = nextDue(p.db, p.now());
+  if (!due) return false;
+  const { row, targets } = due;
+  begin(p.db, row.id);
+  const signer = await p.signer(row.signer);
+  let results: TargetResult[];
+  if (!signer) {
+    results = targets.map((t) => ({ target: t.target, kind: 'retry', error: 'signer unavailable' }));
+  } else if (row.op === 'publish_item') {
+    results = await sendPublish(p, row, signer, targets);
+  } else {
+    const one = { register: sendRegister, upload_blob: sendUpload, mirror_blob: sendMirror }[row.op];
+    results = one ? (await Promise.all(targets.map((t) => one(p, row, signer, t)))).flat() : targets.map((t) => ({ target: t.target, kind: 'rejected', error: `unknown op ${row.op}` }));
+  }
+  finish(p.db, p.now(), row.id, results);
+  return true;
+}
+
+/** Sends until nothing is due or the budget runs out. */
+export async function drain(p: SendPorts, maxRows = 100): Promise<number> {
+  let n = 0;
+  while (n < maxRows && (await sendOne(p))) n++;
+  return n;
+}

@@ -4,6 +4,7 @@
     "strict": true
   },
   "exclude": [
-    "scripts"
+    "scripts",
+    "test"
   ]
 }

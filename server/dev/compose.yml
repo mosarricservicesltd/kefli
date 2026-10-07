@@ -1,0 +1,40 @@
+# Shelf's local stack for phone work before the VPS exists (docs/specs/02-backend.md is the real one):
+# the operator relay (NIP-42 on, as contract 3.2), two relays standing in for the default public ones,
+# the operator Blossom server and a mirror. Host networking, so localhost:<port> is the same address to
+# this machine, to the containers and, through adb reverse, to the phone.
+#   docker compose -f server/dev/compose.yml up -d
+#   node server/dev/api.mjs
+#   server/dev/phone.sh   (adb reverse for every port)
+services:
+  relay-operator:
+    image: ghcr.io/hoytech/strfry:latest
+    network_mode: host
+    command: ["--config=/etc/strfry.conf", "relay"]
+    volumes: ["./strfry-operator.conf:/etc/strfry.conf:ro", "relay-operator:/app/strfry-db"]
+  relay-public-a:
+    image: ghcr.io/hoytech/strfry:latest
+    network_mode: host
+    command: ["--config=/etc/strfry.conf", "relay"]
+    volumes: ["./strfry-public-a.conf:/etc/strfry.conf:ro", "relay-public-a:/app/strfry-db"]
+  relay-public-b:
+    image: ghcr.io/hoytech/strfry:latest
+    network_mode: host
+    command: ["--config=/etc/strfry.conf", "relay"]
+    volumes: ["./strfry-public-b.conf:/etc/strfry.conf:ro", "relay-public-b:/app/strfry-db"]
+  blossom-operator:
+    image: ghcr.io/hzrd149/blossom-server:latest
+    network_mode: host
+    entrypoint: ["deno", "run", "-A", "main.ts", "/etc/blossom.yml"]
+    volumes: ["./blossom-operator.yml:/etc/blossom.yml:ro", "blossom-operator:/data"]
+  blossom-mirror:
+    image: ghcr.io/hzrd149/blossom-server:latest
+    network_mode: host
+    entrypoint: ["deno", "run", "-A", "main.ts", "/etc/blossom.yml"]
+    volumes: ["./blossom-mirror.yml:/etc/blossom.yml:ro", "blossom-mirror:/data", "./mirror-ip-guard.ts:/app/src/utils/ip-guard.ts:ro"]
+
+volumes:
+  relay-operator:
+  relay-public-a:
+  relay-public-b:
+  blossom-operator:
+  blossom-mirror:

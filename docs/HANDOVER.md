@@ -37,6 +37,7 @@ Host github.com
 |---|---|
 | Look at the prototypes | `npx serve docs/design -l 4321`, then open `http://localhost:4321/mockups/prototype.html` (or open the files directly). `.claude/launch.json` has this as "mockups", plus "tour" (the repo root on 4322, for `docs/design/tour.html`). |
 | Check the prototype after a change | `node tools/design-qa/jumps.mjs` (every state, both themes, no script errors, motion rule). See `tools/design-qa/README.md`. |
+| Run the local stack (week 1, before the VPS) | `docker compose -f server/dev/compose.yml up -d` (three strfry relays, the operator Blossom server and a mirror), `node server/dev/api.mjs` (the API stand-in: `/defaults.json`, `/register`), `server/dev/phone.sh` (adb reverse, so the phone reaches them on its own localhost), and `npx tsx server/dev/smoke.ts` for a full save from the desktop. The app's cleartext HTTP is for this stack only and must be limited to development builds before release |
 | Install and test the shared code | `npm install` at the root, then `npm test` (tokens staleness check and the `packages/protocol` suite) and `npm run typecheck` |
 | Rebuild the tokens | `npm run tokens` (the CSS for the prototypes and `packages/tokens` for the app) |
 | Test the cover generator | `node shared/cover/test.cjs`, and `node shared/cover/build.mjs` to copy it into the mockups |

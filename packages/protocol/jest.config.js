@@ -1,6 +1,7 @@
 // ESM-only dependencies are transformed too (mobile spec 2.4, plus @exodus/bytes under whatwg-url and character-entities under decode-named-character-reference);
 // shared/ sits outside this package, so the root is the repository.
 module.exports = {
+  displayName: 'protocol',
   rootDir: '../..',
   roots: ['<rootDir>/packages/protocol/test'],
   transform: { '\\.[cm]?[jt]sx?$': ['babel-jest', { configFile: require.resolve('./babel.config.js') }] },

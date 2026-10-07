@@ -2,6 +2,10 @@
 // and the two ways out. Done (or the 4 s countdown) returns to the app shared from; Read now also opens
 // Shelf on the Reader (flow decision 39). Shelf's real share sheet replaces this in week 1.
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { saveLink, type SaveStep } from '../services/save';
+import { release } from '../data/outbox';
+import { runOutbox } from '../services/runner';
+import { store } from '../services/store';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { itemHash } from '@shelf/protocol';
 import { motion } from '@shelf/tokens';
@@ -25,12 +29,22 @@ export default function ShareRoot({ spoolId }: { spoolId?: string }) {
     }
   }, [url]);
   const [left, setLeft] = useState<number>(motion.countdown.share);
+  const [steps, setSteps] = useState<SaveStep[]>([]);
+  const [saving, setSaving] = useState(true);
   const done = useRef(false);
+  const held = useRef<number[]>([]);
 
   const finish = (mode: 'host' | 'read') => {
     if (done.current) return;
     done.current = true;
     if (spoolId) ShelfShare.deleteSpool(spoolId);
+    // The sheet closed without Undo: its rows go to the queue and the outbox starts sending.
+    if (held.current.length) {
+      release(store(), held.current);
+      runOutbox()
+        .then((n) => console.log(`[shelf-save] ${JSON.stringify({ step: 'sent', ok: true, detail: `${n} outbox rows sent` })}`))
+        .catch((e) => console.log(`[shelf-save] ${JSON.stringify({ step: 'sent', ok: false, detail: String((e as Error).message) })}`));
+    }
     log({ id: 'share-finish', ok: true, detail: mode, ms: 0 });
     ShelfShare.finish(mode, mode === 'read' ? hash : null);
   };
@@ -38,9 +52,30 @@ export default function ShareRoot({ spoolId }: { spoolId?: string }) {
   useEffect(() => {
     const shownMs = entry ? Date.now() - entry.receivedAt : -1;
     log({ id: 'share-activity', ok: !!entry, detail: entry ? `spooled to first render ${shownMs} ms; referrer ${entry.referrer}; link ${url ? 'found' : 'none'}; ${ShelfShare.listSpools().length} spool(s) waiting` : `no spool for ${spoolId}`, ms: shownMs });
+    if (!url) {
+      setSaving(false);
+      return;
+    }
+    // Week 1's slice: the whole save runs here, then the countdown starts.
+    saveLink(url, (st) => {
+      console.log(`[shelf-save] ${JSON.stringify(st)}`);
+      setSteps((prev) => [...prev, st]);
+    })
+      .then((r) => {
+        held.current = r.held;
+        console.log(`[shelf-save] ${JSON.stringify({ step: 'done', ok: true, detail: `d shelf/item/${r.hash}, ${r.held.length} rows held` })}`);
+      })
+      .catch((e) => {
+        console.log(`[shelf-save] ${JSON.stringify({ step: 'error', ok: false, detail: String((e as Error).message) })}`);
+        setSteps((prev) => [...prev, { step: 'error', ok: false, detail: String((e as Error).message) }]);
+      })
+      .finally(() => setSaving(false));
+  }, []);
+  useEffect(() => {
+    if (saving) return;
     const t = setInterval(() => setLeft((l) => l - 100), 100);
     return () => clearInterval(t);
-  }, []);
+  }, [saving]);
   useEffect(() => {
     if (left <= 0) finish('host');
   }, [left]);
@@ -48,11 +83,17 @@ export default function ShareRoot({ spoolId }: { spoolId?: string }) {
   return (
     <View style={s.scrim}>
       <View style={s.card}>
-        <Text style={s.title}>{url ? 'Saved to Shelf' : 'Nothing to save'}</Text>
+        <Text style={s.title}>{!url ? 'Nothing to save' : saving ? 'Saving to Shelf' : 'Saved to Shelf'}</Text>
         <Text style={s.meta} numberOfLines={2}>
           {url ?? entry?.text ?? 'The share carried no text.'}
         </Text>
         {hash && <Text style={s.meta}>d: shelf/item/{hash.slice(0, 16)}…</Text>}
+        {steps.map((st, i) => (
+          <Text key={i} style={[s.meta, !st.ok && { color: '#B42318' }]}>
+            {st.ok ? '✓' : '✗'} {st.step}: {st.detail}
+          </Text>
+        ))}
+        {saving && <Text style={s.meta}>Saving…</Text>}
         <View style={s.row}>
           <Pressable style={[s.btn, s.ghost]} onPress={() => finish('host')}>
             <Text style={s.ghostText}>Done</Text>

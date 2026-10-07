@@ -16,3 +16,4 @@ export * from './deletion';
 export * from './nip98';
 export * from './secret';
 export * from './secp';
+export * from './blossom';
