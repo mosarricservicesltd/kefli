@@ -6,6 +6,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Canvas, ImageSVG, Skia } from '@shopify/react-native-skia';
 import { useFonts } from 'expo-font';
 import { GATES, runGate, type GateResult } from './gates';
+import { VoiceGate } from './VoiceGate';
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const ShelfCover = require('../../../../shared/cover/cover-v1.js');
@@ -122,6 +123,7 @@ export function GatesScreen() {
           </View>
         );
       })}
+      <VoiceGate />
       <Covers />
       <Fonts />
     </ScrollView>

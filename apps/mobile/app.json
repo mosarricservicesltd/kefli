@@ -28,7 +28,15 @@
         }
       ],
       "react-native-quick-crypto",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
+        }
+      ]
     ]
   }
 }
