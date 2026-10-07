@@ -4,7 +4,7 @@
 // covers a live viewfinder, and it moves on at the eighth character. While connecting, Cancel is unavailable and
 // there is no ←. ← and success return to where Connect was opened, Saves or Connected browsers.
 import { useEffect, useRef, useState } from 'react';
-import { BackHandler, Linking, TextInput, View } from 'react-native';
+import { BackHandler, Keyboard, Linking, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
@@ -112,7 +112,11 @@ function CodeStep({ onOffer, error, setError }: { onOffer: (o: PairOffer) => voi
     setChecking(true);
     const r = await lookupCode(connectPorts(owner), next).catch(() => ({ problem: 'offline' as const }));
     setChecking(false);
-    if ('offer' in r) return onOffer(r.offer);
+    if ('offer' in r) {
+      // the confirm card's buttons sit where the keyboard was
+      Keyboard.dismiss();
+      return onOffer(r.offer);
+    }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
     setError(r.problem === 'expired' ? S.conn.expired : r.problem === 'offline' ? S.conn.failed : S.conn.wrong);
     setSelection({ start: 0, end: next.length });

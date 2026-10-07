@@ -33,7 +33,14 @@ Written on 6 October 2026, when the work moved off the laptop it started on. Eve
     - **Schema v2:** `devices` is keyed by token (RULED in `data/schema.ts`), since a browser connected again keeps its key and gets a new token.
     - **Microphone:** the build no longer asks for it. `expo-audio` had added it by default.
     - **Testing without the extension:** `npx tsx server/dev/browser.ts` plays the extension's part. It shows a QR in the terminal and in `server/dev/data/pair.html`, with the typed code under it, then waits for the pair-ack.
-  - **Not yet built:** the inbox (4.7), so browser saves arrive, and the screens behind Add another device, Advanced and Delete my data.
+  - **The inbox** (4.7, sync phase 4) followed the same day. Browser saves arrive as gift wraps on the operator relay:
+    - **When it runs:** drained at every sync, and while Shelf is in front a live subscription (`limit: 0`) drains it within a second of a wrap arriving.
+    - **Judging a wrap:** each one is judged once and recorded in `inbox_seen`. Other apps' messages, unknown tokens, other keys and other versions are left alone.
+    - **An accepted save:** it joins Saves through `queueSave`, so the repeat-save rule applies. Its row reads "From Chrome" with "Getting the text…" (`text_state` 'fetching', RULED in `data/inbox.ts`) until the browser's HTML is downloaded from the operator Blossom server, checked and parsed. The parse goes through the same `parseHtml` and guard as a fetched page.
+    - **When the HTML can't be read:** without HTML, or for an X post, the save waits as a pending parse. A blob that can't be read is retried at each drain, and once it has expired the page is fetched instead.
+    - **Deleting the wrap:** only created, merged and un-archived wraps queue `delete_wrap`.
+    - **Testing:** `npx tsx server/dev/browser.ts save <url>` sends a save from the paired stand-in browser.
+  - **Not yet built:** the screens behind Add another device, Advanced and Delete my data.
 
 ## Open with Richard
 
@@ -66,7 +73,7 @@ Host github.com
 |---|---|
 | Look at the prototypes | `npx serve docs/design -l 4321`, then open `http://localhost:4321/mockups/prototype.html` (or open the files directly). `.claude/launch.json` has this as "mockups", plus "tour" (the repo root on 4322, for `docs/design/tour.html`). |
 | Check the prototype after a change | `node tools/design-qa/jumps.mjs` (every state, both themes, no script errors, motion rule). See `tools/design-qa/README.md`. |
-| Run the local stack (week 1, before the VPS) | `docker compose -f server/dev/compose.yml up -d` (three strfry relays, the operator Blossom server and a mirror), `node server/dev/api.mjs` (the API stand-in: `/defaults.json`, `/register`, `/devices` and `/pair-offers`, devices and offers in memory), `server/dev/phone.sh` (adb reverse, so the phone reaches them on its own localhost), `npx tsx server/dev/smoke.ts` for a full save from the desktop, and `npx tsx server/dev/browser.ts` to pair a stand-in browser. Only a `SHELF_VARIANT=local` build allows cleartext, and only to localhost |
+| Run the local stack (week 1, before the VPS) | `docker compose -f server/dev/compose.yml up -d` (three strfry relays, the operator Blossom server and a mirror), `node server/dev/api.mjs` (the API stand-in: `/defaults.json`, `/register`, `/devices` and `/pair-offers`, devices and offers in memory), `server/dev/phone.sh` (adb reverse, so the phone reaches them on its own localhost), `npx tsx server/dev/smoke.ts` for a full save from the desktop, and `npx tsx server/dev/browser.ts` to pair a stand-in browser (then `… browser.ts save <url>` to send a save from it). Only a `SHELF_VARIANT=local` build allows cleartext, and only to localhost |
 | Install and test the shared code | `npm install` at the root, then `npm test` (tokens staleness check and the `packages/protocol` suite) and `npm run typecheck` |
 | Rebuild the tokens | `npm run tokens` (the CSS for the prototypes and `packages/tokens` for the app) |
 | Test the cover generator | `node shared/cover/test.cjs`, and `node shared/cover/build.mjs` to copy it into the mockups |

@@ -19,6 +19,7 @@ import { WaitDot } from '../ui/Dots';
 import { Icon } from '../ui/Icon';
 import { Press, pressLayer } from '../ui/Press';
 import { S } from '../ui/strings';
+import { browserName } from '../data/inbox';
 import { T, ui } from '../ui/text';
 import { useTheme } from '../ui/theme';
 
@@ -142,7 +143,13 @@ export const SaveRow = memo(function SaveRow({ r, online, onOpen, onSwipe, onMor
             style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start', paddingTop: 14, paddingBottom: 15, paddingRight: onMore ? 44 : 0, backgroundColor: c.background }}
           >
             <View style={{ flex: 1, minWidth: 0 }}>
-              <T muted numberOfLines={1} style={ui(13, 'meta', 1.3)}>{status === 'waiting' && urlTitle ? hostOf(r.url) : r.site ?? hostOf(r.url)}</T>
+              {status === 'waiting' && r.origin_device ? (
+                // a browser save on its way (prototype saves-arrive): the browser's name until the text is here
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Icon name="laptop" size={14} color={c.muted} />
+                  <T muted numberOfLines={1} style={ui(13, 'meta', 1.3)}>{S.row.from(browserName(r.origin_device))}</T>
+                </View>
+              ) : <T muted numberOfLines={1} style={ui(13, 'meta', 1.3)}>{status === 'waiting' && urlTitle ? hostOf(r.url) : r.site ?? hostOf(r.url)}</T>}
               <T numberOfLines={3} style={[ui(15, urlTitle ? 'meta' : 'title', 1.35, -0.005), { marginTop: 3, marginBottom: 7 }, urlTitle && { color: c.muted }]}>{title}</T>
               <Meta r={r} online={online} ink={ink} tag={inPlace} />
             </View>

@@ -119,6 +119,31 @@ export class RelayPool {
     return (await ask()).events;
   }
 
+  /**
+   * A live subscription (the inbox, 4.7): AUTH as query does, once. onDrop when the relay closes it or the
+   * connection goes; the caller decides when to watch again. Returns the stop.
+   */
+  async watch(url: string, filters: Filter[], onEvent: (e: NostrEvent) => void, onDrop: () => void): Promise<() => void> {
+    const relay = await this.relay(url);
+    let stopped = false;
+    let sub: { close: () => void } | null = null;
+    const open = (authed: boolean) => {
+      sub = relay.subscribe(filters, {
+        onevent: (e) => onEvent(e as NostrEvent),
+        onclose: (reason) => {
+          if (stopped) return;
+          if (!authed && AUTH_REQUIRED.test(reason)) this.authenticate(relay).then(() => !stopped && open(true), onDrop);
+          else onDrop();
+        },
+      });
+    };
+    open(false);
+    return () => {
+      stopped = true;
+      sub?.close();
+    };
+  }
+
   close(): void {
     for (const r of this.relays.values()) r.close();
     this.relays.clear();

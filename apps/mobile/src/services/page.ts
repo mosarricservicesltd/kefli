@@ -61,6 +61,11 @@ export async function fetchPage(p: PagePorts, url: string): Promise<PageOutcome>
   const contentType = res.headers.get('content-type') ?? '';
   const refused = refusal(res.status, contentType, bytes.length);
   if (refused) return { kind: 'failed', reason: refused, finalUrl };
+  return parseHtml(p, bytes, contentType, finalUrl);
+}
+
+/** The parse and contract 4.2's guard, for a fetched page and for a browser's own HTML (4.7). */
+export async function parseHtml(p: Pick<PagePorts, 'parse'>, bytes: Uint8Array, contentType: string, finalUrl: string): Promise<Exclude<PageOutcome, { kind: 'offline' }>> {
   const result = await p.parse(base64.encode(bytes), contentType, finalUrl).catch((): ParserResult => ({ ok: false, reason: 'error' }));
   if (!result.ok) return { kind: 'failed', reason: 'not_readable', finalUrl };
   const derived = deriveArticle(result.markdown);

@@ -18,7 +18,7 @@ const h = (n: number) => n.toString(16).padStart(64, '0');
 /** A relay as NIP-01 describes it: newest first, at most limit, and some send fewer (cap). */
 function matches(e: NostrEvent, f: Filter) {
   const tag = (k: string, vs?: string[]) => !vs || e.tags.some((t) => t[0] === k && vs.includes(t[1]));
-  return f.kinds.includes(e.kind) && f.authors.includes(e.pubkey) && tag('t', f['#t']) && tag('k', f['#k'])
+  return f.kinds.includes(e.kind) && (f.authors ?? []).includes(e.pubkey) && tag('t', f['#t']) && tag('k', f['#k'])
     && (f.since === undefined || e.created_at >= f.since) && (f.until === undefined || e.created_at <= f.until);
 }
 

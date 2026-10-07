@@ -149,7 +149,7 @@ export const S = {
     xWaiting: 'Will check the post when X answers',
     failed: 'Couldn’t get the text',
     openOriginal: 'Open original',
-    fromChrome: 'From Chrome',
+    from: (browser: string) => `From ${browser}`,
     archive: 'Archive',
     backToUnread: 'Back to Unread',
     more: (title: string) => `More for ${title}`,

@@ -7,7 +7,7 @@ import { applyFailed, applyParsed, pendingParses, xFound, xNoArticle, type Pendi
 import { checkXPost, type XPorts } from './xpost';
 import type { SaveTargets } from '../data/saves';
 import { indexText } from '../data/sync';
-import { fetchPage, type PagePorts } from './page';
+import { fetchPage, type PageOutcome, type PagePorts } from './page';
 import type { Derived } from '../reader/blocks';
 
 export type PendingPorts = {
@@ -53,28 +53,42 @@ export async function runPendingParses(p: PendingPorts, owner: string): Promise<
       out.waiting = queue.length - i;
       break;
     }
-    const t = await p.targets();
-    if (outcome.kind === 'failed') {
-      applyFailed(p.db, p.now(), owner, item, outcome.reason, t);
+    if ((await settle(p, owner, item, outcome)) === 'failed') {
       out.failed++;
       continue;
-    }
-    const { result } = outcome;
-    const enc = await encryptText(result.markdown, p.crypto);
-    const path = p.stage(enc.text.sha256, enc.blob);
-    const applied = applyParsed(p.db, p.now(), owner, item, {
-      hash: itemHash(outcome.finalUrl, result.canonical), url: outcome.finalUrl, canonical: result.canonical, title: result.title,
-      site: result.site, byline: result.byline, lang: result.lang, hero: result.hero, words: outcome.words,
-      text: enc.text, textHash: textHash(result.markdown, p.crypto),
-    }, { sha256: enc.text.sha256, size: enc.blob.length, path }, t);
-    if (applied.merged) {
-      // It joined a save already here, which keeps its own text.
-      p.unstage(path);
-    } else {
-      p.writeText(applied.hash, result.markdown, outcome.derived);
-      indexText(p.db, { id: item.id, title: result.title, site: result.site, url: outcome.finalUrl }, outcome.spoken);
     }
     out.parsed++;
   }
   return out;
+}
+
+/**
+ * A parse's result applied to a waiting save, for pending parses and the inbox (4.7): failed goes out without
+ * text; parsed has its text encrypted under a fresh key, staged, written and indexed, unless it joined a save
+ * already here, which keeps its own text.
+ */
+export async function settle(
+  p: Pick<PendingPorts, 'db' | 'now' | 'crypto' | 'stage' | 'unstage' | 'writeText' | 'targets'>, owner: string, item: Pending,
+  outcome: Exclude<PageOutcome, { kind: 'offline' }>,
+): Promise<'parsed' | 'failed'> {
+  const t = await p.targets();
+  if (outcome.kind === 'failed') {
+    applyFailed(p.db, p.now(), owner, item, outcome.reason, t);
+    return 'failed';
+  }
+  const { result } = outcome;
+  const enc = await encryptText(result.markdown, p.crypto);
+  const path = p.stage(enc.text.sha256, enc.blob);
+  const applied = applyParsed(p.db, p.now(), owner, item, {
+    hash: itemHash(outcome.finalUrl, result.canonical), url: outcome.finalUrl, canonical: result.canonical, title: result.title,
+    site: result.site, byline: result.byline, lang: result.lang, hero: result.hero, words: outcome.words,
+    text: enc.text, textHash: textHash(result.markdown, p.crypto),
+  }, { sha256: enc.text.sha256, size: enc.blob.length, path }, t);
+  if (applied.merged) {
+    p.unstage(path);
+  } else {
+    p.writeText(applied.hash, result.markdown, outcome.derived);
+    indexText(p.db, { id: item.id, title: result.title, site: result.site, url: outcome.finalUrl }, outcome.spoken);
+  }
+  return 'parsed';
 }

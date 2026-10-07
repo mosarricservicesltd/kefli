@@ -15,10 +15,10 @@ export type LibRow = {
   id: number; hash: string; url: string; title: string | null; site: string | null; words: number | null;
   position_word: number; state: ListName; text_state: string; fail_reason: string | null; origin: string; saved_at: number;
   byline: string | null; lang: string | null; text_sha256: string | null; text_servers: string | null; hero: string | null;
-  x_state: string | null;
+  x_state: string | null; origin_device: string | null;
 };
 
-export const LIB_COLS = 'id, hash, url, title, site, words, position_word, state, text_state, fail_reason, origin, saved_at, byline, lang, text_sha256, text_servers, hero, x_state';
+export const LIB_COLS = 'id, hash, url, title, site, words, position_word, state, text_state, fail_reason, origin, saved_at, byline, lang, text_sha256, text_servers, hero, x_state, origin_device';
 
 export function activeOwner(db: SqlDb): string | null {
   return db.get<{ pubkey: string }>("SELECT pubkey FROM identities WHERE role = 'active'")?.pubkey ?? null;

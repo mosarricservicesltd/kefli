@@ -11,6 +11,8 @@ import { enqueue } from './outbox';
 import { writeRelays } from './lists';
 
 export type Stream = 'items' | 'deletions';
+/** The cursor streams: saves and deletions per read relay, and the inbox on the operator relay (4.7). */
+export type CursorStream = Stream | 'inbox';
 
 type Row = {
   id: number; event_id: string | null; event_created_at: number | null; dirty: number; modified_at: number | null;
@@ -165,12 +167,12 @@ export function applyDeletion(db: SqlDb, owner: string, event: NostrEvent): stri
 
 export type Cursor = { since: number; backfilled: boolean };
 
-export function getCursor(db: SqlDb, relay: string, stream: Stream, owner: string): Cursor | null {
+export function getCursor(db: SqlDb, relay: string, stream: CursorStream, owner: string): Cursor | null {
   const r = db.get<{ since: number; backfilled: number }>('SELECT since, backfilled FROM sync_cursors WHERE relay = ? AND stream = ? AND owner = ?', relay, stream, owner);
   return r ? { since: r.since, backfilled: !!r.backfilled } : null;
 }
 
-export function setCursor(db: SqlDb, now: number, relay: string, stream: Stream, owner: string, since: number): void {
+export function setCursor(db: SqlDb, now: number, relay: string, stream: CursorStream, owner: string, since: number): void {
   db.run(
     `INSERT INTO sync_cursors (relay, stream, owner, since, backfilled, last_eose_at) VALUES (?, ?, ?, ?, 1, ?)
      ON CONFLICT (relay, stream, owner) DO UPDATE SET since = MAX(since, excluded.since), backfilled = 1, last_eose_at = excluded.last_eose_at`,

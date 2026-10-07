@@ -1,6 +1,6 @@
 // Sends the outbox (mobile spec 4.3): one due row at a time, through ports so the tests can stand in for the
 // network. It sends register, upload_blob, mirror_blob, publish_item, publish_lists, delete_item, delete_blob,
-// post_device, pair_ack and delete_device.
+// post_device, pair_ack, delete_device and delete_wrap.
 import {
   buildDeletions, buildDevicesEvent, buildItemEvent, buildRelayList, buildServerList, deleteBlob, httpAuth, mirrorBlob, uploadBlob, wrapPairAck,
 } from '@shelf/protocol';
@@ -218,6 +218,17 @@ async function sendLists(p: SendPorts, row: OutboxRow, signer: Signer, targets: 
   return results;
 }
 
+/** A consumed inbox wrap, deleted with a kind 5 naming it (["e", id], ["k", "1059"]) on the operator relay (C§4.4). */
+async function sendDeleteWrap(p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
+  const { id } = JSON.parse(row.payload ?? '{}') as { id: string };
+  const event = await signer.signEvent({ kind: 5, created_at: p.now(), tags: [['e', id], ['k', '1059']], content: '' });
+  try {
+    return [relayResult(t.target, await p.publish(t.target, event), event.id)];
+  } catch (e) {
+    return [{ target: t.target, kind: 'retry', error: err(e) }];
+  }
+}
+
 /** Sends the next due row, if any. Returns whether it did anything. */
 export async function sendOne(p: SendPorts): Promise<boolean> {
   const due = nextDue(p.db, p.now());
@@ -237,7 +248,7 @@ export async function sendOne(p: SendPorts): Promise<boolean> {
   } else {
     const one = {
       register: sendRegister, upload_blob: sendUpload, mirror_blob: sendMirror, delete_blob: sendDeleteBlob,
-      post_device: sendPostDevice, delete_device: sendDeleteDevice, pair_ack: sendPairAck,
+      post_device: sendPostDevice, delete_device: sendDeleteDevice, pair_ack: sendPairAck, delete_wrap: sendDeleteWrap,
     }[row.op];
     results = one ? (await Promise.all(targets.map((t) => one(p, row, signer, t)))).flat() : targets.map((t) => ({ target: t.target, kind: 'rejected', error: `unknown op ${row.op}` }));
   }

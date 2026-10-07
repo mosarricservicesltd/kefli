@@ -1,8 +1,11 @@
 // Plays the browser extension's side of pairing (contract 4.4) against the local stack, so Connect can be tried
 // on the phone before the extension exists. It keeps a device key, shows an offer as a QR (in the terminal and in
 // server/dev/data/pair.html) with its typed code, posts the sealed offer to /pair-offers, then waits on the
-// operator relay for the pair-ack and checks it as the extension will.
+// operator relay for the pair-ack and checks it as the extension will. Once paired, save sends a page as the
+// extension does (C§4.4): its HTML encrypted into an inbox blob on the operator Blossom server, then a save request
+// wrapped to the user on the operator relay. The page's whole HTML stands in for Readability's content.
 //   npx tsx server/dev/browser.ts ["Chrome on a Linux laptop"]   (with the stack and api.mjs running)
+//   npx tsx server/dev/browser.ts save <url> [--no-html]
 // The device key and pairing land in server/dev/data/browser.json, which git ignores.
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -12,7 +15,8 @@ import { Relay } from 'nostr-tools/relay';
 import { toQR } from 'toqr';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import {
-  LocalSigner, acceptPairAck, derivePairCode, httpAuth, newPairCode, sealOffer, unwrap, type NostrEvent, type PairOffer,
+  LocalSigner, acceptPairAck, derivePairCode, encryptText, httpAuth, newPairCode, sealOffer, unwrap, uploadBlob, wrapSaveRequest,
+  type NostrEvent, type PairOffer, type SaveRequest,
 } from '../../packages/protocol/src';
 import { nodeCrypto } from '../../packages/protocol/src/node';
 
@@ -63,7 +67,36 @@ function page(rows: boolean[][], code: string, label: string): string {
 <div style="font:400 15px system-ui;color:#555">${label} · expires in five minutes</div></div></body>`;
 }
 
+async function save(url: string, withHtml: boolean) {
+  const defaults = await (await fetch('http://localhost:8447/defaults.json')).json();
+  const state = load();
+  if (!state.paired) throw new Error('not paired: run without arguments first and connect from the phone');
+  const device = new LocalSigner(hexToBytes(state.sk));
+  let html: SaveRequest['html'] = null;
+  let title: string | null = null;
+  if (withHtml) {
+    const page = await (await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) Chrome/150.0' } })).text();
+    title = /<title[^>]*>([^<]*)<\/title>/i.exec(page)?.[1]?.trim() ?? null;
+    const enc = await encryptText(page, nodeCrypto);
+    const up = await uploadBlob(defaults.operator.blossom, enc.blob, enc.text.sha256, device);
+    if (!up.ok) throw new Error(`upload: ${up.status} ${up.reason}`);
+    html = { ...enc.text, server: defaults.operator.blossom };
+    console.log(`  uploaded ${enc.blob.length} bytes of HTML as an inbox blob`);
+  }
+  const request: SaveRequest = {
+    v: 1, url, canonical: null, title, site: new URL(url).hostname, byline: null, lang: null, hero: null,
+    captured_at: Math.floor(Date.now() / 1000), token: state.paired.token, html,
+  };
+  const { wrap } = await wrapSaveRequest(device, state.paired.user_pubkey, bytesToHex(nodeCrypto.randomBytes(16)), request, Math.floor(Date.now() / 1000));
+  const relay = await Relay.connect(defaults.operator.relay);
+  await relay.publish(wrap);
+  relay.close();
+  console.log(`  sent ${url} to ${state.paired.user_pubkey.slice(0, 12)}… (wrap ${wrap.id.slice(0, 12)}…)`);
+  process.exit(0);
+}
+
 async function main() {
+  if (process.argv[2] === 'save') return save(process.argv[3], !process.argv.includes('--no-html'));
   const label = process.argv[2] ?? 'Chrome on a Linux laptop';
   const defaults = await (await fetch('http://localhost:8447/defaults.json')).json();
   const state = load();

@@ -19,7 +19,7 @@ import {
   type Stream, type TextJob,
 } from '../data/sync';
 
-export type Filter = { kinds: number[]; authors: string[]; '#t'?: string[]; '#k'?: string[]; since?: number; until?: number; limit?: number };
+export type Filter = { kinds: number[]; authors?: string[]; '#t'?: string[]; '#k'?: string[]; '#p'?: string[]; since?: number; until?: number; limit?: number };
 
 export type SyncPorts = {
   db: SqlDb;

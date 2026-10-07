@@ -50,6 +50,40 @@ describe('relay pool (mobile spec 4.4)', () => {
     expect(opened).toBe(2);
     await expect(pool.relay('ws://insecure.example')).rejects.toThrow('not a wss://');
   });
+
+  test('a live watch authenticates once when asked, delivers events, and reports a drop (4.7)', async () => {
+    const pool = new RelayPool({ verify, signer: async () => null });
+    const subs: { onevent: (e: unknown) => void; onclose: (r: string) => void; closed: boolean }[] = [];
+    let auths = 0;
+    const fake = {
+      onauth: async () => ({}),
+      subscribe: (_f: unknown, h: { onevent: (e: unknown) => void; onclose: (r: string) => void }) => {
+        const s = { ...h, closed: false };
+        subs.push(s);
+        return { close: () => void (s.closed = true) };
+      },
+      auth: async () => void auths++,
+    };
+    (pool as unknown as { relay: () => Promise<unknown> }).relay = async () => fake;
+    const got: string[] = [];
+    let drops = 0;
+    const stop = await pool.watch('wss://op', [], (e) => got.push(e.id), () => drops++);
+    subs[0].onclose('ERROR: auth-required: who are you');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(auths).toBe(1);
+    expect(subs).toHaveLength(2);
+    subs[1].onevent({ id: 'w1' });
+    expect(got).toEqual(['w1']);
+    // refused again after AUTH, or any other close, is a drop
+    subs[1].onclose('auth-required: still no');
+    expect(drops).toBe(1);
+    const stop2 = await pool.watch('wss://op', [], () => undefined, () => drops++);
+    stop2();
+    expect(subs[2].closed).toBe(true);
+    subs[2].onclose('closed by us');
+    expect(drops).toBe(1);
+    stop();
+  });
 });
 
 // Against server/dev's relays: SHELF_LOCAL_STACK=1 npx jest -c apps/mobile/jest.config.js pool

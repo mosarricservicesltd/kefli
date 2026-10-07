@@ -14,6 +14,7 @@ import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { getNetworkStateAsync, NetworkStateType } from 'expo-network';
 import { removeImages, syncImages, type ImagePorts } from './images';
 import { runPendingParses } from './pending';
+import { drainInbox } from './inbox';
 import { xRetryDelay } from './xpost';
 import { ShelfParser } from '../../modules/shelf-parser/src';
 import type { ParserResult } from './page';
@@ -101,6 +102,7 @@ export function runSync(): Promise<SyncResult> {
         openHash: () => reading,
       });
       const owner = store().get<{ pubkey: string }>("SELECT pubkey FROM identities WHERE role = 'active'")?.pubkey;
+      if (owner) await runInbox(owner).catch(() => undefined);
       if (owner) await imagesIfUnmetered(owner).catch(() => undefined);
       if (owner) await parsePending(owner).catch(() => undefined);
       return r;
@@ -130,8 +132,19 @@ export function startSync(): () => void {
     .then((p) => log('launch', p))
     .catch((e) => log('launch', { error: String((e as Error).message) }))
     .finally(sync);
-  const sub = AppState.addEventListener('change', (state) => state === 'active' && sync());
-  return () => sub.remove();
+  watchInbox();
+  const sub = AppState.addEventListener('change', (state) => {
+    if (state === 'active') {
+      sync();
+      watchInbox();
+    } else {
+      unwatchInbox();
+    }
+  });
+  return () => {
+    sub.remove();
+    unwatchInbox();
+  };
 }
 
 /** The image service's ports on the phone. */
@@ -207,4 +220,88 @@ export async function disconnectBrowser(owner: string, devicePubkey: string): Pr
   const d = await loadDefaults();
   disconnect(store(), Math.floor(Date.now() / 1000), owner, d.operator.api, devicePubkey);
   runOutbox().catch(() => 0);
+}
+
+const parserPorts = () => ({
+  crypto: phoneCrypto,
+  stage: stageBlob,
+  unstage: (path: string) => {
+    const f = new File(path);
+    if (f.exists) f.delete();
+  },
+  writeText: textFiles.writeText,
+  targets: async () => {
+    const d = await loadDefaults();
+    return { api: d.operator.api, blossom: d.operator.blossom, mirror: d.mirrors[0] };
+  },
+});
+
+let inboxRun: Promise<void> | null = null;
+
+/** Phase 4 (4.7): the inbox drained; anything it saved goes straight out. Concurrent calls share one run. */
+export function runInbox(owner: string): Promise<void> {
+  inboxRun ??= (async () => {
+    try {
+      const signer = await currentSigner();
+      if (signer?.pubkey() !== owner) return;
+      const r = await drainInbox({
+        db: store(),
+        now: () => Math.floor(Date.now() / 1000),
+        signer,
+        query: (url, filters) => pool.query(url, filters as never),
+        fetch,
+        parse: (b, t, u) => ShelfParser.parse(b, t, u) as Promise<ParserResult>,
+        defaults: loadDefaults,
+        ...parserPorts(),
+      }, owner);
+      console.log(`[shelf-inbox] ${JSON.stringify(r)}`);
+      if (r.created || r.merged || r.unarchived) {
+        await runOutbox().catch(() => 0);
+        await parsePending(owner).catch(() => undefined);
+      }
+    } finally {
+      inboxRun = null;
+    }
+  })();
+  return inboxRun;
+}
+
+let inboxStop: (() => void) | null = null;
+let inboxRetry: ReturnType<typeof setTimeout> | null = null;
+let inboxSoon: ReturnType<typeof setTimeout> | null = null;
+let inboxStarting = false;
+
+/**
+ * While Shelf is in front, a live subscription on the operator relay (4.7) drains the inbox within a second of a
+ * wrap arriving. limit 0 asks for new wraps only; the drain itself reads back from the cursor. A dropped
+ * subscription is opened again after 5 s.
+ */
+function watchInbox(): void {
+  if (inboxStop || inboxRetry || inboxStarting) return;
+  inboxStarting = true;
+  (async () => {
+    const [d, signer] = await Promise.all([loadDefaults(), currentSigner()]);
+    if (!signer) return;
+    const owner = signer.pubkey();
+    const drop = () => {
+      inboxStop = null;
+      if (AppState.currentState === 'active') inboxRetry = setTimeout(() => ((inboxRetry = null), watchInbox()), 5000);
+    };
+    inboxStop = await pool.watch(d.operator.relay, [{ kinds: [1059], '#p': [owner], limit: 0 }] as never, () => {
+      if (inboxSoon) clearTimeout(inboxSoon);
+      inboxSoon = setTimeout(() => runInbox(owner).catch(() => undefined), 300);
+    }, drop);
+  })().catch(() => {
+    inboxStop = null;
+    if (AppState.currentState === 'active') inboxRetry = setTimeout(() => ((inboxRetry = null), watchInbox()), 5000);
+  }).finally(() => {
+    inboxStarting = false;
+  });
+}
+
+function unwatchInbox(): void {
+  inboxStop?.();
+  inboxStop = null;
+  if (inboxRetry) clearTimeout(inboxRetry);
+  inboxRetry = null;
 }
