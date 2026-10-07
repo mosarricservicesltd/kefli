@@ -56,6 +56,8 @@ export const S = {
     minsLeft: (n: number) => `${n} min left`,
     getting: 'Getting the text…',
     willFetch: 'Will fetch when you’re online',
+    // saves-embedfail (G3)
+    xWaiting: 'Will check the post when X answers',
     failed: 'Couldn’t get the text',
     openOriginal: 'Open original',
     fromChrome: 'From Chrome',

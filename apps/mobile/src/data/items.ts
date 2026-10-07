@@ -17,16 +17,18 @@ export type NewItem = {
   byline: string | null; savedAt: number; words: number | null; lang: string | null; hero: string | null;
   text: Omit<ItemText, 'servers'> | null; textHash: string | null; textState: 'cached' | 'failed' | 'queued'; failReason?: string | null;
   sharedUrl?: string | null; origin: string;
+  /** A shared X post waiting for its check (5.4): 'pending'. */
+  xState?: string | null;
 };
 
 export function insertItem(db: SqlDb, now: number, n: NewItem): number {
   return db.run(
     `INSERT INTO items (owner, hash, url, canonical, title, site, byline, saved_at, state, words, lang, hero,
-      text_sha256, text_key, text_nonce, text_hash, text_state, fail_reason, shared_url, origin, modified_at, dirty)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'unread', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+      text_sha256, text_key, text_nonce, text_hash, text_state, fail_reason, shared_url, origin, modified_at, dirty, x_state)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'unread', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
     n.owner, n.hash, n.url, n.canonical, n.title, n.site, n.byline, n.savedAt, n.words, n.lang, n.hero,
     n.text?.sha256 ?? null, n.text?.key ?? null, n.text?.nonce ?? null, n.textHash, n.textState, n.failReason ?? null,
-    n.sharedUrl ?? null, n.origin, now,
+    n.sharedUrl ?? null, n.origin, now, n.xState ?? null,
   ).lastInsertRowId;
 }
 

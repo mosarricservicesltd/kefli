@@ -38,6 +38,7 @@ function world(pages: Record<string, Page | 'down'> = {}, parse?: (url: string) 
       }) as never,
       parse: async (_b, _t, url) => (parse ? parse(url) : { ok: true, title: `Title of ${url}`, byline: null, site: 'Site', lang: 'en', hero: null, canonical: null, readerable: true, markdown: `${LONG}\n` }),
     },
+    x: { fetch: (async () => { throw new Error('offline'); }) as never },
     crypto: nodeCrypto,
     stage: (sha, bytes) => (staged.set(sha, bytes), `/staging/${sha}`),
     unstage: (path) => { staged.delete(path.split('/').pop()!); },
@@ -86,7 +87,7 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     expect(w.share('https://t.co/x')).toEqual([]);
     expect(w.outbox().map((o) => o.op)).toEqual(['register', 'publish_lists']);
     expect(pendingParses(w.db, PK)).toHaveLength(1);
-    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 1, failed: 0, waiting: 0 });
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 1, failed: 0, waiting: 0, xWaiting: 0 });
     const final = itemHash('https://news.com/story');
     const row = w.db.get<Record<string, unknown>>('SELECT * FROM items WHERE hash = ?', final);
     expect(row).toMatchObject({ url: 'https://news.com/story', title: 'Title of https://news.com/story', text_state: 'cached', words: 130, dirty: 1 });
@@ -113,7 +114,7 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     const w = world({ 'https://a.com/gone': { status: 410 }, 'https://b.com/later': 'down' });
     w.share('https://a.com/gone');
     w.share('https://b.com/later');
-    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 1, waiting: 1 });
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 1, waiting: 1, xWaiting: 0 });
     expect(w.db.get('SELECT text_state, fail_reason FROM items WHERE hash = ?', itemHash('https://a.com/gone'))).toEqual({ text_state: 'failed', fail_reason: 'http' });
     expect(w.outbox().filter((o) => o.op === 'publish_item').map((o) => o.subject)).toEqual([itemHash('https://a.com/gone')]);
     expect(pendingParses(w.db, PK).map((x) => x.url)).toEqual(['https://b.com/later']);

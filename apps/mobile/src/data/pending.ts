@@ -7,12 +7,12 @@ import { enqueue } from './outbox';
 import { registerFirst, queueSends, type SaveTargets, type StagedBlob } from './saves';
 import { writeRelays } from './lists';
 
-export type Pending = { id: number; hash: string; url: string; shared_url: string | null; published: number; event_id: string | null };
+export type Pending = { id: number; hash: string; url: string; shared_url: string | null; published: number; event_id: string | null; x_state: string | null };
 
 /** Saves waiting for their parse, oldest first. */
 export function pendingParses(db: SqlDb, owner: string): Pending[] {
   return db.all<Pending>(
-    "SELECT id, hash, url, shared_url, published, event_id FROM items WHERE owner = ? AND text_state = 'queued' AND pending_delete_at IS NULL ORDER BY saved_at, id",
+    "SELECT id, hash, url, shared_url, published, event_id, x_state FROM items WHERE owner = ? AND text_state = 'queued' AND pending_delete_at IS NULL ORDER BY saved_at, id",
     owner,
   );
 }
@@ -69,5 +69,19 @@ export function applyFailed(db: SqlDb, now: number, owner: string, p: Pending, r
   db.tx(() => {
     db.run("UPDATE items SET text_state = 'failed', fail_reason = ?, modified_at = ?, dirty = 1 WHERE id = ?", reason, now, p.id);
     queueSends(db, now, owner, p.hash, null, t, false, registerFirst(db, now, owner, t));
+  });
+}
+
+/** An X post's check found its article (5.4): the save now parses that address, and is re-keyed by it (FD 80). */
+export function xFound(db: SqlDb, p: Pending, article: string): Pending {
+  db.run('UPDATE items SET url = ?, x_state = NULL WHERE id = ?', article, p.id);
+  return { ...p, url: article, x_state: null };
+}
+
+/** An X post with no article in it: the save goes out without text, and its row opens the post (5.4). */
+export function xNoArticle(db: SqlDb, now: number, owner: string, p: Pending, t: SaveTargets): void {
+  db.tx(() => {
+    db.run("UPDATE items SET x_state = 'none' WHERE id = ?", p.id);
+    applyFailed(db, now, owner, p, 'x_no_article', t);
   });
 }

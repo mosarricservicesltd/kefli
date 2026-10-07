@@ -14,6 +14,7 @@ import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { getNetworkStateAsync, NetworkStateType } from 'expo-network';
 import { removeImages, syncImages, type ImagePorts } from './images';
 import { runPendingParses } from './pending';
+import { xRetryDelay } from './xpost';
 import { ShelfParser } from '../../modules/shelf-parser/src';
 import type { ParserResult } from './page';
 import { stageBlob } from './staging';
@@ -161,6 +162,7 @@ async function parsePending(owner: string): Promise<void> {
     db: store(),
     now: () => Math.floor(Date.now() / 1000),
     page: { fetch, parse: (b, t, u) => ShelfParser.parse(b, t, u) as Promise<ParserResult> },
+    x: { fetch },
     crypto: phoneCrypto,
     stage: stageBlob,
     unstage: (path) => {
@@ -174,4 +176,12 @@ async function parsePending(owner: string): Promise<void> {
     },
   }, owner);
   if (r.parsed + r.failed > 0) await runOutbox().catch(() => 0);
+  // X posts whose check X didn't answer are tried again from 30 s, doubling to an hour (G3).
+  if (xTimer) clearTimeout(xTimer);
+  xTimer = null;
+  xFailures = r.xWaiting > 0 ? xFailures + 1 : 0;
+  if (r.xWaiting > 0) xTimer = setTimeout(() => runSync().catch(() => undefined), xRetryDelay(xFailures) * 1000);
 }
+
+let xFailures = 0;
+let xTimer: ReturnType<typeof setTimeout> | null = null;

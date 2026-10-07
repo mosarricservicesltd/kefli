@@ -39,8 +39,8 @@ function Meta({ r, online, ink }: { r: LibRow; online: boolean; ink: string }) {
   if (status === 'waiting') {
     return (
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        {online ? <WaitDot color={ink} /> : <Icon name="hourglass" size={14} color={c.muted} />}
-        <T muted style={meta}>{online ? S.row.getting : S.row.willFetch}</T>
+        {online && r.x_state !== 'pending' ? <WaitDot color={ink} /> : <Icon name="hourglass" size={14} color={c.muted} />}
+        <T muted style={meta}>{!online ? S.row.willFetch : r.x_state === 'pending' ? S.row.xWaiting : S.row.getting}</T>
       </View>
     );
   }
