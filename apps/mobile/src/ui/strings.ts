@@ -80,6 +80,44 @@ export const S = {
     copyNote: 'Paste it somewhere safe, then clear your clipboard.',
   },
   // listen, listen-empty, listen-scrolled
+  browsers: {
+    title: 'Connected browsers',
+    lead: 'Pages you save in a connected browser arrive here the next time you open Shelf.',
+    offline: 'Connecting a browser needs a connection',
+    connect: 'Connect a browser',
+    emptyTitle: 'No browsers yet',
+    emptyBody: 'Save pages from your laptop with the Shelf extension for Chrome or Firefox.',
+    disconnect: 'Disconnect',
+    justNow: 'Connected just now',
+    connectedOn: (date: string) => `Connected ${date}`,
+    sheetTitle: (name: string) => `Disconnect ${name}?`,
+    sheetBody: 'Pages saved from that browser will be ignored. Uninstall the extension there or connect it again.',
+    cancel: 'Cancel',
+    disconnected: (name: string) => `Disconnected from ${name}`,
+  },
+  conn: {
+    title: 'Connect a browser',
+    lead: 'On your laptop, install the Shelf extension and click its icon. If it isn’t in the toolbar, it’s under the puzzle piece. Scan the code it shows, or type the eight-character code.',
+    typeInstead: 'Type the code instead',
+    useCamera: 'Use the camera',
+    cameraOnly: 'Shelf uses the camera only to read this code.',
+    point: 'Point at the code in your browser',
+    refusedTitle: 'The camera is switched off for Shelf',
+    refusedBody: 'Turn it on in Android settings, or type the code instead.',
+    settings: 'Open Android settings',
+    expired: 'That code has expired. Show a new one in the extension, then scan again.',
+    failed: 'Can’t connect right now. Check your connection and try again.',
+    retry: 'Try again',
+    typeLead: 'Type the code shown in the extension.',
+    codeLabel: 'Code from your browser',
+    wrong: 'That code didn’t match. Check it in your browser, or show a new one there.',
+    confirmTitle: 'Connect this browser?',
+    confirmLine: 'Pages you save there will come to this shelf.',
+    go: 'Connect',
+    busy: 'Connecting',
+    cancel: 'Cancel',
+    connected: (name: string) => `Connected to ${name}`,
+  },
   listen: {
     title: 'Listen',
     played: (n: number) => `${n} played`,
@@ -165,4 +203,12 @@ export function savedWhen(savedAt: number, now = Date.now() / 1000): string {
   if (d <= 0) return 'Saved today';
   if (d === 1) return S.reader.savedYesterday;
   return `Saved on ${new Date(savedAt * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}`;
+}
+
+/** "Connected just now" for the first minute, else "Connected 27 September", with the year once it isn't this one. */
+export function connectedWhen(at: number, now = Date.now() / 1000): string {
+  if (now - at < 60) return S.browsers.justNow;
+  const d = new Date(at * 1000);
+  const year = d.getFullYear() !== new Date(now * 1000).getFullYear();
+  return S.browsers.connectedOn(d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', ...(year ? { year: 'numeric' } : {}) }));
 }

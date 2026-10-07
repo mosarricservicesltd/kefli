@@ -40,3 +40,7 @@ coverage/
 # Gradle output of the app's local Expo modules
 apps/mobile/modules/*/android/build/
 apps/mobile/modules/*/android/.cxx/
+
+# the dev browser's device key and its pairing page (server/dev/browser.ts)
+server/dev/data/browser.json
+server/dev/data/pair.html

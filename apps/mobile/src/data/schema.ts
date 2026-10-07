@@ -71,7 +71,15 @@ CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `;
 
 /** MIGRATIONS[n] takes the database from version n to n + 1. */
-export const MIGRATIONS: ((db: SqlDb) => void)[] = [(db) => db.exec(V1)];
+// RULED (v2): devices is keyed by token, as the connected-browsers record is (C§4.9). A browser connected again
+// keeps one key and gets a new token, and both entries stay in the record, so (device_pubkey, owner) couldn't hold it.
+const V2 = `
+DROP TABLE devices;
+CREATE TABLE devices (token TEXT, owner TEXT, device_pubkey TEXT, label TEXT, relay TEXT,
+  connected_at INTEGER, revoked_at INTEGER, last_save_at INTEGER, PRIMARY KEY (token, owner));
+`;
+
+export const MIGRATIONS: ((db: SqlDb) => void)[] = [(db) => db.exec(V1), (db) => db.exec(V2)];
 export const SCHEMA_VERSION = MIGRATIONS.length;
 
 /** Opens the schema: WAL, foreign keys, then every migration past the stored version, each in a transaction. */

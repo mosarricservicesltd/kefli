@@ -2,6 +2,7 @@
 // connected browsers, and the backup card. backup.state stays not_done until the words are shown (3.5); Later
 // hides the card for ten more saves (backup.snooze_until holds the save count it returns at).
 import type { SqlDb } from './db';
+import { browserCount } from './devices';
 import { getSetting, setSetting } from './settings';
 
 export const SNOOZE_SAVES = 10;
@@ -15,7 +16,7 @@ export function youStats(db: SqlDb, owner: string): YouStats {
   const quilt = db.all<{ hash: string; text_state: string }>(
     'SELECT hash, text_state FROM items WHERE owner = ? AND pending_delete_at IS NULL ORDER BY saved_at DESC, id DESC LIMIT ?', owner, QUILT,
   ).map((r) => ({ hash: r.hash, failed: r.text_state === 'failed' }));
-  const browsers = db.get<{ n: number }>('SELECT COUNT(*) AS n FROM devices WHERE owner = ? AND revoked_at IS NULL', owner)?.n ?? 0;
+  const browsers = browserCount(db, owner);
   return { saves, listened, quilt, browsers };
 }
 

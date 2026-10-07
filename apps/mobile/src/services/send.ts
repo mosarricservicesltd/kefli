@@ -1,10 +1,14 @@
 // Sends the outbox (mobile spec 4.3): one due row at a time, through ports so the tests can stand in for the
-// network. It sends register, upload_blob, mirror_blob, publish_item, publish_lists, delete_item and delete_blob.
-import { buildDeletions, buildItemEvent, buildRelayList, buildServerList, deleteBlob, httpAuth, mirrorBlob, uploadBlob } from '@shelf/protocol';
+// network. It sends register, upload_blob, mirror_blob, publish_item, publish_lists, delete_item, delete_blob,
+// post_device, pair_ack and delete_device.
+import {
+  buildDeletions, buildDevicesEvent, buildItemEvent, buildRelayList, buildServerList, deleteBlob, httpAuth, mirrorBlob, uploadBlob, wrapPairAck,
+} from '@shelf/protocol';
 import type { CryptoPort, NostrEvent, Signer } from '@shelf/protocol';
 import type { SqlDb } from '../data/db';
+import { hasDevices, localRecord, noteRecord, pairAcked, recordCreatedAt, type PairPayload } from '../data/devices';
 import { getItem, itemJson, markPublished } from '../data/items';
-import { indexerRelays, listServers, recordList, relayEntries } from '../data/lists';
+import { indexerRelays, listServers, recordList, relayEntries, writeRelays } from '../data/lists';
 import { begin, finish, nextDue } from '../data/outbox';
 import type { OutboxRow, OutboxTarget, TargetResult } from '../data/outbox';
 import type { Defaults } from './config';
@@ -37,19 +41,50 @@ export function relayResult(target: string, a: RelayAnswer, eventId: string): Ta
   return { target, kind: 'retry', error: reason };
 }
 
-async function sendRegister(p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
-  const body = JSON.stringify({ v: 1 });
+/** One signed call to the API (contract 6): ok, retried on 401, 429 and 5xx, otherwise refused. okStatus counts as done too. */
+async function apiCall(p: SendPorts, signer: Signer, url: string, method: 'POST' | 'DELETE', body: string | null, okStatus?: number): Promise<TargetResult> {
   try {
-    const res = await p.fetch(t.target, { method: 'POST', body, headers: { 'Content-Type': 'application/json', Authorization: await httpAuth(signer, t.target, 'POST', body, p.crypto) } });
-    if (res.ok) {
-      p.db.run('UPDATE identities SET registered_at = ? WHERE pubkey = ?', p.now(), row.signer);
-      return [{ target: t.target, kind: 'ok' }];
-    }
-    if (res.status === 401 || res.status === 429 || res.status >= 500) return [{ target: t.target, kind: 'retry', error: `HTTP ${res.status}` }];
-    return [{ target: t.target, kind: 'rejected', error: `HTTP ${res.status}` }];
+    const headers: Record<string, string> = { Authorization: await httpAuth(signer, url, method, body ?? '', p.crypto) };
+    if (body !== null) headers['Content-Type'] = 'application/json';
+    const res = await p.fetch(url, { method, headers, ...(body === null ? {} : { body }) });
+    if (res.ok || res.status === okStatus) return { target: url, kind: 'ok' };
+    if (res.status === 401 || res.status === 429 || res.status >= 500) return { target: url, kind: 'retry', error: `HTTP ${res.status}` };
+    return { target: url, kind: 'rejected', error: `HTTP ${res.status}` };
   } catch (e) {
-    return [{ target: t.target, kind: 'retry', error: err(e) }];
+    return { target: url, kind: 'retry', error: err(e) };
   }
+}
+
+async function sendRegister(p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
+  const r = await apiCall(p, signer, t.target, 'POST', JSON.stringify({ v: 1 }));
+  if (r.kind === 'ok') p.db.run('UPDATE identities SET registered_at = ? WHERE pubkey = ?', p.now(), row.signer);
+  return [r];
+}
+
+/** POST /devices: the browser's key may upload against this identity's quota (C§4.4, 6). */
+async function sendPostDevice(p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
+  const { device_pubkey, label } = JSON.parse(row.payload ?? '{}') as { device_pubkey: string; label: string };
+  return [await apiCall(p, signer, t.target, 'POST', JSON.stringify({ v: 1, device_pubkey, label }))];
+}
+
+/** DELETE /devices/<pk>; a 404 means the API no longer holds it, which is the point. */
+async function sendDeleteDevice(p: SendPorts, _row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
+  return [await apiCall(p, signer, t.target, 'DELETE', null, 404)];
+}
+
+/** The pair-ack wrap to the device on the offer's relay (C§4.4); taken, the browser joins the record. */
+async function sendPairAck(p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
+  const pair = JSON.parse(row.payload ?? '{}') as PairPayload;
+  const ack = { v: 1 as const, user_pubkey: row.signer, write_relays: writeRelays(p.db, row.signer), blossom_servers: listServers(p.db, row.signer), token: pair.token, nonce: pair.nonce };
+  const { wrap } = await wrapPairAck(signer, pair.device_pubkey, ack, p.now(), { now: p.now(), random: p.crypto.randomBytes });
+  let r: TargetResult;
+  try {
+    r = relayResult(t.target, await p.publish(t.target, wrap), wrap.id);
+  } catch (e) {
+    r = { target: t.target, kind: 'retry', error: err(e) };
+  }
+  if (r.kind === 'ok') pairAcked(p.db, p.now(), row.signer, pair);
+  return [r];
 }
 
 async function sendUpload(p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
@@ -150,18 +185,26 @@ async function sendDeleteItem(p: SendPorts, row: OutboxRow, signer: Signer, targ
   );
 }
 
-/** The 10002 to every target, the 10063 to the write relays only (4.3); both built from the tables at send time. */
+/**
+ * The 10002 to every target; the 10063 and the connected-browsers record (C§4.9) to the write relays only (4.3).
+ * All are built from the tables at send time; the record only once there is a browser in it.
+ */
 async function sendLists(p: SendPorts, row: OutboxRow, signer: Signer, targets: OutboxTarget[]): Promise<TargetResult[]> {
   const now = p.now();
   const relayList = await buildRelayList(signer, relayEntries(p.db, row.signer), now);
   const serverList = await buildServerList(signer, listServers(p.db, row.signer), now);
+  const record = hasDevices(p.db, row.signer)
+    ? await buildDevicesEvent(signer, localRecord(p.db, row.signer), Math.max(now, recordCreatedAt(p.db, row.signer) + 1))
+    : null;
   const indexerOnly = new Set(indexerRelays(p.db, row.signer).filter((u) => !relayEntries(p.db, row.signer).some((e) => e.url === u)));
   const results = await Promise.all(
     targets.map(async (t) => {
       try {
-        const a = relayResult(t.target, await p.publish(t.target, relayList), relayList.id);
+        let a = relayResult(t.target, await p.publish(t.target, relayList), relayList.id);
         if (a.kind !== 'ok' || indexerOnly.has(t.target)) return a;
-        return relayResult(t.target, await p.publish(t.target, serverList), serverList.id);
+        a = relayResult(t.target, await p.publish(t.target, serverList), serverList.id);
+        if (a.kind !== 'ok' || !record) return a;
+        return relayResult(t.target, await p.publish(t.target, record), record.id);
       } catch (e) {
         return { target: t.target, kind: 'retry', error: err(e) } as TargetResult;
       }
@@ -170,6 +213,7 @@ async function sendLists(p: SendPorts, row: OutboxRow, signer: Signer, targets: 
   if (results.some((r) => r.kind === 'ok')) {
     recordList(p.db, row.signer, relayList.kind, relayList.id, now, JSON.stringify(relayList));
     recordList(p.db, row.signer, serverList.kind, serverList.id, now, JSON.stringify(serverList));
+    if (record) noteRecord(p.db, row.signer, record.id, record.created_at);
   }
   return results;
 }
@@ -191,7 +235,10 @@ export async function sendOne(p: SendPorts): Promise<boolean> {
   } else if (row.op === 'delete_item') {
     results = await sendDeleteItem(p, row, signer, targets);
   } else {
-    const one = { register: sendRegister, upload_blob: sendUpload, mirror_blob: sendMirror, delete_blob: sendDeleteBlob }[row.op];
+    const one = {
+      register: sendRegister, upload_blob: sendUpload, mirror_blob: sendMirror, delete_blob: sendDeleteBlob,
+      post_device: sendPostDevice, delete_device: sendDeleteDevice, pair_ack: sendPairAck,
+    }[row.op];
     results = one ? (await Promise.all(targets.map((t) => one(p, row, signer, t)))).flat() : targets.map((t) => ({ target: t.target, kind: 'rejected', error: `unknown op ${row.op}` }));
   }
   finish(p.db, p.now(), row.id, results);

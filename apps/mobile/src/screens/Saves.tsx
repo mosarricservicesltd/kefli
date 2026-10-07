@@ -111,7 +111,7 @@ function FirstRun({ online }: { online: boolean }) {
       )}
       title={S.saves.emptyTitle}
       body={S.saves.emptyBody}
-      action={<Button label={S.saves.connectBrowser} icon="laptop" disabled={!online} />}
+      action={<Button label={S.saves.connectBrowser} icon="laptop" disabled={!online} onPress={() => router.push('/connect')} />}
     />
   );
 }

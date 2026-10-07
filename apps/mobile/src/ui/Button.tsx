@@ -8,7 +8,7 @@ import { T, ui } from './text';
 import { useTheme } from './theme';
 import { Dots } from './Dots';
 
-export type ButtonKind = 'primary' | 'secondary' | 'quiet';
+export type ButtonKind = 'primary' | 'secondary' | 'quiet' | 'danger';
 
 export function Button({ label, kind = 'primary', icon, onPress, disabled, busy, full, style, colors }: {
   label: string; kind?: ButtonKind; icon?: IconName; onPress?: () => void; disabled?: boolean; busy?: boolean; full?: boolean;
@@ -19,14 +19,16 @@ export function Button({ label, kind = 'primary', icon, onPress, disabled, busy,
   const { c } = useTheme();
   const fill = colors?.fill ?? c.fill;
   const onFill = colors?.onFill ?? c.onFill;
-  const fg = kind === 'primary' ? onFill : colors?.text ?? c.text;
+  // danger (prototype .btn.danger): the error fill, or its outline on the surface while disabled
+  const fg = kind === 'primary' || (kind === 'danger' && !disabled) ? onFill : kind === 'danger' ? c.error : colors?.text ?? c.text;
   const box: ViewStyle = kind === 'primary'
     ? { backgroundColor: fill }
+    : kind === 'danger' ? { backgroundColor: disabled ? c.surface : c.error, borderWidth: 1.5, borderColor: c.error }
     : kind === 'secondary' ? { backgroundColor: colors?.bg ?? c.surface, borderWidth: 1, borderColor: colors?.edge ?? c.line } : {};
   return (
     <Press
       accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: !!disabled, busy: !!busy }}
-      disabled={disabled || busy} onPress={onPress} layer={pressLayer(fg, kind === 'primary' ? 'fill' : 'page')}
+      disabled={disabled || busy} onPress={onPress} layer={pressLayer(fg, kind === 'primary' || kind === 'danger' ? 'fill' : 'page')}
       style={[{ height: 48, paddingHorizontal: 22, borderRadius: radius.button, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: disabled ? 0.45 : 1 }, full && { alignSelf: 'stretch' }, box, style]}
     >
       {busy ? <Dots color={fg} size={6} gap={4} /> : (

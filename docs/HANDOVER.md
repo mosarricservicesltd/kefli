@@ -25,7 +25,15 @@ Written on 6 October 2026, when the work moved off the laptop it started on. Eve
 - **Week 3 started on 7 October 2026 with the Listen tab** (5.7). It has Now playing with the cover band, the minute ruler, the word meter and the controls; Played, most recent first, kept in `listen_history`; Play all, a snapshot played to its end; and the mini handing over as the card scrolls away (FD 52). The ruler widens its step for long articles, at most nine numbers (RULED in `voice/clock.ts`). You followed the same day:
   - **The screen:** the quilt and counts, the backup card (Later snoozes it for ten more saves), and the rows.
   - **The recovery code sheet:** the words are read from the key file only on "Show the words", and the window is secured while the sheet is open. Copy marks the clipboard as sensitive. `ShelfSystem.setSecure` and `copySensitive` are the new native functions.
-  - **Not yet built:** the screens behind Add another device, Connected browsers, Advanced and Delete my data.
+  - **Connected browsers** (5.5, contract 4.4 and 4.9) followed on 7 October 2026:
+    - **Connect:** scan the browser's QR with `expo-camera`, or type its code. The camera explanation shows only until CAMERA is granted, and refused, expired and Can't connect each have their own state.
+    - **Sending:** Connect queues `post_device` then `pair_ack` and runs the outbox while the button is busy. Any failed attempt is Can't connect: the rows are withdrawn and a device the API already took is let go with `delete_device`.
+    - **The record:** the connected-browsers record (`d` = `shelf/devices`) goes out with `publish_lists` to the write relays. It comes back in with the saves and merges by token, republished when this phone holds more.
+    - **The list:** each browser with Disconnect, which revokes at once, republishes the record and queues `DELETE /devices`.
+    - **Schema v2:** `devices` is keyed by token (RULED in `data/schema.ts`), since a browser connected again keeps its key and gets a new token.
+    - **Microphone:** the build no longer asks for it. `expo-audio` had added it by default.
+    - **Testing without the extension:** `npx tsx server/dev/browser.ts` plays the extension's part. It shows a QR in the terminal and in `server/dev/data/pair.html`, with the typed code under it, then waits for the pair-ack.
+  - **Not yet built:** the inbox (4.7), so browser saves arrive, and the screens behind Add another device, Advanced and Delete my data.
 
 ## Open with Richard
 
@@ -58,7 +66,7 @@ Host github.com
 |---|---|
 | Look at the prototypes | `npx serve docs/design -l 4321`, then open `http://localhost:4321/mockups/prototype.html` (or open the files directly). `.claude/launch.json` has this as "mockups", plus "tour" (the repo root on 4322, for `docs/design/tour.html`). |
 | Check the prototype after a change | `node tools/design-qa/jumps.mjs` (every state, both themes, no script errors, motion rule). See `tools/design-qa/README.md`. |
-| Run the local stack (week 1, before the VPS) | `docker compose -f server/dev/compose.yml up -d` (three strfry relays, the operator Blossom server and a mirror), `node server/dev/api.mjs` (the API stand-in: `/defaults.json`, `/register`), `server/dev/phone.sh` (adb reverse, so the phone reaches them on its own localhost), and `npx tsx server/dev/smoke.ts` for a full save from the desktop. Only a `SHELF_VARIANT=local` build allows cleartext, and only to localhost |
+| Run the local stack (week 1, before the VPS) | `docker compose -f server/dev/compose.yml up -d` (three strfry relays, the operator Blossom server and a mirror), `node server/dev/api.mjs` (the API stand-in: `/defaults.json`, `/register`, `/devices` and `/pair-offers`, devices and offers in memory), `server/dev/phone.sh` (adb reverse, so the phone reaches them on its own localhost), `npx tsx server/dev/smoke.ts` for a full save from the desktop, and `npx tsx server/dev/browser.ts` to pair a stand-in browser. Only a `SHELF_VARIANT=local` build allows cleartext, and only to localhost |
 | Install and test the shared code | `npm install` at the root, then `npm test` (tokens staleness check and the `packages/protocol` suite) and `npm run typecheck` |
 | Rebuild the tokens | `npm run tokens` (the CSS for the prototypes and `packages/tokens` for the app) |
 | Test the cover generator | `node shared/cover/test.cjs`, and `node shared/cover/build.mjs` to copy it into the mockups |

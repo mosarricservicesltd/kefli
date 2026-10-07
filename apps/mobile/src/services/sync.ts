@@ -8,10 +8,11 @@
 //
 // Every relay's pages are collected before anything is applied, and saves are applied before deletions, so a
 // save still held by a relay that missed its deletion can't come back in the same run.
-import { KIND, T_TAG, decryptText, newest, readItemEvent, readRelayList } from '@shelf/protocol';
+import { DEVICES_D, KIND, T_TAG, decryptText, newest, readDevicesEvent, readItemEvent, readRelayList } from '@shelf/protocol';
 import { deriveArticle, type Derived } from '../reader/blocks';
 import type { CryptoPort, NostrEvent, Signer } from '@shelf/protocol';
 import type { SqlDb } from '../data/db';
+import { absorbRecord, queueRecord } from '../data/devices';
 import { indexerRelays, listServers, recordList, relayEntries, seedGeneratedLists, type DefaultsLike } from '../data/lists';
 import {
   applyDeletion, applyItem, getCursor, hashInUse, readRelays, setCursor, textCached, textMissing, textQueue,
@@ -90,10 +91,29 @@ async function collect(p: SyncPorts, owner: string, startedAt: number): Promise<
 
 export type SyncResult = { items: number; deletions: number; texts: number; missing: number };
 
+function partition<T>(xs: T[], test: (x: T) => boolean): [T[], T[]] {
+  return [xs.filter(test), xs.filter((x) => !test(x))];
+}
+
+/** Copies of the connected-browsers record (C§4.9), merged in by token; republished when this phone holds more. */
+async function absorbRecords(p: SyncPorts, owner: string, signer: Signer, records: NostrEvent[]): Promise<void> {
+  let republish = false;
+  for (const e of records) {
+    try {
+      republish = absorbRecord(p.db, owner, await readDevicesEvent(signer, e), e.id, e.created_at) || republish;
+    } catch {
+      // another identity's, or a version this phone doesn't read: left alone
+    }
+  }
+  if (republish) queueRecord(p.db, p.now(), owner);
+}
+
 async function applyAll(p: SyncPorts, owner: string, signer: Signer, collected: Collected[]): Promise<Pick<SyncResult, 'items' | 'deletions'>> {
   const unique = (s: Stream) => [...new Map(collected.filter((c) => c.stream === s).flatMap((c) => c.events).map((e) => [e.id, e])).values()];
   let items = 0;
-  for (const e of unique('items').sort((a, b) => a.created_at - b.created_at)) {
+  const [records, saves] = partition(unique('items'), (e) => e.tags.some((t) => t[0] === 'd' && t[1] === DEVICES_D));
+  await absorbRecords(p, owner, signer, records);
+  for (const e of saves.sort((a, b) => a.created_at - b.created_at)) {
     let read;
     try {
       read = await readItemEvent(signer, e);

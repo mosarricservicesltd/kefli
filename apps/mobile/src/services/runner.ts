@@ -22,6 +22,8 @@ import { File } from 'expo-file-system';
 import { imageFiles, textFiles } from './textFiles';
 import { readStaged } from './staging';
 import { store } from './store';
+import { disconnect } from '../data/devices';
+import type { ConnectPorts } from './connect';
 
 let running: Promise<number> | null = null;
 let defaults: Defaults | null = null;
@@ -185,3 +187,24 @@ async function parsePending(owner: string): Promise<void> {
 
 let xFailures = 0;
 let xTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Connect's ports on the phone (5.5). */
+export function connectPorts(owner: string): ConnectPorts {
+  return {
+    db: store(),
+    now: () => Math.floor(Date.now() / 1000),
+    owner,
+    defaults: loadDefaults,
+    signer: currentSigner,
+    fetch,
+    crypto: phoneCrypto,
+    runOutbox,
+  };
+}
+
+/** Disconnect (5.5): revoked at once; the record and DELETE /devices go with the outbox. */
+export async function disconnectBrowser(owner: string, devicePubkey: string): Promise<void> {
+  const d = await loadDefaults();
+  disconnect(store(), Math.floor(Date.now() / 1000), owner, d.operator.api, devicePubkey);
+  runOutbox().catch(() => 0);
+}

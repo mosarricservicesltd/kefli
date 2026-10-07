@@ -1,6 +1,7 @@
-// A local stand-in for the operator HTTP API (contract section 6), enough for week 1's phone work:
-// GET /defaults.json pointing at the local stack, and POST /register with NIP-98 checked as the contract
-// says. The real API is the backend's Go service (docs/specs/02-backend.md).
+// A local stand-in for the operator HTTP API (contract section 6), enough for the phone's work: GET
+// /defaults.json pointing at the local stack, POST /register, POST and DELETE /devices, and POST and GET
+// /pair-offers, with NIP-98 checked as the contract says. Devices and offers live in memory. The real API is
+// the backend's Go service (docs/specs/02-backend.md).
 //   node server/dev/api.mjs   (from the repository root, so nostr-tools resolves)
 
 import { createServer } from 'node:http';
@@ -69,11 +70,80 @@ async function register(req, res) {
   send(res, 200, { v: 1 });
 }
 
+// device pubkey → { user, label }; lookup → { offer, expires }
+const devices = new Map();
+const offers = new Map();
+const OFFER_LIFE = 300;
+const now = () => Math.floor(Date.now() / 1000);
+
+async function authed(req, res, path, { registeredOnly = true } = {}) {
+  const body = Buffer.concat(await req.toArray());
+  const auth = checkNip98(req.headers.authorization, `${BASE}${path}`, req.method, body);
+  if (!auth.ok) return send(res, 401, { v: 1, error: auth.why }), null;
+  if (registeredOnly && !registered().has(auth.pubkey)) return send(res, 403, { v: 1, error: 'not registered' }), null;
+  let json = null;
+  try {
+    json = body.length ? JSON.parse(body.toString('utf8')) : null;
+  } catch {
+    return send(res, 400, { v: 1, error: 'unreadable body' }), null;
+  }
+  return { pubkey: auth.pubkey, json };
+}
+
+async function postDevice(req, res) {
+  const a = await authed(req, res, '/devices');
+  if (!a) return;
+  const { device_pubkey: pk, label } = a.json ?? {};
+  if (!/^[0-9a-f]{64}$/.test(pk ?? '') || typeof label !== 'string') return send(res, 400, { v: 1, error: 'bad device' });
+  devices.set(pk, { user: a.pubkey, label });
+  console.log(`device ${pk.slice(0, 12)}… (${label}) for ${a.pubkey.slice(0, 12)}…`);
+  send(res, 200, { v: 1 });
+}
+
+async function deleteDevice(req, res, pk) {
+  const a = await authed(req, res, `/devices/${pk}`);
+  if (!a) return;
+  if (devices.get(pk)?.user !== a.pubkey) return send(res, 404, { v: 1, error: 'not found' });
+  devices.delete(pk);
+  console.log(`device ${pk.slice(0, 12)}… let go`);
+  send(res, 200, { v: 1 });
+}
+
+async function postOffer(req, res) {
+  const a = await authed(req, res, '/pair-offers', { registeredOnly: false });
+  if (!a) return;
+  const { lookup, offer } = a.json ?? {};
+  if (!/^[0-9a-f]{64}$/.test(lookup ?? '') || typeof offer !== 'string') return send(res, 400, { v: 1, error: 'bad offer' });
+  const held = offers.get(lookup);
+  if (held && held.expires > now()) return send(res, 409, { v: 1, error: 'lookup taken' });
+  offers.set(lookup, { offer, expires: now() + OFFER_LIFE });
+  send(res, 200, { v: 1 });
+}
+
+async function getOffer(req, res, lookup) {
+  const a = await authed(req, res, `/pair-offers/${lookup}`);
+  if (!a) return;
+  const held = offers.get(lookup);
+  if (!held || held.expires <= now()) return send(res, 404, { v: 1, error: 'not found' });
+  send(res, 200, { v: 1, offer: held.offer });
+}
+
+function route(req, res) {
+  const u = req.url ?? '';
+  if (req.method === 'GET' && u === '/defaults.json') return send(res, 200, DEFAULTS);
+  if (req.method === 'POST' && u === '/register') return register(req, res);
+  if (req.method === 'POST' && u === '/devices') return postDevice(req, res);
+  if (req.method === 'POST' && u === '/pair-offers') return postOffer(req, res);
+  let m = /^\/devices\/([0-9a-f]{64})$/.exec(u);
+  if (req.method === 'DELETE' && m) return deleteDevice(req, res, m[1]);
+  m = /^\/pair-offers\/([0-9a-f]{64})$/.exec(u);
+  if (req.method === 'GET' && m) return getOffer(req, res, m[1]);
+  send(res, 404, { v: 1, error: 'not found' });
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   createServer((req, res) => {
     console.log(`${req.method} ${req.url}`);
-    if (req.method === 'GET' && req.url === '/defaults.json') return send(res, 200, DEFAULTS);
-    if (req.method === 'POST' && req.url === '/register') return register(req, res);
-    send(res, 404, { v: 1, error: 'not found' });
+    route(req, res);
   }).listen(PORT, () => console.log(`Shelf local API on ${BASE}`));
 }

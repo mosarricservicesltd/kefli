@@ -24,7 +24,8 @@
       [
         "expo-audio",
         {
-          "enableBackgroundPlayback": true
+          "enableBackgroundPlayback": true,
+          "recordAudioAndroid": false
         }
       ],
       "react-native-quick-crypto",
@@ -37,7 +38,15 @@
           }
         }
       ],
-      "./plugins/with-shelf-notification"
+      "./plugins/with-shelf-notification",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Shelf uses the camera only to read the code your browser shows.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ]
     ]
   }
 }
