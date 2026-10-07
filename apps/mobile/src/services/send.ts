@@ -1,9 +1,10 @@
 // Sends the outbox (mobile spec 4.3): one due row at a time, through ports so the tests can stand in for the
 // network. Week 1 sends register, upload_blob, mirror_blob and publish_item.
-import { buildItemEvent, httpAuth, mirrorBlob, uploadBlob } from '@shelf/protocol';
+import { buildItemEvent, buildRelayList, buildServerList, httpAuth, mirrorBlob, uploadBlob } from '@shelf/protocol';
 import type { CryptoPort, NostrEvent, Signer } from '@shelf/protocol';
 import type { SqlDb } from '../data/db';
 import { getItem, itemJson, markPublished } from '../data/items';
+import { indexerRelays, listServers, recordList, relayEntries } from '../data/lists';
 import { begin, finish, nextDue } from '../data/outbox';
 import type { OutboxRow, OutboxTarget, TargetResult } from '../data/outbox';
 import type { Defaults } from './config';
@@ -117,6 +118,30 @@ async function sendPublish(p: SendPorts, row: OutboxRow, signer: Signer, targets
   return results;
 }
 
+/** The 10002 to every target, the 10063 to the write relays only (4.3); both built from the tables at send time. */
+async function sendLists(p: SendPorts, row: OutboxRow, signer: Signer, targets: OutboxTarget[]): Promise<TargetResult[]> {
+  const now = p.now();
+  const relayList = await buildRelayList(signer, relayEntries(p.db, row.signer), now);
+  const serverList = await buildServerList(signer, listServers(p.db, row.signer), now);
+  const indexerOnly = new Set(indexerRelays(p.db, row.signer).filter((u) => !relayEntries(p.db, row.signer).some((e) => e.url === u)));
+  const results = await Promise.all(
+    targets.map(async (t) => {
+      try {
+        const a = relayResult(t.target, await p.publish(t.target, relayList), relayList.id);
+        if (a.kind !== 'ok' || indexerOnly.has(t.target)) return a;
+        return relayResult(t.target, await p.publish(t.target, serverList), serverList.id);
+      } catch (e) {
+        return { target: t.target, kind: 'retry', error: err(e) } as TargetResult;
+      }
+    }),
+  );
+  if (results.some((r) => r.kind === 'ok')) {
+    recordList(p.db, row.signer, relayList.kind, relayList.id, now, JSON.stringify(relayList));
+    recordList(p.db, row.signer, serverList.kind, serverList.id, now, JSON.stringify(serverList));
+  }
+  return results;
+}
+
 /** Sends the next due row, if any. Returns whether it did anything. */
 export async function sendOne(p: SendPorts): Promise<boolean> {
   const due = nextDue(p.db, p.now());
@@ -129,6 +154,8 @@ export async function sendOne(p: SendPorts): Promise<boolean> {
     results = targets.map((t) => ({ target: t.target, kind: 'retry', error: 'signer unavailable' }));
   } else if (row.op === 'publish_item') {
     results = await sendPublish(p, row, signer, targets);
+  } else if (row.op === 'publish_lists') {
+    results = await sendLists(p, row, signer, targets);
   } else {
     const one = { register: sendRegister, upload_blob: sendUpload, mirror_blob: sendMirror }[row.op];
     results = one ? (await Promise.all(targets.map((t) => one(p, row, signer, t)))).flat() : targets.map((t) => ({ target: t.target, kind: 'rejected', error: `unknown op ${row.op}` }));

@@ -17,6 +17,10 @@ Written on 6 October 2026, when the work moved off the laptop it started on. Eve
 3. **The licence text:** decided as AGPL-3.0-or-later with a permission for Google Play services and other proprietary system libraries (mobile spec O-10); the LICENSE file is added once Richard confirms the exact text. `apps/mobile/LICENSE` is Expo's template and is deliberately not committed.
 4. **The name** (mobile spec O-9): needed, or at least its domain, by the end of build week 3, because the Play app ID is permanent from the first upload.
 
+## Known issues
+
+- **A share can hang its card on a cold start (seen twice on 7 October 2026, not reproduced since).** When a share starts Shelf's process while an old MainActivity is still listed in the background, the "main" surface starts alongside the "share" surface, and the share card stops drawing after its save. The save itself is recorded and its rows are released at the next start, so nothing is lost; the card stays grey until Back. To look at in week 2 with the real share sheet.
+
 ## Setting up a new machine
 
 Install Git, Node 24, Google Chrome, and for the phone build JDK 17 and the Android SDK (Android Studio installs it; set `ANDROID_HOME`). Then:

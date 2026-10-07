@@ -3,6 +3,7 @@ import type { NostrEvent } from '@shelf/protocol';
 import { nodeCrypto } from '@shelf/protocol/node';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow, queueSave } from '../src/data/saves';
+import { seedGeneratedLists } from '../src/data/lists';
 import { nextDue, release } from '../src/data/outbox';
 import { drain, relayResult, sendOne, type RelayAnswer, type SendPorts } from '../src/services/send';
 import type { Defaults } from '../src/services/config';
@@ -21,7 +22,9 @@ function world(answers: Partial<Record<string, Answer | ((n: number) => Answer)>
   const signer = new LocalSigner(nodeCrypto.randomBytes(32));
   let clock = 1_000;
   const calls: string[] = [];
-  const published: { relay: string; event: NostrEvent }[] = [];
+  const all: { relay: string; event: NostrEvent }[] = [];
+  const published = { get length() { return items().length; } } as unknown as { relay: string; event: NostrEvent }[];
+  const items = () => all.filter((p) => p.event.kind === 30078);
   const blobs = new Map<string, Uint8Array>();
   const counts = new Map<string, number>();
   const fetch = (async (url: string, init: RequestInit) => {
@@ -42,16 +45,17 @@ function world(answers: Partial<Record<string, Answer | ((n: number) => Answer)>
     db, now: () => clock, signer: async (pk) => (pk === signer.pubkey() ? signer : null), fetch, crypto: nodeCrypto,
     defaults: () => D,
     publish: async (url, event) => {
-      published.push({ relay: url, event });
+      all.push({ relay: url, event });
       return relay(url);
     },
     readBlob: async (sha) => blobs.get(sha) ?? null,
   };
-  return { db, signer, ports, calls, published, blobs, tick: (s: number) => (clock += s), now: () => clock };
+  return { db, signer, ports, calls, published: items, all, blobs, tick: (s: number) => (clock += s), now: () => clock };
 }
 
 async function save(w: ReturnType<typeof world>, withText = true) {
   ensureIdentityRow(w.db, w.now(), w.signer.pubkey(), 'early_share', true);
+  seedGeneratedLists(w.db, w.signer.pubkey(), D);
   const md = normaliseMarkdown('# Title\n\nSome words.');
   const enc = withText ? await encryptText(md, nodeCrypto) : null;
   if (enc) w.blobs.set(enc.text.sha256, enc.blob);
@@ -60,7 +64,7 @@ async function save(w: ReturnType<typeof world>, withText = true) {
     byline: null, savedAt: w.now(), words: 2, lang: 'en', hero: null, text: enc?.text ?? null,
     textHash: enc ? textHash(md, nodeCrypto) : null, textState: enc ? 'cached' : 'failed', origin: 'share',
   }, enc ? { sha256: enc.text.sha256, size: enc.blob.length, path: '/staged' } : null,
-  { api: D.operator.api, blossom: D.operator.blossom, mirror: D.mirrors[0], relays: [D.operator.relay, ...D.relays] });
+  { api: D.operator.api, blossom: D.operator.blossom, mirror: D.mirrors[0] });
   return { held, sha: enc?.text.sha256 };
 }
 
@@ -75,14 +79,64 @@ describe('sending a save (mobile spec 4.3)', () => {
     release(w.db, held);
     await drain(w.ports);
     expect(w.calls.slice(1)).toEqual(['PUT http://blossom/upload', 'PUT http://m1/mirror']);
-    expect(w.published.map((p) => p.relay).sort()).toEqual(['ws://a', 'ws://b', 'ws://op']);
-    const { item, hash } = await readItemEvent(w.signer, w.published[0].event);
+    expect(w.published().map((p) => p.relay).sort()).toEqual(['ws://a', 'ws://b', 'ws://op']);
+    const { item, hash } = await readItemEvent(w.signer, w.published()[0].event);
     expect(hash).toBe(HASH);
     expect(item.item.text?.servers).toEqual(['http://blossom', 'http://m1']);
     expect(item.item.text?.sha256).toBe(sha);
-    expect(w.db.get('SELECT published, event_id FROM items')).toEqual({ published: 1, event_id: w.published[0].event.id });
+    expect(w.db.get('SELECT published, event_id FROM items')).toEqual({ published: 1, event_id: w.published()[0].event.id });
     expect(w.db.get<{ n: number }>('SELECT COUNT(*) n FROM outbox')?.n).toBe(0);
     expect(w.db.get<{ registered_at: number }>('SELECT registered_at FROM identities')?.registered_at).toBe(w.now());
+  });
+
+  test('the first save also publishes the lists: the 10002 everywhere, the 10063 to the write relays only', async () => {
+    const w = world();
+    const { held } = await save(w);
+    release(w.db, held);
+    await drain(w.ports);
+    const sent = (kind: number) => w.all.filter((p) => p.event.kind === kind).map((p) => p.relay).sort();
+    // The indexer here (ws://a) is also a write relay, so it gets both.
+    expect(sent(10002)).toEqual(['ws://a', 'ws://b', 'ws://op']);
+    expect(sent(10063)).toEqual(['ws://a', 'ws://b', 'ws://op']);
+    const relayList = w.all.find((p) => p.event.kind === 10002)!.event;
+    expect(relayList.tags).toEqual([['r', 'ws://op'], ['r', 'ws://a'], ['r', 'ws://b']]);
+    expect(w.all.find((p) => p.event.kind === 10063)!.event.tags).toEqual([['server', 'http://blossom'], ['server', 'http://m1']]);
+    expect(w.db.all<{ kind: number }>('SELECT kind FROM lists ORDER BY kind').map((r) => r.kind)).toEqual([10002, 10063]);
+  });
+
+  test('a repeat save of an unread item changes nothing and queues nothing, lists included', async () => {
+    const w = world();
+    release(w.db, (await save(w)).held);
+    await drain(w.ports);
+    const again = await save(w);
+    expect(again.held).toEqual([]);
+    expect(w.db.get<{ n: number }>('SELECT COUNT(*) n FROM outbox')?.n).toBe(0);
+  });
+
+  test('a repeat save of an archived item un-archives it with the new time and republishes', async () => {
+    const w = world();
+    release(w.db, (await save(w)).held);
+    await drain(w.ports);
+    w.db.run("UPDATE items SET state = 'archived'");
+    w.tick(500);
+    const again = await save(w);
+    expect(again.held).toHaveLength(1);
+    expect(w.db.get('SELECT state, saved_at FROM items')).toEqual({ state: 'unread', saved_at: w.now() });
+    release(w.db, again.held);
+    await drain(w.ports);
+    const last = w.published()[w.published().length - 1].event;
+    const { item } = await readItemEvent(w.signer, last);
+    expect([item.item.state, item.item.saved_at, item.item.text?.servers]).toEqual(['unread', w.now(), ['http://blossom', 'http://m1']]);
+  });
+
+  test('an indexer that is not a write relay gets the 10002 only', async () => {
+    const w = world();
+    ensureIdentityRow(w.db, w.now(), w.signer.pubkey(), 'early_share', true);
+    seedGeneratedLists(w.db, w.signer.pubkey(), { ...D, indexer: ['ws://idx'] });
+    const { held } = await save(w, false);
+    release(w.db, held);
+    await drain(w.ports);
+    expect(w.all.filter((p) => p.relay === 'ws://idx').map((p) => p.event.kind)).toEqual([10002]);
   });
 
   test('a save with no text publishes after register, with text null', async () => {
@@ -90,7 +144,7 @@ describe('sending a save (mobile spec 4.3)', () => {
     const { held } = await save(w, false);
     release(w.db, held);
     await drain(w.ports);
-    const { item } = await readItemEvent(w.signer, w.published[0].event);
+    const { item } = await readItemEvent(w.signer, w.published()[0].event);
     expect(item.item.text).toBeNull();
     expect(w.calls).toEqual(['POST http://api/register']);
   });
@@ -102,7 +156,7 @@ describe('sending a save (mobile spec 4.3)', () => {
     await drain(w.ports);
     expect(w.calls.filter((c) => c.includes('mirror'))).toEqual(['PUT http://m1/mirror', 'PUT http://m2/mirror']);
     // The publish still goes: it depends on the upload only, and names the mirror being tried.
-    expect(w.published).toHaveLength(3);
+    expect(w.published()).toHaveLength(3);
     const row = nextDue(w.db, w.now() + 86_400);
     expect(row?.row.op).toBe('mirror_blob');
     expect(row?.targets.map((t) => t.target)).toEqual(['http://m1']);
@@ -114,7 +168,7 @@ describe('sending a save (mobile spec 4.3)', () => {
     const { held } = await save(w);
     release(w.db, held);
     await drain(w.ports);
-    expect(w.published).toHaveLength(0);
+    expect(w.published()).toHaveLength(0);
     expect(nextDue(w.db, w.now() + 86_399)).toBeNull();
     expect(nextDue(w.db, w.now() + 86_400)?.row.op).toBe('upload_blob');
   });
@@ -124,11 +178,11 @@ describe('sending a save (mobile spec 4.3)', () => {
     const { held } = await save(w, false);
     release(w.db, held);
     await drain(w.ports);
-    const first = w.published[0].event.created_at;
+    const first = w.published()[0].event.created_at;
     const { enqueue } = await import('../src/data/outbox');
     enqueue(w.db, w.now(), { op: 'publish_item', signer: w.signer.pubkey(), subject: HASH, targets: ['ws://op'] });
     await sendOne(w.ports);
-    expect(w.published[w.published.length - 1].event.created_at).toBe(first + 1);
+    expect(w.published()[w.published().length - 1].event.created_at).toBe(first + 1);
   });
 
   test('without its signer a row waits', async () => {

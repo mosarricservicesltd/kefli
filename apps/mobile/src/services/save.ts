@@ -6,6 +6,7 @@ import { countWords, encryptText, itemHash, textHash } from '@shelf/protocol';
 import { ShelfParser } from '../../modules/shelf-parser/src';
 import { phoneCrypto } from '../crypto/port';
 import { ensureIdentityRow, queueSave } from '../data/saves';
+import { seedGeneratedLists } from '../data/lists';
 import { loadDefaults } from './config';
 import { ensureSigner } from './identity';
 import { stageBlob } from './staging';
@@ -24,6 +25,7 @@ export async function saveLink(url: string, report: (s: SaveStep) => void): Prom
   const signer = await ensureSigner();
   const db = store();
   ensureIdentityRow(db, now(), signer.pubkey(), 'early_share', true);
+  seedGeneratedLists(db, signer.pubkey(), defaults);
   say('identity', `${signer.pubkey().slice(0, 12)}…`);
 
   const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml', 'Accept-Language': 'en-GB,en;q=0.9' } });
@@ -56,7 +58,6 @@ export async function saveLink(url: string, report: (s: SaveStep) => void): Prom
     sharedUrl: url, origin: 'share',
   }, staged, {
     api: defaults.operator.api, blossom: defaults.operator.blossom, mirror: defaults.mirrors[0],
-    relays: [defaults.operator.relay, ...defaults.relays],
   });
   say('queued', `${held.length} rows held until the sheet closes`);
   return { hash, held };

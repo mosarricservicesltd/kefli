@@ -1,31 +1,24 @@
-// Drains the outbox with the real network (mobile spec 4.3): after a share's rows are released and at start.
-// Relays are reached one connection per publish for now; the relay pool (4.4) replaces this.
-import { Relay } from 'nostr-tools/relay';
-import type { NostrEvent } from '@shelf/protocol';
+// Drains the outbox with the real network (mobile spec 4.3): after a share's rows are released and at start,
+// through the relay pool (4.4).
+import { verifyEventWith } from '@shelf/protocol';
 import { phoneCrypto } from '../crypto/port';
-import { loadDefaults, type Defaults } from './config';
+import { nativeSecp } from '../crypto/secp';
+import { RelayPool } from '../net/pool';
+import { DEFAULTS_URL, loadDefaults, type Defaults } from './config';
 import { currentSigner } from './identity';
-import { drain, type RelayAnswer } from './send';
+import { drain } from './send';
 import { readStaged } from './staging';
 import { store } from './store';
 
 let running: Promise<number> | null = null;
 let defaults: Defaults | null = null;
 
-async function publish(url: string, event: NostrEvent): Promise<RelayAnswer> {
-  const relay = await Relay.connect(url);
-  try {
-    await relay.publish(event);
-    return { ok: true };
-  } catch (e) {
-    const reason = String((e as Error)?.message ?? e);
-    // An OK false carries a prefixed reason; anything else is the network, which the outbox retries.
-    if (/^[a-z-]+:/.test(reason)) return { ok: false, reason };
-    throw e;
-  } finally {
-    relay.close();
-  }
-}
+// One pool per process (mobile spec 4.4). ws:// only while the defaults point at the local stack.
+export const pool = new RelayPool({
+  verify: (e) => verifyEventWith(nativeSecp, e),
+  signer: currentSigner,
+  allowInsecure: DEFAULTS_URL.startsWith('http://localhost'),
+});
 
 /** Sends whatever is due; concurrent calls share one run. Returns how many rows were sent. */
 export function runOutbox(): Promise<number> {
@@ -43,7 +36,7 @@ export function runOutbox(): Promise<number> {
         fetch,
         crypto: phoneCrypto,
         defaults: () => d,
-        publish,
+        publish: (url, event) => pool.publish(url, event),
         readBlob: readStaged,
       });
     } finally {
