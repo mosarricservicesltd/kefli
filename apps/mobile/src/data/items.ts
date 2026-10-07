@@ -15,7 +15,7 @@ export type ItemRow = {
 export type NewItem = {
   owner: string; hash: string; url: string; canonical: string | null; title: string | null; site: string | null;
   byline: string | null; savedAt: number; words: number | null; lang: string | null; hero: string | null;
-  text: Omit<ItemText, 'servers'> | null; textHash: string | null; textState: 'cached' | 'failed'; failReason?: string | null;
+  text: Omit<ItemText, 'servers'> | null; textHash: string | null; textState: 'cached' | 'failed' | 'queued'; failReason?: string | null;
   sharedUrl?: string | null; origin: string;
 };
 

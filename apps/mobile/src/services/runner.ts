@@ -13,6 +13,11 @@ import { syncInbound, type SyncResult } from './sync';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { getNetworkStateAsync, NetworkStateType } from 'expo-network';
 import { removeImages, syncImages, type ImagePorts } from './images';
+import { runPendingParses } from './pending';
+import { ShelfParser } from '../../modules/shelf-parser/src';
+import type { ParserResult } from './page';
+import { stageBlob } from './staging';
+import { File } from 'expo-file-system';
 import { imageFiles, textFiles } from './textFiles';
 import { readStaged } from './staging';
 import { store } from './store';
@@ -94,6 +99,7 @@ export function runSync(): Promise<SyncResult> {
       });
       const owner = store().get<{ pubkey: string }>("SELECT pubkey FROM identities WHERE role = 'active'")?.pubkey;
       if (owner) await imagesIfUnmetered(owner).catch(() => undefined);
+      if (owner) await parsePending(owner).catch(() => undefined);
       return r;
     } finally {
       syncing = null;
@@ -147,4 +153,25 @@ export function removeAllFiles(hash: string): void {
 async function imagesIfUnmetered(owner: string): Promise<void> {
   const n = await getNetworkStateAsync().catch(() => null);
   if (n?.type === NetworkStateType.WIFI || n?.type === NetworkStateType.ETHERNET) await syncImages(imagePorts(), owner);
+}
+
+/** Phase 7: pending parses, one at a time, then their sends (4.5). */
+async function parsePending(owner: string): Promise<void> {
+  const r = await runPendingParses({
+    db: store(),
+    now: () => Math.floor(Date.now() / 1000),
+    page: { fetch, parse: (b, t, u) => ShelfParser.parse(b, t, u) as Promise<ParserResult> },
+    crypto: phoneCrypto,
+    stage: stageBlob,
+    unstage: (path) => {
+      const f = new File(path);
+      if (f.exists) f.delete();
+    },
+    writeText: textFiles.writeText,
+    targets: async () => {
+      const d = await loadDefaults();
+      return { api: d.operator.api, blossom: d.operator.blossom, mirror: d.mirrors[0] };
+    },
+  }, owner);
+  if (r.parsed + r.failed > 0) await runOutbox().catch(() => 0);
 }

@@ -1,8 +1,7 @@
 // A save from a shared link (mobile spec 5.4, contract 4.1–4.3): fetch and parse on the phone, encrypt and
 // stage the text, record the item, and queue its outbox rows held, to be released when the share sheet closes
 // without Undo. The outbox sends them (send.ts, runner.ts).
-import { base64 } from '@scure/base';
-import { encryptText, itemHash, project, textHash } from '@shelf/protocol';
+import { encryptText, itemHash, textHash } from '@shelf/protocol';
 import { ShelfParser } from '../../modules/shelf-parser/src';
 import { phoneCrypto } from '../crypto/port';
 import { getItem } from '../data/items';
@@ -13,10 +12,9 @@ import { loadDefaults } from './config';
 import { ensureSigner } from './identity';
 import { stageBlob } from './staging';
 import { textFiles } from './textFiles';
+import { fetchPage, type ParserResult } from './page';
 import { store } from './store';
 
-const UA = 'Mozilla/5.0 (Linux; Android 17; Pixel 10a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0 Mobile Safari/537.36';
-const GUARD_WORDS = 120;
 
 export type SaveStep = { step: string; ok: boolean; detail: string };
 export type Queued = { hash: string; held: number[] };
@@ -29,44 +27,36 @@ export async function saveLink(url: string, report: (s: SaveStep) => void): Prom
   const db = store();
   seedGeneratedLists(db, signer.pubkey(), defaults);
   say('identity', `${signer.pubkey().slice(0, 12)}…`);
+  const targets = { api: defaults.operator.api, blossom: defaults.operator.blossom, mirror: defaults.mirrors[0] };
 
-  const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml', 'Accept-Language': 'en-GB,en;q=0.9' } });
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  const finalUrl = res.url || url;
-  say('fetch', `HTTP ${res.status}, ${Math.round(bytes.length / 1024)} KB`, res.ok);
-  const parsed = await ShelfParser.parse(base64.encode(bytes), res.headers.get('content-type') ?? '', finalUrl);
-  const spoken = parsed.ok ? project(parsed.markdown) : null;
-  const words = spoken?.wordStarts.length ?? 0;
-  // contract 4.2's guard: not readerable and under 120 spoken words is a failed parse.
-  const good = parsed.ok && (parsed.readerable || words >= GUARD_WORDS);
-  say('parse', good && parsed.ok ? `“${parsed.title}”, ${words} words` : `failed parse (${parsed.ok ? 'the guard' : parsed.reason})`);
-
-  const canonical = parsed.ok ? parsed.canonical : null;
-  const hash = itemHash(finalUrl, canonical);
-  let staged: { sha256: string; size: number; path: string } | null = null;
-  let text: { sha256: string; key: string; nonce: string } | null = null;
-  let hashOfText: string | null = null;
-  if (good && parsed.ok) {
-    const enc = await encryptText(parsed.markdown, phoneCrypto);
-    text = enc.text;
-    hashOfText = textHash(parsed.markdown, phoneCrypto);
-    staged = { sha256: enc.text.sha256, size: enc.blob.length, path: stageBlob(enc.text.sha256, enc.blob) };
-    say('encrypt', `${enc.blob.length} bytes staged`);
+  const outcome = await fetchPage({ fetch, parse: (b, t, u) => ShelfParser.parse(b, t, u) as Promise<ParserResult> }, url);
+  const base = { owner: signer.pubkey(), canonical: null, title: null, site: null, byline: null, savedAt: now(), words: null, lang: null, hero: null, text: null, textHash: null, sharedUrl: url, origin: 'share' };
+  if (outcome.kind !== 'parsed') {
+    // Offline, the save waits on the phone keyed by the shared address, to be parsed when online (share-offline);
+    // a page that can't be read is saved without text, and its row opens the original.
+    say('parse', outcome.kind === 'offline' ? 'offline: saved, waiting to fetch' : `failed (${outcome.reason})`, outcome.kind === 'offline');
+    const hash = itemHash(outcome.kind === 'offline' ? url : outcome.finalUrl);
+    const held = queueSave(db, now(), {
+      ...base, hash, url: outcome.kind === 'offline' ? url : outcome.finalUrl,
+      textState: outcome.kind === 'offline' ? 'queued' : 'failed', failReason: outcome.kind === 'offline' ? null : outcome.reason,
+    }, null, targets);
+    return { hash, held };
   }
+  const { result: parsed, finalUrl, words } = outcome;
+  say('parse', `“${parsed.title}”, ${words} words`);
+  const hash = itemHash(finalUrl, parsed.canonical);
+  const enc = await encryptText(parsed.markdown, phoneCrypto);
+  const staged = { sha256: enc.text.sha256, size: enc.blob.length, path: stageBlob(enc.text.sha256, enc.blob) };
+  say('encrypt', `${enc.blob.length} bytes staged`);
   const held = queueSave(db, now(), {
-    owner: signer.pubkey(), hash, url: finalUrl, canonical,
-    title: parsed.ok ? parsed.title : null, site: parsed.ok ? parsed.site : null, byline: parsed.ok ? parsed.byline : null,
-    savedAt: now(), words: good ? words : null, lang: parsed.ok ? parsed.lang : null, hero: parsed.ok ? parsed.hero : null,
-    text, textHash: hashOfText, textState: good ? 'cached' : 'failed', failReason: good ? null : 'not_readable',
-    sharedUrl: url, origin: 'share',
-  }, staged, {
-    api: defaults.operator.api, blossom: defaults.operator.blossom, mirror: defaults.mirrors[0],
-  });
+    ...base, hash, url: finalUrl, canonical: parsed.canonical, title: parsed.title, site: parsed.site, byline: parsed.byline,
+    words, lang: parsed.lang, hero: parsed.hero, text: enc.text, textHash: textHash(parsed.markdown, phoneCrypto), textState: 'cached',
+  }, staged, targets);
   // The text is on the phone from the start, and searchable (4.1, 4.9); a repeat save keeps the text it had.
   const row = getItem(db, signer.pubkey(), hash);
-  if (row && text && spoken && parsed.ok && row.text_sha256 === text.sha256) {
+  if (row && row.text_sha256 === enc.text.sha256) {
     textFiles.writeText(hash, parsed.markdown);
-    indexText(db, row, spoken.text);
+    indexText(db, row, outcome.spoken);
   }
   say('queued', `${held.length} rows held until the sheet closes`);
   return { hash, held };

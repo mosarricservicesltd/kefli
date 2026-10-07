@@ -1,0 +1,73 @@
+// Pending parses (mobile spec 4.5 phase 7, 5.4): saves whose page hasn't been fetched and parsed yet, one at a time.
+// A share made offline waits here keyed by its shared address; once parsed, an unpublished save is re-keyed by its
+// final address and canonical (FD 80), joining the existing save if there is one (the repeat-save rule, G2), and
+// then its text and save go out. A page that definitely can't be read is published without text.
+import type { SqlDb } from './db';
+import { enqueue } from './outbox';
+import { registerFirst, queueSends, type SaveTargets, type StagedBlob } from './saves';
+import { writeRelays } from './lists';
+
+export type Pending = { id: number; hash: string; url: string; shared_url: string | null; published: number; event_id: string | null };
+
+/** Saves waiting for their parse, oldest first. */
+export function pendingParses(db: SqlDb, owner: string): Pending[] {
+  return db.all<Pending>(
+    "SELECT id, hash, url, shared_url, published, event_id FROM items WHERE owner = ? AND text_state = 'queued' AND pending_delete_at IS NULL ORDER BY saved_at, id",
+    owner,
+  );
+}
+
+export type Parsed = {
+  /** The hash of the final address and canonical. */
+  hash: string; url: string; canonical: string | null; title: string | null; site: string | null; byline: string | null;
+  lang: string | null; hero: string | null; words: number;
+  text: { sha256: string; key: string; nonce: string }; textHash: string;
+};
+
+export type Applied = { hash: string; merged: boolean };
+
+/**
+ * Moves an unpublished save to its final hash (FD 80): its row, search entry and cover record, so the cover
+ * crossfades once without drawing again. If that hash is already a save, the provisional row goes and the existing
+ * save is un-archived as a repeat save is (G2).
+ */
+function rekey(db: SqlDb, now: number, owner: string, from: Pending, to: string): Applied {
+  const existing = db.get<{ id: number; state: string }>('SELECT id, state FROM items WHERE owner = ? AND hash = ?', owner, to);
+  if (!existing) {
+    db.run('UPDATE items SET hash = ? WHERE id = ?', to, from.id);
+    db.run('INSERT OR IGNORE INTO cover_drawn (hash, surface, drawn_at) SELECT ?, surface, 0 FROM cover_drawn WHERE hash = ?', to, from.hash);
+    return { hash: to, merged: false };
+  }
+  db.run('DELETE FROM items_fts WHERE rowid = ?', from.id);
+  db.run('DELETE FROM items WHERE id = ?', from.id);
+  if (existing.state === 'archived') {
+    db.run("UPDATE items SET state = 'unread', saved_at = ?, modified_at = ?, dirty = 1 WHERE id = ?", now, now, existing.id);
+    enqueue(db, now, { op: 'publish_item', signer: owner, subject: to, targets: writeRelays(db, owner) });
+  }
+  return { hash: to, merged: true };
+}
+
+/** A parse that succeeded: the row takes the article and its text goes out (upload, mirror, publish). */
+export function applyParsed(db: SqlDb, now: number, owner: string, p: Pending, parsed: Parsed, blob: StagedBlob, t: SaveTargets): Applied {
+  return db.tx(() => {
+    const unpublished = !p.published && !p.event_id;
+    const where = unpublished && parsed.hash !== p.hash ? rekey(db, now, owner, p, parsed.hash) : { hash: p.hash, merged: false };
+    if (where.merged) return where;
+    db.run(
+      `UPDATE items SET url = ?, canonical = ?, title = ?, site = ?, byline = ?, lang = ?, hero = ?, words = ?, text_sha256 = ?,
+        text_key = ?, text_nonce = ?, text_hash = ?, text_state = 'cached', fail_reason = NULL, modified_at = ?, dirty = 1 WHERE id = ?`,
+      unpublished ? parsed.url : p.url, parsed.canonical, parsed.title, parsed.site, parsed.byline, parsed.lang, parsed.hero, parsed.words,
+      parsed.text.sha256, parsed.text.key, parsed.text.nonce, parsed.textHash, now, p.id,
+    );
+    queueSends(db, now, owner, where.hash, blob, t, false, registerFirst(db, now, owner, t));
+    return where;
+  });
+}
+
+/** A page that can't be read (an HTTP error, not HTML, too large, not readable): the save goes out without text. */
+export function applyFailed(db: SqlDb, now: number, owner: string, p: Pending, reason: string, t: SaveTargets): void {
+  db.tx(() => {
+    db.run("UPDATE items SET text_state = 'failed', fail_reason = ?, modified_at = ?, dirty = 1 WHERE id = ?", reason, now, p.id);
+    queueSends(db, now, owner, p.hash, null, t, false, registerFirst(db, now, owner, t));
+  });
+}
