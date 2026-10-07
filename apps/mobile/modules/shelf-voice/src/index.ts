@@ -3,6 +3,8 @@ import type { Sentence } from '@shelf/protocol';
 
 export type VoiceSession = {
   hash: string; title: string; site: string; sentences: Sentence[];
+  /** The 512 px cover PNG the lock screen shows (6.4). */
+  artworkPath?: string | null;
   startWord: number; totalWords: number; rate: number; wps: number;
 };
 

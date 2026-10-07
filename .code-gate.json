@@ -33,6 +33,7 @@
     "*/apps/mobile/src/services/app.ts",
     "*/apps/mobile/src/services/textFiles.ts",
     "*/apps/mobile/src/screens/actions.ts",
-    "*/apps/mobile/src/services/voice.ts"
+    "*/apps/mobile/src/services/voice.ts",
+    "*/apps/mobile/src/ui/artwork.ts"
   ]
 }

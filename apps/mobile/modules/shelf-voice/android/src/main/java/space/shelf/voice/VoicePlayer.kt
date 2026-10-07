@@ -33,7 +33,9 @@ class VoicePlayer : SimpleBasePlayer(Looper.getMainLooper()) {
       .setSeekBackIncrementMs(15_000)
       .setSeekForwardIncrementMs(15_000)
     if (!e.loaded) return builder.setPlaybackState(Player.STATE_IDLE).build()
-    val meta = MediaMetadata.Builder().setTitle(e.title).setArtist(e.site).build()
+    val meta = MediaMetadata.Builder().setTitle(e.title).setArtist(e.site)
+      .apply { e.artwork?.let { setArtworkData(it, MediaMetadata.PICTURE_TYPE_FRONT_COVER) } }
+      .build()
     val item = MediaItemData.Builder(e.hash)
       .setMediaItem(MediaItem.Builder().setMediaId(e.hash).setMediaMetadata(meta).build())
       .setMediaMetadata(meta)

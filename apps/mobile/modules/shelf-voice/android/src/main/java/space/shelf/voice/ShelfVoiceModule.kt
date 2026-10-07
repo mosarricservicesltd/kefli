@@ -49,6 +49,9 @@ class ShelfVoiceModule : Module() {
           VoiceEngine.load(
             o.getString("hash"), o.getString("title"), o.optString("site"), sentences,
             o.getInt("startWord"), o.getInt("totalWords"), o.getDouble("rate").toFloat(), o.getDouble("wps").toFloat(),
+            o.optString("artworkPath").takeIf { it.isNotEmpty() }?.let { path ->
+              runCatching { java.io.File(android.net.Uri.parse(path).path ?: path).readBytes() }.getOrNull()
+            },
           )
           context.startService(Intent(context, VoiceService::class.java))
           VoiceEngine.play()

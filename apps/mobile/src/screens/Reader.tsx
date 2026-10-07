@@ -215,8 +215,10 @@ function Article({ row, P, owner, article, voice, viewRange, imgs }: {
   viewRange.current = () => ({ first: wordAt(BAND_TOP), last: wordAt(viewH.current - 80) });
 
   // Reading writes the position only while its article isn't playing (5.7).
+  const moved = useRef(false);
   const keep = useCallback(() => {
     if (docked) return;
+    moved.current = true;
     const w = wordAt(BAND_TOP);
     setWord(w);
     const publish = now() - lastPublish.current >= PUBLISH_EVERY;
@@ -228,8 +230,9 @@ function Article({ row, P, owner, article, voice, viewRange, imgs }: {
   // Leaving the Reader publishes the position (4.5); a playing article's position is the voice's.
   const dockedRef = useRef(docked);
   dockedRef.current = docked;
+  // Opening and leaving without a scroll changes nothing.
   useEffect(() => () => {
-    if (dockedRef.current) return;
+    if (dockedRef.current || !moved.current) return;
     setPosition(store(), now(), owner, row.hash, wordAt(BAND_TOP), true);
     runOutbox().catch(() => 0);
   }, [owner, row.hash, wordAt]);

@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.CommandButton
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 
@@ -39,6 +40,9 @@ class VoiceService : MediaSessionService() {
       // media3 never posts the card, the service never goes to the foreground, and Android freezes the app
       // a minute after the screen locks (week-0 gate, first run).
       .also { addSession(it) }
+    // The small icon is Shelf's one-colour glyph (FD 72), drawn into the app by the with-shelf-notification plugin.
+    val icon = resources.getIdentifier("shelf_notification", "drawable", packageName)
+    setMediaNotificationProvider(DefaultMediaNotificationProvider.Builder(this).build().also { if (icon != 0) it.setSmallIcon(icon) })
     VoiceEngine.addListener(listener)
     VoiceLog.start(this)
   }

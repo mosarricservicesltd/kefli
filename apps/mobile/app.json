@@ -36,7 +36,8 @@
             "minSdkVersion": 26
           }
         }
-      ]
+      ],
+      "./plugins/with-shelf-notification"
     ]
   }
 }

@@ -51,6 +51,8 @@ object VoiceEngine {
   var hash = ""; private set
   var title = ""; private set
   var site = ""; private set
+  /** The 512 px cover the lock screen shows (6.4), as PNG bytes, or null. */
+  var artwork: ByteArray? = null; private set
   private var sentences: List<Sentence> = emptyList()
   var totalWords = 0; private set
   var wps = 3.9f; private set
@@ -126,9 +128,9 @@ object VoiceEngine {
     })
   }
 
-  fun load(h: String, t: String, s: String, list: List<Sentence>, startWord: Int, total: Int, r: Float, wordsPerSecond: Float) {
+  fun load(h: String, t: String, s: String, list: List<Sentence>, startWord: Int, total: Int, r: Float, wordsPerSecond: Float, art: ByteArray? = null) {
     reset()
-    hash = h; title = t; site = s; sentences = list; totalWords = total; rate = r; wps = wordsPerSecond
+    hash = h; title = t; site = s; sentences = list; totalWords = total; rate = r; wps = wordsPerSecond; artwork = art
     tts?.setSpeechRate(r)
     word = startWord.coerceIn(0, maxOf(0, total - 1))
     ended = false

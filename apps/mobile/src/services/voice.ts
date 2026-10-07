@@ -11,6 +11,7 @@ import { appState } from './app';
 import { runSync } from './runner';
 import { store } from './store';
 import { textFiles } from './textFiles';
+import { artworkPath } from '../ui/artwork';
 
 export type Session = {
   hash: string; title: string; playing: boolean; word: number; rate: number; wordTiming: boolean; wps: number;
@@ -93,7 +94,13 @@ export async function listen(row: Pick<LibRow, 'hash' | 'title' | 'site' | 'url'
   const word = Math.max(0, Math.min(fromWord, totalWords - 1));
   const title = row.title ?? row.url;
   set({ hash: row.hash, title, playing: true, word, rate, wordTiming: true, wps, ended: false, totalWords, sentences: list, sentence: 0 });
-  await ShelfVoice.start({ hash: row.hash, title, site: row.site ?? '', sentences: list, startWord: word, totalWords, rate, wps });
+  let art: string | null = null;
+  try {
+    art = artworkPath(row.hash);
+  } catch {
+    art = null; // the card shows without artwork rather than not at all
+  }
+  await ShelfVoice.start({ hash: row.hash, title, site: row.site ?? '', sentences: list, startWord: word, totalWords, rate, wps, artworkPath: art });
 }
 
 export function toggle(): void {

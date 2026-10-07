@@ -22,7 +22,8 @@ export function scrollYForWord(blocks: Block[], places: (Place | undefined)[], p
  */
 export function wordAtScroll(blocks: Block[], places: (Place | undefined)[], proseY: number, scrollY: number, at: number, view: { height: number; content: number; words: number }): number {
   if (view.words === 0) return 0;
-  if (scrollY + view.height >= view.content - 4) return view.words - 1;
+  // the bottom counts only once the page is measured and taller than the view, or opening would read it through
+  if (view.content > view.height && scrollY + view.height >= view.content - 4) return view.words - 1;
   const y = scrollY + at - proseY;
   let i = -1;
   for (let k = 0; blocks.length > k; k++) if (places[k] && y >= places[k]!.y) i = k;

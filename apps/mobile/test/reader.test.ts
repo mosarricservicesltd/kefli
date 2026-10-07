@@ -28,6 +28,9 @@ describe('the Reader (mobile spec 5.6, 6.7)', () => {
     expect(wordAtScroll(blocks, places, 300, 1200, 40, view)).toBe(words - 1);
     expect(wordAtScroll(blocks, places, 300, 10, 40, { ...view, words: 0 })).toBe(0);
     expect(wordAtScroll(blocks, places, 300, 900, 40, view)).toBe(11);
+    // before the page is measured (content 0), or when it fits the view, there is no bottom to have reached
+    expect(wordAtScroll(blocks, places, 300, 0, 40, { ...view, content: 0 })).toBe(0);
+    expect(wordAtScroll(blocks, places, 300, 0, 40, { ...view, content: 700 })).toBe(0);
   });
 
   test('the stored size and palette are checked', () => {
