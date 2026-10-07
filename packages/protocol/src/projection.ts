@@ -213,7 +213,11 @@ function block(b: Builder, node: Nodes, inListItem: boolean): void {
 
 /** The spoken projection of normalised Markdown, parsed as CommonMark. */
 export function project(markdown: string): Projection {
-  const tree: Root = fromMarkdown(markdown);
+  return projectTree(markdown, fromMarkdown(markdown));
+}
+
+/** The projection from a CommonMark tree already parsed from markdown, so a caller that needs the tree too parses once. */
+export function projectTree(markdown: string, tree: Root): Projection {
   const b = new Builder(markdown);
   for (const c of tree.children) block(b, c, false);
   const wordStarts: number[] = [];

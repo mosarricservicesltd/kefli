@@ -13,7 +13,7 @@ import * as Clipboard from 'expo-clipboard';
 import { fontFamily, radius, reader as RT } from '@shelf/tokens';
 import { quickIn, quickOut } from '@shelf/tokens/reanimated';
 import { minutes, nextUnread, rowByHash, setPosition, textLost, type LibRow } from '../data/library';
-import { articleBlocks, type Article } from '../reader/blocks';
+import { blockOfWord, type Article } from '../reader/blocks';
 import { scrollYForWord, wordAtScroll, type Place } from '../reader/position';
 import { readerColors, type PaletteId, type ReaderColors } from '../reader/palette';
 import { setReaderPalette, setReaderSize, useReaderPrefs } from '../reader/prefs';
@@ -49,6 +49,10 @@ import { Skeleton } from './Skeleton';
 /** The reading band's top: 40 px under the bar (FD 18). */
 const BAND_TOP = 40;
 const PUBLISH_EVERY = 60;
+/** The first render: blocks before and after the saved place, then batches of this many (6.7). */
+const FIRST_BEFORE = 8;
+const FIRST_AFTER = 40;
+const BATCH = 40;
 const now = () => Math.floor(Date.now() / 1000);
 
 /** The Listen chip (prototype .listenbtn): a hairline entry point; it keeps its slot, faded, while its article plays. */
@@ -172,6 +176,7 @@ function Article({ row, P, owner, article, voice, viewRange, imgs }: {
   const prefs = useReaderPrefs();
   const scroll = useRef<ScrollView>(null);
   const layouts = useRef<(Place | undefined)[]>([]);
+  // blocks are direct children of the scroll content, so their places are content offsets
   const proseY = useRef(0);
   const scrollY = useRef(0);
   const contentH = useRef(0);
@@ -181,6 +186,18 @@ function Article({ row, P, owner, article, voice, viewRange, imgs }: {
   const [word, setWord] = useState(row.position_word);
   const lastPublish = useRef(now());
   const { blocks } = article;
+  // A window of blocks around the saved place renders first and shows; the rest follow in small batches, the
+  // blocks after it first, then those above, which the scroll view adds without moving what is on screen (6.7).
+  const n = blocks.length;
+  const [win, setWin] = useState(() => {
+    const at = row.position_word > 0 ? blockOfWord(blocks, row.position_word) : 0;
+    return { lo: Math.max(0, at - FIRST_BEFORE), hi: Math.min(n, at + FIRST_AFTER) };
+  });
+  useEffect(() => {
+    if (!shown || (win.lo === 0 && win.hi === n)) return;
+    const t = setTimeout(() => setWin((w) => (w.hi < n ? { ...w, hi: Math.min(n, w.hi + BATCH) } : { ...w, lo: Math.max(0, w.lo - BATCH) })), 16);
+    return () => clearTimeout(t);
+  }, [shown, win, n]);
   const docked = voice?.hash === row.hash;
   const dragging = useRef(false);
   const away = useRef(false);
@@ -237,13 +254,6 @@ function Article({ row, P, owner, article, voice, viewRange, imgs }: {
     runOutbox().catch(() => 0);
   }, [owner, row.hash, wordAt]);
 
-  // An image arriving keeps the word at the top of the page still (5.6): its anchor is taken before the new layout.
-  const lastImgs = useRef(imgs);
-  if (lastImgs.current !== imgs) {
-    lastImgs.current = imgs;
-    if (shown && !target.current && !dragging.current) target.current = { word: wordAt(BAND_TOP), at: BAND_TOP };
-  }
-
   // A size change keeps the word a third of the way down still (MS Reader).
   const size = useRef(prefs.size);
   if (size.current !== prefs.size) {
@@ -269,10 +279,11 @@ function Article({ row, P, owner, article, voice, viewRange, imgs }: {
   const litFor = useMemo(() => {
     const out = new Map<number, Lit>();
     if (!lit) return out;
-    blocks.forEach((b, i) => {
+    for (let i = blockOfWord(blocks, lit.from); n > i && lit.to >= blocks[i].firstWord; i++) {
+      const b = blocks[i];
       const last = b.firstWord + b.words - 1;
-      if (b.words && lit.to >= b.firstWord && last >= lit.from) out.set(i, { from: Math.max(lit.from, b.firstWord) - b.firstWord, to: Math.min(lit.to, last) - b.firstWord });
-    });
+      if (b.words && last >= lit.from) out.set(i, { from: Math.max(lit.from, b.firstWord) - b.firstWord, to: Math.min(lit.to, last) - b.firstWord });
+    }
     return out;
   }, [blocks, lit?.from, lit?.to]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -302,26 +313,33 @@ function Article({ row, P, owner, article, voice, viewRange, imgs }: {
           }}
           onMomentumScrollEnd={keep}
           contentContainerStyle={{ paddingTop: 16, paddingHorizontal: 20, paddingBottom: 140 + insets.bottom }}
+          // images arriving and blocks added above keep the text on screen where it is (5.6, 6.7)
+          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         >
-          <View style={{ marginTop: -16, marginHorizontal: -20, marginBottom: 22 }}>
-            <Cover hash={row.hash} size={width / 3} cols={3} square />
-          </View>
-          <T style={[ui(13, 'meta', 1.45), { color: P.muted, marginBottom: 8 }]}>{row.site ?? hostOf(row.url)}</T>
-          <T accessibilityRole="header" style={[articleTitle, { color: P.text, marginBottom: 12 }]}>{row.title ?? hostOf(row.url)}</T>
-          <T style={[ui(13, 'body', 1.45), { color: P.muted, marginBottom: 24 }]}>
-            {[row.byline ?? row.site ?? hostOf(row.url), mins !== null ? S.row.mins(mins) : null, savedWhen(row.saved_at)].filter(Boolean).join(' · ')}
-          </T>
-          <View onLayout={(e) => (proseY.current = e.nativeEvent.layout.y)}>
-            {blocks.map((b, i) => (
-              <BlockView key={i} b={b} P={P} size={prefs.size} onLayout={onLayouts[i]} lit={litFor.get(i)} img={b.kind === 'img' ? imgs.get(b.src) : undefined} />
-            ))}
-          </View>
-          <EndCard
-            row={row} P={P} next={!!next}
-            onArchive={() => { router.back(); archive(row.hash, true, reopen); }}
-            onUnarchive={() => { router.back(); archive(row.hash, false, reopen); }}
-            onNext={() => { if (next) { router.replace(`/reader/${next.hash}`); archive(row.hash, true, reopen); } }}
-          />
+          {win.lo === 0 && (
+            <>
+              <View style={{ marginTop: -16, marginHorizontal: -20, marginBottom: 22 }}>
+                <Cover hash={row.hash} size={width / 3} cols={3} square />
+              </View>
+              <T style={[ui(13, 'meta', 1.45), { color: P.muted, marginBottom: 8 }]}>{row.site ?? hostOf(row.url)}</T>
+              <T accessibilityRole="header" style={[articleTitle, { color: P.text, marginBottom: 12 }]}>{row.title ?? hostOf(row.url)}</T>
+              <T style={[ui(13, 'body', 1.45), { color: P.muted, marginBottom: 24 }]}>
+                {[row.byline ?? row.site ?? hostOf(row.url), mins !== null ? S.row.mins(mins) : null, savedWhen(row.saved_at)].filter(Boolean).join(' · ')}
+              </T>
+            </>
+          )}
+          {blocks.slice(win.lo, win.hi).map((b, k) => {
+            const i = win.lo + k;
+            return <BlockView key={i} b={b} P={P} size={prefs.size} onLayout={onLayouts[i]} lit={litFor.get(i)} img={b.kind === 'img' ? imgs.get(b.src) : undefined} />;
+          })}
+          {win.hi === n && (
+            <EndCard
+              row={row} P={P} next={!!next}
+              onArchive={() => { router.back(); archive(row.hash, true, reopen); }}
+              onUnarchive={() => { router.back(); archive(row.hash, false, reopen); }}
+              onNext={() => { if (next) { router.replace(`/reader/${next.hash}`); archive(row.hash, true, reopen); } }}
+            />
+          )}
         </ScrollView>
       </Animated.View>
     </>
@@ -340,8 +358,8 @@ export default function Reader() {
   const pid: PaletteId = prefs.palette ?? (name === 'dark' ? 'dark' : 'light');
   const P = useMemo(() => readerColors(hash, pid), [hash, pid]);
   const cached = row?.text_state === 'cached';
-  const markdown = useMemo(() => (cached ? textFiles.readText(hash) : null), [cached, hash, row?.text_sha256]); // eslint-disable-line react-hooks/exhaustive-deps
-  const article = useMemo(() => (markdown ? articleBlocks(markdown) : null), [markdown]);
+  // blocks and sentences were derived once when the text arrived (6.7); opening only reads them
+  const article = useMemo(() => (cached ? textFiles.readArticle(hash) : null), [cached, hash, row?.text_sha256]); // eslint-disable-line react-hooks/exhaustive-deps
   const voice = useVoice();
   const urls = useMemo(() => (article ? article.blocks.flatMap((b) => (b.kind === 'img' ? [b.src] : [])) : []), [article]);
   const imgs = useLive(() => {
@@ -367,9 +385,9 @@ export default function Reader() {
   // A text marked here whose file is gone is fetched again; one still to come is fetched first (4.5).
   useEffect(() => {
     if (!row) return;
-    if (cached && markdown === null) textLost(store(), owner, hash);
+    if (cached && article === null) textLost(store(), owner, hash);
     if (!cached && online) runSync().catch(() => undefined);
-  }, [row?.text_state, cached, markdown, online]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [row?.text_state, cached, article, online]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!row) return <View style={{ flex: 1, backgroundColor: P.bg }} />;
   if (row.text_state === 'failed') return <OriginalView row={row} failedSave />;

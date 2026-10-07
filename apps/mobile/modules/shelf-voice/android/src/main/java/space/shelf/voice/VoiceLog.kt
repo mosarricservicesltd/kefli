@@ -26,7 +26,7 @@ object VoiceLog {
       main.postDelayed(this, 30_000)
     }
   }
-  private val onEvent: (VoiceEngine.Event) -> Unit = { e -> if (e !is VoiceEngine.Event.Word) line(e.toString()) }
+  private val onEvent: (VoiceEngine.Event) -> Unit = { e -> if (e !is VoiceEngine.Event.Word && e !is VoiceEngine.Event.SentenceStart) line(e.toString()) }
 
   fun start(context: Context) {
     app = context.applicationContext

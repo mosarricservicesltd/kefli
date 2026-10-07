@@ -4,7 +4,7 @@
 // spoken characters to Markdown offsets (C§7), so a stored word position finds its block and back.
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import type { Nodes, PhrasingContent, RootContent } from 'mdast';
-import { project } from '@shelf/protocol';
+import { projectTree, sentences, type Sentence } from '@shelf/protocol';
 
 export type Span = { text: string; em?: boolean; strong?: boolean; code?: boolean; href?: string };
 
@@ -123,17 +123,29 @@ function lowerBound(xs: number[], v: number): number {
 
 export type Article = { blocks: Block[]; words: number };
 
-export function articleBlocks(markdown: string): Article {
+/** Everything the Reader and the voice need from an article, from one Markdown parse (6.7: blocks are derived once). */
+export type Derived = Article & { v: number; sentences: Sentence[]; spoken: string };
+
+/** The version of what deriveArticle writes; a stored file of another version is derived again. */
+export const DERIVED_VERSION = 1;
+
+export function deriveArticle(markdown: string): Derived {
+  const tree = fromMarkdown(markdown);
   const drafts: Draft[] = [];
-  walk(fromMarkdown(markdown).children, drafts, { depth: 0 });
-  const p = project(markdown);
+  walk(tree.children, drafts, { depth: 0 });
+  const p = projectTree(markdown, tree);
   const wordOffsets = p.wordStarts.map((i) => p.offsets[i]);
   const starts = drafts.map((d) => lowerBound(wordOffsets, d.start));
   const blocks = drafts.map((d, i) => {
     const next = i + 1 < drafts.length ? starts[i + 1] : wordOffsets.length;
     return { ...d, firstWord: starts[i], words: Math.max(0, next - starts[i]) } as Block;
   });
-  return { blocks, words: wordOffsets.length };
+  return { v: DERIVED_VERSION, blocks, words: wordOffsets.length, sentences: sentences(p), spoken: p.text };
+}
+
+export function articleBlocks(markdown: string): Article {
+  const { blocks, words } = deriveArticle(markdown);
+  return { blocks, words };
 }
 
 /** The block holding a word (the last block starting at or before it). */

@@ -140,7 +140,7 @@ export function imagePorts(): ImagePorts {
     fetch,
     nameOf: (url) => bytesToHex(phoneCrypto.sha256(utf8ToBytes(url))),
     files: imageFiles,
-    readText: textFiles.readText,
+    readArticle: textFiles.readArticle,
   };
 }
 

@@ -2,7 +2,7 @@
 // it plays, its rate. Word events set the article's one position directly (MS Signature 2); the position is
 // published when the session pauses, ends or closes, and a sync follows the end of a session (4.5).
 import { useSyncExternalStore } from 'react';
-import { project, sentences, type Sentence } from '@shelf/protocol';
+import type { Sentence } from '@shelf/protocol';
 import { ShelfVoice, type VoiceState } from '../../modules/shelf-voice/src';
 import { setPosition, type LibRow } from '../data/library';
 import { getSetting, setSetting } from '../data/settings';
@@ -83,10 +83,11 @@ export function warmVoice(): void {
 /** Starts the article at a word (5.7): its sentences from the spoken projection, at the stored rate and wps. */
 export async function listen(row: Pick<LibRow, 'hash' | 'title' | 'site' | 'url'>, fromWord: number): Promise<void> {
   wire();
-  const markdown = textFiles.readText(row.hash);
-  if (!markdown) return;
-  const list = sentences(project(markdown));
-  const totalWords = list.length ? list[list.length - 1].firstWord + list[list.length - 1].wordStarts.length : 0;
+  // the sentences were derived once with the article's blocks (6.7); starting only reads them
+  const article = textFiles.readArticle(row.hash);
+  if (!article) return;
+  const list = article.sentences;
+  const totalWords = article.words;
   if (!totalWords) return;
   if (session && session.hash !== row.hash) keep(session.word, true);
   const rate = readRate(getSetting(store(), 'voice.speed'));

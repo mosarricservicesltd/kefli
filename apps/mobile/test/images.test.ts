@@ -48,7 +48,7 @@ function world() {
     }) as never,
     nameOf: (url) => `img-${url.length}-${url.slice(-6)}`,
     files: { write: (name, bytes) => (files.set(`/img/${name}`, bytes), `/img/${name}`), remove: (path) => { files.delete(path); } },
-    readText: (hash) => texts.get(hash) ?? null,
+    readArticle: (hash) => (texts.has(hash) ? { blocks: articleImages(texts.get(hash)!).map((src) => ({ kind: 'img', src })) } : null),
   };
   return { db, ports, files, texts, served, add, tick: (s: number) => (clock += s), now: () => clock };
 }

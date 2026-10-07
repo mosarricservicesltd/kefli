@@ -3,7 +3,7 @@
 // parse. The parse runs in the shelf-parser WebView (a port here), then contract 4.2's guard: not readerable and
 // fewer than 120 spoken words is a failed parse. A network failure is "offline": the save waits and tries again.
 import { base64 } from '@scure/base';
-import { project } from '@shelf/protocol';
+import { deriveArticle, type Derived } from '../reader/blocks';
 
 export const PAGE_MAX_BYTES = 5 * 1024 * 1024;
 export const PAGE_TIMEOUT_MS = 20_000;
@@ -25,7 +25,7 @@ export type FailReason = 'http' | 'not_html' | 'too_large' | 'not_readable';
 export type PageOutcome =
   | { kind: 'offline' }
   | { kind: 'failed'; reason: FailReason; finalUrl: string }
-  | { kind: 'parsed'; finalUrl: string; result: Extract<ParserResult, { ok: true }>; words: number; spoken: string };
+  | { kind: 'parsed'; finalUrl: string; result: Extract<ParserResult, { ok: true }>; words: number; spoken: string; derived: Derived };
 
 /** Why a response can't be parsed, or null when it can. */
 export function refusal(status: number, contentType: string, bytes: number): FailReason | null {
@@ -63,8 +63,7 @@ export async function fetchPage(p: PagePorts, url: string): Promise<PageOutcome>
   if (refused) return { kind: 'failed', reason: refused, finalUrl };
   const result = await p.parse(base64.encode(bytes), contentType, finalUrl).catch((): ParserResult => ({ ok: false, reason: 'error' }));
   if (!result.ok) return { kind: 'failed', reason: 'not_readable', finalUrl };
-  const spoken = project(result.markdown);
-  const words = spoken.wordStarts.length;
-  if (!result.readerable && words < GUARD_WORDS) return { kind: 'failed', reason: 'not_readable', finalUrl };
-  return { kind: 'parsed', finalUrl, result, words, spoken: spoken.text };
+  const derived = deriveArticle(result.markdown);
+  if (!result.readerable && derived.words < GUARD_WORDS) return { kind: 'failed', reason: 'not_readable', finalUrl };
+  return { kind: 'parsed', finalUrl, result, words: derived.words, spoken: derived.spoken, derived };
 }

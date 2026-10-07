@@ -8,7 +8,8 @@
 //
 // Every relay's pages are collected before anything is applied, and saves are applied before deletions, so a
 // save still held by a relay that missed its deletion can't come back in the same run.
-import { KIND, T_TAG, decryptText, newest, project, readItemEvent, readRelayList } from '@shelf/protocol';
+import { KIND, T_TAG, decryptText, newest, readItemEvent, readRelayList } from '@shelf/protocol';
+import { deriveArticle, type Derived } from '../reader/blocks';
 import type { CryptoPort, NostrEvent, Signer } from '@shelf/protocol';
 import type { SqlDb } from '../data/db';
 import { indexerRelays, listServers, recordList, relayEntries, seedGeneratedLists, type DefaultsLike } from '../data/lists';
@@ -28,7 +29,7 @@ export type SyncPorts = {
   fetch: typeof fetch;
   crypto: CryptoPort;
   defaults: () => Promise<DefaultsLike>;
-  files: { writeText: (hash: string, markdown: string) => void; removeText: (hash: string) => void; removeAll: (hash: string) => void };
+  files: { writeText: (hash: string, markdown: string, derived?: Derived) => void; removeText: (hash: string) => void; removeAll: (hash: string) => void };
   /** The article open in the Reader, whose remote position waits. */
   openHash?: () => string | null;
   onHeldWord?: (hash: string, word: number) => void;
@@ -139,8 +140,9 @@ export async function fetchText(p: SyncPorts, job: TextJob): Promise<'ok' | 'mis
     } catch {
       continue; // the wrong bytes, or a key that doesn't open them: as if this server lacked it
     }
-    p.files.writeText(job.hash, markdown);
-    textCached(p.db, job, project(markdown).text);
+    const derived = deriveArticle(markdown);
+    p.files.writeText(job.hash, markdown, derived);
+    textCached(p.db, job, derived.spoken);
     return 'ok';
   }
   if (unreachable > 0) return 'offline';

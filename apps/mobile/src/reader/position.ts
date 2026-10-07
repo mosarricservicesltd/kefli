@@ -5,11 +5,12 @@ import { blockOfWord, type Block } from './blocks';
 
 export type Place = { y: number; h: number };
 
-/** The scroll offset that puts word at `at` pixels below the top of the view, or null until every block is measured. */
+/** The scroll offset that puts word at `at` pixels below the top of the view, or null until its block is measured. */
 export function scrollYForWord(blocks: Block[], places: (Place | undefined)[], proseY: number, word: number, at: number): number | null {
   if (!blocks.length) return 0;
-  for (let i = 0; blocks.length > i; i++) if (!places[i]) return null;
+  // only the word's own block need be measured: the Reader renders a window of blocks first (6.7)
   const i = blockOfWord(blocks, word);
+  if (!places[i]) return null;
   const b = blocks[i];
   const p = places[i]!;
   const frac = b.words ? Math.min(1, Math.max(0, (word - b.firstWord) / b.words)) : 0;

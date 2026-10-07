@@ -8,6 +8,7 @@ import { checkXPost, type XPorts } from './xpost';
 import type { SaveTargets } from '../data/saves';
 import { indexText } from '../data/sync';
 import { fetchPage, type PagePorts } from './page';
+import type { Derived } from '../reader/blocks';
 
 export type PendingPorts = {
   db: SqlDb;
@@ -17,7 +18,7 @@ export type PendingPorts = {
   crypto: CryptoPort;
   stage: (sha256: string, bytes: Uint8Array) => string;
   unstage: (path: string) => void;
-  writeText: (hash: string, markdown: string) => void;
+  writeText: (hash: string, markdown: string, derived?: Derived) => void;
   targets: () => Promise<SaveTargets>;
 };
 
@@ -70,7 +71,7 @@ export async function runPendingParses(p: PendingPorts, owner: string): Promise<
       // It joined a save already here, which keeps its own text.
       p.unstage(path);
     } else {
-      p.writeText(applied.hash, result.markdown);
+      p.writeText(applied.hash, result.markdown, outcome.derived);
       indexText(p.db, { id: item.id, title: result.title, site: result.site, url: outcome.finalUrl }, outcome.spoken);
     }
     out.parsed++;

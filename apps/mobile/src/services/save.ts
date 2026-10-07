@@ -79,7 +79,7 @@ export async function saveLink(url: string, report: (s: SaveStep) => void): Prom
   // The text is on the phone from the start, and searchable (4.1, 4.9); a repeat save keeps the text it had.
   const row = getItem(db, signer.pubkey(), hash);
   if (row && row.text_sha256 === enc.text.sha256) {
-    textFiles.writeText(hash, parsed.markdown);
+    textFiles.writeText(hash, parsed.markdown, outcome.derived);
     indexText(db, row, outcome.spoken);
   }
   say('queued', `${held.length} rows held until the sheet closes`);

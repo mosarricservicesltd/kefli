@@ -87,8 +87,9 @@ function Figure({ alt, P, img }: { alt: string; P: ReaderColors; img?: FigureSta
   if (img?.row?.path) {
     const ar = img.row.w && img.row.h ? img.row.w / img.row.h : 3 / 2;
     // never larger than published: a small image keeps its own size (its pixels as CSS pixels), centred
-    const own = img.row.w ? { maxWidth: img.row.w, alignSelf: 'center' as const } : null;
-    return <Image source={{ uri: img.row.path }} accessibilityLabel={alt || undefined} accessible={!!alt} contentFit="contain" transition={0} style={[{ width: '100%', aspectRatio: ar, borderRadius: radius.image }, own]} />;
+    // its own width, at most the column's, with the height from that width (not from the column's)
+    const size = img.row.w ? { width: img.row.w, maxWidth: '100%' as const, alignSelf: 'center' as const } : { width: '100%' as const };
+    return <Image source={{ uri: img.row.path }} accessibilityLabel={alt || undefined} accessible={!!alt} contentFit="contain" transition={0} style={[size, { aspectRatio: ar, borderRadius: radius.image }]} />;
   }
   if (!img || img.failed || !img.online) return null;
   return <Waiting P={P} />;

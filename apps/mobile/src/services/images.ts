@@ -15,7 +15,8 @@ export type ImagePorts = {
   /** The file name an image is kept under: the sha256 of its address (4.1). */
   nameOf: (url: string) => string;
   files: { write: (name: string, bytes: Uint8Array) => string; remove: (path: string) => void };
-  readText: (hash: string) => string | null;
+  /** The article's derived blocks (textFiles.readArticle), so finding its images never re-parses its text. */
+  readArticle: (hash: string) => { blocks: { kind: string; src?: string }[] } | null;
 };
 
 /** The image addresses in an article, in reading order. */
@@ -71,8 +72,9 @@ async function fetchAll(p: ImagePorts, owner: string, list: { url: string; hash:
 }
 
 const urlsOf = (p: ImagePorts) => (hash: string) => {
-  const md = p.readText(hash);
-  return md ? articleImages(md) : [];
+  const out: string[] = [];
+  for (const b of p.readArticle(hash)?.blocks ?? []) if (b.kind === 'img' && b.src && !out.includes(b.src)) out.push(b.src);
+  return out;
 };
 
 /** The article being opened: its images now, on any network (4.5: on metered networks, when an article opens). */
