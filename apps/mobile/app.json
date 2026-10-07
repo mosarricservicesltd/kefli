@@ -17,21 +17,14 @@
         "backgroundImage": "./assets/brand/adaptive-background.png",
         "monochromeImage": "./assets/brand/adaptive-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": true
     },
     "plugins": [
+      "expo-router",
       [
         "expo-audio",
         {
           "enableBackgroundPlayback": true
-        }
-      ],
-      [
-        "expo-share-intent",
-        {
-          "androidIntentFilters": [
-            "text/*"
-          ]
         }
       ],
       "react-native-quick-crypto",

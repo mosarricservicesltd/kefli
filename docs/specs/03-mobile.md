@@ -115,7 +115,7 @@ Hash-critical steps are pinned to one engine, so the phone matches the extension
 | `normalise` and so the `d` tag | Hermes; the whole URL is parsed and serialised by `whatwg-url`, whose host goes through UTS-46 and punycode by `tr46`, rather than the global `URL` (Expo's does no IDNA, and its path and query encoding is an older Standard's), so V8 and Hermes run the same code |
 | `text_hash`, the spoken projection, `words`, sentences, Reader blocks | Hermes, from the normalised string; Hermes never NFC-normalises hashed text (the one exception is a non-ASCII host in `normalise`, which `tr46` NFC-normalises as UTS-46 requires; the normalise fixtures on Hermes guard it) |
 | AES-256-GCM, scrypt, PBKDF2, SHA-256, random bytes | `react-native-quick-crypto` (OpenSSL) behind `CryptoPort`, and as `globalThis.crypto` for noble (2.4) |
-| Schnorr, ECDH, NIP-44 | `@noble/curves` through nostr-tools, subject to the week-0 timing gate (12) |
+| Schnorr, ECDH, NIP-44 | libsecp256k1 through `shelf-secp` (8), behind `packages/protocol`'s `SecpPort`: noble missed the week-0 timing gate on Hermes (`08-week0-gates.md`). NIP-44's ciphers and HKDF stay in noble |
 | Speech, media session, key file, Block Store, signer intents, share activity | Kotlin modules (section 8) |
 
 ## 3. Identity, keys and signers
@@ -350,7 +350,7 @@ Entry points (FM navigation): a cold open, the share sheet (before the first ope
 - **Waits on another app:** ← does what Cancel does (CS Interaction).
 - **Undo of a Reader action that navigated away** reopens the Reader at its position, or at Speed read's word. Archive and next replaces the Reader, so Back still reaches the opener (FD 54).
 - **Internal links only:** `shelf://reader/<hash>?word=<n>` from the media session and Read now (FD 10); a hash not on the phone opens Saves.
-- **Predictive back:** the system preview on root screens (the flag in 10); in-app only if the week-0 check shows the JS stack supports it, otherwise the pop plays on release (MS Navigation).
+- **Predictive back:** the system preview on root screens (the flag in 10), which needs React Native's always-enabled back callback switched off there: `ShelfSystem.setRootBack(true)` at a root route with nothing open over it, false otherwise (8.6). In-app the pop plays on release, since the week-0 check found that neither React Native 0.86 nor the JS stack passes the gesture's progress to JavaScript (MS Navigation, `08-week0-gates.md`).
 
 ### 5.2 Journey 1: first launch
 
@@ -689,7 +689,7 @@ About 200 lines of Kotlin. Each call tries the `content://<pkg>.<TYPE>` resolver
 
 ### 8.5 `shelf-share`
 
-`ShareActivity`: translucent, `excludeFromRecents`, standard launch mode so it opens in the sender's task, filtering `ACTION_SEND` for `text/plain`. `onCreate` spools the text, subject and referrer to `filesDir/share-spool/<uuid>.json` before JavaScript runs, so process death never loses a share; unprocessed spools are picked up at the next start. It renders the `share` surface on the shared ReactHost with `{spoolId}`. `finish('host')` ends with no transition (`overrideActivityTransition` on API 34 and later, `overridePendingTransition(0, 0)` below); `finish('read', hash)` also starts MainActivity on `shelf://reader/<hash>`. Spiked in week 0.
+`ShareActivity`: translucent, `excludeFromRecents`, standard launch mode, filtering `ACTION_SEND` for `text/plain`. Android's share sheet starts it in a task of its own (`NEW_DOCUMENT`, `MULTIPLE_TASK`), and finishing it returns to the sender (week-0 gate, `08-week0-gates.md`). `onCreate` spools the text, subject and referrer to `filesDir/share-spool/<uuid>.json` before JavaScript runs, so process death never loses a share; unprocessed spools are picked up at the next start. It renders the `share` surface on the shared ReactHost with `{spoolId}`. `finish('host')` ends with no transition (`overrideActivityTransition` on API 34 and later, `overridePendingTransition(0, 0)` below); `finish('read', hash)` also starts MainActivity on `shelf://reader/<hash>`. Passed its week-0 gate from Chrome and X.
 
 ### 8.6 `shelf-system`
 
@@ -699,12 +699,13 @@ interface ShelfSystem {
   copySensitive(text: string): Promise<void>;
   exportToDownloads(fileName: string, contents: string): Promise<{ uri: string }>;  // MediaStore on 29+, SAF on 26–28
   scheduleExpeditedSync(): void;                                                    // fallback only (4.8)
+  setRootBack(atRoot: boolean): boolean;   // off: React Native's back callback, so the system preview plays (5)
 }
 ```
 
 ### 8.7 Config plugins and conditional modules
 
-`expo-build-properties` for `minSdkVersion` 26 and SDK 36; a manifest plugin for `allowBackup="false"` and the data extraction rules (7.1), the blocked permissions, `<queries>`, the share activity and the voice service; the notification drawable from `shared/brand/out/android/shelf_notification.xml`; the parser bundle copied into assets at prebuild with its sha256 constant; the font families. Only if a week-0 gate fails: `shelf-secp` on ACINQ `secp256k1-kmp-jni-android` 0.24.0 (Schnorr, and ECDH through `pubKeyTweakMul` taking the x coordinate, since libsecp256k1's `ecdh` hashes the point), or a Kotlin crypto module (javax.crypto AES-GCM and PBKDF2, Bouncy Castle SCrypt) behind `CryptoPort`.
+`expo-build-properties` for `minSdkVersion` 26 and SDK 36; a manifest plugin for `allowBackup="false"` and the data extraction rules (7.1), the blocked permissions, `<queries>`, the share activity and the voice service; the notification drawable from `shared/brand/out/android/shelf_notification.xml`; the parser bundle copied into assets at prebuild with its sha256 constant; the font families. Because the Schnorr gate failed on noble: `shelf-secp` on ACINQ `secp256k1-kmp-jni-android` 0.22.0 (Schnorr, and ECDH through `pubKeyTweakMul` taking the x coordinate, since libsecp256k1's `ecdh` hashes the point; 0.22.0 rather than 0.24.0, since 0.23 on are built with Kotlin 2.3, which React Native 0.86's Kotlin 2.1 compiler can't read), or a Kotlin crypto module (javax.crypto AES-GCM and PBKDF2, Bouncy Castle SCrypt) behind `CryptoPort`.
 
 ## 9. The parser bundle and canonical text
 

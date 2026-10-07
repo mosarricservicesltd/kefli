@@ -2,9 +2,9 @@
 // of a few samples, so the week-0 gates can check that Hermes gets the same (mobile spec 2.6, 11.2).
 //   npx tsx apps/mobile/scripts/gate-expectations.ts
 
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { normaliseMarkdown, project, sentences, textHash } from '@shelf/protocol';
+import { normaliseMarkdown, parseBip340, project, sentences, textHash } from '@shelf/protocol';
 import { nodeCrypto } from '@shelf/protocol/node';
 
 const SAMPLES = [
@@ -30,3 +30,9 @@ const out = SAMPLES.map((raw) => {
 const path = join(__dirname, '..', 'src', 'gates', 'expected.json');
 writeFileSync(path, `${JSON.stringify(out)}\n`);
 console.log(`wrote ${path}: ${out.length} samples`);
+
+// BIP-340's vectors, parsed, for the shelf-secp gate (Metro doesn't load CSV).
+const csv = readFileSync(join(__dirname, '..', '..', '..', 'packages', 'protocol', 'test', 'vectors', 'bip340.vectors.csv'), 'utf8');
+const bip = join(__dirname, '..', 'src', 'gates', 'bip340.json');
+writeFileSync(bip, `${JSON.stringify(parseBip340(csv))}\n`);
+console.log(`wrote ${bip}`);

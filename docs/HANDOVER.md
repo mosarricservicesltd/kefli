@@ -41,7 +41,7 @@ Host github.com
 | Rebuild the tokens | `npm run tokens` (the CSS for the prototypes and `packages/tokens` for the app) |
 | Test the cover generator | `node shared/cover/test.cjs`, and `node shared/cover/build.mjs` to copy it into the mockups |
 | Rebuild the brand files | install `@resvg/resvg-js@2` somewhere outside the repo, then `NODE_PATH=<that folder>/node_modules node shared/brand/build-icons.cjs` |
-| Rebuild the parser bundle | `node shared/vendor/build-parser-bundle.mjs` (writes `apps/mobile/src/parser/bundle.generated.ts`) |
+| Rebuild the parser bundle | `node shared/vendor/build-parser-bundle.mjs` (writes the APK asset and its sha256 into `apps/mobile/modules/shelf-parser`; `--check` for CI). After a runner change, `node apps/mobile/scripts/parser-expectations.mjs` remakes the phone gate's expected parses in desktop Chrome |
 | The Android test build | `cd apps/mobile`, `npm install`, `npm run make-ticks` (the six-minute test track, kept out of git), `npx expo prebuild --platform android`, then `cd android` and `./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a`; install with `adb install -r app/build/outputs/apk/release/app-release.apk`. The first build takes about 20 minutes. |
 
 Commits to `main` go through the code-gate CRAP check (CLAUDE.md, Rules). On this laptop it ran as a git pre-commit hook from Claude's code-gate skill; a new machine needs the hook installed again before the first commit.

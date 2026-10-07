@@ -1,0 +1,20 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <!-- The share sheet's target (mobile spec 8.5). Translucent, kept out of Recents, and in the standard launch
+         mode so it opens in the sender's task and Back returns there (flow decision 39). -->
+    <activity
+      android:name="space.shelf.share.ShareActivity"
+      android:exported="true"
+      android:excludeFromRecents="true"
+      android:launchMode="standard"
+      android:label="Shelf"
+      android:theme="@style/Shelf.Share"
+      android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode">
+      <intent-filter>
+        <action android:name="android.intent.action.SEND" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data android:mimeType="text/plain" />
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>

@@ -5,10 +5,14 @@
 import { finalizeEvent, generateSecretKey, getPublicKey, verifyEvent } from 'nostr-tools/pure';
 import { v2 as nip44 } from 'nostr-tools/nip44';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+import { base64 } from '@scure/base';
 import {
-  LocalSigner, NotALinkError, derivePairCode, normalise, normaliseMarkdown, project, secretKeyFromMnemonic, sentences, textHash,
+  LocalSigner, NotALinkError, checkSecp, countWords, conversationKey, nobleSecp, verifyEventWith, derivePairCode, normalise, normaliseMarkdown, project, secretKeyFromMnemonic, sentences, textHash,
 } from '@shelf/protocol';
 import { phoneCrypto } from '../crypto/port';
+import { nativeSecp } from '../crypto/secp';
+import { ShelfParser } from '../../modules/shelf-parser/src';
+import type { Bip340Vector, SecpPort } from '@shelf/protocol';
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const NORMALISE = require('../../../../shared/normalise.fixtures.json') as { cases: { name: string; url: string; canonical?: string; expect: string | null }[] };
@@ -20,6 +24,8 @@ const ShelfCover = require('../../../../shared/cover/cover-v1.js');
 const EXPECTED = require('./expected.json') as {
   raw: string; markdown: string; textHash: string; text: string; offsets: number[]; wordStarts: number[]; sentences: [number, string][];
 }[];
+const BIP340 = require('./bip340.json') as Bip340Vector[];
+const PAGES = require('./parse-expected.json') as { chrome: string; pages: { name: string; url: string; contentType: string; body: string; expect: Record<string, unknown> }[] };
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 export type GateResult = { id: string; ok: boolean; detail: string; ms: number };
@@ -111,41 +117,65 @@ export const GATES: Gate[] = [
     },
   },
   {
-    id: 'schnorr-timing',
-    title: 'Schnorr timing: verify median ≤ 10 ms, 1,000-item restore ≤ 20 s (spec 11.3)',
+    id: 'secp-native',
+    title: 'shelf-secp: BIP-340 vectors through libsecp256k1',
     async run() {
-      const signer = new LocalSigner(generateSecretKey());
+      const bad = checkSecp(nativeSecp, BIP340);
+      if (bad.length) fail(bad.join(', '));
+      const sk = generateSecretKey();
       const peer = getPublicKey(generateSecretKey());
-      // 50 real saves, each copied 20 times as plain JSON, so verifyEvent can't use its cache of events it signed.
-      const item = JSON.stringify({ v: 1, url: 'https://example.com/a', title: 'A title of ordinary length', words: 2450, text: null });
-      const signed: string[] = [];
-      const t0 = now();
-      for (let i = 0; i < 50; i++) {
-        const content = await signer.nip44Encrypt(signer.pubkey(), item);
-        signed.push(JSON.stringify(await signer.signEvent({ kind: 30078, created_at: i, tags: [['d', `shelf/item/${i}`], ['t', 'shelf']], content })));
-      }
-      const sign = (now() - t0) / 50;
-      const one: number[] = [];
-      for (let i = 0; i < 50; i++) {
-        const e = JSON.parse(signed[i]);
+      if (bytesToHex(conversationKey(nativeSecp, sk, peer)) !== bytesToHex(nip44.utils.getConversationKey(sk, peer))) fail('NIP-44 conversation key differs from noble');
+      const ev = new LocalSigner(sk, nativeSecp);
+      const signed = await ev.signEvent({ kind: 1, created_at: 1, tags: [], content: 'x' });
+      if (!verifyEvent(JSON.parse(JSON.stringify(signed))) || !verifyEventWith(nobleSecp, signed)) fail('noble refuses a native signature');
+      return `all ${BIP340.length} vectors pass; conversation key matches noble; native signatures verify in noble`;
+    },
+  },
+  {
+    id: 'schnorr-timing',
+    title: 'Schnorr timing with shelf-secp: verify median ≤ 10 ms, 1,000-item restore ≤ 20 s (spec 11.3)',
+    run: () => schnorrTiming(nativeSecp),
+  },
+  {
+    id: 'schnorr-timing-noble',
+    title: 'For comparison: the same with noble in JavaScript',
+    run: () => schnorrTiming(nobleSecp, false),
+  },
+  {
+    id: 'parser',
+    title: 'shelf-parser: detached WebView gives desktop Chrome’s parse',
+    async run() {
+      const bad: string[] = [];
+      const times: number[] = [];
+      for (const p of PAGES.pages) {
         const t = now();
-        if (!verifyEvent(e)) fail('a fresh copy failed to verify');
-        one.push(now() - t);
+        const got = await ShelfParser.parse(p.body, p.contentType, p.url);
+        times.push(now() - t);
+        for (const k of new Set([...Object.keys(p.expect), ...Object.keys(got)])) {
+          if (!same((got as Record<string, unknown>)[k], p.expect[k])) bad.push(`${p.name}: ${k}`);
+        }
       }
-      one.sort((x, y) => x - y);
-      const median = one[25];
-      const t1 = now();
-      for (let i = 0; i < 1000; i++) {
-        const e = JSON.parse(signed[i % 50]);
-        if (!verifyEvent(e)) fail('restore verify');
-        JSON.parse(await signer.nip44Decrypt(signer.pubkey(), e.content));
-      }
-      const restore = now() - t1;
-      const convo = await timed(20, () => nip44.utils.getConversationKey(generateSecretKey(), peer));
-      const verdict = median <= 10 && restore <= 20_000;
-      const detail = `verify median ${ms(median)}, 1,000-item restore ${(restore / 1000).toFixed(1)} s, sign ${ms(sign)}, ECDH ${ms(convo)}`;
-      if (!verdict) fail(`over the bar: ${detail}`);
-      return detail;
+      if (bad.length) fail(`${bad.length} differ from ${PAGES.chrome}: ${bad.slice(0, 4).join('; ')}`);
+      return `all ${PAGES.pages.length} pages match ${PAGES.chrome} field for field; first ${ms(times[0])} (WebView start), then ${ms(Math.max(...times.slice(1)))} at most`;
+    },
+  },
+  {
+    id: 'parser-live',
+    title: 'shelf-parser on a live page, fetched as bytes',
+    async run() {
+      const url = 'https://en.wikipedia.org/wiki/Bookmark_(digital)';
+      const t = now();
+      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Linux; Android 17; Pixel 10a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0 Mobile Safari/537.36', Accept: 'text/html' } });
+      if (res.status !== 200) return fail(`HTTP ${res.status}`);
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      const fetched = now() - t;
+      const t2 = now();
+      const r = await ShelfParser.parse(base64.encode(bytes), res.headers.get('content-type') ?? '', res.url || url);
+      const parsed = now() - t2;
+      if (!r.ok) return fail(`${r.reason} ${r.message ?? ''}`);
+      const words = countWords(r.markdown);
+      if (words < 200 || !r.title) return fail(`not an article: ${words} words, title ${r.title}`);
+      return `${Math.round(bytes.length / 1024)} KB fetched in ${ms(fetched)}, parsed in ${ms(parsed)}: “${r.title}”, ${words} words, canonical ${r.canonical ? 'found' : 'none'}`;
     },
   },
   {
@@ -230,6 +260,40 @@ export const GATES: Gate[] = [
     },
   },
 ];
+
+async function schnorrTiming(secp: SecpPort, enforce = true): Promise<string> {
+  const signer = new LocalSigner(generateSecretKey(), secp);
+  const peer = getPublicKey(generateSecretKey());
+  // 50 real saves, each copied 20 times as plain JSON, so no verified flag is cached on them.
+  const item = JSON.stringify({ v: 1, url: 'https://example.com/a', title: 'A title of ordinary length', words: 2450, text: null });
+  const signed: string[] = [];
+  const t0 = now();
+  for (let i = 0; i < 50; i++) {
+    const content = await signer.nip44Encrypt(signer.pubkey(), item);
+    signed.push(JSON.stringify(await signer.signEvent({ kind: 30078, created_at: i, tags: [['d', `shelf/item/${i}`], ['t', 'shelf']], content })));
+  }
+  const sign = (now() - t0) / 50;
+  const one: number[] = [];
+  for (let i = 0; i < 50; i++) {
+    const e = JSON.parse(signed[i]);
+    const t = now();
+    if (!verifyEventWith(secp, e)) fail('a fresh copy failed to verify');
+    one.push(now() - t);
+  }
+  one.sort((x, y) => x - y);
+  const median = one[25];
+  const t1 = now();
+  for (let i = 0; i < 1000; i++) {
+    const e = JSON.parse(signed[i % 50]);
+    if (!verifyEventWith(secp, e)) fail('restore verify');
+    JSON.parse(await signer.nip44Decrypt(signer.pubkey(), e.content));
+  }
+  const restore = now() - t1;
+  const ecdh = await timed(20, () => conversationKey(secp, generateSecretKey(), peer));
+  const detail = `verify median ${ms(median)}, 1,000-item restore ${(restore / 1000).toFixed(1)} s, sign ${ms(sign)}, ECDH ${ms(ecdh)}`;
+  if (enforce && (median > 10 || restore > 20_000)) fail(`over the bar: ${detail}`);
+  return detail;
+}
 
 export async function runGate(g: Gate): Promise<GateResult> {
   const t = now();

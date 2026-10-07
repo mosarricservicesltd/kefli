@@ -1,0 +1,6 @@
+{
+  "platforms": ["android"],
+  "android": {
+    "modules": ["space.shelf.share.ShelfShareModule"]
+  }
+}

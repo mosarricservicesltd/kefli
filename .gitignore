@@ -36,3 +36,7 @@ tools/design-qa/out/
 
 # test coverage (code-gate reads it)
 coverage/
+
+# Gradle output of the app's local Expo modules
+apps/mobile/modules/*/android/build/
+apps/mobile/modules/*/android/.cxx/

@@ -1,6 +1,7 @@
 // Shelf, the Android test build (CLAUDE.md, "First task"). A throwaway harness, not Shelf's UI: four tests on one
 // screen, each logging its results to logcat under [shelf-test] so they can be read over USB.
-//   1. Share a link from X, fetch it, parse it with the vendored Readability + Turndown in a hidden WebView.
+//   1. Fetch a typed link and parse it with the vendored Readability + Turndown in a hidden WebView (sharing
+//      now goes to the share activity, shelf-share, on the gates tab).
 //   2. Speak a paragraph with expo-speech and record what onBoundary reports (word positions for highlighting).
 //   3. Five minutes locked: a file through expo-audio with lock-screen controls, and the phone's own voice
 //      (v1 listening is on-device only, flow decision 22), with or without a media session held open.
@@ -8,12 +9,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { WebView, type WebViewMessageEvent } from 'react-native-webview';
-import { useShareIntent } from 'expo-share-intent';
 import * as Speech from 'expo-speech';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { scrypt, scryptAsync } from '@noble/hashes/scrypt.js';
-import { PARSER_BUNDLE } from './src/parser/bundle.generated';
+import { base64 } from '@scure/base';
+import { countWords } from '@shelf/protocol';
+import { ShelfParser, type Parsed } from './modules/shelf-parser/src';
 import { LONG_TEXT, PARAGRAPH } from './src/spikeText';
 
 const TAG = '[shelf-test]';
@@ -21,13 +22,6 @@ const log = (what: string, data?: unknown) => console.log(`${TAG} ${what} ${data
 
 /* ---------- 1. share and parse ---------- */
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36';
-const SHORTENERS = /^(t\.co|bit\.ly|buff\.ly|ow\.ly|tinyurl\.com|lnkd\.in)$/i;
-function pickUrl(webUrl: string | null | undefined, text: string): string | null {
-  const all = text.match(/https?:\/\/[^\s<>"]+/g) ?? [];
-  if (webUrl && !SHORTENERS.test(new URL(webUrl).hostname)) return webUrl;
-  return all.length ? all[all.length - 1] : webUrl ?? null;
-}
-type Parsed = { ok: boolean; error?: string; title?: string; byline?: string; siteName?: string; words?: number; markdown?: string; ms?: number; readerable?: boolean; htmlBytes?: number };
 
 /* ---------- 4. the typed-code scrypt ---------- */
 const CODE = 'K7QM4XPD', SALT = 'shelf/pair-code/v1';
@@ -37,45 +31,33 @@ const hex = (b: Uint8Array) => Array.from(b, x => x.toString(16).padStart(2, '0'
 
 export default function App() {
   /* 1 */
-  const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntent();
-  const web = useRef<WebView>(null);
-  const pending = useRef<{ t0: number; fetchMs: number; url: string; finalUrl: string; status: number } | null>(null);
   const [manualUrl, setManualUrl] = useState('');
   const [parse, setParse] = useState<string>('Share a link to "Shelf test" from X, or type a URL.');
   const [parsed, setParsed] = useState<Parsed | null>(null);
 
+  // Fetch the page's bytes and parse them in shelf-parser, the detached WebView (mobile spec 8.2).
   async function fetchAndParse(url: string) {
     setParse(`Fetching ${url}`); setParsed(null);
     const t0 = Date.now();
     try {
       const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml', 'Accept-Language': 'en-GB,en;q=0.9' } });
-      const html = await res.text();
+      const bytes = new Uint8Array(await res.arrayBuffer());
       const finalUrl = res.url || url;
-      pending.current = { t0, fetchMs: Date.now() - t0, url, finalUrl, status: res.status };
-      log('fetched', { url, finalUrl, status: res.status, bytes: html.length, ms: pending.current.fetchMs });
-      setParse(`Parsing ${html.length.toLocaleString()} characters from ${finalUrl}`);
-      web.current?.injectJavaScript(`(window.shelfParse ? window.shelfParse(${JSON.stringify(html)}, ${JSON.stringify(finalUrl)}) : window.ReactNativeWebView.postMessage('{"ok":false,"error":"parser_not_ready"}')); true;`);
+      const fetchMs = Date.now() - t0;
+      log('fetched', { url, finalUrl, status: res.status, bytes: bytes.length, ms: fetchMs });
+      setParse(`Parsing ${bytes.length.toLocaleString()} bytes from ${finalUrl}`);
+      const t1 = Date.now();
+      const r = await ShelfParser.parse(base64.encode(bytes), res.headers.get('content-type') ?? '', finalUrl);
+      const parseMs = Date.now() - t1;
+      const words = r.ok ? countWords(r.markdown) : null;
+      log('parsed', { ...r, markdown: r.ok ? r.markdown.slice(0, 300) : undefined, words, fetchMs, parseMs });
+      setParsed(r);
+      setParse(r.ok ? `Parsed in ${parseMs} ms (fetch ${fetchMs} ms), ${words} words` : `Parse failed: ${r.reason}`);
     } catch (e) {
       log('fetch-error', { url, error: String(e) });
       setParse(`Fetch failed: ${String(e)}`);
     }
   }
-  function onParsed(e: WebViewMessageEvent) {
-    const r: Parsed = JSON.parse(e.nativeEvent.data);
-    const p = pending.current;
-    const totalMs = p ? Date.now() - p.t0 : null;
-    log('parsed', { ok: r.ok, error: r.error, url: p?.finalUrl, title: r.title, byline: r.byline, site: r.siteName, words: r.words, readerable: r.readerable, parseMs: r.ms, fetchMs: p?.fetchMs, totalMs, mdChars: r.markdown?.length, mdStart: r.markdown?.slice(0, 300) });
-    setParsed(r);
-    setParse(r.ok ? `Parsed in ${r.ms} ms (fetch ${p?.fetchMs} ms, total ${totalMs} ms)` : `Parse failed: ${r.error}`);
-  }
-  useEffect(() => {
-    if (!hasShareIntent) return;
-    const text = shareIntent.text ?? '';
-    const url = pickUrl(shareIntent.webUrl, text);
-    log('share', { text, webUrl: shareIntent.webUrl, picked: url });
-    resetShareIntent();
-    if (url) fetchAndParse(url); else setParse(`Shared text had no link: ${text.slice(0, 120)}`);
-  }, [hasShareIntent]);
 
   /* 2 */
   const [word, setWord] = useState<{ i: number; n: number } | null>(null);
@@ -180,7 +162,7 @@ export default function App() {
           <TextInput style={s.input} value={manualUrl} onChangeText={setManualUrl} placeholder="https://…" autoCapitalize="none" autoCorrect={false} />
           <Btn label="Parse" onPress={() => manualUrl && fetchAndParse(manualUrl.trim())} />
         </View>
-        {parsed?.ok ? <View style={s.card}><Text style={s.title}>{parsed.title}</Text><Text style={s.meta}>{[parsed.siteName, parsed.byline, `${parsed.words} words`].filter(Boolean).join(' · ')}</Text><Text style={s.md}>{parsed.markdown?.slice(0, 600)}</Text></View> : null}
+        {parsed?.ok ? <View style={s.card}><Text style={s.title}>{parsed.title}</Text><Text style={s.meta}>{[parsed.site, parsed.byline, `${countWords(parsed.markdown)} words`].filter(Boolean).join(' · ')}</Text><Text style={s.md}>{parsed.markdown?.slice(0, 600)}</Text></View> : null}
 
         <Text style={s.h2}>2 · Word positions</Text>
         <Text style={s.body}>{para}</Text>
@@ -195,8 +177,6 @@ export default function App() {
         <View style={s.row}><Btn label="Time it" onPress={runScrypt} /><Text style={s.meta}>{kdf}</Text></View>
       </ScrollView>
       {/* the hidden parser: a blank page with the vendored bundle; HTML is passed in, parsed into a detached document */}
-      <WebView ref={web} style={s.hidden} originWhitelist={['*']} source={{ html: '<!doctype html><meta charset="utf-8"><title>parser</title>', baseUrl: 'https://parser.shelf.invalid/' }}
-        injectedJavaScriptBeforeContentLoaded={PARSER_BUNDLE} onMessage={onParsed} javaScriptEnabled />
     </View>
   );
 }

@@ -1,10 +1,12 @@
 // NIP-59 gift wraps composed through Signer (mobile spec 3.4): the seal is signed and encrypted by the
 // sender's Signer, the wrap by a fresh key made here. Used for browser save requests and pair-acks (C§4.4).
 
-import { finalizeEvent, generateSecretKey, getEventHash, getPublicKey, verifyEvent } from 'nostr-tools/pure';
+import { generateSecretKey, getEventHash } from 'nostr-tools/pure';
 import { v2 as nip44 } from 'nostr-tools/nip44';
 import { KIND, MAX_EVENT_BYTES } from './constants';
 import { EventTooLargeError, signedSize } from './events';
+import { conversationKey, nobleSecp, signEventWith, verifyEventWith } from './secp';
+import type { SecpPort } from './secp';
 import type { EventTemplate, NostrEvent, Signer } from './signer';
 
 /** A rumor: an event with an id but no signature, so it can't be shown to anyone as signed (NIP-59). */
@@ -37,6 +39,8 @@ export interface WrapOptions {
   random?: (n: number) => Uint8Array;
   /** Refuse wraps of this many bytes or more (the save request's 8 KB, C§4.4); the 16 KB ceiling always applies. */
   maxBytes?: number;
+  /** For the wrap's own key; defaults to noble. */
+  secp?: SecpPort;
 }
 
 /**
@@ -53,17 +57,19 @@ export async function giftWrap(sender: Signer, recipient: string, template: Even
     tags: [],
     content: await sender.nip44Encrypt(recipient, JSON.stringify(rumor)),
   });
+  const secp = opts.secp ?? nobleSecp;
   const wrapKey = generateSecretKey();
   const wrapTemplate: EventTemplate = {
     kind: KIND.giftWrap,
     created_at: backdated(now, random),
     tags: [['p', recipient]],
-    content: nip44.encrypt(JSON.stringify(seal), nip44.utils.getConversationKey(wrapKey, recipient)),
+    content: nip44.encrypt(JSON.stringify(seal), conversationKey(secp, wrapKey, recipient)),
   };
   const bytes = signedSize(wrapTemplate);
   // The save request must be under its limit (C§4.4: under 8 KB); the ceiling may be reached (C§3.3).
   if (bytes > MAX_EVENT_BYTES || (opts.maxBytes !== undefined && bytes >= opts.maxBytes)) throw new EventTooLargeError(bytes);
-  return { wrap: finalizeEvent(wrapTemplate, wrapKey), wrapKey, wrapPubkey: getPublicKey(wrapKey), rumor };
+  const wrap = signEventWith(secp, wrapTemplate, wrapKey);
+  return { wrap, wrapKey, wrapPubkey: wrap.pubkey, rumor };
 }
 
 export class UnwrapError extends Error {
@@ -74,9 +80,9 @@ export class UnwrapError extends Error {
 }
 
 /** Open a wrap addressed to recipient. Checks both signatures, the rumor's id, and that the rumor's author is the seal's signer. */
-export async function unwrap(recipient: Signer, wrap: NostrEvent): Promise<{ rumor: Rumor; seal: NostrEvent }> {
+export async function unwrap(recipient: Signer, wrap: NostrEvent, secp: SecpPort = nobleSecp): Promise<{ rumor: Rumor; seal: NostrEvent }> {
   if (wrap.kind !== KIND.giftWrap) throw new UnwrapError('not kind 1059');
-  if (!verifyEvent(wrap)) throw new UnwrapError('wrap signature');
+  if (!verifyEventWith(secp, wrap)) throw new UnwrapError('wrap signature');
   let seal: NostrEvent;
   let rumor: Rumor;
   try {
@@ -84,7 +90,7 @@ export async function unwrap(recipient: Signer, wrap: NostrEvent): Promise<{ rum
   } catch {
     throw new UnwrapError('wrap does not decrypt');
   }
-  if (seal.kind !== KIND.seal || !verifyEvent(seal)) throw new UnwrapError('seal');
+  if (seal.kind !== KIND.seal || !verifyEventWith(secp, seal)) throw new UnwrapError('seal');
   try {
     rumor = JSON.parse(await recipient.nip44Decrypt(seal.pubkey, seal.content));
   } catch {

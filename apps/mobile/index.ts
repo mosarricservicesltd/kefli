@@ -1,10 +1,10 @@
 // Installs quick-crypto as globalThis.crypto before anything imports nostr-tools (mobile spec 2.4).
 import './src/crypto/install';
-import { registerRootComponent } from 'expo';
+import { AppRegistry } from 'react-native';
+import ShareRoot from './src/share/ShareRoot';
 
-import App from './src/Root';
+// The share activity's surface, on the same runtime (mobile spec 8.5).
+AppRegistry.registerComponent('share', () => ShareRoot);
 
-// registerRootComponent calls AppRegistry.registerComponent('main', () => App);
-// It also ensures that whether you load the app in Expo Go or in a native build,
-// the environment is set up appropriately
-registerRootComponent(App);
+// The main surface: Expo Router, routes in src/app (mobile spec 6.1).
+import 'expo-router/entry';

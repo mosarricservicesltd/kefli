@@ -1,6 +1,7 @@
 // Switches between the Android test build's screen and the week-0 gates.
 import { useState } from 'react';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import App from '../App';
 import { GatesScreen } from './gates/GatesScreen';
 
@@ -14,6 +15,9 @@ export default function Root() {
             <Text style={[s.label, tab === t && s.onLabel]}>{t === 'gates' ? 'Week 0 gates' : 'Test build'}</Text>
           </Pressable>
         ))}
+        <Pressable onPress={() => router.push('/back-test')} style={s.tab}>
+          <Text style={s.label}>Back test</Text>
+        </Pressable>
       </View>
       <View style={s.body}>{tab === 'gates' ? <GatesScreen /> : <App />}</View>
     </SafeAreaView>

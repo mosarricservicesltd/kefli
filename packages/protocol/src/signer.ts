@@ -1,9 +1,10 @@
 // The signer interface (contract section 2, mobile spec 3.4) and the local key's implementation.
 // Every seal, self-encryption, unwrap and NIP-42 AUTH goes through Signer.
 
-import { finalizeEvent, getPublicKey } from 'nostr-tools/pure';
 import type { Event as NostrEvent, EventTemplate } from 'nostr-tools/pure';
 import { v2 as nip44 } from 'nostr-tools/nip44';
+import { conversationKey, nobleSecp, signEventWith } from './secp';
+import type { SecpPort } from './secp';
 
 export type { NostrEvent, EventTemplate };
 
@@ -31,10 +32,14 @@ export class LocalSigner implements SignerProvider {
   #selfKey: Uint8Array | null = null;
   #zeroed = false;
 
-  constructor(secretKey: Uint8Array) {
+  readonly #secp: SecpPort;
+
+  /** secp defaults to noble; the phone passes shelf-secp. */
+  constructor(secretKey: Uint8Array, secp: SecpPort = nobleSecp) {
     if (secretKey.length !== 32) throw new RangeError('a secret key is 32 bytes');
     this.#sk = secretKey;
-    this.#pk = getPublicKey(secretKey);
+    this.#secp = secp;
+    this.#pk = secp.publicKey(secretKey);
   }
 
   pubkey(): string {
@@ -50,7 +55,7 @@ export class LocalSigner implements SignerProvider {
   }
 
   async signEvent(e: EventTemplate): Promise<NostrEvent> {
-    return finalizeEvent(e, this.#secret());
+    return signEventWith(this.#secp, e, this.#secret());
   }
 
   async nip44Encrypt(peer: string, plaintext: string): Promise<string> {
@@ -74,8 +79,8 @@ export class LocalSigner implements SignerProvider {
   }
 
   #conversationKey(peer: string): Uint8Array {
-    if (peer !== this.#pk) return nip44.utils.getConversationKey(this.#secret(), peer);
-    this.#selfKey ??= nip44.utils.getConversationKey(this.#secret(), this.#pk);
+    if (peer !== this.#pk) return conversationKey(this.#secp, this.#secret(), peer);
+    this.#selfKey ??= conversationKey(this.#secp, this.#secret(), this.#pk);
     return this.#selfKey;
   }
 }
