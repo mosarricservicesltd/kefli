@@ -10,7 +10,10 @@ import { currentSigner } from './identity';
 import { launchPlan } from './launchState';
 import { drain } from './send';
 import { syncInbound, type SyncResult } from './sync';
-import { textFiles } from './textFiles';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
+import { getNetworkStateAsync, NetworkStateType } from 'expo-network';
+import { removeImages, syncImages, type ImagePorts } from './images';
+import { imageFiles, textFiles } from './textFiles';
 import { readStaged } from './staging';
 import { store } from './store';
 
@@ -71,10 +74,11 @@ export const syncRunning = {
  * Triggered at start, on returning to the foreground and after a share; concurrent calls share one run.
  */
 export function runSync(): Promise<SyncResult> {
-  syncing ??= (async () => {
+  if (syncing) return syncing;
+  const run = (async (): Promise<SyncResult> => {
     try {
       await runOutbox().catch(() => 0);
-      return await syncInbound({
+      const r = await syncInbound({
         db: store(),
         now: () => Math.floor(Date.now() / 1000),
         signer: async (pubkey) => {
@@ -85,16 +89,20 @@ export function runSync(): Promise<SyncResult> {
         fetch,
         crypto: phoneCrypto,
         defaults: loadDefaults,
-        files: textFiles,
+        files: { ...textFiles, removeAll: removeAllFiles },
         openHash: () => reading,
       });
+      const owner = store().get<{ pubkey: string }>("SELECT pubkey FROM identities WHERE role = 'active'")?.pubkey;
+      if (owner) await imagesIfUnmetered(owner).catch(() => undefined);
+      return r;
     } finally {
       syncing = null;
       syncListeners.forEach((l) => l());
     }
   })();
+  syncing = run;
   syncListeners.forEach((l) => l());
-  return syncing;
+  return run;
 }
 
 /**
@@ -115,4 +123,28 @@ export function startSync(): () => void {
     .finally(sync);
   const sub = AppState.addEventListener('change', (state) => state === 'active' && sync());
   return () => sub.remove();
+}
+
+/** The image service's ports on the phone. */
+export function imagePorts(): ImagePorts {
+  return {
+    db: store(),
+    now: () => Math.floor(Date.now() / 1000),
+    fetch,
+    nameOf: (url) => bytesToHex(phoneCrypto.sha256(utf8ToBytes(url))),
+    files: imageFiles,
+    readText: textFiles.readText,
+  };
+}
+
+/** Everything a save holds on the phone: its text, blocks and images (4.5: a deletion removes them all). */
+export function removeAllFiles(hash: string): void {
+  textFiles.removeAll(hash);
+  removeImages(imagePorts(), hash);
+}
+
+/** Phase 6 on an unmetered network only (4.5); metered networks fetch an article's images when it opens. */
+async function imagesIfUnmetered(owner: string): Promise<void> {
+  const n = await getNetworkStateAsync().catch(() => null);
+  if (n?.type === NetworkStateType.WIFI || n?.type === NetworkStateType.ETHERNET) await syncImages(imagePorts(), owner);
 }

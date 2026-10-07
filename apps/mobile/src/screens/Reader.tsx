@@ -17,7 +17,10 @@ import { articleBlocks, type Article } from '../reader/blocks';
 import { scrollYForWord, wordAtScroll, type Place } from '../reader/position';
 import { readerColors, type PaletteId, type ReaderColors } from '../reader/palette';
 import { setReaderPalette, setReaderSize, useReaderPrefs } from '../reader/prefs';
-import { BlockView, type Lit } from '../reader/Prose';
+import { BlockView, type FigureState, type Lit } from '../reader/Prose';
+import { getImage, needsFetch } from '../data/images';
+import { fetchArticleImages } from '../services/images';
+import { imagePorts } from '../services/runner';
 import { useApp } from '../services/app';
 import { runOutbox, runSync, setReading } from '../services/runner';
 import { store } from '../services/store';
@@ -157,8 +160,10 @@ function litRange(s: Session | null, hash: string): { from: number; to: number }
   return sent ? { from: sent.firstWord, to: sent.firstWord + sent.wordStarts.length - 1 } : null;
 }
 
-function Article({ row, P, owner, article, voice, viewRange }: {
+function Article({ row, P, owner, article, voice, viewRange, imgs }: {
   row: LibRow; P: ReaderColors; owner: string; article: Article; voice: Session | null;
+  /** Each image's state by address (5.6, reader-images). */
+  imgs: Map<string, FigureState>;
   /** Set by the article: the first and last words in view, for where Listen starts (FD 19). */
   viewRange: React.MutableRefObject<(() => { first: number; last: number }) | null>;
 }) {
@@ -229,6 +234,13 @@ function Article({ row, P, owner, article, voice, viewRange }: {
     runOutbox().catch(() => 0);
   }, [owner, row.hash, wordAt]);
 
+  // An image arriving keeps the word at the top of the page still (5.6): its anchor is taken before the new layout.
+  const lastImgs = useRef(imgs);
+  if (lastImgs.current !== imgs) {
+    lastImgs.current = imgs;
+    if (shown && !target.current && !dragging.current) target.current = { word: wordAt(BAND_TOP), at: BAND_TOP };
+  }
+
   // A size change keeps the word a third of the way down still (MS Reader).
   const size = useRef(prefs.size);
   if (size.current !== prefs.size) {
@@ -298,7 +310,7 @@ function Article({ row, P, owner, article, voice, viewRange }: {
           </T>
           <View onLayout={(e) => (proseY.current = e.nativeEvent.layout.y)}>
             {blocks.map((b, i) => (
-              <BlockView key={i} b={b} P={P} size={prefs.size} onLayout={onLayouts[i]} lit={litFor.get(i)} />
+              <BlockView key={i} b={b} P={P} size={prefs.size} onLayout={onLayouts[i]} lit={litFor.get(i)} img={b.kind === 'img' ? imgs.get(b.src) : undefined} />
             ))}
           </View>
           <EndCard
@@ -328,6 +340,18 @@ export default function Reader() {
   const markdown = useMemo(() => (cached ? textFiles.readText(hash) : null), [cached, hash, row?.text_sha256]); // eslint-disable-line react-hooks/exhaustive-deps
   const article = useMemo(() => (markdown ? articleBlocks(markdown) : null), [markdown]);
   const voice = useVoice();
+  const urls = useMemo(() => (article ? article.blocks.flatMap((b) => (b.kind === 'img' ? [b.src] : [])) : []), [article]);
+  const imgs = useLive(() => {
+    const now = Math.floor(Date.now() / 1000);
+    return new Map(urls.map((u) => {
+      const r = getImage(store(), u);
+      return [u, { row: r, failed: !!r && !r.path && !needsFetch(r, now), online } as FigureState];
+    }));
+  }, ['images'], [urls, online]);
+  // The article's images are fetched when it opens, on any network (4.5).
+  useEffect(() => {
+    if (article && online && owner) fetchArticleImages(imagePorts(), owner, hash).catch(() => undefined);
+  }, [article, online, owner, hash]);
   const viewRange = useRef<(() => { first: number; last: number }) | null>(null);
   const lifted = !!voice;
 
@@ -387,7 +411,7 @@ export default function Reader() {
         </ScrollView>
       ) : (
         <>
-          <Article key={`${row.hash}`} row={row} P={P} owner={owner} article={article} voice={voice} viewRange={viewRange} />
+          <Article key={`${row.hash}`} row={row} P={P} owner={owner} article={article} voice={voice} viewRange={viewRange} imgs={imgs} />
           <ArchiveDock
             archived={row.state === 'archived'} bg={P.bg} fg={P.text} shadow={P.float} lifted={lifted}
             onPress={() => { router.back(); archive(row.hash, row.state !== 'archived', reopen); }}

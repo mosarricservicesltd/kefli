@@ -3,9 +3,8 @@
 import { commitDelete, deleteItem, hashInUseAfterDelete, setArchived } from '../data/library';
 import { release } from '../data/outbox';
 import { appState } from '../services/app';
-import { runOutbox } from '../services/runner';
+import { removeAllFiles, runOutbox } from '../services/runner';
 import { store } from '../services/store';
-import { textFiles } from '../services/textFiles';
 import { stopIfPlaying } from '../services/voice';
 import { S } from '../ui/strings';
 import { showToast } from '../ui/toast';
@@ -48,7 +47,7 @@ export function remove(hash: string, onUndo?: () => void): void {
     },
     commit: () => {
       commitDelete(store(), owner, hash, c.held);
-      if (!hashInUseAfterDelete(store(), hash)) textFiles.removeAll(hash);
+      if (!hashInUseAfterDelete(store(), hash)) removeAllFiles(hash);
       send();
     },
   });

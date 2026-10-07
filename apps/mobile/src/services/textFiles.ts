@@ -9,6 +9,23 @@ function remove(name: string) {
   if (f.exists) f.delete();
 }
 
+const imgDir = () => new Directory(Paths.document, 'shelf', 'img');
+
+/** Article images: Paths.document/shelf/img/<sha256 of the image's address> (4.1), app storage, kept offline. */
+export const imageFiles = {
+  write(name: string, bytes: Uint8Array): string {
+    const d = imgDir();
+    if (!d.exists) d.create({ intermediates: true });
+    const f = new File(d, name);
+    f.write(bytes);
+    return f.uri;
+  },
+  remove(path: string): void {
+    const f = new File(path);
+    if (f.exists) f.delete();
+  },
+};
+
 export const textFiles = {
   writeText(hash: string, markdown: string): void {
     const d = dir();

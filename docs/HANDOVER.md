@@ -16,7 +16,8 @@ Written on 6 October 2026, when the work moved off the laptop it started on. Eve
   - **Where they live:** the screens are in `apps/mobile/src/screens`, their parts in `src/ui` and the Reader's logic in `src/reader`. The Android test build's gates moved to the `/gates` route (`adb shell am start -d shelf://gates`).
   - **Listening (`shelf-voice`):** rebuilt the same day on file synthesis, as week 0 decided. Sentences are written a few ahead and played through Shelf's own AudioTrack, and the word is read from the playback head. It has the Listen chip, the Reader tier with the spoken word lit and followed, and the mini on other screens. Android now names Shelf's session the media button session, so hardware play, pause and next (+15) reach it, and the lock-screen card works.
   - **Covers draw in** (signature 1): leaf by leaf from cover v1's own SVG, once per surface, recorded in `cover_drawn`. A save that joins while Unread is on screen draws as it lands, and Welcome's three covers draw on first launch. The Saved share sheet (with its drawing cover) is still the week 1 functional card.
-  - **Still to come in week 2:** the lock-screen artwork and the notification glyph; images and pending parses (sync phases 6 and 7); Search, which is drawn but not wired; and the hour locked on battery (FD 87).
+  - **Images** (sync phase 6): kept in app storage under `img/<sha256 of the address>`, at most 5 MB each and 200 MB in all, archived articles' first to go. The newest 50 unread articles' images are fetched on Wi-Fi, and an article's own when it opens. The Reader shows them at their published size, a 3:2 placeholder while they come, and keeps the word at the top still as they arrive.
+  - **Still to come in week 2:** the lock-screen artwork and the notification glyph; pending parses (sync phase 7); Search, which is drawn but not wired; and the hour locked on battery (FD 87).
 
 ## Open with Richard
 

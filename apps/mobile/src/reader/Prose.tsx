@@ -1,8 +1,13 @@
 // The article's text (mobile spec 6.7; prototype .article .prose): one memoised <Text> per block in Literata at
 // the reading size and 1.6 leading, paragraphs a line apart. Links keep the reading colour, underlined in the
 // article's ink, and open in the browser. Each block reports its place, so the Reader can lay out at a word.
-import { memo, useState } from 'react';
-import { Image, Linking, ScrollView, Text, View, type LayoutChangeEvent, type TextStyle } from 'react-native';
+import { memo, useEffect } from 'react';
+import { Linking, ScrollView, Text, View, type LayoutChangeEvent, type TextStyle } from 'react-native';
+import { Image } from 'expo-image';
+import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+import { motion } from '@shelf/tokens';
+import { ambient } from '@shelf/tokens/reanimated';
+import type { ImageRow } from '../data/images';
 import { fontFamily, radius, reader as R } from '@shelf/tokens';
 import type { Block, Span } from './blocks';
 import type { ReaderColors } from './palette';
@@ -60,23 +65,36 @@ function Spans({ spans, P, size, bold, lit }: { spans: Span[]; P: ReaderColors; 
   );
 }
 
-function Figure({ src, alt, P }: { src: string; alt: string; P: ReaderColors }) {
-  const [ar, setAr] = useState<number | null>(null);
-  const [gone, setGone] = useState(false);
-  // Images are kept on the phone once phase 6 of sync arrives (4.5); until then one that won't load is left out.
-  if (gone) return null;
-  return (
-    <Image
-      source={{ uri: src }} accessibilityLabel={alt || undefined} accessible={!!alt}
-      onLoad={(e) => setAr(e.nativeEvent.source.width / Math.max(1, e.nativeEvent.source.height))}
-      onError={() => setGone(true)}
-      resizeMode="contain"
-      style={{ width: '100%', aspectRatio: ar ?? 3 / 2, borderRadius: radius.image, backgroundColor: ar ? undefined : alpha(P.muted, 0.18) }}
-    />
-  );
+/** An image on its way (prototype .fig.wait): a 3:2 placeholder pulsing in opacity once the wait passes 150 ms. */
+function Waiting({ P }: { P: ReaderColors }) {
+  const o = useSharedValue(1);
+  const still = useReducedMotion();
+  useEffect(() => {
+    if (still) return;
+    o.value = withDelay(motion.ambient.delay, withRepeat(withSequence(withTiming(motion.ambient.pulse.opacity[0], ambient.pulse), withTiming(1, ambient.pulse)), -1));
+  }, [o, still]);
+  const st = useAnimatedStyle(() => ({ opacity: o.value }));
+  return <Animated.View style={[{ width: '100%', aspectRatio: 3 / 2, borderRadius: radius.image, backgroundColor: alpha(P.muted, 0.18) }, st]} />;
 }
 
-export const BlockView = memo(function BlockView({ b, P, size, onLayout, lit }: { b: Block; P: ReaderColors; size: number; onLayout: (e: LayoutChangeEvent) => void; lit?: Lit }) {
+export type FigureState = { row?: ImageRow; failed: boolean; online: boolean };
+
+/**
+ * The article's own image, exactly as published: never cropped or tinted (prototype .fig). On the phone it shows at
+ * its stored size; on its way, a 3:2 placeholder (reader-images); failed, or missing while offline, it is left out.
+ */
+function Figure({ alt, P, img }: { alt: string; P: ReaderColors; img?: FigureState }) {
+  if (img?.row?.path) {
+    const ar = img.row.w && img.row.h ? img.row.w / img.row.h : 3 / 2;
+    // never larger than published: a small image keeps its own size (its pixels as CSS pixels), centred
+    const own = img.row.w ? { maxWidth: img.row.w, alignSelf: 'center' as const } : null;
+    return <Image source={{ uri: img.row.path }} accessibilityLabel={alt || undefined} accessible={!!alt} contentFit="contain" transition={0} style={[{ width: '100%', aspectRatio: ar, borderRadius: radius.image }, own]} />;
+  }
+  if (!img || img.failed || !img.online) return null;
+  return <Waiting P={P} />;
+}
+
+export const BlockView = memo(function BlockView({ b, P, size, onLayout, lit, img }: { b: Block; P: ReaderColors; size: number; onLayout: (e: LayoutChangeEvent) => void; lit?: Lit; img?: FigureState }) {
   const body: TextStyle = { fontFamily: fontFamily.reader.regular, fontSize: size, lineHeight: size * R.lineHeight, color: P.text, includeFontPadding: false };
   const gap = { marginBottom: size };
   switch (b.kind) {
@@ -112,7 +130,8 @@ export const BlockView = memo(function BlockView({ b, P, size, onLayout, lit }: 
         </View>
       );
     case 'img':
-      return <View onLayout={onLayout} style={gap}><Figure src={b.src} alt={b.alt} P={P} /></View>;
+      // a figure left out takes no space, so the text closes up around it
+      return <View onLayout={onLayout} style={img?.row?.path || (img && !img.failed && img.online) ? gap : undefined}><Figure alt={b.alt} P={P} img={img} /></View>;
     case 'hr':
       return <View onLayout={onLayout} style={{ height: 1, backgroundColor: alpha(P.muted, 0.25), marginVertical: size }} />;
   }
