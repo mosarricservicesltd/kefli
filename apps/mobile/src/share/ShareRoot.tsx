@@ -33,18 +33,29 @@ export default function ShareRoot({ spoolId }: { spoolId?: string }) {
   const [saving, setSaving] = useState(true);
   const done = useRef(false);
   const held = useRef<number[]>([]);
+  const unmounted = useRef(false);
+
+  // The sheet closed without Undo: its rows go to the queue and the outbox starts sending.
+  const releaseHeld = () => {
+    if (!held.current.length) return;
+    release(store(), held.current);
+    held.current = [];
+    runOutbox()
+      .then((n) => console.log(`[shelf-save] ${JSON.stringify({ step: 'sent', ok: true, detail: `${n} outbox rows sent` })}`))
+      .catch((e) => console.log(`[shelf-save] ${JSON.stringify({ step: 'sent', ok: false, detail: String((e as Error).message) })}`));
+  };
+
+  // A sheet that ends without closing (its activity destroyed) counts as closed without Undo.
+  useEffect(() => () => {
+    unmounted.current = true;
+    if (!done.current) releaseHeld();
+  }, []);
 
   const finish = (mode: 'host' | 'read') => {
     if (done.current) return;
     done.current = true;
     if (spoolId) ShelfShare.deleteSpool(spoolId);
-    // The sheet closed without Undo: its rows go to the queue and the outbox starts sending.
-    if (held.current.length) {
-      release(store(), held.current);
-      runOutbox()
-        .then((n) => console.log(`[shelf-save] ${JSON.stringify({ step: 'sent', ok: true, detail: `${n} outbox rows sent` })}`))
-        .catch((e) => console.log(`[shelf-save] ${JSON.stringify({ step: 'sent', ok: false, detail: String((e as Error).message) })}`));
-    }
+    releaseHeld();
     log({ id: 'share-finish', ok: true, detail: mode, ms: 0 });
     ShelfShare.finish(mode, mode === 'read' ? hash : null);
   };
@@ -63,6 +74,8 @@ export default function ShareRoot({ spoolId }: { spoolId?: string }) {
     })
       .then((r) => {
         held.current = r.held;
+        // Unmounted before the save finished: release at once rather than leave the rows held.
+        if (done.current || unmounted.current) releaseHeld();
         console.log(`[shelf-save] ${JSON.stringify({ step: 'done', ok: true, detail: `d shelf/item/${r.hash}, ${r.held.length} rows held` })}`);
       })
       .catch((e) => {
