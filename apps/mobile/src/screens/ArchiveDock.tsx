@@ -8,11 +8,13 @@ import { Press, pressLayer } from '../ui/Press';
 import { S } from '../ui/strings';
 
 export const DOCK = 16 + 52;
+/** With a player under it, Archive rises above it (prototype placeStack): 16 + 64 + 8. */
+export const DOCK_LIFTED = 16 + 64 + 8;
 
-export function ArchiveDock({ archived, onPress, bg, fg, shadow }: { archived: boolean; onPress: () => void; bg: string; fg: string; shadow: string }) {
+export function ArchiveDock({ archived, onPress, bg, fg, shadow, lifted = false }: { archived: boolean; onPress: () => void; bg: string; fg: string; shadow: string; lifted?: boolean }) {
   const insets = useSafeAreaInsets();
   return (
-    <View style={{ position: 'absolute', right: 16, bottom: 16 + insets.bottom, zIndex: 3 }}>
+    <View style={{ position: 'absolute', right: 16, bottom: (lifted ? DOCK_LIFTED : 16) + insets.bottom, zIndex: 3 }}>
       <Press
         accessibilityRole="button" accessibilityLabel={archived ? S.reader.backToUnread : S.reader.archive} onPress={onPress} layer={pressLayer(fg, 'reader')}
         style={{ width: 52, height: 52, borderRadius: radius.container, backgroundColor: bg, boxShadow: shadow, alignItems: 'center', justifyContent: 'center' }}

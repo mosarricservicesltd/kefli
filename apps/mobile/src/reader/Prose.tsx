@@ -12,7 +12,39 @@ const face = (s: Span, bold = false): TextStyle => ({
   fontFamily: s.code ? fontFamily.mono : s.strong || bold ? fontFamily.reader.bold : s.em ? fontFamily.reader.italic : fontFamily.reader.regular,
 });
 
-function Spans({ spans, P, size, bold }: { spans: Span[]; P: ReaderColors; size: number; bold?: boolean }) {
+/** The words the voice is on, as indices of the block's whitespace-separated words (one, or a whole sentence). */
+export type Lit = { from: number; to: number };
+
+/**
+ * The playing block's text, split into its words so the spoken one takes the highlight wash (6.7: only the
+ * playing paragraph splits). Words are counted across the spans, as the spoken projection counts them.
+ */
+function LitSpans({ spans, P, size, bold, lit }: { spans: Span[]; P: ReaderColors; size: number; bold?: boolean; lit: Lit }) {
+  let k = -1;
+  let wasSpace = true;
+  return (
+    <>
+      {spans.map((s, i) => (
+        <Text key={i} style={[face(s, bold), s.code && { fontSize: size * 0.85 }, s.href && { textDecorationLine: 'underline', textDecorationColor: P.ink }]}>
+          {s.text.split(/(\s+)/).map((piece, j) => {
+            if (piece === '') return null;
+            if (/^\s+$/.test(piece)) {
+              wasSpace = true;
+              return piece;
+            }
+            if (wasSpace) k++;
+            wasSpace = false;
+            const on = k >= lit.from && lit.to >= k;
+            return on ? <Text key={j} style={{ backgroundColor: P.hl }}>{piece}</Text> : piece;
+          })}
+        </Text>
+      ))}
+    </>
+  );
+}
+
+function Spans({ spans, P, size, bold, lit }: { spans: Span[]; P: ReaderColors; size: number; bold?: boolean; lit?: Lit }) {
+  if (lit) return <LitSpans spans={spans} P={P} size={size} bold={bold} lit={lit} />;
   return (
     <>
       {spans.map((s, i) => (
@@ -44,31 +76,31 @@ function Figure({ src, alt, P }: { src: string; alt: string; P: ReaderColors }) 
   );
 }
 
-export const BlockView = memo(function BlockView({ b, P, size, onLayout }: { b: Block; P: ReaderColors; size: number; onLayout: (e: LayoutChangeEvent) => void }) {
+export const BlockView = memo(function BlockView({ b, P, size, onLayout, lit }: { b: Block; P: ReaderColors; size: number; onLayout: (e: LayoutChangeEvent) => void; lit?: Lit }) {
   const body: TextStyle = { fontFamily: fontFamily.reader.regular, fontSize: size, lineHeight: size * R.lineHeight, color: P.text, includeFontPadding: false };
   const gap = { marginBottom: size };
   switch (b.kind) {
     case 'p':
-      return <View onLayout={onLayout} style={gap}><Text style={body}><Spans spans={b.spans} P={P} size={size} /></Text></View>;
+      return <View onLayout={onLayout} style={gap}><Text style={body}><Spans spans={b.spans} P={P} size={size} lit={lit} /></Text></View>;
     case 'h': {
       const s = b.level <= 2 ? size * 1.2 : size;
       return (
         <View onLayout={onLayout} style={{ marginTop: size * 0.5, marginBottom: size * 0.6 }}>
-          <Text accessibilityRole="header" style={[body, { fontSize: s, lineHeight: s * 1.35 }]}><Spans spans={b.spans} P={P} size={s} bold /></Text>
+          <Text accessibilityRole="header" style={[body, { fontSize: s, lineHeight: s * 1.35 }]}><Spans spans={b.spans} P={P} size={s} bold lit={lit} /></Text>
         </View>
       );
     }
     case 'quote':
       return (
         <View onLayout={onLayout} style={[gap, { borderLeftWidth: 3, borderLeftColor: alpha(P.muted, 0.35), paddingLeft: 14 }]}>
-          <Text style={body}><Spans spans={b.spans} P={P} size={size} /></Text>
+          <Text style={body}><Spans spans={b.spans} P={P} size={size} lit={lit} /></Text>
         </View>
       );
     case 'li':
       return (
         <View onLayout={onLayout} style={{ flexDirection: 'row', marginBottom: size * 0.5, paddingLeft: b.depth * size * 1.2 }}>
           <Text numberOfLines={1} style={[body, { minWidth: size * 1.4, paddingRight: size * 0.4 }]}>{b.marker}</Text>
-          <Text style={[body, { flex: 1 }]}><Spans spans={b.spans} P={P} size={size} /></Text>
+          <Text style={[body, { flex: 1 }]}><Spans spans={b.spans} P={P} size={size} lit={lit} /></Text>
         </View>
       );
     case 'code':

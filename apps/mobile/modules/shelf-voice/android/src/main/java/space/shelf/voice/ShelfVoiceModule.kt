@@ -17,7 +17,8 @@ class ShelfVoiceModule : Module() {
   private val forward: (VoiceEngine.Event) -> Unit = { e ->
     when (e) {
       is VoiceEngine.Event.Word -> sendEvent("word", mapOf("hash" to e.hash, "word" to e.word))
-      is VoiceEngine.Event.State -> sendEvent("state", mapOf("hash" to e.hash, "playing" to e.playing, "word" to e.word, "rate" to e.rate))
+      is VoiceEngine.Event.SentenceStart -> sendEvent("sentence", mapOf("hash" to e.hash, "index" to e.index))
+      is VoiceEngine.Event.State -> sendEvent("state", mapOf("hash" to e.hash, "playing" to e.playing, "word" to e.word, "rate" to e.rate, "wordTiming" to e.wordTiming, "wps" to e.wps))
       is VoiceEngine.Event.Ended -> sendEvent("ended", mapOf("hash" to e.hash))
       is VoiceEngine.Event.Error -> sendEvent("error", mapOf("hash" to e.hash, "code" to e.code))
     }
@@ -25,7 +26,7 @@ class ShelfVoiceModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("ShelfVoice")
-    Events("word", "state", "ended", "error")
+    Events("word", "sentence", "state", "ended", "error")
 
     OnCreate { VoiceEngine.addListener(forward) }
     OnDestroy { VoiceEngine.removeListener(forward) }
@@ -65,23 +66,6 @@ class ShelfVoiceModule : Module() {
       main.post {
         VoiceEngine.close()
         context.stopService(Intent(context, VoiceService::class.java))
-      }
-    }
-    AsyncFunction("probeSynthesis") { text: String, promise: Promise ->
-      main.post { VoiceEngine.probeSynthesis(context, text) { promise.resolve(it) } }
-    }
-    // Week-0 probe: play the probe's WAV in this process, to see whether Android then routes media buttons here.
-    Function("playProbe") {
-      main.post {
-        val f = java.io.File(context.cacheDir, "probe.wav")
-        if (f.length() > 44) runCatching { android.media.MediaPlayer().apply {
-          setAudioAttributes(android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_MEDIA)
-            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build())
-          setDataSource(f.path)
-          setOnCompletionListener { it.release() }
-          prepare()
-          start()
-        } }
       }
     }
     Function("readLog") { VoiceLog.read(context) }

@@ -66,16 +66,6 @@ export function VoiceGate() {
         <Btn label="+15" onPress={() => ShelfVoice.skip(15)} />
         <Btn label="✕" onPress={() => ShelfVoice.close()} />
       </View>
-      <Btn
-        label="Probe writing to a file"
-        onPress={async () => {
-          const text = 'A saved article waits quietly until there is time for it. When it opens on the train, the words are already on the phone.';
-          const r = JSON.parse(await ShelfVoice.probeSynthesis(text));
-          console.log(`[shelf-gates] ${JSON.stringify({ id: 'voice-probe', ok: r.ranges.length > 0, detail: r, ms: r.synthMs })}`);
-          setLog(`probe: ${r.ranges.length} word ranges, ${r.synthMs} ms to write ${r.audioMs} ms of audio at ${r.sampleRate} Hz`);
-        }}
-      />
-      <Btn label="Play the probe here" onPress={() => ShelfVoice.playProbe()} />
       <Btn label="Show the log" onPress={() => { const l = ShelfVoice.readLog(); setLog(l); console.log(`[shelf-voice-log]\n${l}`); }} />
       {log ? <Text style={s.log}>{log.trim().split('\n').slice(-14).join('\n')}</Text> : null}
     </View>

@@ -6,6 +6,7 @@ import { appState } from '../services/app';
 import { runOutbox } from '../services/runner';
 import { store } from '../services/store';
 import { textFiles } from '../services/textFiles';
+import { stopIfPlaying } from '../services/voice';
 import { S } from '../ui/strings';
 import { showToast } from '../ui/toast';
 
@@ -35,6 +36,8 @@ export function archive(hash: string, toArchived: boolean, onUndo?: () => void):
 export function remove(hash: string, onUndo?: () => void): void {
   const owner = appState()?.owner;
   if (!owner) return;
+  // Deleting the playing article stops it (FD 34).
+  stopIfPlaying(hash);
   const c = deleteItem(store(), now(), owner, hash);
   showToast({
     text: S.toast.deleted,

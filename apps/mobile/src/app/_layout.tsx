@@ -16,6 +16,7 @@ import { ShelfSystem } from '../../modules/shelf-system/src';
 import { boot, useApp } from '../services/app';
 import { startSync } from '../services/runner';
 import { FONTS } from '../ui/fonts';
+import { PlayerHost } from '../screens/Player';
 import { SheetHost } from '../ui/sheet';
 import { ToastHost, settleToast } from '../ui/toast';
 import { useTheme } from '../ui/theme';
@@ -84,6 +85,7 @@ export default function Layout() {
           <Stack.Screen name="gates" />
           <Stack.Screen name="back-test" />
         </Stack>
+        <PlayerHost />
         <ToastHost />
         <SheetHost />
       </SafeAreaProvider>

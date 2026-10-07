@@ -1,0 +1,133 @@
+// The listening session (mobile spec 5.7, 8.1) as the screens see it: one article at a time, its word, whether
+// it plays, its rate. Word events set the article's one position directly (MS Signature 2); the position is
+// published when the session pauses, ends or closes, and a sync follows the end of a session (4.5).
+import { useSyncExternalStore } from 'react';
+import { project, sentences, type Sentence } from '@shelf/protocol';
+import { ShelfVoice, type VoiceState } from '../../modules/shelf-voice/src';
+import { setPosition, type LibRow } from '../data/library';
+import { getSetting, setSetting } from '../data/settings';
+import { readRate, readWps, nextRate } from '../voice/clock';
+import { appState } from './app';
+import { runSync } from './runner';
+import { store } from './store';
+import { textFiles } from './textFiles';
+
+export type Session = {
+  hash: string; title: string; playing: boolean; word: number; rate: number; wordTiming: boolean; wps: number;
+  ended: boolean; totalWords: number; sentences: Sentence[]; sentence: number;
+};
+
+let session: Session | null = null;
+const listeners = new Set<() => void>();
+const set = (s: Session | null) => {
+  session = s;
+  listeners.forEach((l) => l());
+};
+const now = () => Math.floor(Date.now() / 1000);
+const VOICE = 'default';
+
+export function useVoice(): Session | null {
+  return useSyncExternalStore((l) => (listeners.add(l), () => listeners.delete(l)), () => session);
+}
+
+export function voiceSession(): Session | null {
+  return session;
+}
+
+/** Stores the position; publishes it (and syncs) when the session stops moving. */
+function keep(word: number, publish: boolean) {
+  const owner = appState()?.owner;
+  if (!owner || !session) return;
+  setPosition(store(), now(), owner, session.hash, word, publish);
+  if (publish) runSync().catch(() => undefined);
+}
+
+let lastKept = 0;
+let wired = false;
+function wire() {
+  if (wired) return;
+  wired = true;
+  ShelfVoice.addListener('word', (e) => {
+    if (!session || e.hash !== session.hash) return;
+    set({ ...session, word: e.word });
+    if (Date.now() - lastKept > 1000) {
+      lastKept = Date.now();
+      keep(e.word, false);
+    }
+  });
+  ShelfVoice.addListener('sentence', (e) => {
+    if (session && e.hash === session.hash) set({ ...session, sentence: e.index });
+  });
+  ShelfVoice.addListener('state', (e: VoiceState) => {
+    if (!session || e.hash !== session.hash) return;
+    const paused = session.playing && !e.playing;
+    set({ ...session, playing: e.playing, word: e.word, rate: e.rate, wordTiming: e.wordTiming, wps: e.wps });
+    if (Math.abs(e.wps - readWps(getSetting(store(), `voice.wps.${VOICE}`))) > 0.05) setSetting(store(), `voice.wps.${VOICE}`, e.wps.toFixed(3));
+    if (paused) keep(e.word, true);
+  });
+  ShelfVoice.addListener('ended', (e) => {
+    if (!session || e.hash !== session.hash) return;
+    // The article was heard to its end: its position is the last word; the player shows it rewound and paused.
+    keep(session.totalWords - 1, true);
+    set({ ...session, playing: false, ended: true, word: 0 });
+  });
+}
+
+/** Warms the engine when a Reader opens, since the first word took about 2 s cold (T§2). */
+export function warmVoice(): void {
+  wire();
+  ShelfVoice.warmUp().catch(() => undefined);
+}
+
+/** Starts the article at a word (5.7): its sentences from the spoken projection, at the stored rate and wps. */
+export async function listen(row: Pick<LibRow, 'hash' | 'title' | 'site' | 'url'>, fromWord: number): Promise<void> {
+  wire();
+  const markdown = textFiles.readText(row.hash);
+  if (!markdown) return;
+  const list = sentences(project(markdown));
+  const totalWords = list.length ? list[list.length - 1].firstWord + list[list.length - 1].wordStarts.length : 0;
+  if (!totalWords) return;
+  if (session && session.hash !== row.hash) keep(session.word, true);
+  const rate = readRate(getSetting(store(), 'voice.speed'));
+  const wps = readWps(getSetting(store(), `voice.wps.${VOICE}`));
+  const word = Math.max(0, Math.min(fromWord, totalWords - 1));
+  const title = row.title ?? row.url;
+  set({ hash: row.hash, title, playing: true, word, rate, wordTiming: true, wps, ended: false, totalWords, sentences: list, sentence: 0 });
+  await ShelfVoice.start({ hash: row.hash, title, site: row.site ?? '', sentences: list, startWord: word, totalWords, rate, wps });
+}
+
+export function toggle(): void {
+  if (!session) return;
+  if (session.playing) ShelfVoice.pause();
+  else ShelfVoice.play();
+}
+
+export function skip(seconds: 15 | -15): void {
+  ShelfVoice.skip(seconds);
+}
+
+export function jumpTo(word: number): void {
+  ShelfVoice.jumpToWord(word);
+}
+
+/** The speed pill: the next rate, kept for every article (O-13). */
+export function cycleRate(): void {
+  if (!session) return;
+  const r = nextRate(session.rate);
+  setSetting(store(), 'voice.speed', String(r));
+  set({ ...session, rate: r });
+  ShelfVoice.setRate(r);
+}
+
+/** ✕: ends the session everywhere (5.7). */
+export function closeVoice(): void {
+  if (!session) return;
+  if (!session.ended) keep(session.word, true);
+  ShelfVoice.close();
+  set(null);
+}
+
+/** Deleting the playing article stops it (FD 34). */
+export function stopIfPlaying(hash: string): void {
+  if (session?.hash === hash) closeVoice();
+}

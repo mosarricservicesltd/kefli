@@ -16,7 +16,7 @@ import { articleBlocks, type Article } from '../reader/blocks';
 import { scrollYForWord, wordAtScroll, type Place } from '../reader/position';
 import { readerColors, type PaletteId, type ReaderColors } from '../reader/palette';
 import { setReaderPalette, setReaderSize, useReaderPrefs } from '../reader/prefs';
-import { BlockView } from '../reader/Prose';
+import { BlockView, type Lit } from '../reader/Prose';
 import { useApp } from '../services/app';
 import { runOutbox, runSync, setReading } from '../services/runner';
 import { store } from '../services/store';
@@ -34,7 +34,10 @@ import { T, articleTitle, ui } from '../ui/text';
 import { setToastFloor, showToast } from '../ui/toast';
 import { alpha, mix, useTheme } from '../ui/theme';
 import { archive, remove } from './actions';
-import { ArchiveDock, DOCK } from './ArchiveDock';
+import { ReaderTier } from './Player';
+import { listen, stopIfPlaying, useVoice, warmVoice, type Session } from '../services/voice';
+import { startWord } from '../voice/clock';
+import { ArchiveDock, DOCK, DOCK_LIFTED } from './ArchiveDock';
 import { OriginalView } from './Original';
 import { hostOf } from './SaveRow';
 import { Skeleton } from './Skeleton';
@@ -44,7 +47,21 @@ const BAND_TOP = 40;
 const PUBLISH_EVERY = 60;
 const now = () => Math.floor(Date.now() / 1000);
 
-function Bar({ row, P, onAa, onMore }: { row: LibRow; P: ReaderColors; onAa: () => void; onMore: () => void }) {
+/** The Listen chip (prototype .listenbtn): a hairline entry point; it keeps its slot, faded, while its article plays. */
+function ListenChip({ P, gone, onPress }: { P: ReaderColors; gone: boolean; onPress: () => void }) {
+  const st = useAnimatedStyle(() => ({ opacity: withTiming(gone ? 0 : 1, gone ? quickOut : quickIn) }), [gone]);
+  return (
+    <Animated.View style={[{ marginRight: 4 }, st]} pointerEvents={gone ? 'none' : 'auto'} importantForAccessibility={gone ? 'no-hide-descendants' : 'auto'}>
+      <Press accessibilityRole="button" accessibilityLabel={S.reader.listen} onPress={onPress} layer={pressLayer(P.text, 'reader')}
+        style={{ height: 36, paddingLeft: 10, paddingRight: 12, borderRadius: radius.control, borderWidth: 1, borderColor: alpha(P.text, 0.22), flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Icon name="play" size={14} color={P.text} solid />
+        <T style={[ui(13, 'title', 1), { color: P.text }]}>{S.reader.listen}</T>
+      </Press>
+    </Animated.View>
+  );
+}
+
+function Bar({ row, P, onAa, onMore, chip }: { row: LibRow; P: ReaderColors; onAa: () => void; onMore: () => void; chip?: React.ReactNode }) {
   const btn = (label: string, onPress: () => void, child: React.ReactNode) => (
     <Press accessibilityRole="button" accessibilityLabel={label} onPress={onPress} layer={pressLayer(P.text, 'reader')} style={{ width: 48, height: 48, borderRadius: radius.button, alignItems: 'center', justifyContent: 'center' }}>
       {child}
@@ -54,6 +71,7 @@ function Bar({ row, P, onAa, onMore }: { row: LibRow; P: ReaderColors; onAa: () 
     <View style={{ height: 56, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, backgroundColor: P.bg, zIndex: 2 }}>
       {btn(S.reader.back, () => router.back(), <Icon name="back" size={22} color={P.text} />)}
       <T numberOfLines={1} style={[ui(13, 'body', 1.3), { flex: 1, textAlign: 'center', color: P.muted }]}>{hostOf(row.url)}</T>
+      {chip}
       {btn(S.reader.aa, onAa, <T style={[ui(15, 'heading', 1, -0.02), { color: P.text }]}>Aa</T>)}
       {btn(S.reader.more, onMore, <Icon name="more" size={22} color={P.text} />)}
     </View>
@@ -129,7 +147,19 @@ function EndCard({ row, P, next, onArchive, onNext, onUnarchive }: { row: LibRow
   );
 }
 
-function Article({ row, P, owner, article }: { row: LibRow; P: ReaderColors; owner: string; article: Article }) {
+/** The words the voice lights in a block: the spoken word, or with no word timing its whole sentence (FD 91 (h)). */
+function litRange(s: Session | null, hash: string): { from: number; to: number } | null {
+  if (!s || s.hash !== hash || s.ended) return null;
+  if (s.wordTiming) return { from: s.word, to: s.word };
+  const sent = s.sentences[s.sentence];
+  return sent ? { from: sent.firstWord, to: sent.firstWord + sent.wordStarts.length - 1 } : null;
+}
+
+function Article({ row, P, owner, article, voice, viewRange }: {
+  row: LibRow; P: ReaderColors; owner: string; article: Article; voice: Session | null;
+  /** Set by the article: the first and last words in view, for where Listen starts (FD 19). */
+  viewRange: React.MutableRefObject<(() => { first: number; last: number }) | null>;
+}) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const prefs = useReaderPrefs();
@@ -144,6 +174,13 @@ function Article({ row, P, owner, article }: { row: LibRow; P: ReaderColors; own
   const [word, setWord] = useState(row.position_word);
   const lastPublish = useRef(now());
   const { blocks } = article;
+  const docked = voice?.hash === row.hash;
+  const dragging = useRef(false);
+  const away = useRef(false);
+  // stable per block, so a word change re-renders only the blocks whose highlight changes (6.7)
+  const onLayouts = useMemo(() => blocks.map((_, i) => (e: LayoutChangeEvent) => {
+    layouts.current[i] = { y: e.nativeEvent.layout.y, h: e.nativeEvent.layout.height };
+  }), [blocks]);
 
   const place = useCallback(() => {
     const t = target.current;
@@ -168,17 +205,24 @@ function Article({ row, P, owner, article }: { row: LibRow; P: ReaderColors; own
     [blocks, article.words],
   );
 
+  viewRange.current = () => ({ first: wordAt(BAND_TOP), last: wordAt(viewH.current - 80) });
+
+  // Reading writes the position only while its article isn't playing (5.7).
   const keep = useCallback(() => {
+    if (docked) return;
     const w = wordAt(BAND_TOP);
     setWord(w);
     const publish = now() - lastPublish.current >= PUBLISH_EVERY;
     if (publish) lastPublish.current = now();
     setPosition(store(), now(), owner, row.hash, w, publish);
     if (publish) runOutbox().catch(() => 0);
-  }, [wordAt, owner, row.hash]);
+  }, [wordAt, owner, row.hash, docked]);
 
-  // Leaving the Reader publishes the position (4.5).
+  // Leaving the Reader publishes the position (4.5); a playing article's position is the voice's.
+  const dockedRef = useRef(docked);
+  dockedRef.current = docked;
   useEffect(() => () => {
+    if (dockedRef.current) return;
     setPosition(store(), now(), owner, row.hash, wordAt(BAND_TOP), true);
     runOutbox().catch(() => 0);
   }, [owner, row.hash, wordAt]);
@@ -190,6 +234,31 @@ function Article({ row, P, owner, article }: { row: LibRow; P: ReaderColors; own
     size.current = prefs.size;
   }
 
+  // Follow-scroll (FD 18, FD 43): when the spoken word leaves the reading band it glides a third of the way down,
+  // never while a finger is down; a drag that takes it off screen stops following until it is seen again.
+  const lit = litRange(voice, row.hash);
+  const spoken = lit?.from ?? -1;
+  useEffect(() => {
+    if (spoken < 0 || !shown) return;
+    const y = scrollYForWord(blocks, layouts.current, proseY.current, spoken, 0);
+    if (y === null) return;
+    const top = scrollY.current + BAND_TOP;
+    const bottom = scrollY.current + viewH.current - 80 - 72;
+    const inBand = y >= top && bottom >= y;
+    if (inBand) away.current = false;
+    if (inBand || dragging.current || away.current) return;
+    scroll.current?.scrollTo({ y: Math.max(0, y - viewH.current / 3), animated: true });
+  }, [spoken, shown, blocks]);
+  const litFor = useMemo(() => {
+    const out = new Map<number, Lit>();
+    if (!lit) return out;
+    blocks.forEach((b, i) => {
+      const last = b.firstWord + b.words - 1;
+      if (b.words && lit.to >= b.firstWord && last >= lit.from) out.set(i, { from: Math.max(lit.from, b.firstWord) - b.firstWord, to: Math.min(lit.to, last) - b.firstWord });
+    });
+    return out;
+  }, [blocks, lit?.from, lit?.to]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const next = row.state === 'unread' ? nextUnread(store(), owner, row.hash) : undefined;
   const reopen = () => router.push(`/reader/${row.hash}`);
   const mins = minutes(row.words);
@@ -198,7 +267,7 @@ function Article({ row, P, owner, article }: { row: LibRow; P: ReaderColors; own
 
   return (
     <>
-      <View style={{ height: 2, overflow: 'hidden', zIndex: 2 }}>
+      <View style={{ height: 2, overflow: 'hidden', zIndex: 2, opacity: docked ? 0 : 1 }}>
         <View style={{ width: `${progress * 100}%`, height: 2, backgroundColor: P.ink }} />
       </View>
       <Animated.View style={[{ flex: 1 }, lineStyle]}>
@@ -208,7 +277,12 @@ function Article({ row, P, owner, article }: { row: LibRow; P: ReaderColors; own
           onContentSizeChange={(_, h) => { contentH.current = h; requestAnimationFrame(place); }}
           onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => (scrollY.current = e.nativeEvent.contentOffset.y)}
           scrollEventThrottle={32}
-          onScrollEndDrag={keep}
+          onScrollBeginDrag={() => { dragging.current = true; }}
+          onScrollEndDrag={() => {
+            dragging.current = false;
+            if (spoken >= 0) away.current = true;
+            keep();
+          }}
           onMomentumScrollEnd={keep}
           contentContainerStyle={{ paddingTop: 16, paddingHorizontal: 20, paddingBottom: 140 + insets.bottom }}
         >
@@ -222,7 +296,7 @@ function Article({ row, P, owner, article }: { row: LibRow; P: ReaderColors; own
           </T>
           <View onLayout={(e) => (proseY.current = e.nativeEvent.layout.y)}>
             {blocks.map((b, i) => (
-              <BlockView key={i} b={b} P={P} size={prefs.size} onLayout={(e: LayoutChangeEvent) => (layouts.current[i] = { y: e.nativeEvent.layout.y, h: e.nativeEvent.layout.height })} />
+              <BlockView key={i} b={b} P={P} size={prefs.size} onLayout={onLayouts[i]} lit={litFor.get(i)} />
             ))}
           </View>
           <EndCard
@@ -251,10 +325,14 @@ export default function Reader() {
   const cached = row?.text_state === 'cached';
   const markdown = useMemo(() => (cached ? textFiles.readText(hash) : null), [cached, hash, row?.text_sha256]); // eslint-disable-line react-hooks/exhaustive-deps
   const article = useMemo(() => (markdown ? articleBlocks(markdown) : null), [markdown]);
+  const voice = useVoice();
+  const viewRange = useRef<(() => { first: number; last: number }) | null>(null);
+  const lifted = !!voice;
 
-  useFocusEffect(useCallback(() => setToastFloor(DOCK), []));
+  useFocusEffect(useCallback(() => setToastFloor((lifted ? DOCK_LIFTED : 16) + 52), [lifted]));
   useEffect(() => {
     setReading(hash);
+    warmVoice();
     return () => setReading(null);
   }, [hash]);
   // A text marked here whose file is gone is fetched again; one still to come is fetched first (4.5).
@@ -273,14 +351,23 @@ export default function Reader() {
       {row.state === 'archived' && <MenuItem icon="restore" label={S.reader.menu.backToUnread} onPress={() => closeSheet(() => { router.back(); archive(row.hash, false, reopen); })} />}
       <MenuItem icon="ext" label={S.reader.menu.openOriginal} onPress={() => closeSheet(() => router.push(`/reader/${row.hash}/original`))} />
       <MenuItem icon="link" label={S.reader.menu.copyLink} onPress={() => closeSheet(() => Clipboard.setStringAsync(row.url).then(() => showToast({ text: S.toast.linkCopied, hash: row.hash })))} />
-      <MenuItem icon="trash" label={S.reader.menu.delete} danger onPress={() => closeSheet(() => { router.back(); remove(row.hash, reopen); })} />
+      <MenuItem icon="trash" label={S.reader.menu.delete} danger onPress={() => closeSheet(() => { router.back(); stopIfPlaying(row.hash); remove(row.hash, reopen); })} />
     </View>
   ));
   const waiting = !cached || !article;
+  const playingHere = voice?.hash === row.hash;
+  const startListening = () => {
+    if (!article) return;
+    const range = viewRange.current?.() ?? { first: row.position_word, last: row.position_word };
+    listen(row, startWord(row.position_word, range, article.words)).catch(() => undefined);
+  };
   return (
     <View style={{ flex: 1, backgroundColor: P.bg, paddingTop: insets.top }}>
       <StatusBar style={P.id === 'dark' ? 'light' : 'dark'} />
-      <Bar row={row} P={P} onAa={() => openSheet(S.reader.aaSheet.title, () => <AaSheet hash={row.hash} />)} onMore={menu} />
+      <Bar
+        row={row} P={P} onAa={() => openSheet(S.reader.aaSheet.title, () => <AaSheet hash={row.hash} />)} onMore={menu}
+        chip={waiting ? undefined : <ListenChip P={P} gone={playingHere} onPress={startListening} />}
+      />
       {waiting ? (
         <ScrollView contentContainerStyle={{ paddingTop: 16, paddingHorizontal: 20, paddingBottom: 140 }}>
           <View style={{ marginTop: -16, marginHorizontal: -20, marginBottom: 22 }}>
@@ -298,11 +385,12 @@ export default function Reader() {
         </ScrollView>
       ) : (
         <>
-          <Article key={`${row.hash}`} row={row} P={P} owner={owner} article={article} />
+          <Article key={`${row.hash}`} row={row} P={P} owner={owner} article={article} voice={voice} viewRange={viewRange} />
           <ArchiveDock
-            archived={row.state === 'archived'} bg={P.bg} fg={P.text} shadow={P.float}
+            archived={row.state === 'archived'} bg={P.bg} fg={P.text} shadow={P.float} lifted={lifted}
             onPress={() => { router.back(); archive(row.hash, row.state !== 'archived', reopen); }}
           />
+          {playingHere && voice && <ReaderTier s={voice} P={P} bottom={16 + insets.bottom} />}
         </>
       )}
     </View>

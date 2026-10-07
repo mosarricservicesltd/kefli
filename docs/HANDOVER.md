@@ -14,7 +14,8 @@ Written on 6 October 2026, when the work moved off the laptop it started on. Eve
   - **Saves:** Unread and Archive, with swipe, the toast with Undo, the row menu, and the empty, offline and sync-line states.
   - **The Reader:** laid out at the saved word, with the Aa sheet, the end card, the ⋯ menu, the loading and offline states, and the original-page view.
   - **Where they live:** the screens are in `apps/mobile/src/screens`, their parts in `src/ui` and the Reader's logic in `src/reader`. The Android test build's gates moved to the `/gates` route (`adb shell am start -d shelf://gates`).
-  - **Still to come in week 2:** `shelf-voice` with the Listen chip, the player and highlighting; covers drawing in; images and pending parses (sync phases 6 and 7); and Search, which is drawn but not wired.
+  - **Listening (`shelf-voice`):** rebuilt the same day on file synthesis, as week 0 decided. Sentences are written a few ahead and played through Shelf's own AudioTrack, and the word is read from the playback head. It has the Listen chip, the Reader tier with the spoken word lit and followed, and the mini on other screens. Android now names Shelf's session the media button session, so hardware play, pause and next (+15) reach it, and the lock-screen card works.
+  - **Still to come in week 2:** the lock-screen artwork and the notification glyph; covers drawing in; images and pending parses (sync phases 6 and 7); Search, which is drawn but not wired; and the hour locked on battery (FD 87).
 
 ## Open with Richard
 

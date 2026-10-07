@@ -25,7 +25,8 @@ import { T, ui } from '../ui/text';
 import { setToastFloor, showToast } from '../ui/toast';
 import { mix, useTheme } from '../ui/theme';
 import { archive, remove } from './actions';
-import { ArchiveDock, DOCK } from './ArchiveDock';
+import { ArchiveDock, DOCK_LIFTED } from './ArchiveDock';
+import { stopIfPlaying, useVoice } from '../services/voice';
 import { IconButton } from './Onb';
 import { hostOf } from './SaveRow';
 import { Skeleton } from './Skeleton';
@@ -35,7 +36,8 @@ export function OriginalView({ row, failedSave }: { row: LibRow; failedSave: boo
   const insets = useSafeAreaInsets();
   const online = useOnline();
   const [st, setSt] = useState<'loading' | 'page' | 'failed'>('loading');
-  useFocusEffect(useCallback(() => setToastFloor(DOCK), []));
+  const playing = !!useVoice();
+  useFocusEffect(useCallback(() => setToastFloor((playing ? DOCK_LIFTED : 16) + 52), [playing]));
   const leave = () => router.back();
   const reopen = () => router.push(`/reader/${row.hash}`);
   const menu = () => openSheet(row.title ?? row.url, () => (
@@ -43,7 +45,7 @@ export function OriginalView({ row, failedSave }: { row: LibRow; failedSave: boo
       <MenuTitle>{row.title ?? row.url}</MenuTitle>
       <MenuItem icon="ext" label={S.reader.iabMenu.openInBrowser} onPress={() => closeSheet(() => Linking.openURL(row.url).catch(() => undefined))} />
       <MenuItem icon="link" label={S.reader.iabMenu.copyLink} onPress={() => closeSheet(() => Clipboard.setStringAsync(row.url).then(() => showToast({ text: S.toast.linkCopied, hash: row.hash })))} />
-      <MenuItem icon="trash" label={S.reader.iabMenu.delete} danger onPress={() => closeSheet(() => { leave(); remove(row.hash, reopen); })} />
+      <MenuItem icon="trash" label={S.reader.iabMenu.delete} danger onPress={() => closeSheet(() => { leave(); stopIfPlaying(row.hash); remove(row.hash, reopen); })} />
     </View>
   ));
   return (
@@ -96,7 +98,7 @@ export function OriginalView({ row, failedSave }: { row: LibRow; failedSave: boo
         </View>
       )}
       <ArchiveDock
-        archived={row.state === 'archived'} bg={c.surface} fg={c.text} shadow={c.shadowFloat}
+        archived={row.state === 'archived'} bg={c.surface} fg={c.text} shadow={c.shadowFloat} lifted={playing}
         onPress={() => { leave(); archive(row.hash, row.state !== 'archived', reopen); }}
       />
     </View>

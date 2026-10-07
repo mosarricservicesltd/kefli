@@ -6,28 +6,37 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
+import android.media.AudioFormat
 import android.media.AudioManager
+import android.media.AudioTrack
 import android.os.Bundle
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import java.io.File
 import kotlin.math.roundToInt
 
-// The phone's own voice reading an article (mobile spec 8.1, 5.7). One process-wide TextToSpeech; sentences
-// are queued a few ahead, each utterance id "<index>:<character offset>", and onRangeStart becomes a word by
-// binary search over the sentence's word starts. Everything here runs on the main looper.
+// The phone's own voice reading an article (mobile spec 8.1, 5.7), in Shelf's own audio. The engine writes each
+// sentence to a file a few ahead (synthesizeToFile), reporting each word's frame; Shelf plays the files through
+// one AudioTrack in its own process, so Android routes media buttons, the car and Bluetooth to Shelf's session
+// (week-0 gate), and the word is read from the playback head. An engine that reports no word ranges makes the
+// sentence the unit (FD 91 (h)). Everything here runs on the main looper except the audio writes.
 object VoiceEngine {
   class Sentence(val text: String, val wordStarts: IntArray, val firstWord: Int)
 
   sealed class Event {
     data class Word(val hash: String, val word: Int) : Event()
-    data class State(val hash: String, val playing: Boolean, val word: Int, val rate: Float) : Event()
+    data class SentenceStart(val hash: String, val index: Int) : Event()
+    data class State(val hash: String, val playing: Boolean, val word: Int, val rate: Float, val wordTiming: Boolean, val wps: Float) : Event()
     data class Ended(val hash: String) : Event()
     data class Error(val hash: String, val code: String) : Event()
   }
 
+  /** Sentences written ahead of the one playing. */
   private const val AHEAD = 2
+  private const val POLL_MS = 40L
   private val main = Handler(Looper.getMainLooper())
   private val listeners = mutableListOf<(Event) -> Unit>()
 
@@ -46,24 +55,47 @@ object VoiceEngine {
   var word = 0; private set
   var playing = false; private set
   var ended = false; private set
+  var wordTiming = true; private set
   val loaded get() = sentences.isNotEmpty()
 
-  // Sentences handed to the engine: [queuedFrom, queuedTo].
-  private var queuedTo = -1
-  private var generation = 0
+  // One run of audio from a start word: its generation, what's written, and the track playing it.
+  @Volatile private var generation = 0
+  private var track: AudioTrack? = null
+  private val segments = ArrayList<Segment>()
+  private var framesWritten = 0L
+  private var nextSentence = 0
+  private var firstOffset = 0
+  private var firstSentence = 0
+  private var synthesizing: Synth? = null
+  /** Audio must be written again from `word` before it plays (after a jump or a rate change while paused). */
+  private var stale = true
+  private var lastSentenceEvent = -1
+  private val order = RangeOrder()
+  private val writerThread = HandlerThread("shelf-voice-audio").apply { start() }
+  private val writer = Handler(writerThread.looper)
   private var resumeOnGain = false
+
+  private class Synth(val gen: Int, val sentence: Int, val offset: Int, val text: String, val file: File) {
+    val ranges = ArrayList<IntArray>()
+  }
 
   fun addListener(l: (Event) -> Unit) = listeners.add(l)
   fun removeListener(l: (Event) -> Unit) = listeners.remove(l)
   private fun emit(e: Event) = listeners.toList().forEach { it(e) }
-  private fun emitState() = emit(Event.State(hash, playing, word, rate))
+  private fun emitState() = emit(Event.State(hash, playing, word, rate, wordTiming, wps))
 
   /** Seconds of reading at the current rate, by the app's clock (5.7). */
   fun durationMs(): Long = if (totalWords == 0) 0 else (totalWords / (wps * rate) * 1000).toLong()
   fun positionMs(): Long = (word / (wps * rate) * 1000).toLong()
 
+  private val attributes: AudioAttributes = AudioAttributes.Builder()
+    .setUsage(AudioAttributes.USAGE_MEDIA)
+    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+    .build()
+
   fun warmUp(context: Context, then: () -> Unit) {
     app = context.applicationContext
+    main.removeCallbacks(idleRelease)
     if (ttsReady) return then()
     onReady.add(then)
     if (tts != null) return
@@ -78,82 +110,86 @@ object VoiceEngine {
     }
   }
 
-  private val attributes: AudioAttributes = AudioAttributes.Builder()
-    .setUsage(AudioAttributes.USAGE_MEDIA)
-    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-    .build()
-
   private fun configure() {
     val t = tts ?: return
-    t.setAudioAttributes(attributes)
+    t.setSpeechRate(rate)
     t.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
       override fun onStart(id: String) {}
-      override fun onDone(id: String) { main.post { if (id.startsWith("probe")) probeDone() else done(id) } }
+      override fun onDone(id: String) { main.post { written(id) } }
       @Deprecated("Deprecated in Java")
-      override fun onError(id: String) { main.post { emit(Event.Error(hash, "tts_error")) } }
-      override fun onRangeStart(id: String, start: Int, end: Int, frame: Int) {
-        main.post { if (id.startsWith("probe")) probeRange(start, end, frame) else range(id, start) }
-      }
+      override fun onError(id: String) { main.post { failed(id) } }
+      override fun onError(id: String, code: Int) { main.post { failed(id) } }
+      override fun onRangeStart(id: String, a: Int, b: Int, c: Int) { main.post { range(id, a, b, c) } }
     })
   }
 
   fun load(h: String, t: String, s: String, list: List<Sentence>, startWord: Int, total: Int, r: Float, wordsPerSecond: Float) {
-    stopSpeech()
+    reset()
     hash = h; title = t; site = s; sentences = list; totalWords = total; rate = r; wps = wordsPerSecond
+    tts?.setSpeechRate(r)
     word = startWord.coerceIn(0, maxOf(0, total - 1))
     ended = false
     playing = false
+    stale = true
     emitState()
   }
 
   fun play() {
     if (!loaded || !ttsReady) return
-    if (ended) { word = 0; ended = false }
+    if (ended) { word = 0; ended = false; stale = true }
     if (!requestFocus()) return
     playing = true
     registerNoisy()
-    speakFrom(word)
+    if (stale) startFrom(word) else track?.play()
+    main.removeCallbacks(poll)
+    main.post(poll)
     emitState()
   }
 
   fun pause() {
     if (!playing) return
     playing = false
-    stopSpeech()
+    track?.pause()
+    main.removeCallbacks(poll)
     unregisterNoisy()
     emitState()
   }
 
-  /** ±15 s moves round(15 × wps × rate) words and restarts speech there, clamped at both ends (5.7). */
+  /** ±15 s moves round(15 × wps × rate) words and restarts the audio there, clamped at both ends (5.7). */
   fun skip(seconds: Int) = jumpTo(word + (seconds * wps * rate).roundToInt())
 
   fun jumpTo(target: Int) {
     if (!loaded) return
     word = target.coerceIn(0, totalWords - 1)
     ended = false
-    if (playing) speakFrom(word)
+    if (playing) startFrom(word) else { reset(); stale = true }
     emit(Event.Word(hash, word))
     emitState()
   }
 
+  /** A new rate is written fresh from the word reached; the voice keeps its pitch. */
   fun setRate(r: Float) {
     rate = r
     tts?.setSpeechRate(r)
-    if (playing) speakFrom(word)
+    if (playing) startFrom(word) else { reset(); stale = true }
     emitState()
   }
 
   fun close() {
     playing = false
-    stopSpeech()
+    reset()
     unregisterNoisy()
     abandonFocus()
     sentences = emptyList()
     totalWords = 0
     emitState()
+    main.removeCallbacks(idleRelease)
+    main.postDelayed(idleRelease, 60_000)
   }
 
-  /** Called a minute after the last session closes: no second TextToSpeech ever competes (8.1). */
+  /** A minute after the last session closes the engine goes, so no second TextToSpeech ever competes (8.1). */
+  private val idleRelease = Runnable { release() }
+
   fun release() {
     tts?.shutdown()
     tts = null
@@ -170,59 +206,164 @@ object VoiceEngine {
     return lo
   }
 
-  private fun stopSpeech() {
+  /** Drops the audio written so far and anything being written. */
+  private fun reset() {
     generation++
     tts?.stop()
-    queuedTo = -1
+    synthesizing?.file?.delete()
+    synthesizing = null
+    track?.let { t -> runCatching { t.pause(); t.flush(); t.release() } }
+    track = null
+    segments.clear()
+    framesWritten = 0
+    lastSentenceEvent = -1
+    main.removeCallbacks(poll)
+    voiceDir().listFiles()?.forEach { it.delete() }
   }
 
-  private fun speakFrom(w: Int) {
-    stopSpeech()
+  private fun voiceDir() = File(app.cacheDir, "voice").apply { mkdirs() }
+
+  private fun startFrom(w: Int) {
+    reset()
+    stale = false
     val si = sentenceOf(w)
     val s = sentences[si]
-    val offset = s.wordStarts[(w - s.firstWord).coerceIn(0, s.wordStarts.size - 1)]
-    enqueue(si, offset, TextToSpeech.QUEUE_FLUSH)
-    for (i in 1..AHEAD) if (si + i < sentences.size) enqueue(si + i, 0, TextToSpeech.QUEUE_ADD)
+    firstSentence = si
+    firstOffset = s.wordStarts[(w - s.firstWord).coerceIn(0, s.wordStarts.size - 1)]
+    nextSentence = si
+    writeAhead()
   }
 
-  private fun enqueue(si: Int, offset: Int, mode: Int) {
-    val text = sentences[si].text.substring(offset)
-    tts?.speak(text, mode, Bundle(), "$generation:$si:$offset")
-    queuedTo = si
+  /** The segment playing now, by the track's head; -1 before the first is written. */
+  private fun playingSegment(head: Long): Int {
+    for (i in segments.indices.reversed()) if (segments[i].startFrame <= head) return i
+    return -1
   }
 
-  private fun parse(id: String): Triple<Int, Int, Int>? =
-    id.split(':').takeIf { it.size == 3 }?.let { Triple(it[0].toInt(), it[1].toInt(), it[2].toInt()) }
+  private fun head(): Long = track?.playbackHeadPosition?.toLong()?.and(0xFFFFFFFFL) ?: 0L
 
-  private fun range(id: String, start: Int) {
-    val (gen, si, offset) = parse(id) ?: return
-    if (gen != generation || !playing || si >= sentences.size) return
-    val s = sentences[si]
-    val char = offset + start
-    var k = s.wordStarts.indexOfLast { it <= char }
-    if (k < 0) k = 0
-    val w = s.firstWord + k
-    if (w != word) {
-      word = w
-      emit(Event.Word(hash, w))
+  private fun writeAhead() {
+    if (synthesizing != null || nextSentence >= sentences.size) return
+    val ahead = segments.size - 1 - maxOf(0, playingSegment(head()))
+    if (ahead >= AHEAD) return
+    val si = nextSentence++
+    val offset = if (si == firstSentence) firstOffset else 0
+    val max = TextToSpeech.getMaxSpeechInputLength() - 1
+    val text = sentences[si].text.substring(offset).let { if (it.length > max) it.substring(0, max) else it }
+    val file = File(voiceDir(), "$generation-$si.wav")
+    val synth = Synth(generation, si, offset, text, file)
+    synthesizing = synth
+    val id = "$hash:$generation:$si"
+    if (tts?.synthesizeToFile(text, Bundle(), file, id) != TextToSpeech.SUCCESS) {
+      synthesizing = null
+      emit(Event.Error(hash, "tts_synthesize"))
     }
   }
 
-  private fun done(id: String) {
-    val (gen, si, _) = parse(id) ?: return
-    if (gen != generation || !playing) return
-    if (si >= sentences.size - 1) {
-      playing = false
-      ended = true
-      word = 0
-      unregisterNoisy()
-      abandonFocus()
-      emit(Event.Ended(hash))
-      emitState()
-      return
+  private fun current(id: String): Synth? = synthesizing?.takeIf { "$hash:${it.gen}:${it.sentence}" == id && it.gen == generation }
+
+  private fun range(id: String, a: Int, b: Int, c: Int) {
+    val s = current(id) ?: return
+    val (char, frame) = order.read(a, b, c, s.text.length) ?: return
+    s.ranges.add(intArrayOf(char, frame))
+  }
+
+  private fun failed(id: String) {
+    val s = current(id) ?: return
+    synthesizing = null
+    s.file.delete()
+    emit(Event.Error(hash, "tts_error"))
+    writeAhead()
+  }
+
+  private fun written(id: String) {
+    val s = current(id) ?: return
+    synthesizing = null
+    val pcm = Wav.read(s.file)
+    s.file.delete()
+    if (pcm == null || pcm.frames == 0) return writeAhead()
+    val t = track ?: newTrack(pcm) ?: return emit(Event.Error(hash, "audio_track"))
+    val ranges = s.ranges.sortedBy { it[1] }
+    if (ranges.isEmpty()) wordTiming = false
+    learn(s, ranges, pcm)
+    segments.add(Segment(s.sentence, s.offset, framesWritten, pcm.frames.toLong(), pcm.sampleRate, ranges))
+    framesWritten += pcm.frames
+    val gen = generation
+    writer.post {
+      var at = 0
+      while (at < pcm.data.size && gen == generation) {
+        val n = t.write(pcm.data, at, minOf(16_384, pcm.data.size - at))
+        if (n <= 0) break
+        at += n
+      }
     }
-    val next = queuedTo + 1
-    if (next < sentences.size) enqueue(next, 0, TextToSpeech.QUEUE_ADD)
+    if (playing && t.playState != AudioTrack.PLAYSTATE_PLAYING) t.play()
+    writeAhead()
+  }
+
+  private fun newTrack(pcm: Pcm): AudioTrack? {
+    val channelMask = if (pcm.channels == 2) AudioFormat.CHANNEL_OUT_STEREO else AudioFormat.CHANNEL_OUT_MONO
+    val encoding = if (pcm.bits == 8) AudioFormat.ENCODING_PCM_8BIT else AudioFormat.ENCODING_PCM_16BIT
+    val min = AudioTrack.getMinBufferSize(pcm.sampleRate, channelMask, encoding)
+    val t = runCatching {
+      AudioTrack.Builder()
+        .setAudioAttributes(attributes)
+        .setAudioFormat(AudioFormat.Builder().setSampleRate(pcm.sampleRate).setChannelMask(channelMask).setEncoding(encoding).build())
+        .setTransferMode(AudioTrack.MODE_STREAM)
+        .setBufferSizeInBytes(maxOf(min, pcm.sampleRate * pcm.frameBytes / 2))
+        .build()
+    }.getOrNull()
+    track = t
+    return t
+  }
+
+  /** Words a second at rate 1 for this voice, learned from each sentence's audio (5.7), as a moving average. */
+  private fun learn(s: Synth, ranges: List<IntArray>, pcm: Pcm) {
+    val sentence = sentences[s.sentence]
+    val first = Timing.lastAtOrBelow(sentence.wordStarts, s.offset)
+    val words = sentence.wordStarts.size - maxOf(0, first)
+    val seconds = pcm.frames.toFloat() / pcm.sampleRate
+    if (words < 4 || seconds < 1f || (ranges.isEmpty() && words < 8)) return
+    val measured = words / seconds / rate
+    if (measured in 1f..8f) wps = wps * 0.8f + measured * 0.2f
+  }
+
+  // While playing, the word follows the playback head; the article ends when the last sentence has played out.
+  private val poll = object : Runnable {
+    override fun run() {
+      if (!playing) return
+      val head = head()
+      val i = playingSegment(head)
+      if (i >= 0) {
+        val seg = segments[i]
+        val s = sentences[seg.sentence]
+        val w = Timing.wordAt(seg, head - seg.startFrame, s.wordStarts, s.firstWord)
+        if (seg.sentence != lastSentenceEvent) {
+          lastSentenceEvent = seg.sentence
+          emit(Event.SentenceStart(hash, seg.sentence))
+        }
+        if (w != word) {
+          word = w
+          emit(Event.Word(hash, w))
+        }
+        val allWritten = nextSentence >= sentences.size && synthesizing == null
+        if (allWritten && head >= framesWritten) return finish()
+      }
+      writeAhead()
+      main.postDelayed(this, POLL_MS)
+    }
+  }
+
+  private fun finish() {
+    playing = false
+    ended = true
+    word = 0
+    reset()
+    stale = true
+    unregisterNoisy()
+    abandonFocus()
+    emit(Event.Ended(hash))
+    emitState()
   }
 
   // Audio focus, manual (8.1): a loss or becoming noisy pauses; a transient loss resumes on regain.
@@ -268,47 +409,5 @@ object VoiceEngine {
     if (!noisyRegistered) return
     app.unregisterReceiver(noisy)
     noisyRegistered = false
-  }
-
-  // The week-0 probe: does the engine report word positions when it writes speech to a file, rather than
-  // speaking it? If so, Shelf can play the audio itself, which Android needs before it routes headphone and
-  // car buttons to Shelf's session (08-week0-gates.md).
-  private var probe: ((String) -> Unit)? = null
-  private var probeStarted = 0L
-  private var probeFile: java.io.File? = null
-  private val probeRanges = org.json.JSONArray()
-
-  fun probeSynthesis(context: Context, text: String, then: (String) -> Unit) {
-    warmUp(context) {
-      val file = java.io.File(app.cacheDir, "probe.wav").apply { delete() }
-      probe = then
-      probeFile = file
-      while (probeRanges.length() > 0) probeRanges.remove(0)
-      probeStarted = android.os.SystemClock.elapsedRealtime()
-      tts?.synthesizeToFile(text, Bundle(), file, "probe")
-    }
-  }
-
-  private fun probeRange(start: Int, end: Int, frame: Int) {
-    probeRanges.put(org.json.JSONObject().put("start", start).put("end", end).put("frame", frame)
-      .put("ms", android.os.SystemClock.elapsedRealtime() - probeStarted))
-  }
-
-  private fun probeDone() {
-    val f = probeFile ?: return
-    val bytes = f.length()
-    // A canonical WAV header: sample rate at byte 24, bits per sample at 34, channels at 22.
-    val head = ByteArray(44).also { b -> f.inputStream().use { it.read(b) } }
-    fun le(i: Int, n: Int) = (0 until n).fold(0) { acc, k -> acc or ((head[i + k].toInt() and 0xff) shl (8 * k)) }
-    val rate = le(24, 4)
-    val bits = le(34, 2)
-    val channels = le(22, 2)
-    val audioMs = if (rate > 0 && bits > 0 && channels > 0) (bytes - 44) * 1000 / (rate.toLong() * channels * bits / 8) else -1
-    val out = org.json.JSONObject()
-      .put("synthMs", android.os.SystemClock.elapsedRealtime() - probeStarted)
-      .put("bytes", bytes).put("sampleRate", rate).put("bits", bits).put("channels", channels).put("audioMs", audioMs)
-      .put("ranges", probeRanges)
-    probe?.invoke(out.toString())
-    probe = null
   }
 }

@@ -53,9 +53,16 @@ export function setToastFloor(px: number): void {
   floorListeners.forEach((l) => l());
 }
 
+// The mini above the tab bar lifts the toast with it (CS Scaffolding: tab bar, player, toast).
+let lift = 0;
+export function setToastLift(px: number): void {
+  lift = px;
+  floorListeners.forEach((l) => l());
+}
+
 export function ToastHost() {
   const t = useSyncExternalStore(subscribe, () => shown);
-  const f = useSyncExternalStore((l) => (floorListeners.add(l), () => floorListeners.delete(l)), () => floor);
+  const f = useSyncExternalStore((l) => (floorListeners.add(l), () => floorListeners.delete(l)), () => floor + lift);
   const insets = useSafeAreaInsets();
   if (!t) return null;
   return <Toast key={t.id} t={t} bottom={insets.bottom + f + 8} />;

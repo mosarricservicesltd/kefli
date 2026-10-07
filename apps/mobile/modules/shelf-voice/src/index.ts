@@ -6,9 +6,12 @@ export type VoiceSession = {
   startWord: number; totalWords: number; rate: number; wps: number;
 };
 
+export type VoiceState = { hash: string; playing: boolean; word: number; rate: number; wordTiming: boolean; wps: number };
+
 type Events = {
   word: (e: { hash: string; word: number }) => void;
-  state: (e: { hash: string; playing: boolean; word: number; rate: number }) => void;
+  sentence: (e: { hash: string; index: number }) => void;
+  state: (e: VoiceState) => void;
   ended: (e: { hash: string }) => void;
   error: (e: { hash: string; code: string }) => void;
 };
@@ -19,14 +22,12 @@ interface Native {
   play(): void; pause(): void; skip(seconds: 15 | -15): void; jumpToWord(word: number): void;
   setRate(rate: number): void; close(): void;
   readLog(): string; clearLog(): void;
-  probeSynthesis(text: string): Promise<string>;
-  playProbe(): void;
   addListener<K extends keyof Events>(name: K, listener: Events[K]): EventSubscription;
 }
 
 const native = requireNativeModule<Native>('ShelfVoice');
 
-/** mobile spec 8.1 (listVoices and sample come later). */
+/** mobile spec 8.1: the phone's voice in Shelf's own audio (listVoices and sample come with the Voice screen). */
 export const ShelfVoice = {
   ...native,
   addListener: native.addListener.bind(native),
