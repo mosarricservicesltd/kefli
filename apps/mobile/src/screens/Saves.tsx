@@ -1,15 +1,16 @@
 // Saves (mobile spec 5.2, 5.6; prototype saves, saves-loading, saves-offline, saves-empty, saves-cleared, archive,
 // archive-empty, archive-menu): the header row, Search, the sync line while a sync runs, Unread and Archive, one
 // notice slot, then the list or its empty state. The list reads SQLite live, so a sync's saves simply appear.
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useIsFocused } from 'expo-router';
 import Animated, { FadeIn, LinearTransition, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SvgXml } from 'react-native-svg';
 import { motion, radius } from '@shelf/tokens';
 import { ambient, quickIn, quickOut } from '@shelf/tokens/reanimated';
+import { coverDraws, markDrawn } from '../data/covers';
 import { counts, listRows, type LibRow, type ListName } from '../data/library';
 import { useApp } from '../services/app';
 import { syncRunning } from '../services/runner';
@@ -92,7 +93,7 @@ function FirstRun({ online }: { online: boolean }) {
       <View style={[{ width: 40, height: 40, borderRadius: 20, backgroundColor: c.line, overflow: 'hidden' }, me && { boxShadow: `0px 0px 0px 2px ${c.surface}, 0px 0px 0px 3.5px ${c.text}` }]}>
         {me && <SvgXml xml={APP_ICON_SVG} width={40} height={40} />}
       </View>
-      <T style={{ fontFamily: me ? 'Archivo-650' : 'Archivo-400', fontSize: 10, color: me ? c.text : c.muted, includeFontPadding: false }}>{label}</T>
+      <T allowFontScaling={false} numberOfLines={1} style={{ width: 60, marginHorizontal: -8, textAlign: 'center', fontFamily: me ? 'Archivo-650' : 'Archivo-400', fontSize: 10, color: me ? c.text : c.muted, includeFontPadding: false }}>{label}</T>
     </View>
   );
   return (
@@ -103,7 +104,7 @@ function FirstRun({ online }: { online: boolean }) {
             {[0, 1].map((row) => <View key={row} style={{ flexDirection: 'row', gap: 6 }}>{[0, 1, 2, 3].map((k) => slot(row * 4 + k))}</View>)}
           </View>
           <View>
-            <T style={{ fontFamily: 'Archivo-400', fontSize: 11, color: c.muted, marginBottom: 8, includeFontPadding: false }}>{S.saves.shareTo}</T>
+            <T allowFontScaling={false} style={{ fontFamily: 'Archivo-400', fontSize: 11, color: c.muted, marginBottom: 8, includeFontPadding: false }}>{S.saves.shareTo}</T>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>{S.saves.shareApps.map((a) => app(a, a === 'Shelf'))}</View>
           </View>
         </View>
@@ -127,6 +128,16 @@ export default function Saves() {
   const rows = useLive(() => (owner ? listRows(store(), owner, list) : []), ['items'], [owner, list]);
   const n = useLive(() => (owner ? counts(store(), owner) : { unread: 0, archived: 0 }), ['items'], [owner]);
   const first = n.unread + n.archived === 0;
+  // Signature 1: saves already here when the list first shows are drawn; one that joins while Unread is in front
+  // of you draws its cover as it lands (a sync, a restore, the first save); one that joins elsewhere is simply there.
+  const focused = useIsFocused();
+  const seeded = useRef(false);
+  if (!seeded.current && owner) {
+    seeded.current = true;
+    markDrawn(store(), rows.map((r) => r.hash), 'list');
+  }
+  const hashes = rows.map((r) => r.hash).join(',');
+  const draws = useMemo(() => coverDraws(store(), rows.map((r) => r.hash), 'list', Date.now(), focused && list === 'unread'), [hashes, focused, list]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useFocusEffect(useCallback(() => setToastFloor(TAB_BAR_HEIGHT), []));
 
@@ -187,7 +198,7 @@ export default function Saves() {
         ListEmptyComponent={empty}
         renderItem={({ item }) => (
           <View style={{ paddingHorizontal: 16 }}>
-            <SaveRow r={item} online={online} onOpen={open} onSwipe={swipe} onMore={item.state === 'archived' ? more : undefined} />
+            <SaveRow r={item} online={online} onOpen={open} onSwipe={swipe} onMore={item.state === 'archived' ? more : undefined} drawFrom={draws.get(item.hash) ?? 0} />
           </View>
         )}
         itemLayoutAnimation={LinearTransition.duration(motion.reflow.duration)}

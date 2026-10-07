@@ -13,5 +13,5 @@ module.exports = {
   testEnvironment: 'node',
   collectCoverageFrom: ['<rootDir>/apps/mobile/src/data/**/*.ts', '<rootDir>/apps/mobile/src/services/send.ts', '<rootDir>/apps/mobile/src/net/**/*.ts', '<rootDir>/apps/mobile/app.config.js',
     '<rootDir>/apps/mobile/src/reader/**/*.ts', '<rootDir>/apps/mobile/src/ui/strings.ts', '<rootDir>/apps/mobile/src/ui/colour.ts',
-    '<rootDir>/apps/mobile/src/voice/**/*.ts'],
+    '<rootDir>/apps/mobile/src/voice/**/*.ts', '<rootDir>/apps/mobile/src/ui/coverLeaves.ts'],
 };

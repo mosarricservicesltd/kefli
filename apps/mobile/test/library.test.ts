@@ -52,6 +52,7 @@ describe('the library (mobile spec 5.6)', () => {
     expect(minutesLeft({ words: 2300, position_word: 1150 })).toBe(5);
     expect(minutesLeft({ words: 2300, position_word: 2299 })).toBe(1);
     expect(progressOf({ words: 100, position_word: 34 })).toBe(0.34);
+    expect(progressOf({ words: 100, position_word: 99 })).toBe(1);
     expect(['cached', 'failed', 'remote', 'queued'].map((s) => rowStatus({ text_state: s }))).toEqual(['ok', 'failed', 'waiting', 'waiting']);
   });
 

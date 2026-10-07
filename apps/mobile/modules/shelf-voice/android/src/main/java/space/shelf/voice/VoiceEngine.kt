@@ -34,8 +34,11 @@ object VoiceEngine {
     data class Error(val hash: String, val code: String) : Event()
   }
 
-  /** Sentences written ahead of the one playing. */
-  private const val AHEAD = 2
+  /**
+   * Audio kept written ahead of the playback head. By time, not by sentences: each file costs the engine a fixed
+   * start, so a run of one-word blocks ("Website", "Yes") written two at a time starved the track.
+   */
+  private const val AHEAD_MS = 10_000L
   private const val POLL_MS = 40L
   private val main = Handler(Looper.getMainLooper())
   private val listeners = mutableListOf<(Event) -> Unit>()
@@ -244,8 +247,8 @@ object VoiceEngine {
 
   private fun writeAhead() {
     if (synthesizing != null || nextSentence >= sentences.size) return
-    val ahead = segments.size - 1 - maxOf(0, playingSegment(head()))
-    if (ahead >= AHEAD) return
+    val rate = segments.lastOrNull()?.sampleRate ?: 0
+    if (rate > 0 && (framesWritten - head()) * 1000 / rate >= AHEAD_MS) return
     val si = nextSentence++
     val offset = if (si == firstSentence) firstOffset else 0
     val max = TextToSpeech.getMaxSpeechInputLength() - 1
@@ -285,7 +288,7 @@ object VoiceEngine {
     val t = track ?: newTrack(pcm) ?: return emit(Event.Error(hash, "audio_track"))
     val ranges = s.ranges.sortedBy { it[1] }
     if (ranges.isEmpty()) wordTiming = false
-    learn(s, ranges, pcm)
+    learn(ranges, pcm)
     segments.add(Segment(s.sentence, s.offset, framesWritten, pcm.frames.toLong(), pcm.sampleRate, ranges))
     framesWritten += pcm.frames
     val gen = generation
@@ -317,14 +320,15 @@ object VoiceEngine {
     return t
   }
 
-  /** Words a second at rate 1 for this voice, learned from each sentence's audio (5.7), as a moving average. */
-  private fun learn(s: Synth, ranges: List<IntArray>, pcm: Pcm) {
-    val sentence = sentences[s.sentence]
-    val first = Timing.lastAtOrBelow(sentence.wordStarts, s.offset)
-    val words = sentence.wordStarts.size - maxOf(0, first)
-    val seconds = pcm.frames.toFloat() / pcm.sampleRate
-    if (words < 4 || seconds < 1f || (ranges.isEmpty() && words < 8)) return
-    val measured = words / seconds / rate
+  /**
+   * Words a second at rate 1 for this voice (5.7), as a moving average, measured between the first and last word's
+   * frames: each file carries silence at both ends, which over a run of one-word blocks halved the estimate.
+   */
+  private fun learn(ranges: List<IntArray>, pcm: Pcm) {
+    if (ranges.size < 5) return
+    val seconds = (ranges.last()[1] - ranges.first()[1]).toFloat() / pcm.sampleRate
+    if (seconds < 1f) return
+    val measured = (ranges.size - 1) / seconds / rate
     if (measured in 1f..8f) wps = wps * 0.8f + measured * 0.2f
   }
 

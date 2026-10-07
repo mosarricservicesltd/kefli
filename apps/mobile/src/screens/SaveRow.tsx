@@ -63,9 +63,9 @@ function Meta({ r, online, ink }: { r: LibRow; online: boolean; ink: string }) {
   return mins === null ? null : <T muted style={meta}>{S.row.mins(mins)}</T>;
 }
 
-type Props = { r: LibRow; online: boolean; onOpen: (r: LibRow) => void; onSwipe: (r: LibRow) => void; onMore?: (r: LibRow) => void };
+type Props = { r: LibRow; online: boolean; onOpen: (r: LibRow) => void; onSwipe: (r: LibRow) => void; onMore?: (r: LibRow) => void; drawFrom?: number };
 
-export const SaveRow = memo(function SaveRow({ r, online, onOpen, onSwipe, onMore }: Props) {
+export const SaveRow = memo(function SaveRow({ r, online, onOpen, onSwipe, onMore, drawFrom = 0 }: Props) {
   const { c } = useTheme();
   const { width } = useWindowDimensions();
   const archived = r.state === 'archived';
@@ -128,7 +128,7 @@ export const SaveRow = memo(function SaveRow({ r, online, onOpen, onSwipe, onMor
               <T numberOfLines={3} style={[ui(15, urlTitle ? 'meta' : 'title', 1.35, -0.005), { marginTop: 3, marginBottom: 7 }, urlTitle && { color: c.muted }]}>{title}</T>
               <Meta r={r} online={online} ink={ink} />
             </View>
-            <Cover hash={r.hash} size={64} failed={status === 'failed'} />
+            <Cover hash={r.hash} size={64} failed={status === 'failed'} drawFrom={drawFrom} />
             <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 1, backgroundColor: c.line }} />
             {status === 'ok' && p > 0 && p < 1 && (
               <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, overflow: 'hidden' }}>

@@ -42,7 +42,9 @@ export function minutes(words: number | null): number | null {
   return words ? Math.max(1, Math.round(words / WPM)) : null;
 }
 
+/** Read to the last word counts as read through (position is a word index, so the last word is words − 1). */
 export function progressOf(r: Pick<LibRow, 'words' | 'position_word'>): number {
+  if (r.words && r.position_word >= r.words - 1) return 1;
   return progressAt(r.position_word, r.words);
 }
 

@@ -7,7 +7,8 @@ import { ScrollView, View, useWindowDimensions, type LayoutChangeEvent, type Nat
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { SlidingLine } from '../ui/Line';
 import * as Clipboard from 'expo-clipboard';
 import { fontFamily, radius, reader as RT } from '@shelf/tokens';
 import { quickIn, quickOut } from '@shelf/tokens/reanimated';
@@ -104,16 +105,17 @@ function AaSheet({ hash }: { hash: string }) {
       <T style={ui(fs, 'heading', 1)}>A</T>
     </Press>
   );
-  const track = useAnimatedStyle(() => ({ width: withTiming(`${pct * 100}%`, quickIn) }), [pct]);
+  const track = useSharedValue(pct);
+  useEffect(() => {
+    track.value = withTiming(pct, quickIn);
+  }, [pct, track]);
   return (
     <View>
       <T accessibilityRole="header" style={[ui(20, 'emptyHeading', 1.3, -0.01), { marginBottom: 4 }]}>{S.reader.aaSheet.title}</T>
       <T muted style={[ui(13, 'body', 1.45), { marginBottom: 16 }]}>{S.reader.aaSheet.sub}</T>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 }}>
         {sz(S.reader.aaSheet.smaller, -1, 13)}
-        <View style={{ flex: 1, height: 4, borderRadius: 999, backgroundColor: c.line, overflow: 'hidden' }}>
-          <Animated.View style={[{ height: 4, borderRadius: 999, backgroundColor: c.text }, track]} />
-        </View>
+        <SlidingLine p={track} height={4} color={c.text} round style={{ flex: 1, borderRadius: 999, backgroundColor: c.line }} />
         {sz(S.reader.aaSheet.larger, 1, 20)}
       </View>
       <T style={{ position: 'absolute', opacity: 0 }} accessibilityLiveRegion="polite">{S.reader.aaSheet.size(prefs.size)}</T>

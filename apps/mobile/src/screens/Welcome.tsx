@@ -1,7 +1,12 @@
 // Welcome (mobile spec 5.2; prototype welcome, welcome-early, welcome-early-many): three saves fanned out, each
 // wearing its cover, the front one part read in its own ink; then New here and I already have a shelf. After a
 // share before the first open, a note with the newest early save's cover says the saves are kept either way.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
+import { SlidingLine } from '../ui/Line';
+import { motion } from '@shelf/tokens';
+import { catchUp } from '@shelf/tokens/reanimated';
+import { coverDraws, drawMs } from '../data/covers';
 import { View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,7 +29,21 @@ const HERO = {
   relays: '34331f690e10f4e9184b0c53e40388e8caeb8bd26c8f44a34ae11f7f9e62213d',
 };
 
-function HeroCard({ rot, x, y, z, hash, lines, progress }: { rot: number; x: number; y: number; z: number; hash: string; lines: string[]; progress?: number }) {
+/**
+ * The front card's line: at 45% once Welcome has been seen; on the first launch it catches up from nothing once the
+ * front cover has finished drawing (MS Before build 2).
+ */
+function CatchUpLine({ hash, progress, from }: { hash: string; progress: number; from: number }) {
+  const { c } = useTheme();
+  const left = from ? Math.max(0, from + drawMs(ShelfCover.leaves(hash, { depth: 3 }).length) - Date.now()) : 0;
+  const p = useSharedValue(from && left > 0 ? 0 : progress);
+  useEffect(() => {
+    if (from && left > 0) p.value = withDelay(left + motion.catchUp.delay, withTiming(progress, catchUp));
+  }, [p, from, left, progress]);
+  return <SlidingLine p={p} height={3} color={ShelfCover.lineInk(hash, c.surface, c.text)} style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }} />;
+}
+
+function HeroCard({ rot, x, y, z, hash, lines, progress, drawFrom }: { rot: number; x: number; y: number; z: number; hash: string; lines: string[]; progress?: number; drawFrom: number }) {
   const { c } = useTheme();
   const ln = (w: string, h: number, color: string, mb = 8) => <View style={{ width: w as `${number}%`, height: h, borderRadius: 999, backgroundColor: color, marginBottom: mb }} />;
   return (
@@ -39,12 +58,8 @@ function HeroCard({ rot, x, y, z, hash, lines, progress }: { rot: number; x: num
         {ln('64%', 9, alpha(c.text, 0.7), 12)}
         {lines.map((w) => <View key={w}>{ln(w, 8, c.line)}</View>)}
       </View>
-      <Cover hash={hash} size={48} />
-      {progress !== undefined && (
-        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, overflow: 'hidden' }}>
-          <View style={{ width: `${progress * 100}%`, height: 3, borderTopRightRadius: 2, borderBottomRightRadius: 2, backgroundColor: ShelfCover.lineInk(hash, c.surface, c.text) }} />
-        </View>
-      )}
+      <Cover hash={hash} size={48} drawFrom={drawFrom} />
+      {progress !== undefined && <CatchUpLine hash={hash} progress={progress} from={drawFrom} />}
     </View>
   );
 }
@@ -54,15 +69,17 @@ export default function Welcome() {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const [busy, setBusy] = useState(false);
+  // Welcome's covers draw in on the first launch only; back on Welcome later they are simply there (signature 1).
+  const [draws] = useState(() => coverDraws(store(), Object.values(HERO), 'welcome', Date.now(), true));
   // saves shared before the first open (FD 6): the newest one's cover and the count
   const owner = activeOwner(store());
   const early = owner ? listRows(store(), owner, 'unread') : [];
   return (
     <View style={{ flex: 1, backgroundColor: c.background, paddingTop: insets.top }}>
       <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ flex: 1, minHeight: Math.min(300, height * 0.35) }}>
-        <HeroCard rot={-6} x={-20} y={-150} z={1} hash={HERO.stratechery} lines={['30%']} />
-        <HeroCard rot={4} x={18} y={-78} z={2} hash={HERO.guardian} lines={['40%']} />
-        <HeroCard rot={-1} x={0} y={-4} z={3} hash={HERO.relays} lines={['22%']} progress={0.45} />
+        <HeroCard rot={-6} x={-20} y={-150} z={1} hash={HERO.stratechery} lines={['30%']} drawFrom={draws.get(HERO.stratechery) ?? 0} />
+        <HeroCard rot={4} x={18} y={-78} z={2} hash={HERO.guardian} lines={['40%']} drawFrom={draws.get(HERO.guardian) ?? 0} />
+        <HeroCard rot={-1} x={0} y={-4} z={3} hash={HERO.relays} lines={['22%']} progress={0.45} drawFrom={draws.get(HERO.relays) ?? 0} />
       </View>
       <View style={{ paddingVertical: 8, paddingHorizontal: 16 }}>
         <T accessibilityRole="header" style={[display28, { marginBottom: 8 }]}>{S.welcome.title}</T>
