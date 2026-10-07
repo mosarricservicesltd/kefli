@@ -4,7 +4,7 @@ import { verifyEventWith } from '@shelf/protocol';
 import { phoneCrypto } from '../crypto/port';
 import { nativeSecp } from '../crypto/secp';
 import { RelayPool } from '../net/pool';
-import { DEFAULTS_URL, loadDefaults, type Defaults } from './config';
+import { LOCAL_STACK, loadDefaults, type Defaults } from './config';
 import { currentSigner } from './identity';
 import { drain } from './send';
 import { readStaged } from './staging';
@@ -17,7 +17,7 @@ let defaults: Defaults | null = null;
 export const pool = new RelayPool({
   verify: (e) => verifyEventWith(nativeSecp, e),
   signer: currentSigner,
-  allowInsecure: DEFAULTS_URL.startsWith('http://localhost'),
+  allowInsecure: LOCAL_STACK,
 });
 
 /** Sends whatever is due; concurrent calls share one run. Returns how many rows were sent. */

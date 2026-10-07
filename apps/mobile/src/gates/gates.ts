@@ -179,6 +179,17 @@ export const GATES: Gate[] = [
     },
   },
   {
+    id: 'cleartext',
+    title: 'Cleartext only to localhost (the local build)',
+    async run() {
+      const local = await fetch('http://localhost:8447/defaults.json').then((r) => r.status, (e) => `refused: ${(e as Error).message}`);
+      if (local !== 200) fail(`localhost: ${local}`);
+      const outside = await fetch('http://neverssl.com/').then((r) => `allowed, HTTP ${r.status}`, () => 'refused');
+      if (outside !== 'refused') fail(`a public http:// host was ${outside}`);
+      return 'http://localhost answers; http://neverssl.com is refused';
+    },
+  },
+  {
     id: 'normalise',
     title: 'normalise fixtures on Hermes (whatwg-url, tr46)',
     async run() {

@@ -11,5 +11,5 @@ module.exports = {
     '/node_modules/(?!(@noble|@scure|@exodus|nostr-tools|micromark|mdast-util-|unist-util-|decode-named-character-reference|character-entities|devlop))',
   ],
   testEnvironment: 'node',
-  collectCoverageFrom: ['<rootDir>/apps/mobile/src/data/**/*.ts', '<rootDir>/apps/mobile/src/services/send.ts'],
+  collectCoverageFrom: ['<rootDir>/apps/mobile/src/data/**/*.ts', '<rootDir>/apps/mobile/src/services/send.ts', '<rootDir>/apps/mobile/src/net/**/*.ts', '<rootDir>/apps/mobile/app.config.js'],
 };
