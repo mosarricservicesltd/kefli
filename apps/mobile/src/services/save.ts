@@ -2,14 +2,17 @@
 // stage the text, record the item, and queue its outbox rows held, to be released when the share sheet closes
 // without Undo. The outbox sends them (send.ts, runner.ts).
 import { base64 } from '@scure/base';
-import { countWords, encryptText, itemHash, textHash } from '@shelf/protocol';
+import { encryptText, itemHash, project, textHash } from '@shelf/protocol';
 import { ShelfParser } from '../../modules/shelf-parser/src';
 import { phoneCrypto } from '../crypto/port';
+import { getItem } from '../data/items';
 import { queueSave } from '../data/saves';
+import { indexText } from '../data/sync';
 import { seedGeneratedLists } from '../data/lists';
 import { loadDefaults } from './config';
 import { ensureSigner } from './identity';
 import { stageBlob } from './staging';
+import { textFiles } from './textFiles';
 import { store } from './store';
 
 const UA = 'Mozilla/5.0 (Linux; Android 17; Pixel 10a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0 Mobile Safari/537.36';
@@ -32,7 +35,8 @@ export async function saveLink(url: string, report: (s: SaveStep) => void): Prom
   const finalUrl = res.url || url;
   say('fetch', `HTTP ${res.status}, ${Math.round(bytes.length / 1024)} KB`, res.ok);
   const parsed = await ShelfParser.parse(base64.encode(bytes), res.headers.get('content-type') ?? '', finalUrl);
-  const words = parsed.ok ? countWords(parsed.markdown) : 0;
+  const spoken = parsed.ok ? project(parsed.markdown) : null;
+  const words = spoken?.wordStarts.length ?? 0;
   // contract 4.2's guard: not readerable and under 120 spoken words is a failed parse.
   const good = parsed.ok && (parsed.readerable || words >= GUARD_WORDS);
   say('parse', good && parsed.ok ? `“${parsed.title}”, ${words} words` : `failed parse (${parsed.ok ? 'the guard' : parsed.reason})`);
@@ -58,6 +62,12 @@ export async function saveLink(url: string, report: (s: SaveStep) => void): Prom
   }, staged, {
     api: defaults.operator.api, blossom: defaults.operator.blossom, mirror: defaults.mirrors[0],
   });
+  // The text is on the phone from the start, and searchable (4.1, 4.9); a repeat save keeps the text it had.
+  const row = getItem(db, signer.pubkey(), hash);
+  if (row && text && spoken && parsed.ok && row.text_sha256 === text.sha256) {
+    textFiles.writeText(hash, parsed.markdown);
+    indexText(db, row, spoken.text);
+  }
   say('queued', `${held.length} rows held until the sheet closes`);
   return { hash, held };
 }

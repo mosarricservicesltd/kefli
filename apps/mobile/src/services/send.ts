@@ -1,6 +1,6 @@
 // Sends the outbox (mobile spec 4.3): one due row at a time, through ports so the tests can stand in for the
-// network. Week 1 sends register, upload_blob, mirror_blob and publish_item.
-import { buildItemEvent, buildRelayList, buildServerList, httpAuth, mirrorBlob, uploadBlob } from '@shelf/protocol';
+// network. It sends register, upload_blob, mirror_blob, publish_item, publish_lists and delete_blob.
+import { buildItemEvent, buildRelayList, buildServerList, deleteBlob, httpAuth, mirrorBlob, uploadBlob } from '@shelf/protocol';
 import type { CryptoPort, NostrEvent, Signer } from '@shelf/protocol';
 import type { SqlDb } from '../data/db';
 import { getItem, itemJson, markPublished } from '../data/items';
@@ -95,6 +95,18 @@ async function sendMirror(p: SendPorts, row: OutboxRow, signer: Signer, t: Outbo
   }
 }
 
+/** A blob no save names any more, on each server that held it; a 404 counts as done (4.3). */
+async function sendDeleteBlob(p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
+  const { sha256 } = JSON.parse(row.payload ?? '{}') as { sha256: string };
+  try {
+    const r = await deleteBlob(t.target, sha256, signer, p.fetch);
+    if (r.ok) return [{ target: t.target, kind: 'ok' }];
+    return [r.permanent ? { target: t.target, kind: 'rejected', error: `HTTP ${r.status} ${r.reason}` } : { target: t.target, kind: 'retry', error: `HTTP ${r.status} ${r.reason}` }];
+  } catch (e) {
+    return [{ target: t.target, kind: 'retry', error: err(e) }];
+  }
+}
+
 async function sendPublish(p: SendPorts, row: OutboxRow, signer: Signer, targets: OutboxTarget[]): Promise<TargetResult[]> {
   const item = getItem(p.db, row.signer, row.subject);
   if (!item) return targets.map((t) => ({ target: t.target, kind: 'rejected' as const, error: 'item gone' }));
@@ -157,7 +169,7 @@ export async function sendOne(p: SendPorts): Promise<boolean> {
   } else if (row.op === 'publish_lists') {
     results = await sendLists(p, row, signer, targets);
   } else {
-    const one = { register: sendRegister, upload_blob: sendUpload, mirror_blob: sendMirror }[row.op];
+    const one = { register: sendRegister, upload_blob: sendUpload, mirror_blob: sendMirror, delete_blob: sendDeleteBlob }[row.op];
     results = one ? (await Promise.all(targets.map((t) => one(p, row, signer, t)))).flat() : targets.map((t) => ({ target: t.target, kind: 'rejected', error: `unknown op ${row.op}` }));
   }
   finish(p.db, p.now(), row.id, results);

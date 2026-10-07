@@ -18,3 +18,4 @@ export * from './secret';
 export * from './secp';
 export * from './blossom';
 export * from './lists';
+export * from './merge';
