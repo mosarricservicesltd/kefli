@@ -2,7 +2,7 @@
 // identity. Pushed screens sit in this stack over the tabs, with no tab bar on them. The sheet and toast hosts sit
 // above the navigator. The spec's push and pop (motion spec, Navigation: fade with 24 px of travel, enter 250 ms,
 // exit 200 ms), no swipe gesture, and the root-back switch so Android's back-to-home preview plays on root screens.
-import { useEffect } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { AppState, Easing, View } from 'react-native';
 import { useFonts } from 'expo-font';
 import { usePathname } from 'expo-router';
@@ -17,7 +17,7 @@ import { boot, useApp } from '../services/app';
 import { startSync } from '../services/runner';
 import { FONTS } from '../ui/fonts';
 import { PlayerHost } from '../screens/Player';
-import { SheetHost } from '../ui/sheet';
+import { SheetHost, sheetOpen } from '../ui/sheet';
 import { ToastHost, settleToast } from '../ui/toast';
 import { useTheme } from '../ui/theme';
 
@@ -47,9 +47,12 @@ export default function Layout() {
   }, []);
   // The resolver first (mobile spec 3.1), then a sync, and another at each return to the foreground (4.5).
   useEffect(startSync, []);
+  // Android's back-to-home preview plays only at a root screen with nothing open over it (5.1): with a sheet up,
+  // Back belongs to the sheet.
+  const sheetUp = useSyncExternalStore(sheetOpen.subscribe, sheetOpen.get);
   useEffect(() => {
-    ShelfSystem.setRootBack(ROOTS.includes(path));
-  }, [path]);
+    ShelfSystem.setRootBack(ROOTS.includes(path) && !sheetUp);
+  }, [path, sheetUp]);
   // Until the fonts and the resolver are ready, the splash stays (6.9).
   if (!fonts || !app) return <View style={{ flex: 1, backgroundColor: c.background }} />;
   const shelf = app.route === 'saves';
