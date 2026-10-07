@@ -5,7 +5,7 @@ import { base64 } from '@scure/base';
 import { countWords, encryptText, itemHash, textHash } from '@shelf/protocol';
 import { ShelfParser } from '../../modules/shelf-parser/src';
 import { phoneCrypto } from '../crypto/port';
-import { ensureIdentityRow, queueSave } from '../data/saves';
+import { queueSave } from '../data/saves';
 import { seedGeneratedLists } from '../data/lists';
 import { loadDefaults } from './config';
 import { ensureSigner } from './identity';
@@ -24,7 +24,6 @@ export async function saveLink(url: string, report: (s: SaveStep) => void): Prom
   const defaults = await loadDefaults();
   const signer = await ensureSigner();
   const db = store();
-  ensureIdentityRow(db, now(), signer.pubkey(), 'early_share', true);
   seedGeneratedLists(db, signer.pubkey(), defaults);
   say('identity', `${signer.pubkey().slice(0, 12)}…`);
 

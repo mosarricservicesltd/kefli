@@ -132,7 +132,7 @@ A Keystore AES-256-GCM key, alias `shelf.identity.v1`, StrongBox-backed where av
 
 ### 3.3 Block Store
 
-One entry, `shelf.mnemonic.v1`, holding the active local identity's mnemonic (C§2, with 3.1's early-share exception), written for device-to-device restore always and with `shouldBackupToCloud` only while `isEndToEndEncryptionAvailable()` is true, rechecked at each launch. A restore by code or pairing writes it when it stores the identity, and a nostr-app identity removes it, except during a move (the early-saves move included): there the entry keeps S until C§4.8 step 5, then takes T's mnemonic, or nothing when T is a nostr app (CR15).
+Seen on the Pixel in week 1: an uninstall and reinstall keeps the entry, so the reinstalled app adopts the shelf (FD 79), but clearing the app's data removes it, which is Android's behaviour, so a clear-data test starts from Welcome. One entry, `shelf.mnemonic.v1`, holding the active local identity's mnemonic (C§2, with 3.1's early-share exception), written for device-to-device restore always and with `shouldBackupToCloud` only while `isEndToEndEncryptionAvailable()` is true, rechecked at each launch. A restore by code or pairing writes it when it stores the identity, and a nostr-app identity removes it, except during a move (the early-saves move included): there the entry keeps S until C§4.8 step 5, then takes T's mnemonic, or nothing when T is a nostr app (CR15).
 
 ### 3.4 Signers
 

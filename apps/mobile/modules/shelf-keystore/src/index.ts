@@ -10,9 +10,13 @@ const native = requireNativeModule<{
   write(json: string): Promise<void>;
   wipe(pubkey: string): Promise<void>;
   strongBox(): Promise<boolean>;
+  blockStoreGet(): Promise<string | null>;
+  blockStoreSet(mnemonic: string): Promise<{ cloud: boolean }>;
+  blockStoreRemove(): Promise<void>;
+  isE2EEAvailable(): Promise<boolean>;
 }>('ShelfKeystore');
 
-/** mobile spec 8.3 (Block Store to come). */
+/** mobile spec 8.3. */
 export const ShelfKeystore = {
   async read(): Promise<KeyRecord | null> {
     const raw = await native.read();
@@ -22,4 +26,8 @@ export const ShelfKeystore = {
   write: (r: KeyRecord) => native.write(JSON.stringify(r)),
   wipe: native.wipe,
   strongBox: native.strongBox,
+  blockStoreGet: native.blockStoreGet,
+  blockStoreSet: native.blockStoreSet,
+  blockStoreRemove: native.blockStoreRemove,
+  isE2EEAvailable: native.isE2EEAvailable,
 };

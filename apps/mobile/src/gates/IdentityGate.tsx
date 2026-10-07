@@ -3,15 +3,18 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ShelfKeystore } from '../../modules/shelf-keystore/src';
+import { launchPlan } from '../services/launchState';
 
 export function IdentityGate() {
   const [shown, setShown] = useState<string | null>(null);
   const show = async () => {
     const r = await ShelfKeystore.read();
     const id = r?.identities[0];
-    if (!id) return setShown('No identity yet: share a link first.');
+    if (!id) return setShown(`No identity yet: share a link first.\nlaunch ${JSON.stringify(await launchPlan())}`);
     const words = await ShelfKeystore.readMnemonic(id.pubkey);
-    setShown(`pubkey ${id.pubkey}\nwords ${words}\nStrongBox ${await ShelfKeystore.strongBox()}`);
+    const bs = await ShelfKeystore.blockStoreGet().catch(() => 'read failed');
+    const plan = await launchPlan();
+    setShown(`pubkey ${id.pubkey}\norigin ${id.origin}\nwords ${words}\nStrongBox ${await ShelfKeystore.strongBox()}\nBlock Store ${bs === words ? 'holds these words' : bs ? 'holds other words' : 'empty'}, end-to-end ${await ShelfKeystore.isE2EEAvailable().catch(() => false)}\nlaunch ${JSON.stringify(plan)}`);
   };
   return (
     <View style={s.box}>
