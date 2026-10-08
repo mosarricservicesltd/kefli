@@ -67,6 +67,7 @@ export const S = {
     addDevice: 'Add another device',
     needsConnection: 'Needs a connection',
     browsers: 'Connected browsers',
+    voice: 'Voice',
     advanced: 'Advanced',
     deleteData: 'Delete my data',
     sheetTitle: 'Your recovery code',
@@ -206,6 +207,19 @@ export const S = {
     importNo: 'Not now',
     importYes: 'Bring them in',
     offline: 'Bringing back your shelf needs a connection',
+  },
+  voice: {
+    title: 'Voice',
+    lead: 'These voices come from your phone and work offline.',
+    defaultSpeed: 'Default speed',
+    slower: 'Slower',
+    faster: 'Faster',
+    note: 'To add more voices, open Android settings, then Text-to-speech output.',
+    sampleOf: (v: string) => `Play a sample of ${v}`,
+    // the prototype's short names for its locales; any other is the phone's own name for it
+    short: { 'en-GB': 'UK English', 'en-US': 'US English' } as Record<string, string>,
+    // RULED: a sample reads the opening of the last article played, in its language, or this line before any has been
+    sampleLine: 'This is how your saves will sound.',
   },
   sw: {
     title: 'Use my nostr app instead',

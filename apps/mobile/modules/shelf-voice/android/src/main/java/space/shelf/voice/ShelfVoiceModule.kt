@@ -52,12 +52,31 @@ class ShelfVoiceModule : Module() {
             o.optString("artworkPath").takeIf { it.isNotEmpty() }?.let { path ->
               runCatching { java.io.File(android.net.Uri.parse(path).path ?: path).readBytes() }.getOrNull()
             },
+            o.optString("voiceId").takeIf { it.isNotEmpty() },
+            o.optString("lang").takeIf { it.isNotEmpty() },
           )
           context.startService(Intent(context, VoiceService::class.java))
           VoiceEngine.play()
           promise.resolve(null)
         }
       }
+    }
+
+    // The installed offline voices (FD 24, 8.1), and the engine's own voice's locale.
+    AsyncFunction("listVoices") { promise: Promise ->
+      main.post {
+        VoiceEngine.warmUp(context) {
+          val voices = VoiceEngine.voices().map {
+            mapOf("id" to it.name, "locale" to it.locale.toLanguageTag(), "name" to it.locale.getDisplayName(java.util.Locale.getDefault()))
+          }
+          promise.resolve(mapOf("voices" to voices, "defaultLocale" to VoiceEngine.defaultLocale()))
+        }
+      }
+    }
+
+    // A short sample in one voice, resolved when it has been spoken or stopped.
+    AsyncFunction("sample") { voiceId: String, text: String, promise: Promise ->
+      main.post { VoiceEngine.warmUp(context) { VoiceEngine.sample(voiceId, text) { promise.resolve(null) } } }
     }
 
     Function("play") { main.post { VoiceEngine.play() } }

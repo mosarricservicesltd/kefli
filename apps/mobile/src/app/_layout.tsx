@@ -88,6 +88,7 @@ export default function Layout() {
             <Stack.Screen name="delete" />
             <Stack.Screen name="advanced" />
             <Stack.Screen name="switch" />
+            <Stack.Screen name="voice" />
           </Stack.Protected>
           <Stack.Protected guard={!shelf}>
             <Stack.Screen name="welcome" />

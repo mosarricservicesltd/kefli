@@ -15,6 +15,8 @@ import android.os.HandlerThread
 import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.speech.tts.Voice
+import java.util.Locale
 import java.io.File
 import kotlin.math.roundToInt
 
@@ -120,17 +122,19 @@ object VoiceEngine {
     t.setSpeechRate(rate)
     t.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
       override fun onStart(id: String) {}
-      override fun onDone(id: String) { main.post { written(id) } }
+      override fun onDone(id: String) { main.post { if (id.startsWith(SAMPLE)) sampleEnded(id) else written(id) } }
       @Deprecated("Deprecated in Java")
-      override fun onError(id: String) { main.post { failed(id) } }
-      override fun onError(id: String, code: Int) { main.post { failed(id) } }
+      override fun onError(id: String) { main.post { if (id.startsWith(SAMPLE)) sampleEnded(id) else failed(id) } }
+      override fun onError(id: String, code: Int) { main.post { if (id.startsWith(SAMPLE)) sampleEnded(id) else failed(id) } }
+      override fun onStop(id: String, interrupted: Boolean) { main.post { if (id.startsWith(SAMPLE)) sampleEnded(id) } }
       override fun onRangeStart(id: String, a: Int, b: Int, c: Int) { main.post { range(id, a, b, c) } }
     })
   }
 
-  fun load(h: String, t: String, s: String, list: List<Sentence>, startWord: Int, total: Int, r: Float, wordsPerSecond: Float, art: ByteArray? = null) {
+  fun load(h: String, t: String, s: String, list: List<Sentence>, startWord: Int, total: Int, r: Float, wordsPerSecond: Float, art: ByteArray? = null, voiceId: String? = null, lang: String? = null) {
     reset()
     hash = h; title = t; site = s; sentences = list; totalWords = total; rate = r; wps = wordsPerSecond; artwork = art
+    useVoice(voiceId, lang)
     tts?.setSpeechRate(r)
     word = startWord.coerceIn(0, maxOf(0, total - 1))
     ended = false
@@ -190,6 +194,60 @@ object VoiceEngine {
     emitState()
     main.removeCallbacks(idleRelease)
     main.postDelayed(idleRelease, 60_000)
+  }
+
+  /** The phone's voices that work offline and are installed (FD 24): id, BCP 47 locale, and the locale's name. */
+  fun voices(): List<Voice> = runCatching { tts?.voices?.toList() }.getOrNull().orEmpty()
+    .filter { !it.isNetworkConnectionRequired && TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED !in it.features }
+    .sortedBy { it.name }
+
+  /** The engine's own voice, whose language stands in before any article has been played. */
+  fun defaultLocale(): String? = runCatching { tts?.defaultVoice?.locale?.toLanguageTag() }.getOrNull()
+
+  /** The chosen voice when it is installed, else the phone's voice for the article's language. */
+  private fun useVoice(voiceId: String?, lang: String?) {
+    val t = tts ?: return
+    val v = voiceId?.let { id -> voices().firstOrNull { it.name == id } }
+    if (v != null) {
+      t.voice = v
+      android.util.Log.i("ShelfVoice", "voice ${v.name}")
+      return
+    }
+    val l = lang?.takeIf { it.isNotBlank() }?.let { Locale.forLanguageTag(it) } ?: return
+    if (t.voice?.locale?.language != l.language) t.language = l
+    android.util.Log.i("ShelfVoice", "voice for ${l.toLanguageTag()}: ${t.voice?.name}")
+  }
+
+  private const val SAMPLE = "sample:"
+  private var sampleDone: (() -> Unit)? = null
+  private var sessionVoice: Voice? = null
+
+  /**
+   * A voice's sample, outside the session (5.8). RULED: it pauses an article that is playing, since one engine
+   * speaks at a time; the article's audio is written again from its word when it next plays.
+   */
+  fun sample(voiceId: String, text: String, done: () -> Unit) {
+    val t = tts ?: return done()
+    val v = voices().firstOrNull { it.name == voiceId } ?: return done()
+    sampleDone?.invoke()
+    pause()
+    if (loaded) { reset(); stale = true }
+    if (sessionVoice == null) sessionVoice = t.voice
+    sampleDone = done
+    t.voice = v
+    t.setSpeechRate(1f)
+    val id = "$SAMPLE${System.nanoTime()}"
+    if (t.speak(text, TextToSpeech.QUEUE_FLUSH, Bundle(), id) != TextToSpeech.SUCCESS) sampleEnded(id)
+  }
+
+  private fun sampleEnded(@Suppress("UNUSED_PARAMETER") id: String) {
+    val t = tts
+    sessionVoice?.let { t?.voice = it }
+    sessionVoice = null
+    t?.setSpeechRate(rate)
+    val d = sampleDone
+    sampleDone = null
+    d?.invoke()
   }
 
   /** A minute after the last session closes the engine goes, so no second TextToSpeech ever competes (8.1). */

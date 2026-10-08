@@ -3,11 +3,12 @@
 // published when the session pauses, ends or closes, and a sync follows the end of a session (4.5).
 import { useSyncExternalStore } from 'react';
 import type { Sentence } from '@shelf/protocol';
-import { ShelfVoice, type VoiceState } from '../../modules/shelf-voice/src';
+import { ShelfVoice, type PhoneVoice, type VoiceState } from '../../modules/shelf-voice/src';
 import { rowByHash, setPosition, type LibRow } from '../data/library';
 import { playFrom, recordPlayed } from '../data/listen';
 import { getSetting, setSetting } from '../data/settings';
 import { readRate, readWps, nextRate } from '../voice/clock';
+import { VOICE_ID, sessionVoice } from '../voice/choice';
 import { appState } from './app';
 import { runSync } from './runner';
 import { store } from './store';
@@ -28,7 +29,8 @@ const set = (s: Session | null) => {
   listeners.forEach((l) => l());
 };
 const now = () => Math.floor(Date.now() / 1000);
-const VOICE = 'default';
+// words a second are kept per voice (5.7); the phone's own voice for a language is 'default'
+let wpsKey = 'voice.wps.default';
 
 export function useVoice(): Session | null {
   return useSyncExternalStore((l) => (listeners.add(l), () => listeners.delete(l)), () => session);
@@ -66,7 +68,7 @@ function wire() {
     if (!session || e.hash !== session.hash) return;
     const paused = session.playing && !e.playing;
     set({ ...session, playing: e.playing, word: e.word, rate: e.rate, wordTiming: e.wordTiming, wps: e.wps });
-    if (Math.abs(e.wps - readWps(getSetting(store(), `voice.wps.${VOICE}`))) > 0.05) setSetting(store(), `voice.wps.${VOICE}`, e.wps.toFixed(3));
+    if (Math.abs(e.wps - readWps(getSetting(store(), wpsKey))) > 0.05) setSetting(store(), wpsKey, e.wps.toFixed(3));
     if (paused) keep(e.word, true);
   });
   ShelfVoice.addListener('ended', (e) => {
@@ -97,7 +99,11 @@ export async function listen(row: Pick<LibRow, 'hash' | 'title' | 'site' | 'url'
   if (!totalWords) return;
   if (session && session.hash !== row.hash) keep(session.word, true);
   const rate = readRate(getSetting(store(), 'voice.speed'));
-  const wps = readWps(getSetting(store(), `voice.wps.${VOICE}`));
+  const lang = store().get<{ lang: string | null }>('SELECT lang FROM items WHERE hash = ? AND lang IS NOT NULL LIMIT 1', row.hash)?.lang ?? null;
+  const phone = await listPhoneVoices();
+  const voice = sessionVoice(phone.voices, getSetting(store(), VOICE_ID), lang, phone.defaultLocale);
+  wpsKey = `voice.wps.${voice.voiceId ?? 'default'}`;
+  const wps = readWps(getSetting(store(), wpsKey));
   const word = Math.max(0, Math.min(fromWord, totalWords - 1));
   const title = row.title ?? row.url;
   const owner = appState()?.owner;
@@ -109,7 +115,7 @@ export async function listen(row: Pick<LibRow, 'hash' | 'title' | 'site' | 'url'
   } catch {
     art = null; // the card shows without artwork rather than not at all
   }
-  await ShelfVoice.start({ hash: row.hash, title, site: row.site ?? '', sentences: list, startWord: word, totalWords, rate, wps, artworkPath: art });
+  await ShelfVoice.start({ hash: row.hash, title, site: row.site ?? '', sentences: list, startWord: word, totalWords, rate, wps, artworkPath: art, ...voice });
 }
 
 // Play all's snapshot of the Played list, the articles still to come (FD 35).
@@ -161,6 +167,30 @@ export function cycleRate(): void {
   setSetting(store(), 'voice.speed', String(r));
   set({ ...session, rate: r });
   ShelfVoice.setRate(r);
+}
+
+/** You → Voice → Default speed: the one speed value (FD 36), applied to a session under way too. */
+export function setDefaultRate(r: number): void {
+  setSetting(store(), 'voice.speed', String(r));
+  if (!session) return;
+  set({ ...session, rate: r });
+  ShelfVoice.setRate(r);
+}
+
+let voices: Promise<{ voices: PhoneVoice[]; defaultLocale: string | null }> | null = null;
+
+/** The phone's offline voices, asked once and again whenever You opens (FD 24: a voice installed later appears). */
+export function listPhoneVoices(fresh = false): Promise<{ voices: PhoneVoice[]; defaultLocale: string | null }> {
+  if (fresh || !voices) {
+    wire();
+    voices = ShelfVoice.listVoices().catch(() => ({ voices: [], defaultLocale: null }));
+  }
+  return voices;
+}
+
+/** A voice's sample (5.8), resolved when it has been spoken. */
+export function playSample(voiceId: string, text: string): Promise<void> {
+  return ShelfVoice.sample(voiceId, text);
 }
 
 /** ✕: ends the session everywhere (5.7). */
