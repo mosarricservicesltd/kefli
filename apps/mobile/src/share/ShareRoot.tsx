@@ -10,16 +10,19 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { itemHash } from '@shelf/protocol';
 import { motion } from '@shelf/tokens';
 import { ShelfShare } from '../../modules/shelf-share/src';
+import { activeSpools, firstLink } from './pickup';
 
 const log = (r: unknown) => console.log(`[shelf-gates] ${JSON.stringify(r)}`);
 
-function firstLink(text: string | null): string | null {
-  const all = text?.match(/https?:\/\/[^\s<>"]+/g) ?? [];
-  return all.length ? all[all.length - 1] : null;
-}
 
 export default function ShareRoot({ spoolId }: { spoolId?: string }) {
   const entry = useMemo(() => (spoolId ? ShelfShare.read(spoolId) : null), [spoolId]);
+  // this sheet's spool is its own; the start-up pickup leaves it alone
+  useEffect(() => {
+    if (!spoolId) return;
+    activeSpools.add(spoolId);
+    return () => void activeSpools.delete(spoolId);
+  }, [spoolId]);
   const url = firstLink(entry?.text ?? null);
   const hash = useMemo(() => {
     try {

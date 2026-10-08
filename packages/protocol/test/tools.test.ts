@@ -7,7 +7,7 @@ import {
   LocalSigner, buildItemEvent, encryptText, itemHash, normaliseMarkdown, parseItem, parseSecret, textHash, wrapPairAck,
 } from '../src';
 import { nodeCrypto } from '../src/node';
-import { decryptCommand, unwrapCommand } from '../tools/commands';
+import { decryptCommand, unwrapCommand, verifyCommand } from '../tools/commands';
 
 const WORDS = 'leader monkey parrot ring guide accident before fence cannon height naive bean';
 const SK = '7f7ff03d123792d6ac594bfa67bf6d0c0ab55b6b1fdb6249303fe861f1ccba9a';
@@ -93,5 +93,34 @@ describe('npm run unwrap', () => {
     expect(out.seal_signer).toBe(user.pubkey());
     expect(out.rumor.content).toEqual(ack);
     await expect(unwrapCommand([], {}, () => {})).rejects.toThrow('usage');
+  });
+});
+
+describe('npm run verify', () => {
+  test('checks the newest copy of every save across the relays, with its blob on each server', async () => {
+    const { event, blob } = await sample(true);
+    const { event: bare } = await sample(false);
+    const s = new LocalSigner(await parseSecret(SK));
+    const newer = (await buildItemEvent(s, itemHash('https://example.com/a'), (await import('../src')).parseItem(JSON.stringify({
+      v: 1, url: 'https://example.com/a', canonical: null, title: 'A', site: null, byline: null, saved_at: 1, state: 'archived', progress: 0,
+      words: 5, lang: 'en', text: null, text_hash: null, hero: null, source_kind: 'web', audio_pref: null,
+    })), 3)).event;
+    const record = { ...bare, tags: [['d', 'shelf/devices'], ['t', 'shelf']] };
+    const relays: Record<string, unknown[]> = { 'ws://a': [event, record], 'ws://b': [event] };
+    const lines: string[] = [];
+    const get = (async () => new Response(Buffer.from(blob))) as unknown as typeof fetch;
+    const query = async (r: string) => relays[r] as never;
+    expect(await verifyCommand(['--relays', 'ws://a,ws://b'], { SHELF_SECRET: SK }, (l) => lines.push(l), query, get)).toBe(true);
+    expect(lines).toContain('ok   A (on 2/2 relays)');
+    expect(lines).toContain('     shelf/devices (on 1/2 relays)');
+    expect(lines.at(-1)).toBe('1 of 1 saves verify, decrypt and match their text');
+    // a newer copy on one relay wins; a missing blob fails
+    relays['ws://b'] = [newer];
+    lines.length = 0;
+    const notFound = (async () => new Response('', { status: 404 })) as unknown as typeof fetch;
+    expect(await verifyCommand(['--relays', 'ws://a,ws://b'], { SHELF_SECRET: SK }, (l) => lines.push(l), query, notFound)).toBe(true);
+    expect(lines[0]).toBe('ok   A [archived] [no text] (on 2/2 relays)');
+    relays['ws://b'] = [];
+    expect(await verifyCommand(['--relays', 'ws://a,ws://b'], { SHELF_SECRET: SK }, () => {}, query, notFound)).toBe(false);
   });
 });

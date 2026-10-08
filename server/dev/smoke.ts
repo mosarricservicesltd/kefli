@@ -9,7 +9,7 @@ import {
   secretKeyFromMnemonic, textHash, uploadBlob, countWords,
 } from '../../packages/protocol/src';
 import { nodeCrypto } from '../../packages/protocol/src/node';
-import { decryptCommand } from '../../packages/protocol/tools/commands';
+import { decryptCommand, verifyCommand } from '../../packages/protocol/tools/commands';
 import { writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -68,8 +68,10 @@ async function main() {
   const lines: string[] = [];
   const ok = await decryptCommand([join(dir, 'event.json'), '--fetch'], { SHELF_SECRET: words }, (l) => lines.push(l));
   for (const l of lines.filter((x) => /^(ok|FAIL)/.test(x))) step(l);
-  console.log(ok ? 'SMOKE PASS' : 'SMOKE FAIL');
-  process.exit(ok ? 0 : 1);
+  // and as the stage gates check a phone's saves: every relay, newest copy, blob on every server
+  const verified = await verifyCommand(['--relays', [defaults.operator.relay, ...defaults.relays].join(',')], { SHELF_SECRET: words }, (l) => step(`verify: ${l}`));
+  console.log(ok && verified ? 'SMOKE PASS' : 'SMOKE FAIL');
+  process.exit(ok && verified ? 0 : 1);
 }
 
 main().catch((e) => {

@@ -12,6 +12,7 @@ import {
 import { phoneCrypto } from '../crypto/port';
 import { nativeSecp } from '../crypto/secp';
 import { ShelfParser } from '../../modules/shelf-parser/src';
+import { runLive, type LiveUrl } from './live';
 import type { Bip340Vector, SecpPort } from '@shelf/protocol';
 
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -25,7 +26,6 @@ const EXPECTED = require('./expected.json') as {
   raw: string; markdown: string; textHash: string; text: string; offsets: number[]; wordStarts: number[]; sentences: [number, string][];
 }[];
 const BIP340 = require('./bip340.json') as Bip340Vector[];
-const PAGES = require('./parse-expected.json') as { chrome: string; pages: { name: string; url: string; contentType: string; body: string; expect: Record<string, unknown> }[] };
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 export type GateResult = { id: string; ok: boolean; detail: string; ms: number };
@@ -143,20 +143,30 @@ export const GATES: Gate[] = [
   },
   {
     id: 'parser',
-    title: 'shelf-parser: detached WebView gives desktop Chrome’s parse',
+    title: 'The twenty fixture pages: desktop Chrome’s parse, text_hash and words on the phone',
     async run() {
+      // shared/fixtures (contract 9), served by server/dev/api.mjs over adb reverse, so the pages stay out of the bundle.
+      const base = 'http://localhost:8447/fixtures';
+      const index = (await (await fetch(`${base}/pages/pages.json`)).json()) as { id: string; url: string; contentType: string }[];
+      const expected = (await (await fetch(`${base}/expected.json`)).json()) as { chrome: string; pages: Record<string, unknown>[] };
       const bad: string[] = [];
       const times: number[] = [];
-      for (const p of PAGES.pages) {
+      for (const p of index) {
+        const want = expected.pages.find((e) => e.id === p.id)!;
+        const bytes = new Uint8Array(await (await fetch(`${base}/pages/${p.id}.html`)).arrayBuffer());
         const t = now();
-        const got = await ShelfParser.parse(p.body, p.contentType, p.url);
+        const got = (await ShelfParser.parse(base64.encode(bytes), p.contentType, p.url)) as Record<string, unknown>;
         times.push(now() - t);
-        for (const k of new Set([...Object.keys(p.expect), ...Object.keys(got)])) {
-          if (!same((got as Record<string, unknown>)[k], p.expect[k])) bad.push(`${p.name}: ${k}`);
+        for (const k of ['ok', 'title', 'byline', 'site', 'lang', 'hero', 'canonical', 'readerable', 'markdown', 'reason']) {
+          if (!same(got[k], want[k])) bad.push(`${p.id}: ${k}`);
         }
+        const md = typeof got.markdown === 'string' ? got.markdown : null;
+        if (md !== null && textHash(md, phoneCrypto) !== want.text_hash) bad.push(`${p.id}: text_hash`);
+        if (md !== null && (project(md).text !== want.spoken || countWords(md) !== want.words)) bad.push(`${p.id}: spoken or words`);
       }
-      if (bad.length) fail(`${bad.length} differ from ${PAGES.chrome}: ${bad.slice(0, 4).join('; ')}`);
-      return `all ${PAGES.pages.length} pages match ${PAGES.chrome} field for field; first ${ms(times[0])} (WebView start), then ${ms(Math.max(...times.slice(1)))} at most`;
+      const matched = index.length - new Set(bad.map((b) => b.split(':')[0])).size;
+      if (bad.length) fail(`${matched}/${index.length} match ${expected.chrome}; differ: ${bad.slice(0, 6).join('; ')}`);
+      return `${matched}/${index.length} pages match ${expected.chrome}: every field, the Markdown, text_hash, the spoken text and words; first ${ms(times[0])} (WebView start), then ${ms(Math.max(...times.slice(1)))} at most`;
     },
   },
   {
@@ -176,6 +186,20 @@ export const GATES: Gate[] = [
       const words = countWords(r.markdown);
       if (words < 200 || !r.title) return fail(`not an article: ${words} words, title ${r.title}`);
       return `${Math.round(bytes.length / 1024)} KB fetched in ${ms(fetched)}, parsed in ${ms(parsed)}: “${r.title}”, ${words} words, canonical ${r.canonical ? 'found' : 'none'}`;
+    },
+  },
+  {
+    id: 'live-list',
+    title: 'The live list of thirty addresses through the share’s own path (stage 1: 20/30)',
+    async run() {
+      const list = ((await (await fetch('http://localhost:8447/fixtures/live-urls.json')).json()) as { urls: LiveUrl[] }).urls;
+      const results = await runLive({ fetch, parse: (b, t, u) => ShelfParser.parse(b, t, u) as never }, { fetch }, list, now);
+      for (const r of results) console.log(`[shelf-live] ${JSON.stringify(r)}`);
+      const passed = results.filter((r) => r.pass).length;
+      const misses = results.filter((r) => !r.pass).map((r) => `${r.kind}: ${r.got} for ${r.expect}`);
+      const line = `${passed}/${results.length} as expected${misses.length ? `; misses: ${misses.join('; ')}` : ''}`;
+      if (passed < 20) fail(line);
+      return line;
     },
   },
   {

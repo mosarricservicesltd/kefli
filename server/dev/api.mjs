@@ -1,12 +1,12 @@
 // A local stand-in for the operator HTTP API (contract section 6), enough for the phone's work: GET
-// /defaults.json pointing at the local stack, POST /register, POST and DELETE /devices, and POST and GET
-// /pair-offers, with NIP-98 checked as the contract says. Devices and offers live in memory. The real API is
-// the backend's Go service (docs/specs/02-backend.md).
+// /defaults.json pointing at the local stack, POST /register, POST and DELETE /devices, POST and GET
+// /pair-offers, with NIP-98 checked as the contract says, and GET /fixtures/… for the phone's fixture gate.
+// Devices and offers live in memory. The real API is the backend's Go service (docs/specs/02-backend.md).
 //   node server/dev/api.mjs   (from the repository root, so nostr-tools resolves)
 
 import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifyEvent } from 'nostr-tools/pure';
@@ -128,8 +128,18 @@ async function getOffer(req, res, lookup) {
   send(res, 200, { v: 1, offer: held.offer });
 }
 
+// shared/fixtures for the phone's fixture gate (mobile spec 11.2), as bytes, so the pages stay out of the app bundle.
+const fixtures = join(here, '..', '..', 'shared', 'fixtures');
+function fixture(res, path) {
+  const file = join(fixtures, path);
+  if (!/^[a-z0-9/._-]+$/.test(path) || path.includes('..') || !existsSync(file)) return send(res, 404, { v: 1, error: 'not found' });
+  res.writeHead(200, { 'content-type': path.endsWith('.json') ? 'application/json' : 'application/octet-stream' });
+  res.end(readFileSync(file));
+}
+
 function route(req, res) {
   const u = req.url ?? '';
+  if (req.method === 'GET' && u.startsWith('/fixtures/')) return fixture(res, u.slice('/fixtures/'.length));
   if (req.method === 'GET' && u === '/defaults.json') return send(res, 200, DEFAULTS);
   if (req.method === 'POST' && u === '/register') return register(req, res);
   if (req.method === 'POST' && u === '/devices') return postDevice(req, res);

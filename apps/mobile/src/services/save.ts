@@ -58,10 +58,13 @@ export async function saveLink(url: string, report: (s: SaveStep) => void): Prom
   if (outcome.kind !== 'parsed') {
     // Offline, the save waits on the phone keyed by the shared address, to be parsed when online (share-offline);
     // a page that can't be read is saved without text, and its row opens the original.
+    // RULED: a failed parse keeps the shared address too. Where a redirect ends is trusted only when the page parses;
+    // a sign-in wall's redirect lands on its login page, which isn't what was saved and isn't what Open original
+    // should open.
     say('parse', outcome.kind === 'offline' ? 'offline: saved, waiting to fetch' : `failed (${outcome.reason})`, outcome.kind === 'offline');
-    const hash = itemHash(outcome.kind === 'offline' ? target : outcome.finalUrl);
+    const hash = itemHash(target);
     const held = queueSave(db, now(), {
-      ...base, hash, url: outcome.kind === 'offline' ? target : outcome.finalUrl,
+      ...base, hash, url: target,
       textState: outcome.kind === 'offline' ? 'queued' : 'failed', failReason: outcome.kind === 'offline' ? null : outcome.reason,
     }, null, targets);
     return { hash, held };

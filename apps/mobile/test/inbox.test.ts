@@ -37,11 +37,11 @@ function world() {
       const b = blobs.get(url);
       return b ? new Response(b as never) : new Response('', { status: 404 });
     }) as never,
-    parse: async (b64): Promise<ParserResult> => {
+    // shelfMarkdown: the content HTML's heading, then the words; metadata comes from the request
+    markdown: async (html): Promise<ParserResult> => {
       parses++;
-      const html = Buffer.from(b64, 'base64').toString('utf8');
-      const title = /<h1>(.*?)<\/h1>/.exec(html)?.[1] ?? null;
-      return { ok: true, title, byline: null, site: 'Example', lang: 'en', hero: null, canonical: null, readerable: true, markdown: `# ${title}\n\n${WORDS}` };
+      const h1 = /<h1>(.*?)<\/h1>/.exec(html)?.[1] ?? '';
+      return { ok: true, title: null, byline: null, site: null, lang: null, hero: null, canonical: null, readerable: true, markdown: `# ${h1}\n\n${WORDS}` };
     },
     defaults: async () => D,
     stage: (sha) => `/staged/${sha}`,
@@ -77,7 +77,7 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     const id = await w.send(w.request({ html }));
     expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
     const hash = itemHash('https://example.com/a');
-    expect(w.item(hash)).toMatchObject({ text_state: 'cached', title: 'Read later', origin: 'browser', origin_device: 'Chrome on a Linux laptop', saved_at: T0 - 60 });
+    expect(w.item(hash)).toMatchObject({ text_state: 'cached', title: 'From the browser', origin: 'browser', origin_device: 'Chrome on a Linux laptop', saved_at: T0 - 60 });
     expect(w.texts.get(hash)).toContain('# Read later');
     expect(w.ops()).toEqual(expect.arrayContaining(['upload_blob', 'mirror_blob', 'publish_item', 'publish_lists', 'delete_wrap']));
     expect(w.db.get('SELECT payload FROM outbox WHERE op = ?', 'delete_wrap')).toEqual({ payload: JSON.stringify({ id }) });
@@ -198,6 +198,7 @@ local('the inbox on the local stack', () => {
     }, w.owner);
     pool.close();
     expect(out).toEqual({ created: 1 });
-    expect(w.item(itemHash('https://example.com/a'))).toMatchObject({ text_state: 'cached', title: 'Over the wire' });
+    expect(w.item(itemHash('https://example.com/a'))).toMatchObject({ text_state: 'cached', title: 'From the browser' });
+    expect(w.texts.get(itemHash('https://example.com/a'))).toContain('# Over the wire');
   }, 20_000);
 });

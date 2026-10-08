@@ -153,6 +153,14 @@
     };
   }
 
+  // Readability's content HTML for a page, prepared as shelfParse prepares it: what the extension sends with a
+  // save (contract 4.4), and the fixtures' Readability output (contract 9).
+  function shelfArticle(bodyBase64, contentType, url) {
+    var doc = documentFor(decode(base64Bytes(bodyBase64), contentType), url);
+    var article = new Readability(doc).parse();
+    return article && article.content ? { ok: true, content: article.content } : { ok: false };
+  }
+
   // An extension save: the extension has already read canonical, hero and the guard from the live page.
   function shelfMarkdown(contentHtml, url, rules) {
     var doc = documentFor(contentHtml, url);
@@ -175,6 +183,7 @@
 
   window.shelfParse = shelfParse;
   window.shelfMarkdown = shelfMarkdown;
+  window.shelfArticle = shelfArticle;
   window.shelfRun = shelfRun;
   window.shelfNormaliseMarkdown = normaliseMarkdown;
 })();

@@ -9,7 +9,8 @@
     "test": "jest",
     "typecheck": "tsc --noEmit",
     "decrypt": "tsx tools/decrypt.ts",
-    "unwrap": "tsx tools/unwrap.ts"
+    "unwrap": "tsx tools/unwrap.ts",
+    "verify": "tsx tools/verify.ts"
   },
   "dependencies": {
     "@noble/ciphers": "2.1.1",

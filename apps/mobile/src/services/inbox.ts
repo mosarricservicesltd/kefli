@@ -5,7 +5,8 @@
 //   - unreadable JSON is failed_parse, a version not understood ignored_version (C§10);
 //   - a token that isn't a connected entry of the record, or a seal by another key: ignored_token.
 // An accepted request becomes a save. Its HTML, when there is some, comes from the operator Blossom server only,
-// capped and checked against its sha256, then parsed as a page is; a blob that can't be read is failed_blob and
+// capped and checked against its sha256: Readability's content HTML, which the canonical Markdown conversion
+// (shelfMarkdown) turns into the save's text, with the title and the rest as the extension read them; a blob that can't be read is failed_blob and
 // tried again from wrap_json at each drain. Only created, merged and unarchived queue delete_wrap; every other
 // wrap is left, so a phone without the record yet can't remove a save another phone still needs.
 //
@@ -20,7 +21,8 @@ import {
 import type { Pending } from '../data/pending';
 import type { SaveTargets } from '../data/saves';
 import { getCursor, setCursor } from '../data/sync';
-import { parseHtml, type PagePorts } from './page';
+import { deriveArticle } from '../reader/blocks';
+import type { PageOutcome, ParserResult } from './page';
 import { settle, type PendingPorts } from './pending';
 import type { Filter } from './sync';
 
@@ -32,7 +34,8 @@ export type InboxPorts = Pick<PendingPorts, 'db' | 'now' | 'crypto' | 'stage' | 
   signer: Signer;
   query: (relay: string, filters: Filter[]) => Promise<NostrEvent[]>;
   fetch: typeof fetch;
-  parse: PagePorts['parse'];
+  /** shelfMarkdown in the parser WebView (C§4.4). */
+  markdown: (contentHtml: string, url: string) => Promise<ParserResult>;
   defaults: () => Promise<{ operator: { relay: string; blossom: string } }>;
 };
 
@@ -63,16 +66,27 @@ function readable(json: string): boolean {
   }
 }
 
+/**
+ * The save's text from the browser's content HTML (C§4.4): the canonical Markdown conversion, with the metadata the
+ * extension read from the live page. The extension applied the guard before sending HTML, so it isn't applied again.
+ */
+export async function fromBrowser(p: Pick<InboxPorts, 'markdown'>, r: SaveRequest, contentHtml: string): Promise<Exclude<PageOutcome, { kind: 'offline' }>> {
+  const m = await p.markdown(contentHtml, r.url).catch((): ParserResult => ({ ok: false, reason: 'error' }));
+  if (!m.ok) return { kind: 'failed', reason: 'not_readable', finalUrl: r.url };
+  const derived = deriveArticle(m.markdown);
+  const result = { ...m, title: r.title, byline: r.byline, site: r.site, lang: r.lang, hero: r.hero, canonical: r.canonical, readerable: true };
+  return { kind: 'parsed', finalUrl: r.url, result, words: derived.words, spoken: derived.spoken, derived };
+}
+
 /** The inbox blob's HTML, or null when it can't be had or doesn't check out. */
-export async function readBlob(p: Pick<InboxPorts, 'fetch' | 'crypto'>, html: NonNullable<SaveRequest['html']>): Promise<Uint8Array | null> {
+export async function readBlob(p: Pick<InboxPorts, 'fetch' | 'crypto'>, html: NonNullable<SaveRequest['html']>): Promise<string | null> {
   try {
     const res = await p.fetch(`${html.server.replace(/\/+$/, '')}/${html.sha256}`, { method: 'GET' });
     if (!res.ok || Number(res.headers.get('content-length') ?? 0) > INBOX_MAX_BYTES) return null;
     const blob = new Uint8Array(await res.arrayBuffer());
     if (blob.length > INBOX_MAX_BYTES) return null;
     const text = await decryptText(blob, { sha256: html.sha256, key: html.key, nonce: html.nonce }, p.crypto);
-    const bytes = new TextEncoder().encode(text);
-    return bytes.length > INBOX_MAX_BYTES - 16 ? null : bytes;
+    return new TextEncoder().encode(text).length > INBOX_MAX_BYTES - 16 ? null : text;
   } catch {
     return null;
   }
@@ -95,7 +109,7 @@ async function take(p: InboxPorts, owner: string, wrapId: string, j: Extract<Jud
       return 'failed_blob';
     }
     const item = pendingRow(p.db, owner, a.hash);
-    if (item) await settle(p, owner, item, await parseHtml(p, html, 'text/html; charset=utf-8', j.request.url));
+    if (item) await settle(p, owner, item, await fromBrowser(p, j.request, html));
   }
   // A retried wrap finds the save it made itself: still its creation.
   const outcome = retry && a.outcome === 'merged' ? 'created' : a.outcome;

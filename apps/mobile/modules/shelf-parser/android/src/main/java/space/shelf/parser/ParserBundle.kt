@@ -3,5 +3,5 @@ package space.shelf.parser
 
 object ParserBundle {
   const val ASSET = "shelf-parser.js"
-  const val SHA256 = "1649d1640013db865e5c92f5e7629e017aa3db520f6a10c05f13a672520e26e1"
+  const val SHA256 = "6ee2edda535c24f2d06532e2f8a8f5a9fb36d527e578334ee9071856b8c2d04c"
 }

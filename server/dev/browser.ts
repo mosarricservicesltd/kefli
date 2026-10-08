@@ -3,7 +3,8 @@
 // server/dev/data/pair.html) with its typed code, posts the sealed offer to /pair-offers, then waits on the
 // operator relay for the pair-ack and checks it as the extension will. Once paired, save sends a page as the
 // extension does (C§4.4): its HTML encrypted into an inbox blob on the operator Blossom server, then a save request
-// wrapped to the user on the operator relay. The page's whole HTML stands in for Readability's content.
+// wrapped to the user on the operator relay. Readability's content HTML and the page's metadata come from the
+// parser bundle in headless Chrome, as the extension will read them from the live page.
 //   npx tsx server/dev/browser.ts ["Chrome on a Linux laptop"]   (with the stack and api.mjs running)
 //   npx tsx server/dev/browser.ts save <url> [--no-html]
 // The device key and pairing land in server/dev/data/browser.json, which git ignores.
@@ -13,6 +14,10 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Relay } from 'nostr-tools/relay';
 import { toQR } from 'toqr';
+// @ts-expect-error: plain ES modules without types
+import { launch } from '../../tools/design-qa/cdp.mjs';
+// @ts-expect-error: plain ES modules without types
+import { shelfBundle } from '../../shared/vendor/build-parser-bundle.mjs';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import {
   LocalSigner, acceptPairAck, derivePairCode, encryptText, httpAuth, newPairCode, sealOffer, unwrap, uploadBlob, wrapSaveRequest,
@@ -74,17 +79,34 @@ async function save(url: string, withHtml: boolean) {
   const device = new LocalSigner(hexToBytes(state.sk));
   let html: SaveRequest['html'] = null;
   let title: string | null = null;
+  let meta = { site: new URL(url).hostname as string | null, byline: null as string | null, lang: null as string | null, canonical: null as string | null, hero: null as string | null };
   if (withHtml) {
-    const page = await (await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) Chrome/150.0' } })).text();
-    title = /<title[^>]*>([^<]*)<\/title>/i.exec(page)?.[1]?.trim() ?? null;
-    const enc = await encryptText(page, nodeCrypto);
+    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) Chrome/150.0' } });
+    const bytes = Buffer.from(await res.arrayBuffer());
+    // Readability's content HTML, as the extension sends it, from the parser bundle in headless Chrome
+    const chrome = await launch();
+    let article: { ok: boolean; content?: string };
+    let parsed: { title?: string | null; site?: string | null; byline?: string | null; lang?: string | null; canonical?: string | null; hero?: string | null };
+    try {
+      await chrome.eval(shelfBundle());
+      const args = `${JSON.stringify(bytes.toString('base64'))}, ${JSON.stringify(res.headers.get('content-type') ?? 'text/html')}, ${JSON.stringify(res.url || url)}`;
+      article = await chrome.eval(`shelfArticle(${args})`);
+      parsed = await chrome.eval(`shelfParse(${args})`);
+    } finally {
+      chrome.close();
+      chrome.proc.kill();
+    }
+    if (!article.ok) throw new Error('Readability found no article on that page; send it with --no-html');
+    title = parsed.title ?? null;
+    meta = { site: parsed.site ?? null, byline: parsed.byline ?? null, lang: parsed.lang ?? null, canonical: parsed.canonical ?? null, hero: parsed.hero ?? null };
+    const enc = await encryptText(article.content!, nodeCrypto);
     const up = await uploadBlob(defaults.operator.blossom, enc.blob, enc.text.sha256, device);
     if (!up.ok) throw new Error(`upload: ${up.status} ${up.reason}`);
     html = { ...enc.text, server: defaults.operator.blossom };
     console.log(`  uploaded ${enc.blob.length} bytes of HTML as an inbox blob`);
   }
   const request: SaveRequest = {
-    v: 1, url, canonical: null, title, site: new URL(url).hostname, byline: null, lang: null, hero: null,
+    v: 1, url, title, ...meta,
     captured_at: Math.floor(Date.now() / 1000), token: state.paired.token, html,
   };
   const { wrap } = await wrapSaveRequest(device, state.paired.user_pubkey, bytesToHex(nodeCrypto.randomBytes(16)), request, Math.floor(Date.now() / 1000));

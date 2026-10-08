@@ -15,6 +15,7 @@ import { getNetworkStateAsync, NetworkStateType } from 'expo-network';
 import { removeImages, syncImages, type ImagePorts } from './images';
 import { runPendingParses } from './pending';
 import { drainInbox } from './inbox';
+import { pickUpSpools } from '../share/pickup';
 import { xRetryDelay } from './xpost';
 import { ShelfParser } from '../../modules/shelf-parser/src';
 import type { ParserResult } from './page';
@@ -125,6 +126,8 @@ export function startSync(): () => void {
   const sync = () =>
     launchPlan()
       .catch(() => null)
+      // shares a killed process left in the spool are saved before the sync sends them (8.5)
+      .then(() => pickUpSpools().then((n) => n && log('pickup', { saved: n })).catch((e) => log('pickup', { error: String((e as Error).message) })))
       .then(runSync)
       .then(async (r) => log('sync', { owner: (await currentSigner())?.pubkey().slice(0, 12), ...r }))
       .catch((e) => log('sync', { error: String((e as Error).message) }));
@@ -250,7 +253,7 @@ export function runInbox(owner: string): Promise<void> {
         signer,
         query: (url, filters) => pool.query(url, filters as never),
         fetch,
-        parse: (b, t, u) => ShelfParser.parse(b, t, u) as Promise<ParserResult>,
+        markdown: (html, u) => ShelfParser.markdown(html, u) as Promise<ParserResult>,
         defaults: loadDefaults,
         ...parserPorts(),
       }, owner);

@@ -1,0 +1,155 @@
+{
+ "about": "The live list (project plan section 6, mobile spec 11.3): thirty addresses fetched and parsed as a share is, each with the outcome that is right for it, honest failures included; where a site's answer decides it (a paywall's opening, a bot check), the kind says so. article: parsed with a title and at least 120 words. failed:<reason>: the honest failure the row shows (http, not_html, not_readable). x-none and x-article: a shared X post, checked through X's embed service (5.4). Pages change upstream, so this list is a measure, not a fixture: stage 1 needs 20 of 30, beta 30 of 30.",
+ "urls": [
+  {
+   "url": "https://en.wikipedia.org/wiki/Instapaper",
+   "kind": "Wikipedia",
+   "expect": "article"
+  },
+  {
+   "url": "https://de.wikipedia.org/wiki/Social_Bookmarks",
+   "kind": "Wikipedia, German",
+   "expect": "article"
+  },
+  {
+   "url": "https://www.bbc.co.uk/news/articles/cwly0jyk2vl5o",
+   "kind": "news",
+   "expect": "article"
+  },
+  {
+   "url": "https://www.theguardian.com/news/2026/oct/07/apparent-exodus-of-super-rich-suggests-uk-is-no-longer-billionaires-playground",
+   "kind": "news",
+   "expect": "article"
+  },
+  {
+   "url": "https://arstechnica.com/space/2026/10/nasa-is-keen-on-pursuing-at-least-one-joint-science-mission-with-europe/",
+   "kind": "news",
+   "expect": "article"
+  },
+  {
+   "url": "https://www.nytimes.com/2023/12/27/business/media/new-york-times-open-ai-microsoft-lawsuit.html",
+   "kind": "paywalled news: the server sends the opening paragraphs, which is what a save keeps",
+   "expect": "article"
+  },
+  {
+   "url": "https://www.astralcodexten.com/p/an-open-letter-to-steven-pinker-on",
+   "kind": "Substack",
+   "expect": "article"
+  },
+  {
+   "url": "https://medium.com/@karpathy/software-2-0-a64152b37c35",
+   "kind": "Medium",
+   "expect": "article"
+  },
+  {
+   "url": "https://github.com/mozilla/readability",
+   "kind": "GitHub README",
+   "expect": "article"
+  },
+  {
+   "url": "https://github.com/nostr-protocol/nips/blob/master/44.md",
+   "kind": "GitHub Markdown file",
+   "expect": "article"
+  },
+  {
+   "url": "https://www.paulgraham.com/greatwork.html",
+   "kind": "personal essay, table layout",
+   "expect": "article"
+  },
+  {
+   "url": "https://martinfowler.com/articles/microservices.html",
+   "kind": "long-form article",
+   "expect": "article"
+  },
+  {
+   "url": "https://danluu.com/web-bloat/",
+   "kind": "minimal blog",
+   "expect": "article"
+  },
+  {
+   "url": "https://blog.cloudflare.com/the-road-to-quic/",
+   "kind": "company blog",
+   "expect": "article"
+  },
+  {
+   "url": "https://jvns.ca/blog/2016/01/23/sendfile-a-new-to-me-system-call/",
+   "kind": "personal blog",
+   "expect": "article"
+  },
+  {
+   "url": "https://docs.python.org/3/tutorial/classes.html",
+   "kind": "documentation",
+   "expect": "article"
+  },
+  {
+   "url": "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html",
+   "kind": "documentation, code",
+   "expect": "article"
+  },
+  {
+   "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching",
+   "kind": "documentation",
+   "expect": "article"
+  },
+  {
+   "url": "https://www.gov.uk/government/publications/open-standards-principles/open-standards-principles",
+   "kind": "government guidance",
+   "expect": "article"
+  },
+  {
+   "url": "https://www.gutenberg.org/files/11/11-h/11-h.htm",
+   "kind": "a whole book",
+   "expect": "article"
+  },
+  {
+   "url": "https://arxiv.org/abs/1706.03762",
+   "kind": "paper abstract page",
+   "expect": "article"
+  },
+  {
+   "url": "https://arxiv.org/pdf/1706.03762",
+   "kind": "PDF link",
+   "expect": "failed:not_html"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+   "kind": "YouTube page",
+   "expect": "failed:not_readable"
+  },
+  {
+   "url": "https://excalidraw.com/",
+   "kind": "JavaScript-only app",
+   "expect": "failed:not_readable"
+  },
+  {
+   "url": "https://news.ycombinator.com/",
+   "kind": "a list of links, which Readability takes as an article",
+   "expect": "article"
+  },
+  {
+   "url": "https://www.reddit.com/r/AskHistorians/comments/1ss3k5/",
+   "kind": "forum thread: the page carries no readable article",
+   "expect": "failed:not_readable"
+  },
+  {
+   "url": "https://stackoverflow.com/questions/11227809/why-is-processing-a-sorted-array-faster-than-processing-an-unsorted-array",
+   "kind": "Q&A behind a bot check that refuses the fetch",
+   "expect": "failed:http"
+  },
+  {
+   "url": "https://x.com/jack/status/20",
+   "kind": "X post without a link",
+   "expect": "x-none"
+  },
+  {
+   "url": "https://www.example.com/",
+   "kind": "a page too short to be an article",
+   "expect": "failed:not_readable"
+  },
+  {
+   "url": "https://www.w3.org/Provider/Style/URI",
+   "kind": "old static page",
+   "expect": "article"
+  }
+ ]
+}

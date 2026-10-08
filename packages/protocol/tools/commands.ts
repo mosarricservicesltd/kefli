@@ -91,3 +91,87 @@ export function run(command: (argv: string[], env: NodeJS.ProcessEnv, log: Log) 
     },
   );
 }
+
+type Query = (relay: string, filter: Record<string, unknown>) => Promise<NostrEvent[]>;
+
+/** Every event matching the filter on one relay, until EOSE (nostr-tools' Relay). */
+export async function relayQuery(relay: string, filter: Record<string, unknown>): Promise<NostrEvent[]> {
+  const { Relay } = await import('nostr-tools/relay');
+  const r = await Relay.connect(relay);
+  try {
+    return await new Promise((ok) => {
+      const got: NostrEvent[] = [];
+      const sub = r.subscribe([filter as never], {
+        onevent: (e) => got.push(e as NostrEvent),
+        oneose: () => (sub.close(), ok(got)),
+      });
+    });
+  } finally {
+    r.close();
+  }
+}
+
+const LOCAL = ['ws://localhost:7447', 'ws://localhost:7448', 'ws://localhost:7449'];
+
+/**
+ * npm run verify (the stage gates, mobile spec 13.1): every save of SHELF_SECRET's identity on the relays, newest
+ * copy of each, checked as decrypt --fetch does: the event verifies, decrypts, and its text blob is on every server
+ * it names, matching text_hash. One line a save, then the count. --relays a,b,c (default: the local stack).
+ */
+export async function verifyCommand(argv: string[], env: { SHELF_SECRET?: string }, log: Log, query: Query = relayQuery, get: typeof fetch = fetch): Promise<boolean> {
+  const relays = argAfter(argv, '--relays')?.split(',') ?? LOCAL;
+  const signer = new LocalSigner(await parseSecret(env.SHELF_SECRET, nodeCrypto));
+  const newest = await newestCopies(relays, signer.pubkey(), query);
+  let bad = 0;
+  let saves = 0;
+  for (const [d, { event, on }] of newest) {
+    const where = `(on ${on.size}/${relays.length} relays)`;
+    if (!d.startsWith('shelf/item/')) {
+      log(`     ${d} ${where}`);
+      continue;
+    }
+    saves++;
+    const lines: string[] = [];
+    const ok = verifyEvent(event) && (await verifyOne(signer, event, (l) => lines.push(l), get));
+    if (!ok) bad++;
+    log(verdictLine(ok, d, lines, where));
+  }
+  log(`${saves - bad} of ${saves} saves verify, decrypt and match their text`);
+  return bad === 0;
+}
+
+/** The newest copy of each d tag across the relays, with the relays that hold any copy of it. */
+async function newestCopies(relays: string[], author: string, query: Query): Promise<Map<string, { event: NostrEvent; on: Set<string> }>> {
+  const newest = new Map<string, { event: NostrEvent; on: Set<string> }>();
+  for (const relay of relays) {
+    for (const e of await query(relay, { kinds: [30078], authors: [author], '#t': ['shelf'] })) {
+      const d = e.tags.find((t) => t[0] === 'd')?.[1] ?? '';
+      const held = newest.get(d);
+      if (!held) newest.set(d, { event: e, on: new Set([relay]) });
+      else {
+        held.on.add(relay);
+        if (e.created_at > held.event.created_at) held.event = e;
+      }
+    }
+  }
+  return newest;
+}
+
+function verdictLine(ok: boolean, d: string, lines: string[], where: string): string {
+  const title = lines.find((l) => l.startsWith('title:'))?.slice(7) ?? d.slice(11, 23);
+  if (ok) return `ok   ${title} ${where}`;
+  return `FAIL ${title} ${where}: ${lines.filter((l) => l.startsWith('FAIL')).join('; ') || 'does not verify'}`;
+}
+
+async function verifyOne(signer: LocalSigner, event: NostrEvent, log: Log, get: typeof fetch): Promise<boolean> {
+  try {
+    const { item } = await readItemEvent(signer, event);
+    log(`title: ${item.item.title ?? item.item.url}${item.item.state === 'archived' ? ' [archived]' : ''}${item.item.text ? '' : ' [no text]'}`);
+    const text = item.item.text;
+    if (!text) return true;
+    return (await Promise.all(text.servers.map((s) => fetchBlob(log, s, text, item.item.text_hash, get)))).every(Boolean);
+  } catch (e) {
+    log(`FAIL ${(e as Error).message}`);
+    return false;
+  }
+}
