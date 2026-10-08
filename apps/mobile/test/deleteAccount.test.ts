@@ -147,3 +147,32 @@ describe('a nostr user’s lists', () => {
     expect(w.sent.some((s) => s.relay === 'ws://idx')).toBe(false);
   });
 });
+
+import { signDeletion } from '../src/services/deleteAccount';
+import { readRelayList, readServerList } from '@shelf/protocol';
+
+describe('a nostr user’s deletion (contract 4.7)', () => {
+  test('their lists are republished without Shelf’s entries', async () => {
+    const w = world();
+    w.db.run("UPDATE identities SET provider = 'nip55'");
+    w.db.run("INSERT INTO relays (url, owner, read, write, source, added_by_shelf) VALUES ('wss://mine', ?, 1, 0, 'user', 0)", w.pk);
+    w.db.run("INSERT INTO servers (url, owner, role, in_10063, added_by_shelf) VALUES ('https://my.blossom', ?, 'user', 1, 0)", w.pk);
+    await deleteEverything(w.p, () => undefined);
+    const lists = w.sent.filter((s) => s.relay === 'ws://idx').map((s) => s.event);
+    expect(lists.map((e) => e.kind).sort()).toEqual([10002, 10063]);
+    expect(readRelayList(lists.find((e) => e.kind === 10002)!)).toEqual([{ url: 'wss://mine', read: true, write: false }]);
+    expect(readServerList(lists.find((e) => e.kind === 10063)!)).toEqual(['https://my.blossom']);
+    expect(w.sent.some((s) => s.event.kind === 5 && s.event.tags.some((t) => t[1]?.startsWith('10002:')))).toBe(false);
+  });
+
+  test('declined in their app, nothing is sent and nothing deleted', async () => {
+    const w = world();
+    w.db.run("UPDATE identities SET provider = 'nip55'");
+    const declining = { ...w.p, signer: { pubkey: () => w.pk, signEvent: async () => { throw Object.assign(new Error('rejected'), { code: 'rejected' }); } } as never };
+    await expect(signDeletion(declining)).rejects.toThrow('rejected');
+    await expect(deleteEverything(declining, () => undefined)).rejects.toThrow('rejected');
+    expect(w.sent).toEqual([]);
+    expect(w.log).toEqual([]);
+    expect(w.wiped()).toBe(false);
+  });
+});

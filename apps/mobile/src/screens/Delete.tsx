@@ -3,13 +3,13 @@
 // lists; the danger button only once DELETE is typed and the phone is online. Deleting shows a row for each
 // server as its request resolves, with no way back; a server that didn't confirm is named. Done, Shelf starts
 // fresh at Welcome with a toast.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, TextInput, View } from 'react-native';
 import { radius } from '@shelf/tokens';
 import { phoneCrypto } from '../crypto/port';
 import { answerDeleted, useApp } from '../services/app';
 import { loadDefaults, type Defaults } from '../services/config';
-import { deleteEverything, deleteTargets, type Progress, type Result, type Target } from '../services/deleteAccount';
+import { deleteEverything, deleteTargets, signDeletion, type DelPorts, type Progress, type Result, type Target } from '../services/deleteAccount';
 import { currentSigner, wipeEverything } from '../services/identity';
 import { pool } from '../services/runner';
 import { closeVoice } from '../services/voice';
@@ -18,14 +18,14 @@ import { Button } from '../ui/Button';
 import { Icon, type IconName } from '../ui/Icon';
 import { Banner, ErrLine } from '../ui/Notice';
 import { useOnline } from '../ui/online';
-import { S, listOf } from '../ui/strings';
+import { S } from '../ui/strings';
 import { T, ui } from '../ui/text';
 import { showToast } from '../ui/toast';
 import { useTheme } from '../ui/theme';
 import { Dots } from '../ui/Dots';
 import { Lead, OnbShell } from './Onb';
 
-type Phase = 'explain' | 'failed' | 'running' | 'partial';
+type Phase = 'explain' | 'failed' | 'declined' | 'approve' | 'running' | 'partial';
 
 function Item({ icon, go, title, sub }: { icon: IconName; go: boolean; title: string; sub?: string }) {
   const { c } = useTheme();
@@ -65,6 +65,7 @@ export default function Delete() {
   useEffect(() => {
     loadDefaults().then(setDefaults, () => undefined);
   }, []);
+  const nostr = useMemo(() => (store().get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local') !== 'local', [owner]);
   const targets: Target[] = useMemo(() => (defaults && owner ? deleteTargets(store(), owner, defaults.operator) : []), [defaults, owner]);
   // no way back while deleting, nor from the partial result (prototype del-running, del-partial)
   useEffect(() => {
@@ -76,21 +77,50 @@ export default function Delete() {
     answerDeleted();
     setTimeout(() => showToast({ text: S.del.done }), 300);
   };
+  const attempt = useRef(0);
   const go = async () => {
     const signer = await currentSigner();
     if (!signer || !defaults) return;
+    const mine = ++attempt.current;
+    const ports: DelPorts = {
+      db: store(), now: () => Math.floor(Date.now() / 1000), signer, defaults, crypto: phoneCrypto, fetch,
+      publish: (url, e) => pool.publish(url, e), sleep: (ms) => new Promise<void>((ok) => setTimeout(ok, ms)), wipePhone: wipeEverything,
+    };
+    // a nostr user approves in their app first: every deletion is signed before anything is sent, and declining
+    // deletes nothing (FD 41, prototype del-nostr, del-declined)
+    if (nostr) setPhase('approve');
+    let signed;
+    try {
+      signed = await signDeletion(ports);
+    } catch {
+      if (mine === attempt.current) setPhase('declined');
+      return;
+    }
+    if (mine !== attempt.current) return;
     setPhase('running');
     closeVoice();
-    const r = await deleteEverything({
-      db: store(), now: () => Math.floor(Date.now() / 1000), signer, defaults, crypto: phoneCrypto, fetch,
-      publish: (url, e) => pool.publish(url, e), sleep: (ms) => new Promise((ok) => setTimeout(ok, ms)), wipePhone: wipeEverything,
-    }, setProg).catch(() => 'failed' as const);
+    const r = await deleteEverything(ports, setProg, signed).catch(() => 'failed' as const);
     if (r === 'failed') return setPhase('failed');
     if (r === 'partial') return setPhase('partial');
     // a moment for the last mark to land, then Shelf starts fresh (prototype runDelete)
     setTimeout(finish, 400);
   };
 
+  if (phase === 'approve') {
+    const cancel = () => {
+      attempt.current++;
+      setPhase('explain');
+    };
+    return (
+      <OnbShell title={S.del.title} back={cancel} actions={<Button label={S.del.cancel} kind="secondary" full onPress={cancel} />}>
+        <View accessibilityLiveRegion="polite" style={{ alignItems: 'center', paddingVertical: 48, gap: 16 }}>
+          <Dots color={c.text} />
+          <T style={ui(17, 'heading', 1.3)}>{S.del.waiting}</T>
+          <T muted style={[ui(15, 'body', 1.45), { textAlign: 'center' }]}>{S.del.waitingLead}</T>
+        </View>
+      </OnbShell>
+    );
+  }
   if (phase === 'running' || phase === 'partial') {
     const others = targets.map((t) => ({ t, state: prog?.others[t.url] ?? 'wait' as Result }));
     const unconfirmed = others.filter((o) => o.state === 'fail').map((o) => o.t.host);
@@ -100,25 +130,29 @@ export default function Delete() {
         <View accessibilityLiveRegion="polite" style={{ paddingHorizontal: 16, borderRadius: radius.container, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line, marginTop: 8 }}>
           <Step first label={S.del.stepServer} state={prog?.operator ?? 'wait'} note={S.del.deleted} />
           {others.map(({ t, state }) => (
-            <Step key={t.url} first={false} label={S.del.stepBackup(t.host)} state={state} note={state === 'fail' ? S.del.notConfirmed : t.kind === 'server' ? S.del.deleted : S.del.asked} />
+            <Step key={t.url} first={false} label={t.own ? S.del.stepOwn(t.host) : S.del.stepBackup(t.host)} state={state} note={state === 'fail' ? S.del.notConfirmed : t.kind === 'server' ? S.del.deleted : S.del.asked} />
           ))}
           <Step first={false} label={S.del.stepPhone} state={prog?.phone ?? 'wait'} note={S.del.deleted} />
         </View>
-        {phase === 'partial' && <ErrLine text={S.del.partialLine(unconfirmed)} style={{ marginTop: 16 }} />}
+        {phase === 'partial' && <ErrLine text={nostr ? S.del.partialLineNostr(unconfirmed) : S.del.partialLine(unconfirmed)} style={{ marginTop: 16 }} />}
       </OnbShell>
     );
   }
 
   const ok = typed === 'DELETE' && online && !!defaults;
+  const own = targets.filter((t) => t.own).length;
   return (
     <OnbShell title={S.del.title} actions={<Button label={S.del.go} kind="danger" full disabled={!ok} onPress={go} />}>
       {phase === 'failed' && <ErrLine text={S.del.failed} />}
+      {phase === 'declined' && <ErrLine text={S.del.declined} />}
       {!online && <Banner text={S.del.offline} style={{ marginHorizontal: 0 }} />}
       <Lead>{S.del.lead}</Lead>
       <View style={{ marginBottom: 20 }}>
         <Item icon="trash" go title={S.del.server} />
         <Item icon="trash" go title={S.del.phone} sub={S.del.phoneSub} />
-        {targets.length > 0 && <Item icon="server" go={false} title={S.del.backups(targets.length)} sub={S.del.backupsSub} />}
+        {targets.length > 0 && (own > 0
+          ? <Item icon="server" go={false} title={S.del.otherServers(targets.length)} sub={S.del.ownSub(own)} />
+          : <Item icon="server" go={false} title={S.del.backups(targets.length)} sub={S.del.backupsSub} />)}
       </View>
       <T style={[ui(13, 'groupLabel', 1.3), { marginBottom: 8 }]}>{S.del.typeLabel}</T>
       <TextInput

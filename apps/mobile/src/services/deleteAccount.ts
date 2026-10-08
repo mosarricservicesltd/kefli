@@ -9,7 +9,7 @@
 //      answered OK to every kind 5, a server when it answered 2xx or 404 to every delete; each gets a minute.
 //   3. the phone: the key file, Block Store, the database and the files.
 // Each step's result is kept in a delete_account job, so a deletion cut short resumes where it stopped.
-import { DEVICES_D, KIND, buildDeletions, deleteBlob, httpAuth, type CryptoPort, type NostrEvent, type Signer } from '@shelf/protocol';
+import { DEVICES_D, KIND, buildDeletions, buildRelayList, buildServerList, deleteBlob, httpAuth, type CryptoPort, type NostrEvent, type Signer } from '@shelf/protocol';
 import type { SqlDb } from '../data/db';
 import type { RelayAnswer } from './send';
 
@@ -28,7 +28,8 @@ export type DelPorts = {
   budgetMs?: number;
 };
 
-export type Target = { url: string; kind: 'relay' | 'server'; host: string };
+/** own: one of the user's own servers, which only a nostr user has (FD 91 (e)). */
+export type Target = { url: string; kind: 'relay' | 'server'; host: string; own: boolean };
 export type Result = 'wait' | 'done' | 'fail';
 export type Progress = { operator: Result; others: Record<string, Result>; phone: Result };
 export type Outcome = 'done' | 'partial' | 'failed';
@@ -44,15 +45,17 @@ const trim = (u: string) => u.replace(/\/+$/, '');
 
 /** The servers step 2 asks: other write relays in the 10002, and other Blossom servers that hold a save's text. */
 export function deleteTargets(db: SqlDb, owner: string, operator: { relay: string; blossom: string }): Target[] {
-  const relays = db.all<{ url: string }>("SELECT url FROM relays WHERE owner = ? AND write = 1 AND source != 'indexer' ORDER BY rowid", owner)
-    .map((r) => r.url).filter((u) => trim(u) !== trim(operator.relay));
+  const relays = db.all<{ url: string; source: string }>("SELECT url, source FROM relays WHERE owner = ? AND write = 1 AND source != 'indexer' ORDER BY rowid", owner)
+    .filter((r) => trim(r.url) !== trim(operator.relay));
   const named = db.all<{ text_servers: string }>('SELECT text_servers FROM items WHERE owner = ? AND text_servers IS NOT NULL', owner)
     .flatMap((r) => JSON.parse(r.text_servers) as string[]);
-  const mirrors = db.all<{ url: string }>("SELECT url FROM servers WHERE owner = ? AND role != 'operator'", owner).map((r) => r.url);
-  const servers = [...new Set([...named, ...mirrors].map(trim))].filter((u) => u !== trim(operator.blossom));
+  const listed = db.all<{ url: string; role: string }>("SELECT url, role FROM servers WHERE owner = ? AND role != 'operator'", owner);
+  const ownServers = new Set(listed.filter((s) => s.role === 'user').map((s) => trim(s.url)));
+  const servers = [...new Set([...named, ...listed.map((s) => s.url)].map(trim))].filter((u) => u !== trim(operator.blossom));
+  const seen = new Set<string>();
   return [
-    ...[...new Set(relays)].map((url) => ({ url, kind: 'relay' as const, host: host(url) })),
-    ...servers.map((url) => ({ url, kind: 'server' as const, host: host(url) })),
+    ...relays.filter((r) => !seen.has(r.url) && seen.add(r.url)).map((r) => ({ url: r.url, kind: 'relay' as const, host: host(r.url), own: r.source === 'user' })),
+    ...servers.map((url) => ({ url, kind: 'server' as const, host: host(url), own: ownServers.has(url) })),
   ];
 }
 
@@ -108,17 +111,44 @@ async function wrapDeletions(p: DelPorts, owner: string): Promise<NostrEvent[]> 
  * The generated identity's lists (C§4.7): the a tags the contract gives, and, RULED, an e tag for each list event the
  * phone sent or saw, since some relays (strfry among them) honour an a tag only for addressable kinds.
  */
-async function listDeletion(p: DelPorts): Promise<NostrEvent | null> {
+async function listDeletion(p: DelPorts): Promise<NostrEvent> {
   const pk = p.signer.pubkey();
-  // a nostr user's lists are shared with their other apps and are never deleted (C§4.7); their rewrite without
-  // Shelf's entries comes with the rest of the nostr user's deletion
-  if (p.db.get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', pk)?.provider !== 'local') return null;
   const ids = p.db.all<{ event_id: string }>("SELECT event_id FROM lists WHERE owner = ? AND kind IN (?, ?) AND d = '' AND event_id IS NOT NULL", pk, KIND.relayList, KIND.serverList)
     .map((r) => ['e', r.event_id]);
   return p.signer.signEvent({
     kind: KIND.deletion, created_at: p.now(), content: '',
     tags: [['a', `${KIND.relayList}:${pk}:`], ['a', `${KIND.serverList}:${pk}:`], ...ids, ['k', String(KIND.relayList)], ['k', String(KIND.serverList)]],
   });
+}
+
+/**
+ * A nostr user's lists (C§4.7): never deleted, since their other apps share them, but republished without the
+ * operator's relay and Blossom server and without any default this phone added. RULED: a list with nothing of
+ * theirs left in it (Shelf made it, finding none) is left as it is, neither emptied nor deleted.
+ */
+async function listRewrites(p: DelPorts): Promise<NostrEvent[]> {
+  const pk = p.signer.pubkey();
+  const relays = p.db.all<{ url: string; read: number; write: number }>("SELECT url, read, write FROM relays WHERE owner = ? AND source != 'indexer' AND added_by_shelf = 0 ORDER BY rowid", pk)
+    .map((r) => ({ url: r.url, read: !!r.read, write: !!r.write }));
+  const servers = p.db.all<{ url: string }>('SELECT url FROM servers WHERE owner = ? AND added_by_shelf = 0 AND in_10063 = 1 ORDER BY rowid', pk).map((r) => r.url);
+  const out: NostrEvent[] = [];
+  if (relays.length) out.push(await buildRelayList(p.signer, relays, p.now()));
+  if (servers.length) out.push(await buildServerList(p.signer, servers, p.now()));
+  return out;
+}
+
+/** Everything the deletion publishes, signed before anything is sent: for a nostr user, the approval in their app. */
+export type Signed = { wraps: NostrEvent[]; items: NostrEvent[]; lists: NostrEvent[]; nostr: boolean };
+
+export async function signDeletion(p: DelPorts): Promise<Signed> {
+  const owner = p.signer.pubkey();
+  const nostr = (p.db.get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local') !== 'local';
+  return {
+    wraps: await wrapDeletions(p, owner),
+    items: await buildDeletions(p.signer, allDs(p.db, owner), p.now()),
+    lists: nostr ? await listRewrites(p) : [await listDeletion(p)],
+    nostr,
+  };
 }
 
 /** Sends every event to a relay; true when it answered OK to each (a relay that refuses one hasn't confirmed). */
@@ -135,12 +165,11 @@ async function deleteBlobs(p: DelPorts, server: string, shas: string[]): Promise
   return true;
 }
 
-async function stepOperator(p: DelPorts, owner: string): Promise<boolean> {
+async function stepOperator(p: DelPorts, owner: string, signed: Signed): Promise<boolean> {
   const op = p.defaults.operator;
   const inList = !!p.db.get("SELECT 1 FROM relays WHERE owner = ? AND url = ? AND source != 'indexer'", owner, op.relay);
   // in the 10002, it gets everything step 2 sends the other relays: the saves' deletions and the lists'
-  const lists = await listDeletion(p);
-  const events = [...(await wrapDeletions(p, owner)), ...(inList ? [...(await buildDeletions(p.signer, allDs(p.db, owner), p.now())), ...(lists ? [lists] : [])] : [])];
+  const events = [...signed.wraps, ...(inList ? [...signed.items, ...signed.lists] : [])];
   // the relay answering at all is what this step needs; a kind 5 it refuses doesn't stop the account's deletion
   const reached = await withinMinute(p, async () => {
     for (const e of events) await p.publish(op.relay, e);
@@ -156,24 +185,23 @@ async function stepOperator(p: DelPorts, owner: string): Promise<boolean> {
   });
 }
 
-async function stepOther(p: DelPorts, owner: string, t: Target): Promise<boolean> {
+async function stepOther(p: DelPorts, owner: string, t: Target, signed: Signed): Promise<boolean> {
   if (t.kind === 'server') return withinMinute(p, () => deleteBlobs(p, t.url, blobs(p.db, owner)));
-  const lists = await listDeletion(p);
-  const events = [...(await buildDeletions(p.signer, allDs(p.db, owner), p.now())), ...(lists ? [lists] : [])];
-  return withinMinute(p, () => sendAll(p, t.url, events));
+  return withinMinute(p, () => sendAll(p, t.url, [...signed.items, ...signed.lists]));
 }
 
 /**
  * Runs or resumes the deletion, reporting each step as it resolves. failed: the operator couldn't be reached or
  * refused, and nothing else ran. partial: some other server didn't confirm; the phone is wiped all the same.
  */
-export async function deleteEverything(p: DelPorts, report: (prog: Progress) => void): Promise<Outcome> {
+export async function deleteEverything(p: DelPorts, report: (prog: Progress) => void, presigned?: Signed): Promise<Outcome> {
   const owner = p.signer.pubkey();
+  const signed = presigned ?? (await signDeletion(p));
   const targets = deleteTargets(p.db, owner, p.defaults.operator);
   const prog: Progress = progressOf(p.db) ?? { operator: 'wait', others: Object.fromEntries(targets.map((t) => [t.url, 'wait'])), phone: 'wait' };
   report(prog);
   if (prog.operator !== 'done') {
-    prog.operator = (await stepOperator(p, owner)) ? 'done' : 'fail';
+    prog.operator = (await stepOperator(p, owner, signed)) ? 'done' : 'fail';
     report({ ...prog });
     if (prog.operator === 'fail') {
       p.db.run('DELETE FROM jobs WHERE id = ?', JOB);
@@ -181,11 +209,10 @@ export async function deleteEverything(p: DelPorts, report: (prog: Progress) => 
     }
     save(p, prog);
   }
-  // the lists go from the indexer as well, unreported: it holds nothing else of this identity
-  const lists = await listDeletion(p);
-  if (lists) await Promise.all(p.defaults.indexer.map((r) => p.publish(r, lists).catch(() => undefined)));
+  // the lists go to the indexer as well, unreported: it holds nothing else of this identity
+  await Promise.all(p.defaults.indexer.flatMap((r) => signed.lists.map((e) => p.publish(r, e).catch(() => undefined))));
   await Promise.all(targets.filter((t) => prog.others[t.url] === 'wait').map(async (t) => {
-    prog.others[t.url] = (await stepOther(p, owner, t)) ? 'done' : 'fail';
+    prog.others[t.url] = (await stepOther(p, owner, t, signed)) ? 'done' : 'fail';
     save(p, prog);
     report({ ...prog, others: { ...prog.others } });
   }));
