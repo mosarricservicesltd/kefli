@@ -44,6 +44,27 @@ export async function currentSigner(): Promise<SignerProvider | null> {
   return signer;
 }
 
+/** The signer for any identity in the key file: the active one, or a move's source (C§4.8). */
+export async function signerOf(pubkey: string): Promise<SignerProvider | null> {
+  const current = await currentSigner();
+  if (current?.pubkey() === pubkey) return current;
+  const r = await ShelfKeystore.read().catch(() => null);
+  const id = r?.identities.find((i) => i.pubkey === pubkey);
+  return id ? signerFor(id) : null;
+}
+
+/**
+ * The move's last act on the keys (C§4.8 step 5, 3.3): S leaves the key file, and Block Store takes T's mnemonic,
+ * or is emptied when T is a nostr app and has none.
+ */
+export async function retireSourceKeys(from: string, to: string): Promise<void> {
+  await ShelfKeystore.wipe(from);
+  const r = await ShelfKeystore.read().catch(() => null);
+  const words = r?.identities.find((i) => i.pubkey === to)?.provider === 'local' ? await ShelfKeystore.readMnemonic(to).catch(() => null) : null;
+  if (words) await ShelfKeystore.blockStoreSet(words).catch(() => undefined);
+  else await ShelfKeystore.blockStoreRemove().catch(() => undefined);
+}
+
 /** A signer just signed in with becomes the current one (nostrSignIn.ts). */
 export function setCurrentSigner(s: SignerProvider | null): void {
   signer = s;

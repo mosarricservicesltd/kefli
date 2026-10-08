@@ -6,18 +6,15 @@
 // bookmarks to bring in, the import sheet asks once, and either answer signs in.
 import { useEffect, useRef, useState } from 'react';
 import { BackHandler, Pressable, TextInput, View } from 'react-native';
-import { bytesToHex } from '@noble/hashes/utils.js';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { radius } from '@shelf/tokens';
 import { quickIn } from '@shelf/tokens/reanimated';
-import { Nip55Signer, TimeoutError, readBunkerLink, type SignerProvider } from '@shelf/protocol';
-import { ShelfNip55, nip55Port } from '../../modules/shelf-nip55/src';
-import { phoneCrypto } from '../crypto/port';
+import { readBunkerLink, type SignerProvider } from '@shelf/protocol';
 import { KEEP_COPIES, setSetting } from '../data/settings';
 import { answerNewHere, answerSignedIn } from '../services/app';
 import { loadDefaults } from '../services/config';
 import { adoptNostr } from '../services/identity';
-import { connectBunker } from '../services/nip46';
+import { askApp, askLink, whyFailed, type How } from '../services/nostrAsk';
 import { checkSignIn, queueImport, settleUserLists, type UserLists } from '../services/nostrSignIn';
 import { pool } from '../services/runner';
 import { store } from '../services/store';
@@ -33,9 +30,7 @@ import { Lead, OnbShell } from './Onb';
 
 type Step = 'intro' | 'none' | 'waiting';
 type Problem = 'declined' | 'timeout' | 'probe' | null;
-type How = { provider: 'nip55'; package: string } | { provider: 'nip46'; bunker: string; client: string };
-
-function Switch({ on, onPress }: { on: boolean; onPress: () => void }) {
+export function KeepSwitch({ on, onPress }: { on: boolean; onPress: () => void }) {
   const { c } = useTheme();
   const x = useSharedValue(on ? 18 : 0);
   useEffect(() => {
@@ -82,7 +77,7 @@ export default function Nostr() {
 
   const fail = (e: unknown, mine: number) => {
     if (mine !== attempt.current) return;
-    setProblem(e instanceof TimeoutError || (e as { code?: string })?.code === 'timeout' ? 'timeout' : 'declined');
+    setProblem(whyFailed(e));
     setStep('intro');
   };
 
@@ -120,13 +115,11 @@ export default function Nostr() {
   const openApp = async () => {
     setProblem(null);
     const mine = ++attempt.current;
-    const signers = await ShelfNip55.listSigners().catch(() => []);
-    if (!signers.length) return setStep('none');
-    setStep('waiting');
     try {
-      const r = await ShelfNip55.getPublicKey(signers.length === 1 ? signers[0].package : null);
+      const a = await askApp(() => setStep('waiting'));
       if (mine !== attempt.current) return;
-      await finish(new Nip55Signer(nip55Port, r.package, r.pubkey), { provider: 'nip55', package: r.package }, mine);
+      if (!a) return setStep('none');
+      await finish(a.signer, a.how, mine);
     } catch (e) {
       fail(e, mine);
     }
@@ -137,11 +130,10 @@ export default function Nostr() {
     setProblem(null);
     const mine = ++attempt.current;
     setStep('waiting');
-    const client = bytesToHex(phoneCrypto.randomBytes(32));
     try {
-      const { signer } = await connectBunker(parsed, client);
+      const a = await askLink(parsed, link);
       if (mine !== attempt.current) return;
-      await finish(signer, { provider: 'nip46', bunker: link.trim(), client }, mine);
+      await finish(a.signer, a.how, mine);
     } catch (e) {
       fail(e, mine);
     }
@@ -184,7 +176,7 @@ export default function Nostr() {
       {line && <ErrLine text={line} />}
       {!online && <Banner text={S.nostr.offline} style={{ marginHorizontal: 0 }} />}
       <Lead>{S.nostr.lead}</Lead>
-      <Switch on={keep} onPress={() => setKeep((k) => !k)} />
+      <KeepSwitch on={keep} onPress={() => setKeep((k) => !k)} />
     </OnbShell>
   );
 }

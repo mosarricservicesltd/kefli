@@ -75,9 +75,15 @@ async function sendDeleteDevice(p: SendPorts, _row: OutboxRow, signer: Signer, t
 
 /** The pair-ack wrap to the device on the offer's relay (C§4.4); taken, the browser joins the record. */
 async function sendPairAck(p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
-  const pair = JSON.parse(row.payload ?? '{}') as PairPayload;
-  const ack = { v: 1 as const, user_pubkey: row.signer, write_relays: writeRelays(p.db, row.signer), blossom_servers: listServers(p.db, row.signer), token: pair.token, nonce: pair.nonce };
-  const { wrap } = await wrapPairAck(signer, pair.device_pubkey, ack, p.now(), { now: p.now(), random: p.crypto.randomBytes });
+  const pair = JSON.parse(row.payload ?? '{}') as PairPayload & { moved_from?: string };
+  // a move's pair-ack (C§4.8 step 4) carries T but is sealed by S, the key the browser knows, with moved_from for the nonce
+  const sealer = pair.moved_from ? await p.signer(pair.moved_from) : signer;
+  if (!sealer) return [{ target: t.target, kind: 'retry', error: 'the source key is not on the phone' }];
+  const ack = {
+    v: 1 as const, user_pubkey: row.signer, write_relays: writeRelays(p.db, row.signer), blossom_servers: listServers(p.db, row.signer), token: pair.token,
+    ...(pair.moved_from ? { moved_from: pair.moved_from } : { nonce: pair.nonce }),
+  };
+  const { wrap } = await wrapPairAck(sealer, pair.device_pubkey, ack, p.now(), { now: p.now(), random: p.crypto.randomBytes });
   let r: TargetResult;
   try {
     r = relayResult(t.target, await p.publish(t.target, wrap), wrap.id);

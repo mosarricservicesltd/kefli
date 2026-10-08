@@ -204,6 +204,11 @@ export async function syncInbound(p: SyncPorts): Promise<SyncResult> {
   const owner = p.db.get<{ pubkey: string }>("SELECT pubkey FROM identities WHERE role = 'active'")?.pubkey;
   const signer = owner ? await p.signer(owner) : null;
   if (!owner || !signer) return { items: 0, deletions: 0, texts: 0, missing: 0 };
+  return syncOwner(p, owner, signer);
+}
+
+/** The same for any identity on the phone: a move collects its source's library this way (C§4.8 step 2). */
+export async function syncOwner(p: SyncPorts, owner: string, signer: Signer): Promise<SyncResult> {
   await syncLists(p, owner);
   const collected = await collect(p, owner, p.now());
   const { items, deletions } = await applyAll(p, owner, signer, collected);

@@ -5,7 +5,7 @@ import { activeOwner } from '../data/library';
 import { launchPlan } from './launchState';
 import { adoptRecovery, newHere } from './identity';
 import { store } from './store';
-import { runSync } from './runner';
+import { onMoveDone, runSync } from './runner';
 
 export type AppState = { route: 'welcome' | 'welcome-early' | 'saves'; owner: string | null; restoreCard: boolean };
 
@@ -58,3 +58,8 @@ export function answerSignedIn(owner: string): void {
   set({ route: 'saves', owner, restoreCard: true });
   runSync().catch(() => undefined);
 }
+
+// a finished move (C§4.8) leaves T as the phone's identity: the shelf on screen follows, wherever the move ran
+onMoveDone((owner) => {
+  if (state && state.owner !== owner) set({ ...state, owner });
+});

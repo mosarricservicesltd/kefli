@@ -1,5 +1,5 @@
 import {
-  LocalSigner, Nip46Signer, Nip55Signer, TimeoutError, bookmarkLinks, nip46Perms, nip55Permissions, probeSigner, readBunkerLink,
+  LocalSigner, Nip46Signer, Nip55Signer, TimeoutError, bookmarkLinks, failureOf, nip46Perms, nip55Permissions, probeSigner, readBunkerLink,
   type BunkerLike, type Nip55Port, type NostrEvent,
 } from '../src';
 import { nodeCrypto } from '../src/node';
@@ -55,6 +55,13 @@ describe('the user’s own nostr app (contract 2)', () => {
     const s = new Nip55Signer(never, 'com.example.signer', PK, 20);
     await expect(s.signEvent({ kind: 24242, created_at: 1, tags: [], content: '' })).rejects.toBeInstanceOf(TimeoutError);
     await expect(s.nip44Encrypt(PK, 'x')).rejects.toBeInstanceOf(TimeoutError);
+  });
+
+  test('a failure reads as unanswered for a timeout, NIP-55 or NIP-46, and as declined otherwise', () => {
+    expect(failureOf(new TimeoutError())).toBe('timeout');
+    expect(failureOf({ code: 'timeout' })).toBe('timeout');
+    expect(failureOf(new Error('user rejected'))).toBe('declined');
+    expect(failureOf(null)).toBe('declined');
   });
 
   test('NIP-46 waits two minutes, then fails', async () => {

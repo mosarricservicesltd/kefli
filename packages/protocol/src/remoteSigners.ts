@@ -62,6 +62,11 @@ export class TimeoutError extends Error {
   }
 }
 
+/** What a failed request to a signer means on screen: no answer in time, or anything else read as declined. */
+export function failureOf(e: unknown): 'timeout' | 'declined' {
+  return e instanceof TimeoutError || (e as { code?: string } | null)?.code === 'timeout' ? 'timeout' : 'declined';
+}
+
 export function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   let t: ReturnType<typeof setTimeout>;
   return Promise.race([p, new Promise<never>((_, fail) => (t = setTimeout(() => fail(new TimeoutError()), ms)))]).finally(() => clearTimeout(t));

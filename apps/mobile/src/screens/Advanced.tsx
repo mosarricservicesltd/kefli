@@ -1,11 +1,11 @@
 // Advanced (mobile spec 5.8, FD 76, FD 93; prototype adv, adv-down, adv-offline, adv-notbacked): the relays in the
 // identity's 10002, Shelf's own first, each with whether it answers; the count of saves not backed up while there
 // are any, after which the note under the relays speaks of "your other saves"; a relay not answering is named in
-// the note. Export and Use my nostr app instead are week 5's: their rows are drawn and lead nowhere yet. "relay"
-// appears in the copy here only (FD 86).
+// the note. Export is week 5's: its row is drawn and leads nowhere yet. Use my nostr app instead opens the switch,
+// and is hidden for a nostr user, who has nothing to switch from. "relay" appears in the copy here only (FD 86).
 import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { radius } from '@shelf/tokens';
 import { notBackedUp } from '../data/backup';
 import { relayEntries } from '../data/lists';
@@ -81,6 +81,7 @@ export default function Advanced() {
   const [operator, setOperator] = useState<string | null>(null);
   const [status, setStatus] = useState<Record<string, Status>>({});
   const relays = useLive(() => (owner ? relayEntries(store(), owner).filter((r) => r.write).map((r) => r.url) : []), ['relays'], [owner]);
+  const local = useLive(() => (store().get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local') === 'local', ['identities'], [owner]);
   const notBacked = useLive(() => (owner ? notBackedUp(store(), owner) : 0), ['items', 'blobs', 'outbox'], [owner]);
 
   useEffect(() => {
@@ -122,8 +123,8 @@ export default function Advanced() {
       </T>
       <Group>
         <Row first icon="download" label={S.adv.export} sub={S.adv.exportSub} onPress={() => undefined} />
-        <Row icon="login" label={S.adv.nostr} sub={online ? S.adv.nostrSub : S.adv.needsConnection} disabled={!online} onPress={() => undefined}
-          right={<Icon name="chev" size={18} color={c.muted} />} />
+        {local && <Row icon="login" label={S.adv.nostr} sub={online ? S.adv.nostrSub : S.adv.needsConnection} disabled={!online} onPress={() => router.push('/switch')}
+          right={<Icon name="chev" size={18} color={c.muted} />} />}
       </Group>
     </OnbShell>
   );

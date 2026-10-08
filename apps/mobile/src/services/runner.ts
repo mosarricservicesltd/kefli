@@ -6,10 +6,13 @@ import { phoneCrypto } from '../crypto/port';
 import { nativeSecp } from '../crypto/secp';
 import { RelayPool } from '../net/pool';
 import { LOCAL_STACK, loadDefaults, type Defaults } from './config';
-import { currentSigner } from './identity';
+import { currentSigner, retireSourceKeys, setCurrentSigner, signerOf } from './identity';
 import { launchPlan } from './launchState';
 import { drain } from './send';
-import { syncInbound, type SyncResult } from './sync';
+import { syncInbound, syncOwner, type SyncPorts, type SyncResult } from './sync';
+import { runMove, type MoveOutcome } from './move';
+import { moveJob } from '../data/move';
+import { deriveArticle } from '../reader/blocks';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { getNetworkStateAsync, NetworkStateType } from 'expo-network';
 import { removeImages, syncImages, type ImagePorts } from './images';
@@ -52,10 +55,8 @@ export function runOutbox(): Promise<number> {
       return await drain({
         db: store(),
         now: () => Math.floor(Date.now() / 1000),
-        signer: async (pubkey) => {
-          const s = await currentSigner();
-          return s?.pubkey() === pubkey ? s : null;
-        },
+        // a move's source still signs its own rows, and seals a moved browser's pair-ack (C§4.8)
+        signer: signerOf,
         fetch,
         crypto: phoneCrypto,
         defaults: () => d,
@@ -97,22 +98,11 @@ export function runSync(): Promise<SyncResult> {
       // a queued restore (C§8) is this sync: lists, every read relay's saves and deletions, then the texts
       const restoring = activeOwner(store());
       if (restoring) beginRestore(store(), Math.floor(Date.now() / 1000), restoring);
-      const r = await syncInbound({
-        db: store(),
-        now: () => Math.floor(Date.now() / 1000),
-        signer: async (pubkey) => {
-          const s = await currentSigner();
-          return s?.pubkey() === pubkey ? s : null;
-        },
-        query: (url, filters) => pool.query(url, filters as never),
-        fetch,
-        crypto: phoneCrypto,
-        defaults: loadDefaults,
-        files: { ...textFiles, removeAll: removeAllFiles },
-        openHash: () => reading,
-      });
+      const r = await syncInbound(syncPorts());
       const owner = store().get<{ pubkey: string }>("SELECT pubkey FROM identities WHERE role = 'active'")?.pubkey;
       if (owner) settleRestore(store(), Math.floor(Date.now() / 1000), owner);
+      // early saves move into the shelf just brought back, after the restore's first pass (C§4.8, FD 6)
+      if (owner) await runMoveJob().catch((e) => console.log(`[shelf-move] ${JSON.stringify({ error: String((e as Error).message) })}`));
       // links a sign-in chose to bring in join after the restore's first pass (FD 82)
       const imported = owner ? takeImport(store(), owner) : null;
       if (owner && imported) {
@@ -131,6 +121,87 @@ export function runSync(): Promise<SyncResult> {
   syncing = run;
   syncListeners.forEach((l) => l());
   return run;
+}
+
+function syncPorts(): SyncPorts {
+  return {
+    db: store(),
+    now: () => Math.floor(Date.now() / 1000),
+    signer: async (pubkey) => {
+      const s = await currentSigner();
+      return s?.pubkey() === pubkey ? s : null;
+    },
+    query: (url, filters) => pool.query(url, filters as never),
+    fetch,
+    crypto: phoneCrypto,
+    defaults: loadDefaults,
+    files: { ...textFiles, removeAll: removeAllFiles },
+    openHash: () => reading,
+  };
+}
+
+let moving: Promise<MoveOutcome> | null = null;
+const moveListeners = new Set<(moved: number, total: number) => void>();
+const doneListeners = new Set<(owner: string) => void>();
+
+/** A move that has finished: the phone's identity is now T (app.ts follows it). */
+export function onMoveDone(l: (owner: string) => void): () => void {
+  doneListeners.add(l);
+  return () => doneListeners.delete(l);
+}
+
+/** The move's "N of M" (5.8 sw-moving). */
+export function onMoveProgress(l: (moved: number, total: number) => void): () => void {
+  moveListeners.add(l);
+  return () => moveListeners.delete(l);
+}
+
+/** Runs or resumes a queued move (C§4.8, 4.10); concurrent calls share one run. */
+export function runMoveJob(): Promise<MoveOutcome> {
+  moving ??= (async (): Promise<MoveOutcome> => {
+    try {
+      const job = moveJob(store());
+      if (!job) return 'done';
+      const [source, target] = await Promise.all([signerOf(job.from), signerOf(job.to)]);
+      if (!source || !target) return 'waiting';
+      const r = await runMove({
+        db: store(),
+        now: () => Math.floor(Date.now() / 1000),
+        source,
+        target,
+        defaults: loadDefaults,
+        query: (url, filters) => pool.query(url, filters as never),
+        publish: (url, event) => pool.publish(url, event),
+        fetch,
+        crypto: phoneCrypto,
+        readStaged,
+        stage: stageBlob,
+        spoken: (hash) => {
+          const md = textFiles.readText(hash);
+          return md === null ? null : deriveArticle(md).spoken;
+        },
+        collect: async (owner, signer) => void (await syncOwner(syncPorts(), owner, signer)),
+        runOutbox,
+        drainSourceInbox: async () => void (await drainInbox({
+          db: store(), now: () => Math.floor(Date.now() / 1000), signer: source,
+          query: (url, filters) => pool.query(url, filters as never), fetch,
+          markdown: (html, u) => ShelfParser.markdown(html, u) as Promise<ParserResult>, defaults: loadDefaults, ...parserPorts(),
+        }, job.from)),
+        retireKeys: () => retireSourceKeys(job.from, job.to),
+        report: (n, m) => moveListeners.forEach((l) => l(n, m)),
+      }, job);
+      console.log(`[shelf-move] ${JSON.stringify({ outcome: r, step: moveJob(store())?.step ?? 'done' })}`);
+      if (r === 'done') {
+        // the key file now starts with T, the signer every later call reads
+        setCurrentSigner(null);
+        doneListeners.forEach((l) => l(job.to));
+      }
+      return r;
+    } finally {
+      moving = null;
+    }
+  })();
+  return moving;
 }
 
 /**
