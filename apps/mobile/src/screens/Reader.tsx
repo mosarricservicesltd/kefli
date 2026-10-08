@@ -39,12 +39,13 @@ import { setToastFloor, showToast } from '../ui/toast';
 import { alpha, mix, useTheme } from '../ui/theme';
 import { archive, remove } from './actions';
 import { ReaderTier } from './Player';
-import { startListening, stopIfPlaying, useVoice, warmVoice, type Session } from '../services/voice';
+import { jumpTo, pauseVoice, startListening, stopIfPlaying, useVoice, warmVoice, type Session } from '../services/voice';
 import { startWord } from '../voice/clock';
 import { ArchiveDock, DOCK, DOCK_LIFTED } from './ArchiveDock';
 import { OriginalView } from './Original';
 import { hostOf } from './SaveRow';
 import { Skeleton } from './Skeleton';
+import { SpeedRead } from './SpeedRead';
 
 /** The reading band's top: 40 px under the bar (FD 18). */
 const BAND_TOP = 40;
@@ -164,12 +165,14 @@ function litRange(s: Session | null, hash: string): { from: number; to: number }
   return sent ? { from: sent.firstWord, to: sent.firstWord + sent.wordStarts.length - 1 } : null;
 }
 
-function Article({ row, P, owner, article, voice, viewRange, imgs }: {
+function Article({ row, P, owner, article, voice, viewRange, jump, imgs }: {
   row: LibRow; P: ReaderColors; owner: string; article: Article; voice: Session | null;
   /** Each image's state by address (5.6, reader-images). */
   imgs: Map<string, FigureState>;
   /** Set by the article: the first and last words in view, for where Listen starts (FD 19). */
   viewRange: React.MutableRefObject<(() => { first: number; last: number }) | null>;
+  /** Set by the article: stands the page at a word, a third of the way down, lit for 1.6 s (leaving Speed read). */
+  jump: React.MutableRefObject<((word: number) => void) | null>;
 }) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -231,6 +234,27 @@ function Article({ row, P, owner, article, voice, viewRange, imgs }: {
 
   viewRange.current = () => ({ first: wordAt(BAND_TOP), last: wordAt(viewH.current - 80) });
 
+  // the word Speed read stopped on: the page stands at it, with no animated scroll, and it stays lit for 1.6 s
+  const [flash, setFlash] = useState<number | null>(null);
+  jump.current = (w: number) => {
+    const y = scrollYForWord(blocks, layouts.current, proseY.current, w, 0);
+    if (y !== null) {
+      const at = Math.max(0, y - viewH.current / 3);
+      scroll.current?.scrollTo({ y: at, animated: false });
+      scrollY.current = at;
+    } else {
+      // a block not laid out yet: the page is placed when it is
+      target.current = { word: w, at: viewH.current / 3 };
+    }
+    setWord(w);
+    setFlash(w);
+  };
+  useEffect(() => {
+    if (flash === null) return;
+    const t = setTimeout(() => setFlash(null), 1600);
+    return () => clearTimeout(t);
+  }, [flash]);
+
   // Reading writes the position only while its article isn't playing (5.7).
   const moved = useRef(false);
   const keep = useCallback(() => {
@@ -263,8 +287,8 @@ function Article({ row, P, owner, article, voice, viewRange, imgs }: {
 
   // Follow-scroll (FD 18, FD 43): when the spoken word leaves the reading band it glides a third of the way down,
   // never while a finger is down; a drag that takes it off screen stops following until it is seen again.
-  const lit = litRange(voice, row.hash);
-  const spoken = lit?.from ?? -1;
+  const lit = litRange(voice, row.hash) ?? (flash !== null ? { from: flash, to: flash } : null);
+  const spoken = litRange(voice, row.hash)?.from ?? -1;
   useEffect(() => {
     if (spoken < 0 || !shown) return;
     const y = scrollYForWord(blocks, layouts.current, proseY.current, spoken, 0);
@@ -374,6 +398,8 @@ export default function Reader() {
     if (article && online && owner) fetchArticleImages(imagePorts(), owner, hash).catch(() => undefined);
   }, [article, online, owner, hash]);
   const viewRange = useRef<(() => { first: number; last: number }) | null>(null);
+  const jump = useRef<((word: number) => void) | null>(null);
+  const [rsvpAt, setRsvpAt] = useState<number | null>(null);
   const lifted = !!voice;
 
   useFocusEffect(useCallback(() => setToastFloor((lifted ? DOCK_LIFTED : 16) + 52), [lifted]));
@@ -395,12 +421,30 @@ export default function Reader() {
   const reopen = () => router.push(`/reader/${row.hash}`);
   const menu = () => openSheet(S.reader.more, () => (
     <View>
+      {article && <MenuItem icon="speedread" label={S.reader.menu.speedRead} onPress={() => closeSheet(openSpeedRead)} />}
       {row.state === 'archived' && <MenuItem icon="restore" label={S.reader.menu.backToUnread} onPress={() => closeSheet(() => { router.back(); archive(row.hash, false, reopen); })} />}
       <MenuItem icon="ext" label={S.reader.menu.openOriginal} onPress={() => closeSheet(() => router.push(`/reader/${row.hash}/original`))} />
       <MenuItem icon="link" label={S.reader.menu.copyLink} onPress={() => closeSheet(() => Clipboard.setStringAsync(row.url).then(() => showToast({ text: S.toast.linkCopied, hash: row.hash })))} />
       <MenuItem icon="trash" label={S.reader.menu.delete} danger onPress={() => closeSheet(() => { router.back(); stopIfPlaying(row.hash); remove(row.hash, reopen); })} />
     </View>
   ));
+  // Speed read starts on the spoken word, else the saved word if it's in view, else the paragraph in view, and pauses
+  // the voice (FD 21, FD 36)
+  const openSpeedRead = () => {
+    if (!article) return;
+    const range = viewRange.current?.() ?? { first: row.position_word, last: row.position_word };
+    const at = voice?.hash === row.hash && !voice.ended ? voice.word : startWord(row.position_word, range, article.words);
+    pauseVoice();
+    setRsvpAt(at);
+  };
+  // Leaving writes the one position and moves the voice to the same word (FD 36)
+  const leaveSpeedRead = (w: number) => {
+    setRsvpAt(null);
+    setPosition(store(), now(), owner, row.hash, w, true);
+    runOutbox().catch(() => 0);
+    if (voice?.hash === row.hash && !voice.ended) jumpTo(w);
+    requestAnimationFrame(() => jump.current?.(w));
+  };
   const waiting = !cached || !article;
   const playingHere = voice?.hash === row.hash;
   const onListen = () => {
@@ -432,12 +476,23 @@ export default function Reader() {
         </ScrollView>
       ) : (
         <>
-          <Article key={`${row.hash}`} row={row} P={P} owner={owner} article={article} voice={voice} viewRange={viewRange} imgs={imgs} />
+          <Article key={`${row.hash}`} row={row} P={P} owner={owner} article={article} voice={voice} viewRange={viewRange} jump={jump} imgs={imgs} />
           <ArchiveDock
             archived={row.state === 'archived'} bg={P.bg} fg={P.text} shadow={P.float} lifted={lifted}
             onPress={() => { router.back(); archive(row.hash, row.state !== 'archived', reopen); }}
           />
           {playingHere && voice && <ReaderTier s={voice} P={P} bottom={16 + insets.bottom} />}
+          {rsvpAt !== null && 'sentences' in article && (
+            <SpeedRead
+              row={row} P={P} sentences={article.sentences} blocks={article.blocks} start={rsvpAt} onExit={leaveSpeedRead}
+              onArchive={(w) => {
+                setPosition(store(), now(), owner, row.hash, w, false);
+                setRsvpAt(null);
+                router.back();
+                archive(row.hash, row.state !== 'archived', reopen);
+              }}
+            />
+          )}
         </>
       )}
     </View>

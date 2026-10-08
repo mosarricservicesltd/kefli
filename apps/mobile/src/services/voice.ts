@@ -152,6 +152,11 @@ export function toggle(): void {
   else ShelfVoice.play();
 }
 
+/** Opening Speed read pauses the voice (FD 21). */
+export function pauseVoice(): void {
+  if (session?.playing) ShelfVoice.pause();
+}
+
 export function skip(seconds: 15 | -15): void {
   ShelfVoice.skip(seconds);
 }

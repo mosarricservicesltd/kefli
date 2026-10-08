@@ -353,6 +353,25 @@ export const S = {
     undo: 'Undo',
   },
   // reader, reader-loading, reader-offline, reader-error, reader-menu, reader-aa, reader-end
+  // rsvp-start, rsvp, rsvp-paused, rsvp-done, rsvp-done-archived
+  rsvp: {
+    exit: 'Back to article',
+    minLeft: (n: number) => `${n} min left`,
+    hintStart: 'Tap to start · swipe to move by sentence',
+    hintPaused: 'Tap to carry on · swipe to move by sentence',
+    hintPlaying: 'Tap to pause',
+    prev: 'Previous sentence',
+    next: 'Next sentence',
+    play: 'Play',
+    pause: 'Pause',
+    slower: 'Slower',
+    faster: 'Faster',
+    wpm: (n: number) => `${n} wpm`,
+    doneTitle: 'You’ve reached the end',
+    doneLine: (site: string, wpm: number) => `${site} · read at ${wpm} wpm`,
+    archive: 'Archive',
+    backToUnread: 'Back to Unread',
+  },
   reader: {
     back: 'Back',
     listen: 'Listen',
