@@ -8,6 +8,8 @@ interface ShelfSystemModule {
   setSecure(on: boolean): boolean;
   /** Copies text marked sensitive, hidden from the clipboard preview (7.1). */
   copySensitive(label: string, text: string): boolean;
+  /** Writes the file to Downloads (8.6): MediaStore on 29 and later, the system's save dialog on 26 to 28. */
+  exportToDownloads(fileName: string, contents: string): Promise<{ uri: string }>;
 }
 
 export const ShelfSystem = requireNativeModule<ShelfSystemModule>('ShelfSystem');

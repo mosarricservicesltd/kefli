@@ -1,8 +1,9 @@
 // Advanced (mobile spec 5.8, FD 76, FD 93; prototype adv, adv-down, adv-offline, adv-notbacked): the relays in the
 // identity's 10002, Shelf's own first, each with whether it answers; the count of saves not backed up while there
 // are any, after which the note under the relays speaks of "your other saves"; a relay not answering is named in
-// the note. Export is week 5's: its row is drawn and leads nowhere yet. Use my nostr app instead opens the switch,
-// and is hidden for a nostr user, who has nothing to switch from. "relay" appears in the copy here only (FD 86).
+// the note. Export my saves writes shelf-export.html to Downloads, offline too, then the toast; a failed export puts
+// its line in the notice slot with Try again (adv-exportfail, G9). Use my nostr app instead opens the switch, and is
+// hidden for a nostr user, who has nothing to switch from. "relay" appears in the copy here only (FD 86).
 import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
@@ -11,13 +12,17 @@ import { notBackedUp } from '../data/backup';
 import { relayEntries } from '../data/lists';
 import { useApp } from '../services/app';
 import { loadDefaults } from '../services/config';
+import { exportSaves } from '../services/export';
 import { relayStatus } from '../services/runner';
 import { store } from '../services/store';
 import { Icon, type IconName } from '../ui/Icon';
 import { useLive } from '../ui/live';
 import { useOnline } from '../ui/online';
 import { Press, pressLayer } from '../ui/Press';
+import { Button } from '../ui/Button';
+import { ErrLine } from '../ui/Notice';
 import { S } from '../ui/strings';
+import { showToast } from '../ui/toast';
 import { T, ui } from '../ui/text';
 import { useTheme } from '../ui/theme';
 import { OnbShell } from './Onb';
@@ -80,6 +85,8 @@ export default function Advanced() {
   const owner = useApp()?.owner ?? '';
   const [operator, setOperator] = useState<string | null>(null);
   const [status, setStatus] = useState<Record<string, Status>>({});
+  const [exportFailed, setExportFailed] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const relays = useLive(() => (owner ? relayEntries(store(), owner).filter((r) => r.write).map((r) => r.url) : []), ['relays'], [owner]);
   const local = useLive(() => (store().get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local') === 'local', ['identities'], [owner]);
   const notBacked = useLive(() => (owner ? notBackedUp(store(), owner) : 0), ['items', 'blobs', 'outbox'], [owner]);
@@ -106,8 +113,23 @@ export default function Advanced() {
   const statusOf = (u: string): Status => (!online ? 'off' : status[u] ?? 'checking');
   const down = online ? ordered.filter((u) => status[u] === 'down').map(hostOf) : [];
 
+  const doExport = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      await exportSaves(owner);
+      setExportFailed(false);
+      showToast({ text: S.adv.exported });
+    } catch {
+      setExportFailed(true);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
-    <OnbShell title={S.adv.title}>
+    <OnbShell title={S.adv.title} actions={exportFailed ? <Button label={S.adv.tryAgain} full onPress={doExport} /> : undefined}>
+      {exportFailed && <ErrLine text={S.adv.exportFail} />}
       {notBacked > 0 && (
         <View accessibilityLiveRegion="polite" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 12, paddingHorizontal: 16, marginBottom: 16, borderRadius: radius.container, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line }}>
           <View style={{ marginTop: 1 }}><Icon name="info" size={16} color={c.muted} /></View>
@@ -122,7 +144,7 @@ export default function Advanced() {
         {S.adv.copied(notBacked > 0, ordered.length)}{down.length ? ` ${S.adv.willReach(down)}` : ''}
       </T>
       <Group>
-        <Row first icon="download" label={S.adv.export} sub={S.adv.exportSub} onPress={() => undefined} />
+        <Row first icon="download" label={S.adv.export} sub={S.adv.exportSub} onPress={doExport} />
         {local && <Row icon="login" label={S.adv.nostr} sub={online ? S.adv.nostrSub : S.adv.needsConnection} disabled={!online} onPress={() => router.push('/switch')}
           right={<Icon name="chev" size={18} color={c.muted} />} />}
       </Group>
