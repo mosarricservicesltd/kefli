@@ -28,6 +28,8 @@ import { activeOwner } from '../data/library';
 import { beginRestore, settleRestore } from '../data/restore';
 import { disconnect } from '../data/devices';
 import type { ConnectPorts } from './connect';
+import type { ShowPorts } from './phonePair';
+import { ShelfKeystore } from '../../modules/shelf-keystore/src';
 
 let running: Promise<number> | null = null;
 let defaults: Defaults | null = null;
@@ -313,4 +315,9 @@ function unwatchInbox(): void {
   inboxStop = null;
   if (inboxRetry) clearTimeout(inboxRetry);
   inboxRetry = null;
+}
+
+/** Add another device's ports (5.8): the user's key signs the offer, which carries the mnemonic from the key file. */
+export function phonePorts(owner: string): ShowPorts {
+  return { ...connectPorts(owner), mnemonic: () => ShelfKeystore.readMnemonic(owner).catch(() => null) };
 }

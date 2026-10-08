@@ -38,8 +38,15 @@ export function OnbShell({ title, children, actions, back = () => router.back() 
   );
 }
 
+/** The lead under a title; **words** between double asterisks are the names of buttons, set in the text colour and bold. */
 export function Lead({ children }: { children: string }) {
-  return <T muted style={[ui(15, 'body', 1.45), { marginBottom: 24 }]}>{children}</T>;
+  const { c } = useTheme();
+  const parts = children.split('**');
+  return (
+    <T muted style={[ui(15, 'body', 1.45), { marginBottom: 24 }]}>
+      {parts.map((p, i) => (i % 2 ? <T key={i} style={[ui(15, 'heading', 1.45), { color: c.text }]}>{p}</T> : p))}
+    </T>
+  );
 }
 
 /** A choice row (prototype .choice): icon tile, title and line, chevron. */

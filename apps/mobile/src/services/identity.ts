@@ -8,6 +8,7 @@ import { resolveLaunch, resolveShare, type LaunchPlan, type Origin } from '../da
 import { WELCOME_ANSWERED, getSetting, hasData, queueRestore, restoreRunning, setSetting, wipe } from '../data/settings';
 import { ensureIdentityRow } from '../data/saves';
 import { store } from './store';
+import { Directory, Paths } from 'expo-file-system';
 
 let signer: LocalSigner | null = null;
 const now = () => Math.floor(Date.now() / 1000);
@@ -107,17 +108,17 @@ export async function pubkeyOfCode(mnemonic: string): Promise<string> {
 }
 
 /**
- * A recovery code that found a shelf (5.3): its key stored, Welcome answered and the restore queued. Block Store
+ * A recovery code that found a shelf, or a mnemonic another phone handed over (5.3): its key stored, Welcome answered and the restore queued. Block Store
  * takes it (3.3), except after an early share, whose key S stays in the key file and in Block Store as the move's
  * source until the move's step 5 (C§4.8, built in week 5); its saves are kept under S meanwhile. Returns the pubkey.
  */
-export async function adoptRecovery(mnemonic: string): Promise<string> {
+export async function adoptRecovery(mnemonic: string, origin: 'recovery_code' | 'phone_pair' = 'recovery_code'): Promise<string> {
   const db = store();
   const early = await activeIdentity();
   const keepEarly = early?.origin === 'early_share' ? early : null;
   const sk = await secretKeyFromMnemonic(mnemonic, phoneCrypto);
   const s = new LocalSigner(sk.slice(), nativeSecp);
-  const identities: KeyIdentity[] = [{ pubkey: s.pubkey(), provider: 'local', sk: bytesToHex(sk), mnemonic, origin: 'recovery_code' }];
+  const identities: KeyIdentity[] = [{ pubkey: s.pubkey(), provider: 'local', sk: bytesToHex(sk), mnemonic, origin }];
   if (keepEarly) {
     const words = await ShelfKeystore.readMnemonic(keepEarly.pubkey).catch(() => null);
     identities.push({ ...keepEarly, ...(words ? { mnemonic: words } : {}) });
@@ -130,11 +131,25 @@ export async function adoptRecovery(mnemonic: string): Promise<string> {
       db.run("INSERT OR IGNORE INTO jobs (id, kind, state, step, data, started_at, updated_at) VALUES (?, 'move', 'queued', 0, ?, ?, ?)",
         `move:${keepEarly.pubkey}`, JSON.stringify({ from: keepEarly.pubkey, to: s.pubkey() }), now(), now());
     }
-    ensureIdentityRow(db, now(), s.pubkey(), 'recovery_code', true);
+    ensureIdentityRow(db, now(), s.pubkey(), origin, true);
     setSetting(db, WELCOME_ANSWERED, '1');
     queueRestore(db, now(), s.pubkey());
   });
   if (!keepEarly) await ShelfKeystore.blockStoreSet(mnemonic).catch(() => undefined);
   signer = s;
   return s.pubkey();
+}
+
+/**
+ * Delete my data's step 3 (7.2): the key file, Block Store's entry, the database and every file under
+ * Paths.document/shelf (texts, images, staged blobs), and the lock-screen artwork cache. Shelf starts as if just
+ * installed.
+ */
+export async function wipeEverything(): Promise<void> {
+  const r = await ShelfKeystore.read().catch(() => null);
+  for (const id of r?.identities ?? []) await ShelfKeystore.wipe(id.pubkey).catch(() => undefined);
+  await ShelfKeystore.blockStoreRemove().catch(() => undefined);
+  wipe(store());
+  for (const d of [new Directory(Paths.document, 'shelf'), new Directory(Paths.cache, 'artwork')]) if (d.exists) d.delete();
+  signer = null;
 }

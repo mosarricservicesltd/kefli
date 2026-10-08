@@ -97,6 +97,59 @@ export const S = {
     fresh: 'Start fresh instead',
     offline: 'Bringing back your shelf needs a connection',
   },
+  addDevice: {
+    title: 'Add another device',
+    lead: 'On the new phone, install Shelf, choose **I already have a shelf**, then **Scan from my other phone**. It scans this code, then asks for the six digits under it.',
+    expiresIn: (t: string) => `Code expires in ${t}`,
+    expired: 'This code has expired.',
+    newCode: 'Show a new one',
+    offline: 'Adding a device needs a connection',
+    offlineLead: 'Try again when you’re online.',
+    qr: 'Code for your other phone to scan',
+    six: (d: string) => `Six digits: ${d.split('').join(' ')}`,
+  },
+  scan: {
+    title: 'Scan from your other phone',
+    lead: 'On your other phone, open Shelf, go to **You**, then **Add another device**. A code will appear for this phone to scan.',
+    useCamera: 'Use the camera',
+    cameraOnly: 'Shelf uses the camera only to read this code.',
+    refusedTitle: 'The camera is switched off for Shelf',
+    refusedBody: 'Scanning needs the camera. Turn it on in Android settings, or use your recovery code instead.',
+    useCode: 'Use my recovery code instead',
+    settings: 'Open Android settings',
+    point: 'Point at the code on your other phone',
+    expired: 'That code has expired. Show a new one on your other phone, then scan again.',
+    scanned: 'Scanned. The six digits under the code make sure only you can use it.',
+    sixLabel: 'Type the six-digit code shown on your other phone',
+    wrong: 'That code didn’t match. Check the six digits on your other phone.',
+    connecting: 'Connecting to your other phone',
+    connectingLead: 'This takes a few seconds.',
+    offline: 'Bringing back your shelf needs a connection',
+  },
+  del: {
+    title: 'Delete my data',
+    lead: 'This removes your library from all your devices and from Shelf’s server.',
+    server: 'Your saves and their text on Shelf’s server',
+    phone: 'Everything on this phone',
+    phoneSub: 'Shelf starts fresh afterwards, as if just installed.',
+    backups: (n: number) => (n === 1 ? 'Copies on one independent backup server' : `Copies on ${say(n)} independent backup servers`),
+    backupsSub: 'We ask each to delete your copies. Each server decides for itself.',
+    typeLabel: 'Type DELETE to confirm',
+    go: 'Delete everything',
+    offline: 'Deleting needs a connection',
+    failed: 'Couldn’t reach Shelf’s server, so nothing has been deleted. Check your connection and try again.',
+    running: 'Deleting your data',
+    partial: 'Almost everything is gone',
+    stepServer: 'Shelf’s server',
+    stepBackup: (host: string) => `Backup: ${host}`,
+    stepPhone: 'This phone',
+    deleted: 'Deleted',
+    asked: 'Asked to delete',
+    notConfirmed: 'Didn’t confirm',
+    partialLine: (who: string[]) => `${listOf(who)} didn’t confirm the deletion. What’s left there is encrypted, and only your recovery code could open it. To be sure, destroy any copy of your recovery code.`,
+    finish: 'Finish',
+    done: 'Your data is deleted',
+  },
   restore: {
     title: 'Bringing back your shelf',
     count: (found: number, total: number) => `${found} of ${total}`,
@@ -257,4 +310,9 @@ export function connectedWhen(at: number, now = Date.now() / 1000): string {
   const d = new Date(at * 1000);
   const year = d.getFullYear() !== new Date(now * 1000).getFullYear();
   return S.browsers.connectedOn(d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', ...(year ? { year: 'numeric' } : {}) }));
+}
+
+/** a, b and c */
+export function listOf(xs: string[]): string {
+  return xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : (xs[0] ?? '');
 }

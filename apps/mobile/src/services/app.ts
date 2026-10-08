@@ -40,10 +40,15 @@ export async function answerNewHere(): Promise<void> {
   set({ route: 'saves', owner, restoreCard: false });
 }
 
-/** A recovery code that found a shelf: the key stored, and a root swap to Saves with the restore card (5.3). */
-export async function answerRecovered(mnemonic: string): Promise<void> {
-  const owner = await adoptRecovery(mnemonic);
+/** A recovery code that found a shelf, or another phone's:  the key stored, and a root swap to Saves with the restore card (5.3). */
+export async function answerRecovered(mnemonic: string, origin: 'recovery_code' | 'phone_pair' = 'recovery_code'): Promise<void> {
+  const owner = await adoptRecovery(mnemonic, origin);
   set({ route: 'saves', owner, restoreCard: true });
   // the restore is this sync (C§8); launch's sync ran before there was a key
   runSync().catch(() => undefined);
+}
+
+/** After Delete my data (FD 74): a root swap to Welcome, as if just installed. */
+export function answerDeleted(): void {
+  set({ route: 'welcome', owner: null, restoreCard: false });
 }

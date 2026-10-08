@@ -84,11 +84,14 @@ export default function Layout() {
             <Stack.Screen name="search" />
             <Stack.Screen name="browsers" />
             <Stack.Screen name="connect" />
+            <Stack.Screen name="add-device" />
+            <Stack.Screen name="delete" />
           </Stack.Protected>
           <Stack.Protected guard={!shelf}>
             <Stack.Screen name="welcome" />
             <Stack.Screen name="return" />
             <Stack.Screen name="code" />
+            <Stack.Screen name="scan" />
           </Stack.Protected>
           <Stack.Protected guard={!!app.owner}>
             <Stack.Screen name="reader/[hash]/index" />

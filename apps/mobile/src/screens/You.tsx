@@ -3,7 +3,7 @@
 // then the rows. The recovery code sheet keeps the words out of sight and out of the accessibility tree until "Show
 // the words", holds them in JavaScript only while shown, and secures the window while it is open (7.1).
 //
-// Add another device, Delete my data and Advanced are week 4: their rows are drawn and lead nowhere yet.
+// Advanced is week 4's: its row is drawn and leads nowhere yet.
 import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
@@ -167,11 +167,11 @@ export default function You() {
         )}
         <Group>
           <Row first icon="keyboard" label={S.you.recovery} sub={done ? S.you.written : S.you.notWritten} warn={!done} onPress={recovery} />
-          <Row icon="phone" label={S.you.addDevice} disabled={!online} sub={online ? undefined : S.you.needsConnection} />
+          <Row icon="phone" label={S.you.addDevice} disabled={!online} sub={online ? undefined : S.you.needsConnection} onPress={() => router.push('/add-device')} />
           <Row icon="laptop" label={S.you.browsers} value={String(stats.browsers)} onPress={() => router.push('/browsers')} />
         </Group>
         <Group><Row first icon="settings" label={S.you.advanced} /></Group>
-        <Group><Row first icon="trash" label={S.you.deleteData} danger /></Group>
+        <Group><Row first icon="trash" label={S.you.deleteData} danger onPress={() => router.push('/delete')} /></Group>
       </ScrollView>
     </View>
   );

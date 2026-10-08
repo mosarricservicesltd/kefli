@@ -53,6 +53,16 @@ Written on 6 October 2026, when the work moved off the laptop it started on. Eve
   - **The first pass:** the key is derived and the relays asked whether any save exists under it (`services/recovery.ts`): the default relays and indexer, then any read relay the key's own 10002 names. Nothing found gives "No saves found for this code" with Try again and Start fresh instead; the key is stored only when a shelf is found.
   - **The restore:** a `jobs` row carried out by the next sync (RULED in `data/restore.ts`: a save counts as back once its text is here or known missing). The card on Saves shows "N of M" with its bar, "Paused…" offline, then "All N saves are back" for 3 s.
   - **After an early share:** the early key stays in the key file and Block Store as the move's source, and a `move` job is queued for week 5; the code's key isn't written to Block Store until the move ends.
+  - **Second-phone pairing** (5.3, 5.8, C§2) followed the same day:
+    - **Add another device:** a real QR (`toqr`, drawn on a light card in both themes) with six digits under it, fresh each time and good for five minutes, the screen kept awake (`expo-keep-awake`) and secured. Expired, the code fades and Show a new one makes another.
+    - **Scan from my other phone:** the explanation, the camera, the six digits (the camera stopped first), wrong code, expired, refused (the way on is the recovery code) and connecting. A key that isn't the QR's is refused; the identity is stored as `phone_pair` and the restore runs.
+    - **The exchange:** HKDF-SHA256 over the QR's secret and the six digits (`packages/protocol/src/phonePair.ts`); the dev API's `/phone-offers` holds an offer five minutes and hands it out once.
+    - **Testing with one phone:** `npx tsx server/dev/otherphone.ts` plays the other phone: it makes a throwaway shelf and shows its QR and six digits in the terminal and `server/dev/data/pair.html`.
+  - **Delete my data** (5.8, 7.2, C§4.7) followed the same day (`services/deleteAccount.ts`):
+    - **The screen:** what goes and what can only be asked for, the backup servers counted from the shelf's real lists, and the danger button only once DELETE is typed online. Deleting shows a row per server as it resolves, with no way back; a server that didn't confirm is named.
+    - **The order:** the operator first (wrap and save deletions, every blob, then `DELETE /account`; unreachable after a minute, nothing else runs and the key stays), then every other relay and server, then the phone (key file, Block Store, database, files and the artwork cache). Each step's result is kept, so a deletion cut short resumes.
+    - **RULED:** the lists' kind 5 names each list event by id as well as by the contract's `a` tags, since strfry honours an `a` tag only for addressable kinds. Checked on the local stack: nothing of a deleted shelf is left on any relay.
+    - **Not yet:** the nostr user's path (approve in their app, lists rewritten rather than deleted) comes with nostr sign-in.
   - **Testing:** `npx tsx server/dev/shelf.ts [N]` makes a throwaway shelf on the local stack and prints its test words; the gates screen's "Forget this phone's shelf" wipes the key file, Block Store and the database so the phone starts at Welcome.
 
 ## Open with Richard

@@ -42,7 +42,7 @@ export function readScan(raw: string, operatorRelay: string, now: number): Offer
 const targetsOf = (d: Awaited<ReturnType<ConnectPorts['defaults']>>) => ({ api: d.operator.api, blossom: d.operator.blossom, mirror: d.mirrors[0] });
 
 /** A still-queued register runs first (5.5): GET /pair-offers needs a registered user. */
-async function registered(p: ConnectPorts): Promise<boolean> {
+export async function registered(p: Pick<ConnectPorts, 'db' | 'now' | 'owner' | 'defaults' | 'runOutbox'>): Promise<boolean> {
   const is = () => !!p.db.get<{ registered_at: number | null }>('SELECT registered_at FROM identities WHERE pubkey = ?', p.owner)?.registered_at;
   if (is()) return true;
   registerFirst(p.db, p.now(), p.owner, targetsOf(await p.defaults()));

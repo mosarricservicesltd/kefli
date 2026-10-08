@@ -1,7 +1,7 @@
 // A local stand-in for the operator HTTP API (contract section 6), enough for the phone's work: GET
-// /defaults.json pointing at the local stack, POST /register, POST and DELETE /devices, POST and GET
-// /pair-offers, with NIP-98 checked as the contract says, and GET /fixtures/… for the phone's fixture gate.
-// Devices and offers live in memory. The real API is the backend's Go service (docs/specs/02-backend.md).
+// /defaults.json pointing at the local stack, POST /register, DELETE /account, POST and DELETE /devices, POST and GET
+// /pair-offers and /phone-offers, with NIP-98 checked as the contract says, and GET /fixtures/… for the
+// phone's fixture gate. Devices and offers live in memory. The real API is the backend's Go service (docs/specs/02-backend.md).
 //   node server/dev/api.mjs   (from the repository root, so nostr-tools resolves)
 
 import { createServer } from 'node:http';
@@ -137,13 +137,52 @@ function fixture(res, path) {
   res.end(readFileSync(file));
 }
 
+// lookup → { offer, expires }: second-phone pairing (contract 2, 6), fetched once
+const phoneOffers = new Map();
+
+async function postPhoneOffer(req, res) {
+  const a = await authed(req, res, '/phone-offers');
+  if (!a) return;
+  const { lookup, offer } = a.json ?? {};
+  if (!/^[0-9a-f]{64}$/.test(lookup ?? '') || typeof offer !== 'string') return send(res, 400, { v: 1, error: 'bad offer' });
+  const held = phoneOffers.get(lookup);
+  if (held && held.expires > now()) return send(res, 409, { v: 1, error: 'lookup taken' });
+  phoneOffers.set(lookup, { offer, expires: now() + OFFER_LIFE });
+  send(res, 200, { v: 1 });
+}
+
+async function getPhoneOffer(req, res, lookup) {
+  // any key may sign: the phone fetching it has no identity yet
+  const a = await authed(req, res, `/phone-offers/${lookup}`, { registeredOnly: false });
+  if (!a) return;
+  const held = phoneOffers.get(lookup);
+  if (!held || held.expires <= now()) return send(res, 404, { v: 1, error: 'not found' });
+  phoneOffers.delete(lookup);
+  send(res, 200, { v: 1, offer: held.offer });
+}
+
+async function deleteAccount(req, res) {
+  const a = await authed(req, res, '/account', { registeredOnly: false });
+  if (!a) return;
+  const keys = registered();
+  keys.delete(a.pubkey);
+  writeFileSync(registeredPath, JSON.stringify([...keys], null, 1));
+  for (const [pk, d] of devices) if (d.user === a.pubkey) devices.delete(pk);
+  console.log(`account ${a.pubkey.slice(0, 12)}… deleted`);
+  send(res, 200, { v: 1 });
+}
+
 function route(req, res) {
   const u = req.url ?? '';
   if (req.method === 'GET' && u.startsWith('/fixtures/')) return fixture(res, u.slice('/fixtures/'.length));
   if (req.method === 'GET' && u === '/defaults.json') return send(res, 200, DEFAULTS);
   if (req.method === 'POST' && u === '/register') return register(req, res);
+  if (req.method === 'DELETE' && u === '/account') return deleteAccount(req, res);
   if (req.method === 'POST' && u === '/devices') return postDevice(req, res);
   if (req.method === 'POST' && u === '/pair-offers') return postOffer(req, res);
+  if (req.method === 'POST' && u === '/phone-offers') return postPhoneOffer(req, res);
+  const po = /^\/phone-offers\/([0-9a-f]{64})$/.exec(u);
+  if (req.method === 'GET' && po) return getPhoneOffer(req, res, po[1]);
   let m = /^\/devices\/([0-9a-f]{64})$/.exec(u);
   if (req.method === 'DELETE' && m) return deleteDevice(req, res, m[1]);
   m = /^\/pair-offers\/([0-9a-f]{64})$/.exec(u);
