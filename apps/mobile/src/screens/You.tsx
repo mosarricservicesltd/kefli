@@ -122,6 +122,8 @@ export default function You() {
   const stats = useLive(() => youStats(store(), owner), ['items', 'listen_history', 'devices'], [owner]);
   const card = useLive(() => showBackupCard(store(), owner, stats.saves), ['settings', 'items'], [owner, stats.saves]);
   const done = useLive(() => backupDone(store()), ['settings'], []);
+  // a nostr user has no recovery code and adds a phone by signing in there (FD 90)
+  const local = useLive(() => (store().get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local') === 'local', ['identities'], [owner]);
   useFocusEffect(useCallback(() => setToastFloor(TAB_BAR_HEIGHT), []));
 
   const recovery = () => openSheet(S.you.sheetTitle, (close) => <RecoverySheet owner={owner} close={close} />);
@@ -165,9 +167,9 @@ export default function You() {
           </Animated.View>
         )}
         <Group>
-          <Row first icon="keyboard" label={S.you.recovery} sub={done ? S.you.written : S.you.notWritten} warn={!done} onPress={recovery} />
-          <Row icon="phone" label={S.you.addDevice} disabled={!online} sub={online ? undefined : S.you.needsConnection} onPress={() => router.push('/add-device')} />
-          <Row icon="laptop" label={S.you.browsers} value={String(stats.browsers)} onPress={() => router.push('/browsers')} />
+          {local && <Row first icon="keyboard" label={S.you.recovery} sub={done ? S.you.written : S.you.notWritten} warn={!done} onPress={recovery} />}
+          {local && <Row icon="phone" label={S.you.addDevice} disabled={!online} sub={online ? undefined : S.you.needsConnection} onPress={() => router.push('/add-device')} />}
+          <Row first={!local} icon="laptop" label={S.you.browsers} value={String(stats.browsers)} onPress={() => router.push('/browsers')} />
         </Group>
         <Group><Row first icon="settings" label={S.you.advanced} onPress={() => router.push('/advanced')} /></Group>
         <Group><Row first icon="trash" label={S.you.deleteData} danger onPress={() => router.push('/delete')} /></Group>

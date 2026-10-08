@@ -52,3 +52,9 @@ export async function answerRecovered(mnemonic: string, origin: 'recovery_code' 
 export function answerDeleted(): void {
   set({ route: 'welcome', owner: null, restoreCard: false });
 }
+
+/** Signed in with a nostr app (5.3): a root swap to Saves with the restore card, and the restore started. */
+export function answerSignedIn(owner: string): void {
+  set({ route: 'saves', owner, restoreCard: true });
+  runSync().catch(() => undefined);
+}

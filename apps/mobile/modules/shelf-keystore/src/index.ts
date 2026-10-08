@@ -1,7 +1,13 @@
 import { requireNativeModule } from 'expo-modules-core';
 
 /** One identity in the key file (mobile spec 3.2). sk is hex; read() never returns mnemonic. */
-export type KeyIdentity = { pubkey: string; provider: 'local' | 'nip55' | 'nip46'; sk?: string; mnemonic?: string; origin?: string };
+export type KeyIdentity = {
+  pubkey: string; provider: 'local' | 'nip55' | 'nip46'; sk?: string; mnemonic?: string; origin?: string;
+  /** NIP-55: the signer app's package. */
+  package?: string;
+  /** NIP-46: the bunker:// link signed in with, and the client key Shelf made for it (hex). */
+  bunker?: string; client?: string;
+};
 export type KeyRecord = { v: 1; identities: KeyIdentity[] };
 
 const native = requireNativeModule<{

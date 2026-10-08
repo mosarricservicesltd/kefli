@@ -137,3 +137,13 @@ describe('Advanced’s words', () => {
     expect(S.adv.copied(true, 2)).toMatch(/^Your other saves are copied to both\./);
   });
 });
+
+describe('a nostr user’s lists', () => {
+  test('are never deleted', async () => {
+    const w = world();
+    w.db.run("UPDATE identities SET provider = 'nip55'");
+    await deleteEverything(w.p, () => undefined);
+    expect(w.sent.some((s) => s.event.tags.some((t) => t[1] === `10002:${w.pk}:`))).toBe(false);
+    expect(w.sent.some((s) => s.relay === 'ws://idx')).toBe(false);
+  });
+});

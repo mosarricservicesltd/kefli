@@ -26,6 +26,8 @@ import { readStaged } from './staging';
 import { store } from './store';
 import { activeOwner } from '../data/library';
 import { beginRestore, settleRestore } from '../data/restore';
+import { queueImported } from '../data/saves';
+import { takeImport } from './nostrSignIn';
 import { disconnect } from '../data/devices';
 import type { ConnectPorts } from './connect';
 import type { ShowPorts } from './phonePair';
@@ -111,6 +113,12 @@ export function runSync(): Promise<SyncResult> {
       });
       const owner = store().get<{ pubkey: string }>("SELECT pubkey FROM identities WHERE role = 'active'")?.pubkey;
       if (owner) settleRestore(store(), Math.floor(Date.now() / 1000), owner);
+      // links a sign-in chose to bring in join after the restore's first pass (FD 82)
+      const imported = owner ? takeImport(store(), owner) : null;
+      if (owner && imported) {
+        const d = await loadDefaults();
+        queueImported(store(), owner, imported.links, imported.at, { api: d.operator.api, blossom: d.operator.blossom, mirror: d.mirrors[0] });
+      }
       if (owner) await runInbox(owner).catch(() => undefined);
       if (owner) await imagesIfUnmetered(owner).catch(() => undefined);
       if (owner) await parsePending(owner).catch(() => undefined);

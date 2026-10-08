@@ -1,6 +1,8 @@
 // The identity the app signs with (mobile spec 3.1–3.3), carrying out the resolver's plans (src/data/resolver.ts).
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
-import { LocalSigner, newMnemonic, secretKeyFromMnemonic } from '@shelf/protocol';
+import { LocalSigner, Nip55Signer, newMnemonic, secretKeyFromMnemonic, type SignerProvider } from '@shelf/protocol';
+import { nip55Port } from '../../modules/shelf-nip55/src';
+import { nip46Signer } from './nip46';
 import { ShelfKeystore, type KeyIdentity } from '../../modules/shelf-keystore/src';
 import { phoneCrypto } from '../crypto/port';
 import { nativeSecp } from '../crypto/secp';
@@ -10,12 +12,20 @@ import { ensureIdentityRow } from '../data/saves';
 import { store } from './store';
 import { Directory, Paths } from 'expo-file-system';
 
-let signer: LocalSigner | null = null;
+let signer: SignerProvider | null = null;
 const now = () => Math.floor(Date.now() / 1000);
 
-async function activeIdentity() {
+/** The active identity is the key file's first; a move's source, if any, follows it. */
+async function activeIdentity(): Promise<KeyIdentity | null> {
   const r = await ShelfKeystore.read();
-  return r?.identities.find((i) => i.provider === 'local' && i.sk) ?? null;
+  return r?.identities[0] ?? null;
+}
+
+/** The signer for an identity in the key file (3.4): its own key, the signer app's, or the bunker's. */
+function signerFor(id: KeyIdentity): SignerProvider | null {
+  if (id.provider === 'local') return id.sk ? new LocalSigner(hexToBytes(id.sk), nativeSecp) : null;
+  if (id.provider === 'nip55') return id.package ? new Nip55Signer(nip55Port, id.package, id.pubkey) : null;
+  return id.bunker && id.client ? nip46Signer(id.bunker, id.client, id.pubkey) : null;
 }
 
 /** Block Store's entry: the mnemonic, null when empty, undefined when the read failed. */
@@ -27,12 +37,16 @@ async function readBlockStore(): Promise<string | null | undefined> {
   }
 }
 
-export async function currentSigner(): Promise<LocalSigner | null> {
+export async function currentSigner(): Promise<SignerProvider | null> {
   if (signer) return signer;
-  const local = await activeIdentity();
-  if (!local?.sk) return null;
-  signer = new LocalSigner(hexToBytes(local.sk), nativeSecp);
+  const id = await activeIdentity();
+  signer = id ? signerFor(id) : null;
   return signer;
+}
+
+/** A signer just signed in with becomes the current one (nostrSignIn.ts). */
+export function setCurrentSigner(s: SignerProvider | null): void {
+  signer = s;
 }
 
 /** Stores a mnemonic's key in the key file and the database. */
@@ -72,7 +86,7 @@ export async function launch(): Promise<LaunchPlan> {
 }
 
 /** The signer a share saves under (3.1): the identity, else Block Store's shelf, else a key the share mints. */
-export async function ensureSigner(): Promise<LocalSigner> {
+export async function ensureSigner(): Promise<SignerProvider> {
   const existing = await currentSigner();
   if (existing) return existing;
   const blockStore = await readBlockStore();
@@ -152,4 +166,34 @@ export async function wipeEverything(): Promise<void> {
   wipe(store());
   for (const d of [new Directory(Paths.document, 'shelf'), new Directory(Paths.cache, 'artwork')]) if (d.exists) d.delete();
   signer = null;
+}
+
+/**
+ * Signing in with the user's nostr app (5.3, C§2): the identity stored with how to reach their app, Welcome
+ * answered, the restore queued, and Block Store's entry removed, since this identity has no mnemonic. After an early
+ * share, the early key stays as the move's source, Block Store with it, until the move ends (C§4.8, week 5).
+ */
+export async function adoptNostr(s: SignerProvider, how: Pick<KeyIdentity, 'provider' | 'package' | 'bunker' | 'client'>): Promise<string> {
+  const db = store();
+  const early = await activeIdentity();
+  const keepEarly = early?.origin === 'early_share' ? early : null;
+  const identities: KeyIdentity[] = [{ pubkey: s.pubkey(), origin: 'nostr_signin', ...how }];
+  if (keepEarly) {
+    const words = await ShelfKeystore.readMnemonic(keepEarly.pubkey).catch(() => null);
+    identities.push({ ...keepEarly, ...(words ? { mnemonic: words } : {}) });
+  }
+  await ShelfKeystore.write({ v: 1, identities });
+  db.tx(() => {
+    if (keepEarly) {
+      db.run("UPDATE identities SET role = 'move_source' WHERE pubkey = ?", keepEarly.pubkey);
+      db.run("INSERT OR IGNORE INTO jobs (id, kind, state, step, data, started_at, updated_at) VALUES (?, 'move', 'queued', 0, ?, ?, ?)",
+        `move:${keepEarly.pubkey}`, JSON.stringify({ from: keepEarly.pubkey, to: s.pubkey() }), now(), now());
+    }
+    ensureIdentityRow(db, now(), s.pubkey(), 'nostr_signin', false, how.provider);
+    setSetting(db, WELCOME_ANSWERED, '1');
+    queueRestore(db, now(), s.pubkey());
+  });
+  if (!keepEarly) await ShelfKeystore.blockStoreRemove().catch(() => undefined);
+  signer = s;
+  return s.pubkey();
 }

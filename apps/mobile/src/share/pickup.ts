@@ -6,6 +6,9 @@ import { release } from '../data/outbox';
 import { saveLink } from '../services/save';
 import { store } from '../services/store';
 
+/** A spool younger than this is a live sheet's. */
+const FRESH_MS = 30_000;
+
 /** Spools an open share sheet is working on, in this JavaScript runtime (the sheets share the ReactHost). */
 export const activeSpools = new Set<string>();
 
@@ -29,7 +32,11 @@ async function pickUp(): Promise<number> {
   let saved = 0;
   for (const id of ShelfShare.listSpools()) {
     if (activeSpools.has(id)) continue;
-    const url = firstLink(ShelfShare.read(id)?.text ?? null);
+    // a spool this young belongs to a sheet still rising: the share brought Shelf to the front, which starts a sync
+    // before the sheet has claimed it (seen on the Pixel, 8 October)
+    const entry = ShelfShare.read(id);
+    if (entry && Date.now() - entry.receivedAt < FRESH_MS) continue;
+    const url = firstLink(entry?.text ?? null);
     if (url) {
       const r = await saveLink(url, (st) => console.log(`[shelf-pickup] ${JSON.stringify(st)}`));
       release(store(), r.held);

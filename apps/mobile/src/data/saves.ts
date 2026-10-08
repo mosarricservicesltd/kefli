@@ -1,6 +1,7 @@
 // Queues a save (mobile spec 4.3, 5.4): the item row, its staged blob, and the outbox rows, held until the
 // share sheet closes without Undo. register runs first if this identity hasn't registered; the upload follows
 // it, the mirror follows the upload, and the publish follows the upload (or register, with no text).
+import { itemHash } from '@shelf/protocol';
 import type { SqlDb } from './db';
 import { insertItem, type NewItem } from './items';
 import { enqueue, undo } from './outbox';
@@ -9,10 +10,10 @@ import { hasList, indexerRelays, writeRelays } from './lists';
 export type SaveTargets = { api: string; blossom: string; mirror: string };
 export type StagedBlob = { sha256: string; size: number; path: string };
 
-export function ensureIdentityRow(db: SqlDb, now: number, pubkey: string, origin: string, hasRecovery: boolean): void {
+export function ensureIdentityRow(db: SqlDb, now: number, pubkey: string, origin: string, hasRecovery: boolean, provider: 'local' | 'nip55' | 'nip46' = 'local'): void {
   db.run(
-    "INSERT OR IGNORE INTO identities (pubkey, provider, role, origin, has_recovery, created_at) VALUES (?, 'local', 'active', ?, ?, ?)",
-    pubkey, origin, hasRecovery ? 1 : 0, now,
+    "INSERT OR IGNORE INTO identities (pubkey, provider, role, origin, has_recovery, created_at) VALUES (?, ?, 'active', ?, ?, ?)",
+    pubkey, provider, origin, hasRecovery ? 1 : 0, now,
   );
 }
 
@@ -103,4 +104,27 @@ export function undoSave(db: SqlDb, owner: string, hash: string, held: number[],
     db.run('DELETE FROM items WHERE id = ?', row.id);
     return { staged };
   });
+}
+
+/** Imported links (FD 82, C§4.6): pending saves at the import time, each fetched and parsed as an offline share is. */
+export function queueImported(db: SqlDb, owner: string, links: string[], at: number, t: SaveTargets): number {
+  let n = 0;
+  for (const url of links) {
+    const hash = itemHashOf(url);
+    if (!hash || db.get('SELECT 1 FROM items WHERE owner = ? AND hash = ?', owner, hash)) continue;
+    queueSave(db, at, {
+      owner, hash, url, canonical: null, title: null, site: null, byline: null, savedAt: at, words: null, lang: null, hero: null,
+      text: null, textHash: null, textState: 'queued', sharedUrl: url, origin: 'import',
+    }, null, t);
+    n++;
+  }
+  return n;
+}
+
+function itemHashOf(url: string): string | null {
+  try {
+    return itemHash(url);
+  } catch {
+    return null;
+  }
 }

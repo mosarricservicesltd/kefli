@@ -93,6 +93,7 @@ export default function Layout() {
             <Stack.Screen name="return" />
             <Stack.Screen name="code" />
             <Stack.Screen name="scan" />
+            <Stack.Screen name="nostr" />
           </Stack.Protected>
           <Stack.Protected guard={!!app.owner}>
             <Stack.Screen name="reader/[hash]/index" />

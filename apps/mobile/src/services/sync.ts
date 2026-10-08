@@ -13,6 +13,8 @@ import { deriveArticle, type Derived } from '../reader/blocks';
 import type { CryptoPort, NostrEvent, Signer } from '@shelf/protocol';
 import type { SqlDb } from '../data/db';
 import { absorbRecord, queueRecord } from '../data/devices';
+import { KEEP_COPIES, getSetting } from '../data/settings';
+import { readUserLists, settleUserLists } from './nostrSignIn';
 import { markBacked } from '../data/backup';
 import { indexerRelays, listServers, recordList, relayEntries, seedGeneratedLists, type DefaultsLike } from '../data/lists';
 import {
@@ -173,7 +175,16 @@ export async function fetchText(p: SyncPorts, job: TextJob): Promise<'ok' | 'mis
 
 /** Phase 1: the identity's newest 10002 and 10063 from the indexer and its relays, recorded; new relays joined. */
 export async function syncLists(p: SyncPorts, owner: string): Promise<void> {
-  if (!p.db.get('SELECT 1 FROM relays WHERE owner = ?', owner)) seedGeneratedLists(p.db, owner, await p.defaults());
+  if (!p.db.get('SELECT 1 FROM relays WHERE owner = ?', owner)) {
+    const d = await p.defaults();
+    const provider = p.db.get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider;
+    if (provider === 'local' || !provider) seedGeneratedLists(p.db, owner, d);
+    else {
+      // a nostr user's own lists, read until found or confirmed absent (4.6); nothing is published meanwhile
+      const lists = await readUserLists({ db: p.db, now: p.now, defaults: d, query: p.query }, owner);
+      if (!settleUserLists(p.db, p.now(), owner, d, lists, getSetting(p.db, KEEP_COPIES) !== '0')) return;
+    }
+  }
   const relays = [...new Set([...indexerRelays(p.db, owner), ...relayEntries(p.db, owner).map((r) => r.url)])];
   const copies = (await Promise.all(relays.map((r) => p.query(r, [{ kinds: [KIND.relayList, KIND.serverList], authors: [owner] }]).catch(() => [])))).flat();
   for (const kind of [KIND.relayList, KIND.serverList]) {

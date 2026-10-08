@@ -10,6 +10,8 @@ export function setSetting(db: SqlDb, key: string, value: string): void {
 }
 
 export const WELCOME_ANSWERED = 'welcome.answered';
+/** Keep backup copies (4.6, FD 76): '0' when switched off at sign-in. */
+export const KEEP_COPIES = 'lists.keep_copies';
 
 export function queueRestore(db: SqlDb, now: number, owner: string): void {
   db.run("INSERT OR IGNORE INTO jobs (id, kind, state, step, data, started_at, updated_at) VALUES (?, 'restore', 'queued', 0, ?, ?, ?)",

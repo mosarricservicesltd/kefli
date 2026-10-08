@@ -108,8 +108,11 @@ async function wrapDeletions(p: DelPorts, owner: string): Promise<NostrEvent[]> 
  * The generated identity's lists (C§4.7): the a tags the contract gives, and, RULED, an e tag for each list event the
  * phone sent or saw, since some relays (strfry among them) honour an a tag only for addressable kinds.
  */
-async function listDeletion(p: DelPorts): Promise<NostrEvent> {
+async function listDeletion(p: DelPorts): Promise<NostrEvent | null> {
   const pk = p.signer.pubkey();
+  // a nostr user's lists are shared with their other apps and are never deleted (C§4.7); their rewrite without
+  // Shelf's entries comes with the rest of the nostr user's deletion
+  if (p.db.get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', pk)?.provider !== 'local') return null;
   const ids = p.db.all<{ event_id: string }>("SELECT event_id FROM lists WHERE owner = ? AND kind IN (?, ?) AND d = '' AND event_id IS NOT NULL", pk, KIND.relayList, KIND.serverList)
     .map((r) => ['e', r.event_id]);
   return p.signer.signEvent({
@@ -136,7 +139,8 @@ async function stepOperator(p: DelPorts, owner: string): Promise<boolean> {
   const op = p.defaults.operator;
   const inList = !!p.db.get("SELECT 1 FROM relays WHERE owner = ? AND url = ? AND source != 'indexer'", owner, op.relay);
   // in the 10002, it gets everything step 2 sends the other relays: the saves' deletions and the lists'
-  const events = [...(await wrapDeletions(p, owner)), ...(inList ? [...(await buildDeletions(p.signer, allDs(p.db, owner), p.now())), await listDeletion(p)] : [])];
+  const lists = await listDeletion(p);
+  const events = [...(await wrapDeletions(p, owner)), ...(inList ? [...(await buildDeletions(p.signer, allDs(p.db, owner), p.now())), ...(lists ? [lists] : [])] : [])];
   // the relay answering at all is what this step needs; a kind 5 it refuses doesn't stop the account's deletion
   const reached = await withinMinute(p, async () => {
     for (const e of events) await p.publish(op.relay, e);
@@ -154,7 +158,8 @@ async function stepOperator(p: DelPorts, owner: string): Promise<boolean> {
 
 async function stepOther(p: DelPorts, owner: string, t: Target): Promise<boolean> {
   if (t.kind === 'server') return withinMinute(p, () => deleteBlobs(p, t.url, blobs(p.db, owner)));
-  const events = [...(await buildDeletions(p.signer, allDs(p.db, owner), p.now())), await listDeletion(p)];
+  const lists = await listDeletion(p);
+  const events = [...(await buildDeletions(p.signer, allDs(p.db, owner), p.now())), ...(lists ? [lists] : [])];
   return withinMinute(p, () => sendAll(p, t.url, events));
 }
 
@@ -178,7 +183,7 @@ export async function deleteEverything(p: DelPorts, report: (prog: Progress) => 
   }
   // the lists go from the indexer as well, unreported: it holds nothing else of this identity
   const lists = await listDeletion(p);
-  await Promise.all(p.defaults.indexer.map((r) => p.publish(r, lists).catch(() => undefined)));
+  if (lists) await Promise.all(p.defaults.indexer.map((r) => p.publish(r, lists).catch(() => undefined)));
   await Promise.all(targets.filter((t) => prog.others[t.url] === 'wait').map(async (t) => {
     prog.others[t.url] = (await stepOther(p, owner, t)) ? 'done' : 'fail';
     save(p, prog);
