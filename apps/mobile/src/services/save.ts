@@ -3,7 +3,7 @@
 // without Undo. The outbox sends them (send.ts, runner.ts). What happened comes back as a kind, which picks the
 // Saved sheet's state.
 import { encryptText, isXPost, itemHash, textHash } from '@shelf/protocol';
-import { ShelfParser } from '../../modules/shelf-parser/src';
+import { phonePagePorts } from './pagePorts';
 import { phoneCrypto } from '../crypto/port';
 import type { SqlDb } from '../data/db';
 import { getItem } from '../data/items';
@@ -15,7 +15,7 @@ import { loadDefaults } from './config';
 import { ensureSigner } from './identity';
 import { stageBlob } from './staging';
 import { textFiles } from './textFiles';
-import { fetchPage, type ParserResult } from './page';
+import { fetchPage } from './page';
 import { checkXPost } from './xpost';
 import { store } from './store';
 
@@ -90,7 +90,7 @@ export async function saveLink(url: string, report: (s: SaveStep) => void): Prom
   const early = priorOf(db, owner, itemHash(target));
   if (early) return repeat(c, itemHash(target), target, early);
 
-  const outcome = await fetchPage({ fetch, parse: (b, t, u) => ShelfParser.parse(b, t, u) as Promise<ParserResult> }, target);
+  const outcome = await fetchPage(phonePagePorts(), target);
   if (outcome.kind !== 'parsed') {
     // Offline, the save waits on the phone keyed by the shared address, to be parsed when online (share-offline);
     // a page that can't be read is saved without text, and its row opens the original.

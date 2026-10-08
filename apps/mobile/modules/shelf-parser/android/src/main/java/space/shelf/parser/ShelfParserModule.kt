@@ -16,6 +16,11 @@ class ShelfParserModule : Module() {
       Parser.submit(context, JSONObject().put("kind", "parse").put("body", body).put("contentType", contentType).put("url", url), promise)
     }
 
+    // A page that turned Shelf's fetch away, loaded once in a browser engine: {ok, url, html} or {ok: false, reason}.
+    AsyncFunction("render") { url: String, promise: Promise ->
+      Renderer.render(context, url, promise)
+    }
+
     // shelfMarkdown: Readability's content HTML from an extension save.
     AsyncFunction("markdown") { html: String, url: String, promise: Promise ->
       Parser.submit(context, JSONObject().put("kind", "markdown").put("html", html).put("url", url), promise)

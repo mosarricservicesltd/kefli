@@ -1,5 +1,5 @@
 {
- "about": "The live list (project plan section 6, mobile spec 11.3): thirty addresses fetched and parsed as a share is, each with the outcome that is right for it, honest failures included; where a site's answer decides it (a paywall's opening, a bot check), the kind says so. article: parsed with a title and at least 120 words. failed:<reason>: the honest failure the row shows (http, not_html, not_readable). x-none and x-article: a shared X post, checked through X's embed service (5.4). Pages change upstream, so this list is a measure, not a fixture: stage 1 needs 20 of 30, beta 30 of 30.",
+ "about": "The live list (project plan section 6, mobile spec 11.3): thirty addresses fetched and parsed as a share is, each with the outcome that is right for it, honest failures included; where a site's answer decides it (a paywall's opening, a bot check), the kind says so. A page whose bot check refuses the phone's fetch is loaded once in a browser engine (mobile spec 8.2), so it reads as an article. article: parsed with a title and at least 120 words. failed:<reason>: the honest failure the row shows (http, not_html, not_readable). x-none and x-article: a shared X post, checked through X's embed service (5.4). Pages change upstream, so this list is a measure, not a fixture: stage 1 needs 20 of 30, beta 30 of 30.",
  "urls": [
   {
    "url": "https://en.wikipedia.org/wiki/Instapaper",
@@ -133,8 +133,8 @@
   },
   {
    "url": "https://stackoverflow.com/questions/11227809/why-is-processing-a-sorted-array-faster-than-processing-an-unsorted-array",
-   "kind": "Q&A behind a bot check that refuses the fetch",
-   "expect": "failed:http"
+   "kind": "Q&A behind a bot check that refuses the fetch, read through the browser engine",
+   "expect": "article"
   },
   {
    "url": "https://x.com/jack/status/20",

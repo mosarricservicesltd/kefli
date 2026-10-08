@@ -2,10 +2,18 @@
 // user agent and a mobile one on 403, a 20 s timeout, a 5 MB cap, and only text/html and application/xhtml+xml
 // parse. The parse runs in the shelf-parser WebView (a port here), then contract 4.2's guard: not readerable and
 // fewer than 120 spoken words is a failed parse. A network failure is "offline": the save waits and tries again.
+// A page still turned away with 403 by both is loaded once in a browser engine (the render port, 8.2), since bot
+// checks such as Cloudflare's tell Android's HTTP client from a browser; its rendered HTML takes the same parse. So is a
+// page whose answer arrives as a bare 1xx.
 import { base64 } from '@scure/base';
 import { deriveArticle, type Derived } from '../reader/blocks';
 
 export const PAGE_MAX_BYTES = 5 * 1024 * 1024;
+/**
+ * RULED: a page rendered by the engine may be larger: the 5 MB cap bounds what Shelf downloads, and a rendered page's
+ * size is mostly what its scripts built (a Substack comment thread came to 5.1 MB stripped), which the parse discards.
+ */
+export const RENDER_MAX_BYTES = 16 * 1024 * 1024;
 export const PAGE_TIMEOUT_MS = 20_000;
 export const GUARD_WORDS = 120;
 export const DESKTOP_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0 Safari/537.36';
@@ -18,6 +26,8 @@ export type ParserResult =
 export type PagePorts = {
   fetch: typeof fetch;
   parse: (bodyBase64: string, contentType: string, url: string) => Promise<ParserResult>;
+  /** The page loaded in a browser engine: its rendered HTML and final address, or null. */
+  render?: (url: string) => Promise<{ url: string; html: string } | null>;
 };
 
 export type FailReason = 'http' | 'not_html' | 'too_large' | 'not_readable';
@@ -45,23 +55,50 @@ async function get(p: PagePorts, url: string, ua: string): Promise<Response> {
   }
 }
 
-export async function fetchPage(p: PagePorts, url: string): Promise<PageOutcome> {
-  let res: Response;
-  let bytes: Uint8Array;
+type Answer = { res: Response; bytes: Uint8Array } | { tooLarge: string } | null;
+
+/** The page as fetched: as desktop Chrome, then as a phone on 403; null when the network failed. */
+async function answer(p: PagePorts, url: string): Promise<Answer> {
   try {
-    res = await get(p, url, DESKTOP_UA);
+    let res = await get(p, url, DESKTOP_UA);
     if (res.status === 403) res = await get(p, url, MOBILE_UA);
     const declared = Number(res.headers.get('content-length') ?? 0);
-    if (declared > PAGE_MAX_BYTES) return { kind: 'failed', reason: 'too_large', finalUrl: res.url || url };
-    bytes = new Uint8Array(await res.arrayBuffer());
+    if (declared > PAGE_MAX_BYTES) return { tooLarge: res.url || url };
+    return { res, bytes: new Uint8Array(await res.arrayBuffer()) };
   } catch {
-    return { kind: 'offline' };
+    return null;
   }
+}
+
+export async function fetchPage(p: PagePorts, url: string): Promise<PageOutcome> {
+  const a = await answer(p, url);
+  if (!a) return { kind: 'offline' };
+  if ('tooLarge' in a) return { kind: 'failed', reason: 'too_large', finalUrl: a.tooLarge };
+  const { res, bytes } = a;
   const finalUrl = res.url || url;
+  // RULED: a 1xx is also loaded in the engine: Android's HTTP client hands back a 103 Early Hints as the final answer
+  // on some HTTP/2 sites (Substack, behind Cloudflare), with an empty body
+  if ((res.status === 403 || res.status < 200) && p.render) {
+    const rendered = await rendered403(p, finalUrl);
+    if (rendered) return rendered;
+  }
   const contentType = res.headers.get('content-type') ?? '';
   const refused = refusal(res.status, contentType, bytes.length);
-  if (refused) return { kind: 'failed', reason: refused, finalUrl };
+  if (refused) {
+    // the status alone, never the address (7.1); release builds strip it
+    console.log(`[shelf-page] ${JSON.stringify({ refused, status: res.status, type: contentType.split(';')[0], bytes: bytes.length })}`);
+    return { kind: 'failed', reason: refused, finalUrl };
+  }
   return parseHtml(p, bytes, contentType, finalUrl);
+}
+
+/** A page turned away from the fetch, loaded in a browser engine and parsed as fetched HTML; null when that failed too. */
+async function rendered403(p: PagePorts, url: string): Promise<Exclude<PageOutcome, { kind: 'offline' }> | null> {
+  const r = await p.render!(url).catch(() => null);
+  if (!r) return null;
+  const bytes = new TextEncoder().encode(r.html);
+  if (bytes.length > RENDER_MAX_BYTES) return { kind: 'failed', reason: 'too_large', finalUrl: r.url };
+  return parseHtml(p, bytes, 'text/html; charset=utf-8', r.url);
 }
 
 /** The parse and contract 4.2's guard, for a fetched page and for a browser's own HTML (4.7). */

@@ -609,7 +609,7 @@ One `strings.ts` module in British English, every user-facing string copied verb
 
 - **Memory and logs.** Secrets live in the key file, in `LocalSigner` as a zeroable byte array, and in JavaScript strings only while deriving or showing the words. Logs never hold keys, content, URLs, titles or payloads; release builds strip `console` below `warn`.
 - **Network.** No cleartext; `wss://` only. NIP-98 events are fresh per request, with `u` equal to the exact URL, `method`, and `payload` on every POST, PUT and DELETE (the empty-string hash without a body, C§6). The inbox fetches HTML only from the operator Blossom origin; inbox-driven URL fetches refuse private, loopback and link-local addresses.
-- **WebViews.** The parser WebView (8.2) is detached, with `blockNetworkLoads` and file, content and cookie access off, and never navigates; HTML enters as data, never as script. The original-page view has no bridge, no `onMessage`, no injected script, no file access and no new windows.
+- **WebViews.** The parser WebView (8.2) is detached, with `blockNetworkLoads` and file, content and cookie access off, and never navigates; HTML enters as data, never as script. The original-page view has no bridge, no `onMessage`, no injected script, no file access and no new windows. The render WebView (8.2) has no bridge either, reads the page back only with `evaluateJavascript`, and follows only http(s) navigation.
 - **Input.** Shares: a string under 64 KB, URLs parsed by the WHATWG algorithm. Inbox: 4.7. QR codes and offers: 5.5. Internal links: a 64-hex hash present on the phone and a non-negative word index.
 - **Screen and clipboard.** `FLAG_SECURE` on the recovery sheet and Add another device. The recovery code is copied with `ClipDescription.EXTRA_IS_SENSITIVE` (its string key below API 33), and the in-sheet "Copied" note shows on every API level (FD 27).
 - **At rest.** `allowBackup="false"` and `android:dataExtractionRules` excluding every domain under both `<cloud-backup>` and `<device-transfer>`, since on some makers' phones `allowBackup` alone still lets a device-to-device transfer copy the plaintext library and index. A database found without a readable key file is wiped before the identity resolver runs (3.1). No SQLCipher: its key would have to work in the background, so it would add little over file-based encryption and the sandbox.
@@ -621,7 +621,7 @@ C§4.7 (CR3) puts the operator's kind 5s before `DELETE /account`, since C§3.2 
 
 ### 7.3 Privacy note lines
 
-The X embed lookup tells X which post was saved (T§1); fetching images at read time tells the image's site which article is open (C§4.2); new saves wait on the phone until the operator is reachable (C§1); a new save can briefly have only Shelf's copy until a backup server accepts it (C§1, FD 93); the phone keeps a plaintext copy of the library in private storage.
+The X embed lookup tells X which post was saved (T§1); fetching images at read time tells the image's site which article is open (C§4.2); new saves wait on the phone until the operator is reachable (C§1); a new save can briefly have only Shelf's copy until a backup server accepts it (C§1, FD 93); the phone keeps a plaintext copy of the library in private storage; a page that turns Shelf's fetch away is loaded once in a browser engine, which runs the page's own scripts as a browser would (8.2).
 
 ## 8. Native modules
 
@@ -653,8 +653,11 @@ type Parsed = { ok: true; title: string | null; byline: string | null; site: str
 interface ShelfParser {
   parse(bodyBase64: string, contentType: string, url: string): Promise<Parsed>;  // shelfParse
   markdown(contentHtml: string, url: string): Promise<Parsed>;                  // shelfMarkdown, inbox
+  render(url: string): Promise<{ ok: true; url: string; html: string } | { ok: false; reason: 'no_webview' | 'timeout' }>;
 }
 ```
+
+`render` (added in week 5): a page whose fetch still gets 403 after the mobile user agent, or whose answer arrives as a bare 1xx (Android's HTTP client hands back a 103 Early Hints on some HTTP/2 sites), is loaded once in a second WebView, as a browser would load it, since bot checks such as Cloudflare's tell Android's HTTP client from a browser. Attached to no window, with JavaScript on, no bridge, no file or content access, no new windows, no images, only http(s) navigation and no third-party cookies; a challenge page is waited out for up to 20 s; one page at a time, the rest queued. The HTML it returns has no scripts, styles, SVG, frames or embeds and no style, data-, aria-, event, srcset or sizes attributes; it is parsed as fetched HTML, under a 16 MB cap in place of the fetch's 5 MB. A live-list gate and the gates screen's render gate check it.
 
 A WebView on the main looper, built with the application context and attached to no window, so it works the same from MainActivity, the share activity and a headless task. The bundle loads from an APK asset, its sha256 checked against the constant baked at build. Input and output cross a `@JavascriptInterface` host object, keeping megabyte strings out of `evaluateJavascript`. One job at a time; torn down after 30 s idle; no WebView provider gives `no_webview`.
 

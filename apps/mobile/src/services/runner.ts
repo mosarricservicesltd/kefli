@@ -1,6 +1,7 @@
 // Drains the outbox with the real network (mobile spec 4.3): after a share's rows are released and at start,
 // through the relay pool (4.4).
 import { AppState } from 'react-native';
+import { phonePagePorts } from './pagePorts';
 import { verifyEventWith } from '@shelf/protocol';
 import { phoneCrypto } from '../crypto/port';
 import { nativeSecp } from '../crypto/secp';
@@ -274,7 +275,7 @@ async function parsePending(owner: string): Promise<void> {
   const r = await runPendingParses({
     db: store(),
     now: () => Math.floor(Date.now() / 1000),
-    page: { fetch, parse: (b, t, u) => ShelfParser.parse(b, t, u) as Promise<ParserResult> },
+    page: phonePagePorts(),
     x: { fetch },
     crypto: phoneCrypto,
     stage: stageBlob,

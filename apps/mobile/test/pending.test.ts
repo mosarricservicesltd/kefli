@@ -4,7 +4,7 @@ import { migrate } from '../src/data/schema';
 import { ensureIdentityRow, queueSave } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
 import { pendingParses } from '../src/data/pending';
-import { DESKTOP_UA, MOBILE_UA, PAGE_MAX_BYTES, fetchPage, refusal, type ParserResult } from '../src/services/page';
+import { DESKTOP_UA, MOBILE_UA, PAGE_MAX_BYTES, RENDER_MAX_BYTES, fetchPage, refusal, type ParserResult } from '../src/services/page';
 import { runPendingParses, type PendingPorts } from '../src/services/pending';
 import { memoryDb } from './sqlite';
 
@@ -98,6 +98,31 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     expect(w.texts.get(final)).toBe(`${LONG}\n`);
     expect(w.db.all("SELECT rowid FROM items_fts WHERE items_fts MATCH 'word42'")).toHaveLength(1);
     expect(w.staged.size).toBe(1);
+  });
+
+  test('a page still turned away with 403 is loaded in a browser engine and parsed the same way', async () => {
+    const w = world({ 'https://cf.com/p': { only: 'a browser' }, 'https://cf.com/q': { only: 'a browser' } });
+    const seen: string[] = [];
+    const page = {
+      ...w.ports.page,
+      render: async (url: string) => {
+        seen.push(url);
+        return url.endsWith('/p') ? { url: 'https://cf.com/p?final', html: '<html><body>rendered</body></html>' } : null;
+      },
+    };
+    expect(await fetchPage(page, 'https://cf.com/p')).toMatchObject({ kind: 'parsed', finalUrl: 'https://cf.com/p?final' });
+    // the engine failing too leaves the honest failure
+    expect(await fetchPage(page, 'https://cf.com/q')).toMatchObject({ kind: 'failed', reason: 'http' });
+    expect(seen).toEqual(['https://cf.com/p', 'https://cf.com/q']);
+    // a rendered page past the cap is too large; without the port a 403 is a failure as before
+    const big = { ...w.ports.page, render: async () => ({ url: 'https://cf.com/p', html: 'x'.repeat(RENDER_MAX_BYTES + 1) }) };
+    expect(await fetchPage(big, 'https://cf.com/p')).toMatchObject({ kind: 'failed', reason: 'too_large' });
+    expect(await fetchPage(w.ports.page, 'https://cf.com/p')).toMatchObject({ kind: 'failed', reason: 'http' });
+    // a bare 103 Early Hints handed back as the answer goes to the engine as well
+    // (a Response can't be made with a 1xx, so this one is hand-made)
+    const early = (async (url: string) => ({ status: 103, url, headers: new Headers(), arrayBuffer: async () => new ArrayBuffer(0) })) as never;
+    expect(await fetchPage({ ...w.ports.page, fetch: early, render: page.render }, 'https://sub.com/p')).toMatchObject({ kind: 'parsed' });
+    expect(seen.at(-1)).toBe('https://sub.com/p');
   });
 
   test("a browser's save naming a private address is never fetched; the phone's own share of one is", async () => {

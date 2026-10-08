@@ -3,6 +3,8 @@
 // computed. Each gate returns a result; the screen logs every result to logcat under [shelf-gates].
 
 import { finalizeEvent, generateSecretKey, getPublicKey, verifyEvent } from 'nostr-tools/pure';
+import { phonePagePorts } from '../services/pagePorts';
+import { RENDER_MAX_BYTES } from '../services/page';
 import { v2 as nip44 } from 'nostr-tools/nip44';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { base64 } from '@scure/base';
@@ -193,13 +195,29 @@ export const GATES: Gate[] = [
     title: 'The live list of thirty addresses through the share’s own path (stage 1: 20/30)',
     async run() {
       const list = ((await (await fetch('http://localhost:8447/fixtures/live-urls.json')).json()) as { urls: LiveUrl[] }).urls;
-      const results = await runLive({ fetch, parse: (b, t, u) => ShelfParser.parse(b, t, u) as never }, { fetch }, list, now);
+      const results = await runLive(phonePagePorts(), { fetch }, list, now);
       for (const r of results) console.log(`[shelf-live] ${JSON.stringify(r)}`);
       const passed = results.filter((r) => r.pass).length;
       const misses = results.filter((r) => !r.pass).map((r) => `${r.kind}: ${r.got} for ${r.expect}`);
       const line = `${passed}/${results.length} as expected${misses.length ? `; misses: ${misses.join('; ')}` : ''}`;
       if (passed < 20) fail(line);
       return line;
+    },
+  },
+  {
+    id: 'render',
+    title: 'The browser engine on a page behind Cloudflare: rendered, stripped and parsed (8.2)',
+    async run() {
+      const t0 = Date.now();
+      const r = await ShelfParser.render('https://www.astralcodexten.com/p/an-open-letter-to-steven-pinker-on');
+      if (!r.ok) fail(`render: ${r.reason}`);
+      const html = (r as { html: string }).html;
+      const bytes = new TextEncoder().encode(html);
+      if (/<script/i.test(html)) fail('scripts left in the rendered HTML');
+      if (bytes.length > RENDER_MAX_BYTES) fail(`${Math.round(bytes.length / 1024)} KB rendered, over the 16 MB cap`);
+      const parsed = await ShelfParser.parse(base64.encode(bytes), 'text/html; charset=utf-8', (r as { url: string }).url);
+      if (!parsed.ok) fail(`parse: ${parsed.reason}`);
+      return `${Math.round(bytes.length / 1024)} KB rendered in ${ms(Date.now() - t0)}: “${(parsed as { title: string | null }).title}”`;
     },
   },
   {

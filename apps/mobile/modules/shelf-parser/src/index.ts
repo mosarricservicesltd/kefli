@@ -5,7 +5,14 @@ export type Parsed =
   | { ok: true; title: string | null; byline: string | null; site: string | null; lang: string | null; hero: string | null; canonical: string | null; readerable: boolean; markdown: string }
   | { ok: false; reason: 'no_webview' | 'not_readable' | 'error'; message?: string };
 
-const native = requireNativeModule<{ parse(b: string, ct: string, url: string): Promise<string>; markdown(html: string, url: string): Promise<string> }>('ShelfParser');
+/** A page loaded once in a browser engine (8.2): its rendered HTML and final address, or why not. */
+export type Rendered = { ok: true; url: string; html: string } | { ok: false; reason: 'no_webview' | 'timeout' };
+
+const native = requireNativeModule<{
+  parse(b: string, ct: string, url: string): Promise<string>;
+  markdown(html: string, url: string): Promise<string>;
+  render(url: string): Promise<string>;
+}>('ShelfParser');
 
 export const ShelfParser = {
   async parse(bodyBase64: string, contentType: string, url: string): Promise<Parsed> {
@@ -13,5 +20,8 @@ export const ShelfParser = {
   },
   async markdown(contentHtml: string, url: string): Promise<Parsed> {
     return JSON.parse(await native.markdown(contentHtml, url));
+  },
+  async render(url: string): Promise<Rendered> {
+    return JSON.parse(await native.render(url));
   },
 };
