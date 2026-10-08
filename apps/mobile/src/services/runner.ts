@@ -161,9 +161,17 @@ export function runMoveJob(): Promise<MoveOutcome> {
   moving ??= (async (): Promise<MoveOutcome> => {
     try {
       const job = moveJob(store());
-      if (!job) return 'done';
+      if (!job) {
+        const ids = store().all<{ role: string; origin: string }>('SELECT role, origin FROM identities');
+        const jobs = store().all<{ kind: string; state: string }>('SELECT kind, state FROM jobs');
+        if (ids.length > 1) console.log(`[shelf-move] ${JSON.stringify({ outcome: 'no job', ids, jobs })}`);
+        return 'done';
+      }
       const [source, target] = await Promise.all([signerOf(job.from), signerOf(job.to)]);
-      if (!source || !target) return 'waiting';
+      if (!source || !target) {
+        console.log(`[shelf-move] ${JSON.stringify({ outcome: 'waiting', missing: !source ? 'source key' : 'target key' })}`);
+        return 'waiting';
+      }
       const r = await runMove({
         db: store(),
         now: () => Math.floor(Date.now() / 1000),
