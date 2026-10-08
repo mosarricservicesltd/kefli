@@ -22,6 +22,7 @@ import { Icon } from '../ui/Icon';
 import { useLive } from '../ui/live';
 import { MenuItem, MenuTitle } from '../ui/MenuItem';
 import { Banner } from '../ui/Notice';
+import { RestoreCard, useRestoreCard } from './RestoreCard';
 import { useOffline, useOnline } from '../ui/online';
 import { Press, pressLayer } from '../ui/Press';
 import { closeSheet, openSheet } from '../ui/sheet';
@@ -128,6 +129,8 @@ export default function Saves() {
   const rows = useLive(() => (owner ? listRows(store(), owner, list) : []), ['items'], [owner, list]);
   const n = useLive(() => (owner ? counts(store(), owner) : { unread: 0, archived: 0 }), ['items'], [owner]);
   const first = n.unread + n.archived === 0;
+  // a restore's card takes the notice slot, and the first-run lesson waits until it has found nothing
+  const restoring = useRestoreCard(owner);
   // Signature 1: saves already here when the list first shows are drawn; one that joins while Unread is in front
   // of you draws its cover as it lands (a sync, a restore, the first save); one that joins elsewhere is simply there.
   const focused = useIsFocused();
@@ -169,11 +172,12 @@ export default function Saves() {
           <Segment label={S.saves.archive} on={list === 'archived'} onPress={() => setList('archived')} />
         </View>
       )}
-      {offline && (first ? <Banner text={S.saves.offlineFirst} /> : <Banner text={S.saves.offline} />)}
+      {restoring && <RestoreCard owner={owner} offline={offline} />}
+      {offline && !restoring && (first ? <Banner text={S.saves.offlineFirst} /> : <Banner text={S.saves.offline} />)}
     </View>
   );
 
-  const empty = first ? <FirstRun online={online} />
+  const empty = first ? (restoring ? null : <FirstRun online={online} />)
     : list === 'unread'
       ? (
         <EmptyTile

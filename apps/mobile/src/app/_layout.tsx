@@ -88,6 +88,7 @@ export default function Layout() {
           <Stack.Protected guard={!shelf}>
             <Stack.Screen name="welcome" />
             <Stack.Screen name="return" />
+            <Stack.Screen name="code" />
           </Stack.Protected>
           <Stack.Protected guard={!!app.owner}>
             <Stack.Screen name="reader/[hash]/index" />

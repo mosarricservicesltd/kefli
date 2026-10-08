@@ -80,6 +80,30 @@ export const S = {
     copyNote: 'Paste it somewhere safe, then clear your clipboard.',
   },
   // listen, listen-empty, listen-scrolled
+  code: {
+    title: 'Enter your recovery code',
+    lead: 'The twelve words from when you backed up your shelf, in order.',
+    words: 'Your twelve words',
+    paste: 'Paste',
+    word: (n: number) => `Word ${n}`,
+    notWord: (n: number, w: string) => `Word ${n}, “${w}”, isn’t one of the recovery words. Check the spelling.`,
+    // drafted for this build: the prototype has no copy for a checksum failure (spec 5.3, "at the last field")
+    notCode: 'These words aren’t a recovery code. Check each one against what you wrote down.',
+    go: 'Bring back my shelf',
+    checking: 'Checking',
+    notFoundTitle: 'No saves found for this code.',
+    notFoundBody: 'The words are valid, but nothing has been saved with them. Check it’s the code from Shelf’s You tab.',
+    retry: 'Try again',
+    fresh: 'Start fresh instead',
+    offline: 'Bringing back your shelf needs a connection',
+  },
+  restore: {
+    title: 'Bringing back your shelf',
+    count: (found: number, total: number) => `${found} of ${total}`,
+    body: 'Your saves are kept in several independent places, so this works even if Shelf’s own server is down.',
+    paused: 'Paused. It will carry on when you’re online.',
+    done: (n: number) => (n === 1 ? 'Your save is back' : `All ${n} saves are back`),
+  },
   share: {
     saved: 'Saved to Shelf',
     again: 'Already on your shelf',

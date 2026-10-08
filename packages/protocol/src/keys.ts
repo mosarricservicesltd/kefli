@@ -31,3 +31,28 @@ export async function secretKeyFromMnemonic(mnemonic: string, crypto: CryptoPort
   if (!key) throw new Error('derivation gave no key');
   return key;
 }
+
+const WORDS = new Set(wordlist);
+
+/** Whether a typed word is on the BIP-39 English list (the recovery code field's check, mobile spec 5.3). */
+export function isRecoveryWord(word: string): boolean {
+  return WORDS.has(word.trim().toLowerCase());
+}
+
+/** Up to n words from the list starting with what has been typed, for the field's suggestions. */
+export function suggestWords(prefix: string, n = 3): string[] {
+  const p = prefix.trim().toLowerCase();
+  if (!p || WORDS.has(p)) return [];
+  const out: string[] = [];
+  for (const w of wordlist) {
+    if (w.startsWith(p)) out.push(w);
+    if (out.length === n) break;
+  }
+  return out;
+}
+
+/** A word typed so far could still become one on the list. */
+export function couldBeRecoveryWord(prefix: string): boolean {
+  const p = prefix.trim().toLowerCase();
+  return !p || wordlist.some((w) => w.startsWith(p));
+}

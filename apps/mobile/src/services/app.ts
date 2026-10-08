@@ -3,8 +3,9 @@
 import { useSyncExternalStore } from 'react';
 import { activeOwner } from '../data/library';
 import { launchPlan } from './launchState';
-import { newHere } from './identity';
+import { adoptRecovery, newHere } from './identity';
 import { store } from './store';
+import { runSync } from './runner';
 
 export type AppState = { route: 'welcome' | 'welcome-early' | 'saves'; owner: string | null; restoreCard: boolean };
 
@@ -37,4 +38,12 @@ export async function boot(): Promise<void> {
 export async function answerNewHere(): Promise<void> {
   const owner = await newHere();
   set({ route: 'saves', owner, restoreCard: false });
+}
+
+/** A recovery code that found a shelf: the key stored, and a root swap to Saves with the restore card (5.3). */
+export async function answerRecovered(mnemonic: string): Promise<void> {
+  const owner = await adoptRecovery(mnemonic);
+  set({ route: 'saves', owner, restoreCard: true });
+  // the restore is this sync (C§8); launch's sync ran before there was a key
+  runSync().catch(() => undefined);
 }

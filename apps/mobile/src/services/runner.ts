@@ -24,6 +24,8 @@ import { File } from 'expo-file-system';
 import { imageFiles, textFiles } from './textFiles';
 import { readStaged } from './staging';
 import { store } from './store';
+import { activeOwner } from '../data/library';
+import { beginRestore, settleRestore } from '../data/restore';
 import { disconnect } from '../data/devices';
 import type { ConnectPorts } from './connect';
 
@@ -88,6 +90,9 @@ export function runSync(): Promise<SyncResult> {
   const run = (async (): Promise<SyncResult> => {
     try {
       await runOutbox().catch(() => 0);
+      // a queued restore (C§8) is this sync: lists, every read relay's saves and deletions, then the texts
+      const restoring = activeOwner(store());
+      if (restoring) beginRestore(store(), Math.floor(Date.now() / 1000), restoring);
       const r = await syncInbound({
         db: store(),
         now: () => Math.floor(Date.now() / 1000),
@@ -103,6 +108,7 @@ export function runSync(): Promise<SyncResult> {
         openHash: () => reading,
       });
       const owner = store().get<{ pubkey: string }>("SELECT pubkey FROM identities WHERE role = 'active'")?.pubkey;
+      if (owner) settleRestore(store(), Math.floor(Date.now() / 1000), owner);
       if (owner) await runInbox(owner).catch(() => undefined);
       if (owner) await imagesIfUnmetered(owner).catch(() => undefined);
       if (owner) await parsePending(owner).catch(() => undefined);

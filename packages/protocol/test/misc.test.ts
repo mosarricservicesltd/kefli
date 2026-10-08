@@ -86,3 +86,19 @@ describe('NIP-98 (C§6)', () => {
     expect(get.tags).toHaveLength(2);
   });
 });
+
+import { couldBeRecoveryWord, isRecoveryWord, suggestWords } from '../src';
+
+describe('recovery code words (mobile spec 5.3)', () => {
+  test('the list, suggestions and prefixes', () => {
+    expect(isRecoveryWord('Harbor ')).toBe(true);
+    expect(isRecoveryWord('lemmon')).toBe(false);
+    expect(suggestWords('lem')).toEqual(['lemon']);
+    expect(suggestWords('ab')).toEqual(['abandon', 'ability', 'able']);
+    expect(suggestWords('lemon')).toEqual([]);
+    expect(suggestWords('')).toEqual([]);
+    expect(couldBeRecoveryWord('lemm')).toBe(false);
+    expect(couldBeRecoveryWord('lem')).toBe(true);
+    expect(couldBeRecoveryWord('')).toBe(true);
+  });
+});

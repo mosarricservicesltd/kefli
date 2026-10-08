@@ -48,6 +48,12 @@ Written on 6 October 2026, when the work moved off the laptop it started on. Eve
     - **Fonts:** embedded at build time through the `expo-font` plugin, so the share surface has Archivo from its first frame.
     - **New copy for Richard to read:** the sheet's error state when a save throws ("That didn't save", "Try sharing it again.") isn't in the prototype.
   - **Not yet built:** the screens behind Add another device, Advanced and Delete my data.
+- **Week 4 started on 8 October 2026 with Enter my recovery code and the restore** (5.3, 4.10, C§8):
+  - **The code screen:** twelve fields with suggestions from the BIP-39 list, Paste, a word not on the list flagged at its field, and a checksum failure at the last field (drafted copy: "These words aren't a recovery code. Check each one against what you wrote down."). The window is secured while it's open.
+  - **The first pass:** the key is derived and the relays asked whether any save exists under it (`services/recovery.ts`): the default relays and indexer, then any read relay the key's own 10002 names. Nothing found gives "No saves found for this code" with Try again and Start fresh instead; the key is stored only when a shelf is found.
+  - **The restore:** a `jobs` row carried out by the next sync (RULED in `data/restore.ts`: a save counts as back once its text is here or known missing). The card on Saves shows "N of M" with its bar, "Paused…" offline, then "All N saves are back" for 3 s.
+  - **After an early share:** the early key stays in the key file and Block Store as the move's source, and a `move` job is queued for week 5; the code's key isn't written to Block Store until the move ends.
+  - **Testing:** `npx tsx server/dev/shelf.ts [N]` makes a throwaway shelf on the local stack and prints its test words; the gates screen's "Forget this phone's shelf" wipes the key file, Block Store and the database so the phone starts at Welcome.
 
 ## Open with Richard
 
