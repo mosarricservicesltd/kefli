@@ -13,8 +13,12 @@ const FRESH_MS = 30_000;
 export const activeSpools = new Set<string>();
 
 /** The link a share carries: the last http(s) address in its text, since apps put their own words first. */
+/** Shared text past this is refused as not a link (7.1: a share is a string under 64 KB). */
+export const SHARE_MAX_CHARS = 64 * 1024;
+
 export function firstLink(text: string | null): string | null {
-  const all = text?.match(/https?:\/\/[^\s<>"]+/g) ?? [];
+  if (!text || text.length >= SHARE_MAX_CHARS) return null;
+  const all = text.match(/https?:\/\/[^\s<>"]+/g) ?? [];
   return all.length ? all[all.length - 1] : null;
 }
 

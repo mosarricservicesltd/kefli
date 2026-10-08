@@ -100,6 +100,16 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     expect(w.staged.size).toBe(1);
   });
 
+  test("a browser's save naming a private address is never fetched; the phone's own share of one is", async () => {
+    const w = world({ 'http://192.168.1.1/admin': {}, 'http://printer.local/': {} });
+    w.share('http://192.168.1.1/admin');
+    w.db.run("UPDATE items SET origin = 'browser' WHERE url = 'http://192.168.1.1/admin'");
+    w.share('http://printer.local/');
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ parsed: 1, failed: 1 });
+    expect(w.uas).toHaveLength(1);
+    expect(w.db.get<{ text_state: string }>("SELECT text_state FROM items WHERE url = 'http://192.168.1.1/admin'")?.text_state).toBe('failed');
+  });
+
   test('a re-keyed share that turns out to be a save already here joins it', async () => {
     const w = world({ 'https://t.co/y': { finalUrl: 'https://news.com/old' } });
     w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin) VALUES (?, ?, 'https://news.com/old', 10, 'archived', 'cached', 'share')", PK, itemHash('https://news.com/old'));

@@ -1,16 +1,19 @@
-// You (mobile spec 5.8, 3.5, FD 17, FD 25, FD 27, FD 68; prototype you, you-done, you-offline, rec-hidden, rec-shown,
-// rec-copied): the quilt of the newest covers beside big counts; the backup card until the words are written down;
-// then the rows. The recovery code sheet keeps the words out of sight and out of the accessibility tree until "Show
+// You (mobile spec 5.8, 3.5, FD 12, FD 17, FD 25, FD 26, FD 27, FD 68, G12; prototype you, you-done, you-offline,
+// you-nostr, you-voices, rec-hidden, rec-shown, rec-copied): the quilt of the newest covers beside big counts; the
+// backup card until the words are written down; then the rows. A nostr user with a name in their profile gets it with
+// their picture (or its initial in a circle) and the quilt across the width; with no name, or before the profile
+// arrives, the counts. Their first row is their nostr app, signed in. The recovery code sheet keeps the words out of sight and out of the accessibility tree until "Show
 // the words", holds them in JavaScript only while shown, and secures the window while it is open (7.1).
 //
 import { useCallback, useEffect, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { Image, ScrollView, View, useWindowDimensions } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { motion, radius } from '@shelf/tokens';
 import { ShelfKeystore } from '../../modules/shelf-keystore/src';
 import { ShelfSystem } from '../../modules/shelf-system/src';
+import { initialOf, readProfile } from '../data/profile';
 import { backupDone, markBackupDone, showBackupCard, snoozeBackup, youStats } from '../data/you';
 import { useApp } from '../services/app';
 import { store } from '../services/store';
@@ -92,7 +95,7 @@ function Row({ icon, label, sub, warn, value, danger, disabled, onPress, first }
   const { c } = useTheme();
   const fg = danger ? c.error : c.text;
   return (
-    <Press accessibilityRole="button" accessibilityLabel={label} accessibilityHint={sub} accessibilityState={{ disabled: !!disabled }} disabled={disabled} onPress={onPress} layer={pressLayer(c.text)}
+    <Press accessibilityRole={onPress ? 'button' : 'text'} accessibilityLabel={value ? `${label}, ${value}` : label} accessibilityHint={sub} accessibilityState={{ disabled: !!disabled }} disabled={disabled || !onPress} onPress={onPress} layer={pressLayer(c.text)}
       style={{ minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8, paddingHorizontal: 16, opacity: disabled ? 0.45 : 1 }}>
       {!first && <View style={{ position: 'absolute', left: 48, right: 0, top: 0, height: 1, backgroundColor: c.line }} />}
       <Icon name={icon} size={20} color={danger ? c.error : c.muted} />
@@ -107,8 +110,19 @@ function Row({ icon, label, sub, warn, value, danger, disabled, onPress, first }
           : <T muted style={[ui(13, 'body', 1.3), { marginTop: 2 }]}>{sub}</T>)}
       </View>
       {value !== undefined && <T muted style={[ui(13, 'body', 1.3), { fontVariant: ['tabular-nums'] }]}>{value}</T>}
-      <Icon name="chev" size={18} color={c.muted} />
+      {onPress && <Icon name="chev" size={18} color={c.muted} />}
     </Press>
+  );
+}
+
+/** One square of the quilt: a save's cover, or a dashed gap while the shelf is small. */
+function Tile({ q, size }: { q: { hash: string; failed: boolean } | undefined; size: number }) {
+  const { c } = useTheme();
+  if (q) return <Cover hash={q.hash} size={size} failed={q.failed} square radius={0} />;
+  return (
+    <View style={{ width: size, height: size, backgroundColor: c.background }}>
+      <View style={{ position: 'absolute', top: 4, left: 4, right: 4, bottom: 4, borderWidth: 1, borderStyle: 'dashed', borderColor: c.lineStrong, borderRadius: 2, opacity: 0.75 }} />
+    </View>
   );
 }
 
@@ -128,6 +142,9 @@ export default function You() {
   // a nostr user has no recovery code and adds a phone by signing in there (FD 90)
   const local = useLive(() => (store().get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local') === 'local', ['identities'], [owner]);
   useFocusEffect(useCallback(() => setToastFloor(TAB_BAR_HEIGHT), []));
+  const profile = useLive(() => (local ? null : readProfile(store(), owner)), ['lists', 'identities'], [owner, local]);
+  const named = profile?.name ? profile : null;
+  const { width } = useWindowDimensions();
   // the Voice row only when the phone has a choice for the last article's language, rechecked each time You opens (FD 24)
   const { voices } = usePhoneVoices(owner);
   const voiceId = useLive(() => getSetting(store(), VOICE_ID), ['settings'], []);
@@ -138,15 +155,27 @@ export default function You() {
     <View style={{ flex: 1, backgroundColor: c.background, paddingTop: insets.top }}>
       <ScrollView contentContainerStyle={{ paddingBottom: 96 }}>
         <Head title={S.you.title} />
+        {named ? (
+          <>
+            <View accessible style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4, marginHorizontal: 16, marginBottom: 16 }}>
+              <View style={{ width: 56, height: 56, borderRadius: 28, overflow: 'hidden', backgroundColor: c.surface, borderWidth: 1, borderColor: c.line, alignItems: 'center', justifyContent: 'center' }}>
+                {named.picture
+                  ? <Image source={{ uri: named.picture }} style={{ width: 56, height: 56 }} accessibilityIgnoresInvertColors />
+                  : <T style={ui(20, 'heading', 1)}>{initialOf(named.name!)}</T>}
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <T numberOfLines={1} style={ui(17, 'heading', 1.3)}>{named.name}</T>
+                <T muted style={ui(13, 'body', 1.3)}>{S.you.signedInWith}</T>
+              </View>
+            </View>
+            <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ marginHorizontal: 16, marginBottom: 16, flexDirection: 'row', borderRadius: radius.control, overflow: 'hidden', boxShadow: `0px 0px 0px 1px ${c.coverEdge}` }}>
+              {tiles.map((q, i) => <Tile key={q?.hash ?? `gap-${i}`} q={q} size={(width - 32) / 8} />)}
+            </View>
+          </>
+        ) : (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 20, marginTop: 4, marginHorizontal: 16, marginBottom: 16 }}>
           <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ width: 160, flexDirection: 'row', flexWrap: 'wrap', borderRadius: radius.control, overflow: 'hidden', boxShadow: `0px 0px 0px 1px ${c.coverEdge}` }}>
-            {tiles.map((q, i) => (q
-              ? <Cover key={q.hash} hash={q.hash} size={40} failed={q.failed} square radius={0} />
-              : (
-                <View key={`gap-${i}`} style={{ width: 40, height: 40, backgroundColor: c.background }}>
-                  <View style={{ position: 'absolute', top: 4, left: 4, right: 4, bottom: 4, borderWidth: 1, borderStyle: 'dashed', borderColor: c.lineStrong, borderRadius: 2, opacity: 0.75 }} />
-                </View>
-              )))}
+            {tiles.map((q, i) => <Tile key={q?.hash ?? `gap-${i}`} q={q} size={40} />)}
           </View>
           <View style={{ gap: 6, minWidth: 0 }}>
             <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
@@ -159,6 +188,7 @@ export default function You() {
             </View>
           </View>
         </View>
+        )}
         {card && (
           <Animated.View entering={FadeIn.duration(motion.quickIn.duration)} style={{ marginHorizontal: 16, marginBottom: 16, padding: 16, borderRadius: radius.container, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
@@ -173,9 +203,10 @@ export default function You() {
           </Animated.View>
         )}
         <Group>
+          {!local && <Row first icon="login" label={S.you.nostrApp} value={S.you.signedIn} />}
           {local && <Row first icon="keyboard" label={S.you.recovery} sub={done ? S.you.written : S.you.notWritten} warn={!done} onPress={recovery} />}
           {local && <Row icon="phone" label={S.you.addDevice} disabled={!online} sub={online ? undefined : S.you.needsConnection} onPress={() => router.push('/add-device')} />}
-          <Row first={!local} icon="laptop" label={S.you.browsers} value={String(stats.browsers)} onPress={() => router.push('/browsers')} />
+          <Row icon="laptop" label={S.you.browsers} value={String(stats.browsers)} onPress={() => router.push('/browsers')} />
           {voices.length > 1 && <Row icon="headphones" label={S.you.voice} value={chosen(voices, voiceId)?.place} onPress={() => router.push('/voice')} />}
         </Group>
         <Group><Row first icon="settings" label={S.you.advanced} onPress={() => router.push('/advanced')} /></Group>

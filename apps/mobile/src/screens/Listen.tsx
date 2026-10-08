@@ -1,6 +1,6 @@
-// Listen (mobile spec 5.7, FD 3, FD 49, FD 52, FD 68; prototype listen, listen-empty, listen-scrolled): Now playing,
+// Listen (mobile spec 5.7, FD 3, FD 49, FD 52, FD 68; prototype listen, listen-empty, listen-scrolled, listen-reader): Now playing,
 // led by the playing article's 3:1 cover band, with the word meter's ruler, the spoken sentence's marks and the
-// controls; then Played, most recent first, with Play all. A row's cover plays it and its body opens the Reader. The
+// controls; then Played, most recent first, with Play all. A row's cover plays it and its body opens the Reader, whose Back returns here (listen-reader). The
 // mini takes over once the card has mostly scrolled away.
 import { useCallback, useRef, useState } from 'react';
 import { ScrollView, View, useWindowDimensions, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';

@@ -1,6 +1,6 @@
-// The restore card (mobile spec 5.3, prototype restoring, restoring-mid, restoring-offline): in Saves' notice slot
+// The restore card (mobile spec 5.3, prototype restoring, restoring-mid, restoring-offline, restore-nothing): in Saves' notice slot
 // while a restore runs, "N of M" over a determinate bar; offline it says it is paused, in place of the offline
-// notice. Done, "All N saves are back" holds for 3 s, then the card leaves.
+// notice. Done, "All N saves are back" holds for 3 s, then the card leaves; a restore that found nothing shows no card.
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import Animated, { FadeIn, FadeOut, useSharedValue, withTiming } from 'react-native-reanimated';

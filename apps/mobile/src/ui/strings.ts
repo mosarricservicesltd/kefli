@@ -51,8 +51,11 @@ export const S = {
     archiveEmptyTitle: 'Nothing archived yet',
     archiveEmptyBody: 'Swipe an article left, or tap Archive when you finish it, and it moves here.',
   },
-  // you, you-done, you-offline, rec-hidden, rec-shown, rec-copied
+  // you, you-done, you-offline, you-nostr, you-voices, rec-hidden, rec-shown, rec-copied
   you: {
+    signedInWith: 'Signed in with your nostr app',
+    nostrApp: 'Your nostr app',
+    signedIn: 'Signed in',
     title: 'You',
     saves: (n: number) => (n === 1 ? 'save' : 'saves'),
     listened: 'listened',

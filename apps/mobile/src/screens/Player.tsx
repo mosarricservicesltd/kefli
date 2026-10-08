@@ -1,4 +1,4 @@
-// The player (mobile spec 5.7; prototype playerHTML, mini, play, play-paused, mini-reader): one float surface at
+// The player (mobile spec 5.7; prototype playerHTML, mini, play, play-paused, play-sentence, mini-reader): one float surface at
 // the bottom. The mini on every screen with a session except first-launch screens and the playing article's Reader,
 // which shows the Reader tier instead: the same surface in the reading palette with ±15 and the speed pill. The
 // play button is the article's face, its cover with the fill disc on it. ✕ shows only while paused and ends the

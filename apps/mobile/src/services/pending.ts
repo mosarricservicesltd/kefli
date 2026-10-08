@@ -1,7 +1,7 @@
 // Sync's phase 7 (mobile spec 4.5): pending parses, one at a time, until the network goes. Each is fetched and
 // parsed as a share is (page.ts); its text is encrypted under a fresh key, staged, written and indexed, and its
 // sends queued (data/pending.ts). Ports, so this runs in tests.
-import { encryptText, itemHash, textHash, type CryptoPort } from '@shelf/protocol';
+import { encryptText, isPublicWebUrl, itemHash, textHash, type CryptoPort } from '@shelf/protocol';
 import type { SqlDb } from '../data/db';
 import { applyFailed, applyParsed, pendingParses, xFound, xNoArticle, type Pending } from '../data/pending';
 import { checkXPost, type XPorts } from './xpost';
@@ -48,7 +48,11 @@ export async function runPendingParses(p: PendingPorts, owner: string): Promise<
       }
       item = xFound(p.db, item, x.url);
     }
-    const outcome = await fetchPage(p.page, item.url);
+    // a page a browser asked for is never fetched from a private, loopback or link-local address (7.1)
+    const fromBrowser = p.db.get<{ origin: string }>('SELECT origin FROM items WHERE id = ?', item.id)?.origin === 'browser';
+    const outcome = fromBrowser && !isPublicWebUrl(item.url)
+      ? { kind: 'failed' as const, reason: 'http' as const, finalUrl: item.url }
+      : await fetchPage(p.page, item.url);
     if (outcome.kind === 'offline') {
       out.waiting = queue.length - i;
       break;

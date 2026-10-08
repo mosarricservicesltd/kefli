@@ -1,25 +1,18 @@
-// Switches between the Android test build's screen and the week-0 gates.
-import { useState } from 'react';
+// The development gates and the predictive-back test (the local stack's build only, src/app/gates.tsx).
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import App from '../App';
 import { GatesScreen } from './gates/GatesScreen';
 
 export default function Root() {
-  const [tab, setTab] = useState<'test' | 'gates'>('gates');
   return (
     <SafeAreaView style={s.root}>
       <View style={s.tabs}>
-        {(['gates', 'test'] as const).map((t) => (
-          <Pressable key={t} onPress={() => setTab(t)} style={[s.tab, tab === t && s.on]}>
-            <Text style={[s.label, tab === t && s.onLabel]}>{t === 'gates' ? 'Week 0 gates' : 'Test build'}</Text>
-          </Pressable>
-        ))}
+        <View style={[s.tab, s.on]}><Text style={[s.label, s.onLabel]}>Week 0 gates</Text></View>
         <Pressable onPress={() => router.push('/back-test')} style={s.tab}>
           <Text style={s.label}>Back test</Text>
         </Pressable>
       </View>
-      <View style={s.body}>{tab === 'gates' ? <GatesScreen /> : <App />}</View>
+      <View style={s.body}><GatesScreen /></View>
     </SafeAreaView>
   );
 }

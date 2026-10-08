@@ -186,8 +186,11 @@ export async function syncLists(p: SyncPorts, owner: string): Promise<void> {
     }
   }
   const relays = [...new Set([...indexerRelays(p.db, owner), ...relayEntries(p.db, owner).map((r) => r.url)])];
-  const copies = (await Promise.all(relays.map((r) => p.query(r, [{ kinds: [KIND.relayList, KIND.serverList], authors: [owner] }]).catch(() => [])))).flat();
-  for (const kind of [KIND.relayList, KIND.serverList]) {
+  // a nostr user's profile comes with their lists, for You's name and picture (FD 12, G12)
+  const nostr = (p.db.get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local') !== 'local';
+  const kinds = nostr ? [KIND.relayList, KIND.serverList, KIND.metadata] : [KIND.relayList, KIND.serverList];
+  const copies = (await Promise.all(relays.map((r) => p.query(r, [{ kinds, authors: [owner] }]).catch(() => [])))).flat();
+  for (const kind of kinds) {
     const latest = newest(copies.filter((e) => e.kind === kind && e.pubkey === owner));
     const held = p.db.get<{ created_at: number }>("SELECT created_at FROM lists WHERE owner = ? AND kind = ? AND d = ''", owner, kind);
     if (!latest || (held && held.created_at >= latest.created_at)) continue;

@@ -21,13 +21,6 @@
     },
     "plugins": [
       "expo-router",
-      [
-        "expo-audio",
-        {
-          "enableBackgroundPlayback": true,
-          "recordAudioAndroid": false
-        }
-      ],
       "react-native-quick-crypto",
       [
         "expo-font",
@@ -68,7 +61,8 @@
           "recordAudioAndroid": false
         }
       ],
-      "./plugins/with-nip55-queries"
+      "./plugins/with-nip55-queries",
+      "./plugins/with-shelf-security"
     ]
   }
 }

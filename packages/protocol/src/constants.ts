@@ -3,6 +3,8 @@
 export const CONTRACT_VERSION = '1.4';
 
 export const KIND = {
+  /** NIP-01 profile: a nostr user's name and picture for You (FD 12, G12). */
+  metadata: 0,
   /** NIP-09 deletion. */
   deletion: 5,
   /** NIP-59 seal, around a pair-ack (C§4.4). */
