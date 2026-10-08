@@ -44,11 +44,12 @@ export function VoiceGate() {
     return () => subs.forEach((s) => s.remove());
   }, []);
 
-  const start = async () => {
+  // 0.8× stretches the reading to about 56 minutes: the stage 2 gate's locked hour (FD 87)
+  const start = async (rate = 1) => {
     ShelfVoice.clearLog();
     await ShelfVoice.start({
       hash: 'gate'.padEnd(64, '0'), title: 'Thirty minutes locked', site: 'Week 0 gate',
-      sentences: reading.sentences, startWord: 0, totalWords: reading.totalWords, rate: 1, wps: 3.9,
+      sentences: reading.sentences, startWord: 0, totalWords: reading.totalWords, rate, wps: 3.9,
     });
   };
   const minutes = (w: number) => (w / 3.9 / 60).toFixed(1);
@@ -60,7 +61,8 @@ export function VoiceGate() {
         {reading.totalWords.toLocaleString()} words in {reading.sentences.length} sentences, about {minutes(reading.totalWords)} minutes. Now at word {word} ({minutes(word)} min), {playing ? 'speaking' : 'stopped'}.
       </Text>
       <View style={s.row}>
-        <Btn label="Start" onPress={start} />
+        <Btn label="Start" onPress={() => start()} />
+        <Btn label="Hour (0.8×)" onPress={() => start(0.8)} />
         <Btn label={playing ? 'Pause' : 'Play'} onPress={() => (playing ? ShelfVoice.pause() : ShelfVoice.play())} />
         <Btn label="−15" onPress={() => ShelfVoice.skip(-15)} />
         <Btn label="+15" onPress={() => ShelfVoice.skip(15)} />
