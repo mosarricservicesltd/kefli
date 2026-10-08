@@ -6,7 +6,7 @@ import { saveLink, type SaveStep } from '../services/save';
 import { release } from '../data/outbox';
 import { runOutbox } from '../services/runner';
 import { store } from '../services/store';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import { itemHash } from '@shelf/protocol';
 import { motion } from '@shelf/tokens';
 import { ShelfShare } from '../../modules/shelf-share/src';
@@ -54,10 +54,16 @@ export default function ShareRoot({ spoolId }: { spoolId?: string }) {
     if (!done.current) releaseHeld();
   }, []);
 
+  // The spool goes once the save is written; until then a process that dies leaves it for the start-up pickup.
+  const saved = useRef(false);
+  const dropSpool = () => {
+    if (spoolId && saved.current && done.current) ShelfShare.deleteSpool(spoolId);
+  };
+
   const finish = (mode: 'host' | 'read') => {
     if (done.current) return;
     done.current = true;
-    if (spoolId) ShelfShare.deleteSpool(spoolId);
+    dropSpool();
     releaseHeld();
     log({ id: 'share-finish', ok: true, detail: mode, ms: 0 });
     ShelfShare.finish(mode, mode === 'read' ? hash : null);
@@ -77,6 +83,8 @@ export default function ShareRoot({ spoolId }: { spoolId?: string }) {
     })
       .then((r) => {
         held.current = r.held;
+        saved.current = true;
+        dropSpool();
         // Unmounted before the save finished: release at once rather than leave the rows held.
         if (done.current || unmounted.current) releaseHeld();
         console.log(`[shelf-save] ${JSON.stringify({ step: 'done', ok: true, detail: `d shelf/item/${r.hash}, ${r.held.length} rows held` })}`);
@@ -86,6 +94,15 @@ export default function ShareRoot({ spoolId }: { spoolId?: string }) {
         setSteps((prev) => [...prev, { step: 'error', ok: false, detail: String((e as Error).message) }]);
       })
       .finally(() => setSaving(false));
+  }, []);
+  // RULED: a sheet that leaves the screen (locked, or another app on top) closes without Undo, since Undo can't be
+  // pressed there: its rows are released and sent at once rather than waiting for a countdown that doesn't run
+  // with the screen off (stage 1 gate, share then lock; mobile spec 4.8).
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'background') finish('host');
+    });
+    return () => sub.remove();
   }, []);
   useEffect(() => {
     if (saving) return;
