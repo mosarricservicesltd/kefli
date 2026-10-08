@@ -13,6 +13,7 @@ import { deriveArticle, type Derived } from '../reader/blocks';
 import type { CryptoPort, NostrEvent, Signer } from '@shelf/protocol';
 import type { SqlDb } from '../data/db';
 import { absorbRecord, queueRecord } from '../data/devices';
+import { markBacked } from '../data/backup';
 import { indexerRelays, listServers, recordList, relayEntries, seedGeneratedLists, type DefaultsLike } from '../data/lists';
 import {
   applyDeletion, applyItem, getCursor, hashInUse, readRelays, setCursor, textCached, textMissing, textQueue,
@@ -195,6 +196,9 @@ export async function syncInbound(p: SyncPorts): Promise<SyncResult> {
   await syncLists(p, owner);
   const collected = await collect(p, owner, p.now());
   const { items, deletions } = await applyAll(p, owner, signer, collected);
+  // a save seen on a relay the operator doesn't run is backed up there (FD 93)
+  const operator = (await p.defaults()).operator.relay;
+  for (const c of collected) if (c.stream === 'items' && c.relay !== operator) for (const e of c.events) markBacked(p.db, e.id);
   let texts = 0;
   let missing = 0;
   for (const job of textQueue(p.db, owner, p.openHash?.())) {

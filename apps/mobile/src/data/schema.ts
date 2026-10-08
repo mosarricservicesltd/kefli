@@ -79,7 +79,14 @@ CREATE TABLE devices (token TEXT, owner TEXT, device_pubkey TEXT, label TEXT, re
   connected_at INTEGER, revoked_at INTEGER, last_save_at INTEGER, PRIMARY KEY (token, owner));
 `;
 
-export const MIGRATIONS: ((db: SqlDb) => void)[] = [(db) => db.exec(V1), (db) => db.exec(V2)];
+// v3: the newest event a relay Shelf doesn't run has accepted, for Advanced's count of saves not backed up (FD 93,
+// C§3.1). RULED: saves already published count as backed up, since the phone kept no record before.
+const V3 = `
+ALTER TABLE items ADD COLUMN backed_event TEXT;
+UPDATE items SET backed_event = event_id WHERE published = 1;
+`;
+
+export const MIGRATIONS: ((db: SqlDb) => void)[] = [(db) => db.exec(V1), (db) => db.exec(V2), (db) => db.exec(V3)];
 export const SCHEMA_VERSION = MIGRATIONS.length;
 
 /** Opens the schema: WAL, foreign keys, then every migration past the stored version, each in a transaction. */

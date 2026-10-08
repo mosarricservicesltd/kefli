@@ -8,6 +8,7 @@ import type { CryptoPort, NostrEvent, Signer } from '@shelf/protocol';
 import type { SqlDb } from '../data/db';
 import { hasDevices, localRecord, noteRecord, pairAcked, recordCreatedAt, type PairPayload } from '../data/devices';
 import { getItem, itemJson, markPublished } from '../data/items';
+import { markBacked } from '../data/backup';
 import { indexerRelays, listServers, recordList, relayEntries, writeRelays } from '../data/lists';
 import { begin, finish, nextDue } from '../data/outbox';
 import type { OutboxRow, OutboxTarget, TargetResult } from '../data/outbox';
@@ -162,6 +163,8 @@ async function sendPublish(p: SendPorts, row: OutboxRow, signer: Signer, targets
     }),
   );
   if (results.some((r) => r.kind === 'ok')) markPublished(p.db, row.signer, item.hash, event.id, createdAt);
+  // backed up once a relay the operator doesn't run holds it (FD 93)
+  if (results.some((r) => r.kind === 'ok' && r.target !== d.operator.relay)) markBacked(p.db, event.id);
   return results;
 }
 

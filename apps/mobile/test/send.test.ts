@@ -7,6 +7,7 @@ import { seedGeneratedLists } from '../src/data/lists';
 import { nextDue, release } from '../src/data/outbox';
 import { drain, relayResult, sendOne, type RelayAnswer, type SendPorts } from '../src/services/send';
 import type { Defaults } from '../src/services/config';
+import { notBackedUp } from '../src/data/backup';
 import { memoryDb } from './sqlite';
 
 const D: Defaults = {
@@ -205,4 +206,29 @@ describe('sending a save (mobile spec 4.3)', () => {
   ])('relay answer %j is %s', (a, kind) => {
     expect(relayResult('r', a, 'id').kind).toBe(kind);
   });
+
+  test('backed up only once a relay the operator doesn’t run holds the newest event and a mirror holds the text (FD 93)', async () => {
+    const pk = () => w.signer.pubkey();
+    // the backups refuse: only the operator holds it
+    let refuse = true;
+    const w = world({}, (url) => (refuse && url !== 'ws://op' ? { ok: false, reason: 'blocked: no' } : { ok: true }));
+    const { held } = await save(w);
+    expect(notBackedUp(w.db, pk())).toBe(1);
+    release(w.db, held);
+    await drain(w.ports);
+    expect(w.db.get('SELECT published FROM items')).toEqual({ published: 1 });
+    expect(notBackedUp(w.db, pk())).toBe(1);
+    // a later change reaches a backup: backed up
+    refuse = false;
+    w.db.run('UPDATE items SET dirty = 1');
+    w.db.run("INSERT INTO outbox (op, signer, subject, lane, created_at, state, was_queued) VALUES ('publish_item', ?, ?, 'interactive', 1, 'queued', 0)", pk(), HASH);
+    const id = w.db.get<{ id: number }>("SELECT id FROM outbox WHERE op = 'publish_item'")!.id;
+    for (const r of ['ws://a', 'ws://b']) w.db.run("INSERT INTO outbox_targets (outbox_id, target, state, attempts, next_at) VALUES (?, ?, 'pending', 0, 0)", id, r);
+    await drain(w.ports);
+    expect(notBackedUp(w.db, pk())).toBe(0);
+    // text whose mirror hasn't got it isn't backed up
+    w.db.run('UPDATE blobs SET mirror_at = NULL');
+    expect(notBackedUp(w.db, pk())).toBe(1);
+  });
 });
+

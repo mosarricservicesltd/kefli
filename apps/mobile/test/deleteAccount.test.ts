@@ -127,3 +127,13 @@ describe('the lists’ deletion', () => {
     expect(ev.tags).toContainEqual(['a', `10002:${w.pk}:`]);
   });
 });
+
+describe('Advanced’s words', () => {
+  test('a relay not answering, or several', () => {
+    expect(S.adv.willReach(['a.org'])).toBe('Saves will reach a.org when it answers again.');
+    expect(S.adv.willReach(['a.org', 'b.org'])).toBe('Saves will reach a.org and b.org when they answer again.');
+    expect(S.adv.notBacked(1)).toBe('One save isn’t backed up yet. Shelf keeps trying until a backup server accepts it.');
+    expect(S.adv.notBacked(3)).toMatch(/^Three saves aren’t backed up yet/);
+    expect(S.adv.copied(true, 2)).toMatch(/^Your other saves are copied to both\./);
+  });
+});

@@ -321,3 +321,8 @@ function unwatchInbox(): void {
 export function phonePorts(owner: string): ShowPorts {
   return { ...connectPorts(owner), mnemonic: () => ShelfKeystore.readMnemonic(owner).catch(() => null) };
 }
+
+/** Advanced's relay rows (5.8, FD 76): each relay in the identity's 10002, answering or not. */
+export async function relayStatus(url: string): Promise<boolean> {
+  return pool.relay(url).then(() => true, () => false);
+}

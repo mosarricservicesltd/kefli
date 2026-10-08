@@ -150,6 +150,25 @@ export const S = {
     finish: 'Finish',
     done: 'Your data is deleted',
   },
+  adv: {
+    title: 'Advanced',
+    relays: 'Relays',
+    shelf: 'Shelf',
+    backup: (n: number) => `Backup ${n}`,
+    connected: 'Connected',
+    down: 'Not responding',
+    off: 'Unreachable',
+    copied: (other: boolean, n: number) => `Your ${other ? 'other ' : ''}saves are copied to ${n === 2 ? 'both' : `all ${say(n)}`}. Any one of them is enough to bring your shelf back.`,
+    willReach: (hosts: string[]) => `Saves will reach ${listOf(hosts)} when ${hosts.length > 1 ? 'they answer' : 'it answers'} again.`,
+    notBacked: (n: number) => (n === 1
+      ? 'One save isn’t backed up yet. Shelf keeps trying until a backup server accepts it.'
+      : `${say(n).charAt(0).toUpperCase()}${say(n).slice(1)} saves aren’t backed up yet. Shelf keeps trying until a backup server accepts them.`),
+    export: 'Export my saves',
+    exportSub: 'One file with every link and its text',
+    nostr: 'Use my nostr app instead',
+    nostrSub: 'Move your saves to your nostr account',
+    needsConnection: 'Needs a connection',
+  },
   restore: {
     title: 'Bringing back your shelf',
     count: (found: number, total: number) => `${found} of ${total}`,
