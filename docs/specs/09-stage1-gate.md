@@ -46,6 +46,23 @@ All sixteen week 0 gates still pass on the same build.
 6. **A share made just before locking wasn't published until the phone was used again** (fixed). The sheet held the save's rows for its Undo countdown, which doesn't run with the screen off. A sheet that leaves the screen now closes without Undo, since Undo can't be pressed there (RULED in `share/ShareRoot.tsx`): its rows are released and sent at once, and the spool goes only once the save is written. With the publish no longer lost, 4.8's condition for the one-off expedited WorkManager job isn't met, so it isn't built. The remaining risk is Android freezing a cached app about ten seconds after it leaves the screen, which a large upload on a slow network could outlast; the queued rows then go at the next start, or with 4.8's periodic `expo-background-task` worker once it's built (not yet).
 7. **A failed parse was keyed by where its redirects ended** (fixed). A sign-in wall's login page took the save's address. Now a failed parse keeps the shared address; a parsed page still takes its final address and canonical (FD 80).
 
+## The gate run, 8 October 2026
+
+Run on the Pixel against the local stack after the Saved sheet (`78f3ad0`):
+
+| Gate step | Result | Evidence |
+|---|---|---|
+| Read offline | Pass | Airplane mode on: Saves showed the offline notice; Microservices opened and read in full, its progress line moving |
+| Listen with the system voice | Pass | Offline, Listen started on Microservices and the lit word moved from "machinery." to "services," in three seconds, the clock 0:48 to 0:51; paused from the Reader tier, the mini kept its place (0:59 / 28:48) |
+| Archive | Pass | A swipe archived Cool URIs ("Archived" with Undo, 16 to 15 unread); Undo brought it back; archived again, it sits in Archive with the LinkedIn save |
+| Save from Chrome and from X | Richard | The share sheets of those apps, by hand |
+| The events verify on the relay | Richard | `npm run verify` with his twelve words |
+
+Two faults found and fixed during the run:
+
+8. **Back from a Reader opened by Read now left Shelf** (fixed). Spec 5.1 has a Reader reached from outside go to Saves on Back. The root layout now anchors the tabs beneath any deep link (`unstable_settings.anchor`).
+9. **Read now pressed before the save was written could leave the sheet stuck** (fixed). On a cold start the save takes over a second; Read now waited for it, then closed the activity through Expo's current activity, which wasn't the share sheet, so nothing happened. The sheet now closes its own activity by spool id (`ShareActivity.live`), through its normal exit.
+
 ## Richard's part
 
 With the local stack running (`docker compose -f server/dev/compose.yml up -d`, `node server/dev/api.mjs`, `server/dev/phone.sh`):

@@ -6,8 +6,8 @@ interface ShelfShareModule {
   readSpool(id: string): string | null;
   deleteSpool(id: string): boolean;
   listSpools(): string[];
-  /** Ends the share activity: 'host' returns to the sender, 'read' also opens the Reader on hash. */
-  finish(mode: 'host' | 'read', hash?: string | null): boolean;
+  /** Ends the share activity of spoolId: 'host' returns to the sender, 'read' also opens the Reader on hash. */
+  finish(mode: 'host' | 'read', hash: string | null, spoolId: string | null): boolean;
 }
 
 const native = requireNativeModule<ShelfShareModule>('ShelfShare');

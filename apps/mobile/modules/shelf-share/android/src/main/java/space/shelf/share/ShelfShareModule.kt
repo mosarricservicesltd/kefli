@@ -13,9 +13,10 @@ class ShelfShareModule : Module() {
     Function("deleteSpool") { id: String -> Spool.delete(context, id) }
     Function("listSpools") { Spool.list(context) }
 
-    // finish('host') or finish('read', hash), from the share surface (mobile spec 8.5).
-    Function("finish") { mode: String, hash: String? ->
-      val activity = appContext.currentActivity as? ShareActivity ?: return@Function false
+    // finish('host') or finish('read', hash), from the share surface (mobile spec 8.5): the sheet of that spool,
+    // or the current activity when it is a share sheet.
+    Function("finish") { mode: String, hash: String?, spoolId: String? ->
+      val activity = spoolId?.let { ShareActivity.live[it]?.get() } ?: appContext.currentActivity as? ShareActivity ?: return@Function false
       activity.runOnUiThread { activity.close(if (mode == "read") hash else null) }
       true
     }

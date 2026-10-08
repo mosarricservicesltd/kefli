@@ -8,6 +8,7 @@ import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
+import java.lang.ref.WeakReference
 
 // The share sheet's target (mobile spec 8.5). onCreate spools the share to a file before any JavaScript runs,
 // so process death never loses it, then renders the "share" surface on the app's one ReactHost with the
@@ -17,7 +18,13 @@ class ShareActivity : ReactActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     spoolId = savedInstanceState?.getString(SPOOL_KEY) ?: Spool.write(this, intent, referrer?.toString())
+    spoolId?.let { live[it] = WeakReference(this) }
     super.onCreate(null)
+  }
+
+  override fun onDestroy() {
+    spoolId?.let { if (live[it]?.get() === this) live.remove(it) }
+    super.onDestroy()
   }
 
   override fun onSaveInstanceState(outState: Bundle) {
@@ -46,6 +53,9 @@ class ShareActivity : ReactActivity() {
 
   companion object {
     private const val SPOOL_KEY = "shelf.spoolId"
+
+    /** The open sheets by spool id: several can be up at once, each in its own task, and each closes its own. */
+    val live = mutableMapOf<String, WeakReference<ShareActivity>>()
 
     fun noTransition(activity: Activity) {
       if (Build.VERSION.SDK_INT >= 34) {

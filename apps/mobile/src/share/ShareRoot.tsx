@@ -119,7 +119,10 @@ function SavedSheet({ spoolId }: { spoolId?: string }) {
     if (leaving.current) return;
     leaving.current = true;
     y.value = withTiming(h || 600, exit);
-    setTimeout(() => ShelfShare.finish(mode, mode === 'read' ? hash : null), motion.exit.duration);
+    setTimeout(() => {
+      const ok = ShelfShare.finish(mode, mode === 'read' ? hash : null, spoolId ?? null);
+      log({ step: 'finish', ok, detail: mode });
+    }, motion.exit.duration);
   };
 
   // ---- the save's outcome ----
@@ -190,7 +193,10 @@ function SavedSheet({ spoolId }: { spoolId?: string }) {
           if (cancelled.current) takeBack();
           else releaseHeld();
           dropSpool();
-          if (wantRead.current) ShelfShare.finish('read', r.hash);
+          if (wantRead.current) {
+            leaving.current = false;
+            end('read', r.hash);
+          }
           return;
         }
         setShown({ hash: r.hash ?? first, title: r.title, site: r.site ?? (url ? hostOf(url) : null) });

@@ -34,6 +34,11 @@ function fadeTravel({ current }: StackCardInterpolationProps) {
 
 const ROOTS = ['/', '/listen', '/you', '/welcome'];
 
+
+// Back from a Reader opened straight from outside (Read now, the lock screen) goes to Saves (mobile spec 5.1): the
+// tabs sit beneath any deep link.
+export const unstable_settings = { anchor: '(tabs)' };
+
 export default function Layout() {
   const path = usePathname();
   const [fonts] = useFonts(FONTS);
