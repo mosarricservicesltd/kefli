@@ -39,7 +39,7 @@ All sixteen week 0 gates still pass on the same build.
 ## Findings
 
 1. **Spools left by a killed share were never picked up** (fixed). Spec 8.5 says unprocessed spools are picked up at the next start, and nothing did it. The pickup now runs before the start's sync, single-flight, and skips a spool whose sheet is still open in this process.
-2. **The share card is still week 1's functional card.** It shows debug lines (the `d` tag, the steps) and offers Read now even when nothing was saved. The designed Saved sheet (5.4: saved, re-share, no article, offline and the rest) hasn't been built. Richard will see this card when he shares from Chrome and X.
+2. **The share card was still week 1's functional card** (fixed). The Saved sheet (5.4) replaced it on 8 October 2026, with every prototype state. Checked on the phone: saved, again, Undo, offline, not a link, no article, and Read now opening the Reader.
 3. **An unknown deep link shows Expo's "Unmatched Route" page** (polish, severity 3). Only a hand-typed `shelf://` address reaches it.
 4. **A waiting X post that turns out to have no article** shows "x.com" as both its source and its title (polish).
 5. **The inbox now runs the contract's Markdown-only conversion** (`shelfMarkdown`) on a browser save's HTML, with the title and the rest as the extension read them. Before, it ran the whole parse again. Found while building `shelfArticle`.

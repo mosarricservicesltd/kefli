@@ -1,4 +1,6 @@
 // The static cuts (mobile spec 6.3, shared/fonts), one expo-font family each, named as packages/tokens names them.
+// They are also embedded at build time (app.json's expo-font plugin), so the share surface, which never runs
+// useFonts, has them from its first frame.
 /* eslint-disable @typescript-eslint/no-require-imports */
 export const FONTS = {
   'Archivo-400': require('../../../../shared/fonts/out/Archivo-400.ttf'),

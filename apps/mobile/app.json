@@ -29,7 +29,28 @@
         }
       ],
       "react-native-quick-crypto",
-      "expo-font",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "../../shared/fonts/out/Archivo-400.ttf",
+            "../../shared/fonts/out/Archivo-500.ttf",
+            "../../shared/fonts/out/Archivo-550.ttf",
+            "../../shared/fonts/out/Archivo-600.ttf",
+            "../../shared/fonts/out/Archivo-620.ttf",
+            "../../shared/fonts/out/Archivo-650.ttf",
+            "../../shared/fonts/out/Archivo-680.ttf",
+            "../../shared/fonts/out/Archivo-750.ttf",
+            "../../shared/fonts/out/ArchivoExpanded-750.ttf",
+            "../../shared/fonts/out/MartianMono-500.ttf",
+            "../../shared/fonts/out/Literata-18-400.ttf",
+            "../../shared/fonts/out/Literata-18-400-Italic.ttf",
+            "../../shared/fonts/out/Literata-18-700.ttf",
+            "../../shared/fonts/out/Literata-32-400.ttf",
+            "../../shared/fonts/out/Literata-32-600.ttf"
+          ]
+        }
+      ],
       [
         "expo-build-properties",
         {

@@ -3,7 +3,7 @@
 // it, the mirror follows the upload, and the publish follows the upload (or register, with no text).
 import type { SqlDb } from './db';
 import { insertItem, type NewItem } from './items';
-import { enqueue } from './outbox';
+import { enqueue, undo } from './outbox';
 import { hasList, indexerRelays, writeRelays } from './lists';
 
 export type SaveTargets = { api: string; blossom: string; mirror: string };
@@ -72,3 +72,35 @@ export function queueSave(db: SqlDb, now: number, item: NewItem, blob: StagedBlo
 }
 
 export { registerFirst };
+
+/** What a share found before it saved: nothing (a new save), or the save already here and its state. */
+export type Prior = { state: 'unread' | 'archived'; saved_at: number; dirty: number; modified_at: number | null } | null;
+
+export function priorOf(db: SqlDb, owner: string, hash: string): Prior {
+  return db.get<NonNullable<Prior>>('SELECT state, saved_at, dirty, modified_at FROM items WHERE owner = ? AND hash = ? AND pending_delete_at IS NULL', owner, hash) ?? null;
+}
+
+/**
+ * Undo on the Saved sheet (mobile spec 5.4, 4.3): the held rows go. A new save goes with its search entry and staged
+ * blob, whose paths are returned for the caller to delete with the save's files; an archived save the share brought
+ * back is archived again as it was. An unread save shared again changed nothing, so there is nothing to undo.
+ */
+export function undoSave(db: SqlDb, owner: string, hash: string, held: number[], prior: Prior): { staged: string[] } {
+  return db.tx(() => {
+    undo(db, held);
+    if (prior) {
+      db.run('UPDATE items SET state = ?, saved_at = ?, dirty = ?, modified_at = ? WHERE owner = ? AND hash = ?', prior.state, prior.saved_at, prior.dirty, prior.modified_at, owner, hash);
+      return { staged: [] };
+    }
+    const row = db.get<{ id: number; text_sha256: string | null }>('SELECT id, text_sha256 FROM items WHERE owner = ? AND hash = ?', owner, hash);
+    if (!row) return { staged: [] };
+    const staged = row.text_sha256
+      ? db.all<{ staged_path: string | null }>('SELECT staged_path FROM blobs WHERE sha256 = ? AND owner = ?', row.text_sha256, owner).map((b) => b.staged_path).filter((p): p is string => !!p)
+      : [];
+    if (row.text_sha256) db.run('DELETE FROM blobs WHERE sha256 = ? AND owner = ?', row.text_sha256, owner);
+    db.run('DELETE FROM items_fts WHERE rowid = ?', row.id);
+    db.run('DELETE FROM cover_drawn WHERE hash = ?', hash);
+    db.run('DELETE FROM items WHERE id = ?', row.id);
+    return { staged };
+  });
+}

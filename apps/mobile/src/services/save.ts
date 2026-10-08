@@ -1,11 +1,14 @@
 // A save from a shared link (mobile spec 5.4, contract 4.1–4.3): fetch and parse on the phone, encrypt and
 // stage the text, record the item, and queue its outbox rows held, to be released when the share sheet closes
-// without Undo. The outbox sends them (send.ts, runner.ts).
+// without Undo. The outbox sends them (send.ts, runner.ts). What happened comes back as a kind, which picks the
+// Saved sheet's state.
 import { encryptText, isXPost, itemHash, textHash } from '@shelf/protocol';
 import { ShelfParser } from '../../modules/shelf-parser/src';
 import { phoneCrypto } from '../crypto/port';
+import type { SqlDb } from '../data/db';
 import { getItem } from '../data/items';
-import { queueSave } from '../data/saves';
+import { priorOf, queueSave, type Prior, type SaveTargets } from '../data/saves';
+import type { NewItem } from '../data/items';
 import { indexText } from '../data/sync';
 import { seedGeneratedLists } from '../data/lists';
 import { loadDefaults } from './config';
@@ -16,75 +19,109 @@ import { fetchPage, type ParserResult } from './page';
 import { checkXPost } from './xpost';
 import { store } from './store';
 
-
 export type SaveStep = { step: string; ok: boolean; detail: string };
-/** hash null: nothing was saved (an X post with no article in it, share-noarticle). */
-export type Queued = { hash: string | null; held: number[] };
+
+/**
+ * saved: a new save (its text may still have failed). unarchived: an archived save brought back (G2). again: an
+ * unread save shared again, unchanged (G2, FD 89). offline and xwait: saved, waiting for the network or for X (G3).
+ * noarticle: an X post linking to no article, nothing saved.
+ */
+export type SaveKind = 'saved' | 'unarchived' | 'again' | 'offline' | 'xwait' | 'noarticle';
+
+/** hash null: nothing was saved. prior: the save already here, for Undo (data/saves undoSave). */
+export type Queued = { hash: string | null; held: number[]; kind: SaveKind; prior: Prior; title: string | null; site: string | null };
+
+type Ctx = { db: SqlDb; owner: string; now: () => number; targets: SaveTargets; say: (step: string, detail: string, ok?: boolean) => void };
+
+/** A share of a save already here takes the repeat-save rule at once, without fetching (contract 4.1). */
+function repeat(c: Ctx, hash: string, url: string, prior: NonNullable<Prior>): Queued {
+  const held = queueSave(c.db, c.now(), base(c, hash, url, 'queued'), null, c.targets);
+  const row = getItem(c.db, c.owner, hash);
+  c.say('repeat', prior.state === 'archived' ? 'archived: back in Unread' : 'already in Unread: unchanged');
+  return { hash, held, kind: prior.state === 'archived' ? 'unarchived' : 'again', prior, title: row?.title ?? null, site: row?.site ?? null };
+}
+
+function base(c: Ctx, hash: string, url: string, textState: NewItem['textState'], sharedUrl = url): NewItem {
+  return {
+    owner: c.owner, hash, url, canonical: null, title: null, site: null, byline: null, savedAt: c.now(), words: null, lang: null,
+    hero: null, text: null, textHash: null, textState, sharedUrl, origin: 'share',
+  };
+}
+
+/** A shared X post (5.4, FD 78): nothing written while it is checked; its article, if any, is what gets saved. */
+async function xRoute(c: Ctx, url: string): Promise<Queued | string> {
+  c.say('x', 'checking the post');
+  const x = await checkXPost({ fetch }, url);
+  if (x.kind === 'none') {
+    c.say('x', x.why === 'article' ? 'an X Article: nothing saved' : 'no article in that post: nothing saved', false);
+    return { hash: null, held: [], kind: 'noarticle', prior: null, title: null, site: null };
+  }
+  if (x.kind === 'article') {
+    c.say('x', `the post links to ${new URL(x.url).hostname}`);
+    return x.url;
+  }
+  // Offline, or X's service failing: the post waits as a pending save (G3).
+  c.say('x', x.kind === 'offline' ? 'offline: the post waits' : 'X is not answering: the post waits');
+  const hash = itemHash(url);
+  const prior = priorOf(c.db, c.owner, hash);
+  if (prior) return repeat(c, hash, url, prior);
+  const held = queueSave(c.db, c.now(), { ...base(c, hash, url, 'queued'), xState: 'pending' }, null, c.targets);
+  return { hash, held, kind: x.kind === 'offline' ? 'offline' : 'xwait', prior: null, title: null, site: null };
+}
 
 export async function saveLink(url: string, report: (s: SaveStep) => void): Promise<Queued> {
-  const say = (step: string, detail: string, ok = true) => report({ step, ok, detail });
-  const now = () => Math.floor(Date.now() / 1000);
   const defaults = await loadDefaults();
   const signer = await ensureSigner();
   const db = store();
-  seedGeneratedLists(db, signer.pubkey(), defaults);
-  say('identity', `${signer.pubkey().slice(0, 12)}…`);
-  const targets = { api: defaults.operator.api, blossom: defaults.operator.blossom, mirror: defaults.mirrors[0] };
+  const owner = signer.pubkey();
+  seedGeneratedLists(db, owner, defaults);
+  const c: Ctx = {
+    db, owner, now: () => Math.floor(Date.now() / 1000), targets: { api: defaults.operator.api, blossom: defaults.operator.blossom, mirror: defaults.mirrors[0] },
+    say: (step, detail, ok = true) => report({ step, ok, detail }),
+  };
+  c.say('identity', `${owner.slice(0, 12)}…`);
 
-  // A shared X post is never saved as itself (5.4, FD 78): nothing is written while it is checked; with no
-  // article in it nothing is saved; offline, or with X's service failing, the post waits as a pending save (G3).
   let target = url;
   if (isXPost(url)) {
-    say('x', 'checking the post');
-    const x = await checkXPost({ fetch }, url);
-    if (x.kind === 'none') {
-      say('x', x.why === 'article' ? 'an X Article: nothing saved' : 'no article in that post: nothing saved', false);
-      return { hash: null, held: [] };
-    }
-    if (x.kind !== 'article') {
-      say('x', x.kind === 'offline' ? 'offline: the post waits' : 'X is not answering: the post waits');
-      const hash = itemHash(url);
-      const held = queueSave(db, now(), {
-        owner: signer.pubkey(), hash, url, canonical: null, title: null, site: null, byline: null, savedAt: now(), words: null, lang: null,
-        hero: null, text: null, textHash: null, textState: 'queued', sharedUrl: url, origin: 'share', xState: 'pending',
-      }, null, { api: defaults.operator.api, blossom: defaults.operator.blossom, mirror: defaults.mirrors[0] });
-      return { hash, held };
-    }
-    say('x', `the post links to ${new URL(x.url).hostname}`);
-    target = x.url;
+    const x = await xRoute(c, url);
+    if (typeof x !== 'string') return x;
+    target = x;
   }
+  const early = priorOf(db, owner, itemHash(target));
+  if (early) return repeat(c, itemHash(target), target, early);
+
   const outcome = await fetchPage({ fetch, parse: (b, t, u) => ShelfParser.parse(b, t, u) as Promise<ParserResult> }, target);
-  const base = { owner: signer.pubkey(), canonical: null, title: null, site: null, byline: null, savedAt: now(), words: null, lang: null, hero: null, text: null, textHash: null, sharedUrl: url, origin: 'share' };
   if (outcome.kind !== 'parsed') {
     // Offline, the save waits on the phone keyed by the shared address, to be parsed when online (share-offline);
     // a page that can't be read is saved without text, and its row opens the original.
     // RULED: a failed parse keeps the shared address too. Where a redirect ends is trusted only when the page parses;
     // a sign-in wall's redirect lands on its login page, which isn't what was saved and isn't what Open original
     // should open.
-    say('parse', outcome.kind === 'offline' ? 'offline: saved, waiting to fetch' : `failed (${outcome.reason})`, outcome.kind === 'offline');
+    const offline = outcome.kind === 'offline';
+    c.say('parse', offline ? 'offline: saved, waiting to fetch' : `failed (${outcome.reason})`, offline);
     const hash = itemHash(target);
-    const held = queueSave(db, now(), {
-      ...base, hash, url: target,
-      textState: outcome.kind === 'offline' ? 'queued' : 'failed', failReason: outcome.kind === 'offline' ? null : outcome.reason,
-    }, null, targets);
-    return { hash, held };
+    const held = queueSave(db, c.now(), { ...base(c, hash, target, offline ? 'queued' : 'failed', url), failReason: offline ? null : outcome.reason }, null, c.targets);
+    return { hash, held, kind: offline ? 'offline' : 'saved', prior: null, title: null, site: null };
   }
   const { result: parsed, finalUrl, words } = outcome;
-  say('parse', `“${parsed.title}”, ${words} words`);
+  c.say('parse', `“${parsed.title}”, ${words} words`);
   const hash = itemHash(finalUrl, parsed.canonical);
+  // The page's own address may name a save already here (a redirect, a canonical): the repeat-save rule again.
+  const prior = priorOf(db, owner, hash);
+  if (prior) return repeat(c, hash, finalUrl, prior);
   const enc = await encryptText(parsed.markdown, phoneCrypto);
   const staged = { sha256: enc.text.sha256, size: enc.blob.length, path: stageBlob(enc.text.sha256, enc.blob) };
-  say('encrypt', `${enc.blob.length} bytes staged`);
-  const held = queueSave(db, now(), {
-    ...base, hash, url: finalUrl, canonical: parsed.canonical, title: parsed.title, site: parsed.site, byline: parsed.byline,
-    words, lang: parsed.lang, hero: parsed.hero, text: enc.text, textHash: textHash(parsed.markdown, phoneCrypto), textState: 'cached',
-  }, staged, targets);
-  // The text is on the phone from the start, and searchable (4.1, 4.9); a repeat save keeps the text it had.
-  const row = getItem(db, signer.pubkey(), hash);
-  if (row && row.text_sha256 === enc.text.sha256) {
+  c.say('encrypt', `${enc.blob.length} bytes staged`);
+  const held = queueSave(db, c.now(), {
+    ...base(c, hash, finalUrl, 'cached', url), canonical: parsed.canonical, title: parsed.title, site: parsed.site, byline: parsed.byline,
+    words, lang: parsed.lang, hero: parsed.hero, text: enc.text, textHash: textHash(parsed.markdown, phoneCrypto),
+  }, staged, c.targets);
+  // The text is on the phone from the start, and searchable (4.1, 4.9).
+  const row = getItem(db, owner, hash);
+  if (row) {
     textFiles.writeText(hash, parsed.markdown, outcome.derived);
     indexText(db, row, outcome.spoken);
   }
-  say('queued', `${held.length} rows held until the sheet closes`);
-  return { hash, held };
+  c.say('queued', `${held.length} rows held until the sheet closes`);
+  return { hash, held, kind: 'saved', prior: null, title: parsed.title, site: parsed.site };
 }
