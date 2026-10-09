@@ -9,6 +9,14 @@ Generated on 9 October 2026 with Higgsfield, on Richard's account. No real place
 | `ridge-*.webp` | The near ridge cut out of that same frame by brightness (rock below 48 of 255 after a light blur, scanned up from the bottom of each column, notches closed). Same size as the plate, so it lines up exactly. |
 | (source, not shipped) | Cinema Studio 2.5 (job `18d9ba0a-ecef-4656-9229-c2077f2d05f9`), 21:9 at 4K: the plate the loop was made from. Its sibling, job `f711b68b-…`, was rejected for its warm peach horizon. |
 
+## The dusk above the footer
+
+| File | Made from |
+|---|---|
+| `dusk-loop-1920.mp4`, `dusk-loop-1280.mp4` | Seedance 2.5 (job `c08ed4fd-f82c-4b38-b9cc-ad66fac5ec77`), made the same way as the summit loop: the dusk plate as first and last frame, locked-off camera, the last second crossfaded into the first. |
+| `dusk-*.avif`, `dusk-*.webp`, `dusk-2206.jpg` | That loop's first frame: the still under the video, and the scene under reduced motion. |
+| (source, not shipped) | Cinema Studio 2.5 (job `ef11bca9-e308-44f6-95d7-2917a44fd8b0`), 21:9 at 4K, made with the summit plate as its reference image: the same view about forty minutes after sunset. Its sibling, `dbbfad16-…`, was the lighter of the two and wasn't used. |
+
 The visual system every asset follows: granite peaks breaking a sea of cloud, seen from a summit at first light; low dawn sun behind thin haze; a long telephoto feel with fine grain; graded towards ink, paper and cold silver with only a whisper of warmth at the sun. Quiet, vast, enduring.
 
 The crest profile in the page (`CREST`) is measured from the ridge cut and must be regenerated with it.
