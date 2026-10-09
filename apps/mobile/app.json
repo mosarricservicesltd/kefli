@@ -52,6 +52,18 @@
           }
         }
       ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/brand/splash-icon.png",
+          "backgroundColor": "#F3F2EE",
+          "imageWidth": 200,
+          "dark": {
+            "image": "./assets/brand/splash-icon-dark.png",
+            "backgroundColor": "#111112"
+          }
+        }
+      ],
       "./plugins/with-shelf-notification",
       [
         "expo-camera",
