@@ -96,22 +96,59 @@ svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-widt
 
 /* Hero: the summit */
 .hero { position: relative; height: 240vh; height: 240svh; background: var(--paper); }
-.stage { position: sticky; top: 0; height: 100vh; height: 100svh; min-height: 560px; overflow: hidden; background: #E7EBEE; }
-.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-#fogBack { z-index: 1; }
+.stage { position: sticky; top: 0; height: 100vh; height: 100svh; min-height: 560px; overflow: hidden; background: #E2E0DC; }
+/* The frame is the photograph's own box, cover-fitted to the stage by script, so the plate,
+   the video, the wordmark and the cut-out ridge share one coordinate system. */
+.frame {
+  position: absolute; left: 50%; top: 50%;
+  width: max(100%, calc(100svh * 2.332)); aspect-ratio: 2206 / 946;
+  transform: translate(-50%, -50%);
+  transform-origin: 50% 100%;
+  will-change: transform;
+}
+.frame > picture, .frame > picture img, .frame > video, .frame > .ridge {
+  position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+}
+.frame > picture img { object-fit: cover; }
+.frame > video { object-fit: cover; opacity: 0; transition: opacity 1.2s ease; }
+.frame > video.on { opacity: 1; }
+.frame > .ridge { z-index: 3; pointer-events: none; }
+/* Rock below the ridge's own bottom edge, for when the near ridge rises during the descent */
+.frame::after { content: ""; position: absolute; left: 0; right: 0; top: 99.5%; height: 60%; background: #1A1A1D; z-index: 3; }
 .word {
-  position: absolute; z-index: 2; left: 50%; bottom: 23%;
+  position: absolute; z-index: 2; left: 50%; top: 0;
   transform: translate3d(-50%, 0, 0);
   margin: 0;
   font-weight: 700; font-stretch: 125%;
-  font-size: clamp(5.5rem, 25vw, 27rem);
+  font-size: clamp(5.5rem, 24vw, 26rem);
   line-height: .78; letter-spacing: -0.045em;
   color: var(--scene-word);
   white-space: nowrap;
   will-change: transform;
   user-select: none;
 }
-#fogFront { z-index: 3; pointer-events: none; }
+/* The cloud you descend into: a bank of paper-coloured fog that rises from below with a billowing crest,
+   until it is the page. Its solid part starts 30% down, so at the end of the descent it fills the stage. */
+.veil {
+  position: absolute; left: -10%; right: -10%; top: 0; height: 150%; z-index: 3; pointer-events: none;
+  transform: translate3d(0, 100%, 0);
+  will-change: transform;
+  background: linear-gradient(to bottom, rgba(243,242,238,0) 0%, rgba(243,242,238,.55) 12%, rgba(243,242,238,.92) 22%, #F3F2EE 30%);
+}
+.veil::before, .veil::after {
+  content: ""; position: absolute; left: 0; right: 0; top: -6%; height: 22%;
+  background:
+    radial-gradient(14% 46% at 8% 70%, rgba(243,242,238,.95), rgba(243,242,238,0) 70%),
+    radial-gradient(18% 60% at 27% 62%, rgba(246,245,242,.9), rgba(246,245,242,0) 70%),
+    radial-gradient(12% 40% at 44% 74%, rgba(243,242,238,.95), rgba(243,242,238,0) 70%),
+    radial-gradient(20% 64% at 63% 60%, rgba(248,247,244,.88), rgba(248,247,244,0) 70%),
+    radial-gradient(13% 44% at 81% 72%, rgba(243,242,238,.95), rgba(243,242,238,0) 70%),
+    radial-gradient(16% 52% at 96% 64%, rgba(246,245,242,.9), rgba(246,245,242,0) 70%);
+  filter: blur(14px);
+  animation: billow 26s ease-in-out infinite alternate;
+}
+.veil::after { top: 2%; opacity: .8; transform: scaleX(-1); animation-duration: 34s; animation-direction: alternate-reverse; }
+@keyframes billow { from { translate: -4% 0; } to { translate: 4% 0; } }
 .hero-copy {
   position: absolute; z-index: 4;
   top: calc(68px + clamp(28px, 6vh, 72px));
@@ -130,18 +167,16 @@ svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-widt
   position: absolute; z-index: 4; left: 50%; bottom: max(22px, env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
   display: inline-flex; align-items: center; gap: 10px;
-  text-decoration: none; color: var(--ink);
+  text-decoration: none; color: var(--night-text);
+  text-shadow: 0 1px 8px rgba(17,17,18,.6);
 }
+.cue:focus-visible { outline-color: var(--night-text); }
 .cue svg.i { width: 16px; height: 16px; animation: bob 2.4s ease-in-out infinite; }
 @keyframes bob { 50% { transform: translateY(4px); } }
-.fallback { position: absolute; inset: 0; z-index: 1; display: none; }
-.fallback svg { width: 100%; height: 100%; display: block; }
-.nogl .fallback { display: block; }
-.nogl canvas { display: none; }
 .cue { white-space: nowrap; }
 @media (max-width: 760px) {
   .hero { height: 200vh; height: 200svh; }
-  .word { bottom: 40%; font-size: 27vw; }
+  .word { font-size: 31vw; }
   .cue { left: auto; right: var(--gutter); transform: none; }
   .cue .cue-text { display: none; }
 }
@@ -149,7 +184,7 @@ svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-widt
   html { scroll-behavior: auto; }
   .hero { height: auto; }
   .stage { position: relative; }
-  .cue svg.i { animation: none; }
+  .cue svg.i, .veil::before, .veil::after, .drift { animation: none; }
   .stage::after { content: ""; position: absolute; inset: auto 0 0 0; height: 18%; z-index: 3; background: linear-gradient(to bottom, rgba(243,242,238,0), var(--paper)); }
 }
 
@@ -271,10 +306,17 @@ footer .brand svg { width: 26px; height: 26px; }
 <main id="top">
   <section class="hero" id="hero" aria-label="Kefli">
     <div class="stage" id="stage">
-      <canvas id="fogBack" aria-hidden="true"></canvas>
-      <div class="fallback" id="fallback" aria-hidden="true"></div>
-      <h1 class="word" id="word">Kefli</h1>
-      <canvas id="fogFront" aria-hidden="true"></canvas>
+      <div class="frame" id="frame">
+        <picture>
+          <source type="image/avif" srcset="assets/plate-960.avif 960w, assets/plate-1600.avif 1600w, assets/plate-2206.avif 2206w" sizes="(max-width: 760px) 240vh, 100vw">
+          <source type="image/webp" srcset="assets/plate-960.webp 960w, assets/plate-1600.webp 1600w, assets/plate-2206.webp 2206w" sizes="(max-width: 760px) 240vh, 100vw">
+          <img src="assets/plate-2206.jpg" alt="" decoding="async" fetchpriority="high">
+        </picture>
+        <video id="loop" muted loop playsinline preload="none" aria-hidden="true"></video>
+        <h1 class="word" id="word">Kefli</h1>
+        <img class="ridge" src="assets/ridge-2206.webp" srcset="assets/ridge-1280.webp 1280w, assets/ridge-2206.webp 2206w" sizes="(max-width: 760px) 240vh, 100vw" alt="" decoding="async">
+      </div>
+      <div class="veil" id="veil" aria-hidden="true"></div>
       <div class="hero-copy" id="heroCopy">
         <div class="wrap">
           <div class="inner">
@@ -473,181 +515,53 @@ footer .brand svg { width: 26px; height: 26px; }
   window.addEventListener("scroll", navState, { passive: true });
   navState();
 
-  /* ---------- The summit: two WebGL layers with the wordmark between ---------- */
-  var stage = document.getElementById("stage");
-  var back = document.getElementById("fogBack"), front = document.getElementById("fogFront");
+  /* ---------- The summit: a photographed plate, its cloud loop, the wordmark behind the near ridge ---------- */
+  var stage = document.getElementById("stage"), frameEl = document.getElementById("frame");
+  var ridgeEl = frameEl.querySelector(".ridge"), video = document.getElementById("loop");
+  var veil = document.getElementById("veil");
   var word = document.getElementById("word"), copy = document.getElementById("heroCopy"), cue = document.getElementById("cue");
+  var ASPECT = 2206 / 946;
+  // The near ridge's crest across the photograph (y from 0 at the top to 1 at the bottom, 65 samples left to right),
+  // measured from the cut-out. The wordmark stands with its foot behind the rock wherever the window falls.
+  var CREST = [0.56,0.559,0.544,0.542,0.536,0.542,0.549,0.555,0.569,0.631,0.648,0.67,0.699,0.723,0.748,0.74,0.742,0.74,0.711,0.707,0.707,0.715,0.721,0.726,0.747,0.754,0.783,0.799,0.804,0.819,0.822,0.812,0.779,0.788,0.784,0.77,0.772,0.781,0.783,0.815,0.822,0.826,0.8,0.804,0.813,0.832,0.837,0.839,0.852,0.867,0.913,0.951,0.952,0.992,1,1,1,1,1,1,1,1,1,1,1];
+  var BURY = 0.4, BURY_NARROW = 0.24; // share of the wordmark's height hidden behind the rock
+  function crest(xn) {
+    var f = Math.min(64, Math.max(0, xn * 64)), i = Math.floor(f), k = f - i;
+    return CREST[i] + (CREST[Math.min(64, i + 1)] - CREST[i]) * k;
+  }
+  var box = { w: 0, h: 0, fw: 0, fh: 0, left: 0, top: 0, wx: 0 };
 
-  var VERT = "attribute vec2 p;void main(){gl_Position=vec4(p,0.0,1.0);}";
-  var FRAG = [
-    "precision highp float;",
-    "uniform vec2 uRes; uniform float uTime; uniform float uDescent; uniform vec2 uPtr; uniform float uFront;",
-    "const vec3 PAPER = vec3(0.9529,0.9490,0.9333);",
-    "const vec3 INK = vec3(0.090,0.090,0.102);",
-    "float hash1(float p){ p = fract(p*0.1031); p *= p + 33.33; p *= p + p; return fract(p); }",
-    "float hash2(vec2 p){ vec3 p3 = fract(vec3(p.xyx)*0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y)*p3.z); }",
-    "float vn1(float x){ float i = floor(x); float f = fract(x); float u = f*f*(3.0-2.0*f); return mix(hash1(i), hash1(i+1.0), u); }",
-    "float vn2(vec2 p){ vec2 i = floor(p); vec2 f = fract(p); vec2 u = f*f*(3.0-2.0*f);",
-    "  return mix(mix(hash2(i), hash2(i+vec2(1.0,0.0)), u.x), mix(hash2(i+vec2(0.0,1.0)), hash2(i+vec2(1.0,1.0)), u.x), u.y); }",
-    "float fbm(vec2 p){ float v = 0.0; float a = 0.5; mat2 m = mat2(1.6,1.2,-1.2,1.6);",
-    "  for(int i=0;i<5;i++){ v += a*vn2(p); p = m*p + vec2(3.1,1.7); a *= 0.5; } return v; }",
-    "float mountain(float x, float seed){",
-    "  float big = vn1(x*0.45 + seed*17.0); big = big*big*(3.0-2.0*big);",
-    "  float v = 0.0; float a = 0.5; float f = 1.0;",
-    "  for(int o=0;o<6;o++){ float n = vn1(x*f + seed*31.0 + float(o)*11.7); n = 1.0 - abs(n*2.0-1.0); v += a*n*n; f *= 2.07; a *= 0.47; }",
-    "  return big*0.62 + v*0.48; }",
-    "void over(inout vec3 c, inout float a, vec3 s, float sa){ c = s*sa + c*(1.0-sa); a = sa + a*(1.0-sa); }",
-    "void main(){",
-    "  vec2 uv = gl_FragCoord.xy/uRes;",
-    "  float asp = uRes.x/uRes.y;",
-    "  float x = (uv.x-0.5)*asp;",
-    "  float y = uv.y;",
-    "  float t = uTime;",
-    "  float d = uDescent;",
-    "  float HOR = asp < 1.0 ? 0.56 : 0.6;",
-    "  float S = asp < 1.0 ? 0.30 : 0.5;",
-    "  float camH = mix(1.0, -0.35, d) + uPtr.y*0.035;",
-    "  float camX = uPtr.x*0.16;",
-    "  vec3 skyHor = vec3(0.905,0.922,0.935);",
-    "  vec3 skyTop = vec3(0.770,0.790,0.812);",
-    "  vec3 sky = mix(skyHor, skyTop, smoothstep(HOR-0.04, 1.05, y));",
-    "  vec2 sp = vec2(x - 0.34*min(asp,1.6), (y - HOR - 0.07)*1.35);",
-    "  float sd = length(sp);",
-    "  sky += vec3(0.085,0.075,0.055)*exp(-sd*4.5);",
-    "  sky = mix(sky, vec3(0.995,0.99,0.975), smoothstep(0.055, 0.0, sd)*0.7);",
-    "  vec3 c; float a;",
-    "  if(uFront > 0.5){ c = vec3(0.0); a = 0.0; } else { c = sky; a = 1.0; }",
-    "  float aa = 1.6/uRes.y;",
-    "  for(int i=0;i<5;i++){",
-    "    float fi = float(i);",
-    "    bool nearL = (i == 4);",
-    "    if(uFront > 0.5 && !nearL) continue;",
-    "    if(uFront < 0.5 && nearL) continue;",
-    "    float z = i==0 ? 7.5 : (i==1 ? 4.6 : (i==2 ? 2.9 : (i==3 ? 1.95 : 1.32)));",
-    "    float k = S/z;",
-    "    float wx = x/k + camX + fi*37.0;",
-    "    float fq = 0.42;",
-    "    float m0 = mountain(wx*fq, fi+1.0);",
-    "    float hm = m0*m0*1.7 - 0.45;",
-    "    float m1 = mountain((wx+0.3)*fq, fi+1.0);",
-    "    float slope = (m1*m1*1.7 - 0.45 - hm)/0.3;",
-    "    float peakY = HOR + (hm - camH)*k;",
-    "    float m = smoothstep(peakY + aa, peakY - aa, y);",
-    "    float haze = 1.0 - exp(-(z - 1.0)*0.34);",
-    "    float worldY = camH + (y - HOR)/k;",
-    "    float below = hm - worldY;",
-    "    float face = fbm(vec2(wx*2.4 + below*0.8, worldY*6.0));",
-    "    float lit = clamp(-slope*0.45 + (face - 0.5)*0.9, 0.0, 1.0);",
-    "    float snow = smoothstep(0.5, 0.64, face + (worldY - 0.15)*0.55 - below*0.6);",
-    "    vec3 rock = mix(INK, vec3(0.30,0.315,0.335), lit*0.7);",
-    "    rock = mix(rock, vec3(0.86,0.875,0.89), snow*0.75);",
-    "    rock = mix(rock, vec3(0.80,0.82,0.84), smoothstep(0.18, -0.1, worldY)*0.35);",
-    "    vec3 rc = mix(rock, skyHor, haze);",
-    "    over(c, a, rc, m);",
-    "    float fh = (fbm(vec2(wx*0.5 + t*0.035, fi*3.7 + t*0.018)) - 0.5)*0.45 - 0.02;",
-    "    float fogY = HOR + (fh - camH)*k;",
-    "    float soft = 0.006 + 0.05*k;",
-    "    float into = (fogY - y)/k;",
-    "    vec2 q = vec2(wx*0.9 - t*0.05, into*3.0 + fi*5.0);",
-    "    vec2 w = vec2(fbm(q + vec2(0.0, t*0.02)), fbm(q + vec2(5.2,1.3) - t*0.015));",
-    "    float bil = fbm(q*1.3 + w*1.6);",
-    "    float dens = smoothstep(-soft*0.7, soft, (fogY - y) + (bil - 0.5)*soft*1.8);",
-    "    dens *= mix(0.8, 1.0, bil);",
-    "    dens = clamp(dens + smoothstep(0.0, 0.25, into)*0.35, 0.0, 1.0);",
-    "    vec3 fogC = mix(vec3(0.988,0.987,0.98), vec3(0.79,0.81,0.835), clamp(clamp(into*1.2,0.0,1.0)*0.55 + (0.5 - bil)*0.4, 0.0, 1.0));",
-    "    fogC = mix(fogC, skyHor, haze*0.55);",
-    "    over(c, a, fogC, dens);",
-    "  }",
-    "  if(uFront > 0.5){",
-    "    float band = smoothstep(0.1, 0.28, y)*smoothstep(0.6, 0.36, y);",
-    "    float wn = fbm(vec2(x*1.1 - t*0.025, y*7.0 + t*0.01) + vec2(fbm(vec2(x*2.0 + t*0.02, y*3.0)), 0.0));",
-    "    float wa = smoothstep(0.56, 0.86, wn)*band*0.5*(1.0 - d*0.4);",
-    "    over(c, a, vec3(0.975,0.976,0.972), wa);",
-    "  }",
-    "  float fn = fbm(vec2(x*1.4, y*1.6) + vec2(t*0.03, -t*0.05));",
-    "  float f = clamp((d*1.35 - 0.33) + (fn - 0.5)*0.55*(1.0 - d), 0.0, 1.0);",
-    "  f = smoothstep(0.0, 1.0, f);",
-    "  f = max(f, smoothstep(0.9, 0.985, d));",
-    "  over(c, a, PAPER, f);",
-    "  c += (hash2(gl_FragCoord.xy) - 0.5)/255.0*a;",
-    "  gl_FragColor = vec4(c, a);",
-    "}"
-  ].join("\n");
-
-  function makeLayer(canvas, isFront) {
-    var gl = canvas.getContext("webgl", { alpha: isFront, premultipliedAlpha: true, antialias: false, depth: false, stencil: false, powerPreference: "high-performance" });
-    if (!gl) return null;
-    function sh(type, src) {
-      var s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { throw new Error(gl.getShaderInfoLog(s)); }
-      return s;
+  function layout() {
+    var w = stage.clientWidth, h = stage.clientHeight, narrow = w < 760;
+    var fw = Math.max(w, h * ASPECT), fh = fw / ASPECT;
+    // On a phone the window onto the photograph slides left, where the near ridge is tallest.
+    var left = (w - fw) * (narrow ? 0.3 : 0.5), top = (h - fh) * 0.62;
+    box = { w: w, h: h, fw: fw, fh: fh, left: left, top: top, wx: w / 2 - left };
+    frameEl.style.width = fw + "px";
+    frameEl.style.height = fh + "px";
+    frameEl.style.left = left + "px";
+    frameEl.style.top = top + "px";
+    word.style.left = box.wx + "px";
+    var ww = word.offsetWidth, wh = word.offsetHeight, sum = 0, n = 0;
+    for (var i = 0; i <= 8; i++) {
+      var c = crest((box.wx - ww / 2 + ww * i / 8) / fw);
+      if (c < 0.99) { sum += c; n++; }
     }
-    var prog = gl.createProgram();
-    gl.attachShader(prog, sh(gl.VERTEX_SHADER, VERT));
-    gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FRAG));
-    gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
-    gl.useProgram(prog);
-    var buf = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-    var loc = gl.getAttribLocation(prog, "p");
-    gl.enableVertexAttribArray(loc);
-    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-    return {
-      gl: gl, canvas: canvas,
-      uRes: gl.getUniformLocation(prog, "uRes"), uTime: gl.getUniformLocation(prog, "uTime"),
-      uDescent: gl.getUniformLocation(prog, "uDescent"), uPtr: gl.getUniformLocation(prog, "uPtr"),
-      uFront: gl.getUniformLocation(prog, "uFront"), front: isFront ? 1 : 0
-    };
+    var foot = (n ? sum / n : 0.85) * fh + (narrow ? BURY_NARROW : BURY) * wh;
+    word.style.top = (foot - wh) + "px";
   }
 
-  function fallbackScene() {
-    stage.classList.add("nogl");
-    var fb = document.getElementById("fallback");
-    fb.innerHTML = svg(1600, 1000,
-      '<rect width="1600" height="1000" fill="#DCE1E5"/>' +
-      '<rect y="560" width="1600" height="440" fill="#F3F2EE"/>' +
-      '<path d="' + ridge(1600, 470, 70, 0.006, 3, 1000) + '" fill="#C7CDD2"/>' +
-      '<rect y="520" width="1600" height="480" fill="#EEEFEE" opacity=".9"/>' +
-      '<path d="' + ridge(1600, 560, 120, 0.004, 9, 1000) + '" fill="#8E949A"/>' +
-      '<rect y="640" width="1600" height="360" fill="#F1F1EF" opacity=".92"/>' +
-      '<path d="' + ridge(1600, 760, 230, 0.0026, 21, 1000) + '" fill="#1E1F22"/>' +
-      '<rect y="800" width="1600" height="200" fill="#F3F2EE"/>', "xMidYMid slice");
-  }
-
-  var layers = [];
-  try {
-    var lb = makeLayer(back, false), lf = makeLayer(front, true);
-    if (lb && lf) layers = [lb, lf];
-  } catch (e) { layers = []; }
-  if (!layers.length) { fallbackScene(); return; }
-
-  var scale = Math.min(window.devicePixelRatio || 1, 1.5);
-  function resize() {
-    layers.forEach(function (L) {
-      var w = Math.max(1, Math.round(L.canvas.clientWidth * scale)), h = Math.max(1, Math.round(L.canvas.clientHeight * scale));
-      if (L.canvas.width !== w || L.canvas.height !== h) { L.canvas.width = w; L.canvas.height = h; }
-      L.gl.viewport(0, 0, w, h);
-    });
-  }
-  function draw(t, d, px, py) {
-    layers.forEach(function (L) {
-      var gl = L.gl;
-      gl.uniform2f(L.uRes, L.canvas.width, L.canvas.height);
-      gl.uniform1f(L.uTime, t);
-      gl.uniform1f(L.uDescent, d);
-      gl.uniform2f(L.uPtr, px, py);
-      gl.uniform1f(L.uFront, L.front);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-    });
-  }
   function smooth(a, b, x) { var t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
 
-  // The DOM layers ride the same camera: the word sits between the far ranges and the near one.
-  function placeDom(d) {
-    var H = stage.clientHeight;
-    word.style.transform = "translate3d(-50%," + (-d * 0.42 * H).toFixed(1) + "px,0)";
+  // Every layer rides one camera: lowering it lifts the scene from its foot, the near ridge lifts most,
+  // and the cloud bank climbs past you until it is the page.
+  function place(d, px, py) {
+    var H = box.h;
+    frameEl.style.transform = "translate3d(" + (px * -10).toFixed(2) + "px," + (py * 6).toFixed(2) + "px,0) scale(" + (1 + d * 0.32).toFixed(4) + ")";
+    word.style.transform = "translate3d(calc(-50% + " + (px * 18).toFixed(2) + "px)," + (d * 0.05 * box.fh + py * -8).toFixed(2) + "px,0)";
+    ridgeEl.style.transform = "translate3d(0," + (-d * 0.04 * box.fh).toFixed(2) + "px,0)";
+    var p = smooth(0.0, 0.8, d);
+    veil.style.transform = "translate3d(0," + ((1 - p) * 100 - p * 30).toFixed(2) + "%,0)";
     var o = 1 - smooth(0.06, 0.38, d);
     copy.style.opacity = o.toFixed(3);
     copy.style.transform = "translate3d(0," + (-d * 0.22 * H).toFixed(1) + "px,0)";
@@ -655,10 +569,19 @@ footer .brand svg { width: 26px; height: 26px; }
     cue.style.opacity = (1 - smooth(0.0, 0.12, d)).toFixed(3);
   }
 
-  resize();
-  window.addEventListener("resize", function () { resize(); if (RM) draw(36, 0, 0, 0); }, { passive: true });
+  layout();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(layout);
 
-  if (RM) { draw(36, 0, 0, 0); placeDom(0); return; }
+  window.addEventListener("resize", layout, { passive: true });
+
+  // Reduced motion: the photograph alone, no loop and no descent.
+  if (RM) { place(0, 0, 0); return; }
+
+  // The cloud loop: a smaller file on phones; it fades in over the still once it plays.
+  video.src = window.innerWidth < 760 ? "assets/loop-1280.mp4" : "assets/loop-1920.mp4";
+  video.preload = "auto";
+  video.addEventListener("playing", function () { video.classList.add("on"); });
+  function playLoop() { var p = video.play(); if (p && p.catch) p.catch(function () {}); }
 
   var ptr = { x: 0, y: 0, tx: 0, ty: 0 }, dS = 0;
   window.addEventListener("pointermove", function (e) {
@@ -672,29 +595,22 @@ footer .brand svg { width: 26px; height: 26px; }
     return span > 0 ? Math.min(1, Math.max(0, -r.top / span)) : 0;
   }
 
-  var running = false, raf = 0, inView = true, t0 = performance.now(), last = t0, slow = 0, frames = 0;
+  var running = false, raf = 0, inView = true;
   function frame(now) {
     raf = 0;
     if (!running) return;
-    var dt = now - last; last = now;
-    frames++; if (dt > 26) slow++;
-    if (frames === 45) {
-      if (slow > 22 && scale > 0.55) { scale *= 0.78; resize(); }
-      frames = 0; slow = 0;
-    }
     ptr.x += (ptr.tx - ptr.x) * 0.045;
     ptr.y += (ptr.ty - ptr.y) * 0.045;
     var target = descentTarget();
     dS += (target - dS) * 0.14;
     if (Math.abs(target - dS) < 0.0005) dS = target;
-    draw(30 + (now - t0) / 1000, dS, ptr.x, ptr.y);
-    placeDom(dS);
+    place(dS, ptr.x, ptr.y);
     raf = requestAnimationFrame(frame);
   }
   function update() {
     var should = inView && !document.hidden;
-    if (should && !running) { running = true; last = performance.now(); raf = requestAnimationFrame(frame); }
-    else if (!should && running) { running = false; if (raf) cancelAnimationFrame(raf); raf = 0; }
+    if (should && !running) { running = true; raf = requestAnimationFrame(frame); playLoop(); }
+    else if (!should && running) { running = false; if (raf) cancelAnimationFrame(raf); raf = 0; video.pause(); }
   }
   if ("IntersectionObserver" in window) {
     new IntersectionObserver(function (es) { inView = es[0].isIntersecting; update(); }, { rootMargin: "80px" }).observe(stage);
