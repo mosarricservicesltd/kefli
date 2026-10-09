@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <!-- s2 at 48 px: bookmark 28 x 34 px, slot 4 px wide from the notch up to y = 21. Built by build.mjs. -->
+  <rect width="48" height="48" rx="10.5" fill="#111112"/>
+  <path fill="#F3F2EE" d="M13 7L35 7A3 3 0 0 1 38 10L38 41L26 33L26 21L22 21L22 33L10 41L10 10A3 3 0 0 1 13 7Z"/>
+</svg>

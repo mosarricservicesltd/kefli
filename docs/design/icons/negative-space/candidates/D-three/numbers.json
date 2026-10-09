@@ -1,0 +1,17 @@
+{
+  "id": "D-three",
+  "label": "Three plays",
+  "width": 43.5,
+  "height": 50.23,
+  "heightToWidth": 1.15,
+  "notchAngle": 30,
+  "play": {
+    "height": 17.94,
+    "depth": 15.54,
+    "shareOfHeight": 0.36,
+    "tipToSlot": 3.11
+  },
+  "threePlaysTall": 50.23,
+  "overshoot": 0,
+  "reachApprox": 31.82
+}

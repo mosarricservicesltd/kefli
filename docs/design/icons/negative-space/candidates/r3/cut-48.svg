@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <!-- r3 at 48 px: ribbon 30 px from under a 3 px lip of tile, tips on row 40, notch 10 px; play 20 px tall at the notch slope. The pause would be bars under 3 px, so it drops out. -->
+  <rect width="48" height="48" rx="10.5" fill="#111112"/>
+  <path fill="#F3F2EE" fill-rule="evenodd" d="M9 3L39 3L39 40L24 30L9 40ZM17 8L32 18L17 28Z"/>
+</svg>

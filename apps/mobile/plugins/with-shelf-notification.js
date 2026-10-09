@@ -1,4 +1,4 @@
-// The media notification's small icon (mobile spec 8.7, FD 72): shared/brand's one-colour glyph, copied into the app's
+// The media notification's small icon (mobile spec 8.7, FD 72 and 94): shared/brand's one-colour glyph, copied into the app's
 // drawables at prebuild so the brand build stays its one source. shelf-voice's service sets it on media3's
 // notification provider by name.
 const fs = require('fs');

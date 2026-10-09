@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <!-- Construction only: three plays on the notch's angles, right, left and right, interlocked up the left half. Not part of the mark. -->
+  <path d="M32.25 51L32.25 79.147L54 65.074Z" fill="#E08200" fill-opacity="0.16" stroke="#E08200" stroke-width="0.6" stroke-linejoin="round"/><path d="M32.25 51L54 65.074L54 36.927Z" fill="none" fill-opacity="0" stroke="#E08200" stroke-width="0.6" stroke-linejoin="round"/><path d="M32.25 51L54 36.927L32.25 22.853Z" fill="#E08200" fill-opacity="0.16" stroke="#E08200" stroke-width="0.6" stroke-linejoin="round"/><path d="M28.25 22.853H58" stroke="#E08200" stroke-width="0.6" stroke-dasharray="1.6 1.2"/>
+</svg>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <!-- n3 at 48 px: the master on a 3 px module. Bookmark 32 x 40 px (shoulders r 3.5, sharp tips), notch 10.7 px at 2:3, top at 4
+    and tips at 44, so its notched bottom sits a pixel low and it looks centred. Play 33.1 px tall with its sides at 2:3, parallel
+    to the notch; flat side on x 13 (5 px wall), 3 px band over the notch and under the top edge, drawn tip 4.98 px from the
+    right edge; corners r 3.5. Thinnest wall measured 3 px. Pause kept: bars 3 x 9 px a 3 px gap apart, on whole pixels
+    (x 16 to 25, y 16 to 25), centred on the play's axis, with at least 3 px of dark round them. -->
+  <rect width="48" height="48" rx="10.5" fill="#111112"/><path fill="#F3F2EE" fill-rule="evenodd" d="M11.5 4L36.5 4A3.5 3.5 0 0 1 40 7.5L40 44L24 33.333L8 44L8 7.5A3.5 3.5 0 0 1 11.5 4ZM18.441 7.588L33.457 17.598A3.5 3.5 0 0 1 33.457 23.423L18.441 33.433A3.5 3.5 0 0 1 13 30.521L13 10.5A3.5 3.5 0 0 1 18.441 7.588ZM16 16L19 16L19 25L16 25L16 16ZM22 16L25 16L25 25L22 25L22 16Z"/>
+</svg>

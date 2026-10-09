@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <!-- C Split: the shared bookmark (candidates/base, 43.5 dp wide, top 27.1) cut down its centre line by a 6.214 dp slot, 0.143 of its width. Built by build.mjs. -->
+  <g transform="translate(54 54) scale(0.9) translate(-54 -54)"><path fill="#F3F2EE" fill-rule="evenodd" d="M37.368 27.1L48.974 27.1A1.919 1.919 0 0 1 50.893 29.019L50.893 67.728A1.919 1.919 0 0 1 50.016 69.339L35.212 78.919A1.919 1.919 0 0 1 32.25 77.308L32.25 32.218A5.118 5.118 0 0 1 37.368 27.1ZM59.026 27.1L70.632 27.1A5.118 5.118 0 0 1 75.75 32.218L75.75 77.308A1.919 1.919 0 0 1 72.788 78.919L57.984 69.339A1.919 1.919 0 0 1 57.107 67.728L57.107 29.019A1.919 1.919 0 0 1 59.026 27.1Z"/></g>
+</svg>

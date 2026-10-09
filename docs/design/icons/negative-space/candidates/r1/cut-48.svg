@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <!-- r1 at 48 px: ribbon 28 px from under a 3 px lip of tile, tips on row 41, notch 9 px deep; play 17 px tall (rows 11 to 28) with its edges at the notch slope, flat side on column 18. -->
+  <rect width="48" height="48" rx="10.5" fill="#111112"/>
+  <path fill="#F3F2EE" fill-rule="evenodd" d="M10 3L38 3L38 41L24 32L10 41ZM18 11L31.222 19.5L18 28Z"/>
+</svg>

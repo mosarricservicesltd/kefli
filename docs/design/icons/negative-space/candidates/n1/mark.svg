@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <!-- n1 Classic nest, built by build.mjs. Bookmark 43.5 dp wide at Shelf's proportions (53.74 dp from the top to the tips' points, about 52 drawn; shoulders r 5.12, tips r 1.92, notch 14.07), top at 27.1: as large as the 66 dp safe circle allows (reach 32.6 dp).
+    Play hole: equilateral, 38.29 dp tall, corners at the shoulder radius, the largest that keeps 6 dp of paper all round; centroid (51.5, 48.5).
+    Pause island: on the play's incircle (r 11.05), bars 3.42 x 11.41 dp with a 3.08 dp gap and r 1 corners; 4 dp of dark to the slanted sides, 6.09 dp to the flat side.
+    One even-odd path: the bookmark, the play (a hole), the bars (paper again). -->
+  <path fill="#F3F2EE" fill-rule="evenodd" d="M37.368 27.1L70.632 27.1A5.118 5.118 0 0 1 75.75 32.218L75.75 77.308A1.919 1.919 0 0 1 72.788 78.919L54 66.762L35.212 78.919A1.919 1.919 0 0 1 32.25 77.308L32.25 32.218A5.118 5.118 0 0 1 37.368 27.1ZM48.122 33.786L65.932 44.068A5.118 5.118 0 0 1 65.932 52.932L48.122 63.214A5.118 5.118 0 0 1 40.446 58.782L40.446 38.218A5.118 5.118 0 0 1 48.122 33.786ZM47.538 42.796L48.96 42.796A1 1 0 0 1 49.96 43.796L49.96 53.204A1 1 0 0 1 48.96 54.204L47.538 54.204A1 1 0 0 1 46.538 53.204L46.538 43.796A1 1 0 0 1 47.538 42.796ZM54.04 42.796L55.462 42.796A1 1 0 0 1 56.462 43.796L56.462 53.204A1 1 0 0 1 55.462 54.204L54.04 54.204A1 1 0 0 1 53.04 53.204L53.04 43.796A1 1 0 0 1 54.04 42.796Z"/>
+</svg>

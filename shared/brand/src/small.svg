@@ -1,22 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
   <!--
-    FROZEN ARTWORK (flow decision 70). The icon redrawn for 16 px: two units are one pixel, and every edge
-    except the notch's diagonals lies on a whole pixel. The ink outline is one whole pixel, three times the
-    108 dp drawing's at this size (a third of a pixel), so the paper bookmark stays distinct from the cream.
-    The cover is simplified to one arc: the signal #E08200 with the cream #F4ECD8 inside the r = 72 band edge
-    (here r = 32 about (40, 40)). The small cream corner and the orange core drop out: at 16 px they were a few
-    soft pixels that read as a chipped corner, not as shapes.
+    FROZEN ARTWORK (flow decision 94). Written from docs/design/icons/negative-space/candidates/D by tools/freeze-d.mjs on 9 October 2026; never regenerate it.
+    16 px (the favicon, the ICO's 16 entry, the browser tab): the split alone, 9 x 10 px, a 1 px slot and 45 degree
+    stairs for feet, half a pixel left of centre. A 3 px play turned into a nick in the bar at this size.
   -->
-  <defs><clipPath id="tile"><rect width="32" height="32" rx="7"/></clipPath></defs>
-  <g clip-path="url(#tile)">
-    <rect width="32" height="32" fill="#E08200"/>
-    <circle cx="40" cy="40" r="32" fill="#F4ECD8"/>
-  </g>
-  <!-- bookmark: 8 x 10 px in a 1 px ink outline, notch 4 px deep at 45 degrees so it survives -->
-  <path d="M10 2H22A2 2 0 0 1 24 4V22L16 14L8 22V4A2 2 0 0 1 10 2Z" fill="#17171A"/>
-  <path d="M10 4H22V17.1716L16 11.1716L10 17.1716Z" fill="#F3F2EE"/>
-  <!-- bar: 12 x 3 px, ink outline and read part; the unread part is a 1 px paper slot, square at the split. The read
-       part is two thirds of the bar (8 of its 12 px), as on the 108 dp drawing and the 48 px cut -->
-  <rect x="4" y="24" width="24" height="6" rx="3" fill="#17171A"/>
-  <path d="M20 26H25A1 1 0 0 1 25 28H20Z" fill="#F3F2EE"/>
+  <rect width="16" height="16" rx="3.5" fill="#111112"/><path fill="#F3F2EE" d="M3 4A1 1 0 0 1 4 3H7V10H6V11H5V12H4V13H3ZM8 3H11A1 1 0 0 1 12 4V13H11V12H10V11H9V10H8Z"/>
 </svg>

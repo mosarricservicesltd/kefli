@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <!-- D Split and play: C's split bookmark (candidates/C: the shared bookmark, 43.5 dp wide, top 27.1, slot 6.21 dp, 1/7 of the width) with a second cut 6.21 dp wide square to the notch's right flank carried on; the play under it is 20.75 x 16.03 dp, its drawn tip 4.23 dp short of the slot. Built by build.mjs. -->
+  <path fill="#F3F2EE" fill-rule="evenodd" d="M37.368 27.1L48.974 27.1A1.919 1.919 0 0 1 50.893 29.019L50.893 61.224A1.919 1.919 0 0 1 47.931 62.835L33.127 53.255A1.919 1.919 0 0 1 32.25 51.644L32.25 32.218A5.118 5.118 0 0 1 37.368 27.1ZM35.212 62.006L45.79 68.851A1.919 1.919 0 0 1 45.79 72.074L35.212 78.919A1.919 1.919 0 0 1 32.25 77.308L32.25 63.618A1.919 1.919 0 0 1 35.212 62.006ZM59.026 27.1L70.632 27.1A5.118 5.118 0 0 1 75.75 32.218L75.75 77.308A1.919 1.919 0 0 1 72.788 78.919L57.984 69.339A1.919 1.919 0 0 1 57.107 67.728L57.107 29.019A1.919 1.919 0 0 1 59.026 27.1Z"/>
+</svg>

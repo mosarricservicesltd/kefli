@@ -1,0 +1,230 @@
+[
+ {
+  "key": "AB",
+  "refined": {
+   "options": [
+    {
+     "id": "A",
+     "title": "Play",
+     "changes": "Starts from p2's notch-folded play, now cut from the shared bookmark (base: 43.5 dp wide, top at 27.1) in place of p2's 42.5 dp box-centred one. The play is still exactly the folded notch: 28.15 \u00d7 21.75 dp, depth = height \u00d7 17/22, edges parallel to the notch at 32.9 degrees (the app's Lucide play is 32.7). The judges' fixes:\n- Raised so it sits in the body. The axis is at y 49.8, 2.9 dp below the middle of the body against p2's 4.5. Its lower corner is now 2.9 dp above the notch's apex, where p2's was level with it.\n- The strap of paper along the notch, parallel to it, is 7.61 dp (p2: 6.25).\n- Flat-side and tip walls are 12.2 and 11.16 dp. They read as equal because the point carries less weight than a flat side.\n\nCorner rule settled by angle and stated in meta.json ('corners'). The play's corners take the tail tips' radius, 1.92 dp (1.5/34 of the width); the play's back corners have exactly the tips' 57 degree angle. Right angles take the shoulders' 4/34. I checked it against p1's 3.1 dp. At 1x the two can't be told apart; at 4x, 3.1 dp looks softer than the tail tips beside it and closer to Play Books. So the tips' radius stays. Shelf's bookmark already follows this rule: its shoulders and tips both round off 2.1 dp inside their sharp points.\n\nCuts: each play is rebuilt from its own cut's notch, on base's cut bookmarks unchanged.\n- 48 px: placed so the strap equals the master's 7.5 dp at that scale (4.84 px).\n- 32 px: half a pixel taller (13.5 px) on x 11, because the exact fold sat visibly left on whole pixels.\n- 16 px: p1's 5/3/3/1 whole-pixel play, with 2 px of paper above the apex. p2's had one row and a blunt 2 px tip.\n- Glyph: it sat low (2.8 px strap against 4.8 above) and left. Now 11 \u00d7 8.8 px on x 8, axis at 10.7.\n- Whole-pixel stairs at 32 px were tried and dropped: they look like pixel art beside the notch's smooth diagonal.\n\nB's build imports this construction from A/build.mjs, so the pair can't drift apart.",
+     "numbers": "Master (108 dp canvas):\n- Base bookmark, reach 32.56 of 33 (inside_safe), centroid (54.39, 50.82).\n- Play 28.15 \u00d7 21.75 dp, flat side on x 44.45, axis y 49.8 (the body's middle is 46.93), corners r 1.92.\n- Walls: flat side 12.2, drawn tip 11.16, top 10.23, strap 7.61 (least 7.61). The hole is 15.1% of the bookmark.\n\nCuts:\n- 48 px: play 18 \u00d7 14 on x 18, axis 21.1. Walls 8 / 7.05 / 6.13, strap 4.84 px. 6.9% soft (base 3.3).\n- 32 px: play 13.5 \u00d7 10.38 on x 11, axis 14. Walls 5 / 5.35 / 3.99, strap 3.35 px. 10.7% soft (base 5.2).\n- 16 px: columns 5, 3, 3, 1 from x 6 on rows 4 to 8. 3 px at each side, 2 above, 2 over the apex. 12.2% soft (base 10.9; the play adds no soft pixels).\n- Glyph: play 11 \u00d7 8.8 on x 8, axis 10.7. Walls 4 / 3.83 / 3.77, strap 2.8 px. 13.1% soft (base 6.3).\n\nFiles: /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/candidates/A (mark.svg, cut-48.svg, cut-32.svg, cut-16.svg, glyph-24.svg, meta.json, build.mjs, sheet.png, metrics.json). Comparison with base, p2, p1, n1 and n3: /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/sheets/round2-ab.png.",
+     "doubts": "- It is still a symbol in a bookmark: GoodLinks' template and Google Play Books' pair of signs. Among media apps it could read as a podcast or audiobook app.\n- The notch construction shows on the launcher only. At toolbar sizes it is any bookmark with a play.\n- To sit evenly on whole pixels, the 32 px play is half a pixel taller than the folded notch and the glyph's play a pixel taller. So the 'exactly the notch' story holds only on the master and the 48 px cut.\n- Every diagonal doubles the soft pixels: 6.9, 10.7 and 13.1% at 48, 32 and the glyph, against the plain bookmark's 3.3, 5.2 and 6.3.\n- The crisp 1.92 dp corners follow the judges' rule, but Richard rejected sharp triangles once. At 4x they read as cut, not sharp, and at 1x they can't be told from 3.1 dp. Still, he may see it differently.\n- The extension's toolbar button only saves, so a play in its cuts promises listening the extension doesn't offer. Base's plain bookmark may be the better toolbar cut for either option.",
+     "self_score": 7.5
+    },
+    {
+     "id": "B",
+     "title": "Play and pause",
+     "changes": "n1's nest with n3's discipline, on the shared bookmark, using A's construction (B/build.mjs imports A's).\n\nPlay: notch-parallel like A's and larger, 36.62 \u00d7 28.29 dp (n1's was an equilateral 38.3, n3's 44.6). It is the largest play that keeps 6 dp of paper above it and along the notch, so the bookmark reads solid (n3's frame was 4.1 dp). The sides are 8.62 and 8.19 dp, on A's axis (y 49.8).\n\nCorners: the tail tips' radius, 1.92 dp. n1 and n3 used 5.1 dp on corners of 57 to 66 degrees, which looked softer than the shoulders.\n\nPause: Shelf's own proportions, from the app's Lucide pause drawn filled at a 1.75 stroke (bars 2.56 times the gap, 3.09 times as tall as wide). The bars are 3.69 \u00d7 11.38 dp with a 1.44 dp gap (n1's were 3.42 \u00d7 11.41 sticks with a 3.08 gap).\n- Position: I started on the play's incircle and nudged it 1 dp towards the flat side. That leaves 4.55 dp of dark along the flat side and 3.5 at the bars' outer corners, which looks even because a band parallel to a bar looks narrower than the same gap at a corner. For comparison, n1 sat on the incircle with 6.1 and 4.0; n3 sat 1.9 dp left with 4.1 everywhere.\n- Bar corners are 4/34 of the bar's width (0.43 dp), the shoulders' proportion. The app's rounder bar ends looked soft beside the crisp play.\n\n48 px keeps the pause. n1 dropped it from every cut, and n3 kept it only by enlarging the cut's bookmark to 32 \u00d7 40. Here: bars 2 \u00d7 7 px with a 2 px gap, 3 px of dark at the flat side and 2.5 at the corners, in a 24.5 px play on base's 28 \u00d7 34 bookmark.\n\n32 px, 16 px and the glyph drop the pause and are A's files byte for byte. That also removes n1's 16 px leak into the notch.",
+     "numbers": "Master (108 dp canvas):\n- Reach 32.56 (inside_safe), centroid (54.96, 50.9).\n- Play 36.62 \u00d7 28.29 dp, flat side on x 40.87, axis y 49.8, corners r 1.92.\n- Walls: flat side 8.62, tip 8.19, top 6.0, strap 6.0 (least 6.0, measured on the drawn outlines).\n- Incircle at (50.83, 49.8), radius 9.96.\n- Pause: bars 3.69 \u00d7 11.38 dp, gap 1.44 (bar to gap 2.56, height to bar 3.09), corner r 0.43, centre x 49.83 (1 dp left of the incircle). Dark ring 4.55 dp at the flat side, 3.5 at the corners.\n\nThe 4.5 dp target was not reached. With 6 dp walls the bars reach 3.7 dp with an even ring, or 3.9 if the pause crowds the flat side. 4.5 dp bars would need walls of about 4 dp (a play about 40.6 dp tall). On a Pixel launcher (about 2 px per dp) the bars are 7 px with a 3 px gap; on a 1x home screen (48 px), 2.5 px bars with a 1 px gap.\n\nCuts:\n- 48 px: play 24.52 \u00d7 19.07 on x 15, axis 21.5. Walls 5 / 4.98 / 3.27, strap 3.39 px. Bars 2 \u00d7 7 px at x 18 to 24, y 18 to 25, gap 2 px. Ring 3 px at the flat side, 2.5 at the corners. 9.1% soft (A 6.9, base 3.3).\n- 32 px, 16 px and the glyph: A's files exactly, 10.7, 12.2 and 13.1% soft.\n\nFiles: /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/candidates/B (all six files plus build.mjs, sheet.png, metrics.json). Comparison: /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/sheets/round2-ab.png.",
+     "doubts": "- The 3.7 dp bars are under the 4.5 dp aim. On a 1x home screen the pause merges into one small patch (gap about 1 px); it reads clearly from about 64 px and on real launchers.\n- A play holding a pause is the media player's toggle. That makes B the most player-like option and the nearest to Play Books.\n- The play takes 36.6 of the bookmark's 52 dp, so the paper is a 6 to 8.6 dp frame. It reads solid, but at a glance the play is louder than the bookmark.\n- At 48 px the walls drop to 3.3 px (the master's 6 dp would be 3.9), and the gap is as wide as a bar. The pause there is a plain II, not the app's proportions. In a toolbar strip the 48 also looks like a different drawing from the 32 beside it.\n- The pause sits 1 dp left of the incircle on purpose; someone measuring may call it off-centre.\n- The play's lower-left corner dips 1.35 dp below the notch's apex, which a play this size can't avoid.\n- Below 48 px B is A, so the third level exists only on the launcher, the launch screens and one toolbar cut.",
+     "self_score": 7
+    }
+   ]
+  },
+  "qa": [
+   {
+    "id": "A",
+    "defects_found": [
+     {
+      "what": "cut-48: play axis at y 21.1 put its corners off the pixel grid (12.1, 30.1), so the upper and lower slanted edges rasterised as different stair patterns (measured mirror asymmetry sum 3.07, max 0.27 per pixel, in the sheet's Chrome). The stated reason, 'the master's 7.5 dp strap at this scale (4.8 px)', used the wrong figure: the master's strap is 7.61 dp, 4.90 px at this scale.",
+      "severity": "medium",
+      "fixed": true,
+      "how": "CUT[48].ym 21.1 -> 21 in /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/candidates/A/build.mjs. Edges now mirror (asymmetry 0.2, Chrome's arc noise), corners on y 12 and 30, strap 4.93 px (the master's 7.6 dp at scale), 6.03 above; soft unchanged (50 px, 6.9%). A only: B draws its own 48."
+     },
+     {
+      "what": "glyph-24: play axis at y 10.7 made the tip hook downward at 5x (rows either side of the tip at 0.2 and 0.5 paper; asymmetry sum 2.99, max 0.45), and meta.json claimed it 'sits centred on whole pixels'.",
+      "severity": "medium",
+      "fixed": true,
+      "how": "CUT.glyph.ym 10.7 -> 10.5: corners on y 5 and 16, the rows either side of the tip mirror (asymmetry 0.02), 3.57 px above, 2.97 px strap, soft 32 px (13.0%). This file is shared with B, so B's glyph-24.svg is stale until B is rebuilt."
+     },
+     {
+      "what": "meta.json title 'Play' is one word; the brief asks for 2 to 4. The page also uses it as a button label, where 'Play' reads as a media control.",
+      "severity": "low",
+      "fixed": true,
+      "how": "Title is now 'Play cut' (it echoes the one-liner, 'a play cut at the notch's angle')."
+     },
+     {
+      "what": "The corner rule is not applied as stated on the cuts. meta.json says the play's corners take the tail tips' radius and that 'on the cuts the radii scale with the cut's bookmark', but base draws the cuts' tail tips sharp at every size. So on the cuts the play's corners (r 1.24, 0.88 and 0.71 px) are softer than the tips beside them, and risks said they 'match the tail tips' without qualification.",
+      "severity": "low",
+      "fixed": true,
+      "how": "Kept the drawing on evidence: sharp corners add soft pixels (52 vs 50 at 48, 42 vs 39 at 32) and push a lone 70%-dark pixel outside each back corner (rows 12 and 29 at 48). meta.json 'corners' now says plainly that on the cuts the play's corners are a little softer than base's sharp tips, and why; risks is scoped to the launcher."
+     },
+     {
+      "what": "meta.json built: 'the notch's two halves joined along their long sides'. A right triangle's long side is its hypotenuse, and joining there makes a kite; build.mjs correctly says long legs.",
+      "severity": "low",
+      "fixed": true,
+      "how": "Now reads 'each 17 units across and 11 up, joined along their 17-unit sides'."
+     },
+     {
+      "what": "meta.json built: 'the play's lower corner is 2.9 dp above the notch's apex' quotes the unrounded construction corner, while every other wall quotes the drawn shape. Measured from mark.svg's path, the drawn play's lowest point is 4.5 dp above the apex.",
+      "severity": "low",
+      "fixed": true,
+      "how": "Now reads 'the play's lowest point is 4.5 dp above the notch's apex'."
+     },
+     {
+      "what": "meta.json small: 'the play built from that cut's own notch, so it stays parallel to the notch at every size' is false at 16 px, where the play is whole-pixel stairs.",
+      "severity": "low",
+      "fixed": true,
+      "how": "Now says that at 48 px, 32 px and on the glyph the play is built from that cut's notch, and at 16 px it is drawn in whole pixels."
+     },
+     {
+      "what": "meta.json small, 48 px: '(the master's 7.5 dp at this scale)' contradicts built's 7.6 dp strap, and the 48 numbers changed with the axis fix.",
+      "severity": "low",
+      "fixed": true,
+      "how": "Now reads 6 above and a 4.9 px strap (the master's 7.6 dp at this scale), and says the axis on y 21 puts the corners on whole pixels with mirrored edges. The build.mjs comment was corrected the same way."
+     },
+     {
+      "what": "The 'corners' key (in A, B and C) is never rendered by tools/page.tpl.html. A's reasoned use of the tail tips' radius (1.92 dp), where the brief suggests about the shoulder radius, never reaches the study page.",
+      "severity": "low",
+      "fixed": false,
+      "how": "Not fixed: tools/ is outside a checker's remit. Fix by adding a Corners row next to Built in page.tpl.html, or by moving one sentence into 'built'."
+     }
+    ],
+    "checks_passed": "Files: mark.svg, cut-48/32/16.svg, glyph-24.svg, meta.json and build.mjs are all present. viewBoxes are 0 0 108 108, 0 0 N N and 0 0 24 24. Only path and rect elements; no stroke, mask, clipPath, filter, gradient, opacity or style. Fills are exactly #F3F2EE and #111112 (glyph #FFFFFF), the paths use evenodd, and every cut's first element is geom.tileRect(N).\n\nSilhouette: every file's first subpath is byte-identical to base's (geom.bookmark(MASTER) and CUTS[n]). Master bbox is 32.2, 27.1, 43.6 x 52.1 and reach is 32.56, the same as base; inside_safe is true.\n\nMaster geometry, re-measured independently from mark.svg's path: flat wall 12.2, drawn tip 11.16, top 10.24, strap (the least gap) 7.61, lowest point 4.5 above the apex. Play 28.15 x 21.75 dp (22 x 17 units); edges at 32.9 degrees, parallel to the notch (Lucide 32.7). Back corners 57.1 degrees, the tips' angle; point 65.8. Shoulders and tips both round off 2.1 dp inside their sharp points. Hole is 15.07% of the bookmark; axis 2.87 dp below the body's middle. The cited p2 (4.51 dp below) and p1 (3.1 dp corners) are verified. The corner rule holds on the master (all play corners r 1.92).\n\nPixel cuts (rasterised in the sheet's Chrome; coverage grids match sheet.mjs exactly):\n- Straight edges on whole pixels: flat sides on x 18, 11 and 8; the 16 px cut is all whole pixels.\n- Least walls: 48 px 4.93 (minimum 3), 32 px 3.35 (minimum 2), 16 px 2 (minimum 1), glyph 2.97.\n- The hole is its own 8-connected dark region at every size: no leak into the notch or the edge, corner to corner included.\n- The glyph sits in x 4 to 20 and y 2 to 22, inside its 2 px padding.\n- Soft: 6.9 / 10.7 / 12.2 / 13.0% against base's 3.3 / 5.2 / 10.9 / 6.3. The excess is the play's two diagonals only (the 16 px cut adds none), and sharp corners or other axes were no better.\n\nLooks: the sheet's launcher views at 4x, home screens at 1x, light colourway, themed icons, toolbars and status bar, plus a compare sheet against base and p2. The bookmark reads first and the play is balanced by the master's own flat-side/tip rule; nothing is crowded. Every size keeps the play, and meta.json now says plainly that the 16 px play is whole pixels.\n\nWords: 'one' is 64 characters; British spelling throughout; no inverted-emphasis constructions ('rather than' in risks is a plain comparison).\n\nBase's files are byte-identical before and after rebuilding A, which rewrites them on import.",
+    "remaining": "1. B needs a rebuild: from /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space, run 'node candidates/B/build.mjs' (no code change). B's 32 px, 16 px and glyph files come from A's build.mjs, and its glyph-24.svg now differs from A's. Until then B's meta claim that those files are A's 'byte for byte' is false for the glyph.\n2. study.html needs 'node tools/build-page.mjs' to show A's new title ('Play cut'), the new 48 px cut and the new glyph.\n3. The page template does not render meta.json's 'corners' text (A, B and C), so A's reasoned use of the tail tips' radius, where the brief suggests about the shoulder radius, isn't visible to Richard.\n4. Judgement call, left as drawn: the 32 px play sits about 0.46 px further left than the master's proportions (hole centroid 7.5% of the width left of centre, against 5.2%; flat wall 5 against tip 5.35). Taller plays (14 and 14.5 px) and a flat side on x 12 were compared at 8x and 1x: 14 px is marginally more even but thins the top and the strap, 14.5 px crowds them, and x 12 looks pushed right.\n\nChanged files: /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/candidates/A/build.mjs, meta.json, cut-48.svg, glyph-24.svg, sheet.png and metrics.json; mark.svg, cut-32.svg and cut-16.svg are unchanged.",
+    "verdict": "ready-with-caveats"
+   },
+   {
+    "id": "B",
+    "defects_found": [
+     {
+      "what": "glyph-24.svg was stale. A's checker moved A's glyph axis from y 10.7 to 10.5 at 23:18, so B's glyph no longer matched A's. That broke meta.json's claim that B's 32, 16 and glyph files are A's 'byte for byte', and left the old glyph, whose tip hooked down, in B.",
+      "severity": "medium",
+      "fixed": true,
+      "how": "Rebuilt B with node build.mjs, which writes A's shared cuts from A's current build. cmp now shows B's cut-16, cut-32 and glyph-24 identical to A's. The master and cut-48 were byte-identical before and after. The new glyph is symmetric about row 10, has no corner-to-corner leak into the notch, a 2.97 px strap and 13.0% soft. Added a header line to build.mjs saying B must be rebuilt after any change to ../A/build.mjs, because B also takes A's axis."
+     },
+     {
+      "what": "meta.json 'built' gave the wrong figures for what 4.5 dp bars would need: 'a play about 40.6 dp tall, which leaves about 4 dp of paper'. Re-running B's own construction gives 42.3 dp and 3.2 dp walls with the ring kept even, or 40.3 dp and 4.2 dp if the pause crowds the flat side. The text matched neither and didn't say which placement it meant.",
+      "severity": "low",
+      "fixed": true,
+      "how": "Bisected with B's own fitPause and walls (scratch mirror, coarser sampling) and rewrote the sentence with both cases. The '3.7, or 3.9 if crowded' claim checked out (3.69 and 3.90 at 1.75 dp left) and is unchanged."
+     },
+     {
+      "what": "At 48 px the dark between the right bar's outer corners and the play's slanted edges is 2.5 px (two pixels on the diagonal in the Chrome raster). That is under the 3 px minimum at this size, and the 2 px allowance covers only the bars and the gap. meta.json gave the number without saying it is under the minimum.",
+      "severity": "low",
+      "fixed": true,
+      "how": "Searched every whole-pixel 48 px drawing (flat side x 13 to 16, bars 5 to 8 px tall, any axis and height) and kept the drawing. Every way to get 3 px everywhere costs more. With 2 x 7 bars the play has to move to x 13 (3 px wall against 5.4 at the tip). The balanced option, x 14 with 2 x 6 bars, puts the play 0.6 px left of centre: rendered at x9 it looked lopsided and was softer (9.8% against 9.1%). A taller play only reaches 2.73 px and takes the top wall down to 3.0. The fix is in the words: meta.json 'small' now says plainly that the corner dark is under the minimum and why."
+     },
+     {
+      "what": "meta.json 'small' overstated the 32 px case: 'no play with 2 px walls holds 2 px bars with a 2 px ring'. A search finds 324 layouts that fit, all with bars only 3 px tall.",
+      "severity": "low",
+      "fixed": true,
+      "how": "Reworded: such a play holds the bars only if they are 3 px tall, which reads as two dots. Used semicolons so the 32 / 16 / glyph reasons read as a list."
+     },
+     {
+      "what": "meta.json 'risks' said the pause appears 'on the launcher, the launch screens and the 48 px cut only; everywhere else B is A'. That leaves out the themed icon and the mark on paper (the light colourway, as on the website), which both come from the master and show the pause.",
+      "severity": "low",
+      "fixed": true,
+      "how": "Rewrote it: the pause appears wherever the master is used (the launcher and its themed icon, both launch screens, and the mark on paper, as on the website) and in the 48 px cut; the 32 and 16 px cuts and the glyph are A's."
+     },
+     {
+      "what": "Running B's build rewrites base's mark.svg, three cuts, glyph and meta.json, because base/build.mjs writes its files at import time with no main guard. B imports it directly and through A.",
+      "severity": "low",
+      "fixed": false,
+      "how": "Not mine to edit (base). Checked with md5 before and after that the rewritten base files are byte-identical, so it does no harm."
+     }
+    ],
+    "checks_passed": "Files: mark.svg, cut-48.svg, cut-32.svg, cut-16.svg, glyph-24.svg and meta.json all exist.\n- viewBoxes are 0 0 108 108, 0 0 48/32/16 and 0 0 24 24.\n- Each file has one path, plus the tile rect on the cuts. No stroke, mask, clipPath, filter, gradient or opacity.\n- Colours are exactly #F3F2EE and #111112, with #FFFFFF on the glyph.\n- Each cut starts with geom.tileRect(N) (rx 10.5, 7 and 3.5).\n- Every SVG reproduces byte for byte from build.mjs.\n\nSilhouette:\n- The master's outer subpath is base's mark path character for character. Bbox 32.2/27.1/43.6/52.1 and reach 32.56 are identical to base's, inside the safe circle.\n- Each cut's outer subpath is base's CUTS[n]. No hole touches the outline.\n\nGeometry, measured from the SVG with my own path parser and point-to-segment distances:\n- Master walls: least 6.000 at the top, strap 6, flat side 8.624, tip 8.195.\n- Bars 3.685 x 11.378 dp, gap 1.442. Ring 3.499 at the right bar's corners and 4.554 at the flat side.\n- The pause is on the play's axis (49.8) and 1 dp left of the incircle centre (50.83).\n- All of this matches meta.json and the SVG comment.\n- Lucide pause ratios checked against docs/design/mockups/prototype.html. solid('pause') is Lucide's 4 x 16 bars filled at a 1.75 stroke: 5.75 x 17.75 with a 2.25 gap, giving 2.56 and 3.09, and the 1/3 corner.\n- Corner rule holds everywhere:\n  - Master: play 1.919 dp at all three corners, bars 0.434, shoulders 5.118.\n  - Cuts: play radius scales to 1.235 at 48, 0.882 at 32 and 0.706 on the glyph; whole pixels at 16; the 48 px bars are square, as stated.\n- 'Thinnest the judges would accept' matches rounds/round1.json (the concept judge asked for walls of 6 dp or more). n3 is explained on the study page.\n\nPixel cuts (Chrome coverage maps):\n- Straight edges sit on whole pixels.\n- No hole meets the notch or the edge corner to corner at any size (at least two paper pixels on the diagonal).\n- The glyph is inside 2..22.\n- Walls: at least 3.27 at 48, 3.35 at 32 and 2 at 16; the glyph strap is 2.97.\n- soft_pct: 48 at 9.1% (base 3.3, A 6.9). Scanning the allowed play heights gives 8.9 to 9.8%, so it is no worse than a play big enough for the pause needs. 32, 16 and the glyph are A's.\n\nLooks:\n- At 6x I compared the pause at 0, 1, 1.5 and 1.75 dp left of the incircle. B's 1 dp reads as an even ring; 0 floats right, and 1.5 to 1.75 crowd the flat side.\n- The 48 px pause reads at x9 and at 1x.\n- What each size drops is stated plainly.\n\nWords: 'one' is 66 characters; British spelling; no inverted-emphasis constructions.\n\nFinal state: B's sheet.png and metrics.json are re-rendered. A/build.mjs md5 at the final build is 69fc0a84bd6aac88b17f97a75203a05b.",
+    "remaining": "- The 48 px corner ring is 2.5 px, under the 3 px minimum. I accepted it as the best trade-off and meta.json now says so.\n- The master's third level is small: 3.69 dp bars with a 1.44 dp gap merge into one patch on a 1x home screen (about 7 px bars with a 3 px gap on a Pixel). This is declared in risks.\n- The paper frame is 6 dp above the play and along the notch, against 8.6 and 8.2 at the sides. That follows from the notch-parallel play on A's axis, and meta.json declares it as a 6 to 8.6 dp frame.\n- B depends on A's build for its 32 px, 16 px and glyph files and for its axis. If A's checker changes ../A/build.mjs after 23:30, run node build.mjs in candidates/B and then node tools/sheet.mjs candidates/B. The new build.mjs header says this.\n- Base's files are rewritten (byte-identical) on every build.\n\nFiles: /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/candidates/B/meta.json, build.mjs (header comment only), glyph-24.svg (rebuilt), sheet.png and metrics.json (re-rendered).",
+    "verdict": "ready-with-caveats"
+   }
+  ]
+ },
+ {
+  "key": "C",
+  "refined": {
+   "options": [
+    {
+     "id": "C",
+     "title": "Split bookmark",
+     "changes": "Redrawn on the shared bookmark: build.mjs imports MASTER and CUTS from ../base/build.mjs and reads the cut geometry out of the base's path strings. The outer silhouette matches the base to within about 0.01 dp (rasterised at 40 px per dp). s1 used its own 42 dp bookmark. The master is unchanged apart from the slot.\n\nSlot: 6.21 dp, 1/7 (0.143) of the width, against s1's 6.3 dp in 42 (0.15). I chose it by eye from 0.12, 0.13, 1/7 and 0.15 at 4x and 1x. At 0.12 the slot looked like a crack. At 0.15 the halves began to part in the light colourway. 1/7 is also exactly what the 48 and 32 px grids give (4 px in 28, 3 px in 21), so one ratio holds at master, 48 and 32. s1 drifted to 0.2 at 32 and 16.\n\n32 px: the base's 20 px bookmark gains one pixel on the left (21 x 24) so a 3 px slot sits between two 9 px halves. On 20 px the only centred slots are 2 px (0.1) or 4 px (0.2). The feet keep the base's notch slope (6.5 in 10).\n\n16 px: the bookmark gives up its right-hand pixel (9 x 12) for a centred 1 px slot (1/9, the nearest the grid allows; s1 had 2 px in 10, 0.2). The feet are the craft judge's whole-pixel 45 degree stairs and meet the slot level with the base's apex. Softness drops to 2.4% against the base's 10.9% (s1: 11.4%).\n\n48 px: the feet now run on the base's own notch line (s1 used a 2:3 slope). 2:3 would have been 0.5 points crisper, but the rule is not to change the shared bookmark without need.\n\nCorner rule, settled and stated in meta.json ('corners' and 'built'): a corner's radius follows what made it. The outline's square shoulders take 4/34 of the width (5.12 dp). Everything a cut makes, the notch's tips and all four slot corners, takes the tips' 1.5/34 (1.92 dp). In the pixel cuts these are square, as the base draws its tips. I tested the angle rule literally (shoulder radius on the slot's two right-angled top corners): each half turned into a rounded bar and the pair read as II. Sharp corners looked harder than the tips at 4x.\n\nGlyph: changed from split to the plain shared bookmark (base glyph-24). I mocked the status bar and Android's media card, playing and paused, with real transport controls: the split glyph read as a second pause button beside the real one and as 'paused' while audio played. The mock is saved for Richard at /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/candidates/C/media-card.png.\n\nAdded a measured ElevenLabs comparison to risks. Files are in /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/candidates/C (build.mjs, mark.svg, cut-48/32/16.svg, glyph-24.svg, meta.json, metrics.json, sheet.png, media-card.png). The comparison with base and s1 is /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/sheets/C-split.png.",
+     "numbers": "Master: bookmark 43.5 x 52.1 dp, the base's, reach 32.56 of 33, inside the safe circle. Slot 6.21 dp, 1/7 = 0.143 of the width, 4.1 px on a 1x home screen. Halves 18.64 x 52.1 dp each (1 : 2.8), so the slot is exactly a third of a half; there are no holes, so no walls, and the halves are the paper. The feet meet the slot 2.01 dp below the vanished apex (y 68.77 against 66.76), on the base's notch line, so the V is unbroken. Radii: shoulders 5.12 dp (4/34); tips and slot corners 1.92 dp (1.5/34), about 1.3 px at 1x against 3.4 px shoulders. Centroid (54, 51.16); ink 34.0% of the 72 dp viewport (base 38.9%).\n\nCuts (soft against the base's own figure):\n- 48 px: 28 x 34, 4 px slot (0.143), 12 px halves, shoulders r 3, feet on the 9/14 line. 3.3% soft (base 3.3%).\n- 32 px: 21 x 24 at x 5 to 26 (half a pixel left of centre), 3 px slot (0.143), 9 px halves, notch slope 0.65, shoulders r 2. 5.7% soft (base 5.2%).\n- 16 px: 9 x 12 at x 3 to 12 (half a pixel left), 1 px slot (0.111), 4 px halves, 45 degree whole-pixel stairs rising 3 px to the slot, shoulders r 1. 2.4% soft (base 10.9%).\n- Glyph: the base's plain 16 x 20 bookmark. 6.3% soft (base 6.3%).\n\nLight colourway against ElevenLabs' II, measured from its 240 px app icon: its bars are 20 x 96 px (1 : 4.8), square-ended, with the gap equal to a bar (a third of the pair's width); the pair is 0.63 as wide as tall and fills 25% of the tile's width. C's halves are 1 : 2.8, the slot is a seventh of the pair's width, the pair is 0.83 as wide as tall and fills 60% of the tile's width, and it has round outer shoulders and sloped feet.",
+     "doubts": "- It still reads as a pause before a bookmark at 1x on a home screen, in the themed icon and as a 16 px favicon. No width between 0.12 and 0.15 changed that much; the shoulders and feet do the work of keeping it a bookmark, and they are small at those sizes.\n- Pause on its own says 'playing now' more than 'you can listen', and the notch's apex, the bookmark's most recognisable point, is gone.\n- As the extension's toolbar button, which only saves, the 16 and 32 px split can look like a control that pauses the page. In a mock browser toolbar at 1x it sat among the other extension icons like one. If the base's plain bookmark is used there, the split lives only in the launcher, the launch screens and the favicon.\n- With the plain glyph the idea is missing from the status bar and the media notification. I think that is right, but it means the listening cue appears in the fewest places of any option.\n- The 32 and 16 px cuts sit half a pixel left of centre. That is unavoidable with an odd slot, and invisible at 1x but visible magnified.\n- The 16 px slot is a single pixel, fragile in redraws and in one-colour uses (print, emboss, cut stickers all have to keep it open).\n- The light colourway is still the nearest any option gets to ElevenLabs' II: clearly different at launcher sizes, much less so at 16 px.\n- 1/7 against 0.12 or 0.15 is a judgement on about 1 dp. The grid argument tips it more than the eye did.\n- Process note: importing ../base/build.mjs runs its writes. I checked that it rewrites the base's files byte for byte, but parallel agents importing it at the same moment could race on those writes.",
+     "self_score": 7
+    }
+   ]
+  },
+  "qa": [
+   {
+    "id": "C",
+    "defects_found": [
+     {
+      "what": "meta.json small (16 px): '1/9, the nearest the grid gets to 1/7' is false. 1 px in 7 and 2 px in 14 are exactly 1/7, and 2 px in 12 (0.167, 0.024 off) is nearer than 1/9 (0.111, 0.032 off). It holds only for bookmarks within a pixel of the base's 10 px width (9, 10 or 11 px).",
+      "severity": "medium",
+      "fixed": true,
+      "how": "Reworded in build.mjs meta() to '1/9, the nearest to 1/7 of any bookmark within a pixel of the base's 10 px', then rebuilt."
+     },
+     {
+      "what": "meta.json small (16 px): 'whole-pixel 45 degree stairs, as the brand's own 16 px cut draws its notch' misattributes the stairs. shared/brand/src/small.svg draws its 16 px notch as a straight 45 degree diagonal (L24 22 to 16 14 in half-pixel units), which leaves half-covered pixels. It also gave no reason for leaving the base cut's notch line, and the brief asks for one when a cut's outline differs.",
+      "severity": "medium",
+      "fixed": true,
+      "how": "Now reads 'The feet leave the base's notch line for whole-pixel stairs at 45 degrees, the angle of the brand's own 16 px notch, so they have no soft pixels'."
+     },
+     {
+      "what": "meta.json built: '1/7 is also what the 48 and 32 px grids give exactly ... so one ratio holds from the launcher to the toolbar' overclaims. The toolbar at 1\u00d7 uses the 16 px cut, which is 1/9, and 32 px gives 3 in 21 only after the bookmark is widened.",
+      "severity": "medium",
+      "fixed": true,
+      "how": "Now says the 48 and 32 px cuts can draw 1/7 exactly ('3 in 21 once the 32 px bookmark gains a pixel'), so one ratio holds 'from the launcher down to the 32 px cut; the 16 px cut is 1/9'. The numbers are computed from the cuts."
+     },
+     {
+      "what": "meta.json small (32 px): 'on 20 px the only centred slots are 2 px (0.1) and 4 px (0.2)' is inaccurate, since 6 px (0.3) is also centred.",
+      "severity": "low",
+      "fixed": true,
+      "how": "Now 'the centred slots nearest 1/7 are 2 px (0.1) and 4 px (0.2 ...)'."
+     },
+     {
+      "what": "meta.json built: 'Each half is 18.64 dp wide and 52.1 tall (about 1 : 2.8), so the slot is exactly a third of a half' does not follow. The third comes from the halves being 3/7 of the width, not from their height.",
+      "severity": "low",
+      "fixed": true,
+      "how": "Now 'Each half is 3/7 of the width, 18.64 dp, so the slot is exactly a third of a half; a half is 52.1 dp tall, about 1 : 2.8' (the height is read from metrics when present)."
+     },
+     {
+      "what": "meta.json built and corners: 'In the pixel cuts both kinds of cut corner are square' uses 'square' to mean unrounded. The same text calls the rounded shoulders 'square shoulders', and the tips are 57 degrees, so the sentence contradicts itself.",
+      "severity": "low",
+      "fixed": true,
+      "how": "Now 'In the pixel cuts every cut corner is sharp, as the base draws its tips'."
+     },
+     {
+      "what": "meta.json built: 'so the V is unbroken across the slot' contradicts risks ('The notch's apex ... is gone'). The feet are collinear with the old V, but the V itself is cut.",
+      "severity": "low",
+      "fixed": true,
+      "how": "Now 'so the eye carries the V across the slot'."
+     },
+     {
+      "what": "Plain English: 'nothing here is a triangle, so the setback-matched fallback had nothing to fix' is process jargon a reader can't follow, and it says nothing about the drawing. 'the round shoulders and sloped feet are what keep it Shelf's' is a cleft construction close to the banned emphasis patterns. '4x' and '1x' were inconsistent with the \u00d7 used elsewhere.",
+      "severity": "low",
+      "fixed": true,
+      "how": "Dropped the fallback clause. Changed the cleft to 'the round shoulders and sloped feet keep it Shelf's'. Normalised to 4\u00d7 and 1\u00d7. The off-centre reason now reads 'with an odd slot the mark is an odd number of pixels wide, so it can't be centred on an even tile'."
+     },
+     {
+      "what": "meta.json small (32 px): '5.7% soft against the base's 5.2' reads as a softer drawing. In fact it has the same 22 soft pixels as the base over fewer paper pixels (388 touched against 422).",
+      "severity": "low",
+      "fixed": true,
+      "how": "soft() in build.mjs now notes equal soft counts: '5.7% soft against the base's 5.2: the same 22 soft pixels, a larger share because the slot takes paper away'."
+     },
+     {
+      "what": "build.mjs meta() hard-coded numbers that belong to the drawing (52.1 drawn height, 1.3 and 3.4 px at 1\u00d7, 28 \u00d7 34, 21 \u00d7 24, 9 \u00d7 12, the 12/9/4 px halves), so they would drift silently if an OPT value changed.",
+      "severity": "low",
+      "fixed": true,
+      "how": "These are now computed from the geometry and metrics (px1, dims, c[n].xl - c[n].x0, metrics.master.bbox.h). Checked that meta() still runs with no metrics.json ('softness not yet measured')."
+     },
+     {
+      "what": "The 32 and 16 px cuts sit half a pixel left of their tiles' centres (margins 5/6 px and 3/4 px).",
+      "severity": "low",
+      "fixed": false,
+      "how": "Not fixable without giving up the judges' odd-slot ratio: an odd slot makes the mark an odd width, which can't be centred on an even tile. The only exact 1/7 alternatives are 28 px wide at 32, or 7 or 14 px at 16. Documented in small and risks."
+     },
+     {
+      "what": "Importing candidates/base/build.mjs (as C's build must, for MASTER and CUTS) rewrites base's SVGs and meta.json as a side effect of its top-level code.",
+      "severity": "low",
+      "fixed": false,
+      "how": "Outside C's folder, so not edited. Verified every base file is byte-identical to its state before my runs, so nothing changed in the base."
+     }
+    ],
+    "checks_passed": "1 Files: mark.svg, cut-48/32/16.svg, glyph-24.svg and meta.json all exist. viewBoxes are 0 0 108 108, 0 0 N N and 0 0 24 24. Elements are only svg, path and rect, with no stroke, mask, clip-path, filter, gradient, opacity, style or class. Colours are exactly #F3F2EE and #111112 (glyph #FFFFFF). Each cut starts with geom.tileRect(N) byte for byte (rx 10.5, 7, 3.5). build.mjs reproduces every file exactly.\n2 Silhouette: rasterised at 40 px/dp, C is a strict subset of the base (0 pixels outside it). Everything removed is the 6.214 dp strip plus about 2 dp\u00b2 of corner-rounding slivers. Bbox (32.25, 27.1, 43.5 \u00d7 52.127) and analytic reach (32.524; sheet 32.56) are identical to the base, inside_safe is true, and the feet are collinear with the base's notch line. Cut 48 is the base's outline. Cuts 32 (21 px wide) and 16 (9 px, stairs) differ, and meta.json says why.\n3 Geometry: slot 43.5/7 = 6.214 dp. Halves 18.643 dp, symmetric about x = 54. yCut is 68.772, 2.01 dp below the old apex at 66.762. Measured at y = 30 to 67, the slot is 6.2 dp everywhere. Arc check: shoulders r 5.118 (90\u00b0), tips r 1.919 (57.1\u00b0), slot top corners r 1.919 (90\u00b0), slot foot corners r 1.919 (122.9\u00b0). The stated corner rule holds everywhere in the master, and every cut corner in the pixel cuts is sharp. At 1\u00d7 the slot is 4.14 px, the tips' radius 1.28 and the shoulders' 3.41, matching the claims.\n4 Pixel cuts: I rendered the coverage grids in Chrome and magnified them. Verticals and tops lie on whole pixels; the only diagonals are the 48 and 32 px feet, and the 16 px has none. Slots are 4, 3 and 1 px, halves 12, 9 and 4 px, all at or above the minimums, and all three cuts are mirror-symmetric about their own centres. The slot opens into the notch and the top edge by design, and there are no stray leaks. The glyph is the base's (x 4 to 20, y 2 to 22), inside its padding. soft_pct: 48 is 3.3 (base 3.3, 24 soft pixels against 28); 32 is 5.7 (base 5.2, the same 22 soft pixels); 16 is 2.4 (base 10.9); glyph 6.3, as the base.\n5 Looks: I viewed the sheet, a comparison with the base and s1, and 20\u00d7 close-ups of the slot's top, foot and tips. The master is even and clean. All three cuts carry the split, and the glyph drops it, as meta.json says plainly.\n6 Words: 'one' is 79 characters. The text is British English, and after the fixes it has no inverted-emphasis constructions. ElevenLabs' proportions match the designer's measurement (20 \u00d7 96 px bars on a 240 px tile). The 0.83 and 60% figures check out (43.5/52.1 and 43.5/72).",
+    "remaining": "Design trade-offs that are documented in meta.json but can't be fixed:\n- The 32 and 16 px cuts sit half a pixel left of their tiles' centres.\n- At 1\u00d7 on a home screen, in the themed icon and at 16 px it reads as a pause sign first. In the light colourway it is the nearest of the set to ElevenLabs' II.\n- The glyph is the plain bookmark, so the status bar and media notification don't show the split.\n- C's corner rule ('follows what made it') differs from A and B's angle rule at the slot's two top corners. The reasons are given, but A and B's text says 'the same rule in A and B', so the page shows two rules.\n- media-card.png is evidence made by a script in the session scratchpad, so it can't be rebuilt from the repo.\n- meta() still writes its reasons ('1/7', 'gains a pixel on the left', 'level with the base's apex') for the current options. If OPT changes, the prose needs rewriting.\nFiles: /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/candidates/C/build.mjs (only meta() changed), meta.json (regenerated), sheet.png and metrics.json (re-rendered, metrics identical). The SVGs are byte-identical to before.",
+    "verdict": "ready-with-caveats"
+   }
+  ]
+ }
+]

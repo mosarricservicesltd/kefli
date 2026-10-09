@@ -1,22 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
   <!--
-    FROZEN ARTWORK. The paper mark (flow decision 70): today's bookmark and reading-progress bar, inverted to
-    stand on the C·L·063 cover in background.svg. Paper fill #F3F2EE and ink #17171A are the light theme's
-    background and text tokens (tokens.json 0.2.0), copied in so that a token change never recolours the icon.
-    Drawn as Richard chose it on docs/design/icons/fingerprint-icon-12.html (fgMark(true)): each shape has a
-    3-unit ink stroke under its paper fill, so 1.5 units of ink outline show outside it, and the read two thirds
-    of the bar are ink. The stroke is its own layer under the fill (the picture paint-order="stroke" gives),
-    so tools that ignore paint-order still draw it right.
-    The group is scaled to 96% about the canvas centre. At full size the outline reaches 34.3 dp from the
-    centre at the bar's ends, outside Android's 66 dp safe circle; at 96% the farthest ink is 32.9 dp.
+    FROZEN ARTWORK (flow decision 94). Written from docs/design/icons/negative-space/candidates/D by tools/freeze-d.mjs on 9 October 2026; never regenerate it.
+    The adaptive icon's foreground: D, "split and play". Shelf's bookmark in paper (#F3F2EE), cut twice, with nothing
+    stamped on: a slot down the centre line, 1/7 of the width, makes the halves a pause; the notch's right flank carried
+    on across the left half, in a cut 0.8 of the slot, makes the left tail a play. The notch is at 30 degrees, so the
+    plays those angles make are equilateral, and the bookmark is exactly three of them tall: four notch depths. Drawn
+    43.5 x 50.23 dp and shown at 90% about the canvas centre (39.15 x 45.21 dp), for room round the mark. One colour;
+    every dark shape is a hole.
   -->
-  <g transform="translate(54 54) scale(0.96) translate(-54 -54)">
-    <!-- bookmark: square shoulders, notched tail -->
-    <path d="M41 25H67A4 4 0 0 1 71 29V64.24A1.5 1.5 0 0 1 68.68 65.5L54 56L39.32 65.5A1.5 1.5 0 0 1 37 64.24V29A4 4 0 0 1 41 25Z" fill="none" stroke="#17171A" stroke-width="3" stroke-linejoin="round"/>
-    <path d="M41 25H67A4 4 0 0 1 71 29V64.24A1.5 1.5 0 0 1 68.68 65.5L54 56L39.32 65.5A1.5 1.5 0 0 1 37 64.24V29A4 4 0 0 1 41 25Z" fill="#F3F2EE"/>
-    <!-- shelf = reading-progress bar (decision 72): one ink pill is the outline and the read two thirds, then the unread slot in paper on top,
-         its left end following the read part's round cap, so no two shapes share an edge and no hairline shows -->
-    <rect x="30" y="70" width="48" height="9" rx="4.5" fill="#17171A" stroke="#17171A" stroke-width="3"/>
-    <path d="M57.5 70H73.5A4.5 4.5 0 0 1 73.5 79H57.5A4.5 4.5 0 0 0 57.5 70Z" fill="#F3F2EE"/>
-  </g>
+  <g transform="translate(54 54) scale(0.9) translate(-54 -54)"><path fill="#F3F2EE" fill-rule="evenodd" d="M37.368 28.885L48.974 28.885A1.919 1.919 0 0 1 50.893 30.804L50.893 61.439A1.919 1.919 0 0 1 48.014 63.101L33.21 54.554A1.919 1.919 0 0 1 32.25 52.892L32.25 34.003A5.118 5.118 0 0 1 37.368 28.885ZM35.129 61.403L46.15 67.766A1.919 1.919 0 0 1 46.15 71.09L35.129 77.453A1.919 1.919 0 0 1 32.25 75.791L32.25 63.065A1.919 1.919 0 0 1 35.129 61.403ZM59.026 28.885L70.632 28.885A5.118 5.118 0 0 1 75.75 34.003L75.75 75.791A1.919 1.919 0 0 1 72.871 77.453L58.067 68.905A1.919 1.919 0 0 1 57.107 67.243L57.107 30.804A1.919 1.919 0 0 1 59.026 28.885Z"/></g>
 </svg>

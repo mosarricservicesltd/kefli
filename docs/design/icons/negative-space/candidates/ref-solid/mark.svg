@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <!-- Reference: today's bookmark (shared/brand/src/foreground.svg) as one solid shape, scaled 1.18 about its box centre and moved to the canvas centre. No holes. -->
+  <g transform="translate(54 54) scale(1.18) translate(-54 -45.3)">
+    <path fill="#F3F2EE" d="M41 25H67A4 4 0 0 1 71 29V64.24A1.5 1.5 0 0 1 68.68 65.5L54 56L39.32 65.5A1.5 1.5 0 0 1 37 64.24V29A4 4 0 0 1 41 25Z"/>
+  </g>
+</svg>

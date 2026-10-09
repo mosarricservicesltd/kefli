@@ -1,0 +1,204 @@
+{
+  "eyebrow": "Shelf · app icon · negative space",
+  "h1": "Negative space",
+  "lede": "One paper bookmark on graphite, as you described, with every dark shape in it cut right through. Four options, each shown at 90% of its drawn size for room round the mark, each drawn again by hand at 48, 32 and 16 px, and the 18 ideas they came from.",
+  "lede2": "Pick an option to see it beside today's icon, on home screens, in the launcher's shapes, on the lock screen while Shelf reads aloud, at real size in a browser toolbar, and on both launch screens.",
+  "stays": [
+    [
+      "Changes with the choice:",
+      "the launcher and Play Store icons, the themed icon, the notification glyph, both launch screens, and the extension's and website's icons. The cover pattern and the progress bar leave the icon."
+    ],
+    [
+      "Stays as it is:",
+      "the bookmark's shape (square shoulders, the shallow notched tail), the in-app icons, and every save's own cover."
+    ],
+    [
+      "Why holes:",
+      "every dark shape inside the bookmark is a hole, so one drawing gives the light version, the themed icon and the glyph, and they can't drift apart."
+    ]
+  ],
+  "learned": {
+    "title": "How this round was made",
+    "items": [
+      "Seven designers each took one direction: your nest, a play cut, a pause made from the bookmark, the tail as the play, figure and ground swapped, a figure hidden in a gap, and the ribbon from the top edge. They drew 18 candidates on Shelf's own bookmark.",
+      "Each was checked on a contact sheet at real size: four launcher masks, the themed icon, both home screens at 1×, the toolbar cuts magnified, and the status bar.",
+      "Three judges scored all 18 separately: the idea and its negative space (with a search of other reading and listening apps' icons), craft at small sizes, and your brief.",
+      "The three shortlisted were redrawn on one shared bookmark, so switching between them changes only the cut, then checked and corrected by someone who hadn't drawn them.",
+      "D, the split with h1's tail play, was drawn after you asked for it, then redrawn three plays tall after your designer friend's notes. Every option is now shown at 90% in the launcher's tile; the 48, 32 and 16 px cuts keep their size, since at toolbar sizes that room would cost legibility.",
+      "Last, a reviewer with no context saw the icons among other apps, unlabelled, and said what each looked like; their read is in each option's notes. They also noticed the graphite tile almost vanishes on a dark home screen, so the paper shape floats beside coloured icons."
+    ]
+  },
+  "groups": [
+    {
+      "title": "The shortlist",
+      "text": "D, the split with h1's tail play, is the app icon (flow decision 94). C, A and B stay for comparison.",
+      "ids": [
+        "D",
+        "C",
+        "A",
+        "B"
+      ]
+    },
+    {
+      "title": "For comparison",
+      "text": "Shelf's bookmark with no cut, at the size every option shares. It is also the plain mark for places that only save, such as the extension's toolbar button.",
+      "ids": [
+        "base"
+      ]
+    }
+  ],
+  "pick": "D",
+  "tried": {
+    "title": "Also tried",
+    "text": "All 18 round-one candidates, with why each stopped there. Select one to see it in context.",
+    "items": [
+      {
+        "id": "n1",
+        "became": "Developed into B.",
+        "why": "Your idea drawn straight. The judges asked for Shelf's own play, cut parallel to the notch, and a pause with real weight: at 1× its thin bars were specks."
+      },
+      {
+        "id": "p2",
+        "became": "Developed into A.",
+        "why": "The play is the notch folded forward, at the angle of the app's own play button. It sat low enough to look slipped, so A raises it."
+      },
+      {
+        "id": "s1",
+        "became": "Developed into C, and with h1's tail into D.",
+        "why": "The only candidate where a single cut makes both ideas, and the one all three judges shortlisted. C narrows the slot so the bookmark reads first."
+      },
+      {
+        "id": "n3",
+        "became": "Folded into B.",
+        "why": "Its play is cut parallel to the notch and its pause survives to 32 px, but the hole left a 4 dp frame, and an outlined bookmark reads as not saved."
+      },
+      {
+        "id": "p1",
+        "became": "Folded into A.",
+        "why": "The best-placed play of the round, and its whole-pixel 16 px play is in A. The soft equilateral play itself is the generic media one."
+      },
+      {
+        "id": "h1",
+        "why": "The most original idea: one cut turns the left tail into a play. On its own, the diagonal across the whole bookmark reads as the 'bookmark off' slash: the reviewer with no context saw a crossed-out box.",
+        "became": "Its tail cut is in D."
+      },
+      {
+        "id": "n2",
+        "why": "n1 with less of everything: a small play window with a pause too small to see below the launcher, and the look of a badge stamped on a bookmark."
+      },
+      {
+        "id": "p3",
+        "why": "A play small enough to vanish on a home screen: a badge on the bookmark, and the closest of all to GoodLinks' starred bookmark."
+      },
+      {
+        "id": "s3",
+        "why": "A pause stamped into the bookmark, and at 16 px two slots over the notch read as a face. C says pause with one cut."
+      },
+      {
+        "id": "s2",
+        "why": "Carried up as a slot, the notch reads as a Π, trousers or rocket fins, and says neither bookmark nor pause."
+      },
+      {
+        "id": "t1",
+        "why": "On its side, with the notch deepened to read as a play, it stops being Shelf's bookmark: a tag, a ticket or a > prompt first."
+      },
+      {
+        "id": "t2",
+        "why": "Play beside pause is the media toggle, so it reads as a remote before a reading app, and the bookmark is on its side."
+      },
+      {
+        "id": "i1",
+        "why": "Inside out: a white disc with a dark bookmark. It loses your white bookmark, is the brightest icon on a dark home screen, and the disc is Spotify's layout."
+      },
+      {
+        "id": "i2",
+        "why": "A page with a bookmark cut from its head: Material's stock book glyph, with nothing about listening."
+      },
+      {
+        "id": "h2",
+        "why": "Two bookmarks and a play make three pieces. The play reads as dropped under the front bookmark, and it is gone at 16 px."
+      },
+      {
+        "id": "r1",
+        "why": "A ribbon hanging off the top edge is Day One's icon, and the launcher's mask, not Shelf, decides the shape of its top."
+      },
+      {
+        "id": "r2",
+        "why": "C without the bookmark's head: off the edge it reads as two bars first, and on light wallpapers the dark tile reads as a W."
+      },
+      {
+        "id": "r3",
+        "why": "Your three levels on the ribbon: the pause is a smudge below the launcher, and it has r1's problems with the bleed."
+      }
+    ]
+  },
+  "footer": [
+    "To choose, tell Claude the option's letter, for example C.",
+    "A new flow decision then replaces decisions 70 and 72. The chosen drawing is frozen in shared/brand/src: the master as the adaptive icon's foreground on a flat #111112 background, the same shape as the monochrome layer, and the cuts and glyph as drawn here. build-icons.cjs needs updating for it, since today's build checks for the cover background and the paper mark's ink outline.",
+    "The extension only saves pages, so whichever option you choose, its toolbar icon could be the plain bookmark instead. That is a separate choice."
+  ],
+  "open": "D",
+  "pickWhy": "Made official on 9 October 2026 as flow decision 94: frozen in shared/brand/src and built into every icon file.",
+  "pickLabel": "Chosen",
+  "pickWhyLabel": "Status",
+  "studies": [
+    {
+      "title": "D, a tad shorter",
+      "text": [
+        "Your designer friend's notes on D: a tad shorter; its height set by three play buttons, the bottom one facing right, the middle left and the top right; and the room round it that the light and themed versions have.",
+        "D's two cuts lie on the notch's two angles, so those angles already make a grid of plays up the left half, outlined in orange: the bottom one is the play with the cut above it. At the old angle three of them stood 2.6 dp taller than D, so shortening D moved it away from three plays. At 30 degrees the plays become equilateral and three of them are exactly the height, 6.5% shorter, so the two notes meet there. The notch is then 3 degrees shallower than today's bookmark.",
+        "You chose three plays, smaller, and then a bigger play for it: that is D in the options above, with its 48, 32 and 16 px cuts drawn. Every option is shown at 90%.",
+        "A reviewer with no context, shown the new D and the earlier one without names, judged the new one better drawn: its halves keep a bookmark's squat shape and it sits in the tile like the other options, where the earlier D looked a size bigger and more like a pause sign."
+      ],
+      "pick": "D-three-90",
+      "items": [
+        {
+          "id": "D-was",
+          "label": "D before",
+          "note": "The first D: today's notch, 32.9 degrees, 43.5 × 53.7 dp. The play is 0.39 of the height; three plays would stand 2.6 dp above the top."
+        },
+        {
+          "id": "D-short",
+          "label": "A tad shorter",
+          "note": "Today's angle, 6.5% shorter: 43.5 × 50.2 dp. The play is unchanged, so it grows to 0.41 of the height, and three plays overshoot by 6.1 dp."
+        },
+        {
+          "id": "D-three",
+          "label": "Three plays",
+          "note": "The notch at 30 degrees: the plays are equilateral, and three interlocked plays are exactly the height, 43.5 × 50.2 dp. The play is 0.36 of the height."
+        },
+        {
+          "id": "D-three-90",
+          "label": "Three plays, smaller",
+          "note": "Three plays at 90%: 39.2 × 45.2 dp of the 72 dp the launcher shows. Chosen, then given a bigger play (below)."
+        }
+      ],
+      "pickLabel": "Chosen",
+      "key": "dstudy"
+    },
+    {
+      "key": "dplay",
+      "title": "D, the play's weight",
+      "text": [
+        "The blind reader's main note on D: the two bars read as pause first, and the play under the left one is small. The earlier, larger D had one advantage, its bigger triangle.",
+        "Narrowing the diagonal cut to 0.8 of the slot's width makes the play 8% taller without changing the height, which the notch sets: three plays as before. The cost is that the two cuts are no longer one width, and the play's tip comes closer to the slot: 1.9 dp in the master against 3.1, and about 1 px at 32 px against 2.",
+        "You chose the bigger play: it is now D. The one-width version stays here for comparison."
+      ],
+      "cuts": true,
+      "items": [
+        {
+          "id": "D-even",
+          "label": "One-width cuts",
+          "note": "Slot and diagonal one width, 6.2 dp. Play 17.9 × 15.5 dp before the 90%; its tip 3.1 dp short of the slot. At 48 px the play is 11 px tall, at 32 px 8."
+        },
+        {
+          "id": "D",
+          "label": "Bigger play",
+          "note": "Diagonal 5.0 dp, 0.8 of the slot. Play 19.4 × 16.8 dp, 8% taller; its tip 1.9 dp short of the slot. At 48 px the play is 12 px tall, at 32 px 9."
+        }
+      ],
+      "pick": "D",
+      "pickLabel": "Chosen"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <!-- n3 at 16 px. Bookmark 10 x 12 px, notch 3 px. The play in whole pixels, columns of 7, 5, 3 and 1 from x 6, so it stays crisp
+    at 1x. Here the stepped play's sides are at 45 degrees whatever the master does, so the notch goes back to 3 px, which leaves a
+    full pixel of paper between the play and the notch's apex (the 2:3 notch left 0.7). The pause is dropped: at a 1 px module the
+    bars, gap and ring would blur into one grey patch. At this size the three nested candidates meet in one drawing. -->
+  <rect width="16" height="16" rx="3.5" fill="#111112"/><path fill="#F3F2EE" fill-rule="evenodd" d="M4 2L12 2A1 1 0 0 1 13 3L13 14L8 11L3 14L3 3A1 1 0 0 1 4 2ZM6 4H7V5H8V6H9V7H10V8H9V9H8V10H7V11H6Z"/>
+</svg>

@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <!-- D at 16 px: the split alone on D's proportions, 9 x 10 px, 1 px slot, 45 degree stairs. Built by build.mjs. -->
+  <rect width="16" height="16" rx="3.5" fill="#111112"/><path fill="#F3F2EE" d="M3 4A1 1 0 0 1 4 3H7V10H6V11H5V12H4V13H3ZM8 3H11A1 1 0 0 1 12 4V13H11V12H10V11H9V10H8Z"/>
+</svg>

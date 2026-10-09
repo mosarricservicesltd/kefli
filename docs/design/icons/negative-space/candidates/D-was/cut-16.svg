@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <!-- D at 16 px: C's 16 px cut, the split alone (9 x 12 px, 1 px slot, 45 degree stairs); the second cut and the play drop at this size. Built by build.mjs. -->
+  <rect width="16" height="16" rx="3.5" fill="#111112"/><path fill="#F3F2EE" d="M4 2L7 2L7 11L6 11L6 12L5 12L5 13L4 13L4 14L3 14L3 3A1 1 0 0 1 4 2ZM8 2L11 2A1 1 0 0 1 12 3L12 14L11 14L11 13L10 13L10 12L9 12L9 11L8 11L8 2Z"/>
+</svg>

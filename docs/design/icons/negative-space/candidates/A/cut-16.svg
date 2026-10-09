@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <!-- A, and B without its pause, at 16 px: the shared bookmark with the play in whole pixels, columns of 5, 3, 3 and 1 from x 6 on rows 4 to 8; 3 px of paper at the flat side and past the tip, 2 above and 2 over the notch's apex -->
+  <rect width="16" height="16" rx="3.5" fill="#111112"/><path fill="#F3F2EE" fill-rule="evenodd" d="M4 2H12A1 1 0 0 1 13 3V14L8 11L3 14V3A1 1 0 0 1 4 2ZM6 4H7V5H8H9V6H10V7H9V8H8H7V9H6Z"/>
+</svg>

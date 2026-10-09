@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <!-- A Play, built by build.mjs. The shared bookmark (base: 43.5 dp wide, top at 27.1), shown at 90%. Play hole: the notch turned forward, 28.15 x 21.75 dp, slanted edges parallel to the notch and as long; corners r 1.92, the tail tips' radius. Axis at y 49.8. Walls: 12.2 at the flat side, 11.16 at the drawn tip, 10.23 above, strap 7.61 along the notch (least 7.61). -->
+  <g transform="translate(54 54) scale(0.9) translate(-54 -54)"><path fill="#F3F2EE" fill-rule="evenodd" d="M37.368 27.1L70.632 27.1A5.118 5.118 0 0 1 75.75 32.218L75.75 77.308A1.919 1.919 0 0 1 72.788 78.919L54 66.762L35.212 78.919A1.919 1.919 0 0 1 32.25 77.308L32.25 32.218A5.118 5.118 0 0 1 37.368 27.1ZM47.412 37.643L63.71 48.189A1.919 1.919 0 0 1 63.71 51.411L47.412 61.957A1.919 1.919 0 0 1 44.45 60.346L44.45 39.254A1.919 1.919 0 0 1 47.412 37.643Z"/></g>
+</svg>

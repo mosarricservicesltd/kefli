@@ -327,9 +327,9 @@ const CHAPTERS = [
       dec: [68, 69] },
     { id: 'lock', src: P, jump: 'lock', l: 'Lock screen', title: 'The lock screen',
       see: 'Android’s media controls while Shelf plays with the screen locked.',
-      look: ['The cover as the media artwork, and Shelf’s one-colour glyph in the app slot, as Android 13 and later show it.'],
+      look: ['The cover as the media artwork, and Shelf’s one-colour glyph, the plain bookmark, in the app slot, as Android 13 and later show it.'],
       try: [],
-      dec: [72] },
+      dec: [72, 94] },
     { id: 'rsvp', src: P, jump: 'rsvp', l: 'Running', alts: [['Paused', 'rsvp-paused'], ['Finished', 'rsvp-done']], title: 'Speed read',
       see: 'One word at a time, at a fixed point.',
       look: ['The focus letter keeps the reading text colour and sits on the article’s wash. The ticks above and below are in the article’s ink.', 'Tap to pause shows the whole sentence.'],
@@ -413,17 +413,17 @@ const CHAPTERS = [
       try: [],
       dec: [] },
   ] },
-  { id: 'brand', title: 'Icon and launch screens', blurb: 'The frozen icon, C·L·063 with the paper mark, at the sizes people meet it.', stops: [
+  { id: 'brand', title: 'Icon and launch screens', blurb: 'The frozen icon, D: the bookmark cut into a pause and a play, at the sizes people meet it.', stops: [
     { id: 'icon', board: 'icon', title: 'The app icon',
       see: 'The files in shared/brand/out, shown where they will appear.',
-      look: ['On a home screen, light and dark, inside Android’s mask shapes, and as a themed icon.', 'The toolbar cuts at real size: the 16 px cut on a standard screen, the 32 px cut on a high-density one. Magnified copies show every pixel.'],
+      look: ['On a home screen, light and dark, inside Android’s mask shapes, and as a themed icon.', 'In the browser at real size: the tab shows the icon’s 16 px cut, and the extension’s toolbar button is the plain bookmark, 16 px on a standard screen and 32 px on a high-density one. Magnified copies show every pixel.'],
       try: [],
-      dec: [67, 70, 72] },
+      dec: [94] },
     { id: 'splash', board: 'splash', title: 'Launch screens',
       see: 'What shows for a moment while the app starts.',
-      look: ['The paper mark on paper in the light theme, and the paper-only mark on the dark background, in the same place.'],
+      look: ['The mark in ink on paper in the light theme, and in paper on the dark background, in the same place.'],
       try: [],
-      dec: [72] },
+      dec: [94] },
     { id: 'store', board: 'store', title: 'Store and social cards',
       see: 'The Play listing and the card shown when someone shares the website.',
       look: ['The store icon, the feature graphic and the social card, each with a strip of covers.'],
@@ -568,8 +568,8 @@ const BOARDS = {
     <p class="cap">Your screen is showing the ${devicePixelRatio >= 1.5 ? '32 px cut (a high-density screen)' : '16 px cut (a standard-density screen)'} in the toolbar.</p>
     <h3>Magnified, one square per pixel</h3>
     <div class="row mag">
-      <div class="fig">${img('extension/icon-16.png', '16 px cut, magnified', 'style="width:128px;height:128px"')}16 px × 8</div>
-      <div class="fig">${img('extension/icon-32.png', '32 px cut, magnified', 'style="width:128px;height:128px"')}32 px × 4</div>
+      <div class="fig">${img('extension/icon-16.png', 'Toolbar button at 16 px, magnified', 'style="width:128px;height:128px"')}Toolbar button, 16 px × 8</div>
+      <div class="fig">${img('extension/icon-32.png', 'Toolbar button at 32 px, magnified', 'style="width:128px;height:128px"')}Toolbar button, 32 px × 4</div>
       <div class="fig">${img('extension/icon-48.png', '48 px cut, magnified', 'style="width:144px;height:144px"')}48 px × 3</div>
       <div class="fig">${img('extension/icon-128.png', '128 px icon', 'style="width:128px;height:128px"')}128 px</div>
     </div></div>`,

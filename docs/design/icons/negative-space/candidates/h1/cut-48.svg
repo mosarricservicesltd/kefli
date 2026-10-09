@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <!-- h1 at 48 px. 28 x 34 px, as the master at 2/3. Notch 9 px (slope 9/14, 32.7 degrees). L runs from the right tip (38, 41) through the apex (24, 32) to the left edge at y 23. The cut drops 4 px (3.4 px square to the line): the play is 14 px tall (27 to 41) and 10.9 deep, its tip at (20.9, 34). -->
+  <rect width="48" height="48" rx="10.5" fill="#111112"/><path fill="#F3F2EE" fill-rule="evenodd" d="M13 7L35 7A3 3 0 0 1 38 10L38 39.168A1 1 0 0 1 36.459 40.01L10.459 23.295A1 1 0 0 1 10 22.454L10 10A3 3 0 0 1 13 7ZM11.541 27.99L19.58 33.159A1 1 0 0 1 19.58 34.841L11.541 40.01A1 1 0 0 1 10 39.168L10 28.832A1 1 0 0 1 11.541 27.99Z"/>
+</svg>

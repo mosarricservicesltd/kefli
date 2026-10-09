@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <!-- n2 at 16 px. Bookmark 10 x 12 px (shoulders r 1, notch 3 px). Play in whole pixels, columns of 7, 5, 3 and 1 from x 6, so it
+    stays crisp at 1x. No pause. -->
+  <rect width="16" height="16" rx="3.5" fill="#111112"/><path fill="#F3F2EE" fill-rule="evenodd" d="M4 2L12 2A1 1 0 0 1 13 3L13 14L8 11L3 14L3 3A1 1 0 0 1 4 2ZM6 4H7V5H8V6H9V7H10V8H9V9H8V10H7V11H6Z"/>
+</svg>

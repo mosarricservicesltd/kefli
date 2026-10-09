@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- n1 at 32 px. Bookmark 20 x 24 px (shoulders r 2, notch 6.5 px, sharp tips). Play 16 x 14 px, flat side on x 10, sides at 4:7,
+    corners r 2: 4 px walls on the left and at the tip, 3 px over the top corner and over the notch. No pause: 2 px bars 6 px
+    tall with a 2 px gap and ring need a play about 21 px tall, more than this bookmark holds with walls like the master's. -->
+  <rect width="32" height="32" rx="7" fill="#111112"/><path fill="#F3F2EE" fill-rule="evenodd" d="M8 4L24 4A2 2 0 0 1 26 6L26 28L16 21.5L6 28L6 6A2 2 0 0 1 8 4ZM12.992 7.21L20.961 11.764A2 2 0 0 1 20.961 15.236L12.992 19.79A2 2 0 0 1 10 18.054L10 8.946A2 2 0 0 1 12.992 7.21Z"/>
+</svg>

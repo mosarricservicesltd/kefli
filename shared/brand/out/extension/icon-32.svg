@@ -1,23 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <!--
-    FROZEN ARTWORK (flow decision 70). The icon redrawn for 32 px (the toolbar at 2x): one unit is one pixel and
-    every edge except the notch's diagonals lies on a whole pixel. The full C·L·063 cover, as background.svg
-    shows it in the launcher's central 72 dp (cream ground, orange r = 48, cream r = 32, orange r = 16 about
-    (40, 40)). The ink outline is two whole pixels, three times the 108 dp drawing's at this size, so it matches
-    small.svg's one pixel at 1x and still reads where a browser scales this cut down to 20 or 24 px.
-    The notch keeps the master's shallow angle.
+    FROZEN ARTWORK (flow decision 94). Written from docs/design/icons/negative-space/candidates/D by tools/freeze-d.mjs on 9 October 2026; never regenerate it.
+    The extension's toolbar button at 32 px (2x): the plain bookmark on D's proportions, 20 x 24 px with a 6 px notch.
   -->
-  <defs><clipPath id="tile"><rect width="32" height="32" rx="7"/></clipPath></defs>
-  <g clip-path="url(#tile)">
-    <rect width="32" height="32" fill="#F4ECD8"/>
-    <circle cx="40" cy="40" r="48" fill="#E08200"/>
-    <circle cx="40" cy="40" r="32" fill="#F4ECD8"/>
-    <circle cx="40" cy="40" r="16" fill="#E08200"/>
-  </g>
-  <!-- bookmark: 16 x 18 px in a 2 px ink outline -->
-  <path d="M11 3H21A3 3 0 0 1 24 6V21L16 17L8 21V6A3 3 0 0 1 11 3Z" fill="#17171A"/>
-  <path d="M11 5H21A1 1 0 0 1 22 6V17.7639L16 14.7639L10 17.7639V6A1 1 0 0 1 11 5Z" fill="#F3F2EE"/>
-  <!-- bar: 24 x 6 px, ink outline and read part; the unread part is a 2 px paper slot, square at the split -->
-  <rect x="4" y="23" width="24" height="6" rx="3" fill="#17171A"/>
-  <path d="M19 25H25A1 1 0 0 1 25 27H19Z" fill="#F3F2EE"/>
+  <rect width="32" height="32" rx="7" fill="#111112"/><path fill="#F3F2EE" d="M8 4H24A2 2 0 0 1 26 6V28L16 22L6 28V6A2 2 0 0 1 8 4Z"/>
 </svg>

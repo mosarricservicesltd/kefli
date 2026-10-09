@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <!-- t1 · The notch plays. Shelf's bookmark on its side, tail to the left: W 37, notch 28.778 deep (14/18 of W, Lucide's play), body 26 behind the apex; shoulders r 4.353, tips r 1.632, apex r 4.353. Tips at x 22.49, centred on y 54. Built by build.mjs -->
+  <path fill="#F3F2EE" d="M77.268 39.853L77.268 68.147A4.353 4.353 0 0 1 72.915 72.5L28.048 72.5A1.632 1.632 0 0 1 27.165 69.495L45.572 57.662A4.353 4.353 0 0 0 45.572 50.338L27.165 38.505A1.632 1.632 0 0 1 28.048 35.5L72.915 35.5A4.353 4.353 0 0 1 77.268 39.853Z"/>
+</svg>

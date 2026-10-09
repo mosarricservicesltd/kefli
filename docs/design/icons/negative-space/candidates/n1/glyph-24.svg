@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- n1 status-bar glyph, white on transparent; Android reads alpha only, so the play is a real hole. Bookmark 16 x 20 px inside the
+    central 20 px (shoulders r 2, notch 5 px). Play 12 px tall, flat side on x 8, corners r 1.5: 3 px of white over the top
+    corner and over the notch, 4 px on the left, 3 px past the tip. The pause is left out: the media notification beside it
+    already carries play and pause, and a 1 px island would not survive the 18 px the status bar can draw it at. -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M6 2L18 2A2 2 0 0 1 20 4L20 22L12 17L4 22L4 4A2 2 0 0 1 6 2ZM10.244 5.282L16.221 8.698A1.5 1.5 0 0 1 16.221 11.302L10.244 14.718A1.5 1.5 0 0 1 8 13.415L8 6.585A1.5 1.5 0 0 1 10.244 5.282Z"/>
+</svg>

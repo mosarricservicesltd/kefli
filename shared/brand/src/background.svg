@@ -1,15 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
   <!--
-    FROZEN ARTWORK. Shelf's app icon background (flow decision 70, completing 67), "C·L·063".
-    Cover v1 (shared/cover/cover-v1.js, version 'cover-v1', file sha256 50a774f5f8a245e4...) for
-    sha256 2c7601c0d38e939a7bffbe46ab3cdf5c88871873a92ec375b0fffb35a41eab13
-    at depth 1: complement scheme, light ground, hue 63 deg; one 8-unit leaf, "bands", rotation 2,
-    signal on ground: #E08200 bands on a #F4ECD8 ground. Generated from ShelfCover once on 2026-10-04 and
-    written out as static shapes on the 108 dp canvas (the cover's 800 viewBox scaled to 108, the rotation applied).
-    It is the icon's own artwork now: never regenerate it, and never change it for a generator change or a rename.
+    FROZEN ARTWORK (flow decision 94). Written from docs/design/icons/negative-space/candidates/D by tools/freeze-d.mjs on 9 October 2026; never regenerate it.
+    The adaptive icon's background: graphite, the dark theme's background (#111112), flat.
   -->
-  <rect width="108" height="108" fill="#F4ECD8"/>
-  <path d="M108 108H0A108 108 0 0 1 108 0Z" fill="#E08200"/>
-  <path d="M108 108H36A72 72 0 0 1 108 36Z" fill="#F4ECD8"/>
-  <path d="M108 108H72A36 36 0 0 1 108 72Z" fill="#E08200"/>
+  <rect width="108" height="108" fill="#111112"/>
 </svg>

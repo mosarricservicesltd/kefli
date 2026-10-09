@@ -1,0 +1,8 @@
+{
+  "title": "D, one-width cuts",
+  "one": "D with both cuts one width, the version before the bigger play.",
+  "idea": "D with the slot and the diagonal one width, 1/7 of the bookmark's, so the two cuts look made by one blade; its play is smaller than D's.",
+  "built": "Slot and diagonal both 6.21 dp (before the 90%). Play 17.94 × 15.54 dp, its tip 3.11 dp short of the slot; D's bigger play is 8% taller, its tip 1.86 dp short.",
+  "small": "48 px: the diagonal dropped 5 px (D: 4), 4.34 px square to itself; the play 11 px tall, its tip 2.38 px short of the slot. 32 px: dropped 4 px (D: 3); the play 8 px tall, its tip 2 px short of the slot. 16 px, the glyph and the extension's buttons are D's.",
+  "risks": "The play is smaller against the two bars, which the reviewer with no context read as pause first."
+}

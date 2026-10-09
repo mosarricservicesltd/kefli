@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <!-- s3 at 48 px: bookmark 28 x 34 px; holes 5 px wide, side walls 7, spine 4, top wall 7. Built by build.mjs. -->
+  <rect width="48" height="48" rx="10.5" fill="#111112"/>
+  <path fill="#F3F2EE" fill-rule="evenodd" d="M13 7L35 7A3 3 0 0 1 38 10L38 41L24 32L10 41L10 10A3 3 0 0 1 13 7ZM17 14L22 14L22 26L17 29L17 14ZM26 14L31 14L31 29L26 26L26 14Z"/>
+</svg>

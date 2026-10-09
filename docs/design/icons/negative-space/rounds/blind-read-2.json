@@ -1,0 +1,23 @@
+{
+ "sheet": "sheet-73.png",
+ "key": {
+  "1": "A",
+  "2": "D (three plays, 90%)",
+  "3": "base",
+  "4": "C",
+  "5": "h1",
+  "6": "B",
+  "7": "D-was"
+ },
+ "ranking": [
+  "A",
+  "B",
+  "base",
+  "D",
+  "D-was",
+  "C",
+  "h1"
+ ],
+ "pair": "D judged better drawn than D-was (proportions, fit in the tile); D-was had the larger play",
+ "at16": "four shapes: base; A and B; C, D and D-was (a pause button); h1 (a crossed-out box)"
+}

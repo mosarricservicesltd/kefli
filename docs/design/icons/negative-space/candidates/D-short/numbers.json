@@ -1,0 +1,17 @@
+{
+  "id": "D-short",
+  "label": "A tad shorter",
+  "width": 43.5,
+  "height": 50.23,
+  "heightToWidth": 1.15,
+  "notchAngle": 32.91,
+  "play": {
+    "height": 20.75,
+    "depth": 16.03,
+    "shareOfHeight": 0.41,
+    "tipToSlot": 2.61
+  },
+  "threePlaysTall": 56.29,
+  "overshoot": 6.06,
+  "reachApprox": 31.82
+}

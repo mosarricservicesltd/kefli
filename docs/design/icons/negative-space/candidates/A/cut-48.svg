@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <!-- A, and B without its pause, at 48 px: the shared bookmark (base) with the play cut parallel to this cut's notch, 18 x 14 px, corners r 1.24; walls 8 px at the flat side, 7.05 at the tip, 6.03 above, strap 4.93 along the notch -->
+  <rect width="48" height="48" rx="10.5" fill="#111112"/><path fill="#F3F2EE" fill-rule="evenodd" d="M13 7H35A3 3 0 0 1 38 10V41L24 32L10 41V10A3 3 0 0 1 13 7ZM19.903 13.224L30.384 19.961A1.235 1.235 0 0 1 30.384 22.039L19.903 28.776A1.235 1.235 0 0 1 18 27.737L18 14.263A1.235 1.235 0 0 1 19.903 13.224Z"/>
+</svg>

@@ -1,0 +1,7 @@
+{
+  "title": "Solid bookmark",
+  "idea": "Today's bookmark alone, solid paper on graphite, with no holes. The baseline every negative-space option is compared with.",
+  "built": "shared/brand/src/foreground.svg's bookmark scaled 1.18 about its box centre and moved to the canvas centre: 40.2 × 48.1 dp, reaching 30.7 of the 33 dp safe radius.",
+  "small": "Each cut redraws the bookmark on whole pixels: 8 × 10 px at 16 with a 45° notch 4 px deep, 16 × 20 at 32, 24 × 30 at 48, and 14 × 18 for the 24 px glyph.",
+  "risks": "No second idea: it says bookmark and nothing about listening."
+}

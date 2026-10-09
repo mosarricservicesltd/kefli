@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- n3 at 32 px: the master on a 2 px module. Bookmark 22 x 27 px (shoulders r 2.5), notch 7.3 px at 2:3; it fills more of the
+    tile than the master does, because at 2 px a pause only fits in a play this big. Play 22.77 px tall, flat side on x 8 (3 px
+    wall), 2 px band over the notch and under the top, drawn tip 3.93 px from the right edge, corners r 2.5. Thinnest wall
+    2 px. Pause kept: bars 2 x 6 px, 2 px apart (x 10 to 16, y 11 to 17), at least 2 px of dark round them. -->
+  <rect width="32" height="32" rx="7" fill="#111112"/><path fill="#F3F2EE" fill-rule="evenodd" d="M7.5 3L24.5 3A2.5 2.5 0 0 1 27 5.5L27 30L16 22.667L5 30L5 5.5A2.5 2.5 0 0 1 7.5 3ZM11.887 5.42L21.956 12.132A2.5 2.5 0 0 1 21.956 16.293L11.887 23.005A2.5 2.5 0 0 1 8 20.925L8 7.5A2.5 2.5 0 0 1 11.887 5.42ZM10 11L12 11L12 17L10 17L10 11ZM14 11L16 11L16 17L14 17L14 11Z"/>
+</svg>

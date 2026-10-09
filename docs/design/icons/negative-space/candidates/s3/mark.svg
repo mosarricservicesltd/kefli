@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <!-- s3 Notch-echo pause. Shelf's bookmark, 42 dp wide, with two pause holes: walls 11 at the sides and 10.5 on top, a 4 dp spine between them, and their bottoms parallel to the notch 9 dp above it. Built by build.mjs. -->
+  <path fill="#F3F2EE" fill-rule="evenodd" d="M37.941 28.835L70.059 28.835A4.941 4.941 0 0 1 75 33.777L75 77.312A1.853 1.853 0 0 1 72.14 78.867L54 67.129L35.86 78.867A1.853 1.853 0 0 1 33 77.312L33 33.777A4.941 4.941 0 0 1 37.941 28.835ZM45.853 39.335L50.147 39.335A1.853 1.853 0 0 1 52 41.188L52 56.696A1.853 1.853 0 0 1 51.154 58.251L46.86 61.03A1.853 1.853 0 0 1 44 59.474L44 41.188A1.853 1.853 0 0 1 45.853 39.335ZM57.853 39.335L62.147 39.335A1.853 1.853 0 0 1 64 41.188L64 59.474A1.853 1.853 0 0 1 61.14 61.03L56.846 58.251A1.853 1.853 0 0 1 56 56.696L56 41.188A1.853 1.853 0 0 1 57.853 39.335Z"/>
+</svg>

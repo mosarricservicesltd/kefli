@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <!-- n1 at 16 px. Bookmark 10 x 12 px (shoulders r 1, notch 3 px, sharp tips). Play drawn in whole pixels, columns of 7, 5, 3 and 1
+    from x 6 (4 x 7 px), so no edge is a blur; walls of 3 px left, 2 px top, 3 px at the tip and 1 px over the notch's apex.
+    No pause. -->
+  <rect width="16" height="16" rx="3.5" fill="#111112"/><path fill="#F3F2EE" fill-rule="evenodd" d="M4 2L12 2A1 1 0 0 1 13 3L13 14L8 11L3 14L3 3A1 1 0 0 1 4 2ZM6 4H7V5H8V6H9V7H10V8H9V9H8V10H7V11H6Z"/>
+</svg>

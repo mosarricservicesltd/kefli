@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- r1 at 32 px: ribbon 18 px from under a 2 px lip, tips on row 27, notch 6 px deep; play 12 px tall (rows 6 to 18) at the notch slope, flat side on column 12. -->
+  <rect width="32" height="32" rx="7" fill="#111112"/>
+  <path fill="#F3F2EE" fill-rule="evenodd" d="M7 2L25 2L25 27L16 21L7 27ZM12 6L21 12L12 18Z"/>
+</svg>

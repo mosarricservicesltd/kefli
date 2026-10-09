@@ -1,26 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28">
   <!--
-    FROZEN ARTWORK (flow decision 70). The icon redrawn for 28 px, the extension options page's logo: one unit is one
-    pixel at 1x and two device pixels at 2x, and every edge except the notch's diagonals lies on a whole pixel. The
-    full C·L·063 cover, as background.svg shows it in the launcher's central 72 dp (cream ground, orange r = 42,
-    cream r = 28, orange r = 14 about (35, 35)), in the cuts' 7 in 32 corner. The ink outline is two whole pixels,
-    as in small-32.svg; the master's shallow notch.
-    small-32.svg drawn at 28 was the other option: at 1x its edges land between pixels, so the outline, the notch
-    and the slot go soft, and at 2x it is still a little soft. This cut is sharp at both (checked in Chrome on the
-    options page, light and dark). The build writes it to out/extension/options-logo-28.svg for the page to inline.
+    FROZEN ARTWORK (flow decision 94). Written from docs/design/icons/negative-space/candidates/D by tools/freeze-d.mjs on 9 October 2026; never regenerate it.
+    28 px (the extension options page's logo, 1x and 2x): 19 x 22 px, notch 5.5 (four notch depths tall), 3 px slot,
+    the diagonal dropped 3 px; an 8 px play, its tip 1.1 px short of the slot. Half a pixel left of centre.
   -->
-  <defs><clipPath id="tile"><rect width="28" height="28" rx="6.125"/></clipPath></defs>
-  <g clip-path="url(#tile)">
-    <rect width="28" height="28" fill="#F4ECD8"/>
-    <circle cx="35" cy="35" r="42" fill="#E08200"/>
-    <circle cx="35" cy="35" r="28" fill="#F4ECD8"/>
-    <circle cx="35" cy="35" r="14" fill="#E08200"/>
-  </g>
-  <!-- bookmark: 14 x 16 px in a 2 px ink outline -->
-  <path d="M10 2H18A3 3 0 0 1 21 5V18L14 14.5L7 18V5A3 3 0 0 1 10 2Z" fill="#17171A"/>
-  <path d="M10 4H18A1 1 0 0 1 19 5V14.7639L14 12.2639L9 14.7639V5A1 1 0 0 1 10 4Z" fill="#F3F2EE"/>
-  <!-- bar: 20 x 6 px, ink outline and read part; the unread part is a 2 px paper slot, square at the split. The read
-       part is about two thirds of the bar (13 of its 20 px) -->
-  <rect x="4" y="20" width="20" height="6" rx="3" fill="#17171A"/>
-  <path d="M17 22H21A1 1 0 0 1 21 24H17Z" fill="#F3F2EE"/>
+  <rect width="28" height="28" rx="6.125" fill="#111112"/><path fill="#F3F2EE" d="M6 3L12 3L12 18.632L4 14L4 5A2 2 0 0 1 6 3ZM4 17L10.909 21L4 25L4 17ZM15 3L21 3A2 2 0 0 1 23 5L23 25L15 20.368L15 3Z"/>
 </svg>

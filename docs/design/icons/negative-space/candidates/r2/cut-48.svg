@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <!-- r2 at 48 px: ribbon 28 px from under a 3 px lip of tile, tips on row 41, notch 9 px; slot 6 px, bars 11 px. -->
+  <rect width="48" height="48" rx="10.5" fill="#111112"/>
+  <path fill="#F3F2EE" d="M10 3L21 3L21 33.929L10 41ZM27 3L38 3L38 41L27 33.929Z"/>
+</svg>

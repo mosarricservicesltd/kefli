@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- r1 glyph: the whole bookmark, 16 px wide (no tile to hang from), with the play cut out. -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M6 2L18 2A2 2 0 0 1 20 4L20 20.702A0.706 0.706 0 0 1 18.911 21.295L12 16.824L5.089 21.295A0.706 0.706 0 0 1 4 20.702L4 4A2 2 0 0 1 6 2ZM8 5L15.727 10L8 15Z"/>
+</svg>

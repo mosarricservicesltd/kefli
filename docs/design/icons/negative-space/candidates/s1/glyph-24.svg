@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- s1 glyph: bookmark 16 x 20 px inside the 20 px live area, gap 2 px. Built by build.mjs. -->
+  <path fill="#FFFFFF" d="M6 2L11 2L11 17L4 22L4 4A2 2 0 0 1 6 2ZM13 2L18 2A2 2 0 0 1 20 4L20 22L13 17L13 2Z"/>
+</svg>

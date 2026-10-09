@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <!-- h2 at 48 px. Two 20 x 25 px bookmarks, notch 7 px (slope 0.7). Front 9..29 from y 8; back 19..39 from y 15, its apex under the front tip at (29, 33). 3 px gap beside the front; the play drops 4 px (3.3 px square) under the front right flank: 10 px tall (30 to 40), 7.1 deep. Pair 9..39, centred. -->
+  <rect width="48" height="48" rx="10.5" fill="#111112"/><path fill="#F3F2EE" fill-rule="evenodd" d="M11.5 8L26.5 8A2.5 2.5 0 0 1 29 10.5L29 31.079A1 1 0 0 1 27.427 31.899L19 26L10.573 31.899A1 1 0 0 1 9 31.079L9 10.5A2.5 2.5 0 0 1 11.5 8ZM33 15L36.5 15A2.5 2.5 0 0 1 39 17.5L39 38.079A1 1 0 0 1 37.427 38.899L32.427 35.399A1 1 0 0 1 32 34.579L32 16A1 1 0 0 1 33 15ZM20.573 31.101L24.973 34.181A1 1 0 0 1 24.973 35.819L20.573 38.899A1 1 0 0 1 19 38.079L19 31.921A1 1 0 0 1 20.573 31.101Z"/>
+</svg>

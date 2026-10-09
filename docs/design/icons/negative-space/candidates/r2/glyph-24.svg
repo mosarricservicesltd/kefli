@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- r2 glyph: the whole bookmark, 16 px wide, with its outer shoulders (no tile to hang from), split by a 4 px slot into two 6 px bars. -->
+  <path fill="#FFFFFF" d="M6 2L10 2L10 18.118L4 22L4 4A2 2 0 0 1 6 2ZM14 2L18 2A2 2 0 0 1 20 4L20 22L14 18.118L14 2Z"/>
+</svg>

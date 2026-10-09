@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <!-- 16 px: page 10 x 14; bookmark hole 6 x 8 with a 3 px notch, 2 px of page above it, 2 at the sides and 4 below its tips; the notch at 45 degrees so it survives -->
+  <rect width="16" height="16" rx="3.5" fill="#111112"/><path fill="#F3F2EE" fill-rule="evenodd" d="M3 1L13 1L13 15L3 15L3 1ZM5 3L11 3L11 11L8 8L5 11L5 3Z"/>
+</svg>

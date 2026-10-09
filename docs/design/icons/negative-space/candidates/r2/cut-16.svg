@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <!-- r2 at 16 px: ribbon 8 px from under a 1 px lip, notch 4 px at 45 degrees; slot 2 px, bars 3 px. -->
+  <rect width="16" height="16" rx="3.5" fill="#111112"/>
+  <path fill="#F3F2EE" d="M4 1L7 1L7 10L4 13ZM9 1L12 1L12 13L9 10Z"/>
+</svg>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <!--
+    FROZEN ARTWORK (flow decision 94). Written from docs/design/icons/negative-space/candidates/D by tools/freeze-d.mjs on 9 October 2026; never regenerate it.
+    The extension's toolbar button at 16 px: the plain bookmark on D's proportions, 10 x 12 px with a 3 px notch (four
+    notch depths tall). The extension only saves, and D's split reads as a pause control at toolbar sizes.
+  -->
+  <rect width="16" height="16" rx="3.5" fill="#111112"/><path fill="#F3F2EE" d="M4 2H12A1 1 0 0 1 13 3V14L8 11L3 14V3A1 1 0 0 1 4 2Z"/>
+</svg>

@@ -38,7 +38,7 @@ ShelfCover.motion                   // the same timings as numbers, for native a
 ```
 
 - `hash` is 64 hexadecimal characters, read case-insensitively. Anything else throws a `TypeError`.
-- `depth` is 0 to 3, default 3. Rows, Listen, the Reader band and media art use 3. The board drew the app icon at 1, and the app icon (flow decision 70) is cover v1 `2c7601c0…` at depth 1, frozen as artwork in `shared/brand/src`.
+- `depth` is 0 to 3, default 3. Rows, Listen, the Reader band and media art use 3. The board drew the app icon at 1, and from flow decision 70 to 94 the app icon was cover v1 `2c7601c0…` at depth 1; since decision 94 it is no longer a cover.
 - `cols` is 1 to 16, default 1. Wider frames (the Reader's 3:1 band, Now playing) continue the cover to the right: the second square carries on from the same random stream, so the first square of a wide cover is the row's square.
 - `size` (whole pixels) sets `width` and `height` (`size × cols` by `size`). Without it, the SVG fills its box.
 - `grey` is `'light'`, `'dark'` or null: the same shapes in the chrome's greys, for a save whose text couldn't be fetched.
@@ -211,7 +211,7 @@ SpiderMonkey and the Hermes runtime haven't run the fixtures yet: the first Fire
 
 `fixtures.json` holds 64 cases:
 
-- the board's nine sample hashes (its eight articles, sha256 of their normalised URLs, and `https://shelf.app/`, the board's provisional icon seed, kept as a case although the app icon is now C·L·063, flow decision 70);
+- the board's nine sample hashes (its eight articles, sha256 of their normalised URLs, and `https://shelf.app/`, the board's provisional icon seed, kept as a case although the app icon later became C·L·063, flow decision 70, and then D, flow decision 94);
 - `shelf-fixture-1` to `shelf-fixture-40` (sha256 of the string);
 - edge cases: all zeros, all f, alternating nibbles and bits, both sides of the dark boundary, the signal's lightness peak, and an upper-case hash;
 - probes: an unsplit square, both kinds of signal rule, all big modules, many 1-unit leaves.

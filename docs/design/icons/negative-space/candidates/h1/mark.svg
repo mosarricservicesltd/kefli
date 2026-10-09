@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <!-- h1 · The tail plays. Shelf's bookmark, 42 dp wide in today's proportions (notch 13.588, shoulders r 4.941, tips r 1.853), drawn box centred. One cut, 3.2 dp wide, carries the notch's right flank straight on through the apex to the left edge; under it the left tail is a play 23.365 tall and 18.055 deep (0.77, Lucide's play is 0.78), corners r 1.853 like the tips. Built by build.mjs. -->
+  <path fill="#F3F2EE" fill-rule="evenodd" d="M37.941 28.837L70.059 28.837A4.941 4.941 0 0 1 75 33.778L75 77.313A1.853 1.853 0 0 1 72.14 78.869L33.846 54.091A1.853 1.853 0 0 1 33 52.535L33 33.778A4.941 4.941 0 0 1 37.941 28.837ZM35.86 59.205L48.651 67.481A1.853 1.853 0 0 1 48.651 70.593L35.86 78.869A1.853 1.853 0 0 1 33 77.313L33 60.76A1.853 1.853 0 0 1 35.86 59.205Z"/>
+</svg>

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- n2 status-bar glyph, white on transparent; the play is a real hole. Bookmark 16 x 20 px inside the central 20 (shoulders r 2,
+    notch 5 px). Play 11 px tall, flat side on x 8, corners r 1.5, at least 3 px of white round it. No pause. -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M6 2L18 2A2 2 0 0 1 20 4L20 22L12 17L4 22L4 4A2 2 0 0 1 6 2ZM10.246 5.787L15.328 8.698A1.5 1.5 0 0 1 15.328 11.302L10.246 14.213A1.5 1.5 0 0 1 8 12.912L8 7.088A1.5 1.5 0 0 1 10.246 5.787Z"/>
+</svg>

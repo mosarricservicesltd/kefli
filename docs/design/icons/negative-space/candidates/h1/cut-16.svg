@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <!-- h1 at 16 px, in whole pixels: 10 x 12 px bookmark, L and the notch as 45 degree stairs, a 2 px stepped cut, and a 6/4/2 px play in the corner, centred on y 11. -->
+  <rect width="16" height="16" rx="3.5" fill="#111112"/><path fill="#F3F2EE" fill-rule="evenodd" d="M3 3A1 1 0 0 1 4 2H12A1 1 0 0 1 13 3V14H12V13H11V12H10V11H9V10H7V9H6V8H5V7H4V6H3ZM3 8H4V9H5V10H6V12H5V13H4V14H3Z"/>
+</svg>

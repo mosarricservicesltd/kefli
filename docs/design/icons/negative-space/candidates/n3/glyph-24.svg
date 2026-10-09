@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- n3 status-bar glyph, white on transparent (Android reads alpha only, so the play is a real hole). Bookmark 16 x 20 px in the
+    central 20, notch 5.3 px at 2:3. Play 14.9 px tall at 2:3, flat side on x 7, 2 px band and top wall, corners r 1.5;
+    thinnest wall 2 px. No pause: the glyph sits beside the media notification, which already shows play and pause. -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M6 2L18 2A2 2 0 0 1 20 4L20 22L12 16.667L4 22L4 4A2 2 0 0 1 6 2ZM9.332 4.252L16.302 8.899A1.5 1.5 0 0 1 16.302 11.395L9.332 16.042A1.5 1.5 0 0 1 7 14.794L7 5.5A1.5 1.5 0 0 1 9.332 4.252Z"/>
+</svg>

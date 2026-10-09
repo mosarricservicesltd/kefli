@@ -1,13 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
-  <!-- FROZEN ARTWORK (flow decision 70): background.svg, then foreground.svg, on the 108 dp canvas. build-icons.cjs checks that these shapes match the two layers. -->
-  <rect width="108" height="108" fill="#F4ECD8"/>
-  <path d="M108 108H0A108 108 0 0 1 108 0Z" fill="#E08200"/>
-  <path d="M108 108H36A72 72 0 0 1 108 36Z" fill="#F4ECD8"/>
-  <path d="M108 108H72A36 36 0 0 1 108 72Z" fill="#E08200"/>
-  <g transform="translate(54 54) scale(0.96) translate(-54 -54)">
-    <path d="M41 25H67A4 4 0 0 1 71 29V64.24A1.5 1.5 0 0 1 68.68 65.5L54 56L39.32 65.5A1.5 1.5 0 0 1 37 64.24V29A4 4 0 0 1 41 25Z" fill="none" stroke="#17171A" stroke-width="3" stroke-linejoin="round"/>
-    <path d="M41 25H67A4 4 0 0 1 71 29V64.24A1.5 1.5 0 0 1 68.68 65.5L54 56L39.32 65.5A1.5 1.5 0 0 1 37 64.24V29A4 4 0 0 1 41 25Z" fill="#F3F2EE"/>
-    <rect x="30" y="70" width="48" height="9" rx="4.5" fill="#17171A" stroke="#17171A" stroke-width="3"/>
-    <path d="M57.5 70H73.5A4.5 4.5 0 0 1 73.5 79H57.5A4.5 4.5 0 0 0 57.5 70Z" fill="#F3F2EE"/>
-  </g>
+  <!--
+    FROZEN ARTWORK (flow decision 94). Written from docs/design/icons/negative-space/candidates/D by tools/freeze-d.mjs on 9 October 2026; never regenerate it.
+    background.svg, then foreground.svg, on the 108 dp canvas. build-icons.cjs checks that these shapes match the two layers.
+  -->
+  <rect width="108" height="108" fill="#111112"/><g transform="translate(54 54) scale(0.9) translate(-54 -54)"><path fill="#F3F2EE" fill-rule="evenodd" d="M37.368 28.885L48.974 28.885A1.919 1.919 0 0 1 50.893 30.804L50.893 61.439A1.919 1.919 0 0 1 48.014 63.101L33.21 54.554A1.919 1.919 0 0 1 32.25 52.892L32.25 34.003A5.118 5.118 0 0 1 37.368 28.885ZM35.129 61.403L46.15 67.766A1.919 1.919 0 0 1 46.15 71.09L35.129 77.453A1.919 1.919 0 0 1 32.25 75.791L32.25 63.065A1.919 1.919 0 0 1 35.129 61.403ZM59.026 28.885L70.632 28.885A5.118 5.118 0 0 1 75.75 34.003L75.75 75.791A1.919 1.919 0 0 1 72.871 77.453L58.067 68.905A1.919 1.919 0 0 1 57.107 67.243L57.107 30.804A1.919 1.919 0 0 1 59.026 28.885Z"/></g>
 </svg>

@@ -1,0 +1,406 @@
+<title>Shelf Negative-Space Icons</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Martian+Mono:wght@400..600&display=swap">
+<style>
+/* Layout: a review board in Shelf's own chrome, as the earlier icon study. The options as a picker on the left,
+   grouped by direction; the chosen option in context on the right (a tall sticky panel on wide screens, first on
+   phones). Above both, every option side by side at real size. Page colours are Shelf's ink and paper tokens
+   (tokens.json 1.0.1); icons, wallpapers and drawn system UI carry their own colours as content. */
+:root{
+  --bg:#F3F2EE; --surface:#FFFFFF; --line:#DEDCD5; --line-strong:#8C8A83; --text:#17171A; --muted:#5C5B56;
+  --fill:#17171A; --on-fill:#F3F2EE; --focus:#17171A;
+  --font-ui:'Archivo',Roboto,'Segoe UI',system-ui,sans-serif;
+  --font-mono:'Martian Mono','Roboto Mono',ui-monospace,Consolas,monospace;
+  --wall-light:#E4DCCB; --wall-dark:#14171E; --graphite:#111112; --paper:#F3F2EE; --ink:#17171A;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111112; --surface:#1A1A1C; --line:#2E2E31; --line-strong:#7A7983; --text:#EDECE8; --muted:#A7A59F;
+  --fill:#EDECE8; --on-fill:#111112; --focus:#EDECE8; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111112; --surface:#1A1A1C; --line:#2E2E31; --line-strong:#7A7983; --text:#EDECE8; --muted:#A7A59F;
+  --fill:#EDECE8; --on-fill:#111112; --focus:#EDECE8; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--font-ui);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1280px;margin:0 auto;padding-inline:20px;padding-block:36px 64px}
+h1,h2,h3{margin:0;text-wrap:balance}
+h1{font-stretch:125%;font-weight:750;letter-spacing:-.025em;font-size:clamp(30px,4vw,44px);line-height:1.1}
+h2{font-stretch:125%;font-weight:720;letter-spacing:-.02em;font-size:22px;line-height:1.2}
+h3{font-size:13px;font-weight:600;color:var(--muted)}
+p{margin:0}
+.eyebrow{font-family:var(--font-mono);font-size:12px;letter-spacing:-.02em;color:var(--muted)}
+.mono{font-family:var(--font-mono);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
+header{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:32px 48px;align-items:start;padding-bottom:32px;border-bottom:1px solid var(--line)}
+header .lede{margin-top:14px;max-width:64ch;font-size:16px}
+header .lede + p{margin-top:10px;max-width:64ch}
+.stays{margin-top:20px;font-size:14px;display:grid;gap:6px;max-width:72ch}
+.stays b{font-weight:600}
+.learned{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;display:grid;gap:8px;font-size:14px}
+.learned ul{margin:0;padding-left:18px;display:grid;gap:6px}
+
+/* every option side by side, real size */
+.lineup{margin-top:32px;display:grid;gap:12px}
+.lineup .head{display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap}
+.lineup .head p{font-size:14px;color:var(--muted);max-width:70ch}
+.rows{display:grid;gap:8px}
+.lrow{overflow-x:auto;border-radius:12px;box-shadow:0 0 0 1px var(--line)}
+.lrow .in{display:flex;gap:6px;padding:16px 14px 12px;min-width:max-content}
+.lrow button{all:unset;cursor:pointer;display:grid;justify-items:center;gap:6px;width:76px;font-size:11px;line-height:1.25;text-align:center;border-radius:10px;padding:6px 2px}
+.lrow button:focus-visible{outline:2px solid currentColor;outline-offset:1px}
+.lrow button[aria-pressed="true"]{box-shadow:inset 0 0 0 1.5px currentColor}
+.lrow .tb{display:flex;align-items:center;gap:14px;padding:10px 14px;min-width:max-content;font-size:12px}
+.lrow .tb span.k{display:inline-flex;align-items:center;gap:6px}
+
+.layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,560px);gap:40px;margin-top:40px;align-items:start}
+.panel{position:sticky;top:16px;align-self:start;max-height:calc(100vh - 32px);overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;scroll-margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px}
+.peek{display:none}
+.pickers{display:grid;gap:34px}
+.group{display:grid;gap:12px}
+.group-head{display:grid;gap:4px}
+.group-head p{font-size:14px;color:var(--muted);max-width:62ch}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.cand{display:flex;gap:14px;align-items:flex-start;width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:inherit;font:inherit;text-align:left;cursor:pointer}
+.cand:hover{border-color:var(--line-strong)}
+.cand[aria-pressed="true"]{border-color:var(--text);box-shadow:inset 0 0 0 1px var(--text)}
+.cand .meta{display:grid;gap:4px;min-width:0}
+.cand .meta b{font-weight:600;font-size:15px;line-height:1.25}
+.cand .meta .mono{font-size:11px;color:var(--muted)}
+.cand .meta .one{font-size:13px;color:var(--muted);line-height:1.4}
+.pickmark{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:999px;background:var(--fill);color:var(--on-fill);font-size:11px;font-weight:600;line-height:1;margin-left:6px;vertical-align:2px}
+
+/* icons: an inline SVG tile clipped to a launcher mask */
+.ico{display:block;flex:none;overflow:hidden}
+.ico svg{display:block;width:100%;height:100%}
+.squircle{clip-path:url(#m-squircle)} .circle{border-radius:50%} .rounded{border-radius:22%} .teardrop{border-radius:50% 50% 16% 50%}
+
+.panel .top{display:grid;gap:8px}
+.tags{display:flex;gap:6px;flex-wrap:wrap}
+.tag{display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:999px;border:1px solid var(--line-strong);font-size:12px;font-weight:550;line-height:1}
+.sec{margin-top:24px;display:grid;gap:10px}
+.hero{display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap}
+.hero figure,.shapes figure,.screens figure,.pix figure,.pair figure{margin:0;display:grid;gap:6px;font-size:12px;color:var(--muted);justify-items:center;text-align:center}
+.wallbox{border-radius:12px;padding:16px;display:grid;place-items:center;box-shadow:0 0 0 1px var(--line)}
+.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.pair .walls{display:grid;grid-template-columns:1fr 1fr;border-radius:10px;overflow:hidden;box-shadow:0 0 0 1px var(--line);width:100%}
+.pair .walls div{display:flex;align-items:center;justify-content:center;padding:16px 0}
+.home{border-radius:10px;padding:18px 10px 12px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;box-shadow:0 0 0 1px var(--line)}
+.home .app{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11px;line-height:1.2}
+.home .app span.i{width:48px;height:48px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.home .app span.i svg{display:block}
+.shapes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;max-width:400px}
+.screens{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-width:380px}
+.screens .scr{width:100%;aspect-ratio:9/16;border-radius:16px;display:grid;place-items:center;box-shadow:0 0 0 1px var(--line)}
+.chrome{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;font-size:12px}
+.chrome .tab{display:flex;align-items:center;gap:7px;height:28px;padding:0 10px;border-radius:7px 7px 0 0}
+.chrome .omni{flex:1;min-width:0;height:26px;border-radius:13px;padding:0 10px;display:flex;align-items:center;white-space:nowrap;overflow:hidden}
+.chrome svg{width:16px;height:16px;display:block;flex:none}
+.pix{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end}
+.pix canvas{image-rendering:pixelated;display:block;border-radius:2px;box-shadow:0 0 0 1px var(--line)}
+/* the lock screen's media notification, drawn generically (Android 13+ layout) */
+.lock{border-radius:16px;padding:14px;background:linear-gradient(160deg,#20242C,#0E1014);color:#F2F2F2;display:grid;gap:12px;box-shadow:0 0 0 1px var(--line)}
+.status{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500}
+.status .sp{margin-left:auto;display:flex;gap:6px;opacity:.85}
+.media{border-radius:20px;background:#2A2F38;padding:14px;display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center}
+.media .art{width:64px;height:64px;border-radius:10px;overflow:hidden}
+.media .app{display:flex;align-items:center;gap:6px;font-size:12px;opacity:.85}
+.media .t{font-weight:600;font-size:15px;line-height:1.25}
+.media .s{font-size:12px;opacity:.75}
+.media .ctl{grid-column:1/-1;display:flex;align-items:center;gap:14px}
+.media .bar{flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.25);position:relative}
+.media .bar i{position:absolute;inset:0 62% 0 0;border-radius:2px;background:#F2F2F2}
+.media .pp{width:40px;height:40px;border-radius:12px;background:#F2F2F2;color:#1B1E24;display:grid;place-items:center}
+.notes{display:grid;gap:8px;font-size:14px}
+.notes .who{font-weight:600}
+.notes dl{margin:0;display:grid;gap:8px}
+.notes dt{font-size:12px;font-weight:600;color:var(--muted)}
+.notes dd{margin:0}
+.judges{display:grid;gap:8px;font-size:14px}
+.why-pick{font-size:14px;padding:10px 12px;border-radius:10px;background:var(--bg);border:1px solid var(--line)}
+.why-pick a{color:inherit;text-decoration-thickness:1px;text-underline-offset:2px}
+.judges p{padding-left:12px;border-left:2px solid var(--line)}
+/* D's height: construction and the icon at launcher size, side by side */
+.dstudy{margin-top:48px;padding-top:28px;border-top:1px solid var(--line);display:grid;gap:16px}
+.dstudy:empty{display:none}
+.dstudy .head{display:grid;gap:8px;max-width:78ch}
+.dstudy .head p{font-size:14px;color:var(--muted)}
+.dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+.dcard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:grid;gap:12px;align-content:start}
+.dcard h3{font-size:15px;color:var(--text);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.dcard .cons{width:100%;max-width:240px;aspect-ratio:1;border-radius:10px;overflow:hidden;justify-self:center}
+.dcard .cons svg{display:block;width:100%;height:100%}
+.dcard .row{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap}
+.dcard .row .wb{border-radius:10px;padding:10px;display:grid;place-items:center}
+.dcard p{font-size:13px;color:var(--muted)}
+.dcard p.cap{font-size:11px;text-align:center;margin-top:-6px}
+.dcard .px canvas{image-rendering:pixelated;display:block}
+/* round one: every candidate, smaller, each with why it stopped */
+.tried{margin-top:48px;padding-top:28px;border-top:1px solid var(--line);display:grid;gap:14px}
+.tried .head{display:grid;gap:4px}
+.tried .head p{font-size:14px;color:var(--muted);max-width:76ch}
+.tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px}
+.tcard{display:flex;gap:12px;align-items:flex-start;width:100%;padding:10px;border-radius:12px;border:1px solid var(--line);background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.tcard:hover{border-color:var(--line-strong)}
+.tcard[aria-pressed="true"]{border-color:var(--text);box-shadow:inset 0 0 0 1px var(--text)}
+.tcard .meta{display:grid;gap:3px;min-width:0;font-size:13px;line-height:1.4}
+.tcard .meta b{font-size:14px;font-weight:600}
+.tcard .meta .mono{font-size:11px;color:var(--muted)}
+.tcard .meta .why{color:var(--muted)}
+.tcard .meta .dev{font-weight:600;color:var(--text)}
+footer{margin-top:48px;padding-top:24px;border-top:1px solid var(--line);display:grid;gap:8px;max-width:76ch;font-size:14px}
+footer p:first-child{font-size:16px;font-weight:600}
+
+@media (max-width:1000px){
+  header{grid-template-columns:1fr}
+  .layout{grid-template-columns:1fr}
+  .panel{position:static;align-self:auto;order:-1;max-height:none;overflow:visible}
+  .peek{position:sticky;top:8px;z-index:2;display:flex;align-items:center;gap:10px;height:56px;padding:0 12px;border-radius:14px;background:var(--surface);border:1px solid var(--line-strong);color:inherit;text-decoration:none;font-size:14px}
+}
+@media (max-width:440px){
+  .wrap{padding-inline:16px}
+  .home .app span.i{width:42px;height:42px}
+  .shapes{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (prefers-reduced-motion:no-preference){.cand{transition:border-color .12s}}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+  <clipPath id="m-squircle" clipPathUnits="objectBoundingBox"><path id="sq-path" d=""/></clipPath>
+</defs></svg>
+
+<div class="wrap">
+  <header>
+    <div>
+      <p class="eyebrow" id="eyebrow"></p>
+      <h1 id="h1"></h1>
+      <p class="lede" id="lede"></p>
+      <p class="muted" id="lede2"></p>
+      <div class="stays" id="stays"></div>
+    </div>
+    <div class="learned" id="learned"></div>
+  </header>
+
+  <section class="lineup" aria-labelledby="h-line">
+    <div class="head"><h2 id="h-line">Side by side</h2><p>Every option at real size: on a dark and a light home screen at 48 px, and in a browser toolbar at 16 px. Select one to see it in context below.</p></div>
+    <div class="rows" id="rows"></div>
+  </section>
+
+  <div class="layout">
+    <div class="pickers" id="pickers">
+      <a class="peek" id="peek" href="#panel"></a>
+    </div>
+    <aside class="panel" id="panel" aria-live="polite" aria-label="The chosen option in context"></aside>
+  </div>
+
+  <div id="studies"></div>
+
+  <section class="tried" id="tried" aria-labelledby="h-tried"></section>
+
+  <footer id="footer"></footer>
+</div>
+
+<script>
+const DATA = /*DATA*/null;
+const PAPER = '#F3F2EE', INK = '#17171A', GRAPHITE = '#111112';
+const THEMED = { light: { tile: '#D7E8DA', mark: '#1F3A28' }, dark: { tile: '#1F2B23', mark: '#B8DCC2' } };
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+const C = Object.fromEntries(DATA.cands.concat(DATA.tried || []).map(c => [c.id, c]));
+const TRIED = Object.fromEntries(((DATA.page.tried && DATA.page.tried.items) || []).map(t => [t.id, t]));
+const ORDER = DATA.page.groups.flatMap(g => g.ids);
+const state = { id: [DATA.page.open, DATA.page.pick].find(x => x && C[x]) || ORDER[0] };
+
+// superellipse for the squircle mask (n = 4), in the clip path's 0..1 box
+(() => { const pts = []; for (let i = 0; i < 96; i++) { const t = i / 96 * Math.PI * 2, c = Math.cos(t), s = Math.sin(t);
+  pts.push(((Math.sign(c) * Math.abs(c) ** .5 + 1) / 2).toFixed(4) + ' ' + ((Math.sign(s) * Math.abs(s) ** .5 + 1) / 2).toFixed(4)); }
+  $('sq-path').setAttribute('d', 'M' + pts.join('L') + 'Z'); })();
+
+/* ---------------- drawing ---------------- */
+const inner = svg => svg.replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
+const recolour = (svg, tile, mark) => svg.replace(/#111112/gi, '@T@').replace(/#F3F2EE/gi, '@M@').replace(/@T@/g, tile).replace(/@M@/g, mark);
+// the launcher view: the 108 dp master's central 72 dp on a tile, clipped to a mask shape
+function icon(c, size, { shape = 'squircle', tile = GRAPHITE, mark = PAPER, label = '' } = {}) {
+  const body = recolour(inner(c.svg.mark), tile, mark);
+  return `<span class="ico ${shape}" style="width:${size}px;height:${size}px;background:${tile}"${label ? ` role="img" aria-label="${esc(label)}"` : ' aria-hidden="true"'}><svg xmlns="http://www.w3.org/2000/svg" viewBox="18 18 72 72" focusable="false">${body}</svg></span>`;
+}
+// the mark alone on the whole 108 canvas (launch screens)
+const bare = (c, mark, size) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="${size}" height="${size}" aria-hidden="true" focusable="false">${recolour(inner(c.svg.mark), GRAPHITE, mark)}</svg>`;
+// a tuned cut at a CSS size
+const cutSvg = (c, k, size, light) => { const s = light ? recolour(c.svg[k], PAPER, INK) : c.svg[k];
+  return s.replace('<svg', `<svg width="${size}" height="${size}" aria-hidden="true" focusable="false"`); };
+const glyph = (c, size, col = '#FFFFFF') => c.svg.glyph.replace(/#FFFFFF/gi, col).replace('<svg', `<svg width="${size}" height="${size}" aria-hidden="true" focusable="false"`);
+// today's icon (shared/brand/src/full.svg), cropped to the launcher's 72 dp
+const todayIcon = size => `<span class="ico circle" style="width:${size}px;height:${size}px">${DATA.today.replace(/viewBox="0 0 108 108"/, 'viewBox="18 18 72 72"').replace('<svg', '<svg aria-hidden="true" focusable="false"')}</span>`;
+// the 16 px toolbar slot: the 32 px cut on a 2x screen, the 16 px cut on a 1x one
+const tool = (c, light) => window.devicePixelRatio >= 1.5 ? cutSvg(c, 'c32', 16, light) : cutSvg(c, 'c16', 16, light);
+// the extension's toolbar button: its own drawing where the option has one (the plain bookmark), else the cut
+const extBtn = c => { const k = window.devicePixelRatio >= 1.5 ? (c.svg.ext32 ? 'ext32' : 'c32') : (c.svg.ext16 ? 'ext16' : 'c16');
+  return c.svg[k].replace('<svg', '<svg width="16" height="16" aria-hidden="true" focusable="false"'); };
+
+const GLYPH = {
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  chat: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
+  notes: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+  music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+};
+// drawn neighbours on the home screen: generic apps, not real brands
+const APPS = [['Clock', 'clock', '#FFFFFF', '#2B3140'], ['Messages', 'chat', '#3D6FD9', '#FFFFFF'], ['Notes', 'notes', '#E9D9B8', '#3A3020'], ['Music', 'music', '#F08A3C', '#FFFFFF']];
+const appIcon = ([name, g, bg, fg]) => `<div class="app"><span class="i" style="background:${bg};color:${fg}"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${GLYPH[g]}</svg></span><span>${name}</span></div>`;
+
+function pixels(svg, px, scale, holder, label) {
+  const cv = document.createElement('canvas'); cv.width = px; cv.height = px; cv.style.width = px * scale + 'px'; cv.style.height = px * scale + 'px';
+  cv.setAttribute('role', 'img'); cv.setAttribute('aria-label', label);
+  const img = new Image();
+  img.onload = () => { const x = cv.getContext('2d'); x.clearRect(0, 0, px, px); x.drawImage(img, 0, 0, px, px); };
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  holder.appendChild(cv);
+}
+
+/* ---------------- page ---------------- */
+function drawStatic() {
+  const P = DATA.page;
+  $('eyebrow').textContent = P.eyebrow; $('h1').textContent = P.h1;
+  $('lede').textContent = P.lede; $('lede2').textContent = P.lede2;
+  $('stays').innerHTML = P.stays.map(([b, t]) => `<span><b>${esc(b)}</b> ${esc(t)}</span>`).join('');
+  $('learned').innerHTML = `<h3>${esc(P.learned.title)}</h3><ul>${P.learned.items.map(t => `<li>${esc(t)}</li>`).join('')}</ul>`;
+  $('footer').innerHTML = P.footer.map(t => `<p${P.footer[0] === t ? '' : ' class="muted"'}>${esc(t)}</p>`).join('');
+}
+
+function drawRows() {
+  const btn = (c, wall) => `<button type="button" data-id="${c.id}" aria-pressed="${c.id === state.id}" aria-label="${esc(c.title)}">${icon(c, 48, { shape: 'circle' })}<span>${esc(c.title)}</span></button>`;
+  const order = ORDER.map(id => C[id]);
+  $('rows').innerHTML =
+    `<div class="lrow" style="background:var(--wall-dark);color:#F2F2F2"><div class="in">${order.map(c => btn(c, 'd')).join('')}</div></div>` +
+    `<div class="lrow" style="background:var(--wall-light);color:#1F1F1F"><div class="in">${order.map(c => btn(c, 'l')).join('')}</div></div>` +
+    `<div class="lrow" style="background:#FFFFFF;color:#1F1F1F"><div class="tb">${order.map(c => `<span class="k">${tool(c, false)}${esc(c.id)}</span>`).join('')}</div></div>` +
+    `<div class="lrow" style="background:#35363A;color:#E8EAED"><div class="tb">${order.map(c => `<span class="k">${tool(c, false)}${esc(c.id)}</span>`).join('')}</div></div>`;
+}
+
+function drawPickers() {
+  const card = c => `<button class="cand" type="button" data-id="${c.id}" aria-pressed="${c.id === state.id}">${icon(c, 64)}<span class="meta"><b>${esc(c.title)}${c.id === DATA.page.pick ? `<span class="pickmark">${esc(DATA.page.pickLabel || 'My pick')}</span>` : ''}</b><span class="mono">${esc(c.id)}</span><span class="one">${esc(c.one || c.idea)}</span></span></button>`;
+  $('pickers').innerHTML = `<a class="peek" id="peek" href="#panel"></a>` + DATA.page.groups.map((g, i) =>
+    `<section class="group" aria-labelledby="g${i}"><div class="group-head"><h2 id="g${i}">${esc(g.title)}</h2>${g.text ? `<p>${esc(g.text)}</p>` : ''}</div><div class="grid">${g.ids.map(id => card(C[id])).join('')}</div></section>`).join('');
+}
+
+function drawStudies() {
+  const one = (S, it) => {
+    const c = { svg: { mark: it.mark } };
+    const cons = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="18 18 72 72" role="img" aria-label="${esc(it.label)}${it.overlay ? ': the mark with three interlocked plays outlined' : ''}"><rect x="18" y="18" width="72" height="72" fill="${GRAPHITE}"/>${inner(it.mark)}${it.overlay ? inner(it.overlay) : ''}</svg>`;
+    const cuts = it.c48 ? `<div style="background:#F1F3F4;border-radius:10px;padding:10px 6px;display:grid;gap:10px">
+        <div class="row">${it.c48.replace('<svg', '<svg width="48" height="48" aria-hidden="true" focusable="false"')}${it.c32.replace('<svg', '<svg width="32" height="32" aria-hidden="true" focusable="false"')}<span style="font-size:11px;color:#5C5B56">48 and 32 px at 1×</span></div>
+        <div class="row"><span class="px" data-svg="${encodeURIComponent(it.c48)}" data-n="48" data-z="2"></span><span class="px" data-svg="${encodeURIComponent(it.c32)}" data-n="32" data-z="3"></span></div>
+        <p class="cap" style="margin:0;color:#5C5B56">magnified: 48 px ×2, 32 px ×3</p></div>` : '';
+    return `<article class="dcard"><h3>${esc(it.label)}${it.id === S.pick ? `<span class="pickmark">${esc(S.pickLabel || 'My pick')}</span>` : ''}</h3>
+      <div class="cons">${cons}</div>
+      <div class="row">
+        <span class="wb" style="background:linear-gradient(160deg,#4A5A6E,#1C2331)">${icon(c, 76, { label: it.label + ', app icon' })}</span>
+        <span class="wb" style="background:var(--wall-light)">${icon(c, 48, { tile: PAPER, mark: INK, label: it.label + ', light version' })}</span>
+        <span class="wb" style="background:var(--wall-light)">${icon(c, 48, { shape: 'circle', tile: THEMED.light.tile, mark: THEMED.light.mark, label: it.label + ', themed icon' })}</span>
+      </div>
+      <div class="row" style="background:var(--wall-dark);border-radius:10px;padding:10px 6px">${icon(c, 40, { shape: 'circle' })}${icon(c, 40, { shape: 'squircle' })}<span style="color:#F2F2F2;font-size:11px">1× home screen</span></div>
+      ${cuts}
+      <p>${esc(it.note)}</p></article>`;
+  };
+  $('studies').innerHTML = (DATA.studies || []).map(S => `<section class="dstudy" id="${esc(S.key)}" aria-labelledby="h-${esc(S.key)}"><div class="head"><h2 id="h-${esc(S.key)}">${esc(S.title)}</h2>${S.text.map(x => `<p>${esc(x)}</p>`).join('')}</div><div class="dgrid">${S.items.map(it => one(S, it)).join('')}</div></section>`).join('');
+  for (const el of document.querySelectorAll('#studies .px')) {
+    const f = document.createElement('figure'); f.style.margin = '0';
+    pixels(decodeURIComponent(el.dataset.svg), +el.dataset.n, +el.dataset.z, f, 'magnified cut'); el.appendChild(f);
+  }
+}
+
+function drawTried() {
+  const T = DATA.page.tried; if (!T) return;
+  $('tried').innerHTML = `<div class="head"><h2 id="h-tried">${esc(T.title)}</h2><p>${esc(T.text)}</p></div><div class="tgrid">${T.items.map(t => { const c = C[t.id];
+    return `<button class="tcard" type="button" data-id="${c.id}" aria-pressed="${c.id === state.id}">${icon(c, 48, { shape: 'circle' })}<span class="meta"><b>${esc(c.title)}</b><span class="mono">${esc(c.id)} · round one</span>${t.became ? `<span class="dev">${esc(t.became)}</span>` : ''}<span class="why">${esc(t.why)}</span></span></button>`; }).join('')}</div>`;
+}
+
+function drawPanel() {
+  const c = C[state.id], n = c.notes || {};
+  const homeRow = wall => `<div class="home" style="background:${wall === 'l' ? 'var(--wall-light)' : 'var(--wall-dark)'};color:${wall === 'l' ? '#1F1F1F' : '#F2F2F2'}">${appIcon(APPS[0])}${appIcon(APPS[1])}<div class="app">${icon(c, 48, { shape: 'circle', label: c.title + ' on a home screen' })}<span>Shelf</span></div>${appIcon(APPS[2])}${appIcon(APPS[3])}</div>`;
+  const judges = n.judges ? Object.entries(n.judges).map(([who, t]) => `<p><span class="who">${esc(who)}:</span> ${esc(t)}</p>`).join('') : '';
+  $('panel').innerHTML = `<div class="top">
+      <p class="eyebrow">${esc(c.id)} · ${esc(TRIED[c.id] ? 'Round one' : DATA.page.groups.find(g => g.ids.includes(c.id)).title)}</p>
+      <h2>${esc(c.title)}${c.id === DATA.page.pick ? `<span class="pickmark">${esc(DATA.page.pickLabel || 'My pick')}</span>` : ''}</h2>
+      ${c.tags ? `<div class="tags">${c.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div>` : ''}
+      <p>${esc(c.idea)}</p>
+      ${c.id === 'D' && DATA.page.studies ? `<p class="why-pick"><b>Fine-tuning:</b> D was redrawn three plays tall after your designer friend's notes, then given a bigger play after the blind read; see <a href="#dstudy">D, a tad shorter</a> and <a href="#dplay">D, the play's weight</a>, below the options.</p>` : ''}
+      ${c.id === DATA.page.pick && DATA.page.pickWhy ? `<p class="why-pick"><b>${esc(DATA.page.pickWhyLabel || "Why it's my pick")}:</b> ${esc(DATA.page.pickWhy)}</p>` : ''}
+    </div>
+    <div class="sec"><h3>The icon</h3><div class="hero">
+      <figure><div class="wallbox" style="background:linear-gradient(160deg,#4A5A6E,#1C2331)">${icon(c, 152, { label: c.title + ', the app icon' })}</div>App icon</figure>
+      <figure><div class="wallbox" style="background:var(--wall-light)">${icon(c, 88, { tile: PAPER, mark: INK, label: c.title + ', light version' })}</div>Light version</figure>
+      <figure><div class="wallbox" style="background:var(--wall-light)">${icon(c, 88, { shape: 'circle', tile: THEMED.light.tile, mark: THEMED.light.mark, label: c.title + ', themed icon' })}</div>Themed icon</figure>
+    </div></div>
+    <div class="sec"><h3>Next to today</h3><div class="pair">
+      <figure><div class="walls"><div style="background:var(--wall-light)">${todayIcon(72)}</div><div style="background:var(--wall-dark)">${todayIcon(72)}</div></div>Today</figure>
+      <figure><div class="walls"><div style="background:var(--wall-light)">${icon(c, 72, { shape: 'circle' })}</div><div style="background:var(--wall-dark)">${icon(c, 72, { shape: 'circle' })}</div></div>${esc(c.title)}</figure>
+    </div></div>
+    <div class="sec"><h3>On a home screen</h3>${homeRow('l')}${homeRow('d')}</div>
+    <div class="sec"><h3>Launcher shapes</h3><div class="shapes">
+      <figure>${icon(c, 68, { shape: 'circle' })}Circle</figure>
+      <figure>${icon(c, 68, { shape: 'squircle' })}Squircle</figure>
+      <figure>${icon(c, 68, { shape: 'rounded' })}Rounded square</figure>
+      <figure>${icon(c, 68, { shape: 'teardrop' })}Teardrop</figure>
+    </div></div>
+    <div class="sec"><h3>On the lock screen, listening</h3>
+      <div class="lock" role="img" aria-label="A lock screen with Shelf's media notification while an article is read aloud">
+        <div class="status"><span class="mono" style="font-size:12px">9:41</span>${glyph(c, 18)}<span class="sp" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M1 13h2v2H1zM5 10h2v5H5zM9 7h2v8H9zM13 3h2v12h-2z"/></svg><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 14 1 6.5a10 10 0 0 1 14 0Z"/></svg><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><rect x="5" y="2" width="6" height="13" rx="1.5"/><rect x="6.5" y="0.5" width="3" height="2" rx=".5"/></svg></span></div>
+        <div class="media">
+          <span class="art">${DATA.cover.replace('<svg', '<svg width="64" height="64" aria-hidden="true" focusable="false"')}</span>
+          <div><div class="app">${glyph(c, 16)}<span>Shelf</span></div><div class="t">The quiet economics of the library</div><div class="s">example.org · 14 min</div></div>
+          <div class="ctl"><span class="mono" style="font-size:11px">5:12</span><span class="bar"><i></i></span><span class="mono" style="font-size:11px">14:03</span><span class="pp"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></span></div>
+        </div>
+      </div>
+      <p class="muted" style="font-size:12px">The status bar and the notification's header use the one-colour glyph (24 px drawing, shown at 18 and 16 px); the artwork is the article's own cover (here the cover behind today's icon, as a stand-in).</p>
+    </div>
+    <div class="sec"><h3>In the browser, real size</h3>
+      <div class="chrome" style="background:#FFFFFF;color:#1F1F1F;box-shadow:inset 0 0 0 1px #DADCE0"><span class="tab" style="background:#DFE1E5">${tool(c)}Shelf</span><span class="omni" style="background:#F1F3F4">shelf.example/saves</span>${extBtn(c)}</div>
+      <div class="chrome" style="background:#35363A;color:#E8EAED"><span class="tab" style="background:#202124">${tool(c)}Shelf</span><span class="omni" style="background:#202124">shelf.example/saves</span>${extBtn(c)}</div>
+      <div class="pix" id="pix"></div>
+      ${c.svg.ext16 ? '<p class="muted" style="font-size:12px">The tab shows the site\'s favicon, the option\'s own cut; the button at the end of the toolbar is the extension\'s, the plain bookmark, since the extension only saves.</p>' : ''}
+    </div>
+    <div class="sec"><h3>Launch screens</h3><div class="screens">
+      <figure><div class="scr" style="background:${GRAPHITE}">${bare(c, PAPER, 112)}</div>Dark theme</figure>
+      <figure><div class="scr" style="background:${PAPER}">${bare(c, INK, 112)}</div>Light theme</figure>
+    </div></div>
+    <div class="sec"><h3>How it is drawn</h3><div class="notes"><dl>
+      <div><dt>Built</dt><dd>${esc(c.built)}</dd></div>
+      <div><dt>Small sizes</dt><dd>${esc(c.small)}</dd></div>
+      <div><dt>Risks</dt><dd>${esc(c.risks)}</dd></div>
+    </dl></div></div>
+    ${TRIED[c.id] ? `<div class="sec"><h3>Why it stopped at round one</h3><div class="judges"><p>${esc(TRIED[c.id].became ? TRIED[c.id].became + ' ' : '')}${esc(TRIED[c.id].why)}</p></div></div>` : ''}
+    ${judges ? `<div class="sec"><h3>What reviewers said</h3><div class="judges">${judges}</div></div>` : ''}`;
+  $('peek').innerHTML = icon(c, 40) + `<span>${esc(c.title)}</span><span class="muted" style="margin-left:auto">See it in context</span>`;
+  const pix = $('pix');
+  [['16 px, ×8', 'c16', 16, 8], ['32 px, ×4', 'c32', 32, 4], ['48 px, ×3', 'c48', 48, 3], ['Glyph, 24 px, ×5', 'glyph', 24, 5],
+   ...(c.svg.ext16 ? [['Extension button, 16 px, ×8', 'ext16', 16, 8], ['Extension button, 32 px, ×4', 'ext32', 32, 4]] : [])].forEach(([cap, k, px, sc]) => {
+    const f = document.createElement('figure');
+    let svg = c.svg[k];
+    if (k === 'glyph') svg = svg.replace(/(<svg[^>]*>)/, '$1<rect width="24" height="24" fill="#000000"/>');
+    pixels(svg, px, sc, f, `${c.title}: ${cap}`);
+    const cp = document.createElement('figcaption'); cp.textContent = cap; f.appendChild(cp); pix.appendChild(f);
+  });
+}
+
+function update() {
+  drawRows(); drawPickers(); drawTried(); drawPanel();
+  try { history.replaceState(null, '', '#' + state.id); } catch (e) {}
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-id]'); if (!b) return;
+  state.id = b.dataset.id;
+  const fromRow = !!b.closest('.lrow'), wall = fromRow && b.closest('.lrow') === b.closest('.rows').children[1] ? 1 : 0;
+  update();
+  const fromTried = !!b.closest('.tried');
+  const again = fromRow ? $('rows').children[wall].querySelector(`[data-id="${state.id}"]`) : document.querySelector(`${fromTried ? '.tcard' : '.cand'}[data-id="${state.id}"]`);
+  if (again) again.focus({ preventScroll: true });
+  if ((fromRow || fromTried) && window.matchMedia('(max-width:1000px)').matches) $('panel').scrollIntoView({ block: 'start' });
+  else if (fromTried) $('panel').scrollIntoView({ block: 'nearest' });
+});
+(() => { const h = (location.hash || '').slice(1); if (C[h]) state.id = h; })();
+drawStatic();
+drawStudies();
+update();
+</script>

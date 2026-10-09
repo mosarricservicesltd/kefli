@@ -58,7 +58,7 @@ html.embed .wrap{padding:var(--space-16)}
 .tab.on{background:var(--chrome-2);color:var(--chrome-text)}
 .tab .lbl{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .tab .fav{width:16px;height:16px;border-radius:4px;background:var(--chrome-muted);opacity:.5;flex:none}
-/* Shelf's icon wherever Chrome shows the extension: tab favicon, toolbar, menu, address bar (the frozen app icon, see MARK). */
+/* Shelf's icon wherever Chrome shows the extension: tab favicon, toolbar, menu, address bar (the extension's icon, see MARK). */
 .tab .fav.shelf{background:none;border-radius:0;opacity:1;display:inline-flex}
 .mark{display:block;flex:none;position:relative;width:var(--m);height:var(--m)}
 .mark svg{display:block;width:100%;height:100%}
@@ -329,12 +329,6 @@ details.adv[open] summary .chevr{transform:rotate(90deg)}
 </style>
 </head>
 <body>
-<!-- The rounded tile of Shelf's app icon, defined once and shared by every inlined copy of the 16 and 32 px cuts.
-     shelfTile32 is those cuts' own clip (small.svg and small-32.svg, there called "tile"). The options page's 28 px logo
-     carries its own clip, shelfLogo28, inside options-logo-28.svg. -->
-<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
-  <clipPath id="shelfTile32" clipPathUnits="userSpaceOnUse"><rect width="32" height="32" rx="7"/></clipPath>
-</defs></svg>
 <div class="wrap">
   <div class="panel">
     <h1>Shelf prototype · batch 5 · browser extension · Fingerprint</h1>
@@ -432,7 +426,7 @@ details.adv[open] summary .chevr{transform:rotate(90deg)}
         <li><strong>Toast:</strong> the shadow-root contract is in the comment above the toast host in this file’s source.</li>
         <li><strong>Motion:</strong> the toast’s rise and sink are CSS transitions on transform and opacity with <code>@starting-style</code>, declared on the inner toast with the motion tokens as custom properties, so a sink interrupted by a new save turns round from where it is. The countdown is a full-width fill translated left in a clipped strip, held with <code>animation-play-state</code>. Put <code>ShelfCover.css</code> and the reduced-motion rules in each shadow root. On the options page, neighbours move by FLIP through the Web Animations API, a group’s surface is drawn per row so its edge can glide, and nothing animates height.</li>
         <li><strong>Covers:</strong> bundle <code>shared/cover/cover-v1.js</code> (frozen) in the toast script, the popup and the options page. The background already computes each save’s d-tag hash (contract 4.3) and sends it with the result. The toast draws <code>ShelfCover.svg(hash, {draw: true})</code>, keeps the same cover element when Saving… becomes Saved so the drawing isn’t restarted, and brings the corner mark in as the last leaf lands (520 ms plus 34 ms a leaf), or at 1 s if the drawing is longer (motion spec, Before build item 4). Covers in the Couldn’t send list are drawn still. The toast’s countdown takes <code>ShelfCover.lineInk(hash, surface, text)</code> for the toast’s colours, the popup’s for its surface.</li>
-        <li><strong>Icon:</strong> the app icon frozen under decision 70, C·L·063 with the paper mark, built from <code>shared/brand/src</code> into <code>shared/brand/out/extension/</code>. The manifest’s <code>icons</code> and <code>action.default_icon</code> take <code>icon-16.png</code>, <code>icon-32.png</code> and <code>icon-48.png</code> (the tuned cuts, <code>small.svg</code>, <code>small-32.svg</code> and <code>small-48.svg</code>) with <code>icon-128.png</code>; Firefox takes <code>icon-16.svg</code> and <code>icon-32.svg</code> for its 16 and 32 keys. Chrome picks the cut for the screen, 16 on a 1x screen and 32 drawn at 16 on anything denser, and this mockup does the same. The options page’s 28 px logo inlines <code>options-logo-28.svg</code>, the tuned 28 px cut built from <code>small-28.svg</code>, at the cuts’ 7 in 32 corner, with the covers’ hairline from the page’s CSS. It is static artwork: never draw it from cover v1.</li>
+        <li><strong>Icon:</strong> decision 94’s icons, built from <code>shared/brand/src</code> into <code>shared/brand/out/extension/</code>. The manifest’s <code>icons</code> and <code>action.default_icon</code> take <code>icon-16.png</code> and <code>icon-32.png</code>, the toolbar button (the plain bookmark, <code>toolbar-16.svg</code> and <code>toolbar-32.svg</code>), and <code>icon-48.png</code> and <code>icon-128.png</code>, the app icon D (<code>small-48.svg</code>, and the 108 dp drawing with the Web Store’s padding); Firefox takes <code>icon-16.svg</code> and <code>icon-32.svg</code> for its 16 and 32 keys. Chrome picks the size for the screen, 16 on a 1x screen and 32 drawn at 16 on anything denser, and this mockup does the same. The options page’s 28 px logo inlines <code>options-logo-28.svg</code>, D’s tuned 28 px cut built from <code>small-28.svg</code>. It is static artwork.</li>
         <li><strong>Second press:</strong> while a Saved toast shows, the command handler asks the tab’s content script to reach Undo and passes the keyboard flag.</li>
         <li><strong>Install:</strong> on runtime.onInstalled with reason 'install', call runtime.openOptionsPage() so Connect opens by itself. The Firefox manifest overlay sets action.default_area:'navbar'.</li>
         <li><strong>Pin line:</strong> read action.getUserSettings().isOnToolbar (Chrome 91+, Firefox 118+); re-check on focus, visibilitychange and action.onUserSettingsChanged where it exists, and drop the line once Shelf is pinned.</li>
@@ -482,23 +476,23 @@ const SAVES = {
   options:  { url: 'chrome-extension://shelf/options.html',                                                            hash: 'ba0e9d66f202c9756b3e154ef6dc9c997c4601be24c23dee7e76bc00d627ebaa' },
 };
 
-/* Shelf's icon: the app icon frozen under decision 70, C·L·063 with the paper mark (a paper bookmark and bar in an ink
-   outline, with the read part in ink, on cover v1's 2c7601c0… at depth 1). It is static artwork in shared/brand/src and is
-   never drawn from cover v1, so a change to the generator or a rename leaves it alone. The shapes below are those files'
-   own markup, copied unchanged; the 16 and 32 px cuts share the tile's clip, under the id defined at the top of the body.
-   The 16 px slots take those two tuned cuts (both are inlined and the CSS shows the one Chrome would use for the screen);
-   the options page's 28 px logo takes the tuned 28 px cut. Its colours are fixed in every theme. */
-const ICON_16 =                  // shared/brand/src/small.svg: 32 x 32, two units to the pixel at 16 px
-  '<g clip-path="url(#shelfTile32)"><rect width="32" height="32" fill="#E08200"/><circle cx="40" cy="40" r="32" fill="#F4ECD8"/></g><path d="M10 2H22A2 2 0 0 1 24 4V22L16 14L8 22V4A2 2 0 0 1 10 2Z" fill="#17171A"/><path d="M10 4H22V17.1716L16 11.1716L10 17.1716Z" fill="#F3F2EE"/><rect x="4" y="24" width="24" height="6" rx="3" fill="#17171A"/><path d="M20 26H25A1 1 0 0 1 25 28H20Z" fill="#F3F2EE"/>';
-const ICON_32 =                  // shared/brand/src/small-32.svg: 32 x 32, one unit to the pixel at 32 px
-  '<g clip-path="url(#shelfTile32)"><rect width="32" height="32" fill="#F4ECD8"/><circle cx="40" cy="40" r="48" fill="#E08200"/><circle cx="40" cy="40" r="32" fill="#F4ECD8"/><circle cx="40" cy="40" r="16" fill="#E08200"/></g><path d="M11 3H21A3 3 0 0 1 24 6V21L16 17L8 21V6A3 3 0 0 1 11 3Z" fill="#17171A"/><path d="M11 5H21A1 1 0 0 1 22 6V17.7639L16 14.7639L10 17.7639V6A1 1 0 0 1 11 5Z" fill="#F3F2EE"/><rect x="4" y="23" width="24" height="6" rx="3" fill="#17171A"/><path d="M19 25H25A1 1 0 0 1 25 27H19Z" fill="#F3F2EE"/>';
+/* Shelf's icons in the browser (decision 94). Wherever Chrome shows the extension at 16 px (the toolbar button, the
+   context menu, the options page's tab) it shows the extension's own icon: the plain bookmark in D's proportions, since
+   the extension only saves and the app icon's split reads as a pause control at that size. These are shared/brand/src's
+   toolbar-16.svg and toolbar-32.svg, copied unchanged (a graphite tile and the bookmark, no clip); both are inlined and
+   the CSS shows the one Chrome would use for the screen. The options page's 28 px logo is the app icon itself, D, as
+   the build writes it from small-28.svg. Static artwork, fixed in every theme. */
+const ICON_16 =                  // shared/brand/src/toolbar-16.svg: 16 x 16, one unit to the pixel
+  '<rect width="16" height="16" rx="3.5" fill="#111112"/><path fill="#F3F2EE" d="M4 2H12A1 1 0 0 1 13 3V14L8 11L3 14V3A1 1 0 0 1 4 2Z"/>';
+const ICON_32 =                  // shared/brand/src/toolbar-32.svg: 32 x 32, one unit to the pixel at 32 px
+  '<rect width="32" height="32" rx="7" fill="#111112"/><path fill="#F3F2EE" d="M8 4H24A2 2 0 0 1 26 6V28L16 22L6 28V6A2 2 0 0 1 8 4Z"/>';
 /* shared/brand/out/extension/options-logo-28.svg, its <svg> exactly as the build writes it from src/small-28.svg: 28 x 28,
-   one unit to the pixel at 28 px, with its own clip (shelfLogo28) and aria-hidden, since the name sits beside it. */
+   one unit to the pixel at 28 px, aria-hidden, since the name sits beside it. */
 const LOGO_28 =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28" aria-hidden="true" focusable="false"><defs><clipPath id="shelfLogo28"><rect width="28" height="28" rx="6.125"/></clipPath></defs><g clip-path="url(#shelfLogo28)"><rect width="28" height="28" fill="#F4ECD8"/><circle cx="35" cy="35" r="42" fill="#E08200"/><circle cx="35" cy="35" r="28" fill="#F4ECD8"/><circle cx="35" cy="35" r="14" fill="#E08200"/></g><path d="M10 2H18A3 3 0 0 1 21 5V18L14 14.5L7 18V5A3 3 0 0 1 10 2Z" fill="#17171A"/><path d="M10 4H18A1 1 0 0 1 19 5V14.7639L14 12.2639L9 14.7639V5A1 1 0 0 1 10 4Z" fill="#F3F2EE"/><rect x="4" y="20" width="20" height="6" rx="3" fill="#17171A"/><path d="M17 22H21A1 1 0 0 1 21 24H17Z" fill="#F3F2EE"/></svg>';
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28" aria-hidden="true" focusable="false"><rect width="28" height="28" rx="6.125" fill="#111112"/><path fill="#F3F2EE" d="M6 3L12 3L12 18.632L4 14L4 5A2 2 0 0 1 6 3ZM4 17L10.909 21L4 25L4 17ZM15 3L21 3A2 2 0 0 1 23 5L23 25L15 20.368L15 3Z"/></svg>';
 const iconSVG = (cls, vb, body) => `<svg class="${cls}" viewBox="${vb}" aria-hidden="true" focusable="false">${body}</svg>`;
 const MARK = s => `<span class="mark" style="--m:${s}px">${s < 24
-  ? iconSVG('c16', '0 0 32 32', ICON_16) + iconSVG('c32', '0 0 32 32', ICON_32)
+  ? iconSVG('c16', '0 0 16 16', ICON_16) + iconSVG('c32', '0 0 32 32', ICON_32)
   : LOGO_28}</span>`;
 /* No nudging onto device pixels: Chrome already paints an inline <svg> on whole device pixels wherever layout puts it, so
    the tuned cuts come out as sharp as the shipped icon-16.png and icon-32.png (checked in headless Chrome at 1x and 2x).

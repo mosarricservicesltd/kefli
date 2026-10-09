@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- n2 at 32 px. Bookmark 20 x 24 px (shoulders r 2, notch 6.5 px). Play 14 x 12.25 px, flat side on x 11, sides at 4:7, corners r 2:
+    5 px of paper on the left and past the tip, 4 px over the top corner and 3.4 px over the notch. No pause. -->
+  <rect width="32" height="32" rx="7" fill="#111112"/><path fill="#F3F2EE" fill-rule="evenodd" d="M8 4L24 4A2 2 0 0 1 26 6L26 28L16 21.5L6 28L6 6A2 2 0 0 1 8 4ZM13.992 8.21L20.211 11.764A2 2 0 0 1 20.211 15.236L13.992 18.79A2 2 0 0 1 11 17.054L11 9.946A2 2 0 0 1 13.992 8.21Z"/>
+</svg>

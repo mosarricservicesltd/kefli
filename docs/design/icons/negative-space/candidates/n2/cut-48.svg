@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <!-- n2 at 48 px. Bookmark 28 x 34 px (shoulders r 3, notch 9 px, sharp tips). Play 20 x 17.5 px, flat side on x 17, sides at 4:7,
+    corners r 3: 7 px of paper on the left, 6.5 px past the tip, 5.7 px over the top corner and 4.8 px over the notch, the
+    master's ratio; the play's ends sit on half pixels, which blurs nothing because the play has no level edge. No pause: this
+    play's incircle is under 6 px in radius and a 3 px pause with a 3 px ring needs about 9. -->
+  <rect width="48" height="48" rx="10.5" fill="#111112"/><path fill="#F3F2EE" fill-rule="evenodd" d="M13 7L35 7A3 3 0 0 1 38 10L38 41L24 32L10 41L10 10A3 3 0 0 1 13 7ZM21.488 13.065L29.942 17.895A3 3 0 0 1 29.942 23.105L21.488 27.935A3 3 0 0 1 17 25.33L17 15.67A3 3 0 0 1 21.488 13.065Z"/>
+</svg>

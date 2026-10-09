@@ -12,7 +12,7 @@
 <script src="cover-v1.js"></script>
 <style>
 /* Fingerprint (decisions 65-68). Every colour, size and radius in Shelf's own UI comes from tokens.css; the only other
-   colours are the covers (cover v1), the app icon (frozen artwork, decision 70), the board chrome around the phone, and
+   colours are the covers (cover v1), the app icon (frozen artwork, decision 94), the board chrome around the phone, and
    drawn system UI (status bar, lock screen, permission dialog, the host app, web pages and the camera feed), which keep
    their own look. */
 *{box-sizing:border-box}
@@ -933,7 +933,7 @@ svg .arc{transform-box:view-box;transform-origin:center}
       <button data-jump="rsvp-done-archived">Finished, archived article</button>
     </div>
     <div class="note">
-      <p><strong>Look (Fingerprint, decisions 65–70):</strong> every save wears its own cover, drawn by cover v1 from the sha256 of its normalised address, so the same article has the same face on every surface. The chrome is ink, paper, two greys and hairlines; the article lends its ink to its progress line, link underline and spoken-word highlight, and Night paper is tinted per article. A row draws its cover once, when the save lands. The app icon in the share row is C·L·063 with the paper mark (decision 70), frozen artwork from shared/brand/src. The lock screen’s media card shows the notification glyph in its app slot, the one-colour bookmark and bar from monochrome.svg, in the system’s tint.</p>
+      <p><strong>Look (Fingerprint, decisions 65–69, and 94 for the icon):</strong> every save wears its own cover, drawn by cover v1 from the sha256 of its normalised address, so the same article has the same face on every surface. The chrome is ink, paper, two greys and hairlines; the article lends its ink to its progress line, link underline and spoken-word highlight, and Night paper is tinted per article. A row draws its cover once, when the save lands. The app icon in the share row is D, the bookmark cut into a pause and a play (decision 94), frozen artwork from shared/brand/src. The lock screen’s media card shows the notification glyph in its app slot, the plain bookmark from glyph-24.svg, in the system’s tint.</p>
       <p><strong>Player:</strong> one listening session, three sizes. The mini player sits at the bottom of every screen (8 px above the tab bar, or 16 px above the screen edge). In the playing article’s Reader it expands in place into the full row: play, time, ±15 s, speed, and ✕ once paused. Its line replaces the reading line. On Listen the Now playing card is the player; the mini slides in once the card has scrolled mostly away. Only play controls play: a Listen row’s body opens the article, its round button plays.</p>
       <p><strong>Bottom stack:</strong> tab bar or screen edge, then the player, then the screen’s own bar or floating Archive, then the toast, 8 px apart. Back from a Reader returns to whatever opened it.</p>
       <p><strong>Motion (decision 73, motion-spec.md):</strong> everything fades by default and travels only to show where something went, on the motion tokens, and only transform and opacity animate. A cover draws once, when its save lands in front of you (the share sheet, “A save arrives from Chrome”, a restore, “…the first save lands”). Each article’s line is carried at its place: open a part-read row, read on, and come back to see it catch up; Archive from the Reader to see it finish before the row leaves. With reduced motion every meaning stays and the travel goes. Jumps land in place.</p>
@@ -1075,27 +1075,18 @@ const readingStyle = (it, id) => {
   const R = articleReading(it, id);
   return (R.tinted ? `--reader-bg:${R.bg};--reader-text:${R.text};--reader-muted:${R.muted};` : '') + (R.ink ? `--reader-ink:${R.ink};--reader-highlight:${R.hl};` : '');
 };
-// The app icon: C·L·063 with the paper mark (decision 70), frozen artwork copied from shared/brand/src, so its colours
-// are the brand's own hex, never tokens or the generator. 24 px and up draw full.svg as a launcher shows it: the central
-// 72 dp of the 108 dp canvas, in the system's circle mask. Below that, small.svg, the cut tuned for 16 px, in its own tile.
+// The app icon: D, "split and play" (decision 94), frozen artwork copied from shared/brand/src, so its colours are the
+// brand's own hex, never tokens. 24 px and up draw full.svg as a launcher shows it: the central 72 dp of the 108 dp
+// canvas, in the system's circle mask. Below that, small.svg, the cut tuned for 16 px, in its own tile.
 const appIcon = (px = 40) => px < 24
-  ? `<svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><defs><clipPath id="shelf-icon-tile"><rect width="32" height="32" rx="7"/></clipPath></defs>`
-    + `<g clip-path="url(#shelf-icon-tile)"><rect width="32" height="32" fill="#E08200"/><circle cx="40" cy="40" r="32" fill="#F4ECD8"/></g>`
-    + `<path d="M10 2H22A2 2 0 0 1 24 4V22L16 14L8 22V4A2 2 0 0 1 10 2Z" fill="#17171A"/><path d="M10 4H22V17.1716L16 11.1716L10 17.1716Z" fill="#F3F2EE"/>`
-    + `<rect x="4" y="24" width="24" height="6" rx="3" fill="#17171A"/><path d="M20 26H25A1 1 0 0 1 25 28H20Z" fill="#F3F2EE"/></svg>`
-  : `<svg viewBox="18 18 72 72" aria-hidden="true" focusable="false"><rect width="108" height="108" fill="#F4ECD8"/>`
-    + `<path d="M108 108H0A108 108 0 0 1 108 0Z" fill="#E08200"/><path d="M108 108H36A72 72 0 0 1 108 36Z" fill="#F4ECD8"/><path d="M108 108H72A36 36 0 0 1 108 72Z" fill="#E08200"/>`
-    + `<g transform="translate(54 54) scale(0.96) translate(-54 -54)">`
-    + `<path d="M41 25H67A4 4 0 0 1 71 29V64.24A1.5 1.5 0 0 1 68.68 65.5L54 56L39.32 65.5A1.5 1.5 0 0 1 37 64.24V29A4 4 0 0 1 41 25Z" fill="none" stroke="#17171A" stroke-width="3" stroke-linejoin="round"/>`
-    + `<path d="M41 25H67A4 4 0 0 1 71 29V64.24A1.5 1.5 0 0 1 68.68 65.5L54 56L39.32 65.5A1.5 1.5 0 0 1 37 64.24V29A4 4 0 0 1 41 25Z" fill="#F3F2EE"/>`
-    + `<rect x="30" y="70" width="48" height="9" rx="4.5" fill="#17171A" stroke="#17171A" stroke-width="3"/>`
-    + `<path d="M57.5 70H73.5A4.5 4.5 0 0 1 73.5 79H57.5A4.5 4.5 0 0 0 57.5 70Z" fill="#F3F2EE"/></g></svg>`;   // bar as in full.svg (decision 72): ink pill, paper slot, no shared edges
-// The notification's small icon: monochrome.svg, the one-colour bookmark and bar whose shelf breaks where reading stops,
-// drawn on the 24 dp canvas of out/android/shelf_notification.xml (2 dp padding). Android 13 and later put it in the
-// media card's app slot and tint it themselves, so here it takes the card's colour (currentColor), never the brand's hex.
-const notifGlyph = `<svg viewBox="21.5 19.5 65 65" fill="currentColor" aria-hidden="true" focusable="false">`
-  + `<path d="M41 25H67A4 4 0 0 1 71 29V64.24A1.5 1.5 0 0 1 68.68 65.5L54 56L39.32 65.5A1.5 1.5 0 0 1 37 64.24V29A4 4 0 0 1 41 25Z"/>`
-  + `<rect x="30" y="70" width="30" height="9" rx="4.5"/><rect x="65" y="70" width="13" height="9" rx="4.5"/></svg>`;
+  ? `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect width="16" height="16" rx="3.5" fill="#111112"/><path fill="#F3F2EE" d="M3 4A1 1 0 0 1 4 3H7V10H6V11H5V12H4V13H3ZM8 3H11A1 1 0 0 1 12 4V13H11V12H10V11H9V10H8Z"/></svg>`
+  : `<svg viewBox="18 18 72 72" aria-hidden="true" focusable="false"><rect width="108" height="108" fill="#111112"/>`
+    + `<g transform="translate(54 54) scale(0.9) translate(-54 -54)"><path fill="#F3F2EE" fill-rule="evenodd" d="M37.368 28.885L48.974 28.885A1.919 1.919 0 0 1 50.893 30.804L50.893 61.439A1.919 1.919 0 0 1 48.014 63.101L33.21 54.554A1.919 1.919 0 0 1 32.25 52.892L32.25 34.003A5.118 5.118 0 0 1 37.368 28.885ZM35.129 61.403L46.15 67.766A1.919 1.919 0 0 1 46.15 71.09L35.129 77.453A1.919 1.919 0 0 1 32.25 75.791L32.25 63.065A1.919 1.919 0 0 1 35.129 61.403ZM59.026 28.885L70.632 28.885A5.118 5.118 0 0 1 75.75 34.003L75.75 75.791A1.919 1.919 0 0 1 72.871 77.453L58.067 68.905A1.919 1.919 0 0 1 57.107 67.243L57.107 30.804A1.919 1.919 0 0 1 59.026 28.885Z"/></g></svg>`;
+// The notification's small icon: glyph-24.svg, the plain bookmark in D's proportions, on the 24 dp canvas of
+// out/android/shelf_notification.xml (2 dp padding). Android 13 and later put it in the media card's app slot and tint
+// it themselves, so here it takes the card's colour (currentColor), never the brand's hex.
+const notifGlyph = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">`
+  + `<path d="M6 3H18A2 2 0 0 1 20 5V21L12 16.5L4 21V5A2 2 0 0 1 6 3Z"/></svg>`;
 
 /* ---------------- data ---------------- */
 // Each save carries the sha256 of its normalised address (contract 4.3), computed in Node with crypto.createHash and the
@@ -1256,7 +1247,7 @@ function savesScreen(){
   if (S.savesMode === 'first') {
     // once a browser is connected (fix 19 returns here), the empty state has nothing left to offer but the sharing lesson
     // the board's scaffold: empty slots already split into quarters, waiting for an address; one draws its cover on a loop
-    // over the share lesson, with Shelf's own icon (decision 70) in the share row
+    // over the share lesson, with Shelf's own icon (decision 94) in the share row
     const slots = Array.from({ length: 8 }, (_, i) => i === 5 ? coverHTML(HASH.atlantic, { loop: true, cls: 'slot' }) : '<span class="slot"></span>').join('');
     body = `<div class="empty first" data-fk="empty-first">
       <div class="illus" aria-hidden="true"><div class="slots">${slots}</div>

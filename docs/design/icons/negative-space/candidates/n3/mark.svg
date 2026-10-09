@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <!-- n3 One hand, built by build.mjs. Bookmark 43.5 dp wide at Shelf's proportions (53.74 dp from the top to the tips' points, about 52 drawn; shoulders r 5.12, tips r 1.92, notch 14.07), top at 27.1: as large as the 66 dp safe circle allows (reach 32.6 dp).
+    Play hole cut at the notch's angle: its sides run parallel to the notch's diagonals (11 in 17, 32.9 degrees), so it is
+    44.64 dp tall and 34.5 deep; corners at the shoulder radius (5.12).
+    Module 4.1 dp: the paper band over the notch, the top wall, both pause bars, the gap between them and the dark ring round
+    them. Left wall 6.8 dp and drawn tip 6.51 dp from the right edge, so the play sits optically centred.
+    Pause island: bars 4.1 x 14.56 dp, r 1, the left bar a module from the flat side (centre 49.3, incircle centre 51.19). -->
+  <path fill="#F3F2EE" fill-rule="evenodd" d="M37.368 27.1L70.632 27.1A5.118 5.118 0 0 1 75.75 32.218L75.75 77.308A1.919 1.919 0 0 1 72.788 78.919L54 66.762L35.212 78.919A1.919 1.919 0 0 1 32.25 77.308L32.25 32.218A5.118 5.118 0 0 1 37.368 27.1ZM46.948 32.021L66.905 44.935A5.118 5.118 0 0 1 66.905 53.528L46.948 66.441A5.118 5.118 0 0 1 39.05 62.145L39.05 36.318A5.118 5.118 0 0 1 46.948 32.021ZM44.15 41.95L46.25 41.95A1 1 0 0 1 47.25 42.95L47.25 55.513A1 1 0 0 1 46.25 56.513L44.15 56.513A1 1 0 0 1 43.15 55.513L43.15 42.95A1 1 0 0 1 44.15 41.95ZM52.35 41.95L54.45 41.95A1 1 0 0 1 55.45 42.95L55.45 55.513A1 1 0 0 1 54.45 56.513L52.35 56.513A1 1 0 0 1 51.35 55.513L51.35 42.95A1 1 0 0 1 52.35 41.95Z"/>
+</svg>

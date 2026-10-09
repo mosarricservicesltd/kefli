@@ -1,20 +1,24 @@
 // Builds every Shelf icon and brand asset from the source SVGs in ./src.
 //
-//   npm install --no-save @resvg/resvg-js@2      (once, anywhere on NODE_PATH)
-//   node shared/brand/build-icons.cjs
+//   npm install --prefix ~/.cache/shelf-resvg @resvg/resvg-js@2      (once, anywhere outside the repo)
+//   NODE_PATH=~/.cache/shelf-resvg/node_modules node shared/brand/build-icons.cjs
 //
-// Sources: the app icon of flow decision 70, "C·L·063 with the paper mark", frozen as artwork (README.md):
-//   src/background.svg  adaptive-icon background: cover v1 2c7601c0... at depth 1, written out as static shapes
-//   src/foreground.svg  adaptive-icon foreground: the paper mark (paper fill, ink outline, ink read part), transparent
-//   src/monochrome.svg  one-colour bookmark and bar for Android 13+ themed icons (unchanged since decision 55)
-//   src/small.svg       pixel-tuned 32 x 32 drawing for 16 px (favicon, 1x toolbar): 1 px outline, the cover as one arc
-//   src/small-32.svg    the same grid tuned for 32 px (2x toolbar): 2 px outline, the full cover
-//   src/small-48.svg    tuned for 48 px (extension icon-48, the ICO's 48 entry): 3 px outline, the full cover
-//   src/small-28.svg    tuned for 28 px (the extension options page's logo, 1x and 2x): 2 px outline, the full cover
-//   src/splash-dark.svg the launch-screen mark for a dark background: paper bookmark and bar, the unread slot cut out
-//   src/full.svg        foreground on background, 108 canvas (checked against the two layers below)
-// Everything else is derived here, so a change to the mark is made once in src. The icon never comes from the
-// cover generator; only the strip of covers on the OG card and the Play feature graphic is drawn from it, at build time.
+// Sources: the app icon of flow decision 94, D "split and play", frozen as artwork (README.md):
+//   src/background.svg  adaptive-icon background: graphite (#111112), flat
+//   src/foreground.svg  adaptive-icon foreground: the bookmark in paper, cut twice (the halves a pause, the left tail a
+//                       play), shown at 90% about the canvas centre; one colour, every dark shape a hole
+//   src/monochrome.svg  Android 13+ themed icon: the foreground's shape in one colour (checked below)
+//   src/full.svg        background then foreground, 108 canvas (checked against the two layers)
+//   src/small.svg       16 px (favicon, the ICO's 16): the split alone, on its pixel grid
+//   src/small-28.svg    28 px (the extension options page's logo, 1x and 2x)
+//   src/small-32.svg    32 px (the ICO's 32, the tab at 2x)
+//   src/small-48.svg    48 px (the extension's icon-48, the ICO's 48)
+//   src/toolbar-16.svg  the extension's toolbar button at 16 px: the plain bookmark (the extension only saves)
+//   src/toolbar-32.svg  the extension's toolbar button at 32 px (2x): the plain bookmark
+//   src/glyph-24.svg    the status bar's and media notification's small icon: the plain bookmark, white
+// Everything else is derived here, so a change to the mark is made once in src: both launch screens come from the
+// foreground, in ink for the light one and as drawn for the dark one. The icon never comes from the cover generator;
+// only the strip of covers on the OG card and the Play feature graphic is drawn from it, at build time.
 
 const fs = require('fs');
 const path = require('path');
@@ -30,11 +34,29 @@ const shapes = svg => inner(svg).replace(/<!--[\s\S]*?-->/g, '').replace(/>\s+</
 
 const full = read('full.svg'), fg = read('foreground.svg'), bg = read('background.svg'), mono = read('monochrome.svg');
 const small = read('small.svg'), small32 = read('small-32.svg'), small48 = read('small-48.svg'), small28 = read('small-28.svg');
-const splashDarkSrc = read('splash-dark.svg');
+const toolbar16 = read('toolbar-16.svg'), toolbar32 = read('toolbar-32.svg'), glyph = read('glyph-24.svg');
 if (shapes(full) !== shapes(bg) + shapes(fg)) throw new Error('src/full.svg must be background.svg followed by foreground.svg');
 
 // Fingerprint chrome, light theme (shared/tokens/tokens.json 0.2.0). Copied, like the icon's own colours.
 const INK = '#17171A', PAPER = '#F3F2EE', MUTED = '#5C5B56', EDGE_OPACITY = 0.09;   // cover edge: ink at 9%
+const GRAPHITE = '#111112';                                                           // the dark theme's background
+
+// The rule decision 94 rests on: the mark is one paper shape with real holes, so the light launch screen, the themed
+// icon and the glyph are the same drawing. The foreground is fills only, in paper alone; the background is one flat
+// graphite rect; the themed layer is the foreground's shape exactly.
+function checkLayers(){
+  const f = shapes(fg);
+  if (/stroke|mask|clip-path|filter|gradient|opacity/i.test(f)) throw new Error('src/foreground.svg: fills only (no stroke, mask, clip, filter, gradient or opacity)');
+  const fills = [...new Set([...f.matchAll(/fill="([^"]+)"/g)].map(m => m[1].toUpperCase()))];
+  if (fills.length !== 1 || fills[0] !== PAPER) throw new Error('src/foreground.svg: paper only, got ' + fills.join(', '));
+  if (shapes(bg) !== `<rect width="108" height="108" fill="${GRAPHITE}"/>`) throw new Error('src/background.svg: one flat graphite rect');
+  if (shapes(mono) !== f.split(PAPER).join('#000000')) throw new Error("src/monochrome.svg must be foreground.svg's shape in #000000");
+  for (const [name, svg] of [['small.svg', small], ['small-28.svg', small28], ['small-32.svg', small32], ['small-48.svg', small48], ['toolbar-16.svg', toolbar16], ['toolbar-32.svg', toolbar32]])
+    if (!new RegExp(`^<rect width="(\\d+)" height="\\1" rx="[\\d.]+" fill="${GRAPHITE}"/><path fill="${PAPER}"`).test(shapes(svg))) throw new Error(`src/${name}: a graphite tile, then the mark in paper`);
+  if (!/^<path fill="#FFFFFF" d="[^"]+"\/>$/.test(shapes(glyph))) throw new Error('src/glyph-24.svg: one white path');
+  return 'one paper shape with holes; themed layer and tiles as drawn';
+}
+const layers = checkLayers();
 
 // The launcher shows the central 72 of the 108 canvas: crop to it where an icon is shown unmasked.
 const crop72 = svg => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="18 18 72 72">${inner(svg)}</svg>`;
@@ -42,29 +64,22 @@ const crop72 = svg => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="18 18 72
 const tile = (size, pad, radius) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}">
   <defs><clipPath id="t"><rect x="${pad}" y="${pad}" width="${size - 2 * pad}" height="${size - 2 * pad}" rx="${radius}"/></clipPath></defs>
   <g clip-path="url(#t)"><svg x="${pad}" y="${pad}" width="${size - 2 * pad}" height="${size - 2 * pad}" viewBox="18 18 72 72">${inner(full)}</svg></g></svg>`;
-// Android notification small icon: white silhouette on a 24 dp artboard. The art (x 30-78, y 25-79 on the
-// 108 canvas) is framed so it fills Material's 20 dp live area with 2 dp padding, centred on (54, 52).
-const NOTIF_BOX = [21.5, 19.5, 65];
-const notification = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${NOTIF_BOX[0]} ${NOTIF_BOX[1]} ${NOTIF_BOX[2]} ${NOTIF_BOX[2]}">${inner(mono).replace(/#000000/g, '#FFFFFF')}</svg>`;
+// Android notification small icon: glyph-24.svg, a white silhouette drawn on the 24 dp artboard inside Material's
+// 20 dp live area (2 dp padding).
+const notification = glyph;
 // The same glyph as an Android VectorDrawable, the form a small icon should take in res/drawable.
-// Shapes follow monochrome.svg; its two shelf rects are written as pill paths.
-const monoBookmark = mono.match(/<path d="([^"]+)"/)[1];
-const pill = (x, y, w, h) => { const r = h / 2; return `M${x + r} ${y}H${x + w - r}A${r} ${r} 0 0 1 ${x + w - r} ${y + h}H${x + r}A${r} ${r} 0 0 1 ${x + r} ${y}Z`; };
+const glyphPath = glyph.match(/<path fill="#FFFFFF" d="([^"]+)"\/>/)[1];
 const vectorDrawable = `<?xml version="1.0" encoding="utf-8"?>
-<!-- Generated by shared/brand/build-icons.cjs from src/monochrome.svg. Do not edit. -->
+<!-- Generated by shared/brand/build-icons.cjs from src/glyph-24.svg. Do not edit. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp"
-    android:viewportWidth="${NOTIF_BOX[2]}" android:viewportHeight="${NOTIF_BOX[2]}">
-    <group android:translateX="${-NOTIF_BOX[0]}" android:translateY="${-NOTIF_BOX[1]}">
-        <path android:fillColor="#FFFFFFFF" android:pathData="${monoBookmark}"/>
-        <path android:fillColor="#FFFFFFFF" android:pathData="${pill(30, 70, 30, 9)}"/>
-        <path android:fillColor="#FFFFFFFF" android:pathData="${pill(65, 70, 13, 9)}"/>
-    </group>
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FFFFFFFF" android:pathData="${glyphPath}"/>
 </vector>
 `;
-// Launch screen: the paper mark alone. On a paper splash background (#F3F2EE in app config) it shows as its ink
-// outline and ink read part. The dark launch screen (#111112) gets splash-dark.svg, the same mark redrawn in paper.
-const splash = crop72(fg), splashDark = crop72(splashDarkSrc);
+// Launch screens: the mark alone, from the foreground. The light one (on paper, #F3F2EE in app config) draws it in
+// ink; the dark one (on #111112) as drawn, in paper. Both have the same footprint, so the mark sits in the same place.
+const splash = crop72(fg.split(PAPER).join(INK)), splashDark = crop72(fg);
 // The options page inlines its 28 px logo into a page that holds other inline icons, so the copy has no comments,
 // a clip id of its own and is hidden from assistive technology (the name "Shelf" sits beside it).
 const LOGO_ID = 'shelfLogo28';
@@ -99,31 +114,33 @@ function cover(hash, x, y, s, rx){
     + `<rect x="${x + 0.5}" y="${y + 0.5}" width="${s - 1}" height="${s - 1}" rx="${rx - 0.5}" fill="none" stroke="${INK}" stroke-opacity="${EDGE_OPACITY}"/>`;
 }
 const strip = (x, y, s, gap, rx) => STRIP.map((h, i) => cover(h, x + i * (s + gap), y, s, rx)).join('');
-// The icon as a tile on a card: its cream ground sits close to paper, so it gets the covers' hairline too.
-function iconTile(x, y, s, rx, edge){
+// The icon as a tile on a card: graphite on paper needs no edge of its own.
+function iconTile(x, y, s, rx){
   const id = 'i' + clipId++;
   return `<defs><clipPath id="${id}"><rect x="${x}" y="${y}" width="${s}" height="${s}" rx="${rx}"/></clipPath></defs>`
-    + `<g clip-path="url(#${id})"><svg x="${x}" y="${y}" width="${s}" height="${s}" viewBox="18 18 72 72">${inner(full)}</svg></g>`
-    + `<rect x="${x + edge / 2}" y="${y + edge / 2}" width="${s - edge}" height="${s - edge}" rx="${rx - edge / 2}" fill="none" stroke="${INK}" stroke-opacity="${EDGE_OPACITY}" stroke-width="${edge}"/>`;
+    + `<g clip-path="url(#${id})"><svg x="${x}" y="${y}" width="${s}" height="${s}" viewBox="18 18 72 72">${inner(full)}</svg></g>`;
 }
 
-// The wordmark is set in the system UI font until the name and typeface are final (Segoe UI on Windows, Arial on macOS).
-const FONT = 'Segoe UI, Roboto, Arial, sans-serif';
+// The name and tagline are set in Archivo, the interface's typeface, from the repo's own static instances
+// (shared/fonts/out), so the cards come out the same on any machine. Regenerate them when the name is final.
+const FONT_DIR = path.join(__dirname, '..', 'fonts', 'out');
+const FONT_FILES = ['Archivo-400.ttf', 'Archivo-600.ttf'].map(f => path.join(FONT_DIR, f));
+const NAME_FONT = 'Archivo-600', TEXT_FONT = 'Archivo-400';
 // Social card, 1200 x 630: the icon tile, then the name, the tagline and a short strip of saves, bottom-aligned with the tile.
 const og = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
   <rect width="1200" height="630" fill="${PAPER}"/>
-  ${iconTile(120, 165, 300, 68, 2)}
-  <text x="484" y="258" font-family="${FONT}" font-size="112" font-weight="600" letter-spacing="-3" fill="${INK}">Shelf</text>
-  <text x="488" y="328" font-family="${FONT}" font-size="38" fill="${MUTED}">Save anything. Read it clean and offline,</text>
-  <text x="488" y="376" font-family="${FONT}" font-size="38" fill="${MUTED}">or listen to it.</text>
+  ${iconTile(120, 165, 300, 68)}
+  <text x="484" y="258" font-family="${NAME_FONT}" font-size="112" letter-spacing="-3" fill="${INK}">Shelf</text>
+  <text x="488" y="326" font-family="${TEXT_FONT}" font-size="34" fill="${MUTED}">Save anything. Read it clean and offline,</text>
+  <text x="488" y="370" font-family="${TEXT_FONT}" font-size="34" fill="${MUTED}">or listen to it.</text>
   ${strip(488, 409, 56, 10, 6)}
 </svg>`;
 // Google Play feature graphic, 1024 x 500, opaque. Tile, name and strip sit centred, clear of Play's edge cutoff zones;
-// the strip spans the name's ink (about x 512 to 766 in Segoe UI) and the name and strip are centred on the tile.
+// the strip starts under the name's ink and the name and strip are centred on the tile.
 const feature = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 500">
   <rect width="1024" height="500" fill="${PAPER}"/>
-  ${iconTile(262, 150, 200, 45, 2)}
-  <text x="506" y="265" font-family="${FONT}" font-size="120" font-weight="600" letter-spacing="-3" fill="${INK}">Shelf</text>
+  ${iconTile(262, 150, 200, 45)}
+  <text x="506" y="265" font-family="${NAME_FONT}" font-size="120" letter-spacing="-3" fill="${INK}">Shelf</text>
   ${strip(512, 297, 28, 4, 3)}
 </svg>`;
 
@@ -141,8 +158,10 @@ function encodePng(w, h, channels, px){
 }
 
 function write(file, buf){ fs.mkdirSync(path.dirname(path.join(OUT, file)), { recursive: true }); fs.writeFileSync(path.join(OUT, file), buf); return buf; }
-// Only the two cards set text; scanning the system fonts costs most of a second per render, so the icons skip it.
-const render = (svg, width) => new Resvg(svg, { fitTo: { mode: 'width', value: width }, font: { loadSystemFonts: svg.includes('<text') }, background: 'rgba(0,0,0,0)' }).render();
+// Only the two cards set text, from the repo's Archivo files; nothing reads the system's fonts.
+const render = (svg, width) => new Resvg(svg, { fitTo: { mode: 'width', value: width },
+  font: svg.includes('<text') ? { fontFiles: FONT_FILES, loadSystemFonts: false, defaultFontFamily: TEXT_FONT } : { loadSystemFonts: false },
+  background: 'rgba(0,0,0,0)' }).render();
 
 // Up to 48 px, render at 8x and box-average each 8 x 8 block. resvg's own 4 x 4 sampling counts edges that
 // run through pixel corners on one side only, which makes the symmetric notch lopsided at 16 and 32 px.
@@ -201,29 +220,13 @@ function checkSafeZones(){
   return `safe zones: mark ${fgReach.toFixed(2)} of 33 dp; maskable mark ${(maskReach * 100).toFixed(1)}% of 40%`;
 }
 const zones = checkSafeZones();
-// The dark splash is paper only, stays inside the light splash's silhouette (same size on either launch screen) and
-// cuts the unread slot through to the background while the read part stays solid.
-function checkDarkSplash(){
-  // the bookmark is foreground.svg's, turned to paper; the bar is drawn as an outline ring and the read pill, so the slot is open
-  const mark = svg => shapes(svg).split('<rect')[0];
-  if (mark(splashDarkSrc) !== mark(fg).split(INK).join(PAPER))
-    throw new Error("src/splash-dark.svg's bookmark must be foreground.svg's with its ink turned to paper");
-  const N = 512, d = render(splashDark, N).pixels, l = render(splash, N).pixels, [pr, pg, pb] = [0xF3, 0xF2, 0xEE];
-  const box = px => { let x0 = N, y0 = N, x1 = -1, y1 = -1; for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (px[(y * N + x) * 4 + 3]) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); } return [x0, y0, x1, y1].join(','); };
-  let outside = 0;
-  for (let p = 0; p < N * N; p++) {
-    const a = d[p * 4 + 3], o = p * 4;
-    if (a && [pr, pg, pb].some((c, i) => Math.abs(d[o + i] - c * a / 255) > 1)) throw new Error(`splash-icon-dark: pixel ${p} is not paper`);
-    if (a > l[o + 3] + 4) outside++;
-  }
-  if (outside) throw new Error(`splash-icon-dark: ${outside} pixels paint outside the light splash's silhouette`);
-  if (box(d) !== box(l)) throw new Error(`splash-icon-dark: footprint ${box(d)} differs from the light splash's ${box(l)}`);
-  // centres of the unread slot (x 70, y 74.5) and the read part (x 46) on the 108 canvas, through the 96% scale and the 72 crop
-  const at = (x, y) => { const s = v => Math.round(((54 + (v - 54) * 0.96) - 18) / 72 * N); return d[(s(y) * N + s(x)) * 4 + 3]; };
-  if (at(70, 74.5) !== 0 || at(46, 74.5) !== 255) throw new Error('splash-icon-dark: the slot must be cut out and the read part solid');
-  return 'dark splash paper only, inside the light footprint, slot cut out';
+// The two launch screens are one drawing in two colours: the same footprint, and nothing painted outside it.
+function checkSplashes(){
+  const N = 512, l = render(splash, N).pixels, d = render(splashDark, N).pixels;
+  for (let p = 0; p < N * N; p++) if (Math.abs(l[p * 4 + 3] - d[p * 4 + 3]) > 1) throw new Error(`launch screens: pixel ${p} differs in coverage`);
+  return 'both launch screens one drawing';
 }
-const darkSplash = checkDarkSplash();
+const splashes = checkSplashes();
 
 fs.rmSync(OUT, { recursive: true, force: true });
 
@@ -234,20 +237,21 @@ png(bg, 1024, 'android/adaptive-background.png');
 png(mono, 1024, 'android/adaptive-monochrome.png');
 png(splash, 1024, 'android/splash-icon.png');
 png(splashDark, 1024, 'android/splash-icon-dark.png');
-png(notification, 96, 'android/notification-icon.png');
+png(notification, 96, 'android/notification-icon.png');   // the glyph at 4x, for anything that needs a bitmap
 copy(vectorDrawable, 'android/shelf_notification.xml');
 png(crop72(full), 512, 'android/play-store-icon.png');
 pngRgb(feature, 1024, 'android/play-feature-graphic.png');
 
 // Browser extension (manifest "icons" and "action.default_icon"; Firefox also takes SVGs, keyed by size).
-// 16, 32 and 48 are the tuned cuts; 128 is the 108 dp drawing with the Chrome Web Store's 16 px of padding.
-// The options page inlines options-logo-28.svg.
-png(small, 16, 'extension/icon-16.png');
-png(small32, 32, 'extension/icon-32.png');
+// 16 and 32 are the toolbar button, the plain bookmark (decision 94: the extension only saves, and the split reads as
+// a pause control at toolbar sizes); 48 is the tuned cut of the icon, which Chrome's extensions page shows; 128 is the
+// 108 dp drawing with the Chrome Web Store's 16 px of padding. The options page inlines options-logo-28.svg.
+png(toolbar16, 16, 'extension/icon-16.png');
+png(toolbar32, 32, 'extension/icon-32.png');
 png(small48, 48, 'extension/icon-48.png');
 png(tile(128, 16, 22), 128, 'extension/icon-128.png');
-copy(small, 'extension/icon-16.svg');
-copy(small32, 'extension/icon-32.svg');
+copy(toolbar16, 'extension/icon-16.svg');
+copy(toolbar32, 'extension/icon-32.svg');
 copy(inlineLogo, 'extension/options-logo-28.svg');
 
 // Website. favicon.svg stays the 16 px drawing because tabs show it at 16 CSS px; the ICO carries the 16, 32 and 48 cuts.
@@ -289,4 +293,4 @@ for (const [file, [w, h]] of Object.entries(SIZES)) {
 const list = [];
 (function walk(d){ for (const f of fs.readdirSync(d)) { const p = path.join(d, f); fs.statSync(p).isDirectory() ? walk(p) : list.push(`${path.relative(OUT, p).replace(/\\/g, '/')}  ${fs.statSync(p).size} B`); } })(OUT);
 console.log(list.join('\n'));
-console.log(zones + '; ' + darkSplash + '; every PNG at its expected size; feature graphic 24-bit RGB');
+console.log([layers, zones, splashes, 'every PNG at its expected size', 'feature graphic 24-bit RGB'].join('; '));

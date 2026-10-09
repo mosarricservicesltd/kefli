@@ -1,0 +1,17 @@
+{
+  "id": "D-three-90",
+  "label": "Three plays, smaller",
+  "width": 39.15,
+  "height": 45.21,
+  "heightToWidth": 1.15,
+  "notchAngle": 30,
+  "play": {
+    "height": 16.15,
+    "depth": 13.98,
+    "shareOfHeight": 0.36,
+    "tipToSlot": 2.8
+  },
+  "threePlaysTall": 45.21,
+  "overshoot": 0,
+  "reachApprox": 28.64
+}

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!--
+    FROZEN ARTWORK (flow decision 94). Written from docs/design/icons/negative-space/candidates/D by tools/freeze-d.mjs on 9 October 2026; never regenerate it.
+    The status bar's and media notification's small icon: the plain bookmark on D's proportions, 16 x 18 px, white.
+    A play-and-pause glyph would sit beside the media card's real play and pause button.
+  -->
+  <path fill="#FFFFFF" d="M6 3H18A2 2 0 0 1 20 5V21L12 16.5L4 21V5A2 2 0 0 1 6 3Z"/>
+</svg>

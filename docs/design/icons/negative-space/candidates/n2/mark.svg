@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <!-- n2 Bookmark window, built by build.mjs. Bookmark 43.5 dp wide at Shelf's proportions (53.74 dp from the top to the tips' points, about 52 drawn; shoulders r 5.12, tips r 1.92, notch 14.07), top at 27.1: as large as the 66 dp safe circle allows (reach 32.6 dp).
+    Play hole: equilateral, 32.27 dp tall, corners at the shoulder radius, sized so at least 7.5 dp of paper stays round it
+    (10.43 on the left, 10.24 past the drawn tip); centroid (52, 48.5).
+    Pause island: on the play's incircle (r 9.32), bars 3.3 x 10 dp with a 2.81 dp gap, r 1; a 3 dp ring of dark
+    to the slanted sides and 4.61 dp to the flat side. -->
+  <path fill="#F3F2EE" fill-rule="evenodd" d="M37.368 27.1L70.632 27.1A5.118 5.118 0 0 1 75.75 32.218L75.75 77.308A1.919 1.919 0 0 1 72.788 78.919L54 66.762L35.212 78.919A1.919 1.919 0 0 1 32.25 77.308L32.25 32.218A5.118 5.118 0 0 1 37.368 27.1ZM50.36 36.796L62.956 44.068A5.118 5.118 0 0 1 62.956 52.932L50.36 60.204A5.118 5.118 0 0 1 42.684 55.772L42.684 41.228A5.118 5.118 0 0 1 50.36 36.796ZM48.297 43.499L49.597 43.499A1 1 0 0 1 50.597 44.499L50.597 52.501A1 1 0 0 1 49.597 53.501L48.297 53.501A1 1 0 0 1 47.297 52.501L47.297 44.499A1 1 0 0 1 48.297 43.499ZM54.403 43.499L55.703 43.499A1 1 0 0 1 56.703 44.499L56.703 52.501A1 1 0 0 1 55.703 53.501L54.403 53.501A1 1 0 0 1 53.403 52.501L53.403 44.499A1 1 0 0 1 54.403 43.499Z"/>
+</svg>

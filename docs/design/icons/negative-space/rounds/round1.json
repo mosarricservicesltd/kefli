@@ -1,0 +1,879 @@
+{
+ "candidates": [
+  {
+   "id": "n1",
+   "title": "Classic nest",
+   "idea": "Richard's idea drawn straight: Shelf's bookmark in paper, the largest play hole its walls allow, and a paper pause sitting on the play's incircle. The play is the dark tile showing through and the pause is the bookmark's own paper again, so one shape carries save, listen and pause.",
+   "built": "Bookmark at Shelf's proportions, 43.5 dp wide with its top at 27.1, as large as the 66 dp safe circle allows (reach 32.6 dp). The play is equilateral, 38.3 dp tall, with its corners rounded at the bookmark's shoulder radius (5.1 dp); it is the largest that keeps at least 6 dp of paper round it: 6 at the top corner and over the notch, 8.2 on the left, 7.3 past the drawn tip. Its centroid sits 2.5 dp left of the centre line, which puts the drawn play's box 0.5 dp right of it, halfway between centroid and box centring; that is what looks centred inside a rectangle. The pause sits on the incircle (radius 11.05 dp): bars 3.4 x 11.4 dp, 3.1 dp apart, corner radius 1 dp, with 4 dp of dark to the slanted sides and 6.1 dp to the flat side. The extra on the flat side is deliberate: a gap that runs parallel to a bar looks narrower than the same gap at a corner. One even-odd path.",
+   "small": "48 px: bookmark 28 x 34 px, play 24 px tall with its sides at 4:7 (within a degree of equilateral) and r 3 corners, 3.8 to 5 px of paper round it. The pause is dropped there: once a 3 px ring and a 3 px gap come out of a play with a 7 px incircle, 3 px bars could only be about 4 px tall. 32 px: bookmark 20 x 24 px with a 16 px play and 3 to 4 px walls, no pause. 16 px: bookmark 10 x 12 px with a 4 x 7 px play drawn in whole pixels, so it stays crisp. Glyph 24: bookmark 16 x 20 px with a 12 px play hole and at least 3 px of white round it; no pause, since the media notification beside it already carries play and pause. The pause therefore lives only in the launcher icon and on the launch screens.",
+   "risks": "Google Play Books also builds its icon from a bookmark-like shape round a play triangle; the pause island, the single colour and Shelf's square shoulders set this apart, and only the last two survive below 64 px. On a home screen at 1x the pause shrinks to two specks and the icon reads as a bookmark with a play button, which could suggest a podcast or video app. The toolbar cuts carry the play alone.",
+   "self_score": 6,
+   "self_critique": "Well made and faithful, but it is the drawing anyone would arrive at from Richard's sentence, so it is closer to forgettable than I would like. The pause exists only in the launcher icon: every toolbar cut and the glyph are bookmark plus play, which is exactly the Play Books composition. The equilateral play's lower side (30 degrees) runs nearly but not quite parallel to the notch (32.9), so the paper band under it tapers by about 1.5 dp: near-parallel lines that are not parallel are the kind of thing n3 fixes. The ring round the pause is uneven by design (4 dp to the slanted sides, 6.1 to the flat side); I think it reads as even, but someone measuring will see it. At 1x on a home screen it reads as a media button in a bookmark before it reads as reading.",
+   "territory": "nested"
+  },
+  {
+   "id": "n2",
+   "title": "Bookmark window",
+   "idea": "The bookmark first: a smaller play hole set in Shelf's bookmark like a window, with a broad margin of paper all round and the paper pause held snugly inside it. Of the three it keeps the most solid bookmark, so saving reads before listening.",
+   "built": "Same bookmark as n1 (43.5 dp wide, top at 27.1, reach 32.6 dp). The play is equilateral, 32.3 dp tall, corners at the shoulder radius, sized so at least 7.5 dp of paper stays round it: 7.5 over the notch, 9 at the top corner, 10.4 on the left and 10.2 past the drawn tip. The band over the notch is the thinnest on purpose, because the tails add paper either side of it. The play's centroid is at (52, 48.5), on the bookmark's visual centre, which sits lower than the middle of the body above the notch; centred on the body, the play looked high. The pause sits on the incircle (radius 9.3 dp): bars 3.3 x 10 dp, 2.8 dp apart, inside a 3 dp ring, tighter than n1's 4 dp, so the island keeps its size in the smaller play.",
+   "small": "48 px: bookmark 28 x 34 px with a 20 px play and 4.8 to 7 px of paper round it; no pause, as the play's incircle is under 6 px in radius. 32 px: a 14 px play with 3.4 to 5 px of paper; no pause. 16 px: the same 4 x 7 px stepped play as n1. Glyph 24: an 11 px play hole with at least 3.3 px of white round it; no pause. In the 48, the 32 and the glyph the play's ends sit on half pixels so the paper above and below it keeps the master's ratio; the play has no level edge, so nothing blurs.",
+   "risks": "The quietest of the three, and the nearest to a bookmark with a play badge placed on it, the clip-art reading the brief warns against. Its pause is the smallest here and turns to specks on a 1x home screen, and its play window is small in the 32 and 16 px cuts. It shares n1's likeness to Google Play Books, at a lower volume.",
+   "self_score": 5,
+   "self_critique": "This is the replacement for the stencil, and it is n1 at a lower volume: the same construction with a smaller window, so the difference is one of hierarchy, not of idea. It is worth showing only as the calm end of the range (bookmark first, n1 balanced, n3 play first). It has the least negative space of the three, which runs against Richard asking to play with negative space, and it is the one most open to the 'symbol stamped on a bookmark' criticism from the first round. Its pause (3.3 x 10 dp) is the smallest and the most at risk on a home screen. I would not put it forward as the answer.",
+   "territory": "nested"
+  },
+  {
+   "id": "n3",
+   "title": "One hand",
+   "idea": "The play hole is cut at the notch's own angle, its two sides parallel to the notch's two diagonals, so tail and triangle look cut by one hand, and it is as large as the bookmark can hold. That leaves room for a full-height pause in an even dark ring, and one module sets every wall, bar and gap, so the pause survives down to 32 px.",
+   "built": "Same bookmark (43.5 dp wide, top at 27.1, reach 32.6 dp). The play's sides slope at the notch's 11 in 17 (32.9 degrees from level, 65.8 at the tip), so it is 44.6 dp tall and 34.5 deep, corners at the shoulder radius. One module, 4.1 dp (9.4% of the bookmark's width), sets the paper band over the notch, which runs parallel to it, the top wall, both pause bars, the gap between them and the dark ring round them. The left wall, 6.8 dp, is the one measure off the module, chosen so the drawn tip sits 6.5 dp from the right edge and the play is optically centred. The bars come out at 4.1 x 14.6 dp, about 1 to 3.5, the proportion of a standard pause sign. The left bar is a module from the flat side and the right bar's corners a module from the slanted sides, so the ring is even on all three sides and the pause sits in the deep part of the play, 1.9 dp left of the incircle centre.",
+   "small": "The module is 3 px on the 48 px cut and 2 px on the 32, so both keep the pause. 48 px: bookmark 32 x 40 px, a 33 px play and 3 x 9 px bars, with the notch and the play's sides at 2:3 so they stay parallel on the pixel grid. 32 px: bookmark 22 x 27 px, a 23 px play and 2 x 6 px bars. Every bar sits on whole pixels. To make room, these two bookmarks fill about two thirds of the tile, against the master's 60%. 16 px drops the pause, since a 1 px module blurs into one grey patch, and shares n1's 4 x 7 px stepped play. Glyph 24: bookmark 16 x 20 px with a 15 px play hole and 2 px walls; no pause, as a 2 px pause does not fit.",
+   "risks": "The hole is so large that the bookmark becomes a frame, and at a glance the play can register before the bookmark; that also puts it closest of the three to Google Play Books. The walls are 4.1 dp, under 3 px on a 1x home screen, so the frame looks light beside solid icons. The small cuts are drawn larger in their tiles than the master, so in the toolbar the icon looks a size up from the launcher's proportions.",
+   "self_score": 7,
+   "self_critique": "The strongest of the three and the one I would show: every diagonal shares the notch's angle, one module drives walls, bars, gap and ring, the pause has a real pause's proportions, and it is the only nest whose pause is still there in the 48 and 32 px toolbar cuts. What still bothers me: the play is so dominant that the icon can read as a play button in a bookmark-shaped frame, which is both the Play Books risk and a 'video or music app first' risk; the frame is thin (4.1 dp) and looks light beside solid launcher icons at 1x; the one-module story has one exception (the 6.8 dp left wall, needed for optical centring); the pause is fitted into the deep part of the play rather than centred on the incircle, which some eyes will read as sitting left; the 48 and 32 cuts only keep the pause because their bookmarks are drawn about 10% larger in the tile than the master; and the 16 px cut, shared with n1 and n2, loses everything that makes n3 distinct.",
+   "territory": "nested"
+  },
+  {
+   "id": "p1",
+   "title": "Centred play",
+   "idea": "Shelf's bookmark in solid paper with one hole: an equilateral play, rounded as softly as the bookmark's shoulders and set in the middle of the body, so the paper around it reads as an even frame. The bookmark reads first, and the hole says every save can be played.",
+   "built": "Bookmark 42.5 dp wide, 1.25 times today's with its proportions unchanged, drawn box centred on the canvas; the farthest ink is 32.4 dp from the centre. In bookmark units (34 wide): the play is 22 tall and 19.05 deep (equilateral), half the bookmark's height. Corners r 2.5 units (3.1 dp): on a 60 degree corner that reads as soft as the 4 unit shoulders on their 90. The flat side sits 0.42 of the play's depth left of the centre line, between box centring (0.5) and centroid centring (0.33), leaving 9 units of paper at the flat side and 8.45 at the rounded tip, which look equal. The play's axis is 17.25 units below the top: 8.1 units of paper above the hole and 6.4 to the notch's apex, which balances because the apex is a point. The hole is 16% of the bookmark's area.",
+   "small": "48 px: bookmark 28 x 34 px with a 9 px notch; the play 18 x 16 px with its flat side on x 17, 7 px of paper at the flat side and at the tip, 6.5 px above and 5.2 to the apex. 32 px: bookmark 18 x 22, play 11 x 9.5 px on x 12, walls of 5 and 4.9 px, 4.5 above and 3.3 to the apex. 16 px: bookmark 10 x 12; the play is redrawn in whole pixels as columns of 5, 3, 3 and 1 on x 6, rows 4 to 8, floating with 2 px of paper above and 2 to 3 below, since a drawn triangle this small is only grey pixels. Glyph: bookmark 16 x 20, play 10 px tall on x 8 with 4 px walls. Every cut keeps the play; nothing is dropped.",
+   "risks": "Google Play Books pairs the same two symbols, a soft play triangle holding a bookmark. Here the silhouette is Shelf's square-shouldered bookmark and the play is a hole, which keeps them apart, but a bigger or softer play would close the gap. After the silhouette, the play is the loudest thing on the icon, so among media apps it could be taken for a player. At 16 px the play is 5 px tall and only just reads as a play.",
+   "self_score": 6,
+   "self_critique": "It is the expected answer: a play set in a bookmark, carefully proportioned (walls measured, not eyeballed) but with no idea beyond the symbol itself, so it sits close to the clip-art reading the brief warns about. At launcher sizes it is hard to tell from p2 without looking. A soft rounded play next to a bookmark is Google Play Books' pairing reversed, which nags. The 16 px play is 5 px tall and only just a play. The 42.5 dp bookmark sits closer to the circle mask's edge than the reference (3.6 dp clearance against 5.3), slightly tight in the circle at 48 px.",
+   "territory": "play"
+  },
+  {
+   "id": "p2",
+   "title": "Notch-cut play",
+   "idea": "The two cuts that make the bookmark's tail, folded to point forward, make the play: its slanted edges run parallel to the notch's and are just as long, so the hole and the tail look cut by the same hand. The play rests on the tail with an even strap of paper along the notch, and its angle is also the angle of the play button inside the app.",
+   "built": "Bookmark as p1: 42.5 dp wide, today's proportions, drawn box centred. The play is the notch's triangle folded: its flat side is twice the notch's depth (22 units of 34, 27.5 dp) and its depth half the bookmark's width (17 units, 21.25 dp), so both slanted edges have the notch's slope (32.9 degrees) and length (20.25 units), and the hole has the notch's area. The prototype's Lucide play (polygon 6 3, 20 12, 6 21) slopes at 32.7 degrees, so it is the same shape. Corners r 1.5 units (1.9 dp), the tail tips' radius, because the play's back corners have the tips' 57 degree angle. The flat side sits 0.46 of the depth left of the centre line, leaving 9.2 units of paper at the flat side and 9.1 at the tip. The lower edge is set 5 units square to the notch's left edge: a strap thinner than the 9.2 to 9.4 units at the flat side, tip and top, so the play reads as resting on the tail. The hole is 14.8% of the bookmark.",
+   "small": "Each cut builds the play from its own notch, so the edges stay parallel to the notch at every size. 48 px: notch 9 over 14, play 18 x 14 px with its flat side on x 18 (8 px of paper there, 7 at the tip), strap 4 px, 6.6 px above. 32 px: notch 6 over 9, play 12 x 9 px on x 12, strap 2.6 px. 16 px: the play is redrawn in whole pixels as columns of 6, 4, 4 and 2 on x 6, rows 4 to 9, resting on the tail with 2 px above and its lower steps 1 to 2 px from the notch. Glyph: notch 5 over 8, play 10 x 8 px on x 8, strap 3 px. Every cut keeps the play.",
+   "risks": "The crisp corners follow the tail tips, so they are much crisper than the round shoulders, and some will read them as sharp. The play sits below the middle on purpose, which out of context can look as if it has slipped. At launcher sizes the difference from p1 is subtle (narrower, crisper, lower), and the notch rhyme is only visible from about 48 px up. Google Play Books pairs the same two symbols; the bookmark silhouette and the hole keep them apart.",
+   "self_score": 7,
+   "self_critique": "The strongest idea of the three, and the construction is real rather than claimed: the play's edges are the notch's edges in slope and length, it has the notch's area, and it matches the angle of the in-app play button. But below 48 px nobody will see the construction; on a home screen it reads as a slightly narrower, lower, crisper p1. The 1.9 dp corners break the brief's 'about the shoulder radius' default on purpose. At 288 px they read as cut rather than sharp, but Richard rejected sharp triangles last time and may not see the distinction. The 48 px cut cannot centre the play exactly (8 px of paper at the flat side against 7 at the tip) without a half-pixel flat side, because its depth is locked to the notch's half-width. The 16 px play's tip is 2 px wide and blunt.",
+   "territory": "play"
+  },
+  {
+   "id": "p3",
+   "title": "Quiet play",
+   "idea": "The bookmark stays the hero, with the app's own play button punched small through its optical centre. The icon says saved first and listen second.",
+   "built": "Bookmark as p1: 42.5 dp wide, today's proportions, drawn box centred. The play has the proportions of the player's Lucide play (14 deep by 18 tall); its flat side is 15 units of 34 (18.75 dp), 36% of the bookmark's height, the smallest play a 48 px icon still shows without effort. Corners r 1.7 units, 0.11 of its height, the same softness as p1's play. The flat side sits 0.40 of the depth left of the centre line, close to centroid centring, because the eye places a small shape in a wide field by its mass. The axis is 17.6 units below the top: the centre of mass is at 18.4, but a small play there reads low. Walls: 12.3 units at the flat side, 11.4 at the tip, 11.5 above and 7.8 to the notch's apex. The hole is 6.6% of the bookmark.",
+   "small": "48 px: play 12 x 9.3 px on x 20, 10 px of paper at the flat side and 9.9 at the tip. 32 px: play 8.5 x 6.6 px on x 13, walls of 6 and 6.2 px. 16 px: the play in whole pixels as columns of 5, 3 and 1 on x 7, rows 5 to 9, the smallest shape that still reads as a play. Glyph: play 8.5 px tall on x 9, walls of 5 and 5.2 px. Every cut keeps the play; at 16 px it is as tall as p1's, as nothing smaller reads as a play.",
+   "risks": "The least inventive of the three: a symbol set into the bookmark, close to clip art, kept clear of it only by its restraint. The play is small, so in the status bar and at 16 px it is a 5 px mark that can be taken for a speck, and on a busy home screen the listen message is easy to miss. It shares its play shape with p2.",
+   "self_score": 5,
+   "self_critique": "Competent but forgettable. It exists because every bolder third idea failed (see dropped), and it is the only one that keeps saved first and listen second at real sizes. The negative space does nothing beyond carrying the symbol, which is the clip-art failure the brief names, softened only by its size. Its play shape is p2's at two thirds the size, so the family has two near-relatives. The quiet idea does not survive at 16 px, where the play has to be as tall as p1's to read at all.",
+   "territory": "play"
+  },
+  {
+   "id": "s1",
+   "title": "Split bookmark",
+   "idea": "Shelf's bookmark cut once down its centre line, so the two halves stand as a pause sign. Each half keeps its half of the notch, and the eye closes the two slopes back into one bookmark; a pause and a bookmark both mean stop here and come back later.",
+   "built": "geom.bookmark at 42 dp wide with today's proportions, drawn as one compound path of two pieces, centred on its drawn box (reach 32.0 of the 33 dp safe radius, centroid 1.9 dp above centre). The cut is 6.3 dp, 0.15 of the width. The app's own pause button (Lucide pause filled with the 1.75 stroke: bars 5.75 wide, gap 2.25) has a gap of 0.164 of its width; a hair narrower here lets the bookmark lead, and from 0.18 up the halves start to read as two separate bars. Each half runs from its tip up its half of the notch to the cut, so the slope is unbroken. The four corners the cut makes take the tip radius (1.5/34 of the width) and only the outer shoulders are round, so the halves read as one shape cut through.",
+   "small": "Nothing is dropped at any size. 48 px: 28 x 34 px, 4 px cut, shoulders r 3, each notch edge from the tip at (10, 41) to the cut at (22, 33), a 2:3 slope close to the master's. 32 px: 20 x 24 px with a 4 px cut, since a 2 px cut went faint where this size shows at 16 CSS px on 2x screens; notch 5 over 8. 16 px: 10 x 12 px, 2 px cut, notch 3 over 4, shoulders r 1. I tried 1:2 slopes at 48 and 32: cleaner steps, but visibly flatter than the master's notch and no fewer grey pixels. Glyph: 16 x 20 px with a 2 px cut, the master's proportion, because phones draw it at 2.6 times or more.",
+   "risks": "It reads as a pause sign, and as listening only to someone who already knows Shelf reads articles aloud; pause on its own says something is playing now. Out of context, most of all at 16 px, it can pass for a media app's pause button before it reads as a bookmark; the angled feet keep it Shelf's. Near lookalikes: a Roman numeral II, a parallel sign. The gap carries the whole idea, so every later redraw has to keep it open.",
+   "self_score": 7,
+   "self_critique": "The strongest of my three and the one I would show Richard. Its soft-pixel share is lower than the solid reference's at every size (2.8, 5.1 and 11.4 per cent against 3.5, 6.3 and 14.7). Out of context it can still read as a media pause button before a bookmark, and at 16 px the bookmark survives only through three pixels of slope on each foot. The notch's apex, the bookmark's most recognisable point, is gone and has to be inferred by the eye. The mark becomes two pieces, so any one-colour use (print, emboss, stitch) must keep the gap open. The gap's share of the width drifts with the pixel grid (0.15 master, 0.14 at 48, 0.2 at 32 and 16, 0.125 on the glyph). I chose 0.15 by eye over the app pause's 0.164; the difference is under a dp and could go either way.",
+   "territory": "pause"
+  },
+  {
+   "id": "s2",
+   "title": "Forked tail",
+   "idea": "Shelf's bookmark with its notch carried up the centre line as a slot, so the tail forks into two legs under a whole head. It was meant to be a bookmark and a pause at once; drawn, it reads as a bookmark with a split tail, and the pause does not come through.",
+   "built": "The same 42 dp bookmark and 6.3 dp cut as s1 (0.15 of the width), stopped 0.4 of the height below the top edge: the slot rises 17.5 dp above the notch's apex, and its corners take the tip radius. I drew heads of 0.45, 0.4, 0.33, 0.3, 0.24, 0.16 and 0.1 of the height, slots from 0.1 to 0.22 of the width, and square, round and pointed slot ends. From about 0.33 down the shape reads as a \u03a0, a gate or a pair of trousers, so 0.4 is the deepest that is still plainly the bookmark.",
+   "small": "Nothing is dropped. 48 px: 28 x 34 px, a 4 px slot from the notch up to y 21, leaving 14 px of head. 32 px: 20 x 24 px, 4 px slot up to y 14. 16 px: 10 x 12 px, 2 px slot up to y 7. Glyph: 16 x 20 px, 2 px slot up to y 10. The head is about 0.4 of the height at every size, and the notch edges use s1's slopes.",
+   "risks": "It reads as neither a pause nor listening. Any bridge across the top, however thin, joins the legs into one letter-like object (\u03a0, a gate, trousers), and Shelf's bookmark is too short for its legs to pass as pause bars: cut all the way through, each half is about 2.8 times as tall as it is wide, and every bit of head left on makes the legs stubbier. The dark slot and notch together can look like an upside-down Y, a crack or a rocket's fins. It answers how deep the slot can go; I would not put it forward on its own.",
+   "self_score": 3,
+   "self_critique": "It does not do what it was asked to do. No depth of slot makes the legs read as a pause: any bridge turns two bars into one letter-like shape, and the bookmark's proportions leave the legs too stubby. It is a carefully drawn negative result (crisp cuts, 2.6 per cent soft at 48), kept so Richard can see that s1's cut has to go all the way through. The dark slot-and-notch shape means nothing for Shelf and can read as a crack. I looked hard for a better replacement in the territory (listed under dropped) and found none that beat it on the brief's own terms, so I left the honest answer in place.",
+   "territory": "pause"
+  },
+  {
+   "id": "s3",
+   "title": "Notch-echo pause",
+   "idea": "A solid Shelf bookmark with a pause cut out of its body. The two holes together are the bookmark's own outline, inset and cut down the middle, so the pause stands on the tail's angle and the paper under it is an even chevron.",
+   "built": "The 42 dp bookmark as in s1. Two holes 8 dp wide with a 4 dp spine between them (half a hole, as tight as the app's own pause button). Paper: 11 dp at the sides, 10.5 above, and 9 dp between the holes and the notch measured square to the notch edge, so the chevron band is even along its length. The holes sit wholly above the notch's apex, and their corners take the tip radius. With 9 dp walls the paper turned into a frame, close to the outlined bookmark that means not saved in most interfaces; with 12 dp walls the holes started to look like a pair of eyes.",
+   "small": "Nothing is dropped. 48 px: 28 x 34 px; holes 5 px wide, a 4 px spine and 7 px walls, the holes' bottoms 3 px lower at the outside edge (the echo). 32 px: 20 x 24 px; holes 4 px, spine 2, walls 5, a 2 px echo. 16 px: 10 x 12 px; holes, spine and walls 2 px each, with flat bottoms, since a one-pixel slant only adds grey. Glyph: 16 x 20 px; holes 4 px, spine 2, side walls 3, top 4, a 2 px echo.",
+   "risks": "The most literal of the three: a pause stamped into a bookmark, the same construction as Google Play Books (a media symbol inside a bookmark-like shape) with pause in place of play. It reads as a pause sign, and as listening only to someone who knows Shelf reads aloud. The echo is quiet at 48 px and gone at 16. Two dark slots in a light shape can read as eyes; the narrow spine and the holes' height hold it to a pause.",
+   "self_score": 5,
+   "self_critique": "Competent and legible at every size, but literal. It is a symbol in a bookmark, which is what the first attempt was criticised for and how Google Play Books is built. The inset-and-split logic and the notch echo are the only things tying the pause to the bookmark, and the echo is quiet at 48 px and gone at 16. The pause is smaller and weaker than s1's, and at 16 px the holes are 2 px slits. The 32 px cut is softer than the reference (9.6 against 6.3 per cent) because of the hole bottoms' diagonals.",
+   "territory": "pause"
+  },
+  {
+   "id": "t1",
+   "title": "The notch plays",
+   "idea": "Shelf's bookmark laid on its side, tail to the left, so the notch it already has points right as a play button. One solid shape with no holes: the play is the space the bookmark's own tail leaves open.",
+   "built": "Today's bookmark turned a quarter turn clockwise, 37 dp wide (its height on the tile) and 54.8 long. The notch is deepened from 11/34 of the width to 14/18, the proportion of Shelf's in-app play icon (Lucide play: 18 tall, 14 deep), so the notch and the player's play are the same triangle. In a depth study (0.55, 0.62, 0.70, 0.78) the dark wedge read as a chevron up to 0.62 and as a play from 0.70, most firmly at 0.78. The body behind the apex is 26 dp, 0.7 of the width. Corner radii follow the bookmark: shoulders 4/34 of the width, tips 1.5/34, and the notch's apex takes the shoulder radius (4.35 dp) so the play's point is as soft as the shoulders. Centred on y 54. Horizontally the notch takes weight from the left, so the box is moved left of centre by 0.65 of the gap between its box centre and its centroid: box-centred looked right-heavy, centroid-centred pushed the tips past the safe circle. Reach 32.6 dp, inside the 33 dp circle.",
+   "small": "Every size keeps the whole drawing, because there is nothing inside to drop. 48 px: 24 x 34 px, the notch 18 deep on a 2 : 3 staircase (the nearest clean slope to the play's 0.78), shoulders r 3, the apex r 3 (the master's 4.35 dp is 2.9 px here), sharp tips. 32 px: 16 x 23, notch 12, shoulders r 2, apex r 1. 16 px: 8 x 11, notch 6, shoulders r 1, sharp apex, 2 px clear on the left and 3 on the right. Each cut's body is the master's at that scale, so the mark sits where the master does. Glyph: 14 x 20 in the 20 px box, an 11 px notch (11/14, the play's ratio again) with its apex on a whole pixel.",
+   "risks": "On its side the bookmark loses the hang that makes it a bookmark: it can read as a tag, a label, a pennant or the tail of an arrow first, and its square shoulders are the only cue left, small at 48 px. Gmail's 'important' marker is a horizontal tag with a notched end, and Plex's chevron sits close to the notch's outline on a dark tile. A bookmark paired with a play triangle is Google Play Books' ground, which the brief flags; here the play is empty space on a sideways shape, but the pairing is the same. The play is a figure-ground switch: some people will see a chevron bite or a forward arrow until it is pointed out. The deeper notch makes the prongs long and pointed, so it is further from today's chunky bookmark than any upright option.",
+   "self_score": 6,
+   "self_critique": "Next to the upright reference on sheets/tail.png, it reads as a tag, label or pennant before a bookmark. Laying it on its side trades the bookmark's hang for the play, and no notch depth or body length recovers both. I tried D/W from 0.32 to 0.87 and bodies from 24 to 36; long reads as a banner, short as a ticket. The 14/18 notch is far from Shelf's shallow one, with long pointed prongs. At 1x on the home screen the notch reads as a chevron bite before it reads as a play. In its favour, it is the purest negative space in this territory: one shape, no holes, the play made by the bookmark's own tail. The themed icon, glyph and light colourway come free, and every cut is drawn by hand, at the reference's softness (48/32/16 px soft 4.6/7.8/14.7%, against 3.5/6.3/14.7). Reviewer note: the rejected first round had this premise inside its 'Swallowtail' option, so Richard has seen the sideways-notch idea before, drawn badly. This is it redrawn with Shelf's shoulders, a measured notch and tuned cuts. Worth showing as the clean version of the idea; probably not the one.",
+   "territory": "tail"
+  },
+  {
+   "id": "t2",
+   "title": "Play, then pause",
+   "idea": "t1's sideways bookmark with a pause cut through its body, so the notch is the play and two slots are the pause: both of Richard's symbols are negative space in one solid shape. A bookmark marks where you stopped; here its tail resumes and its body pauses.",
+   "built": "t1's bookmark exactly (37 dp wide, the notch 14/18 of the width as Shelf's in-app play icon, the same corner radii, the apex at the shoulder radius), with the body behind the apex lengthened from 26 to 29.5 dp to hold the pause. The pause is drawn like Shelf's own (Lucide's pause has bars wider than the gap between them): bars 7 x 25 dp with a 4.5 dp gap and r 1 corners. The paper round it is nearly even: 6 dp above and below the bars, 5.5 from the notch's apex to the first bar and from the last bar to the shoulders; the gap between the bars is the narrowest paper on purpose, as in any pause glyph. 58.3 dp long, centred on y 54, the box moved left of centre by half the gap between box centre and centroid. Reach 32.4 dp.",
+   "small": "48 px: 24 x 39 px, the notch 18 on a 2 : 3 staircase, bars 5 x 16 with a 3 px gap (the 48 px minimum), 4 px of paper above, below and either side of the pause. 32 px: 16 x 25, notch 12, bars 3 x 10 with a 2 px gap, 3 px above and below, 2 from the apex and 3 to the shoulders. 16 px: the pause would be 1 px slits in 1 px walls, which read as a grille at 1x, so it is dropped and the 16 px cut is t1's notch alone, the same silhouette. Glyph: 14 x 20, a 10 px notch, bars 2 x 8, 2 px apart, so it still says play and pause in the media notification.",
+   "risks": "Play beside pause is the universal media toggle, so the icon can read as a music, podcast or remote-control app before a reading app; the bookmark is only the frame round the two symbols. A bookmark paired with a play triangle is also Google Play Books' ground. The pause is cut into the body like a stamp, so it is less of a discovery than t1's notch; a quieter pause (bars 5.5 x 20) was tried and still read as play and pause, only weaker. Sideways, the bookmark can read as a tag or a label. In the status bar at 18 px the bars are about 1.5 px wide and soften.",
+   "self_score": 5,
+   "self_critique": "It reads as a media play/pause key, so a music or podcast app comes to mind before a reading app. That is the brief's fail condition, and the bookmark shrinks to a frame round two symbols. Only the play is the bookmark's own negative space; the pause is stamped into the body, much like the clip art the brief warns against, even though the pause is drawn carefully (Lucide's proportions, even walls, crisp 5 x 16 px bars at 48). It loses the pause at 16 px, and a quieter pause did not change the reading. This is the rejected round's 'Swallowtail' (sideways bookmark, notch as play, pause in the body) drawn properly this time, so Richard will recognise the premise. I would show it only as the literal answer to his play-and-pause request, next to t1.",
+   "territory": "tail"
+  },
+  {
+   "id": "i1",
+   "title": "Paused bookmark",
+   "idea": "A paper disc with Shelf's bookmark punched out of it and a paper pause left standing in the hole: Richard's three levels turned inside out, so the bookmark is the dark of the screen showing through the paper. A bookmark is a pause in reading, so the pause inside it says 'come back to this' and 'you can listen' at once, and on the light colourway the same drawing gives his solid light bookmark with a dark pause in it, held in an ink disc.",
+   "built": "Disc r 32 dp about the centre, reaching 32.0 of the 33 dp safe radius. Today's bookmark at today's width, 34 dp, every proportion from geom.bookmark's defaults (shoulders r 4, notch 11 deep, tips r 1.5); its box sits 0.5 dp below the disc's centre, because the notch lightens its foot and a centred box looks high. Pause bars 5.5 x 18 dp with a 5.5 dp gap and r 1.5, the tips' radius, so the drawing has only two radii; the pause is centred 17 dp below the bookmark's top edge, a little below the middle of the body above the notch, because the V under the bars reads as extra room. The narrowest paper is 5.6 dp between the tips and the disc's edge and 6.3 dp between the bars and the notch, both above the 4.5 dp that becomes 3 px at 48.",
+   "small": "48 px: disc r 21, bookmark 22 x 27 with a 7 px notch and r 3 shoulders, bars 4 x 12 with a 4 px gap; every straight edge on whole pixels, so only the disc's rim and the notch are soft (11.6%). 32 px: disc r 14, bookmark 14 x 18 with a 5 px notch, bars 2 x 8 with a 2 px gap, at least 2 px of paper everywhere. 16 px: the pause drops out; the disc is a hand-stepped 14 px circle on whole pixels and the bookmark is 6 x 9 with a 3 px notch at 45 degrees, as Shelf's own small cuts have it (6.5% soft against the solid reference's 14.7). Glyph: disc r 10 with a 10 x 12 bookmark hole and no pause, so the status bar never shows what looks like a paused control while Shelf is reading aloud.",
+   "risks": "The paper disc makes this the brightest icon on a dark home screen and moves it away from the dark icon Richard described; it is 42% paper against the solid reference's 33%. A light disc with a dark mark can read as a button, and the pause could suggest a media app at a glance, although the bookmark's square shoulders and notch read first at launcher sizes. A bookmark in a circle also echoes Telegram's Saved Messages avatar, a white bookmark on a blue disc. The pause is gone at 16 px and in the glyph, so the toolbar and the status bar show a plain bookmark disc.",
+   "self_score": 6,
+   "self_critique": "It is the stronger of my two and well drawn: today's bookmark at today's size, two radii in the whole drawing, the pause placed by eye after three position tests, and every cut hand-placed on whole pixels. The 16 px cut is crisper than the solid reference (6.5% soft against 14.7). What still bothers me: (1) The swap costs the dark icon Richard asked for. A 64 dp paper disc makes it the brightest thing on a dark home screen. (2) Both levels really are negative space, yet the finished picture can still be summed up as 'a bookmark with a pause in it', which is close to the 'symbol stamped in a bookmark' the first round was rejected for. The light colourway reads that way most of all. (3) A disc round a mark reads as a button or badge, and the pause adds a media flavour, so it sits nearer a podcast-app look than ref-solid does. (4) The listening idea only exists at launcher sizes and in the 48 and 32 px cuts. At 16 px and in the glyph it becomes a plain bookmark disc. (5) The 48 and 32 px cuts are softer than the reference (11.6% and 17.7%) because a circle's rim cannot sit on whole pixels. Next to ref-solid on the comparison sheet it is bolder and says more, but it is less calm and less ownable.",
+   "territory": "invert"
+  },
+  {
+   "id": "i2",
+   "title": "Bookmarked page",
+   "idea": "A paper page with Shelf's bookmark cut out at its head, set in an even margin with the page running on below its tail, the way a ribbon lies in a book. It is the swap at its simplest, two levels with the paper standing for the page you saved; it leaves listening out on purpose to test whether the bookmark alone carries Shelf, and on paper the same drawing becomes a dark book with a light bookmark.",
+   "built": "Page 40 x 55 dp (1 : 1.375, close to A4), centred on the canvas, its corners r 3.3 dp, the bookmark's own shoulder radius, so page and bookmark share one corner language; the corners reach 32.7 of the 33 dp safe radius. Bookmark 28 dp wide with today's proportions (geom.bookmark's defaults scaled), 6 dp below the page's top edge and 6 dp in from each side, so it sits in an even margin on three sides; about 14 dp of page carries on below its tips, enough for the paper to read as a page. The narrowest paper is the 6 dp margin, above the 4.5 dp that becomes 3 px at 48.",
+   "small": "Every cut keeps both levels and every edge except the notch lies on whole pixels: 5.0%, 5.0% and 5.8% soft at 48, 32 and 16 px, against the solid reference's 3.5, 6.3 and 14.7. 48 px: page 26 x 36 with r 2, bookmark 18 x 22 with a 6 px notch, margins 4 px, 10 px of page below. 32 px: page 18 x 24 with r 1.5, bookmark 12 x 15 with a 4 px notch, margins 3 px, 6 below. 16 px: page 10 x 14 with square corners, bookmark 6 x 8 with a 3 px notch at 45 degrees, margins 2 px, 4 below. Glyph: page 14 x 20 with r 1, bookmark 10 x 12 with a 3 px notch, margins 2 px.",
+   "risks": "It is the most literal option: a page with a bookmark is a familiar 'bookmarked document' pictogram, so it relies on Shelf's square shoulders and shallow notch to be its own. It says nothing about listening. A light portrait card on a dark tile could be taken for a phone or a cards app at a glance. The page is narrower than a disc, so it looks slighter than its neighbours on a home screen (26% paper against the solid reference's 33%), and at 16 px it nearly fills the tile's height, with 1 px of tile above and below.",
+   "self_score": 5,
+   "self_critique": "Its craft is the best in my territory. Both levels survive at every size with nothing dropped, and the cuts are the crispest I drew (5% soft at 48 and 32, 5.8% at 16, against ref-solid's 14.7 at 16). It also settles one real question: hanging the bookmark from the page's head in an even margin is what turns a 'frame' into a 'page'. Honestly, though, it is competent but forgettable. Next to ref-solid on the comparison sheet it looks like the reference's light colourway put onto a card, a stock 'bookmarked document' glyph with Shelf's notch. It drops Richard's play/pause entirely, it is slight on a home screen (26% paper), and at 16 px the page nearly fills the tile's height. I kept it because it is genuinely different from i1 (a different field, a different metaphor, two levels), and because it shows whether the swap can carry Shelf with the bookmark alone. I would not put it in front of Richard ahead of i1 or ref-solid.",
+   "territory": "invert"
+  },
+  {
+   "id": "h1",
+   "title": "The tail plays",
+   "idea": "Shelf's bookmark with one straight cut that carries the notch's right edge on through the apex to the left side; the paper under the cut, the bookmark's own left tail, is a play triangle. The notch is cut at the same angle as the app's play button (32.9 degrees against Lucide's 32.7), so the play was already inside the bookmark and the outline stays whole.",
+   "built": "Today's bookmark at 42 dp wide, scale 42/34: notch 13.59, shoulders r 4.94, tips r 1.85, no proportion changed; drawn box centred like the reference, reach 32.06 of 33. The line through the right tip and the apex, carried on, meets the left edge two notches above the tips (y 53.5) and is the body's whole lower edge. The play's top edge is that line moved 3.2 dp down, square to it; its bottom edge is the notch's own left flank, so the two are mirror images and the play is isosceles, 23.4 tall and 18.1 deep (0.77; the app's play is 0.78), its tip about 3 dp short of the apex. Its corners take the tail tips' radius, r 1.85, since one of them is a tail tip. The cut opens to the left edge at one end and into the notch at the other, so there is no hole and the outline is exactly the reference bookmark's.",
+   "small": "48 px: everything, bookmark 28 x 34 px, notch 9 (slope 9/14); the cut drops 4 px (3.4 square to the line) so its ends land on whole pixels; play 14 x 10.9 px. 32 px: everything, 18 x 22, notch 6, cut 3 px (2.5 square), play 9 x 6.75. 16 px: redrawn in whole pixels, 10 x 12; the line and the notch become 45 degree stairs, as the brand's own 16 px cut does with its notch, the cut a 2 px step and the play 6, 4 and 2 px tall in three columns (2.2% soft pixels against the reference's 14.7). Glyph: 16 x 20 inside the padding, cut 3 px (2.5 square), play 7 x 5.6.",
+   "risks": "A diagonal through a bookmark can read as a slash, the convention for 'bookmark off'; here it runs only through the tail and the play under it gives it a reason, but it is the main risk. It can also read as a page with a folded corner and a play, a media-file icon. Google Play Books also pairs a bookmark with a play (a rounded play triangle with a bookmark inside); here the bookmark is the outline and the play a quarter of it. The play is paper, where Richard described a dark play: the dark here is the cut and the notch. At 16 px the play is a six-pixel hint.",
+   "self_score": 7,
+   "self_critique": "The idea is the strongest hidden figure I found: one line, no hole, the outline identical to ref-solid, and the play found at every size including a crisp 16 px. What still bothers me: the cut is the loudest line in the mark. It turns a calm bookmark into a dynamic one, and the body above it becomes a trapezoid, so the notch's V now exists only between two pieces. At a glance that diagonal invites the 'slash' or folded-page reading. The play is paper, the reverse of Richard's dark play. The 3.2 dp cut becomes 2.1 px on a 1x home screen, which is visible but soft. And p2 (another designer) uses the same notch-angle insight as a centred play hole, so Richard will see the two as relatives: p2 states the play, h1 hides it in the tail.",
+   "territory": "hidden"
+  },
+  {
+   "id": "h2",
+   "title": "Two saves, one play",
+   "idea": "Two of Shelf's bookmarks, the back one exactly half a width to the right and one notch lower. At that offset the front bookmark's right flank cuts the back one's lower-left corner into a play, so the play appears where the two saves overlap and both bookmarks stay whole.",
+   "built": "Two of today's bookmarks at 31 dp wide, scale 31/34: notch 10.03, shoulders r 3.65, tips r 1.37. The back one's left side lies on the front one's centre line and its tip line one notch lower, so its apex sits under the front one's right tip and its left flank and the front's right flank close a triangle: a play 17.1 tall and 13.2 deep (0.77, like the app's play), corners r 1.37 like the tips. Gaps of 2.5 dp separate the front bookmark from the back one, beside it and under its right flank; the rest of the back one shows as a 13 dp strip. Pair box centred, reach 32.53 of 33. A version slid further right, so the back bookmark's notch showed, was drawn and dropped: its play fell to 11.6 x 8.9 dp.",
+   "small": "48 px: both bookmarks, 20 x 25 px each, notch 7 (slope 0.7), 3 px gaps; play 10 x 7.1 px. 32 px: both, 14 x 17, notch 5, 2 px gaps, play 7 x 4.9; the pair is 21 px wide, so it sits half a pixel left of centre to keep straight edges on whole pixels. 16 px: the play is dropped; the front bookmark 8 x 9 px with a 2 px stepped notch and the back one as a 3 px strip behind a 1 px gap. Glyph: both, 12 x 15, 2 px gaps, play 6 x 4.5.",
+   "risks": "Three pieces: at small sizes the back bookmark reads as a bar and the play as a symbol placed under the front bookmark rather than the corner of a second one, so the idea needs a second look. Two overlapping bookmarks is also Material's 'bookmarks' icon, a generic interface glyph. Each bookmark is smaller than in a single-bookmark mark (31 dp against 40 to 42), so it has less presence on the home screen. The 16 px cut loses the play, and the glyph is crowded at 18 px.",
+   "self_score": 4,
+   "self_critique": "This is the literal FedEx move: nothing is cut, and the play comes only from the exact offset, which is a good story for a library of saves. Drawn, it doesn't deliver. It is three pieces where h1 is two. The back bookmark shows only its right half, so it reads as a bar, and the play looks placed under the front bookmark rather than discovered as the corner of a second one. Sliding the back bookmark until its notch showed fixed the reading but shrank the play to 8 x 6 px at 1x, and 3 px gaps at 48 px leave no play at all, so I chose the larger play over the clearer pair. Each bookmark is 31 dp against the reference's 40, the base is close to Material's generic 'bookmarks' glyph, the 16 px cut loses the play, and the glyph is cluttered at 18 px. Kept because it is the only true between-two-shapes play in this territory that no other designer covers. It is weaker than h1 by a clear margin.",
+   "territory": "hidden"
+  },
+  {
+   "id": "r1",
+   "title": "Ribbon with a play",
+   "idea": "Shelf's bookmark hangs from the top edge of the tile like the ribbon marker in a hardback, so the tile becomes the book and only the ribbon's body and notched tail show. A play is cut out of the body: kept for later, and ready to listen to.",
+   "built": "Ribbon 40 dp wide (the solid reference's width), running from y 0 so it passes the top of every mask and the launcher's parallax, down to tips at y 79, with Shelf's notch (11/34 of the width, 12.9 dp) and tips r 1.76; the rounded tips reach 30.2 dp from the centre. The play's slanted edges are parallel to the notch's (tan 11/17), which makes it 24 dp tall and 18.5 deep, a little slimmer than equilateral; its two back corners then share the tips' 57 degrees, and the band of paper under it runs parallel to the notch. Corners r 1.76, like the tips. It sits 0.35 of the way from box centring to centroid centring, and its height is set by the 10.5 dp band under it, which puts its centre at y 46.9: walls 11.8 left, 11.1 right (to the rounded tip) and 10.5 under, measured square to the notch.",
+   "small": "The cuts keep a lip of tile above the ribbon, 3 px at 48, 2 at 32 and 1 at 16, the smallest detail each size allows: bled to the edge, the paper merged with light browser toolbars and the tile read as a dark U. The ribbon's square top corners still say it comes from under the edge, and every cut keeps the play's rhyme with the notch. 48: ribbon 28 px, notch 9 px over a 14 px half width (Shelf's slope), play 17 px with its flat side on column 18; walls 8, 6.8 and 6.6 px. 32: ribbon 18 px, notch 6 px, play 12 px on column 12, a little larger than the master's so it holds on a 2x toolbar. 16: ribbon 8 px, notch 4 px at 45 degrees as in small.svg, play a 3 x 5 pixel staircase whose 45-degree steps match the notch, with its centroid on the centre line. Glyph: there is no tile to hang from, so it is the whole bookmark with its round shoulders, 16 px wide, with a 10 px play on column 8.",
+   "risks": "A bookmark with a play in it is close to Google Play Books. One colour, a modest hole and the ribbon running off the tile keep some distance, but this is the main risk. The bleed relies on the tile's edge being visible: on a wallpaper near graphite the ribbon's top reads as the bookmark's own, flat in the squircle and arched in the circle and teardrop; on a pale wallpaper the paper merges with the background, and the tile becomes a dark frame round a bookmark-shaped opening with the play floating in it, which still reads. The toolbar cuts need a lip of tile for the same reason, so they show the ribbon starting just under the edge. The launch screens and the website need an edge for the ribbon to hang from, such as the top of the screen; Android 12's circle-masked splash would cut it with the circle.",
+   "self_score": 6,
+   "self_critique": "Well made and legible at every size. The notch rhyme gives one angle system: the play's back corners equal the tips' 57.1 degrees and the band under it runs parallel to the notch. Every cut was centred pixel by pixel in a magnified grid. But it is the expected answer, a bookmark with a play in it, so it sits close to Play Books and to the 'symbol in a bookmark' pattern the first round was rejected for. The bleed is the only new move, and on dark wallpapers, where the graphite tile disappears, it reads as a square-topped bookmark, so many people will never see the ribbon idea. The play centre sits 7 dp above the tile centre because the notch takes the bottom; that is right for a hanging ribbon but makes the icon slightly top-heavy next to the reference. The toolbar cuts gave up the bleed for a lip, so the idea lives only in the launcher.",
+   "territory": "ribbon"
+  },
+  {
+   "id": "r2",
+   "title": "Split ribbon",
+   "idea": "The same ribbon hanging from the top edge, split down the middle by one straight slot that runs from the edge into the notch. The slot is the only negative space: it turns one bookmark into two ribbons, like a book with two markers, and two bars side by side read as pause.",
+   "built": "Ribbon 40 dp wide from y 0 (past the top of every mask) to tips at y 79, Shelf's notch (12.9 dp), tips r 1.76; the rounded tips reach 30.2 dp from the centre. The slot is 8 dp, a fifth of the width, leaving two 16 dp bars: wide enough to read as a deliberate cut and as pause, narrow enough that the outline stays one bookmark. The notch is shared, so each bar's foot slopes from its outer tip up to the slot, meeting it at y 68.6; those inner corners stay sharp, like the notch's apex. Nothing else is cut.",
+   "small": "Nothing needs dropping. The cuts keep a lip of tile above the bars, 3 px at 48, 2 at 32 and 1 at 16, the smallest detail each size allows: bled to the edge, the paper bars merged with light browser toolbars, and the tile's sides with the dark slot between them read as a bold W. 48: ribbon 28 px, slot 6 px, bars 11 px, notch 9 px over 14. 32: ribbon 18 px, slot 4 px, bars 7 px, notch 6 px. 16: ribbon 8 px, slot 2 px, bars 3 px, notch 4 px at 45 degrees, so each foot is a clean three-step stair. The cuts' slots are about 9 dp, a touch wider than the master's 8, because a slot has to be an even number of pixels to stay centred. Glyph: the whole bookmark, 16 px wide with its outer round shoulders, split by a 4 px slot into two 6 px bars.",
+   "risks": "Two bars are the most familiar media sign there is, so at a glance it can say pause before it says bookmark; the shared notch and the bleed keep it Shelf's. Pause says stopped for now: that suits a place kept for later, but it says listen less directly than a play. On a near-white wallpaper the paper bars merge with the background and the dark frame with the slot can read as a W or a Cyrillic \u0428, the same failure the toolbar cuts' lip fixes; the launcher has no such fix without giving up the bleed. On wallpapers near graphite the bar tops look flat or arched. The launch screens need an edge to hang the ribbons from.",
+   "self_score": 7,
+   "self_critique": "The strongest idea in this territory and the one I would show Richard first. A single straight cut makes pause out of Shelf's own outline, and nothing is stamped on. It holds at every size with nothing dropped, and its cuts are the crispest of the set (soft 2.3 / 3.1 / 9.1 percent against the reference's 3.5 / 6.3 / 14.7). What still bothers me: at a glance it says pause before it says bookmark, so a viewer could take it for a media app, and only the shared notch argues otherwise. I chose an 8 dp slot over 6 for a clearer pause; 6 would put the bookmark first, and I'm not certain I chose right. On a near-white wallpaper the launcher can read as a W, and the lip that fixes this in the toolbar can't be used in the launcher without giving up the bleed. The bar tops arch in the circle mask, like two tombstones on a dark wallpaper.",
+   "territory": "ribbon"
+  },
+  {
+   "id": "r3",
+   "title": "Ribbon, play, pause",
+   "idea": "Richard's three levels on the ribbon: the graphite tile, Shelf's bookmark hanging from its top edge in paper, a play cut out of the ribbon, and a paper pause left standing inside the play. The ribbon runs off the tile and needs no shoulders, so it can be wider than a free-standing bookmark and give the third level more room.",
+   "built": "Ribbon 46 dp wide from y 0 to tips at y 78, Shelf's notch (14.9 dp), tips r 2.03; the rounded tips reach 31.2 dp from the centre, inside the safe circle. Play 31 dp tall with its edges parallel to the notch, as in r1, corners r 2.03, placed 0.3 of the way from box to centroid centring and centred at y 45.1: walls 12.2 left, 11.5 right and 8 under. The pause is fitted by search to be as large as it can be with 2.4 dp of dark between it and the play's flat side and slanted edges: 10.2 dp tall, bars 3.3 dp, gap 2.7 dp, corners r 0.8.",
+   "small": "The pause would need bars under 3 px at 48, so every cut and the glyph drop it and keep the ribbon and the play, which is still plainly the same icon. As in r1, the cuts keep a lip of tile above the ribbon (3, 2 and 1 px) so the tile stays closed on light toolbars. 48: ribbon 30 px, notch 10 px, play 20 px on column 17. 32: ribbon 20 px, notch 7 px, play 14 px on column 12. 16: ribbon 10 px, notch 4 px, play a 4 x 7 pixel staircase. Glyph: the whole bookmark, 16 px wide, with an 11 px play.",
+   "risks": "Inside a ribbon the pause can only be 10 dp tall: it reads on a phone's launcher, turns to a smudge in the 1x home screen preview, and is gone from every smaller size, where this becomes r1 with a bigger play. A play with a pause inside is the media toggle, so of the three this leans furthest towards a media app, and it shares r1's Play Books risk. The play sits high, 10 to 11.5 dp below the top edge of the mask, because the notch and the safe circle take the bottom. The bleed's risks are as in r1.",
+   "self_score": 5,
+   "self_critique": "A faithful, carefully fitted drawing of what Richard described, and worth showing because it is his idea. The territory can't give the third level real size, though. The notch and the safe circle take the bottom of the ribbon, so even at 46 dp wide the play crowds the top edge and the pause is only 10 dp tall. At the 1x home-screen preview the pause is a smudge, and every cut and the glyph drop it, which makes the small sizes r1 with a bigger play. Of the three it is the most media-like: a play/pause toggle in a bookmark. I nearly replaced it, but every replacement I drew in this territory was weaker or duplicated r2. Its main value is showing Richard what his three-level idea costs inside a ribbon.",
+   "territory": "ribbon"
+  }
+ ],
+ "dropped": [
+  {
+   "territory": "nested",
+   "dropped": "Stencil (the suggested n2): pause bars crossing the play and joining the bookmark at its top and bottom edges. I drew eleven proportions over three rounds: thin and thick bars, narrow and wide gaps, bars on the incircle and pushed towards the tip, rounded and crisper pieces, equilateral and notch-angle plays. The play always survives, but the pause never reads. The bridges are never enclosed by dark, so the eye takes them as ground rather than figure, and their ends dissolve into the paper; the dark pieces read instead as 'D | play', a skip or next-track glyph, or a play with speed lines. Replaced by the bookmark window (n2).\n\nInverting pause: whole bars that run past the play's edges, so the even-odd rule makes them dark slots in the paper and light bars inside the play. It is striking large and reads as a bookmark with a pause when small, but the bars cut the rounded play into a D-shaped piece and a tip, so the play stops reading. At 48 px it becomes a striped blob, and it drifts out of the nested territory into inversion.\n\nSplit-bookmark pause: the island drawn as a small Shelf bookmark split down its axis (pausing keeps your place). At 9 dp wide the slanted ends read as chamfered bars, weaken the pause and vanish at every small size: a hidden detail with no payoff.\n\nPlay drawn with the bookmark's own corners (shoulder radius at the back, tail-tip radius at the point): it sharpens the play towards the sharp triangles the first round was faulted for.\n\nn3 variants:\n- Every wall on the module, so the left wall and both bars make three equal stripes: the play slides down and left and looks off-centre.\n- A 5 dp module: squashes the bars into two squares that read as a face.\n- The first 4.5 dp module: gave blocky 4.5 x 10.9 bars and did not match the cuts' proportions. Superseded by 4.1 dp, which fixes both.\n- A 32 px cut one pixel shorter: freed the tile corners but left squat 2 x 5 bars.\n\nn1 and n2 variants:\n- An even-gap pause pushed against the flat side: crowds it; the incircle placement looks more centred.\n- Plays with 7 to 8.5 dp walls and a looser ring: starve the pause to 2.2 x 7 dp bars.\n- The window placed high in the body: leaves a dead slab of paper under it.\n- The window with its pause on the bookmark's axis above the notch apex: makes the play look pushed right.\n\nAt 16 px, a bigger stepped play with 1 px walls for n3 sits lopsided, so all three share one 16 px drawing (a 4 x 7 px stepped play in a 10 x 12 px bookmark). A brute-force search for an even-walled play was abandoned as too slow; my estimate is that it comes out almost exactly equilateral and box-centred, which the n1 placement tests already cover.\n\nFiles: /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/candidates/n1, n2 and n3, each with mark.svg, cut-48.svg, cut-32.svg, cut-16.svg, glyph-24.svg, meta.json, build.mjs and a rendered sheet.png. Comparison with ref-solid: /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/sheets/nested.png. All three are inside the safe circle (reach 32.56 dp), fills only, and valid XML."
+  },
+  {
+   "territory": "play",
+   "dropped": "Sketched in a scratch harness, judged at 360 px and at real home-screen sizes, then dropped:\n1. One continuous cut, the suggested p3, tried three ways: the play opening out of the notch's apex; a slot from the apex up into a centred play; the notch's right edge running on as a channel into the play's lower corner. All three turn the bookmark into a letterform (a flag on a pole, a P or an R) and split the left tail off as a prong, so the tail stops reading as a tail. Making the hole merely touch the apex at a point would break the 3 px wall rule at 48 px.\n2. Hidden play: the notch's two edges, extended past the apex, already enclose a play-shaped region in the lower left with its tip on the apex. Its inradius is about 6 units, too small to hold a hole with real walls, and it sits off-centre. Its geometry became p2's construction instead.\n3. Continuation: the play's base laid on the notch's left edge, carried on past the apex. That forces a small play into the right half; it looks randomly placed, and the collinearity is invisible unless pointed out.\n4. Inscribed notch-angle play, pressed into the left side and tail with even walls: left-heavy, and it turns the bookmark into a media frame.\n5. Frame, the largest play the body holds with even walls (limited by the gap to the notch's apex, about 26 units tall): it reads as a play button held by a bookmark, play first and bookmark second, the closest to the video-app lookalike.\n6. Eyelet, a small play near the top like a tag's punched hole: a speck at 48 px, top-heavy, and it turns Shelf's ribbon into a luggage tag.\n7. Smaller drops:\n   - A ribbon bleeding off the top of the tile loses the square shoulders, giving a generic bookmark, which was the first round's failure.\n   - A play-shaped bite from the left side, or a tip breaking out through the right edge, breaks the silhouette (Pac-Man).\n   - A tilted play reads as a cursor or a send arrow.\n   - A pixel-first play with 45 degree steps reads as a disclosure caret.\n   - A play only as tall as the notch is deep (11 units) is too small at 32 and 16 px.\n   - An outlined play with a paper island belongs to the nested territory.\n\nLookalike check: the current Google Play Books icon is a rounded play triangle with a bookmark inside it (https://9to5google.com/2023/06/08/new-google-play-books-icon/), the same two symbols nested the other way round. All three candidates keep Shelf's silhouette outside and the play as a hole.\n\nThe files are in /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/candidates/p1, p2 and p3; each folder has a build.mjs that regenerates every SVG. The comparison sheet is /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/sheets/play.png."
+  },
+  {
+   "territory": "pause",
+   "dropped": "Sketched in the scratchpad (my files are in scratchpad/pause-s123; another designer was writing into scratchpad/ns, so I moved out of it) and dropped:\n\n1. Pair of ribbons (two narrow bookmarks side by side, each with its own notch). Tried as a replacement for s2. It reads as a plain media pause button first, its notches disappear at 32 and 16 px, and two narrow ribbons are no longer Shelf's bookmark. It fails the brief's media lookalike rule more badly than the slot does.\n2. Slot cut down from the top edge, stopping above the notch (tail left whole). Reads as a U, and at small sizes as an exclamation mark.\n3. Closed slot on the centre line with the outline intact. An exclamation mark at every size, with the notch as its dot.\n4. Two slots rising from the notch's slopes, open at the bottom. Reads as an \"m\", a comb or a trident.\n5. Slot with a pointed top at the notch's angle. Reads as a gothic arch or a lambda.\n6. Cut from the top down to the apex, joined only by a thin bridge at the apex. A U with a hinge, and no gain over s1.\n7. Very narrow, very deep slits (0.1 to 0.15 of the width, head 0.1 to 0.25 of the height). Still a \u03a0. This is the finding behind s2: any bridge, however thin, closes the pause.\n8. Split bookmark with every corner of each half rounded. The halves become two separate pause bars and the bookmark falls apart. Near-sharp cut corners keep it one shape cut through.\n9. Split gaps of 0.2 to 0.25 of the width read as two separate strips; 0.12 is a slit and loses the pause. 0.15 holds both readings.\n10. Plain pause holes at the app pause's proportions (rounded rectangles). Stamped clip art; replaced by the notch-echo holes.\n11. Inset holes with thin walls (7 to 9 dp). The bookmark becomes an outline with a divider, which reads as \"not saved\" or a crest.\n12. Small holes with 12 dp walls, high in the body. A pair of eyes.\n13. 1:2 notch slopes on s1's 48 and 32 px cuts. Visibly flatter than the master's notch, and the soft-pixel share went up (3.7 and 6.1 per cent against 2.8 and 5.1), so I reverted.\n\nOne finding worth keeping: the app's own solid pause (Lucide pause filled at the 1.75 stroke) has bars 5.75 x 17.75 with a 2.25 gap. Shelf's bookmark split by 0.15 to 0.164 of its width comes out at almost the same proportions (each half about 2.8 times as tall as it is wide, against the app's 3.1). That is why s1 works, and why no partial slot (s2) can.\n\nFiles: /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/candidates/s1, s2 and s3. Each holds mark.svg, cut-48.svg, cut-32.svg, cut-16.svg, glyph-24.svg, meta.json and build.mjs, all inside the safe circle (reach 32.03 dp). The comparison sheet is /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/sheets/pause.png."
+  },
+  {
+   "territory": "tail",
+   "dropped": "1. Today's shallow notch simply turned on its side (D/W 0.32): reads as an envelope flap or label; a 114-degree notch is never a play. 2. Notch depths 0.50 to 0.62: the dark wedge stays a chevron bite. Equilateral (0.87): 30-degree prongs make a swallowtail pennant. 3. Richard's nesting with the notch as the dark play and a paper pause island inside it: the notch is open on the left, so the bars float outside the silhouette, read as pause-then-chevron, and are 2 px specks at 48 px. 4. The head sliced by two full-height cuts into two paper pause bars (dark play, light pause, matching heights): two dark gaps and two paper bars alternate and read as stripes or a barcode, and it breaks the mark into three pieces against the brief's one paper shape. 5. Bookmark in a bookmark: Shelf's upright bookmark with a hole shaped as a sideways bookmark, whose notch leaves a paper play wedge. The outer shape reads as a bookmark, but the hole reads as a dark label window, the play is lost, and it is a symbol stamped in a bookmark again. 6. Upright bookmark whose tail space reads as play: impossible with Shelf's tail. The tips sit on one line, so the notch can only point up (eject), and an asymmetric tail gives a right-angled ramp, not a play. 7. The sideways ribbon bleeding off the right edge as if out of a book: it hides the square shoulders, the last cue that it is Shelf's bookmark, and reads as a pull tab. Not drawn. 8. Body length behind the apex of 24, 30 or 36 (t1): long reads as a banner, short as a ticket; kept 26. 9. A quieter pause for t2 (bars 5.5 x 20): still reads as play and pause, only weaker. No third candidate: nothing else in the territory beat t1 and t2. Files: /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/candidates/t1 and /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/candidates/t2 (each with build.mjs, mark.svg, cut-48/32/16.svg, glyph-24.svg, meta.json, sheet.png, metrics.json); comparison sheet /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/sheets/tail.png."
+  },
+  {
+   "territory": "invert",
+   "dropped": "Sketched in rounds 0 to 8 (scratch renders only) and dropped:\n\n(1) The suggested i2, a paper play triangle with the bookmark cut out. At 48 px and in every mask it reads as a media play button with a dent. Worse, Google Play Books' current icon (2023 onwards) is a softened, rounded play triangle with a lighter bookmark in it (9to5Google, 8 June 2023), so this would be close to a copy. A play triangle as the field with a pause island in the bookmark fails the same way.\n\n(2) A play island inside the bookmark hole (disc, bookmark, play). It reads as a 'watch later' video button, and putting play and bookmark together is the Play Books vocabulary whichever way they nest.\n\n(3) The split bookmark in a disc: the bookmark cut down its spine by a 4.5 dp paper strip, so its two halves are the pause bars, in two levels. It was my original i2 and the cleverest use of negative space in the territory. Drawn at bookmark widths 32 to 36 with rounded and sharp inner corners, it reads as a pause button in a white circle at 48 px and in the circle mask, so 'listen' comes before 'saved' and it is the generic media-button lookalike. Deepening the notch to 14/34 or 17/34 pulls the bookmark back but turns it into a generic ribbon, which is how round one failed.\n\n(4) Short pause bars (13 dp) in the dark bookmark. Two short paper bars high in a dark notched shape read as a ghost's eyes. Taller 18 dp bars, centred lower, fixed it in i1.\n\n(5) Rounded-square and centred-page fields read as a frame: a squircle inside the squircle tile, or a white tile with a black border on light wallpapers. Only the page with the bookmark set at its head (i2) escaped that.\n\n(6) Capsule (pill) and arch fields carry no meaning; they read as a lozenge and a tombstone.\n\n(7) The page with i1's pause added. Three levels in a 40 dp page squeeze the pause into slits at 48 px.\n\n(8) The plain disc with the bookmark hole (two levels). It is clean and bookmark-first, but it is i1 without its pause, and i1's 16 px cut and glyph already show it.\n\n(9) Full-bleed paper, where the paper fills every mask and the bookmark is the only hole. It works in all four masks, but it is only ref-solid's light colourway with the colours swapped, and it throws away the dark icon.\n\n(10) Tips breaking out of the disc's foot, or the bookmark opening out of the top of a page. These lose the notch's tongue or the square shoulders, which are what make the bookmark Shelf's.\n\n(11) Lines of text or book spines with the bookmark knocked out as an implied contour (the IBM-stripes move). Too busy for 'simplicity', and it cannot survive 16 px.\n\n(12) Two narrow bookmarks side by side as a pause. This changes the bookmark's proportions.\n\nFiles: /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/candidates/i1 and /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/candidates/i2 each hold build.mjs, mark.svg, cut-48.svg, cut-32.svg, cut-16.svg, glyph-24.svg, meta.json, sheet.png and metrics.json. Both are inside the safe circle (32.04 and 32.72 dp). Each build.mjs reproduces its SVGs exactly from its own folder. No SVG uses a stroke, mask, clip, filter, gradient or opacity. Comparison against ref-solid: /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/sheets/invert.png."
+  },
+  {
+   "territory": "hidden",
+   "dropped": "Sketched and rendered side by side with ref-solid (masters plus shrunk fallbacks), then dropped:\n\n(1) Split pause: the bookmark cut down its centre line so the halves stand as pause bars. Bold and the simplest of all, but it reads as a pause button first, a media-app icon. Its status-bar glyph would show pause while audio is playing. s1 already draws it.\n(2) Slit from the notch: the notch carried up the centre as a slot, so the legs are pause bars. It reads as a bookmark first, but it is a cut in one shape, it reads as trousers, and s2 has it.\n(3) Gap play: a vertical slit that opens into a play bitten from the right half. Reads as the letter R and as a |> media control.\n(4) Chevron split: a > shaped cut carving a play out of the left edge. A big play inside a bookmark, which is the Google Play Books lookalike, and the play is stamped in rather than found.\n(5) Two ribbons: two narrow bookmarks side by side as a pause. A plain pause sign, and the bookmark's proportions change.\n(6) Pause and play from two cuts: the centre split plus h1's notch cut. It gives Richard's bookmark, pause and play without nesting, but it is three pieces, the second symbol repeats 'listen', and its split is s1's move.\n(7) Dark play bite: the play as a dark wedge between the body and the tail's edge, which would be Richard's dark play. It needs a thin band along the notch that tapers to a point, or else becomes one shape with a Pac-Man bite.\n(8) h1 on a taller bookmark (45/34): little gain for a change to Shelf's proportions. Cut weights of 2.6 and 3.8 dp were also tested and 3.2 kept.\n(9) Two saves, slid so the back bookmark's notch shows: reads best as two bookmarks, but the play shrinks to 11.6 x 8.9 dp (8 x 6 px at 1x) and cannot survive 3 px gaps at 48 px.\n(10) Two saves with a larger back bookmark: the tops line up and the pair reads as a split pause. With a smaller back bookmark, the play shrinks into the front notch and looks placed.\n(11) A play tucked into the notch (a second bookmark hidden except its corner): a play symbol set beside the bookmark, clip art, about 6 px at 48.\n(12) Dark pause bars as the gaps between three bookmarks: the gaps run the full height and never close, so they read as separations. Joining the outer pieces turns them into holes, which is another territory.\n(13) A dark play between the bookmark and a second shape: an upright bookmark has no edge with paper below it rising at the play angle. The second shape would have to be a chevron (reads as 'next'), a tilted bookmark (busy) or an inverted one (the notches make a diamond).\n(14) The bookmark on its side so the notch points right: the shallow notch makes a squat play, Shelf's bookmark hangs upright, and t1 covers it.\n\nNote for the round: h1's notch-angle insight (the notch's 32.9 degree flanks match Lucide's 32.7 degree play) is shared with p2's centred play hole. h1 is the version with no hole, where the play is the bookmark's own tail.\n\nFiles: /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/candidates/h1 and .../candidates/h2 (mark.svg, cut-48.svg, cut-32.svg, cut-16.svg, glyph-24.svg, meta.json, build.mjs, sheet.png, metrics.json); comparison at /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/sheets/hidden.png."
+  },
+  {
+   "territory": "ribbon",
+   "dropped": "Dropped ideas, all sketched and rendered on scratch sheets, in the order I tried them:\n\n(1) Two separate ribbons, each with its own Shelf notch (the literal r2 suggestion). Beautiful at launcher size, like a journal with two markers, but each 15 dp ribbon's notch is under 5 dp and vanishes below 32 px. It also duplicates the split ribbon's pause, which keeps Shelf's single outline and a notch big enough to survive.\n\n(2) Split ribbon with the slot stopping above the notch, so the tail stays whole. The tail survived, but bars joined at the bottom read as a slit bookmark or a tuning fork, and the pause disappeared.\n\n(3) Two pause slots cut into one ribbon, even with their feet cut parallel to the notch: a symbol stamped in a bookmark, the clip-art pattern the first round was rejected for.\n\n(4) Play corners at the shoulder radius (4.7 dp): soft and generic, like a media-player button, against the ribbon's near-sharp tips and apex. Replaced by the tips' radius, which matches the visible corner language once the shoulders are off the tile.\n\n(5) A slot running from the top edge into the play hole (one connected negative shape, pause above and play below): it reads as a flag on a pole or a music note.\n\n(6) A ribbon entering from the left edge so the notch points right as a play: Shelf's notch is a third of the width deep, far too shallow to read as play, and the ribbon no longer hangs.\n\n(7) A 24 px glyph hanging from a drawn bar standing in for the book's head: the bar reads as an extra element (a rod), which the brief rules out. The glyphs use the whole bookmark with its shoulders instead.\n\n(8) The play as a thin outline cut, a Lucide-style play island left in place: a style variant of r1 whose ring would be under 2 px at 48.\n\n(9) Full bleed in the toolbar cuts: on Chrome's and Firefox's light toolbars the paper merged with the toolbar, so r1 and r3 became a dark U round a floating play and r2 a bold W. Replaced by a 3 / 2 / 1 px lip of tile; the comparison sheet confirms it.\n\n(10) Sound-wave or speaker holes for 'listen': clip art, and close to podcast icons.\n\n(11) Shorter ribbons (tips at 70 to 76): they read more as hanging, but they push the hole up against the tile's top edge.\n\nFiles: /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/candidates/r1, r2 and r3 each hold mark.svg, cut-48.svg, cut-32.svg, cut-16.svg, glyph-24.svg, meta.json and build.mjs, plus a rendered sheet.png and metrics.json. The comparison is /home/richard/Claude Code Repo/Shelf/docs/design/icons/negative-space/sheets/ribbon.png. All three masters bleed off the top deliberately, so inside_safe is false; I checked them in the circle, squircle, rounded-square and teardrop masks and the themed icon. Measured on the rendered masters, the tails reach 30.2 dp (r1, r2) and 31.2 dp (r3) from the centre, against the reference's 30.7, so everything except the bleed sits inside the 33 dp safe circle."
+  }
+ ],
+ "judges": [
+  {
+   "lens": "concept",
+   "top": [
+    "s1",
+    "n1",
+    "h1",
+    "p2",
+    "n3",
+    "ref-solid"
+   ],
+   "summary": "Far better drawn than round one, but most of it is still a play or pause symbol set into a bookmark. 11 of 18 stamp a play or pause into the shape, and all 17 that try to say listen use play or pause, which is what pulls them toward media apps. The lookalike search found the real risks elsewhere. Play Books (a soft blue play with a light bookmark hanging inside its back edge) shares the n, p and r families' pair of signs, nested the other way. GoodLinks, an Apple-only read-later app, is a white notched bookmark with a symbol in its body: the p and n template. Day One, which is on Android, is a white ribbon hanging off the top of its tile: the r family's device. Of the named apps, only Spotify (i1's layout), YouTube (t2, weakly) and ElevenLabs' II (s1 and r2 in the light colourway) come near anything. Audible, Apple Podcasts, Apple Books, Speechify, Matter, Readwise Reader, Instapaper and ElevenReader are clear, and Pocket closed in July 2025. Shelf's ink and paper are already the colours of Matter, Readwise Reader, Instapaper and ElevenLabs, so only the silhouette can carry identity, which favours a whole bookmark. Negative space does real work only where it comes from the bookmark's own geometry (s1, h1, t1), and s1 is the best idea here. Untried and worth a round: a listening cue other than play or pause, and the name itself, since nobody drew a shelf (a ledge, or saves standing in a row). Lookalike sheets: /tmp/claude-1000/-home-richard/888f19c8-b290-45c7-bdee-5459c8488462/scratchpad/refs/page/heads.png and pairs2.png."
+  },
+  {
+   "lens": "craft",
+   "top": [
+    "s1",
+    "p2",
+    "h1",
+    "p1",
+    "n3",
+    "p3"
+   ],
+   "summary": "On craft this round fixes most of what sank the last one. Every candidate has hand-drawn 48, 32 and 16 px cuts and a glyph, and the bookmark is Shelf's own (t1 and t2 change its proportions and say so). Every master except the deliberate ribbon bleeds sits inside the safe circle, and every 48 and 32 px cut holds its 3 and 2 px minimums. The pixel grid sorts the ideas. The straight vertical cuts (s1, s2, r2) are crisper than the solid reference at every size: 2.3 to 2.8% soft at 48 against 3.5. Every play hole roughly doubles the reference (7 to 10% at 48, 10 to 12.6% at 32), because a 30 or 32.9 degree edge never lands on whole pixels, and i1's disc is the softest drawing (11.6 and 17.7%). Two faults repeat. First, n1, n2, n3 and r3 share a stepped 4 x 7 px play at 16 px whose bottom pixel touches the notch's apex corner to corner, so the hole leaks into the notch; p1's 5/3/3/1 play with 2 px clear is the fix. Second, the nested pauses in n1, n2 and r3 are 2.5 to 3.5 dp, under the 4.5 dp that 3 px on a 1x home screen needs, and are dropped from every cut, so Richard's third level exists only above about 64 px (only n3 and i1 carry it to 32). Corner radii went three ways: the shoulder radius applied to 60 degree corners, which reads softer than the shoulders; p1's setback-matched radius; and p2, r1 and h1 matching the tips by angle. The round should settle on one, and p2's rule is the most defensible. metrics.json reports 0% soft for every glyph because the measure skips pixels with alpha under 250, which on a transparent glyph are exactly the soft ones; counted from alpha they run 6 to 25% (the reference is 8%). Two directions nobody tried. First, a size ladder that keeps the reference's solid bookmark at 16 px and brings the hole in from 32 up: the honest answer for any second symbol smaller than 6 px at 16. Second, a play drawn as whole-pixel stairs at 32 as well as 16, since 32 is where every play hole is softest and at 2x those steps are single device pixels."
+  },
+  {
+   "lens": "brief",
+   "top": [
+    "p2",
+    "n1",
+    "s1",
+    "p1",
+    "p3"
+   ],
+   "summary": "Through Richard's brief and Shelf's brand, this round fixes what sank round one. Every option starts from Shelf's own bookmark, every small size is drawn on its own grid (all at or under the reference's 14.7% soft pixels at 16 px), and the geometry is measured. Its weakness is convergence: 8 of the 18 options are a bookmark with a play hole, a few dp apart. Richard should see three directions: p2 (the simplest answer, with the play cut at the notch's angle, which is also the angle of the play button in Shelf's player), n1 (his own nest, which reads on a real Pixel even though the 1x sheets turn its pause to specks) and s1 (the purest negative space, the bookmark cut into a pause). I expect him to pick n1 or p2, with s1 the one that could surprise him. He will think the options that break the brief's fixed points miss the point: t1 and t2 turn the bookmark on its side and deepen its notch, i1 and i2 make the bookmark a dark hole, r1 to r3 trade the square shoulders for the launcher's mask (an arch in a Pixel's default circle and on Android 12's launch screen), and h1 and h2 break the bookmark into fragments. Two directions are missing. Nobody drew the nest with Shelf's own play and pause (Lucide's 14:18 play, bars about 2.5 times their gap); n1's refinement should. And nobody tried motion: Android 12's launch screen can animate the icon, so play-then-pause can live there (the notch folding up into p2's play, then a pause rising inside it) and in the player's play-and-pause morph, leaving the static icon at two levels as simplicity asks. One context needs checking for every play option: the extension's toolbar button only saves (its spec puts any reading or listening out of scope), so a play in its 16 and 32 px cuts promises listening it does not offer. Those cuts may be better as the solid bookmark."
+  }
+ ],
+ "ranking": [
+  {
+   "id": "s1",
+   "scores": {
+    "concept": 7.5,
+    "craft": 8,
+    "brief": 7
+   },
+   "verdicts": {
+    "concept": "shortlist",
+    "craft": "shortlist",
+    "brief": "shortlist"
+   },
+   "notes": {
+    "concept": {
+     "works": "The one candidate where a single cut makes both ideas. The halves are a bookmark and a pause at once, and a pause means stop here and come back, which is the read-it-later promise, while also saying audio. Nothing is stamped on and there is no play, so it stays clear of Play Books and GoodLinks. It fits in five words (a bookmark split into pause) and could be drawn from memory. At launcher size the round outer shoulders and the unbroken notch slope pull the halves back into Shelf's bookmark.",
+     "fails": "On a 1x home screen, in the themed icon and in the 32 and 16 px cuts it reads as a pause sign before a bookmark. The 32 and 16 px cuts make this worse: their slots are 0.2 of the bookmark's width against the master's 0.15. The status-bar glyph is a pause sign shown beside 'Now listening' while audio plays, so it reads as the paused state. Lookalikes: the light colourway (two heavy black bars on paper) is moderately close to ElevenLabs' II, the best-known mark in text to speech. Its bars are 1:5 with a gap as wide as a bar; s1's are 1:2.8 with a gap a third of a bar, which keeps them apart. It is also near a generic pause button and the Roman numeral II. ElevenReader's own icon, a black fan of rays, is not close.",
+     "fix": "Hold the slot at about 0.15 of the width at every size, because that ratio decides whether it reads bookmark-first or pause-first. At 32 px draw a 21 px bookmark with a 3 px slot (0.14) in place of 20 px with 4 (0.2); at 16 px use an odd width with a 1 px slot. Never widen the slot toward pause proportions, where ElevenLabs and the stock media button sit. Keep the outer shoulders at r 4/34 and the notch slope continuous across the slot, since they are what make it a bookmark. Mock the media notification with the real transport controls beside it. If the glyph reads as 'paused', draw the glyph as the unsplit bookmark, as i1 drops its pause from the glyph for the same reason."
+    },
+    "craft": {
+     "works": "The cleanest drawing in the round. One 6.3 dp cut (0.15 of the width) runs down the centre line, the halves are symmetrical and Shelf's proportions are untouched. The outer shoulders are round and every corner the cut makes, including where each foot meets the cut, takes the tips' 1.853 dp radius, so it reads as one shape cut through. Every edge except the feet is vertical, so it is crisper than the solid reference at every size (2.8 / 5.1 / 11.4% soft against 3.5 / 6.3 / 14.7). The idea survives whole at every size: a 4 px gap at 48 and 32, 2 px at 16 and in the glyph, and still 4.2 px on a 1x home screen. Inside safe (32.03); clean in all four masks, the themed icon and the light colourway.",
+     "fails": "At 16 px it reads as a pause sign before it reads as a bookmark. The feet run from (7,11) to (3,14), a 3-in-4 diagonal that leaves soft pixels on rows 11 to 13 where the reference has a clean 4 px notch, so the bookmark cue is weakest at the size where the pause is strongest. The 32 px gap is 0.2 of the width against the master's 0.15: forced, because an odd gap can't be centred, but the 32 looks more like two bars than the master does. At 42 dp wide it leaves about 0.5 dp of the safe circle unused.",
+     "fix": "Draw each 16 px foot as a whole-pixel 45 degree stair, 4 across and 4 up, so the inner corners land on (7,10) and (9,10) and the notch matches the reference's 4 px notch with no soft pixels. Widen the master to 43.5 dp and place it as n1 to n3 do (top 27.1, reach 32.56) for presence. Keep the gap at 4, 4, 2 and 2 px in the 48, 32, 16 and glyph."
+    },
+    "brief": {
+     "works": "The purest negative space in the round: one cut down Shelf's bookmark and the two halves are the pause, so the bookmark itself carries the second idea. Two parts ('a bookmark cut in two') and drawable after one look; the square shoulders are kept. The cuts are the crispest here (2.8, 5.1 and 11.4% soft, against the reference's 3.5, 6.3 and 14.7). It is typographic, like a letterform, so it sits naturally beside Archivo and hairlines, and a bookmark and a pause both mean stop here and come back.",
+     "fails": "At real launcher size it reads as a pause first and a bookmark second, more so in the light colourway (an ink pause sign on paper). The cut removes the notch's apex, so Shelf's shallow V survives only as two sloped feet. There is no play, so listening is suggested only by a media sign. On the lock-screen media card the glyph is the same shape as the pause button beside it, and in the status bar during playback it suggests a paused state.",
+     "fix": "Narrow the master's cut from 6.3 dp (0.15 of the width) to 5 dp (0.12), so the outline closes into one bookmark at a glance and the pause comes second. Keep the 48 and 32 px cuts' 4 px gap and the glyph's 2 px. Show Richard the media card so he can judge the overlap himself."
+    }
+   },
+   "mean": 7.5,
+   "shortlisted": 3
+  },
+  {
+   "id": "p2",
+   "scores": {
+    "concept": 6,
+    "craft": 7,
+    "brief": 7.5
+   },
+   "verdicts": {
+    "concept": "maybe",
+    "craft": "shortlist",
+    "brief": "shortlist"
+   },
+   "notes": {
+    "concept": {
+     "works": "The clearest two-level answer: a bookmark with a play hole, five words, bookmark first at every size, and the play is kept in every cut. The construction has a real reason: the notch's two cuts folded forward, with the same slope and length, match the in-app Lucide play. The even strap of paper along the notch is visible at launcher size.",
+     "fails": "To a viewer it is a symbol set into a bookmark, the construction the brief says sank round one. It is GoodLinks' template and Play Books' pair, moderately close to both. The notch rhyme shows only from about 48 px; at 1x it cannot be told from p1 or p3. Among media icons, a bookmark with a play also reads as a podcast or audiobook app.",
+     "fix": "Present it as n1's small sizes, since n1 below 64 px is p2. Fold its notch-parallel play and its strap along the notch into n1 instead of offering it as a separate option."
+    },
+    "craft": {
+     "works": "The play is the notch folded. Its slanted edges run parallel to the notch's (32.9 degrees) and are as long, which is also the angle of the app's Lucide play. Its corners take the tips' radius because they have the tips' 57 degrees, so across the whole mark the acute corners are crisp and the right angles round. Each cut rebuilds the play from its own notch (9/14 at 48, 6/9 at 32), so the parallels hold on the grid. Walls are 11.6 at the flat side, 11.5 at the tip and 11.9 above, with an even 6.2 dp strap along the notch. The play survives at every size.",
+     "fails": "The play sits 4.5 dp below the middle of the body above the apex (centre y 52.4 against 47.9; top wall 11.9 against the 6.2 strap). At 1x it looks slipped rather than resting on the tail. The rhyme with the notch can't be seen below 48 px, so at toolbar sizes this is p1 with sharper corners. At 16 px only one row of paper (row 10) separates the play from the apex, the bare minimum. Cuts are 7.0 and 11.2% soft at 48 and 32, double the reference.",
+     "fix": "Raise the play 1.5 dp, keeping the strap parallel to the notch: the strap becomes about 7.5 dp and the top wall 10.4. At 16 px use p1's 5 px play (columns 5/3/3/1 on rows 4 to 8) so 2 px of paper stays above the apex. If the tip-radius corners look too sharp beside the shoulders at 1x, use p1's r 3.1 dp rule instead."
+    },
+    "brief": {
+     "works": "Shelf's bookmark untouched (42.5 dp, today's proportions) with one hole that has a reason. The play is the notch's two cuts folded forward: its edges are parallel to the notch and as long. At 32.9\u00b0 it is also the angle of the play button in Shelf's own player (Lucide, 32.7\u00b0), so the icon's play and the app's play are one shape. Two parts and drawable from memory; corners at the tips' radius give one corner language with the tail. The play survives at 48, 32 and 16 px and in the glyph. On the lock-screen media card the glyph reads as a badge beside the real pause button.",
+     "fails": "It sits low. Its axis is at y 52.4, 4.5 dp below the middle of the body (top 28.5 to notch apex 67.3) and 2.3 dp below p1's, with its lower-left corner level with the apex. That leaves 11.7 dp of paper above it against a 6.25 dp strap below. At 1x it looks as if it has slipped, the optical-centring fault Richard rejected in round one. The 16 px play ends in a 2 px flat tip (column 9, rows 6 to 7) that blunts it into a tab. It shares Google Play Books' pairing of bookmark and play, though only in idea.",
+     "fix": "Raise the play 2 dp (axis to about y 50.4). The paper above drops to about 9.7 dp and the strap along the notch grows to about 7.9 dp, so the play sits in the body above the apex and keeps the notch rhyme. At 16 px end the play on one pixel (columns of 5, 3, 3 and 1 from x 6, as in p1's cut). My first choice to refine and show."
+    }
+   },
+   "mean": 6.83,
+   "shortlisted": 2
+  },
+  {
+   "id": "n1",
+   "scores": {
+    "concept": 6.5,
+    "craft": 5,
+    "brief": 7
+   },
+   "verdicts": {
+    "concept": "shortlist",
+    "craft": "drop",
+    "brief": "shortlist"
+   },
+   "notes": {
+    "concept": {
+     "works": "Richard's own idea, drawn faithfully and well. The bookmark leads, the play is the tile showing through, and the pause is the bookmark's paper again: one colour and real holes. Of the five nests (n1, n2, n3, r3, i1) it keeps the most bookmark while the play is still unmistakable at 48 px, so it is the version of his idea to show him.",
+     "fails": "Three symbols stacked, so it is two ideas stuck together. A play holding a pause is the play/pause toggle, which says media player at launcher size, and the pause is gone below 64 px. Every smaller size is a bookmark with a play: GoodLinks' template (a white notched bookmark with a symbol in its body, in Shelf's own category, Apple-only) and Play Books' pair of signs nested the other way. It is moderately close to both. The play is equilateral with 5.1 dp corners, about 13% of its height, the softness of Play Books' triangle (about 11%), and nothing in its shape comes from the bookmark.",
+     "fix": "Bring n3's play geometry into n1: slanted edges parallel to the notch (the 11:17 slope n3 and p2 use), with n1's walls kept at 6 dp or more. Hole and tail then look cut by one hand without n3's thin frame. If it still reads as Google Play, try the tips' radius on the play's back corners, as p2 does. Show it with its two-level small sizes beside it, so Richard sees the pause appears only on the launcher and the launch screens."
+    },
+    "craft": {
+     "works": "Shelf's proportions at the largest size the circle allows (43.6 dp, reach 32.56). The frame round the play is close to even: 6.1 above, 6.0 over the notch, 8.3 at the flat side and 7.4 past the tip. The pause sits exactly on the incircle centre (51.5, 48.5). The 48 and 32 cuts are real redraws with 4 to 5 px walls.",
+     "fails": "The pause ring is 6.2 dp at the flat side against 4.0 at the slanted sides, so the bars crowd the play's edges. Bars of 3.5 dp and a 3.0 dp gap are 2.3 and 2.0 px on a 1x home screen, under the 3 px minimum. Every cut and the glyph drop the pause, so the third level exists only above about 64 px. The play's corners are r 5.1 on 60 degree angles, setting each curve back 8.8 dp against the shoulders' 5.1, so the play reads softer than the bookmark. The 48 px cut is 9.7% soft, 2.8 times the reference. At 16 px the play's bottom pixel (6,10) touches the notch's 80%-dark apex pixel (7,11) corner to corner, so the hole leaks into the notch.",
+     "fix": "Move the pause 1.5 dp left (centre x 50.0) to even the ring at 4.7 dp. Set the play's corners to r 3.0 dp. Redraw the 16 px play 5 px tall on rows 4 to 8 (5/3/3/1) to keep 2 px above the apex. Even then it is a weaker n3."
+    },
+    "brief": {
+     "works": "Richard's own idea, drawn properly: Shelf's bookmark at 43.5 dp (reach 32.6), a play hole with 6 to 8.2 dp of paper round it, and the paper pause centred on the play's incircle (51.5, 48.5), so nothing floats. On his Pixel the launcher draws the 72 dp at about 140 px, where the pause bars are about 7 \u00d7 22 px and read clearly (checked in a scratch render); the 1x sheets understate it. He will recognise it at once and is the most likely to pick it.",
+     "fails": "Four parts, the busiest of the bookmark-first options. The play (38 of the bookmark's 52 dp) is louder than the bookmark, so at a glance it is a play-and-pause button in a bookmark frame, which reads as a media player. The play is the generic soft one: equilateral, corners r 5.1 (13% of its height), YouTube's shape rather than Shelf's own narrower Lucide play. The pause bars are thin sticks with a gap almost as wide as a bar (3.42 and 3.08 dp); Shelf's in-app pause (filled, 1.75 stroke) has bars about 2.5 times its gap. The pause exists only on the launcher and launch screens. Every cut and the glyph is a plain play, so in most places n1 is p1.",
+     "fix": "Redraw the play as Shelf's, keeping its 38.3 dp height: depth 0.78 of the height (Lucide's 14:18), edges parallel to the notch (32.9\u00b0, Lucide's 32.7\u00b0), corners at the tips' radius (about 1.9 dp). The narrower play adds about 1.6 dp of paper on each side. Give the pause Shelf's proportions in the same footprint: bars about 4 \u00d7 11.4 dp with a 1.8 dp gap, re-centred on the new incircle. The two shortlisted play options then differ only by the pause and the play's size, a clean A/B for Richard."
+    }
+   },
+   "mean": 6.17,
+   "shortlisted": 2
+  },
+  {
+   "id": "p1",
+   "scores": {
+    "concept": 5.5,
+    "craft": 7,
+    "brief": 6
+   },
+   "verdicts": {
+    "concept": "drop",
+    "craft": "maybe",
+    "brief": "maybe"
+   },
+   "notes": {
+    "concept": {
+     "works": "Clean and centred, bookmark first, with the play legible at every size.",
+     "fails": "p2 with less reason behind it. The equilateral play takes nothing from the bookmark, and its 3.1 dp corners (11% of its height) are Play Books' softness. It has the same GoodLinks template and Play Books pair as p2, moderately close to both.",
+     "fix": "Drop in favour of p2's notch-parallel play folded into n1."
+    },
+    "craft": {
+     "works": "The best-drawn play hole. Walls are 11.4 at the flat side, 10.7 past the tip, 10.2 above and 8.0 to the notch. The corner radius of r 3.1 dp on the play's 60 degree corners sets each curve back 5.4 dp, matching the shoulders' 5.0, so play and bookmark have one softness. Every cut keeps an even frame: 7 px at 48, 5 at 32, 3 at 16 and 4 in the glyph. The 16 px play (columns 5/3/3/1) floats with 2 px above and 2 px over the apex, so it doesn't leak.",
+     "fails": "It is the stamped symbol the brief names as the last round's failure, drawn well: the hole carries a symbol and does no other work. The diagonals double the reference's softness (7.3 / 10.4% against 3.5 / 6.3 at 48 / 32). At 16 px the 5-pixel play is at the limit of legibility. It overlaps p2 almost completely at toolbar sizes.",
+     "fix": "Fold its two best decisions into p2: the 16 px play (5/3/3/1 on rows 4 to 8), and the setback-matched r 3.1 dp corners if p2's crisp corners fight the shoulders. Drawn as it is, it needs no geometric fix."
+    },
+    "brief": {
+     "works": "The most evenly framed play: equilateral, its flat side 0.42 of its depth left of the centre line so the walls read even (11.25 and 10.56 dp), its axis at y 50.1 on the visual centre. Two parts, bookmark first, and the play is kept at every size.",
+     "fails": "The play is the generic soft one (equilateral, corners r 3.1, 11% of its height): the media-player play rather than Shelf's narrower Lucide play. The even frame makes it a button set into the bookmark, the stamped reading the brief warns about. p2 does the same job with a play that belongs to Shelf.",
+     "fix": "Merge into p2: keep p1's placement (axis about y 50) and use p2's notch-parallel play."
+    }
+   },
+   "mean": 6.17,
+   "shortlisted": 0
+  },
+  {
+   "id": "n3",
+   "scores": {
+    "concept": 6,
+    "craft": 6,
+    "brief": 5
+   },
+   "verdicts": {
+    "concept": "maybe",
+    "craft": "maybe",
+    "brief": "drop"
+   },
+   "notes": {
+    "concept": {
+     "works": "The best-integrated nest. The play's sides run parallel to the notch, one 4.1 dp module sets every wall, bar and gap, and the pause survives to 32 px. It is the only nest where Richard's third level reaches the toolbar.",
+     "fails": "The hole is so large that the bookmark becomes an outline frame, and an outlined bookmark is the 'not saved' state in Lucide and Material, the opposite of Shelf's first message. The play and pause read before the bookmark. Of the nests that makes it the closest to Play Books, a big soft play with a bookmark around it (Play Books' pair with the nesting swapped, moderate to close), and to a media-player button.",
+     "fix": "Fold it into n1. Keep its notch-parallel play and its one-module discipline, and thicken the walls to at least 6 dp (the play drops to about 38 dp tall) so the bookmark reads solid."
+    },
+    "craft": {
+     "works": "The most rigorous nest. One 4.1 dp module sets the top wall, the band over the notch, both bars, the gap and the ring. The play's sides run parallel to the notch at 11:17, and the pause sits 1.9 dp left of the incircle so the ring is an even 4.1 on all three sides. It is the only nest whose cuts carry the pause: 3 px bars, gap and ring at 48, 2 px at 32, with play and notch on matching 2:3 stairs.",
+     "fails": "Every dimension sits on the floor. The 4.1 dp module is 2.7 px on a 1x home screen, under 3. The 48 cut is 3 px everything and the 32 cut 2 px everything, so both are busy, at 9.3 and 12.6% soft. The frame is 4.2 dp at the top against 7.0 at the sides, so the bookmark becomes an outline round a play. Play corners at r 5.1 on 57 and 66 degree angles set back 9.4 and 7.9 dp, far softer than the shoulders and the sharp apex. The 48 and 32 bookmarks fill two thirds of the tile against the master's 60%. At 16 px the play's bottom pixel (6,10) touches the notch's 80%-dark apex pixel (7,11) corner to corner, so the hole leaks into the notch.",
+     "fix": "If a nest goes to Richard, refine this one. Take about 0.9 dp off the play's height so the top wall and the band over the notch reach 4.5 dp. Set the play's corners to r 3 dp. Redraw the 16 px play 5 px tall with 2 px clear of the apex. Accept that the bars, gap and ring can't reach 4.5 dp inside a 43.5 dp bookmark."
+    },
+    "brief": {
+     "works": "The best-built nest: the play is cut at the notch's angle and one 4.1 dp module sets every wall, bar and gap, so the pause survives down to the 32 px cut.",
+     "fails": "The hole takes so much that the bookmark becomes a 4.1 dp frame (2.7 px at 1x), and in most interfaces an outlined bookmark means not saved. The pause sits against the flat side, 1.9 dp left of the incircle's centre, so pause-then-point reads as the play/pause media toggle before it reads as a bookmark. The 48 and 32 px cuts draw the bookmark at two thirds of the tile, a size up from the launcher.",
+     "fix": "Fold its notch-parallel play and its module into n1's refinement, and drop it as a separate option."
+    }
+   },
+   "mean": 5.67,
+   "shortlisted": 0
+  },
+  {
+   "id": "h1",
+   "scores": {
+    "concept": 6,
+    "craft": 7,
+    "brief": 3.5
+   },
+   "verdicts": {
+    "concept": "maybe",
+    "craft": "shortlist",
+    "brief": "drop"
+   },
+   "notes": {
+    "concept": {
+     "works": "The most original idea in the round, and the only one no competitor resembles. One straight cut, continuing the notch's own right edge, shows that the bookmark's left tail was a play all along. It is one idea with nothing stamped on and the outline untouched: the hidden-arrow kind of discovery that makes a mark ownable.",
+     "fails": "The band runs edge to edge, from the left side at y 53.5 down to the right tip. That is the top-left to bottom-right direction of the 'off' slash (Tabler's bookmark-off, Lucide's bell-off), so a first reading can be 'bookmark removed', the opposite of saved. The cut also swallows the notch: the V that identifies Shelf's bookmark is gone, and the shape reads as a flag or a dog-eared page first. The play (23 x 18 dp, bottom left) reads as a media-file badge at 1x and is six pixels at 16 px. It is hard to draw from memory: which tail, and which way?",
+     "fix": "Test before refining: show the 48 px icon cold to five people. If 'crossed out' or 'turned off' comes up, drop it, because any edge-to-edge diagonal carries that convention. If it survives, end the cut 4.5 dp (3 px at 48) short of the left edge, so a paper hinge keeps the outline closed and the cut reads as a fold, then check the play still reads."
+    },
+    "craft": {
+     "works": "The most exact construction in the round. One cut carries the notch's right flank straight on through the apex to the left edge, and the play's lower edge is the notch's own left flank. That makes the play isosceles at 0.77 (Lucide's is 0.78), and every corner except the shoulders takes the tips' r 1.853. The outline is the reference bookmark exactly. The cuts are the crispest of any idea with a diagonal: 2.2% soft at 16, where the cut, the notch and a 6/4/2 play are all whole-pixel 45 degree stairs, and 5.1 / 8.5% at 48 / 32. The play survives everywhere: 14 x 11 px at 48, 9 x 7 at 32, 7 x 6 in the glyph.",
+     "fails": "The cut is 3.2 dp, 2.1 px on a 1x home screen and under the 3 px minimum, so at launcher sizes it reads as a hairline slash, which is the 'bookmark off' convention. The play is a corner fragment, about 11% of the paper. At 16 px it is a 6-pixel hint that reads as a broken tail more than a play.",
+     "fix": "Widen the cut to 4.5 dp. Keep its upper edge on the notch's line and move the play's top edge down; the play shrinks to about 22 x 17 dp. Keep the 16 px cut's 2 px stair. Then check at 1x that the wider band reads as a fold rather than a slash."
+    },
+    "brief": {
+     "works": "The cleverest geometry in the round: the outline stays whole and the play is the bookmark's own left tail.",
+     "fails": "The idea needs explaining. At a glance a diagonal through a bookmark is the bookmark-off slash or a folded corner, and the play is a fragment falling out of the bottom left. At 16 px it is a slash, and nobody could draw it from memory.",
+     "fix": "None."
+    }
+   },
+   "mean": 5.5,
+   "shortlisted": 1
+  },
+  {
+   "id": "p3",
+   "scores": {
+    "concept": 4.5,
+    "craft": 6,
+    "brief": 6
+   },
+   "verdicts": {
+    "concept": "drop",
+    "craft": "maybe",
+    "brief": "maybe"
+   },
+   "notes": {
+    "concept": {
+     "works": "Restraint: the bookmark clearly leads and the play is a quiet aside.",
+     "fails": "The closest of all to GoodLinks: a small dark symbol centred in a solid notched bookmark, at about the size and position of GoodLinks' star. At 6.6% of the bookmark's area the play vanishes on a 1x home screen and in the status bar, so the listen message is mostly lost.",
+     "fix": "Drop. A smaller stamp is still a stamp."
+    },
+    "craft": {
+     "works": "Clean and restrained. The play is 6.6% of the bookmark, with walls of 15.6 at the flat side, 14.5 at the tip and above, and 9.8 to the notch, set close to the optical centre. It is the crispest of the play holes (5.3 / 8.6 / 11.9% soft). At 16 px the play is a 5/3/1 stair centred by its centroid on the bookmark's axis.",
+     "fails": "The play is about 10 px tall at 48 and 7 at 32, so on a 1x home screen it is a dot. At 16 px it sits on rows 5 to 9, with 3 px of paper above and 1 px over the apex. In the glyph it has 5 px above and 2 below. Both sit 1 px low.",
+     "fix": "Lift the 16 px play to rows 4 to 8 (2 px above, 2 over the apex) and the glyph's play by 1 px. Beyond that it is p1 at two thirds the size: a quieter option with no new idea."
+    },
+    "brief": {
+     "works": "The bookmark stays the hero, with Lucide's 14:18 play at its own proportions. It is the quietest play option, the most at home beside Shelf's ink-and-paper interface, with crisp cuts (5.3% soft at 48).",
+     "fails": "The hole is 6.6% of the bookmark, too small for the negative space to do work. It reads as a badge on the bookmark, the clip-art reading. On a busy home screen the listening cue is a dot, and since Richard asked for negative space he is likely to find it timid.",
+     "fix": "If the quiet route is wanted, grow the play from 18.75 to about 22 dp tall, with p2's notch-parallel edges, at the visual centre. It then meets refined p2, so show only one of the two."
+    }
+   },
+   "mean": 5.5,
+   "shortlisted": 0
+  },
+  {
+   "id": "ref-solid",
+   "scores": {
+    "concept": 5,
+    "craft": 5,
+    "brief": 5
+   },
+   "verdicts": {
+    "concept": "maybe",
+    "craft": "maybe",
+    "brief": "maybe"
+   },
+   "notes": {
+    "concept": {
+     "works": "It says saved instantly and is the simplest mark possible. Its silhouette also stands apart from the monochrome reading apps it will sit beside, which are all letterforms or abstract marks: Matter's M, Readwise Reader's R, Instapaper's I, ElevenReader's fan.",
+     "fails": "Nothing about listening and nothing ownable. A solid bookmark is Material's stock 'bookmark' glyph, and on a home screen it is moderately close to Day One, a white notched bookmark on a solid tile that is on Android too (Day One's bleeds off the top and is narrower).",
+     "fix": "None. Keep it beside the shortlist as the control: a candidate that doesn't add meaning without also adding a lookalike should lose to it on simplicity."
+    },
+    "craft": {
+     "works": "The control, and per pixel the cleanest drawing: 24 x 30 at 48, 16 x 20 at 32, 8 x 10 at 16 with a 4 px 45 degree notch, and a 14 x 18 glyph. Soft 3.5 / 6.3 / 14.7%, reach 30.7 dp, clean in every mask, the themed icon and both launch screens.",
+     "fails": "It has no second idea and no negative space, so it can't answer the brief. It also leaves size unused: 40.2 dp wide against the 42 to 43.6 dp the candidates reach inside the same circle.",
+     "fix": "Keep it on Richard's page as the baseline beside the shortlist. Use its cuts (whole-pixel shoulders, the 4 px notch) as the template for every shortlisted 16 px cut and glyph."
+    },
+    "brief": {
+     "works": "Shelf's bookmark exactly (today's foreground.svg scaled 1.18, 40.2 \u00d7 48.1 dp, reach 30.7): one part, drawable from memory, crisp cuts (3.5, 6.3 and 14.7% soft), already the dark launch screen's shape, and the quietest neighbour for Shelf's ink-and-paper interface.",
+     "fails": "It answers none of what Richard asked for: no negative space and no hint of listening. At 1x a white bookmark on black is the generic bookmarks icon, kept Shelf's only by the square shoulders and the shallow notch.",
+     "fix": "Nothing to fix as an answer. Keep it on the page as the control every option must beat, and as the fallback if Richard decides a listening cue is not worth a hole."
+    }
+   },
+   "mean": 5,
+   "shortlisted": 0
+  },
+  {
+   "id": "r1",
+   "scores": {
+    "concept": 4,
+    "craft": 6,
+    "brief": 5
+   },
+   "verdicts": {
+    "concept": "drop",
+    "craft": "maybe",
+    "brief": "drop"
+   },
+   "notes": {
+    "concept": {
+     "works": "The bleed adds a real second idea: the tile is the book and the ribbon marks your place, a strong picture of coming back to something.",
+     "fails": "That picture is Day One's icon: a white ribbon hanging off the top edge of its tile, with a shallow notch, and Day One is on Android. r1 is Day One with a play hole, so the likeness is close. A ribbon hanging from an edge with a play is also Play Books' own device (its ribbon hangs inside the play's top edge), and the play here is stamped. The bleed costs Shelf's shoulders and needs a lip of tile on pale wallpapers and toolbars.",
+     "fix": "Drop the ribbon family."
+    },
+    "craft": {
+     "works": "A well-placed play: edges parallel to the notch, corners at the tips' radius, walls of 11.8 / 11.1 / 10.5 dp, all far above the minimum. The cuts are clean (5.5 / 6.8 / 9.6% soft). The 16 px play is a 5/3/1 stair centred by its centroid, and a deliberate 3, 2 and 1 px lip of tile sits above the ribbon in the toolbar cuts.",
+     "fails": "The bleed depends on the mask and the wallpaper. Under the circle and teardrop the ribbon's top is cut into an arch. On a light home screen the paper runs into the wallpaper and the tile reads as a dark U round a bookmark-shaped opening. The launch screens, and Android 12's circle-masked splash, need an edge for it to hang from. The toolbar cuts need a lip the master doesn't have, so the family has two drawings of the top. Without the bleed it is p1.",
+     "fix": "Keep it only if Richard wants the tile-as-book reading, and test the 1x light home screen and the circle mask with him first. Otherwise fold its play (parallel to the notch, r 1.76) into p2."
+    },
+    "brief": {
+     "works": "A good idea: the tile becomes the book and the bookmark its ribbon marker. The play's edges run parallel to the notch with even 10.5 to 11.8 dp walls, and in the rounded-square mask it looks lovely.",
+     "fails": "The ribbon runs off the top, so Shelf's square shoulders are replaced by whatever the mask is. In a Pixel's default circle the top becomes an arch about 6 dp high, and on a dark wallpaper the tile's edge disappears, so the arch reads as the bookmark's own shape (checked at 140 px). Android 12's launch screen draws the icon inside a circle and cuts it the same way. The website and light launch screen have no edge to hang from, the toolbar cuts need a lip, and the glyph is the whole bookmark. That makes two drawings for one brand, against the study's one-drawing rule.",
+     "fix": "Its free-standing twin is p2 with r1's play, which the p2 refinement covers. Keep the ribbon only as a separate study if Richard asks for it."
+    }
+   },
+   "mean": 5,
+   "shortlisted": 0
+  },
+  {
+   "id": "s3",
+   "scores": {
+    "concept": 5,
+    "craft": 5,
+    "brief": 4.5
+   },
+   "verdicts": {
+    "concept": "drop",
+    "craft": "drop",
+    "brief": "drop"
+   },
+   "notes": {
+    "concept": {
+     "works": "A paused bookmark carries the right meaning (stop here, come back). Leaving out the play keeps it clear of Play Books, and the slots' bottoms echo the notch.",
+     "fails": "It stamps a pause into the body: GoodLinks' template with a pause where the star would be. The echo is invisible below 48 px, and two vertical slots over a V read as a face, eyes over a mouth. s1 says the same thing with one cut in place of two holes.",
+     "fix": "Drop in favour of s1."
+    },
+    "craft": {
+     "works": "Careful geometry. The two 8 dp holes are the bookmark's own outline inset, with bottoms parallel to the notch, so the chevron band under them is an even 9 dp. Walls are 11.1 at the sides and 10.6 above. Every cut is on whole pixels: holes of 5, 4 and 2 px with spines of 4, 2 and 2 at 48, 32 and 16, and flat bottoms at 16. Soft 5.4 / 9.6% at 48 / 32.",
+     "fails": "The 4.1 dp spine is 2.7 px on a 1x home screen, under 3. At 16 px, two 2 x 5 slots over a stepped notch read as a face: two eyes and a frown. The echo disappears below 48. It is a pause stamped into the body, the construction the brief calls clip art, and s1 says pause with one cut and no face.",
+     "fix": "Spine 4.5 dp (holes 7.8). At 16 px drop the pause rather than draw a face. s1 makes this candidate redundant."
+    },
+    "brief": {
+     "works": "Clean at launcher size, and the holes' slanted bottoms run parallel to the notch, so the paper under them is an even chevron.",
+     "fails": "A pause stamped into a bookmark, round one's clip-art construction. The echo is invisible below 48 px, and at 16 px two slots over the notch read as a face. A light shape with two vertical slots and a notched foot is close to Twitch's logo, a streaming app. Its glyph duplicates the pause button on the media card.",
+     "fix": "None; s1 makes the pause out of the bookmark itself."
+    }
+   },
+   "mean": 4.83,
+   "shortlisted": 0
+  },
+  {
+   "id": "r2",
+   "scores": {
+    "concept": 4.5,
+    "craft": 5,
+    "brief": 4.5
+   },
+   "verdicts": {
+    "concept": "drop",
+    "craft": "drop",
+    "brief": "drop"
+   },
+   "notes": {
+    "concept": {
+     "works": "s1's split plus a second picture: a book with two ribbon markers.",
+     "fails": "With no shoulders the halves read as two separate bars, so pause and II come before bookmark. The light colourway, two black bars running off a paper tile, is moderately close to ElevenLabs' II. The bleed is Day One's device, and on pale wallpapers the frame reads as W or \u0428, as its own notes say.",
+     "fix": "Drop in favour of s1, whose shoulders make the halves one bookmark."
+    },
+    "craft": {
+     "works": "With s1, the crispest cuts in the round (2.3 / 3.1 / 9.1% soft). An 8 dp slot (5.3 px at 1x) becomes 6, 4 and 2 px in the cuts. Every edge is vertical, and the feet are clean stairs at 16.",
+     "fails": "The bleed fails worst here. On a light home screen the two paper bars merge with the wallpaper, and the dark tile with its slot reads as a \u0428 or a W. The circle and teardrop masks arch the tops of the bars. The 16 px needs a 1 px lip. It is s1's idea with a failure s1 doesn't have.",
+     "fix": "Drop in favour of s1."
+    },
+    "brief": {
+     "works": "s1's split on the hanging ribbon: two parts, and crisp (2.3 and 3.1% soft at 48 and 32).",
+     "fails": "It has all of r1's mask and launch-screen problems, and it reads as a pause first: two bars hanging from the edge. On a pale wallpaper the dark frame becomes the figure and reads as a W.",
+     "fix": "None; s1 is the better form of the idea."
+    }
+   },
+   "mean": 4.67,
+   "shortlisted": 0
+  },
+  {
+   "id": "i2",
+   "scores": {
+    "concept": 4,
+    "craft": 6,
+    "brief": 4
+   },
+   "verdicts": {
+    "concept": "drop",
+    "craft": "maybe",
+    "brief": "drop"
+   },
+   "notes": {
+    "concept": {
+     "works": "Literal and calm: the bookmark is the hole, and on paper it becomes a dark book with a light ribbon.",
+     "fails": "It is Material's stock 'book' glyph, a page with a bookmark cut out at its head, so nothing about it is ownable. It says nothing about listening, and a narrow portrait card at 26% paper reads as a phone, an e-reader or a cards app at a glance.",
+     "fix": "Drop."
+    },
+    "craft": {
+     "works": "The crispest drawing that has a diagonal in it: 5.0 / 5.0 / 5.8% soft, with every edge except the notch on whole pixels. One corner language: the page corners are r 3.3, the bookmark's own shoulder radius. An even 6 dp margin on three sides becomes 4, 3 and 2 px in the cuts, with 14 dp of page below the tips. The light colourway, a dark book with a light bookmark, is strong.",
+     "fails": "It leaves out listening on purpose, so the negative space carries no second idea. At 16 px the 10 x 14 page runs from row 1 to row 14, leaving 1 px of tile above and below, so on a light toolbar the tile turns into a hairline frame round a light card. At 26% paper it is the slightest mark on a home screen, and the ink centroid sits 3.9 dp low (57.9) because the solid page is all at the bottom.",
+     "fix": "At 16 px draw the page 10 x 12 on rows 2 to 13 with a 6 x 7 bookmark and a 2 px notch, so the tile keeps 2 px above and below. In the master, shorten the page from 55 to 52 dp with the margins unchanged, so the solid foot is lighter and the centroid comes up."
+    },
+    "brief": {
+     "works": "Simple (two parts), crisp at every size (5.0, 5.0 and 5.8% soft) and plainly a bookmarked page.",
+     "fails": "The bookmark becomes a dark hole and listening is gone, so it misses both halves of Richard's ask. A light card on a dark tile reads as a phone, an e-reader or a generic bookmarked-document pictogram, and at 26% paper it looks slight beside other icons.",
+     "fix": "None; ref-solid already answers whether the bookmark alone carries Shelf."
+    }
+   },
+   "mean": 4.67,
+   "shortlisted": 0
+  },
+  {
+   "id": "n2",
+   "scores": {
+    "concept": 5,
+    "craft": 4,
+    "brief": 4.5
+   },
+   "verdicts": {
+    "concept": "drop",
+    "craft": "drop",
+    "brief": "drop"
+   },
+   "notes": {
+    "concept": {
+     "works": "Bookmark first; the nest at its most restrained.",
+     "fails": "A badge set in a bookmark, which is the clip-art construction. The pause island (bars 3.3 x 10 dp) is specks at 1x, so the third level adds complexity nobody sees. GoodLinks' template plus Play Books' pair.",
+     "fix": "Drop. n1 holds the nest with a play big enough for its pause."
+    },
+    "craft": {
+     "works": "The calmest frame of the nests (10.6 / 10.4 / 9.1 / 7.5 dp) and the most solid bookmark. The pause sits on the incircle, and the cuts are tidy (7.8 / 10.8% soft).",
+     "fails": "The third level is too small to exist. Bars are 3.3 x 10 dp, the gap 2.8 and the ring 3.0 at the slants: 2.2, 1.9 and 2.0 px at 1x. On a home screen the pause is two specks, and every cut and the glyph drop it, leaving a less even p1. The ring is 4.7 at the flat side against 3.0 at the slants. It has the same 16 px corner-touch leak as n1 ((6,10) to (7,11)), and the same r 5.1 play corners, softer than the shoulders.",
+     "fix": "Without the pause this is p1. A kept pause needs the play to grow until its bars, gap and ring are each at least 4.5 dp, which this bookmark can't hold."
+    },
+    "brief": {
+     "works": "The bookmark reads before the play, with 7.5 to 10.4 dp of paper round the hole.",
+     "fails": "The pause is jammed into the play with a 3 dp ring (bars 3.3 \u00d7 10 dp), so the island looks stamped on and becomes specks below 64 px. It is n1 with less of everything. Its own designer calls it a play badge placed on a bookmark, the clip-art reading round one was rejected for.",
+     "fix": "Not worth fixing: n1 carries the nest. If a smaller play is wanted, drop the pause and it becomes the p family."
+    }
+   },
+   "mean": 4.5,
+   "shortlisted": 0
+  },
+  {
+   "id": "i1",
+   "scores": {
+    "concept": 4,
+    "craft": 5,
+    "brief": 3.5
+   },
+   "verdicts": {
+    "concept": "drop",
+    "craft": "drop",
+    "brief": "drop"
+   },
+   "notes": {
+    "concept": {
+     "works": "A smart inversion that gives the light colourway Richard's solid bookmark, and 'a bookmark is a pause in reading' is a good line.",
+     "fails": "On a home screen it is a white disc holding two bars, the generic circular pause button the brief rules out, and the brightest icon on the screen at 42% paper. A light disc filling a dark tile with dark marks inside is Spotify's layout (moderate), and a disc holding a media symbol is YouTube Music's. The light colourway, an ink disc with a paper bookmark, is Telegram's Saved Messages avatar. The disc adds no meaning, and the pause is gone at 16 px and in the glyph.",
+     "fix": "Drop. If the inversion is wanted, use it only as the light colourway of a bookmark-first mark."
+    },
+    "craft": {
+     "works": "The only three-level mark whose master clears 4.5 dp everywhere: disc ring 5.7 at the tips, bars 5.6, gap 5.4, island ring 6.3 or more. So the pause survives to 32 px (2 px bars and gap, 4 px ring), and the 48 cut has generous 4 px bars. The bookmark is today's exact proportions. The hand-stepped 16 px disc is crisp (6.5%).",
+     "fails": "The disc can't sit on the grid: 11.6% soft at 48 and 17.7% at 32, against the reference's 3.5 and 6.3, and the glyph is 25% soft counted from alpha. On the circle mask the 32 dp disc leaves a 4 dp dark ring (2.7 px at 1x) that reads as an outline round a white button. At 42% paper it is the brightest mark on a dark home screen. The pause is gone at 16 and in the glyph, leaving a bookmark in a disc.",
+     "fix": "Drop. Its lesson for any nest is that the third level needs bars and gaps of 5.5 dp or more, which only this inversion found room for."
+    },
+    "brief": {
+     "works": "A real three-level figure-ground drawing that uses only two radii.",
+     "fails": "It inverts Richard's ask: the bookmark is dark and the paper is a disc. The icon becomes a white circle, 42% paper against the reference's 33%: the brightest icon on a dark home screen and a white flash on the dark launch screen. In the circle mask the tile vanishes. It reads as a round button or Telegram's Saved Messages, and it has four parts.",
+     "fix": "None within the brief."
+    }
+   },
+   "mean": 4.17,
+   "shortlisted": 0
+  },
+  {
+   "id": "t1",
+   "scores": {
+    "concept": 4,
+    "craft": 4,
+    "brief": 4
+   },
+   "verdicts": {
+    "concept": "drop",
+    "craft": "drop",
+    "brief": "drop"
+   },
+   "notes": {
+    "concept": {
+     "works": "The purest negative-space idea in the round: no holes at all, and the play is the space the bookmark's own notch leaves open.",
+     "fails": "On its side it stops being a bookmark. A horizontal slab with a chevron bite reads as a tag, a ticket, a '>' prompt (Termux's >_ on black) or Plex's chevron before it reads as a play, and the play needs pointing out. The notch was deepened from 11/34 to 14/18 of the width, so even the bookmark's proportions are gone. It fails the first test, saved first.",
+     "fix": "Drop the rotation. Its question, whether the notch itself can be the play, deserves another try with the bookmark upright; h1 is the nearest answer so far."
+    },
+    "craft": {
+     "works": "One solid shape with no holes, so it is about as crisp as the reference (4.6 / 7.8 / 14.7% soft) and nothing has to be dropped at any size. The apex takes the shoulder radius, so the play-shaped wedge is as soft as the shoulders. Inside safe at 32.6.",
+     "fails": "It breaks the fixed bookmark. The notch goes from 11/34 to 14/18 of the width (0.32 to 0.78, 2.4 times deeper) and the mark lies on its side, so the hang and the shallow, chunky tail that make it Shelf's are gone. At every size it reads as a tag, a pennant or a > prompt. The prongs end in single soft pixels at 48 and 16.",
+     "fix": "Nothing within the brief: restoring the 11/34 notch kills the play, and that is the finding."
+    },
+    "brief": {
+     "works": "One solid shape with no holes, and using the notch as the play is a genuinely clever thought.",
+     "fails": "It is no longer Shelf's bookmark. On its side, with the notch deepened from 0.32 to 0.78 of the width, it reads as a tag, a label or a terminal prompt (Plex's chevron, Gmail's important marker). The play is a bite open to the tile, so most people will see a chevron first. Richard asked to keep his bookmark, so he will think it misses the point.",
+     "fix": "None within the brief."
+    }
+   },
+   "mean": 4,
+   "shortlisted": 0
+  },
+  {
+   "id": "r3",
+   "scores": {
+    "concept": 3.5,
+    "craft": 4,
+    "brief": 4
+   },
+   "verdicts": {
+    "concept": "drop",
+    "craft": "drop",
+    "brief": "drop"
+   },
+   "notes": {
+    "concept": {
+     "works": "Richard's three levels, with more room for the pause than a free-standing bookmark gives.",
+     "fails": "Day One's ribbon plus Play Books' pair plus the play/pause toggle. The 10 dp pause is gone below the launcher, so the third level costs the most for the least.",
+     "fix": "Drop."
+    },
+    "craft": {
+     "works": "The ribbon's extra width (46 dp) gives the play 31 dp of height with walls of 12.3, 11.6 and 8 dp. The cuts drop the pause honestly and keep a clean play.",
+     "fails": "The smallest third level in the round. Bars are 3.3 x 10.2 dp, the gap 2.7 and the ring 2.4 to 2.7 dp, about 2.2, 1.8 and 1.6 px at 1x: a smudge on any home screen, and gone from every cut and the glyph, which are then r1 with a bigger play. The 16 px 4 x 7 play's bottom pixel (6,9) touches the notch's 70%-dark apex pixel (7,10) corner to corner. r1's bleed problems apply.",
+     "fix": "Drop. If the nest belongs anywhere, it belongs in n3."
+    },
+    "brief": {
+     "works": "It gives Richard's third level the most room by giving up the shoulders.",
+     "fails": "The pause is 10.2 dp tall with a 2.4 dp ring: a smudge at 1x and gone from every cut, so in most places this is r1 with a bigger play. The play sits 10 to 11.5 dp under the mask's top, crowding the arch. Of all the options it leans furthest towards a media app, and it has r1's bleed problems.",
+     "fix": "None; n1 does the three levels better."
+    }
+   },
+   "mean": 3.83,
+   "shortlisted": 0
+  },
+  {
+   "id": "h2",
+   "scores": {
+    "concept": 4,
+    "craft": 4,
+    "brief": 3
+   },
+   "verdicts": {
+    "concept": "drop",
+    "craft": "drop",
+    "brief": "drop"
+   },
+   "notes": {
+    "concept": {
+     "works": "Clever geometry: the play exists only where the two saves overlap. Two bookmarks also hint at a collection, the nearest anything here comes to the name Shelf.",
+     "fails": "At a glance it is three pieces (a bookmark, a bar and a triangle beneath), and the play reads as a symbol dropped under the front bookmark, where it should read as an overlap. Two overlapping bookmarks is Material's stock 'bookmarks' glyph. The play is gone at 16 px, and the glyph is crowded at 18 px.",
+     "fix": "Drop as drawn. Carry the 'saves standing side by side' thought into a round about the name."
+    },
+    "craft": {
+     "works": "A clever overlap. With the back bookmark half a width right and one notch lower, the front one's right flank cuts a play from the back one's corner, at Lucide's 0.77 with corners at the tips' radius. The cuts hold 3 px gaps at 48 and 2 px at 32.",
+     "fails": "Three pieces of paper and two 2.5 dp gaps, 1.7 px at 1x and under the minimum. Each bookmark is 31 dp, the smallest in the round. The 17 x 13 dp play reads at small sizes as a symbol placed under the front bookmark, and its origin as a second bookmark's corner needs a second look. The 16 px cut drops the play and becomes an 8 x 9 bookmark with a 2 px notch beside a 3 px bar. Two overlapping bookmarks is Material's 'bookmarks' glyph.",
+     "fix": "No fix survives the sizes; drop."
+    },
+    "brief": {
+     "works": "Both bookmarks stay whole and the play appears where they overlap.",
+     "fails": "Three pieces, with a 17 dp play tucked under the front tail: busy, and it needs a second look. Two overlapping bookmarks is Material's generic bookmarks glyph. Each bookmark is only 31 dp wide, so the mark looks small on a home screen, and the 16 px cut loses the play.",
+     "fix": "None."
+    }
+   },
+   "mean": 3.67,
+   "shortlisted": 0
+  },
+  {
+   "id": "t2",
+   "scores": {
+    "concept": 3,
+    "craft": 3,
+    "brief": 3
+   },
+   "verdicts": {
+    "concept": "drop",
+    "craft": "drop",
+    "brief": "drop"
+   },
+   "notes": {
+    "concept": {
+     "works": "Both of Richard's symbols are negative space in one solid shape.",
+     "fails": "It is the play/pause symbol drawn as a slab: a media remote before a reading app, with the bookmark reduced to a frame around two controls. In the light colourway a dark horizontal slab holding a light play is YouTube's structure, though only weakly. It also inherits t1's sideways problem.",
+     "fix": "Drop."
+    },
+    "craft": {
+     "works": "Tidy pixel work: slots of 5/3/5 px at 48, 3/2/3 at 32 and 2/2/2 in the glyph, with 3 to 4 px walls, all on whole pixels. The 16 px cut honestly drops the pause.",
+     "fails": "It has t1's broken proportions, plus a play beside a pause, which is the media toggle the brief warns against: the bookmark becomes the frame round two transport symbols. At 16 px it falls back to t1.",
+     "fix": "Drop."
+    },
+    "brief": {
+     "works": "Both of Richard's symbols are negative space in one solid shape.",
+     "fails": "Play beside pause is the universal media toggle, so it reads as a remote or music app before a reading app. The bookmark has gone (sideways, deep notch), and the 16 px cut falls back to t1.",
+     "fix": "None."
+    }
+   },
+   "mean": 3,
+   "shortlisted": 0
+  },
+  {
+   "id": "s2",
+   "scores": {
+    "concept": 3,
+    "craft": 3,
+    "brief": 3
+   },
+   "verdicts": {
+    "concept": "drop",
+    "craft": "drop",
+    "brief": "drop"
+   },
+   "notes": {
+    "concept": {
+     "works": "A useful study of how far a slot can rise before the bookmark breaks.",
+     "fails": "It reads as neither a bookmark nor a pause, more like a \u03a0, a gate, trousers or rocket fins, as its own notes say.",
+     "fix": "Drop."
+    },
+    "craft": {
+     "works": "Pixel-perfect: the slot is axis-aligned, so the cuts are 2.6 / 4.6 / 10.2% soft, crisper than the reference, and Shelf's outline is untouched.",
+     "fails": "By its own designer's account the slot carries no second idea. A 6.3 dp slot rising 17.5 dp from the apex reads as a split tail, a \u03a0, an inverted Y or rocket fins, and at 16 px it is a 2 x 4 px stub under the head. The negative space does no work.",
+     "fix": "No fix is worth making. Its finding, that any bridge across the top kills the pause, is why s1 cuts all the way through."
+    },
+    "brief": {
+     "works": "Shelf's bookmark is kept, and it shows how deep a slot can go.",
+     "fails": "It carries no second idea: neither pause nor play. As its designer says, it reads as a split tail, a \u03a0, trousers or rocket fins.",
+     "fix": "None; drop it."
+    }
+   },
+   "mean": 3,
+   "shortlisted": 0
+  }
+ ]
+}
