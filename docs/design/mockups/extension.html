@@ -670,6 +670,9 @@ const TOASTS = {
   unqueued: c => ({ tile: 'undo', title: 'Removed from Kefli', sub: c.link ? c.host : TITLE, timer: CD, say: 'Removed from Kefli' }),
   full:     c => ({ tile: 'alert', tone: 'bad', title: `Not saved: ${CAP} are already waiting`, sub: 'They’ll send when you’re online. Save this again then.', wrap: true, timer: CD, say: `Not saved: ${CAP} are already waiting. They’ll send when you’re online. Save this again then.` }),
   failed:   c => ({ cover: c.hash, mark: 'bad', title: 'Couldn’t send this save', sub: 'It’s kept here, and Kefli will keep trying.', wrap: true, action: 'Options', timer: CD, say: 'Couldn’t send this save. It’s kept here, and Kefli will keep trying.' }),
+  // A browser's own page (chrome://, about:) has no web address to save, so nothing is saved (decision 100). Pages with a
+  // web address where no toast can run (a PDF, the Web Store, Firefox's reader view) still save, through the popup.
+  browserpage: c => ({ tile: 'alert', tone: 'bad', title: 'Can’t save this page', sub: 'Kefli saves web pages, and this one belongs to the browser.', wrap: true, timer: CD, say: 'Can’t save this page. Kefli saves web pages, and this one belongs to the browser.' }),
 };
 /* The corner marks: 12 px glyphs on a 20 px disc, heavier than 1.75 so they hold at that size. */
 const MK = {
@@ -1373,16 +1376,12 @@ function save(o = {}){
   later(() => showToast(o.linkOnly ? 'notext' : 'saved', { inPlace: true }), 900, 'save');
 }
 
-/* No toast can run on browser pages (chrome:// and about: pages, the Web Store, PDFs, reader view): Kefli saves the address,
-   the icon ticks for four seconds, and on Chrome 127+ and Firefox a small popup confirms the save under the button. */
+/* No toast can run on browser pages. The browser's own pages (chrome:// and about: pages, and Kefli's options tab) have
+   no web address, so nothing is saved and the popup says so (decision 100); the icon doesn't tick. Pages with a web
+   address where no toast can run (the Web Store, a PDF, reader view) save the address, tick for four seconds and confirm
+   in the popup with the toast's copy, as decision 59 says; this mock draws only the browser's own Settings page. */
 function browserPageSave(){
-  const onOpts = S.view === 'options';
-  const where = onOpts ? 'chrome-extension://kefli' : 'chrome://settings';
-  let kind = 'notext';
-  if (!S.online) { if (S.waiting >= CAP) kind = 'full'; else { S.waiting++; kind = 'offline'; } }
-  else if (S.waiting) S.waiting = 0;                        // back online: the queue has sent
-  if (kind === 'full') renderChrome(); else tick(kind);
-  if (!S.oldChrome) openPopup(kind, { host: where, hash: (onOpts ? SAVES.options : SAVES.settings).hash, focus: true, timed: true });
+  if (!S.oldChrome) openPopup('browserpage', { host: S.view === 'options' ? 'chrome-extension://kefli' : 'chrome://settings', focus: true, timed: true });
 }
 
 /* Retry: busy from the tap; the dots and 'Sending' only if the wait passes 150 ms; when it is sent the check lands in the
@@ -1497,14 +1496,14 @@ setInterval(() => {
 
 /* ---------------- panel ---------------- */
 const TOAST_JUMPS = ['saving', 'saved', 'undone', 'notext', 'offline', 'unqueued', 'full', 'failed'];
-const BROWSER_PAGE = 'Browser pages like this one don’t allow extensions to read them. Kefli saves the address, and your phone fetches the page.';
+const BROWSER_PAGE = 'This is one of the browser’s own pages, with no web address your phone could fetch, so Kefli saves nothing here (decision 100). Pages with a web address where no toast can run, such as a PDF or the Web Store, save their address and your phone fetches the page.';
 const NOTES = {
   saving: 'The address is known before the text, so the cover draws itself while Kefli saves, its leaves landing in hash order over about a second. When the save goes through, Saved crossfades in and its tick lands with the last leaf (never more than a second in), or as soon as the save is confirmed if that comes later. This state is held still: click the jump to replay the drawing, or click Kefli’s button to watch a whole save.',
   reach: 'Pressing the shortcut again while a Saved toast shows moves focus to Undo. Tab past the last button, Shift+Tab before the first, Escape or ✕ take focus back to where it was.',
   menu: 'A link saved from this menu wears the cover of the page it points to, the same face the phone shows in its row while it fetches the text.',
   unqueued: 'The offline save was still in this browser’s queue, so Undo takes it out and the waiting count drops by one. Nothing needs doing on the phone.',
-  popup: `${BROWSER_PAGE} On Chrome 127+ and Firefox a small popup confirms the save under Kefli’s button, with its own status message. It closes after 8 seconds, on Escape, or when you click away.`,
-  restricted: `${BROWSER_PAGE} Before Chrome 127 an extension can’t open its popup from a shortcut, so the icon tick alone confirms the save, for 4 seconds.`,
+  popup: `${BROWSER_PAGE} On Chrome 127+ and Firefox a small popup under Kefli’s button says so, with its own status message. It closes after 8 seconds, on Escape, or when you click away.`,
+  restricted: `${BROWSER_PAGE} Before Chrome 127 an extension can’t open its popup, so nothing shows here; on a page with a web address the icon tick alone confirms the save, for 4 seconds.`,
   'o-unpinned': 'Installing Kefli opens this page by itself. Until Kefli is pinned, the pin line shows at the top of the pairing card, and first under Ways to save once connected. Here, click the puzzle piece in the toolbar to pin Kefli.',
   'o-waiting': 'Saves made offline wait in this browser. The toolbar badge, the button’s name and this notice show the same count.',
   'o-unsent': 'Saves that haven’t reached Kefli’s server live only in this browser, so the confirm counts them and the button names the consequence.',
@@ -1534,7 +1533,7 @@ document.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => {
   if (j === 'unqueued') { S.online = false; S.waiting = 2; }
   if (j === 'full') { S.online = false; S.waiting = CAP; }
   if (j === 'failed') S.failed = [THIS_SAVE()];
-  if (j === 'restricted' || j === 'popup') { S.view = 'restricted'; S.base = 'restricted'; S.tick = 'notext'; S.oldChrome = j === 'restricted'; }
+  if (j === 'restricted' || j === 'popup') { S.view = 'restricted'; S.base = 'restricted'; S.tick = false; S.oldChrome = j === 'restricted'; }
   if (j === 'menu') S.menu = true;
   if (j.startsWith('o-')) { S.optsOpen = true; S.view = 'options'; }
   if (['o-pair', 'o-unpinned', 'o-expired', 'o-offline', 'o-scanned'].includes(j)) { S.paired = false; S.pair = { 'o-expired': 'expired', 'o-offline': 'offline' }[j] || 'show'; }
@@ -1546,7 +1545,7 @@ document.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => {
   render({ fresh: true });
   if (TOAST_JUMPS.includes(j)) showToast(j, { timed: false });          // held still for review
   if (j === 'reach') { showToast('saved', { timed: false }); reachUndo(); }
-  if (j === 'popup') openPopup('notext', { host: 'chrome://settings', hash: SAVES.settings.hash, timed: false });
+  if (j === 'popup') openPopup('browserpage', { host: 'chrome://settings', timed: false });
   if (j === 'o-unsent') {                                  // bring the confirm into view inside the options tab
     const o = content.querySelector('.opts'), c = content.querySelector('.confirm');
     o.scrollTop += c.getBoundingClientRect().bottom - o.getBoundingClientRect().bottom + 24;

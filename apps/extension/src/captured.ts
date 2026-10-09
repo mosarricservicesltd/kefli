@@ -19,6 +19,11 @@ export const GUARD_WORDS = 120;
 /** contract 4.4: content HTML over this many bytes as UTF-8 is not sent. */
 export const HTML_MAX_BYTES = 2_097_152;
 
+/** Whether an address can be saved at all: a web page's, http or https (contract 4.3; decision 100). */
+export function isWebAddress(url: string): boolean {
+  return /^https?:\/\//i.test(url);
+}
+
 /** A save made from a link or a page where no script can run: the address alone (extension spec 4). */
 export function linkOnly(url: string): Captured {
   return { url, canonical: null, hero: null, title: null, site: null, byline: null, lang: null, html: null };

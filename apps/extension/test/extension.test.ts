@@ -7,7 +7,7 @@ import { acceptSaveRequest, derivePairCode, openOffer, wrapPairAck, type PairAck
 import { LocalSigner, type NostrEvent } from '../../../packages/protocol/src/signer';
 import { decryptText } from '../../../packages/protocol/src/text';
 import { unwrap } from '../../../packages/protocol/src/wrap';
-import { GUARD_WORDS, HTML_MAX_BYTES, keepHtml, linkOnly, pageUrl, type Captured } from '../src/captured';
+import { GUARD_WORDS, HTML_MAX_BYTES, isWebAddress, keepHtml, linkOnly, pageUrl, type Captured } from '../src/captured';
 import { webCrypto } from '../src/crypto';
 import { loadDefaults, type Defaults } from '../src/defaults';
 import { deviceSigner } from '../src/device';
@@ -231,6 +231,10 @@ describe('the queue (extension spec 4, decisions 30, 31 and 60)', () => {
 describe('capture (contract 4.2 and 4.4)', () => {
   const words = (n: number) => Array.from({ length: n }, () => 'word').join(' ') + '\n';
   test('the address loses its fragment', () => expect(pageUrl('https://a.example/x?y=1#z')).toBe('https://a.example/x?y=1'));
+  test('only web addresses can be saved (decision 100)', () => {
+    expect(['https://a.example/', 'HTTP://b.example/x.pdf'].every(isWebAddress)).toBe(true);
+    expect(['chrome://settings/', 'about:blank', 'file:///tmp/a.html', 'chrome-extension://x/options.html'].some(isWebAddress)).toBe(false);
+  });
   test('the guard: readerable, or enough spoken words', () => {
     expect(keepHtml({ ok: true, readerable: true, markdown: words(3) }, '<p>x</p>')).toBe('<p>x</p>');
     expect(keepHtml({ ok: true, readerable: false, markdown: words(GUARD_WORDS) }, '<p>x</p>')).toBe('<p>x</p>');
@@ -260,6 +264,8 @@ describe('the toast', () => {
     expect(toastCopy({ ...s, kind: 'notext' }).sub).toBe('example.com · your phone will fetch the text');
     expect(toastCopy({ ...s, kind: 'undone' }).tile).toBe('undo');
     expect(toastCopy({ ...s, kind: 'unqueued' }).sub).toBe('A page');
+    expect(toastCopy({ ...s, kind: 'browserpage' })).toMatchObject({ title: 'Can’t save this page', tile: 'alert', tone: 'bad', timed: true });
+    expect(toastCopy({ ...s, kind: 'browserpage' }).action).toBeUndefined();
   });
   test('the mark lands with the last leaf, never after a second', () => {
     expect(markDelay(1)).toBe(520);

@@ -1,7 +1,7 @@
 // The background (extension spec 2 and 4): the toolbar button, the shortcut and the link menu all save; Undo, the queue's
 // minute-by-minute retry and the badge. Whatever must outlive a service worker or event page restart is in storage.
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
-import { linkOnly, type Captured } from './captured';
+import { isWebAddress, linkOnly, type Captured } from './captured';
 import { BROWSER, DEFAULTS_URL, FLAVOUR } from './config';
 import { webCrypto } from './crypto';
 import { loadDefaults } from './defaults';
@@ -20,7 +20,7 @@ const now = () => Math.floor(Date.now() / 1000);
 const MENU = BROWSER === 'firefox' ? 'Save Link to Kefli' : 'Save link to Kefli';
 
 // Created at the top level, not in onInstalled, so it survives Firefox's event page restarts (spec 6).
-chrome.contextMenus.removeAll(() => chrome.contextMenus.create({ id: 'save-link', title: MENU, contexts: ['link'] }));
+chrome.contextMenus.removeAll(() => chrome.contextMenus.create({ id: 'save-link', title: MENU, contexts: ['link'], targetUrlPatterns: ['http://*/*', 'https://*/*'] }));
 
 chrome.runtime.onInstalled.addListener((d) => {
   if (d.reason === 'install') void chrome.runtime.openOptionsPage();
@@ -135,11 +135,12 @@ async function save(c: Captured, tabId: Where, link: boolean): Promise<void> {
 async function saveTab(tab: chrome.tabs.Tab): Promise<void> {
   if (tab.id === undefined || !tab.url) return;
   const c = await captureTab(tab.id);
-  if (!c) {
-    await session.set('popup', null);
-    void openSavedPopup();
-  }
-  await save(c ?? linkOnly(tabUrl(tab.url)), c ? tab.id : 'popup', !c);
+  if (c) return save(c, tab.id, false);
+  const url = tabUrl(tab.url);
+  await session.set('popup', null);
+  void openSavedPopup();
+  if (isWebAddress(url)) return save(linkOnly(url), 'popup', true);
+  await toast('popup', { kind: 'browserpage', title: '', host: '', link: true });
 }
 
 async function undo(id: string, where: Where): Promise<void> {
