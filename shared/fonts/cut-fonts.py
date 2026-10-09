@@ -44,7 +44,7 @@ def rename(font: TTFont, family: str) -> None:
     style = 'Italic' if italic else 'Regular'
     drop_names(font)
     full = f'{family} {style}' if italic else family
-    for name_id, value in ((1, family), (2, style), (3, f'{family};shelf-cut'), (4, full), (6, family)):
+    for name_id, value in ((1, family), (2, style), (3, f'{family};kefli-cut'), (4, full), (6, family)):
         font['name'].setName(value, name_id, 3, 1, 0x409)
     font['OS/2'].usWeightClass = 400
     # fsSelection: ITALIC (bit 0) or REGULAR (bit 6), with BOLD (bit 5) cleared; macStyle bit 1 is italic.
