@@ -823,7 +823,7 @@ Contract v1.3 took in all eighteen requests, approved with section 14 on 5 Octob
 
 ## 14. Decided
 
-Richard approved every recommendation in this section as a set on 5 October 2026, with no exceptions. Each item points to the flow decision that records it (FD 79–93); O-9 is still open in `CLAUDE.md`, and O-10 is recorded there.
+Richard approved every recommendation in this section as a set on 5 October 2026, with no exceptions. Each item points to the flow decision that records it (FD 79–93). O-9's name is settled as Kefli by FD 95 and its app ID is still open in `CLAUDE.md`; O-10 is recorded there.
 
 | O | Question | Decision |
 |---|---|---|

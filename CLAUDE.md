@@ -54,5 +54,5 @@ If all three work, Expo is confirmed and the Android spec is rewritten as an Exp
 
 ## Open items for Richard
 
-- **Name** (mobile spec O-9): decided as **Kefli** on 9 October 2026 (`docs/research/naming.md`). Still open: the Play app ID (permanent from the first upload and owner of the Block Store data; `app.kefli` was free), the domains, the UK trade mark filing, a flow decision recording the name, and the rename itself.
+- **Name** (mobile spec O-9): decided as **Kefli** on 9 October 2026 (`docs/research/naming.md`). Recorded as flow decision 95. Still open: the Play app ID (permanent from the first upload and owner of the Block Store data; `app.kefli` was free), the domains, the UK trade mark filing, and the rename itself.
 - **Licence text:** the licence was decided by Richard on 5 October 2026 (mobile spec O-10): AGPL-3.0-or-later, with an added permission for Google Play services and other proprietary system libraries (open-sourcing the clients supports the "outlives the service" story; AGPL stops a closed fork). The LICENSE file is added once Richard confirms its exact text. `apps/mobile/LICENSE` is Expo's template and is not committed.
