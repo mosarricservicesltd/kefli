@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Shelf Flow Map</title>
+<title>Kefli Flow Map</title>
 <style>
 :root{
   --bg:#FCF7F6; --surface:#FFFFFF; --line:#E9EAEB; --text:#181D27; --muted:#535862;
@@ -58,13 +58,13 @@ code{font-size:13px;background:var(--accent-soft);padding:1px 5px;border-radius:
 </head>
 <body>
 <main>
-<h1>Shelf flow map, revision 3</h1>
+<h1>Kefli flow map, revision 3</h1>
 <p class="lede">Every screen, decision, input and wait from each way into the app to the moment of value, plus the state of every screen. Screens are built from this map and nothing else.</p>
 <p class="meta">27 September 2026 · supersedes revision 2 (<code>pocket-on-nostr-flow.html</code>) · decisions in <code>flow-decisions.md</code> · style: Fingerprint, Lucide at 1.75 (<code>shared/tokens/tokens.json</code> 1.0.1; decisions 65 to 68 and 92) · marks what changed from revision 2: <span class="changed">new</span>; changes from flow decision 79 on (round 23, 5 October 2026) carry their decision number, as in <span class="changed">new · 91 (b)</span> or <span class="changed">changed · 79</span></p>
 <p class="meta"><strong>Later decisions override this page where they differ:</strong> see <code>flow-decisions.md</code> from decision 18 on, notably 21 (speed read), 22 (listening is on-device only; everything about a better voice below is out of v1), 45 (one player, at the bottom) and 50 (Back returns to where you came from).</p>
 
 <nav class="toc">
-  <a href="#loop">Core loop</a><a href="#nav">Navigation</a><a href="#j1">First launch</a><a href="#j2">Returning to a shelf</a>
+  <a href="#loop">Core loop</a><a href="#nav">Navigation</a><a href="#j1">First launch</a><a href="#j2">Returning to a library</a>
   <a href="#j3">Save from phone</a><a href="#j4">Save from browser</a><a href="#j5">Read</a><a href="#j6">Listen</a>
   <a href="#j7">You</a><a href="#weight">Weight audit</a><a href="#states">State matrix</a><a href="#inventory">Screen inventory</a>
   <a href="#heuristics">Usability pass</a><a href="#open">Open items</a>
@@ -91,7 +91,7 @@ code{font-size:13px;background:var(--accent-soft);padding:1px 5px;border-radius:
   <div class="card"><strong>Entry points</strong>
     <ul>
       <li>Cold open, first launch → Welcome</li>
-      <li>Cold open after a reinstall, with a shelf in Block Store → Saves with the restore card, never Welcome <span class="changed">changed · 79</span></li>
+      <li>Cold open after a reinstall, with a key in Block Store → Saves with the restore card, never Welcome <span class="changed">changed · 79</span></li>
       <li>Share sheet from any app, including before the first open <span class="changed">new</span></li>
       <li>Returning open → where the user was <span class="changed">new</span></li>
       <li>Lock screen or media notification → Reader at the spoken word <span class="changed">new</span></li>
@@ -111,11 +111,11 @@ code{font-size:13px;background:var(--accent-soft);padding:1px 5px;border-radius:
 <p>No signup, no tour. One question, then the empty state does the teaching.</p>
 <div class="card">
 <ol class="flow">
-  <li><span class="tag t-screen">Screen</span><div><strong>Welcome</strong> <span class="changed">new</span>. App name, one line on what it does, two buttons: <em>New here</em> (primary) and <em>I already have a shelf</em>.</div></li>
-  <li><span class="tag t-decision">Decision</span><div>New here → continue below. I already have a shelf → journey 2.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Welcome</strong> <span class="changed">new</span>. App name, one line on what it does, two buttons: <em>New here</em> (primary) and <em>I already have a library</em>.</div></li>
+  <li><span class="tag t-decision">Decision</span><div>New here → continue below. I already have a library → journey 2.</div></li>
   <li><span class="tag t-bg">Silent</span><div>Generate key, store in Keystore, back up through Google Block Store. No screen.</div></li>
   <li><span class="tag t-screen">Screen</span><div><strong>Saves, empty.</strong> Teaches the share sheet with one illustration of it. One button: <em>Connect your browser</em>. The nostr sign-in link has moved to journey 2. Offline, the notice slot reads “Connecting a browser needs a connection” and the button is disabled (<code>saves-empty-offline</code>) <span class="changed">new · 91 (g)</span>.</div></li>
-  <li><span class="tag t-action">Action</span><div>In any app: Share → Shelf. (Journey 3.)</div></li>
+  <li><span class="tag t-action">Action</span><div>In any app: Share → Kefli. (Journey 3.)</div></li>
   <li><span class="tag t-screen">Screen</span><div><strong>Saved sheet</strong> → <em>Read now</em></div></li>
   <li><span class="tag t-screen">Screen</span><div><strong>Reader</strong>, clean text <span class="star">★ FIRST VALUE</span></div></li>
 </ol>
@@ -123,33 +123,33 @@ code{font-size:13px;background:var(--accent-soft);padding:1px 5px;border-radius:
 <h3>Share before the first open <span class="changed">new</span></h3>
 <div class="card">
 <ol class="flow">
-  <li><span class="tag t-action">Action</span><div>Freshly installed, never opened: Share → Shelf.</div></li>
-  <li><span class="tag t-bg">Silent</span><div>Key generated as above, unless Block Store already holds a shelf: then the share stores that key and saves under it, and the next open goes to Saves with the restore card (below) <span class="changed">changed · 79</span>. The save proceeds normally.</div></li>
+  <li><span class="tag t-action">Action</span><div>Freshly installed, never opened: Share → Kefli.</div></li>
+  <li><span class="tag t-bg">Silent</span><div>Key generated as above, unless Block Store already holds a key: then the share stores that key and saves under it, and the next open goes to Saves with the restore card (below) <span class="changed">changed · 79</span>. The save proceeds normally.</div></li>
   <li><span class="tag t-screen">Screen</span><div><strong>Saved sheet</strong> → Read now → Reader <span class="star">★</span></div></li>
-  <li><span class="tag t-screen">Screen</span><div>On the first proper open: <strong>Welcome</strong>. New here → Saves, already populated. I already have a shelf → journey 2, and the early saves are moved into the restored shelf, never lost. The note under Welcome shows the newest early save’s cover and counts them: “You’ve already saved one article. It’ll be on your shelf either way.”, or for several, “You’ve already saved three articles. They’ll be on your shelf either way.” (<code>welcome-early-many</code>) <span class="changed">new · 91 (f)</span>; the restore card adds “Your three saves from before are included.”</div></li>
+  <li><span class="tag t-screen">Screen</span><div>On the first proper open: <strong>Welcome</strong>. New here → Saves, already populated. I already have a library → journey 2, and the early saves are moved into the restored library, never lost. The note under Welcome shows the newest early save’s cover and counts them: “You’ve already saved one article. It’ll be in your library either way.”, or for several, “You’ve already saved three articles. They’ll be in your library either way.” (<code>welcome-early-many</code>) <span class="changed">new · 91 (f)</span>; the restore card adds “Your three saves from before are included.”</div></li>
 </ol>
 </div>
-<h3>Reinstalling where Block Store holds a shelf <span class="changed">changed · 79</span></h3>
+<h3>Reinstalling where Block Store holds a key <span class="changed">changed · 79</span></h3>
 <div class="card">
 <ol class="flow">
-  <li><span class="tag t-action">Action</span><div>Shelf reinstalled on a phone whose Google Backup kept Block Store’s entry; first open.</div></li>
-  <li><span class="tag t-bg">Silent</span><div>No key on the phone, and Block Store holds a recovery phrase: Shelf stores that key, marks the first-launch question answered and starts the restore. No screen.</div></li>
+  <li><span class="tag t-action">Action</span><div>Kefli reinstalled on a phone whose Google Backup kept Block Store’s entry; first open.</div></li>
+  <li><span class="tag t-bg">Silent</span><div>No key on the phone, and Block Store holds a recovery phrase: Kefli stores that key, marks the first-launch question answered and starts the restore. No screen.</div></li>
   <li><span class="tag t-screen">Screen</span><div><strong>Saves with the restore card</strong> (journey 2’s Restoring); Welcome and its question never show. If the restore finds nothing, first-run Saves with no card (<code>restore-nothing</code>) <span class="changed">new · 91 (a)</span>.</div></li>
   <li><span class="tag t-bg">Unhappy</span><div>Google Backup off: the entry doesn’t survive the reinstall, so Welcome opens as on a new phone and the way back is journey 2. A share before this first open reads Block Store first and saves under the same key, so it isn’t an early share and nothing needs moving.</div></li>
 </ol>
 </div>
 
-<h2 id="j2">2 · Returning to a shelf <span class="changed">new</span></h2>
+<h2 id="j2">2 · Returning to a library <span class="changed">new</span></h2>
 <p>A new phone, a reinstall without Google backup, or an existing nostr user. Every way back in sits on one screen.</p>
 <div class="card">
 <ol class="flow">
-  <li><span class="tag t-screen">Screen</span><div><strong>Bring back your shelf.</strong> Three rows: <em>Scan from my other phone</em>, <em>Enter my recovery code</em>, <em>Sign in with your nostr app</em>. Back returns to Welcome.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Bring back your library.</strong> Three rows: <em>Scan from my other phone</em>, <em>Enter my recovery code</em>, <em>Sign in with your nostr app</em>. Back returns to Welcome.</div></li>
   <li><span class="tag t-decision">Decision</span><div>Which of the three.</div></li>
   <li><span class="tag t-screen">Screen</span><div><strong>A · Scan from my other phone.</strong> One line: "On your other phone, open You, then Add another device."</div>
     <ol class="flow">
       <li><span class="tag t-perm">Permission</span><div>Camera, asked here and only here, with the reason on screen first.</div></li>
       <li><span class="tag t-input">Input</span><div>Scan the QR, then type the six-digit code shown on the other phone. The code is a second factor, never an alternative to scanning (decision 53).</div></li>
-      <li><span class="tag t-wait">Wait</span><div><strong>Connecting.</strong> An online exchange: the other phone has posted the twelve words to Shelf’s server, encrypted under the QR’s secret and the six digits; this phone fetches them with a throwaway key, checks them against the QR and stores the shelf. The server holds the offer for five minutes and limits tries, so a photo of the QR can’t be tested offline against every code <span class="changed">changed · 85</span>.</div></li>
+      <li><span class="tag t-wait">Wait</span><div><strong>Connecting.</strong> An online exchange: the other phone has posted the twelve words to Kefli’s server, encrypted under the QR’s secret and the six digits; this phone fetches them with a throwaway key, checks them against the QR and stores the library. The server holds the offer for five minutes and limits tries, so a photo of the QR can’t be tested offline against every code <span class="changed">changed · 85</span>.</div></li>
       <li><span class="tag t-bg">Unhappy</span><div>Camera refused → screen explains; the way on is the recovery code, or Android settings to turn the camera on (decision 53). Code expired → "That code has expired. Show a new one on your other phone."</div></li>
     </ol>
   </li>
@@ -159,14 +159,14 @@ code{font-size:13px;background:var(--accent-soft);padding:1px 5px;border-radius:
       <li><span class="tag t-bg">Unhappy</span><div>A word not on the list is marked at that field. A valid code with nothing saved under it: "No saves found for this code" with <em>Try again</em> and <em>Start fresh instead</em>.</div></li>
     </ol>
   </li>
-  <li><span class="tag t-screen">Screen</span><div><strong>C · Sign in with your nostr app.</strong> Hands off to the signer app on the phone (NIP-55), with a remote signer (NIP-46) as the second choice. "nostr" appears on this route, on switching to a nostr app, on You for nostr users and on the deletion route, and nowhere else <span class="changed">changed · 86</span>. A <em>Keep backup copies</em> switch, on by default, adds Shelf’s server and one independent backup to the user’s own server list (contract 3.1, decision 76) <span class="changed">new</span>.</div>
+  <li><span class="tag t-screen">Screen</span><div><strong>C · Sign in with your nostr app.</strong> Hands off to the signer app on the phone (NIP-55), with a remote signer (NIP-46) as the second choice. "nostr" appears on this route, on switching to a nostr app, on You for nostr users and on the deletion route, and nowhere else <span class="changed">changed · 86</span>. A <em>Keep backup copies</em> switch, on by default, adds Kefli’s server and one independent backup to the user’s own server list (contract 3.1, decision 76) <span class="changed">new</span>.</div>
     <ol class="flow">
       <li><span class="tag t-bg">Unhappy</span><div>No signer app installed → a short explanation and the remote-signer option. Request refused in the signer → back to this screen, nothing changed.</div></li>
-      <li><span class="tag t-bg">Unhappy</span><div>A remote signer that doesn’t answer within two minutes, or answers with a timeout → back to the start, with “Your nostr app didn’t answer. Nothing has changed.” in the notice slot (<code>nostr-timeout</code>). A sign-in link that’s malformed or can’t be reached → at the field, link kept: “That link didn’t work. Copy it again from your nostr app.” (<code>nostr-badlink</code>) <span class="changed">new · 91 (b)</span>. The app fails the privacy check (it can’t encrypt to itself) → back to the start with “Your nostr app can’t keep your saves private yet. Try another app, or start a new shelf on this phone.” and <em>Start a new shelf</em> under <em>Open my nostr app</em>, which goes where New here goes, to first-run <strong>Saves, empty</strong> (<code>nostr-probe</code>) <span class="changed">new · 91 (d)</span>.</div></li>
+      <li><span class="tag t-bg">Unhappy</span><div>A remote signer that doesn’t answer within two minutes, or answers with a timeout → back to the start, with “Your nostr app didn’t answer. Nothing has changed.” in the notice slot (<code>nostr-timeout</code>). A sign-in link that’s malformed or can’t be reached → at the field, link kept: “That link didn’t work. Copy it again from your nostr app.” (<code>nostr-badlink</code>) <span class="changed">new · 91 (b)</span>. The app fails the privacy check (it can’t encrypt to itself) → back to the start with “Your nostr app can’t keep your saves private yet. Try another app, or start a new library on this phone.” and <em>Start a new library</em> under <em>Open my nostr app</em>, which goes where New here goes, to first-run <strong>Saves, empty</strong> (<code>nostr-probe</code>) <span class="changed">new · 91 (d)</span>.</div></li>
       <li><span class="tag t-decision">Decision</span><div>Once, after first sign-in, and only when the person’s lists hold web links that aren’t saves yet: “Bring in your bookmarks?” Web links only: kind 39701 web bookmarks and any legacy <code>r</code> tags in their 10003 list and 30003 sets; notes, long-form articles and private entries aren’t imported. The count is the links found, saved ones skipped, worded for one or several (“We found one bookmark…”, “We found 23 bookmarks…”) <span class="changed">changed · 82</span> <span class="changed">new · 91 (f)</span>. Private by default, no cap. Either answer starts the restore; imported links join after its first pass as pending rows.</div></li>
     </ol>
   </li>
-  <li><span class="tag t-wait">Wait</span><div><strong>Restoring.</strong> Saves fill in as they arrive from the three relays; text downloads from mirrored storage. The list is usable at once (partial state). One line says this works even if Shelf's own server is off, in plain words.</div></li>
+  <li><span class="tag t-wait">Wait</span><div><strong>Restoring.</strong> Saves fill in as they arrive from the three relays; text downloads from mirrored storage. The list is usable at once (partial state). One line says this works even if Kefli's own server is off, in plain words.</div></li>
   <li><span class="tag t-bg">Unhappy</span><div>Nothing to bring back: a nostr sign-in, a Block Store restore or a pairing that finds no saves lands on first-run <strong>Saves, empty</strong> (journey 1), with no restore card (<code>restore-nothing</code>) <span class="changed">new · 91 (a)</span>. A recovery code that finds nothing keeps “No saves found for this code”.</div></li>
   <li><span class="tag t-screen">Screen</span><div><strong>Saves, populated</strong> <span class="star">★</span></div></li>
 </ol>
@@ -175,11 +175,11 @@ code{font-size:13px;background:var(--accent-soft);padding:1px 5px;border-radius:
 <h2 id="j3">3 · Save from the phone</h2>
 <div class="card">
 <ol class="flow">
-  <li><span class="tag t-action">Action</span><div>Share → Shelf, from any app.</div></li>
+  <li><span class="tag t-action">Action</span><div>Share → Kefli, from any app.</div></li>
   <li><span class="tag t-screen">Screen</span><div><strong>Saved sheet</strong>, confirmed at once: title, source, "Private. Ready to read offline in a moment." <em>Undo</em> · <em>Read now</em>. Dismisses itself after 4 seconds and returns the user to the app they were in.</div></li>
   <li><span class="tag t-bg">Silent</span><div>Fetch and parse; cache text and images; encrypt; publish to three relays; queued if offline.</div></li>
-  <li><span class="tag t-screen">Screen</span><div><strong>Already saved.</strong> Sharing a link that is already on the shelf and unread changes nothing: the sheet reads “Already on your shelf” and “Still in Unread, where you left it.” with <em>Done</em> and <em>Read now</em>, and no Undo, since there is nothing to undo (<code>share-again</code>) <span class="changed">new · 89, G2</span>. An archived save shared again comes back to Unread at its new save time, on the usual sheet, whose Undo archives it again.</div></li>
-  <li><span class="tag t-screen">Screen</span><div><strong>A shared X post</strong> is checked first: the sheet reads "Checking the post" while Shelf reads it through X’s public embed service to find the first link leading outside X, then saves that article as usual. Nothing of X’s is stored (decisions 77 and 78) <span class="changed">new</span>. If X’s embed service doesn’t answer while the phone is online, the post’s address is saved as pending and checked again from 30 seconds, doubling to an hour: the sheet reads “Saved · will check the post when X answers” with Undo and Done (<code>share-embedfail</code>), the row “Will check the post when X answers” with the hourglass (<code>saves-embedfail</code>), and opening it says “Shelf will check this post when X answers. If it links to an article, the article will be here to read, offline too.” <span class="changed">changed · 89, G3</span>. Once checked it goes on as an offline post does.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Already saved.</strong> Sharing a link that is already in the library and unread changes nothing: the sheet reads “Already in your library” and “Still in Unread, where you left it.” with <em>Done</em> and <em>Read now</em>, and no Undo, since there is nothing to undo (<code>share-again</code>) <span class="changed">new · 89, G2</span>. An archived save shared again comes back to Unread at its new save time, on the usual sheet, whose Undo archives it again.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>A shared X post</strong> is checked first: the sheet reads "Checking the post" while Kefli reads it through X’s public embed service to find the first link leading outside X, then saves that article as usual. Nothing of X’s is stored (decisions 77 and 78) <span class="changed">new</span>. If X’s embed service doesn’t answer while the phone is online, the post’s address is saved as pending and checked again from 30 seconds, doubling to an hour: the sheet reads “Saved · will check the post when X answers” with Undo and Done (<code>share-embedfail</code>), the row “Will check the post when X answers” with the hourglass (<code>saves-embedfail</code>), and opening it says “Kefli will check this post when X answers. If it links to an article, the article will be here to read, offline too.” <span class="changed">changed · 89, G3</span>. Once checked it goes on as an offline post does.</div></li>
   <li><span class="tag t-bg">Unhappy</span><div>Offline → sheet reads "Saved · will fetch when online". Shared text with no link → "That wasn't a link." Page can't be parsed → saved as a link; the row later reads "Couldn't get the text · open original". A page Readability marks not readable, with very little text, such as a sign-in wall, counts as one that can't be parsed (decision 77). An X post with no link outside X, or one pointing to an X Article → "No article in that post", nothing saved; offline, it is saved and checked later, and reads "Couldn't get the text · open original" if it has no article (decision 78).</div></li>
 </ol>
 </div>
@@ -189,7 +189,7 @@ code{font-size:13px;background:var(--accent-soft);padding:1px 5px;border-radius:
 <div class="card">
 <ol class="flow">
   <li><span class="tag t-action">Action</span><div>Laptop: install the extension and click its icon. Unpaired, so the options page opens.</div></li>
-  <li><span class="tag t-screen">Screen</span><div><strong>Extension: connect.</strong> QR, a short typed code under it <span class="changed">new</span>, a five-minute countdown, and "Open Shelf on your phone, go to You, then Connect a browser."</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Extension: connect.</strong> QR, a short typed code under it <span class="changed">new</span>, a five-minute countdown, and "Open Kefli on your phone, go to You, then Connect a browser."</div></li>
   <li><span class="tag t-action">Action</span><div>Phone: You → Connected browsers → <em>Connect a browser</em>.</div></li>
   <li><span class="tag t-perm">Permission</span><div>Camera, first time only, reason shown first.</div></li>
   <li><span class="tag t-input">Input</span><div>Scan the QR, or <em>Type a code instead</em> <span class="changed">new</span>.</div></li>
@@ -202,7 +202,7 @@ code{font-size:13px;background:var(--accent-soft);padding:1px 5px;border-radius:
 <div class="card">
 <ol class="flow">
   <li><span class="tag t-action">Action</span><div>Toolbar icon, keyboard shortcut, or right-click → Save link.</div></li>
-  <li><span class="tag t-screen">Screen</span><div><strong>Toast:</strong> "Saving…" then "Saved to Shelf · Undo", eight seconds. <em>Open in app</em> is removed <span class="changed">new</span>.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Toast:</strong> "Saving…" then "Saved to Kefli · Undo", eight seconds. <em>Open in app</em> is removed <span class="changed">new</span>.</div></li>
   <li><span class="tag t-bg">Unhappy</span><div>No text captured → "Saved — your phone will fetch the text". Offline → "Saved — will send when you're online", no Undo. Eight waiting → "8 waiting". Pages where scripts can't run → a tick on the icon for four seconds, link only.</div></li>
   <li><span class="tag t-bg">Silent</span><div>Phone picks it up next time the app is open; until then it shows as a pending row.</div></li>
 </ol>
@@ -215,7 +215,7 @@ code{font-size:13px;background:var(--accent-soft);padding:1px 5px;border-radius:
   <li><span class="tag t-action">Action</span><div>Tap a row → Reader. Swipe left → Archive, with a five-second undo.</div></li>
   <li><span class="tag t-screen">Screen</span><div><strong>Reader.</strong> Progress line. Top bar: back · Aa · ▶ · Archive · ⋯ (Delete <span class="changed">new</span>, Open original, Copy link).</div></li>
   <li><span class="tag t-action">Action</span><div>Reach the end → <strong>End card</strong>: <em>Archive</em> · <em>Next unread</em>. Delete → back to Saves with a five-second undo <span class="changed">new</span>.</div></li>
-  <li><span class="tag t-screen">Screen</span><div><strong>Original page.</strong> ⋯ → Open original, and a save whose text couldn’t be fetched, open the page in Shelf’s own view: the page under Shelf’s bar (✕, title and host, ⋯ with Open in browser, Copy link and Delete) and the floating Archive. Open in browser covers sites where the person is signed in <span class="changed">changed · 81</span>.</div>
+  <li><span class="tag t-screen">Screen</span><div><strong>Original page.</strong> ⋯ → Open original, and a save whose text couldn’t be fetched, open the page in Kefli’s own view: the page under Kefli’s bar (✕, title and host, ⋯ with Open in browser, Copy link and Delete) and the floating Archive. Open in browser covers sites where the person is signed in <span class="changed">changed · 81</span>.</div>
     <ol class="flow">
       <li><span class="tag t-wait">Wait</span><div>Loading: the Reader’s skeleton under the bar (<code>reader-original-loading</code>) <span class="changed">new · 81</span>.</div></li>
       <li><span class="tag t-bg">Unhappy</span><div>An HTTP or TLS error, or a site that refuses to open in an app → “This page won’t load here. Your browser may still open it.” with <em>Open in browser</em> (<code>reader-original-failed</code>) <span class="changed">new · 81</span>. Offline → “Opening the original needs a connection” (<code>reader-original-offline</code>) <span class="changed">new · 89, G4</span>.</div></li>
@@ -243,19 +243,19 @@ code{font-size:13px;background:var(--accent-soft);padding:1px 5px;border-radius:
 <h2 id="j7">7 · You</h2>
 <div class="card">
 <ol class="flow">
-  <li><span class="tag t-screen">Screen</span><div><strong>You.</strong> Header: nostr name and picture if signed in with a nostr app, otherwise "47 saves · 12 listened" <span class="changed">new</span>. Then: Back up your shelf card (while not done), Recovery code, Add another device, Connected browsers, Voice, Advanced, Delete my data. Signed in with a nostr app: “Your nostr app · Signed in” in place of the card and the Recovery code row, and no Add another device, since there are no twelve words on the phone to pass on; a second phone signs in with the nostr app instead (<code>you-nostr</code>) <span class="changed">changed · 90</span>.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>You.</strong> Header: nostr name and picture if signed in with a nostr app, otherwise "47 saves · 12 listened" <span class="changed">new</span>. Then: Back up your library card (while not done), Recovery code, Add another device, Connected browsers, Voice, Advanced, Delete my data. Signed in with a nostr app: “Your nostr app · Signed in” in place of the card and the Recovery code row, and no Add another device, since there are no twelve words on the phone to pass on; a second phone signs in with the nostr app instead (<code>you-nostr</code>) <span class="changed">changed · 90</span>.</div></li>
   <li><span class="tag t-screen">Screen</span><div><strong>Recovery code sheet.</strong> Twelve numbered words, Copy, one line on when you'd need it. Viewing it clears "Not written down".</div></li>
   <li><span class="tag t-screen">Screen</span><div><strong>Add another device.</strong> QR plus six-digit code, five minutes. Expired → "Code expired, show a new one". Showing the QR posts the online exchange that journey 2’s Connecting fetches <span class="changed">changed · 85</span>.</div></li>
   <li><span class="tag t-screen">Screen</span><div><strong>Connected browsers.</strong> List, Connect a browser, Disconnect with its dialog: "Pages saved from that browser will be ignored. Uninstall the extension there or connect it again."</div></li>
   <li><span class="tag t-screen">Screen</span><div><strong>Voice.</strong> Which better voice to use; the phone's voice as the fallback.</div></li>
   <li><span class="tag t-screen">Screen</span><div><strong>Advanced.</strong> Relays (the one place the word appears), Export, <em>Use my nostr app instead</em> <span class="changed">new</span>, which moves every save across, with the same <em>Keep backup copies</em> switch (decision 76).</div>
     <ol class="flow">
-      <li><span class="tag t-bg">Silent</span><div>Saves no backup server holds yet are counted in the notice slot, while there are any: “Two saves aren’t backed up yet. Shelf keeps trying until a backup server accepts them.” (<code>adv-notbacked</code>) <span class="changed">new · 93</span>. Meanwhile the note under the relays reads “Your other saves are copied to all three.” A save is backed up once a relay Shelf doesn’t run has accepted its newest change and, for a save with text, a mirror holds its text.</div></li>
-      <li><span class="tag t-bg">Unhappy</span><div>Export my saves writes <code>shelf-export.html</code> to Downloads, offline too. If it fails: “The export didn’t save. Check the phone has space, then try again.” with <em>Try again</em> (<code>adv-exportfail</code>) <span class="changed">changed · 89, G9</span>.</div></li>
-      <li><span class="tag t-bg">Unhappy</span><div>Use my nostr app instead with no nostr app on the phone → the sign-in’s “No nostr app on this phone”, with the sign-in link field (<code>sw-none</code>). The app fails the privacy check → “Your nostr app can’t keep your saves private yet. Try another app. Nothing has changed.” (<code>sw-probe</code>) <span class="changed">new · 91 (c)</span>. A save from a newer Shelf, met while gathering either library, stops the move before any save is copied: “Some saves come from a newer version of Shelf. Update Shelf, then try again.” and “Your saves are still on this phone, and your recovery code still works.”, with <em>Update Shelf</em>; the nostr app’s registration and server lists stay (<code>sw-newer</code>) <span class="changed">new · 91 (i)</span>.</div></li>
+      <li><span class="tag t-bg">Silent</span><div>Saves no backup server holds yet are counted in the notice slot, while there are any: “Two saves aren’t backed up yet. Kefli keeps trying until a backup server accepts them.” (<code>adv-notbacked</code>) <span class="changed">new · 93</span>. Meanwhile the note under the relays reads “Your other saves are copied to all three.” A save is backed up once a relay Kefli doesn’t run has accepted its newest change and, for a save with text, a mirror holds its text.</div></li>
+      <li><span class="tag t-bg">Unhappy</span><div>Export my saves writes <code>kefli-export.html</code> to Downloads, offline too. If it fails: “The export didn’t save. Check the phone has space, then try again.” with <em>Try again</em> (<code>adv-exportfail</code>) <span class="changed">changed · 89, G9</span>.</div></li>
+      <li><span class="tag t-bg">Unhappy</span><div>Use my nostr app instead with no nostr app on the phone → the sign-in’s “No nostr app on this phone”, with the sign-in link field (<code>sw-none</code>). The app fails the privacy check → “Your nostr app can’t keep your saves private yet. Try another app. Nothing has changed.” (<code>sw-probe</code>) <span class="changed">new · 91 (c)</span>. A save from a newer Kefli, met while gathering either library, stops the move before any save is copied: “Some saves come from a newer version of Kefli. Update Kefli, then try again.” and “Your saves are still on this phone, and your recovery code still works.”, with <em>Update Kefli</em>; the nostr app’s registration and server lists stay (<code>sw-newer</code>) <span class="changed">new · 91 (i)</span>.</div></li>
     </ol>
   </li>
-  <li><span class="tag t-screen">Screen</span><div><strong>Delete my data.</strong> What goes, and what can only be asked of independent relays. Type DELETE to confirm <span class="changed">new</span>. Done → Welcome. The explain screen says “This removes your library from all your devices and from Shelf’s server.” and counts the backup servers from the person’s real lists, the mirror and a nostr user’s own servers included (“Copies on three independent backup servers”; for a nostr user, “Copies on four other servers”, two of them their own). Deleting shows a step for each server, Shelf’s first and this phone last, and names any that didn’t confirm (<code>del</code> to <code>del-failed</code>) <span class="changed">changed · 91 (e)</span>.</div></li>
+  <li><span class="tag t-screen">Screen</span><div><strong>Delete my data.</strong> What goes, and what can only be asked of independent relays. Type DELETE to confirm <span class="changed">new</span>. Done → Welcome. The explain screen says “This removes your library from all your devices and from Kefli’s server.” and counts the backup servers from the person’s real lists, the mirror and a nostr user’s own servers included (“Copies on three independent backup servers”; for a nostr user, “Copies on four other servers”, two of them their own). Deleting shows a step for each server, Kefli’s first and this phone last, and names any that didn’t confirm (<code>del</code> to <code>del-failed</code>) <span class="changed">changed · 91 (e)</span>.</div></li>
 </ol>
 </div>
 
@@ -264,7 +264,7 @@ code{font-size:13px;background:var(--accent-soft);padding:1px 5px;border-radius:
 <tr><th>Metric</th><th>Rev. 2</th><th>Rev. 3</th><th>Why</th></tr>
 <tr><td>Taps to first value</td><td class="num">4 (2 with Read now)</td><td class="num">5 (3 with Read now)</td><td>+1 for "New here" on Welcome.</td></tr>
 <tr><td>Inputs</td><td class="num">0</td><td class="num">0</td><td>Nothing typed, chosen or scanned.</td></tr>
-<tr><td>Decisions</td><td class="num">0</td><td class="num">1</td><td>New here / I already have a shelf. Accepted: without it, a returning user has no front door and a silent key would be thrown away.</td></tr>
+<tr><td>Decisions</td><td class="num">0</td><td class="num">1</td><td>New here / I already have a library. Accepted: without it, a returning user has no front door and a silent key would be thrown away.</td></tr>
 <tr><td>Waits</td><td class="num">1</td><td class="num">1</td><td>Parse after save, in the background; Read now shows a sub-second skeleton at worst.</td></tr>
 <tr><td>Permissions before value</td><td class="num">0</td><td class="num">0</td><td>Camera only when scanning; no notifications at all.</td></tr>
 <tr><td>Screens traversed</td><td class="num">3</td><td class="num">4</td><td>Welcome · Saves (empty) · Saved sheet · Reader.</td></tr>
@@ -276,17 +276,17 @@ code{font-size:13px;background:var(--accent-soft);padding:1px 5px;border-radius:
 <div class="scroll"><table class="matrix">
 <tr><th>Screen</th><th>Empty</th><th>Loading</th><th>Partial</th><th>Populated</th><th>Error</th><th>Offline</th></tr>
 <tr><td>Welcome</td><td>n/a</td><td>n/a</td><td>n/a</td><td>Name, one line, two buttons; after early shares, a note with the newest one’s cover, worded for one or several <span class="changed">new · 91 (f)</span></td><td>n/a</td><td>Identical; both routes say later if they need a connection</td></tr>
-<tr><td>Bring back your shelf</td><td>n/a</td><td>n/a</td><td>n/a</td><td>Three rows</td><td>n/a</td><td>"You'll need a connection to bring your shelf back"; rows disabled</td></tr>
-<tr><td>Scan / six-digit code</td><td>n/a</td><td>Camera starting: dark frame, no spinner; Connecting fetches the shelf by the online exchange <span class="changed">changed · 85</span></td><td>n/a</td><td>Viewfinder, code field below</td><td>Camera refused; code expired; code wrong</td><td>Needs a connection, says so</td></tr>
+<tr><td>Bring back your library</td><td>n/a</td><td>n/a</td><td>n/a</td><td>Three rows</td><td>n/a</td><td>"You'll need a connection to bring your library back"; rows disabled</td></tr>
+<tr><td>Scan / six-digit code</td><td>n/a</td><td>Camera starting: dark frame, no spinner; Connecting fetches the library by the online exchange <span class="changed">changed · 85</span></td><td>n/a</td><td>Viewfinder, code field below</td><td>Camera refused; code expired; code wrong</td><td>Needs a connection, says so</td></tr>
 <tr><td>Recovery code entry</td><td>Twelve blank fields, paste hint</td><td>Checking: button shows progress</td><td>Some words filled</td><td>All valid, Continue enabled</td><td>Word not on list (at the field); nothing found for this code</td><td>Needs a connection, says so</td></tr>
 <tr><td>Nostr sign-in</td><td>Nothing to bring back → first-run Saves, no restore card <span class="changed">new · 91 (a)</span></td><td>Waiting for the signer app</td><td>n/a</td><td>Signed in → import question, only when the lists hold web links, counted for one or several <span class="changed">changed · 82</span> <span class="changed">new · 91 (f)</span></td><td>No signer installed; request refused; no answer within two minutes; a sign-in link that doesn’t work, at the field <span class="changed">new · 91 (b)</span>; the app can’t keep saves private <span class="changed">new · 91 (d)</span></td><td>Needs a connection, says so</td></tr>
 <tr><td>Restoring</td><td>"No saves found" (see code entry); after a sign-in, Block Store restore or pairing, first-run Saves with no card <span class="changed">new · 91 (a)</span></td><td>First items arriving</td><td>List usable while more arrive; text still downloading marked</td><td>→ Saves</td><td>One relay unreachable: carry on with the others, silently</td><td>Paused, resumes on reconnect</td></tr>
 <tr><td>Saves: Unread</td><td>First run: teaches the share sheet + Connect your browser. Cleared out: "All read" with a link to Archive</td><td>Cached list at once, thin refresh line</td><td>Pending dot for unparsed; browser saves waiting; "Couldn't get the text · open original"; an X post waiting for X, "Will check the post when X answers" <span class="changed">changed · 89, G3</span></td><td>Rows</td><td>Row-level only, never whole-screen</td><td>Banner "Offline — showing saved copies"; queued saves marked ⏳; first run: "Connecting a browser needs a connection", the button disabled <span class="changed">new · 91 (g)</span></td></tr>
 <tr><td>Saves: Archive</td><td>"Nothing archived yet"</td><td>Cached at once</td><td>n/a</td><td>Rows, swipe right to restore</td><td>n/a</td><td>Identical</td></tr>
 <tr><td>Search</td><td>Before typing: nothing, keyboard up</td><td>n/a (on-device, instant)</td><td>n/a</td><td>Results labelled Unread / Archive</td><td>"Nothing matches" + clear search</td><td>Identical</td></tr>
-<tr><td>Saved sheet</td><td>n/a</td><td>Confirms at once; an X post shows "Checking the post" first</td><td>X not answering: "Saved · will check the post when X answers", Undo · Done <span class="changed">changed · 89, G3</span></td><td>Saved · Undo · Read now; already saved and unread: “Already on your shelf”, Done · Read now, no Undo <span class="changed">new · 89, G2</span></td><td>"That wasn't a link." An X post with no article: "No article in that post."</td><td>"Saved · will fetch when online"</td></tr>
-<tr><td>Reader</td><td>n/a</td><td>Skeleton under a second, only if not yet parsed</td><td>Text in place, images still arriving</td><td>Article</td><td>Original page in Shelf’s own view <span class="changed">changed · 81</span></td><td>Identical to online</td></tr>
-<tr><td>Original page view <span class="changed">new · 81</span></td><td>n/a</td><td>The Reader’s skeleton under Shelf’s bar</td><td>n/a</td><td>The page under Shelf’s bar, ⋯ and the floating Archive</td><td>"This page won’t load here. Your browser may still open it." + Open in browser</td><td>"Opening the original needs a connection" <span class="changed">new · 89, G4</span></td></tr>
+<tr><td>Saved sheet</td><td>n/a</td><td>Confirms at once; an X post shows "Checking the post" first</td><td>X not answering: "Saved · will check the post when X answers", Undo · Done <span class="changed">changed · 89, G3</span></td><td>Saved · Undo · Read now; already saved and unread: “Already in your library”, Done · Read now, no Undo <span class="changed">new · 89, G2</span></td><td>"That wasn't a link." An X post with no article: "No article in that post."</td><td>"Saved · will fetch when online"</td></tr>
+<tr><td>Reader</td><td>n/a</td><td>Skeleton under a second, only if not yet parsed</td><td>Text in place, images still arriving</td><td>Article</td><td>Original page in Kefli’s own view <span class="changed">changed · 81</span></td><td>Identical to online</td></tr>
+<tr><td>Original page view <span class="changed">new · 81</span></td><td>n/a</td><td>The Reader’s skeleton under Kefli’s bar</td><td>n/a</td><td>The page under Kefli’s bar, ⋯ and the floating Archive</td><td>"This page won’t load here. Your browser may still open it." + Open in browser</td><td>"Opening the original needs a connection" <span class="changed">new · 89, G4</span></td></tr>
 <tr><td>Aa sheet</td><td>n/a</td><td>n/a</td><td>n/a</td><td>Size, Light · Sepia · Dark</td><td>n/a</td><td>Identical</td></tr>
 <tr><td>Mini player</td><td>Hidden</td><td>Never blocks: phone voice starts at once</td><td>"Preparing better voice" note</td><td>Title, play/pause, ±15 s, speed</td><td>"Better voice unavailable for this one"</td><td>Downloaded audio, else phone voice</td></tr>
 <tr><td>Listen</td><td>"Tap ▶ on any article to listen to it here."</td><td>n/a (local)</td><td>Downloaded items marked, others streamable; a voice without word timing: the sentence marked in the Reader, the word meter unlit <span class="changed">new · 91 (h)</span></td><td>Now playing + played list, Play all</td><td>Per-item note only</td><td>Downloaded play; others use the phone's voice</td></tr>
@@ -297,9 +297,9 @@ code{font-size:13px;background:var(--accent-soft);padding:1px 5px;border-radius:
 <tr><td>Connect this browser?</td><td>n/a</td><td>Connecting (1–3 s)</td><td>n/a</td><td>Browser label + Connect</td><td>Expired / can't connect</td><td>Needs a connection</td></tr>
 <tr><td>Voice</td><td>n/a</td><td>Voice list loading: skeleton rows</td><td>n/a</td><td>Voices, current ticked</td><td>List unavailable: phone voice only, says why</td><td>Phone voice only</td></tr>
 <tr><td>Advanced</td><td>n/a</td><td>n/a</td><td>A relay not responding, marked; saves not backed up yet, counted in the notice slot <span class="changed">new · 93</span></td><td>Relays, Export, Use my nostr app</td><td>"The export didn’t save. Check the phone has space, then try again." + Try again <span class="changed">changed · 89, G9</span></td><td>Relays shown as unreachable; export works</td></tr>
-<tr><td>Use my nostr app instead</td><td>n/a</td><td>Waiting for the nostr app; moving, "N of M", Back swallowed</td><td>n/a</td><td>Explain, Keep backup copies, Continue</td><td>Declined; no nostr app on the phone; the app can’t keep saves private <span class="changed">new · 91 (c)</span>; a save from a newer Shelf: stops, Update Shelf <span class="changed">new · 91 (i)</span></td><td>Continue disabled, says it needs a connection</td></tr>
+<tr><td>Use my nostr app instead</td><td>n/a</td><td>Waiting for the nostr app; moving, "N of M", Back swallowed</td><td>n/a</td><td>Explain, Keep backup copies, Continue</td><td>Declined; no nostr app on the phone; the app can’t keep saves private <span class="changed">new · 91 (c)</span>; a save from a newer Kefli: stops, Update Kefli <span class="changed">new · 91 (i)</span></td><td>Continue disabled, says it needs a connection</td></tr>
 <tr><td>Delete my data</td><td>n/a</td><td>Deleting: a step for each server, the mirror and a nostr user’s own included <span class="changed">changed · 91 (e)</span></td><td>Some servers didn’t confirm: each named, honestly <span class="changed">changed · 91 (e)</span></td><td>Explain ("…from all your devices…", the backup servers counted) + type DELETE <span class="changed">changed · 91 (e)</span></td><td>Our server unreachable: nothing deleted, retry</td><td>Blocked, says it needs a connection</td></tr>
-<tr><td>Extension toast</td><td>n/a</td><td>"Saving…"</td><td>"Saved — your phone will fetch the text"</td><td>"Saved to Shelf · Undo"</td><td>"Couldn't send" (after retries)</td><td>"Saved — will send when you're online"; "8 waiting"</td></tr>
+<tr><td>Extension toast</td><td>n/a</td><td>"Saving…"</td><td>"Saved — your phone will fetch the text"</td><td>"Saved to Kefli · Undo"</td><td>"Couldn't send" (after retries)</td><td>"Saved — will send when you're online"; "8 waiting"</td></tr>
 <tr><td>Extension options</td><td>Unpaired: QR + typed code</td><td>Waiting for phone</td><td>n/a</td><td>"Connected to your phone", relays read-only, Unpair</td><td>"This code expired"; failed queue with Retry</td><td>"Can't connect right now. Check your connection."</td></tr>
 </table></div>
 
@@ -308,7 +308,7 @@ code{font-size:13px;background:var(--accent-soft);padding:1px 5px;border-radius:
 <ol>
   <li><strong>Core loop:</strong> Saves (all states), Saved sheet, Reader (all states), Aa sheet, end card.</li>
   <li><strong>Listen:</strong> mini player, Reader playing with highlight, Listen tab, lock screen reference.</li>
-  <li><strong>First launch and return:</strong> Welcome, Bring back your shelf, scan, recovery code, nostr sign-in, Restoring.</li>
+  <li><strong>First launch and return:</strong> Welcome, Bring back your library, scan, recovery code, nostr sign-in, Restoring.</li>
   <li><strong>You:</strong> You, recovery code sheet, Add another device, Connected browsers and Connect this browser?, Voice, Advanced, Delete my data.</li>
   <li><strong>Extension:</strong> toast states, options page states.</li>
 </ol>
@@ -332,7 +332,7 @@ code{font-size:13px;background:var(--accent-soft);padding:1px 5px;border-radius:
 <ul>
   <li><strong>Contract v1.2 (written 5 October 2026):</strong> typed-code browser pairing (decision 11, contract 4.4), "Open in app" and <code>/open</code> out of v1 (decision 9), moving saves to another identity (decisions 6 and 13, contract 4.8), and server audio out of v1 (decision 22, contract 6.1).</li>
   <li><strong>Contract v1.3 (5 October 2026):</strong> the mobile spec’s eighteen requests, round 23 (decisions 79 to 93).</li>
-  <li><strong>Name:</strong> still open (mobile spec O-9), needed by the end of week 3. "Shelf" stays the working name in every mockup.</li>
+  <li><strong>Name:</strong> Kefli (flow decision 95, settling mobile spec O-9), with the app ID <code>app.kefli</code> (flow decision 96).</li>
   <li><strong>Licence:</strong> decided, AGPL-3.0-or-later with an added permission for Google Play services and other proprietary system libraries; the LICENSE file lands once Richard confirms its text.</li>
 </ul>
 </main>

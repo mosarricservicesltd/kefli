@@ -7,8 +7,8 @@ Nothing gets drawn that isn't on the flow map. If a frame needs something new, i
 ## 1. File setup
 
 1. In Figma Community, open **Untitled UI – FREE Figma UI kit** and choose **Open in Figma**. That puts a copy in your drafts.
-2. Rename that copy **Shelf — Stage 0** and add our pages to it, next to the kit's own pages. On the free Starter plan, a file's components can't be published as a library for another file, so the kit and our screens live in the same file. When we move to a paid plan, the kit pages can be split out into a library.
-3. For Android system chrome (status bar, gesture bar, the system share sheet, the media notification), use the **Material 3 Design Kit**, which Figma already makes available to every file. Use it only for things the operating system draws, never for Shelf's own screens.
+2. Rename that copy **Kefli — Stage 0** and add our pages to it, next to the kit's own pages. On the free Starter plan, a file's components can't be published as a library for another file, so the kit and our screens live in the same file. When we move to a paid plan, the kit pages can be split out into a library.
+3. For Android system chrome (status bar, gesture bar, the system share sheet, the media notification), use the **Material 3 Design Kit**, which Figma already makes available to every file. Use it only for things the operating system draws, never for Kefli's own screens.
 4. Pages to add, in this order, above the kit's pages:
    - `00 Cover`: name, date, status (Exploring, In review, Frozen).
    - `01 Tokens`: the token table from section 2, drawn as colour styles and text styles.
@@ -112,7 +112,7 @@ Every screen gets the states listed. "n/a" states from the flow map are left out
 
 | Frame | Notes |
 |---|---|
-| Android share sheet with Shelf | System reference, so we know how the icon and label read |
+| Android share sheet with Kefli | System reference, so we know how the icon and label read |
 | Saved sheet / Saved | Title, source, "Private. Ready to read offline in a moment." Undo · Read now |
 | Saved sheet / Offline | "Saved · will fetch when online" |
 | Saved sheet / Not a link | "That wasn't a link." |
@@ -132,11 +132,11 @@ Every screen gets the states listed. "n/a" states from the flow map are left out
 | Frame | Notes |
 |---|---|
 | Toast / Saving | 320 px card, bottom right: "Saving…" |
-| Toast / Saved | "Saved to Shelf" · Undo · Open in app |
+| Toast / Saved | "Saved to Kefli" · Undo · Open in app |
 | Toast / No text | "Saved — your phone will fetch the text" |
 | Toast / Offline | "Saved — will send when you're online" · Open in app only |
 | Toast / Queue full | "8 waiting" |
-| Options / Pair | QR with five-minute countdown, "Open Shelf on your phone, go to You, then Connect a browser, and scan this." |
+| Options / Pair | QR with five-minute countdown, "Open Kefli on your phone, go to You, then Connect a browser, and scan this." |
 | Options / Connected | "Connected to your phone" and the date, relays read-only, Unpair |
 | Options / Expired | "This code expired" + "Show a new one" |
 | Options / Can't reach | "Can't reach the relay. Check your connection." (user-facing, so the wording needs changing; see open question 4) |

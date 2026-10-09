@@ -39,15 +39,15 @@ MS still says draft although FD 73 signed it off. Files that C§3.1, §4.2, §4.
 |---|---|---|
 | Stack | Kotlin, Compose, Room, WorkManager, rust-nostr | Expo SDK 57, TypeScript, expo-sqlite, nostr-tools, six local native modules |
 | Protocol code | Kotlin modules | `packages/protocol`, shared with the extension and later iOS |
-| Kinds | 30979, 979, 978 | 30078 under `kefli/` d tags (C§11.5, renamed from `shelf/` in C§11.1) |
-| Listening | SystemVoice and CachedVoice | On-device voice in Shelf's own media session (FD 22, T§3) |
+| Kinds | 30979, 979, 978 | 30078 under `kefli/` d tags (C§11.5; the namespace from C§11.1) |
+| Listening | SystemVoice and CachedVoice | On-device voice in Kefli's own media session (FD 22, T§3) |
 | Screens | Library, Material 3 | Fingerprint and the signed-off prototype (FD 65, FD 75) |
 
 ## 1. Goal and scope
 
 The app is the reference client for what the contract leaves to a client: parsing and the canonical Markdown, self-encryption, Blossom upload with mirroring, the outbox, the save inbox, on-device voice and covers. Its code is the code iOS will run, so it must be legible as well as correct.
 
-**In scope:** FM's seven journeys (first launch, returning to a shelf, saving from the phone and from the browser, reading, listening, You), with Search (FD 51), Speed read (FD 21), typed-code pairing (C§4.4), Keep backup copies (FD 76), moving saves (C§4.8), shared X posts (FD 78), covers (FD 65) and Export (`adv`).
+**In scope:** FM's seven journeys (first launch, returning to a library, saving from the phone and from the browser, reading, listening, You), with Search (FD 51), Speed read (FD 21), typed-code pairing (C§4.4), Keep backup copies (FD 76), moving saves (C§4.8), shared X posts (FD 78), covers (FD 65) and Export (`adv`).
 
 **Out of scope:** server audio and `CachedVoice` (C§6.1, FD 22); "Open in app" and any public deep link (FD 9); Recommend (C§4.5); NIP-05 names (C§6); private relays (C§11.4); notifications (FD 15); seeking (FD 48); tags, folders, highlights, widgets, Wear, discovery; tablets beyond "doesn't break". Pasting an nsec isn't on the flow map and isn't built; v1.3 dropped it from C§2 (FD 90).
 
@@ -64,7 +64,7 @@ UI         Expo Router screens; hosts for the player, toasts and sheets
 Services   sync, outbox, inbox, jobs, player, connectivity and session stores
 Protocol   packages/protocol: platform-free TypeScript
 Ports      CryptoPort, KeyStorePort, ParserPort, VoicePort, SignerPort
-Native     shelf-voice, shelf-parser, shelf-keystore, shelf-nip55, shelf-share, shelf-system
+Native     kefli-voice, kefli-parser, kefli-keystore, kefli-nip55, kefli-share, kefli-system
 ```
 
 One JavaScript runtime serves MainActivity, the share surface and headless tasks, so services are singletons with no UI dependency. Screens reach native modules only through ports, each with an `.android.ts` implementation and an iOS stub: the seam for the later iOS build.
@@ -115,7 +115,7 @@ Hash-critical steps are pinned to one engine, so the phone matches the extension
 | `normalise` and so the `d` tag | Hermes; the whole URL is parsed and serialised by `whatwg-url`, whose host goes through UTS-46 and punycode by `tr46`, rather than the global `URL` (Expo's does no IDNA, and its path and query encoding is an older Standard's), so V8 and Hermes run the same code |
 | `text_hash`, the spoken projection, `words`, sentences, Reader blocks | Hermes, from the normalised string; Hermes never NFC-normalises hashed text (the one exception is a non-ASCII host in `normalise`, which `tr46` NFC-normalises as UTS-46 requires; the normalise fixtures on Hermes guard it) |
 | AES-256-GCM, scrypt, PBKDF2, SHA-256, random bytes | `react-native-quick-crypto` (OpenSSL) behind `CryptoPort`, and as `globalThis.crypto` for noble (2.4) |
-| Schnorr, ECDH, NIP-44 | libsecp256k1 through `shelf-secp` (8), behind `packages/protocol`'s `SecpPort`: noble missed the week-0 timing gate on Hermes (`08-week0-gates.md`). NIP-44's ciphers and HKDF stay in noble |
+| Schnorr, ECDH, NIP-44 | libsecp256k1 through `kefli-secp` (8), behind `packages/protocol`'s `SecpPort`: noble missed the week-0 timing gate on Hermes (`08-week0-gates.md`). NIP-44's ciphers and HKDF stay in noble |
 | Speech, media session, key file, Block Store, signer intents, share activity | Kotlin modules (section 8) |
 
 ## 3. Identity, keys and signers
@@ -126,13 +126,13 @@ C§2 follows FD 2 and FD 6 (CR15): a key is made silently when the person taps N
 
 The resolver at launch, in order: a database with no readable key file is wiped (7.1); an `early_share` identity with `welcome.answered` unset opens `welcome-early`, as does Back from a Read-now Reader before it is set (FD 6, FM journey 1); any other identity in the key file opens by the returning-open rule (5.1), with the restore card while a restore job runs; a mnemonic in Block Store is stored as `block_store` as above, and Saves opens with the restore card (FD 79, one branch in the resolver); otherwise Welcome. `POST /register` is queued the moment a key exists (C§6), so an offline first launch still lands on a working Saves.
 
-### 3.2 The key file (`shelf-keystore`)
+### 3.2 The key file (`kefli-keystore`)
 
-A Keystore AES-256-GCM key, alias `shelf.identity.v1`, StrongBox-backed where available and regenerated without it on `StrongBoxUnavailableException` (C§2), with no user-authentication or unlocked-device requirement, so signing works in the background and behind the lock screen. It encrypts `{v:1, identities:[{pubkey, provider, sk?, mnemonic?, nip55:{package}?, nip46:{client_sk, bunker_pubkey, relays, secret}?}]}`, stored as IV‖ciphertext‖tag in `noBackupFilesDir/shelf/identity.bin` and written atomically; `read()` returns records without mnemonics, which only `readMnemonic()` returns. A lost key or an undecryptable file counts as no identity (3.1). Wiping the last identity deletes the file and the alias.
+A Keystore AES-256-GCM key, alias `kefli.identity.v1`, StrongBox-backed where available and regenerated without it on `StrongBoxUnavailableException` (C§2), with no user-authentication or unlocked-device requirement, so signing works in the background and behind the lock screen. It encrypts `{v:1, identities:[{pubkey, provider, sk?, mnemonic?, nip55:{package}?, nip46:{client_sk, bunker_pubkey, relays, secret}?}]}`, stored as IV‖ciphertext‖tag in `noBackupFilesDir/kefli/identity.bin` and written atomically; `read()` returns records without mnemonics, which only `readMnemonic()` returns. A lost key or an undecryptable file counts as no identity (3.1). Wiping the last identity deletes the file and the alias.
 
 ### 3.3 Block Store
 
-Seen on the Pixel in week 1: an uninstall and reinstall keeps the entry, so the reinstalled app adopts the shelf (FD 79), but clearing the app's data removes it, which is Android's behaviour, so a clear-data test starts from Welcome. One entry, `shelf.mnemonic.v1`, holding the active local identity's mnemonic (C§2, with 3.1's early-share exception), written for device-to-device restore always and with `shouldBackupToCloud` only while `isEndToEndEncryptionAvailable()` is true, rechecked at each launch. A restore by code or pairing writes it when it stores the identity, and a nostr-app identity removes it, except during a move (the early-saves move included): there the entry keeps S until C§4.8 step 5, then takes T's mnemonic, or nothing when T is a nostr app (CR15).
+Seen on the Pixel in week 1: an uninstall and reinstall keeps the entry, so the reinstalled app adopts the library (FD 79), but clearing the app's data removes it, which is Android's behaviour, so a clear-data test starts from Welcome. One entry, `kefli.mnemonic.v1`, holding the active local identity's mnemonic (C§2, with 3.1's early-share exception), written for device-to-device restore always and with `shouldBackupToCloud` only while `isEndToEndEncryptionAvailable()` is true, rechecked at each launch. A restore by code or pairing writes it when it stores the identity, and a nostr-app identity removes it, except during a move (the early-saves move included): there the entry keeps S until C§4.8 step 5, then takes T's mnemonic, or nothing when T is a nostr app (CR15).
 
 ### 3.4 Signers
 
@@ -145,13 +145,13 @@ export interface Signer {
   nip44Encrypt(peer: string, plaintext: string): Promise<string>;
   nip44Decrypt(peer: string, ciphertext: string): Promise<string>;
 }
-export interface SignerProvider extends Signer {       // Shelf's own, outside the contract
+export interface SignerProvider extends Signer {       // Kefli's own, outside the contract
   kind: 'local' | 'nip55' | 'nip46';
   canActInBackground(): Promise<boolean>;             // gates inbox drains (4.7)
 }
 ```
 
-`LocalSigner` uses nostr-tools `finalizeEvent` and `nip44` v2 (random bytes from `globalThis.crypto`, 2.4), caches the self-encryption conversation key, and zeroes its secret after five minutes in the background. `Nip55Signer` wraps `shelf-nip55` (8.4) and asks for the permissions C§2 lists for NIP-55, the NIP-46 kinds. `Nip46Signer` implements `SignerProvider` by composition, since `BunkerSigner`'s constructor is private: `BunkerSigner.fromBunker(clientSk, bp, { pool })`, then the public `sendRequest('connect', [bp.pubkey, bp.secret ?? '', perms])`, because 2.25.2's `connect` sends no permissions. Its pool is a dedicated `AbstractSimplePool` with Shelf's verifier and only the link's `wss://` relays, outside `RelayPool`'s backoff; its client key lives in the key file and it waits two minutes. Every provider passes the capability probe at sign-in and at move step 1 (C§2); a refusal is `nostr-probe` at sign-in and `sw-probe` in a switch (FD 91 (c), (d)). Every seal, self-encryption, unwrap and NIP-42 AUTH goes through `Signer`; the wrap layer uses a fresh key generated in `packages/protocol`, where seals and wraps are composed, since the nostr-tools helpers take raw keys.
+`LocalSigner` uses nostr-tools `finalizeEvent` and `nip44` v2 (random bytes from `globalThis.crypto`, 2.4), caches the self-encryption conversation key, and zeroes its secret after five minutes in the background. `Nip55Signer` wraps `kefli-nip55` (8.4) and asks for the permissions C§2 lists for NIP-55, the NIP-46 kinds. `Nip46Signer` implements `SignerProvider` by composition, since `BunkerSigner`'s constructor is private: `BunkerSigner.fromBunker(clientSk, bp, { pool })`, then the public `sendRequest('connect', [bp.pubkey, bp.secret ?? '', perms])`, because 2.25.2's `connect` sends no permissions. Its pool is a dedicated `AbstractSimplePool` with Kefli's verifier and only the link's `wss://` relays, outside `RelayPool`'s backoff; its client key lives in the key file and it waits two minutes. Every provider passes the capability probe at sign-in and at move step 1 (C§2); a refusal is `nostr-probe` at sign-in and `sw-probe` in a switch (FD 91 (c), (d)). Every seal, self-encryption, unwrap and NIP-42 AUTH goes through `Signer`; the wrap layer uses a fresh key generated in `packages/protocol`, where seals and wraps are composed, since the nostr-tools helpers take raw keys.
 
 NIP-46 is reached only by a pasted `bunker://` link, as the signed-off state draws (`nostr-none`); a link without a 64-hex pubkey and a `wss://` relay is a field error (`nostr-badlink`, FD 91 (b)). v1.3 dropped C§2's app-initiated `nostrconnect://` URI, whose QR no signed-off screen draws (CR2).
 
@@ -180,7 +180,7 @@ CREATE TABLE identities (pubkey TEXT PRIMARY KEY,
 
 CREATE TABLE items (id INTEGER PRIMARY KEY,  -- stable rowid for FTS (4.9)
   owner TEXT NOT NULL REFERENCES identities(pubkey),
-  hash TEXT NOT NULL,                        -- sha256 of the normalised URL; d = 'shelf/item/'||hash
+  hash TEXT NOT NULL,                        -- sha256 of the normalised URL; d = 'kefli/item/'||hash
   v INTEGER NOT NULL DEFAULT 1, url TEXT NOT NULL, canonical TEXT, title TEXT, site TEXT, byline TEXT,
   saved_at INTEGER NOT NULL, state TEXT NOT NULL CHECK (state IN ('unread','archived')),
   progress REAL NOT NULL DEFAULT 0, words INTEGER, lang TEXT,
@@ -219,10 +219,10 @@ CREATE TABLE outbox_targets (outbox_id INTEGER REFERENCES outbox(id) ON DELETE C
   next_at INTEGER, last_error TEXT, event_id TEXT, PRIMARY KEY (outbox_id, target));
 
 CREATE TABLE relays (url TEXT, owner TEXT, read INTEGER, write INTEGER,
-  source TEXT CHECK (source IN ('operator','default','user','indexer')), added_by_shelf INTEGER,
+  source TEXT CHECK (source IN ('operator','default','user','indexer')), added_by_app INTEGER,
   status TEXT, last_ok_at INTEGER, PRIMARY KEY (url, owner));
 CREATE TABLE servers (url TEXT, owner TEXT, role TEXT CHECK (role IN ('operator','mirror','user')),
-  in_10063 INTEGER, added_by_shelf INTEGER, status TEXT, PRIMARY KEY (url, owner));
+  in_10063 INTEGER, added_by_app INTEGER, status TEXT, PRIMARY KEY (url, owner));
 CREATE TABLE lists (owner TEXT, kind INTEGER, d TEXT NOT NULL DEFAULT '', event_id TEXT, created_at INTEGER,
   raw TEXT, PRIMARY KEY (owner, kind, d));   -- latest 10002, 10063, 0, 10003; every 30003 set and 39701
 CREATE TABLE sync_cursors (relay TEXT, stream TEXT CHECK (stream IN ('items','deletions','inbox','lists')),
@@ -243,7 +243,7 @@ Rows are keyed by owner and hash, so a move's S and T copies of one save sit sid
 
 Settings keys: `welcome.answered` (3.1), `reader.size` (15–24, default 18, TK), `reader.palette`, `voice.id`, `voice.speed` (O-13), `voice.wps.<voice>`, `speedread.wpm` (200–700, default 300, FD 21), `keep_backup_copies` (default on, FD 76), `backup.state`, `backup.snooze_until` (a save count, FD 17), `saves.added_count`, `nav.last_screen`, `nav.last_at` and `nav.tab_scroll` (FD 4, FD 74), the cached `defaults.json`, and `clock.offset.<host>`.
 
-Files under `Paths.document/shelf/`: `text/<hash>.md`, `text/<hash>.blocks.json`, `img/<sha256 of image URL>` (app storage, because expo-image's cache can evict and C§4.2 needs images offline) and `staging/<sha256>.bin` (ciphertext until upload and mirror both succeed). The share spool is `filesDir/share-spool/`.
+Files under `Paths.document/kefli/`: `text/<hash>.md`, `text/<hash>.blocks.json`, `img/<sha256 of image URL>` (app storage, because expo-image's cache can evict and C§4.2 needs images offline) and `staging/<sha256>.bin` (ciphertext until upload and mirror both succeed). The share spool is `filesDir/share-spool/`.
 
 ### 4.2 Item JSON and columns
 
@@ -283,7 +283,7 @@ A save counts as saved once any write relay accepts it, and as backed up only on
 
 ### 4.4 Relay pool
 
-Shelf's own `RelayPool` on nostr-tools `AbstractRelay`, for per-target retry state and AUTH through `Signer`, with an injected verifier. AUTH is per connection, when a kind 1059 REQ opens or `CLOSED auth-required:` arrives (C§3.2). Reconnects back off from 1 s to 60 s; only `wss://` is accepted. Sockets are held in the foreground, during a voice session and during a background run.
+Kefli's own `RelayPool` on nostr-tools `AbstractRelay`, for per-target retry state and AUTH through `Signer`, with an injected verifier. AUTH is per connection, when a kind 1059 REQ opens or `CLOSED auth-required:` arrives (C§3.2). Reconnects back off from 1 s to 60 s; only `wss://` is accepted. Sockets are held in the foreground, during a voice session and during a background run.
 
 ### 4.5 Sync
 
@@ -291,37 +291,37 @@ Triggers: start, foreground, reconnection, a finished share, the end of a voice 
 
 1. **Prerequisites:** `defaults.json` (baked-in fallback, C§3.1); `register` if needed; the owner's 10002 and 10063 from the indexer and write relays.
 2. **Outbound:** the outbox.
-3. **Items and deletions** from every read relay: `{"kinds":[30078],"authors":[pk],"#t":["shelf"],"since":cursor−300,"limit":500}` and `{"kinds":[5],"authors":[pk],"#k":["30078"],"since":cursor−300,"limit":500}`, each `a` checked to name `shelf/item/`. Each next page's `until` is the oldest `created_at` seen, inclusive and deduplicated by id, until a page brings nothing new, since relays may return fewer than the limit (NIP-01); completion is recorded per relay and stream in `sync_cursors.backfilled`, then the subscription stays live. Restore counts M the same way.
+3. **Items and deletions** from every read relay: `{"kinds":[30078],"authors":[pk],"#t":["kefli"],"since":cursor−300,"limit":500}` and `{"kinds":[5],"authors":[pk],"#k":["30078"],"since":cursor−300,"limit":500}`, each `a` checked to name `kefli/item/`. Each next page's `until` is the oldest `created_at` seen, inclusive and deduplicated by id, until a page brings nothing new, since relays may return fewer than the limit (NIP-01); completion is recorded per relay and stream in `sync_cursors.backfilled`, then the subscription stays live. Restore counts M the same way.
 4. **Inbox** (4.7).
 5. **Text:** the item being opened first, then unread newest first, then archived; each server in `text.servers`, then the 10063 servers; check the sha256, decrypt, write `.md`, derive blocks, index FTS. Failure everywhere sets `blob_missing`, which shows "Couldn't get the text".
 6. **Images:** on unmetered networks, the newest 50 unread articles' images (5 MB each, 200 MB in all, evicting archived first); on metered networks, when an article opens.
 7. **Pending parses**, one at a time.
 
-Merge rules are a pure function in `packages/protocol` with property tests. Only a verified kind 30078 by an identity on the phone, with `d` = `shelf/item/<64 hex>` and `t` = `shelf`, is accepted, into that owner's rows, and a NIP-44 failure drops it. The connected-browsers record (`d` = `shelf/devices`) merges into `devices` by token, keeping every entry and the earlier `revoked_at` (C§4.9). With no local row it is inserted as `remote`; a clean row takes it if it is newer than `event_created_at` (ties to the lower id); a dirty row yields only if it is newer than `modified_at`, and otherwise republishes above it. A remote `progress` for the article open in the Reader waits until the Reader closes. A different `text.sha256` fetches the new text and, when the losing blob was this phone's upload and nothing references it, queues `delete_blob`. A kind 5 naming this `d` at or after the row's `created_at` removes the row, files, FTS entry, Listen history and images, unless the row was edited after it. `progress` is republished on leaving the Reader or Speed read, at the end of a voice session, and at most once a minute while reading.
+Merge rules are a pure function in `packages/protocol` with property tests. Only a verified kind 30078 by an identity on the phone, with `d` = `kefli/item/<64 hex>` and `t` = `kefli`, is accepted, into that owner's rows, and a NIP-44 failure drops it. The connected-browsers record (`d` = `kefli/devices`) merges into `devices` by token, keeping every entry and the earlier `revoked_at` (C§4.9). With no local row it is inserted as `remote`; a clean row takes it if it is newer than `event_created_at` (ties to the lower id); a dirty row yields only if it is newer than `modified_at`, and otherwise republishes above it. A remote `progress` for the article open in the Reader waits until the Reader closes. A different `text.sha256` fetches the new text and, when the losing blob was this phone's upload and nothing references it, queues `delete_blob`. A kind 5 naming this `d` at or after the row's `created_at` removes the row, files, FTS entry, Listen history and images, unless the row was edited after it. `progress` is republished on leaving the Reader or Speed read, at the end of a voice session, and at most once a minute while reading.
 
 ### 4.6 Relay and server lists
 
 - **Generated identity, first save:** 10002 = operator plus `defaults.relays[0..1]`, read and write, also to the indexer; 10063 = operator plus the default mirror (C§3.1, C§4.2).
-- **Existing list, Keep backup copies on:** read their latest 10002, add the operator relay and `defaults.relays[0]` where not already listed, with `added_by_shelf = 1`, keep every other entry and marker, republish; the same for 10063 (CR12).
+- **Existing list, Keep backup copies on:** read their latest 10002, add the operator relay and `defaults.relays[0]` where not already listed, with `added_by_app = 1`, keep every other entry and marker, republish; the same for 10063 (CR12).
 - **Switch off:** write only to their relays; blobs still go to the operator and mirror (C§4.2) and the inbox still uses the operator relay (C§4.4).
 - **No list, or no answer:** a nostr user's 10002 or 10063 is absent only once every indexer relay in `defaults.indexer[]` and at least two of `defaults.relays` have sent EOSE without one (C§3.1); a copy on any relay wins, and an edit always starts from the newest copy seen, so a failed read never replaces the list their other apps share (FD 76). A confirmed absence gets the default set, whatever the switch says (C§3.1). Until the list or its absence is confirmed nothing is published and the read retries on the outbox's backoff, with relays still silent after a minute shown as not responding in Advanced (`adv-down`); meanwhile saves go to the operator relay and `defaults.relays[0]` with the switch on, and wait in the outbox with it off.
-- **Retired defaults** (C§3.1, FD 93): an entry Shelf added (`added_by_shelf`, or any default of a generated identity) that `defaults.json` drops is replaced by the first entry of the same list that the user's lacks; the list is republished and the library copied over, every item to a new relay, or every blob to a new mirror with its item republished naming it.
+- **Retired defaults** (C§3.1, FD 93): an entry Kefli added (`added_by_app`, or any default of a generated identity) that `defaults.json` drops is replaced by the first entry of the same list that the user's lacks; the list is republished and the library copied over, every item to a new relay, or every blob to a new mirror with its item republished naming it.
 - **Clock:** a 401 about `created_at`, or a failed AUTH, sets a per-host offset from the HTTP `Date` header and retries once.
 
 ### 4.7 Inbox
 
 Subscribed on the operator relay only, after AUTH: `{"kinds":[1059],"#p":[pk],"since":cursor−172800−300}`, allowing for NIP-59's two-day timestamp tweak; `inbox_seen` dedupes every outcome but `failed_blob` (CR16).
 
-1. **Unwrap:** `nip44Decrypt(wrap.pubkey)` gives the seal; verify it; `nip44Decrypt(seal.pubkey)` gives the rumor, whose pubkey must equal the seal's. Anything but kind 30078 with `d` = `shelf/save-request/…` is recorded `ignored_foreign`, since other apps' direct messages share the `p`; a request with `v` ≠ 1 is `ignored_version` (C§10), and one whose JSON can't be read is `failed_parse`, which is final.
+1. **Unwrap:** `nip44Decrypt(wrap.pubkey)` gives the seal; verify it; `nip44Decrypt(seal.pubkey)` gives the rumor, whose pubkey must equal the seal's. Anything but kind 30078 with `d` = `kefli/save-request/…` is recorded `ignored_foreign`, since other apps' direct messages share the `p`; a request with `v` ≠ 1 is `ignored_version` (C§10), and one whose JSON can't be read is `failed_parse`, which is final.
 2. **Accept** only a token from a connected entry of the connected-browsers record (C§4.9), held in `devices`, with a seal signed by that entry's `device_pubkey` (C§4.4); otherwise `ignored_token`. Ignored wraps are kept and never deleted, so a phone that hasn't yet received the record can't remove a save another phone still needs.
-3. **Process:** an X URL takes the X rule (5.4) and its HTML is discarded. With `html`: fetch only from the known operator Blossom origin, check the sha256 with the download capped at 2 × 1,048,576 + 16 bytes (the extension's 2 MB plus the GCM tag), decrypt, check the HTML is within 2 MB, run `shelfMarkdown` and build the item as for a share, with a fresh text key and a new blob (C§4.4). A download or check that fails is `failed_blob`: the rumor stays in `wrap_json` and is retried from there at each drain, since the subscription no longer reaches it. With `html` null, or 14 days after `captured_at` when the inbox blob has expired: fetch and parse the URL (address rules in 7.1). An existing item is un-archived if archived, with `saved_at` set as in 4.2 (G2, CR10), else recorded `merged`.
+3. **Process:** an X URL takes the X rule (5.4) and its HTML is discarded. With `html`: fetch only from the known operator Blossom origin, check the sha256 with the download capped at 2 × 1,048,576 + 16 bytes (the extension's 2 MB plus the GCM tag), decrypt, check the HTML is within 2 MB, run `kefliMarkdown` and build the item as for a share, with a fresh text key and a new blob (C§4.4). A download or check that fails is `failed_blob`: the rumor stays in `wrap_json` and is retried from there at each drain, since the subscription no longer reaches it. With `html` null, or 14 days after `captured_at` when the inbox blob has expired: fetch and parse the URL (address rules in 7.1). An existing item is un-archived if archived, with `saved_at` set as in 4.2 (G2, CR10), else recorded `merged`.
 4. **Close:** record `inbox_seen`; only `created`, `merged` and `unarchived` queue `delete_wrap`.
 
 Background drains need `canActInBackground()`: always true for `LocalSigner`, true for NIP-55 when the resolver answers without the signer's interface and for NIP-46 with a live bunker.
 
 ### 4.8 Background execution
 
-No foreground service runs except playback, and the battery-optimisation exemption is never requested (FD 15; `archive/03-android-v1.0.md` §4.5). One `expo-background-task` worker runs at the 15-minute minimum with a nine-minute budget and calls the foreground's `syncOnce()`. If the share-then-lock test (11.3) loses publishes, `shelf-system` adds a one-off expedited WorkManager job firing the same task, on API 31 and later only, with `RUN_AS_NON_EXPEDITED_WORK_REQUEST`: below 31 expedited work runs as a foreground service with a notification (FD 15), so on API 26–30 the share waits for the periodic task or the next open. A laptop save made while the phone is closed arrives at the next of these runs or the next open (FD 84, C§4.4).
+No foreground service runs except playback, and the battery-optimisation exemption is never requested (FD 15; `archive/03-android-v1.0.md` §4.5). One `expo-background-task` worker runs at the 15-minute minimum with a nine-minute budget and calls the foreground's `syncOnce()`. If the share-then-lock test (11.3) loses publishes, `kefli-system` adds a one-off expedited WorkManager job firing the same task, on API 31 and later only, with `RUN_AS_NON_EXPEDITED_WORK_REQUEST`: below 31 expedited work runs as a foreground service with a notification (FD 15), so on API 26–30 the share waits for the periodic task or the next open. A laptop save made while the phone is closed arrives at the next of these runs or the next open (FD 84, C§4.4).
 
 ### 4.9 Search index
 
@@ -332,8 +332,8 @@ FTS5 over title, site, URL and the spoken projection, rowid = `items.id` (an exp
 Each job is a `jobs` row checkpointed per item in `job_items` and resumed at start-up.
 
 - **Restore** (C§8, its kind 5s included): the contract's steps, with deletions applied. "N of M" counts M as distinct live items after EOSE from every reachable relay (it can grow) and N as rows placed; it pauses offline (FD 40). Nothing found gives `code-notfound` for a recovery code, and otherwise first-run Saves without the card (`restore-nothing`, FD 91 (a)).
-- **Move** (C§4.8's five steps): T's library is collected too, into T's own rows beside S's (4.1); phone-only items go straight to T, Listen history follows each item, read-back uses min(2, n) of T's write relays, and the Block Store entry switches at the end (3.3). A save from a newer Shelf stops it (C§10, `sw-newer`, FD 91 (i)): S's local `items_future` rows are checked before step 1, and one met in step 2's collection, S's or T's, stops the move before step 3, leaving S and every save unchanged while T's registration and relay lists stay.
-- **Import** (FD 82, C§4.6): the user's kind 39701 web bookmarks (`d` = the URL without scheme, imported as `https://<d>`) and any legacy `r` tags in their 10003 and every 30003 set become queued items, skipping saves already on the shelf, fetched two at a time on the bulk lane. Private entries in a list's `content`, and `e` and `a` tags, aren't imported.
+- **Move** (C§4.8's five steps): T's library is collected too, into T's own rows beside S's (4.1); phone-only items go straight to T, Listen history follows each item, read-back uses min(2, n) of T's write relays, and the Block Store entry switches at the end (3.3). A save from a newer Kefli stops it (C§10, `sw-newer`, FD 91 (i)): S's local `items_future` rows are checked before step 1, and one met in step 2's collection, S's or T's, stops the move before step 3, leaving S and every save unchanged while T's registration and relay lists stay.
+- **Import** (FD 82, C§4.6): the user's kind 39701 web bookmarks (`d` = the URL without scheme, imported as `https://<d>`) and any legacy `r` tags in their 10003 and every 30003 set become queued items, skipping saves already in the library, fetched two at a time on the bulk lane. Private entries in a list's `content`, and `e` and `a` tags, aren't imported.
 - **Delete account:** 7.2, each step's result persisted, the key wiped only after the server steps succeed.
 
 ## 5. Features by journey
@@ -349,8 +349,8 @@ Entry points (FM navigation): a cold open, the share sheet (before the first ope
 - **States that can't be left** hide ← and swallow Back: `sw-moving`, `del-running`, and as drawn, `conn-busy` and `del-partial`.
 - **Waits on another app:** ← does what Cancel does (CS Interaction).
 - **Undo of a Reader action that navigated away** reopens the Reader at its position, or at Speed read's word. Archive and next replaces the Reader, so Back still reaches the opener (FD 54).
-- **Internal links only:** `shelf://reader/<hash>?word=<n>` from the media session and Read now (FD 10); a hash not on the phone opens Saves.
-- **Predictive back:** the system preview on root screens (the flag in 10), which needs React Native's always-enabled back callback switched off there: `ShelfSystem.setRootBack(true)` at a root route with nothing open over it, false otherwise (8.6). In-app the pop plays on release, since the week-0 check found that neither React Native 0.86 nor the JS stack passes the gesture's progress to JavaScript (MS Navigation, `08-week0-gates.md`).
+- **Internal links only:** `kefli://reader/<hash>?word=<n>` from the media session and Read now (FD 10); a hash not on the phone opens Saves.
+- **Predictive back:** the system preview on root screens (the flag in 10), which needs React Native's always-enabled back callback switched off there: `KefliSystem.setRootBack(true)` at a root route with nothing open over it, false otherwise (8.6). In-app the pop plays on release, since the week-0 check found that neither React Native 0.86 nor the JS stack passes the gesture's progress to JavaScript (MS Navigation, `08-week0-gates.md`).
 
 ### 5.2 Journey 1: first launch
 
@@ -364,11 +364,11 @@ Entry points (FM navigation): a cold open, the share sheet (before the first ope
 | First-run Saves (`saves-empty`, FD 5, FD 42, FD 69) | Scaffold loop; Connect your browser as primary, hidden once a browser is connected; offline `saves-empty-offline` (FD 91 (g)) |
 | First save lands (`saves-first-arrive`) | Crossfade to the list; the row's cover draws |
 
-The critical path is five taps, no inputs, one decision and no permissions (FM weight audit). A share before the first open makes the key at once; on first open New here keeps that key, and I already have a shelf runs the early-saves move (5.3).
+The critical path is five taps, no inputs, one decision and no permissions (FM weight audit). A share before the first open makes the key at once; on first open New here keeps that key, and I already have a library runs the early-saves move (5.3).
 
-### 5.3 Journey 2: returning to a shelf
+### 5.3 Journey 2: returning to a library
 
-**Bring back your shelf** (FD 5): three rows (`return`); offline, the notice and disabled rows (`return-offline`). The flows below can therefore only lose their connection part way, which shows the notice and keeps the entered value (G6).
+**Bring back your library** (FD 5): three rows (`return`); offline, the notice and disabled rows (`return-offline`). The flows below can therefore only lose their connection part way, which shows the notice and keeps the entered value (G6).
 
 | Scan from my other phone (FD 23, FD 40, FD 53) | Build notes |
 |---|---|
@@ -386,20 +386,20 @@ The critical path is five taps, no inputs, one decision and no permissions (FM w
 | Word not on the list (`code-wrong`) | Flagged at its field as typed |
 | All twelve (`code-ready`) | Primary enabled; a checksum failure shows at the last field |
 | Checking (`code-checking`) | Busy button; derives the key and runs the restore's first pass; the key is stored only once items are found, with Block Store per 3.3 (after an early share it keeps S until move step 5) |
-| Nothing found (`code-notfound`) | No Shelf items after EOSE from every reachable relay; the derived key is discarded. Try again clears all twelve fields; Start fresh instead does what New here does, keeping an early-share key |
+| Nothing found (`code-notfound`) | No Kefli items after EOSE from every reachable relay; the derived key is discarded. Try again clears all twelve fields; Start fresh instead does what New here does, keeping an early-share key |
 
 | Sign in with your nostr app (FD 5, FD 41, FD 76) | Build notes |
 |---|---|
 | Start (`nostr`) | Always the first step; Keep backup copies switch (4.6); primary opens the NIP-55 signer through Android's chooser; quiet link to the `bunker://` field |
 | No signer installed (`nostr-none`) | Reached from the primary when `listSigners()` is empty, or from the quiet link; carries the switch's value; a malformed or unreachable link is a field error (`nostr-badlink`, FD 91 (b)) |
 | Waiting (`nostr-waiting`) | Cancel, ← = Cancel; NIP-46 waits two minutes; its expiry or a `timeout` returns to the start (`nostr-timeout`, FD 91 (b)) |
-| Declined (`nostr-declined`); probe refused (`nostr-probe`) | Error line; the refusal in FD 91 (d)'s words, and for the probe a secondary Start a new shelf under the primary, doing what New here does |
+| Declined (`nostr-declined`); probe refused (`nostr-probe`) | Error line; the refusal in FD 91 (d)'s words, and for the probe a secondary Start a new library under the primary, doing what New here does |
 | Import sheet (`nostr-import`, FD 82, C§4.6) | Once after the first sign-in, over the waiting step as drawn, when the lists hold web links; the count is the links found, saved ones being skipped, worded for one or several (FD 91 (f)); scrim and Back don't dismiss it, as drawn; either answer starts the restore, and imported links join after its first EOSE as pending rows saved at the import time |
 | Success (FD 41, FD 12) | Root swap to Saves with the restore card, or to first-run Saves with nothing to restore (`restore-nothing`, FD 91 (a)); marked a nostr user everywhere; kind 0 read for You |
 
 **Restoring on Saves** (FD 23, FD 40): the card in Saves' notice slot with "N of M" and a determinate bar (`restoring`, `restoring-mid`); paused offline (`restoring-offline`); done held 3 s, then row out; a silent relay is skipped. Restored rows draw their covers as they land on screen.
 
-**Moving early saves** (FD 6, C§4.8): when I already have a shelf succeeds after an early share, the move runs from the early key under the restore card, which adds the prototype's line about the earlier save. It pauses offline and resumes at start-up; S stays intact until step 5 (CR12).
+**Moving early saves** (FD 6, C§4.8): when I already have a library succeeds after an early share, the move runs from the early key under the restore card, which adds the prototype's line about the earlier save. It pauses offline and resumes at start-up; S stays intact until step 5 (CR12).
 
 ### 5.4 Journey 3: saving from the phone
 
@@ -412,7 +412,7 @@ The critical path is five taps, no inputs, one decision and no permissions (FM w
 | X post: checking; no article (`share-checking`, `share-noarticle`, FD 78) | Nothing written while checking; Cancel or OK saves nothing |
 | Already saved, unread (`share-again`) | G2 (FD 89): nothing changes; Done and Read now, no Undo (FD 38); the cover is already drawn and doesn't draw again; the countdown runs as for a new save. An archived save shared again gets the Saved sheet and un-archives (Repeat saves below) |
 | X service failing (`share-embedfail`; its row `saves-embedfail`) | G3 (FD 89): saved as pending, retried from 30 s doubling to an hour; no countdown, Undo and Done |
-| Read now (MS Sheets) | MainActivity opens `shelf://reader/<hash>` through Android's app transition |
+| Read now (MS Sheets) | MainActivity opens `kefli://reader/<hash>` through Android's app transition |
 | Screen reader on (FD 38) | No auto-dismiss or countdown (5.9) |
 
 **Picking the URL:** the first `http(s)` URL in `EXTRA_TEXT` (64 KB cap). A URL on `x.com`, `twitter.com` or `mobile.twitter.com` shaped `/<user>/status/<id>` takes the X route.
@@ -441,9 +441,9 @@ The critical path is five taps, no inputs, one decision and no permissions (FM w
 | Can't connect (`conn-failed`) | `POST /devices` or the pair-ack failed |
 | Success (prototype `connectScreen()`) | Pops to the launcher, then the toast |
 
-**Typed code** (C§4.4): read leniently (upper case, hyphens and spaces dropped, O as 0, I and L as 1); scrypt through `CryptoPort` (N 16384, r 8, p 1, 64 bytes, salt `shelf/pair-code/v1`); `GET /pair-offers/<lookup>`; decrypt; validate as a QR. A still-queued `register` runs first, inside the busy state.
+**Typed code** (C§4.4): read leniently (upper case, hyphens and spaces dropped, O as 0, I and L as 1); scrypt through `CryptoPort` (N 16384, r 8, p 1, 64 bytes, salt `kefli/pair-code/v1`); `GET /pair-offers/<lookup>`; decrypt; validate as a QR. A still-queued `register` runs first, inside the busy state.
 
-**Validation and pair-ack:** a QR or offer needs `v` 1, an unexpired `expires`, a valid x-only `device_pubkey`, a plain-text `label` under 64 characters, and `relay` equal to the operator relay in `defaults.json` (CR10). Connect queues `post_device` then `pair_ack`: a wrap to the device on that relay, rumor kind 30078, `d` = `shelf/pair-ack`, content `{v:1, user_pubkey, write_relays, blossom_servers, token, nonce}`, `token` 32 random bytes in hex, seal signed by the user (C§4.4). On success the `devices` row is written and the connected-browsers record republished (C§4.9).
+**Validation and pair-ack:** a QR or offer needs `v` 1, an unexpired `expires`, a valid x-only `device_pubkey`, a plain-text `label` under 64 characters, and `relay` equal to the operator relay in `defaults.json` (CR10). Connect queues `post_device` then `pair_ack`: a wrap to the device on that relay, rumor kind 30078, `d` = `kefli/pair-ack`, content `{v:1, user_pubkey, write_relays, blossom_servers, token, nonce}`, `token` 32 random bytes in hex, seal signed by the user (C§4.4). On success the `devices` row is written and the connected-browsers record republished (C§4.9).
 
 **Connected browsers** (FD 11, FD 32): the list (`br`); none yet (`br-empty`); the Disconnect sheet then a toast (`br-disconnect`), setting `revoked_at` at once, republishing the record and queueing `delete_device`; offline, the notice with Connect disabled. FM's "pairing failed" is Can't connect.
 
@@ -480,13 +480,13 @@ The critical path is five taps, no inputs, one decision and no permissions (FM w
 
 **Aa sheet** (`reader-aa`, FD 16): 15–24 px in 1 px steps from 18; Light, Sepia and Dark. A size change keeps the word a third of the way down still (MS Reader). One size and palette for every article, the palette following the phone until one is picked (FD 89).
 
-**Original page view** (FD 81): `react-native-webview` inside Shelf's bar, notice and floating Archive (`reader-error`, `reader-original`), its ⋯ holding Open in browser, Copy link and Delete (`reader-error-menu`); loading shows the Reader's skeleton under the bar (`reader-original-loading`), a load failure points to Open in browser (`reader-original-failed`), and offline it says it needs a connection (`reader-original-offline`, G4); hardening in 7.1.
+**Original page view** (FD 81): `react-native-webview` inside Kefli's bar, notice and floating Archive (`reader-error`, `reader-original`), its ⋯ holding Open in browser, Copy link and Delete (`reader-error-menu`); loading shows the Reader's skeleton under the bar (`reader-original-loading`), a load failure points to Open in browser (`reader-original-failed`), and offline it says it needs a connection (`reader-original-offline`, G4); hardening in 7.1.
 
-**From the Reader,** Archive pops to the opener and plays Finish on its row; Delete stops playback if the article is playing and removes it from Listen (FD 34); each raises its Undo toast. Undo of deleting the playing article starts a paused `shelf-voice` session at its stored word and puts back its Listen row and any Play-all queue (FD 34). Copy link's toast follows G11.
+**From the Reader,** Archive pops to the opener and plays Finish on its row; Delete stops playback if the article is playing and removes it from Listen (FD 34); each raises its Undo toast. Undo of deleting the playing article starts a paused `kefli-voice` session at its stored word and puts back its Listen row and any Play-all queue (FD 34). Copy link's toast follows G11.
 
 ### 5.7 Journey 6: listening
 
-**The session** (`shelf-voice`, 8.1): starting builds the article's sentences from the spoken projection, each with its word starts, and hands them over with the start word, rate, voice and the 512 px cover. The engine is warmed when a Reader mounts, since the first word took about 2 s cold (T§2). Word events set the position directly (MS Signature 2). Engines without word timing report sentence starts only; the highlight then marks the sentence (`play-sentence`, FD 91 (h); `archive/03-android-v1.0.md` fell back to paragraphs, but utterances are now sentences), the line glides across each sentence's estimated duration (MS Signature 2), the word meter stays unlit (FD 68, FD 69), and Speed read is unaffected.
+**The session** (`kefli-voice`, 8.1): starting builds the article's sentences from the spoken projection, each with its word starts, and hands them over with the start word, rate, voice and the 512 px cover. The engine is warmed when a Reader mounts, since the first word took about 2 s cold (T§2). Word events set the position directly (MS Signature 2). Engines without word timing report sentence starts only; the highlight then marks the sentence (`play-sentence`, FD 91 (h); `archive/03-android-v1.0.md` fell back to paragraphs, but utterances are now sentences), the line glides across each sentence's estimated duration (MS Signature 2), the word meter stays unlit (FD 68, FD 69), and Speed read is unaffected.
 
 **Where it starts** (FD 19, FD 36): at the saved word if on screen, otherwise the first paragraph in view, with no scroll; a Listen row's play button starts from the stored position, or from 0 if finished. Each article has one position, a word index, written by reading, listening and Speed read; reading writes it only while the article isn't playing.
 
@@ -528,9 +528,9 @@ Leaving moves the audio to the same word, and the Reader lights it for 1.6 s; wp
 | Add another device (`dev`, `dev-expired`) | 3.6; expired fades the QR to 12 %; offline notice; generating shows a skeleton QR (FM) |
 | Voice (`voice`, FD 24, FD 36) | Offline voices for the last played article's language (FD 89), samples played outside the session, Default speed; loading is a momentary read; no engine, no row; offline identical |
 | Advanced (`adv`, `adv-down`, `adv-offline`) | The relay group with each relay's status (FD 76); the count of saves not backed up (`adv-notbacked`, 4.3, FD 93), and while there are any, the note under the relays speaks of "your other saves"; offline disables the row for switching to a nostr app |
-| Export my saves (`adv`) | Works offline; one HTML bookmark file with each save's text, `shelf-export.html` to Downloads, then the toast (FD 89); failure `adv-exportfail` (G9) |
+| Export my saves (`adv`) | Works offline; one HTML bookmark file with each save's text, `kefli-export.html` to Downloads, then the toast (FD 89); failure `adv-exportfail` (G9) |
 
-**Switching to a nostr app** (FD 13, FD 26, FD 76; move job 4.10): explain with the switch (`sw`); waiting (`sw-waiting`); declined (`sw-declined`); offline, primary disabled (`sw-offline`); moving with "N of M", Back swallowed (`sw-moving`); done root-swaps to You with its toast. No signer installed is `sw-none`, a probe refusal `sw-probe` and a save from a newer Shelf `sw-newer` (FD 91 (c), (i)); a bad sign-in link is a field error, as at sign-in. Hidden for nostr users.
+**Switching to a nostr app** (FD 13, FD 26, FD 76; move job 4.10): explain with the switch (`sw`); waiting (`sw-waiting`); declined (`sw-declined`); offline, primary disabled (`sw-offline`); moving with "N of M", Back swallowed (`sw-moving`); done root-swaps to You with its toast. No signer installed is `sw-none`, a probe refusal `sw-probe` and a save from a newer Kefli `sw-newer` (FD 91 (c), (i)); a bad sign-in link is a field error, as at sign-in. Hidden for nostr users.
 
 | Delete my data (FD 14, FD 28, FD 41) | Build notes |
 |---|---|
@@ -577,7 +577,7 @@ SDK 57 takes only static fonts, so TK's variable faces are cut with fontTools `v
 
 ### 6.5 Motion
 
-Durations and curves come only from the token module; the two signatures and every row of MS's Interactions tables are built as written, each row's Build column being its implementation note, except where this spec names a substitute: `shelf-voice` for expo-speech, `onRangeStart` word events for `onBoundary`, Shelf's own sheet (6.8) for @gorhom/bottom-sheet, and Speed read's host for its modal route (6.1). Gestures use `Gesture.Pan` and commit through `scheduleOnRN` before animating, never in a completion callback. Reduced motion is read at launch and on change, with `ReduceMotion.Never` on the fallback fades (MS Principle 7). MS's Don'ts are review criteria.
+Durations and curves come only from the token module; the two signatures and every row of MS's Interactions tables are built as written, each row's Build column being its implementation note, except where this spec names a substitute: `kefli-voice` for expo-speech, `onRangeStart` word events for `onBoundary`, Kefli's own sheet (6.8) for @gorhom/bottom-sheet, and Speed read's host for its modal route (6.1). Gestures use `Gesture.Pan` and commit through `scheduleOnRN` before animating, never in a completion callback. Reduced motion is read at launch and on change, with `ReduceMotion.Never` on the fallback fades (MS Principle 7). MS's Don'ts are review criteria.
 
 ### 6.6 Lists and swipe
 
@@ -589,7 +589,7 @@ Blocks are derived once with `mdast-util-from-markdown`, whose nodes carry exact
 
 ### 6.8 Sheets, toasts, bottom stack
 
-Sheets are Shelf's own component on Reanimated and Gesture Handler, to MS Sheets: scrim opacity derived from translateY, closing past 30 % of the height or 1,000 px/s, no travel above rest, toasts paused under the scrim. One bottom-stack model computes the offsets of the tab bar, mini or tier, the screen's bottom layer and the toast, moved by translateY on the enter curve (CS Scaffolding). z-order (CS): content, Archive, mini, toast, scrim and sheet, Speed read (its own host, 6.1).
+Sheets are Kefli's own component on Reanimated and Gesture Handler, to MS Sheets: scrim opacity derived from translateY, closing past 30 % of the height or 1,000 px/s, no travel above rest, toasts paused under the scrim. One bottom-stack model computes the offsets of the tab bar, mini or tier, the screen's bottom layer and the toast, moved by translateY on the enter curve (CS Scaffolding). z-order (CS): content, Archive, mini, toast, scrim and sheet, Speed read (its own host, 6.1).
 
 ### 6.9 System surfaces
 
@@ -617,21 +617,21 @@ One `strings.ts` module in British English, every user-facing string copied verb
 
 ### 7.2 Delete my data
 
-C§4.7 (CR3) puts the operator's kind 5s before `DELETE /account`, since C§3.2 then rejects the account's kind 5s, and FD 91 (e) gives each server its step. The build runs: (1) the operator: kind 5s for every known wrap, and for every item when the operator relay is in the user's 10002, to the operator relay, then blob deletes on the operator server and `DELETE /account`, which run in every case, with at most a minute of the outbox's retries; an OK to a kind 5 counts as confirmed; (2) every other write relay in the user's 10002 (Shelf's backups and, for a nostr user, their own) and the mirror, each reported as deleted, asked or not confirmed after at most a minute of the outbox's retries, since step 3 wipes the outbox; (3) the phone: key file, Block Store entry, database and files. The kind 5s cover `items`, `items_future` and the connected-browsers record alike (C§4.7). A generated identity's 10002 and 10063 are deleted, on the indexer too; a nostr user's are rewritten without the operator's entries and the defaults this phone added. If step 1 fails, or its minute runs out with the operator unreachable, nothing else runs (`del-failed`). For a nostr user, wiping the key means the NIP-46 client key or the NIP-55 package record.
+C§4.7 (CR3) puts the operator's kind 5s before `DELETE /account`, since C§3.2 then rejects the account's kind 5s, and FD 91 (e) gives each server its step. The build runs: (1) the operator: kind 5s for every known wrap, and for every item when the operator relay is in the user's 10002, to the operator relay, then blob deletes on the operator server and `DELETE /account`, which run in every case, with at most a minute of the outbox's retries; an OK to a kind 5 counts as confirmed; (2) every other write relay in the user's 10002 (Kefli's backups and, for a nostr user, their own) and the mirror, each reported as deleted, asked or not confirmed after at most a minute of the outbox's retries, since step 3 wipes the outbox; (3) the phone: key file, Block Store entry, database and files. The kind 5s cover `items`, `items_future` and the connected-browsers record alike (C§4.7). A generated identity's 10002 and 10063 are deleted, on the indexer too; a nostr user's are rewritten without the operator's entries and the defaults this phone added. If step 1 fails, or its minute runs out with the operator unreachable, nothing else runs (`del-failed`). For a nostr user, wiping the key means the NIP-46 client key or the NIP-55 package record.
 
 ### 7.3 Privacy note lines
 
-The X embed lookup tells X which post was saved (T§1); fetching images at read time tells the image's site which article is open (C§4.2); new saves wait on the phone until the operator is reachable (C§1); a new save can briefly have only Shelf's copy until a backup server accepts it (C§1, FD 93); the phone keeps a plaintext copy of the library in private storage; a page that turns Shelf's fetch away is loaded once in a browser engine, which runs the page's own scripts as a browser would (8.2).
+The X embed lookup tells X which post was saved (T§1); fetching images at read time tells the image's site which article is open (C§4.2); new saves wait on the phone until the operator is reachable (C§1); a new save can briefly have only Kefli's copy until a backup server accepts it (C§1, FD 93); the phone keeps a plaintext copy of the library in private storage; a page that turns Kefli's fetch away is loaded once in a browser engine, which runs the page's own scripts as a browser would (8.2).
 
 ## 8. Native modules
 
 Local Expo modules under `apps/mobile/modules/`, each with an `.android` implementation, an iOS stub, Kotlin unit tests and a device test in the harness (11.2).
 
-### 8.1 `shelf-voice`
+### 8.1 `kefli-voice`
 
 ```ts
 type Sentence = { text: string; wordStarts: number[]; firstWord: number };
-interface ShelfVoice {
+interface KefliVoice {
   listVoices(): Promise<{ id: string; locale: string; offline: boolean }[]>;
   warmUp(voiceId?: string): Promise<void>;
   start(s: { hash: string; title: string; site: string; artworkPath: string; sentences: Sentence[];
@@ -642,17 +642,17 @@ interface ShelfVoice {
 }
 ```
 
-A media3 1.11.1 `MediaSessionService` (`foregroundServiceType="mediaPlayback"`) whose session is registered with `addSession`, playing audio Shelf writes itself: the week-0 gate found that speech through `TextToSpeech.speak` plays from the engine's process, so Android never routes media buttons (headphones, car, keyboard) to Shelf's session (`08-week0-gates.md`). The module owns one process-wide `TextToSpeech`, created by `warmUp`, shared by the service and `sample()`, and released on `close()` and after a minute idle, so no second instance competes. Sentences are written a few ahead with `synthesizeToFile`, each under `getMaxSpeechInputLength`, ids `<hash>:<index>`, and played in order by Shelf's own player; each word's time is its `onRangeStart` frame (Google's engine passes the frame first and the characters after it when writing a file, so they are read by value), mapped to a word by binary search over the sentence's word starts. On an engine that reports no ranges, the sentence is the unit (FD 91 (h)). Pause stops the engine and resumes from the last word's start, and a skip or jump re-queues the target sentence from the target word's offset. Commands are play, pause and seek back and forward, mapped by the clock rule (5.7). Android 13 and later fill the card's side slots only from media button preferences, so the session sets two `CommandButton`s, `ICON_SKIP_BACK_15` in `SLOT_BACK` and `ICON_SKIP_FORWARD_15` in `SLOT_FORWARD`; `KEYCODE_MEDIA_PREVIOUS` and `KEYCODE_MEDIA_NEXT` map to −15 and +15. The media item's duration and the state's position are the app's clock (5.7), `totalWords ÷ (wps × rate)` and `word ÷ (wps × rate)`, sent with `playbackSpeed` 1, so Android's extrapolation doesn't count the rate twice and the card's times match the mini's; they're resent only on play, pause, skip, jump and a rate change (MS Player). There is no seek-in-item command, so the system bar moves by itself but can't be dragged (FD 48). Audio focus is manual (`USAGE_MEDIA`, `CONTENT_TYPE_SPEECH`): a loss or becoming noisy pauses, and a transient loss resumes on regain. The small icon is `shelf_notification`; the session activity opens `shelf://reader/<hash>` and the app reads the live word (FD 10). Session and service are released on ✕, when an article finishes (alone, or the last of Play all) and in `onTaskRemoved`, since a leftover card restarted playback in T§3c; the app's mini then shows the finished article rewound and paused with ✕ (FD 20, FD 35), and play builds a new session. Within Play all the session moves to the next article without a release.
+A media3 1.11.1 `MediaSessionService` (`foregroundServiceType="mediaPlayback"`) whose session is registered with `addSession`, playing audio Kefli writes itself: the week-0 gate found that speech through `TextToSpeech.speak` plays from the engine's process, so Android never routes media buttons (headphones, car, keyboard) to Kefli's session (`08-week0-gates.md`). The module owns one process-wide `TextToSpeech`, created by `warmUp`, shared by the service and `sample()`, and released on `close()` and after a minute idle, so no second instance competes. Sentences are written a few ahead with `synthesizeToFile`, each under `getMaxSpeechInputLength`, ids `<hash>:<index>`, and played in order by Kefli's own player; each word's time is its `onRangeStart` frame (Google's engine passes the frame first and the characters after it when writing a file, so they are read by value), mapped to a word by binary search over the sentence's word starts. On an engine that reports no ranges, the sentence is the unit (FD 91 (h)). Pause stops the engine and resumes from the last word's start, and a skip or jump re-queues the target sentence from the target word's offset. Commands are play, pause and seek back and forward, mapped by the clock rule (5.7). Android 13 and later fill the card's side slots only from media button preferences, so the session sets two `CommandButton`s, `ICON_SKIP_BACK_15` in `SLOT_BACK` and `ICON_SKIP_FORWARD_15` in `SLOT_FORWARD`; `KEYCODE_MEDIA_PREVIOUS` and `KEYCODE_MEDIA_NEXT` map to −15 and +15. The media item's duration and the state's position are the app's clock (5.7), `totalWords ÷ (wps × rate)` and `word ÷ (wps × rate)`, sent with `playbackSpeed` 1, so Android's extrapolation doesn't count the rate twice and the card's times match the mini's; they're resent only on play, pause, skip, jump and a rate change (MS Player). There is no seek-in-item command, so the system bar moves by itself but can't be dragged (FD 48). Audio focus is manual (`USAGE_MEDIA`, `CONTENT_TYPE_SPEECH`): a loss or becoming noisy pauses, and a transient loss resumes on regain. The small icon is `kefli_notification`; the session activity opens `kefli://reader/<hash>` and the app reads the live word (FD 10). Session and service are released on ✕, when an article finishes (alone, or the last of Play all) and in `onTaskRemoved`, since a leftover card restarted playback in T§3c; the app's mini then shows the finished article rewound and paused with ✕ (FD 20, FD 35), and play builds a new session. Within Play all the session moves to the next article without a release.
 
-### 8.2 `shelf-parser`
+### 8.2 `kefli-parser`
 
 ```ts
 type Parsed = { ok: true; title: string | null; byline: string | null; site: string | null; lang: string | null;
                 hero: string | null; canonical: string | null; readerable: boolean; markdown: string }
             | { ok: false; reason: 'no_webview' | 'not_readable' | 'error' };
-interface ShelfParser {
-  parse(bodyBase64: string, contentType: string, url: string): Promise<Parsed>;  // shelfParse
-  markdown(contentHtml: string, url: string): Promise<Parsed>;                  // shelfMarkdown, inbox
+interface KefliParser {
+  parse(bodyBase64: string, contentType: string, url: string): Promise<Parsed>;  // kefliParse
+  markdown(contentHtml: string, url: string): Promise<Parsed>;                  // kefliMarkdown, inbox
   render(url: string): Promise<{ ok: true; url: string; html: string } | { ok: false; reason: 'no_webview' | 'timeout' }>;
 }
 ```
@@ -661,10 +661,10 @@ interface ShelfParser {
 
 A WebView on the main looper, built with the application context and attached to no window, so it works the same from MainActivity, the share activity and a headless task. The bundle loads from an APK asset, its sha256 checked against the constant baked at build. Input and output cross a `@JavascriptInterface` host object, keeping megabyte strings out of `evaluateJavascript`. One job at a time; torn down after 30 s idle; no WebView provider gives `no_webview`.
 
-### 8.3 `shelf-keystore`
+### 8.3 `kefli-keystore`
 
 ```ts
-interface ShelfKeystore {
+interface KefliKeystore {
   read(): Promise<KeyRecord | null>; readMnemonic(pubkey: string): Promise<string | null>;
   write(r: KeyRecord): Promise<void>; wipe(pubkey: string): Promise<void>;
   strongBox(): Promise<boolean>; isE2EEAvailable(): Promise<boolean>;
@@ -675,10 +675,10 @@ interface ShelfKeystore {
 
 Behaviour in 3.2 and 3.3, on `play-services-auth-blockstore` 16.4.0 with about 120 lines adapted from `expo-block-store` 1.0.0 (MIT).
 
-### 8.4 `shelf-nip55`
+### 8.4 `kefli-nip55`
 
 ```ts
-interface ShelfNip55 {
+interface KefliNip55 {
   listSigners(): Promise<{ package: string; label: string }[]>;
   getPublicKey(perms: { type: string; kind?: number }[]): Promise<{ pubkey: string; package: string }>;
   signEvent(pkg: string, eventJson: string, pubkey: string): Promise<string>;
@@ -690,14 +690,14 @@ interface ShelfNip55 {
 
 About 200 lines of Kotlin. Each call tries the `content://<pkg>.<TYPE>` resolver first and falls back to the `nostrsigner:` intent through Expo's activity-result listener with `FLAG_ACTIVITY_SINGLE_TOP`. Errors are `rejected` (the declined state), `not_installed` and `timeout`. Payloads are never logged. A config plugin adds the `<queries>` entry for the scheme.
 
-### 8.5 `shelf-share`
+### 8.5 `kefli-share`
 
-`ShareActivity`: translucent, `excludeFromRecents`, standard launch mode, filtering `ACTION_SEND` for `text/plain`. Android's share sheet starts it in a task of its own (`NEW_DOCUMENT`, `MULTIPLE_TASK`), and finishing it returns to the sender (week-0 gate, `08-week0-gates.md`). `onCreate` spools the text, subject and referrer to `filesDir/share-spool/<uuid>.json` before JavaScript runs, so process death never loses a share; unprocessed spools are picked up at the next start. It renders the `share` surface on the shared ReactHost with `{spoolId}`. `finish('host')` ends with no transition (`overrideActivityTransition` on API 34 and later, `overridePendingTransition(0, 0)` below); `finish('read', hash)` also starts MainActivity on `shelf://reader/<hash>`. Passed its week-0 gate from Chrome and X.
+`ShareActivity`: translucent, `excludeFromRecents`, standard launch mode, filtering `ACTION_SEND` for `text/plain`. Android's share sheet starts it in a task of its own (`NEW_DOCUMENT`, `MULTIPLE_TASK`), and finishing it returns to the sender (week-0 gate, `08-week0-gates.md`). `onCreate` spools the text, subject and referrer to `filesDir/share-spool/<uuid>.json` before JavaScript runs, so process death never loses a share; unprocessed spools are picked up at the next start. It renders the `share` surface on the shared ReactHost with `{spoolId}`. `finish('host')` ends with no transition (`overrideActivityTransition` on API 34 and later, `overridePendingTransition(0, 0)` below); `finish('read', hash)` also starts MainActivity on `kefli://reader/<hash>`. Passed its week-0 gate from Chrome and X.
 
-### 8.6 `shelf-system`
+### 8.6 `kefli-system`
 
 ```ts
-interface ShelfSystem {
+interface KefliSystem {
   setSecure(on: boolean): void;
   copySensitive(text: string): Promise<void>;
   exportToDownloads(fileName: string, contents: string): Promise<{ uri: string }>;  // MediaStore on 29+, SAF on 26–28
@@ -708,11 +708,11 @@ interface ShelfSystem {
 
 ### 8.7 Config plugins and conditional modules
 
-`expo-build-properties` for `minSdkVersion` 26 and SDK 36; a manifest plugin for `allowBackup="false"` and the data extraction rules (7.1), the blocked permissions, `<queries>`, the share activity and the voice service; the notification drawable from `shared/brand/out/android/shelf_notification.xml`; the parser bundle copied into assets at prebuild with its sha256 constant; the font families. Because the Schnorr gate failed on noble: `shelf-secp` on ACINQ `secp256k1-kmp-jni-android` 0.22.0 (Schnorr, and ECDH through `pubKeyTweakMul` taking the x coordinate, since libsecp256k1's `ecdh` hashes the point; 0.22.0 rather than 0.24.0, since 0.23 on are built with Kotlin 2.3, which React Native 0.86's Kotlin 2.1 compiler can't read), or a Kotlin crypto module (javax.crypto AES-GCM and PBKDF2, Bouncy Castle SCrypt) behind `CryptoPort`.
+`expo-build-properties` for `minSdkVersion` 26 and SDK 36; a manifest plugin for `allowBackup="false"` and the data extraction rules (7.1), the blocked permissions, `<queries>`, the share activity and the voice service; the notification drawable from `shared/brand/out/android/kefli_notification.xml`; the parser bundle copied into assets at prebuild with its sha256 constant; the font families. Because the Schnorr gate failed on noble: `kefli-secp` on ACINQ `secp256k1-kmp-jni-android` 0.22.0 (Schnorr, and ECDH through `pubKeyTweakMul` taking the x coordinate, since libsecp256k1's `ecdh` hashes the point; 0.22.0 rather than 0.24.0, since 0.23 on are built with Kotlin 2.3, which React Native 0.86's Kotlin 2.1 compiler can't read), or a Kotlin crypto module (javax.crypto AES-GCM and PBKDF2, Bouncy Castle SCrypt) behind `CryptoPort`.
 
 ## 9. The parser bundle and canonical text
 
-- **Build.** `shared/vendor/build-parser-bundle.mjs` bundles the vendored libraries with `parser-runner.js`, exposing `shelfParse(bodyBase64, contentType, url, rules)` and `shelfMarkdown(contentHtml, url, rules)`. The runner gains normalisation, the Markdown-only entry, decoding and the guard's inputs, and loses its raw token count (T§1). Before Readability runs, since `parse()` mutates the document and returns neither, it reads `canonical` (the first `<link rel="canonical">`, resolved against the page URL, `http(s)` only) and `hero` (`og:image`, else `twitter:image`); C§4.3 pins the canonical rule, checked by the normalise fixtures, and the extension uses the same code.
+- **Build.** `shared/vendor/build-parser-bundle.mjs` bundles the vendored libraries with `parser-runner.js`, exposing `kefliParse(bodyBase64, contentType, url, rules)` and `kefliMarkdown(contentHtml, url, rules)`. The runner gains normalisation, the Markdown-only entry, decoding and the guard's inputs, and loses its raw token count (T§1). Before Readability runs, since `parse()` mutates the document and returns neither, it reads `canonical` (the first `<link rel="canonical">`, resolved against the page URL, `http(s)` only) and `hero` (`og:image`, else `twitter:image`); C§4.3 pins the canonical rule, checked by the normalise fixtures, and the extension uses the same code.
 - **Rules.** Turndown options from `shared/turndown-rules.json`, whose first version holds the runner's options and no added rules; Readability and `isProbablyReaderable` with their defaults, the extension's `charThreshold: 250` dropped (C§4.2).
 - **Decoding.** Bytes arrive with their Content-Type and Blink's `TextDecoder` decodes them, sniffing `<meta charset>` when the header names none, as the extension's browser would.
 - **Normalisation** in the bundle: NFC, CRLF to LF, trailing whitespace stripped per line, three or more newlines collapsed to two, one final newline (C§4.2). The blob's plaintext is this string as UTF-8 (C§4.2).
@@ -723,7 +723,7 @@ interface ShelfSystem {
 
 - **Profiles** (`eas.json`): `development` (dev client APK), `preview` (release APK, arm64), `production` (AAB, Play App Signing). Local builds use `npx expo run:android --variant release` or Gradle, since EAS local builds aren't supported on Windows. `versionCode` is incremented remotely by EAS.
 - **Windows long paths.** `LongPathsEnabled` is 0 on the build laptop, and the deepest `.cxx` path already reaches 247 of 260 characters before Reanimated, Skia and Nitro codegen. Fixes: Richard enables `LongPathsEnabled` (needs admin), the build points at CMake 3.31.4 (ninja 1.12 or later), or builds run from a short `subst` drive.
-- **Play Console.** App ID pending O-9, with sideloaded preview APKs until then; the internal track at the stage 2 gate; data safety declaring a public key, encrypted blobs and device keys on the operator's servers and no article text sent anywhere (FD 22); the `mediaPlayback` declaration; the deletion page (13.1); target 36.
+- **Play Console.** App ID `app.kefli` (FD 96), with sideloaded preview APKs before the internal track at the stage 2 gate; data safety declaring a public key, encrypted blobs and device keys on the operator's servers and no article text sent anywhere (FD 22); the `mediaPlayback` declaration; the deletion page (13.1); target 36.
 - **Brand** (`shared/brand/README.md`): icons from `out/android`, the splash in 6.9, the notification glyph, the Play icon and feature graphic. The Expo template icons in `apps/mobile/assets/` go; `app.json` gets the real name and slug, `userInterfaceStyle: "automatic"`, the splash block, and `android.predictiveBackGestureEnabled: true`, which the root screens' system preview needs (5.1; the harness has it off). The week-0 gate checks that Back, swallowed Back included, still works with it on, and decides only whether in-app pops are predictive.
 - **Licences.** The app is AGPL-3.0-or-later with an added permission for Play services and other proprietary system libraries (O-10); `apps/mobile/LICENSE` is Expo's template and is not committed, and the LICENSE file is committed once Richard confirms its text. Dependencies are MIT, Apache-2.0 (Readability, media3), ISC (Lucide), Unlicense (nostr-tools) and OFL 1.1 (the fonts), plus proprietary Play services for Block Store; react-native-quick-crypto's tarball has no LICENSE file, so its repository's is checked in week 0.
 
@@ -737,7 +737,7 @@ interface ShelfSystem {
 
 ### 11.2 The on-device fixture harness
 
-A `fixtures` route, built only into development and CI profiles, runs the twenty pages through `shelf-parser` with Hermes hashing, the normalise fixtures on Hermes, the cover fixtures on Skia, the crypto vectors (a signature and a NIP-44 encryption included) and a Keystore round trip, and writes a JSON report read over adb, on an x86_64 emulator in CI and on the Pixel before each gate (C§9). Contract tests against staging add publishing, a refused unauthorised 1059 read, a pair-ack to an authorised device accepted and one to an unknown key refused, a recipient's kind 5 removing a wrap, Blossom quota and 413, a mirror that refuses, the inbox round trip with the extension, sign-in with the indexer blocked (4.6), the move scenario, and restore with the operator off (C§8).
+A `fixtures` route, built only into development and CI profiles, runs the twenty pages through `kefli-parser` with Hermes hashing, the normalise fixtures on Hermes, the cover fixtures on Skia, the crypto vectors (a signature and a NIP-44 encryption included) and a Keystore round trip, and writes a JSON report read over adb, on an x86_64 emulator in CI and on the Pixel before each gate (C§9). Contract tests against staging add publishing, a refused unauthorised 1059 read, a pair-ack to an authorised device accepted and one to an unknown key refused, a recipient's kind 5 removing a wrap, Blossom quota and 413, a mirror that refuses, the inbox round trip with the extension, sign-in with the indexer blocked (4.6), the move scenario, and restore with the operator off (C§8).
 
 ### 11.3 Device matrix
 
@@ -779,11 +779,11 @@ Devices: the Pixel 10a (Android 17), a Samsung with its own speech engine and ba
 
 | Week | Deliverables | Evidence |
 |---|---|---|
-| 0 | Done: the CR list sent and every request ruled, contract v1.3 signed (13.2); tokens 1.0.1 (FD 92); O-15 (f)–(h), G2's sheet, G3's lines and O-3's states approved and drawn under FD 91's jump names. To do: the token generator emitting 1.0.1; workspaces; protocol skeleton; normalise draft. Gates: react-native-quick-crypto (LICENSE file, 16 KB pages, arm64 release, scrypt time, x86_64 issue #1077, and `finalizeEvent` plus `nip44.v2.encrypt` succeeding on a release build once `install()` runs), Schnorr timing, share activity, detached parser WebView, JS stack and predictive back, eight Skia covers, font cuts; a `shelf-voice` spike (a `MediaSessionService` with `SimpleBasePlayer` driving the voice, the lock-screen ±15 buttons, 30 minutes locked on battery) | Gate results recorded |
+| 0 | Done: the CR list sent and every request ruled, contract v1.3 signed (13.2); tokens 1.0.1 (FD 92); O-15 (f)–(h), G2's sheet, G3's lines and O-3's states approved and drawn under FD 91's jump names. To do: the token generator emitting 1.0.1; workspaces; protocol skeleton; normalise draft. Gates: react-native-quick-crypto (LICENSE file, 16 KB pages, arm64 release, scrypt time, x86_64 issue #1077, and `finalizeEvent` plus `nip44.v2.encrypt` succeeding on a release build once `install()` runs), Schnorr timing, share activity, detached parser WebView, JS stack and predictive back, eight Skia covers, font cuts; a `kefli-voice` spike (a `MediaSessionService` with `SimpleBasePlayer` driving the voice, the lock-screen ±15 buttons, 30 minutes locked on battery) | Gate results recorded |
 | 1 | Key file, Block Store and the identity resolver, `LocalSigner`, register, schema, outbox, relay pool, share sheet and parser, encrypt, upload, mirror, publish, lists, `npm run decrypt` | An event decrypts with `npm run decrypt` |
-| 2 | Welcome, New here, `welcome-early` and first-run Saves; Saves, Archive, swipe and Undo, offline, Reader, Aa, end card, inbound sync; `shelf-voice` with highlighting, the Reader tier and the media card (±15 buttons, artwork, estimated duration). Already done: O-15 (a)–(e) and (i) and O-17's count approved and drawn under FD 91's jump names, and contract v1.3 signed | Stage 1 gate |
+| 2 | Welcome, New here, `welcome-early` and first-run Saves; Saves, Archive, swipe and Undo, offline, Reader, Aa, end card, inbound sync; `kefli-voice` with highlighting, the Reader tier and the media card (±15 buttons, artwork, estimated duration). Already done: O-15 (a)–(e) and (i) and O-17's count approved and drawn under FD 91's jump names, and contract v1.3 signed | Stage 1 gate |
 | 3 | Inbox, Connect a browser, Connected browsers, Listen, the mini and Now playing, the lock-screen tap to the Reader, recovery code and backup card, Search | A laptop save appears |
-| 4 | Bring back your shelf (scan, code, NIP-55, `bunker://`), restore, import, Add another device, Delete my data, Advanced, Play internal track | Stage 2 gate |
+| 4 | Bring back your library (scan, code, NIP-55, `bunker://`), restore, import, Add another device, Delete my data, Advanced, Play internal track | Stage 2 gate |
 | 5 | Switching to a nostr app and the early-saves move, Speed read, Voice, Export, hardening, live list to 30/30 (FD 87) | Matrix complete |
 | 6–7 | Beta: severity-1 fixes only, TalkBack pass, listing assets | No open severity 1 |
 | 7–8 | Play production | Live on Play |
@@ -802,7 +802,7 @@ Contract v1.3 took in all eighteen requests, approved with section 14 on 5 Octob
 
 | CR | Request, as settled | Status |
 |---|---|---|
-| 1 | The connected-browsers record, a self-encrypted kind 30078 at `d` = `shelf/devices`, merged by token with revocations kept; save requests accepted only from its connected entries | Landed, C§4.9, §4.4 |
+| 1 | The connected-browsers record, a self-encrypted kind 30078 at `d` = `kefli/devices`, merged by token with revocations kept; save requests accepted only from its connected entries | Landed, C§4.9, §4.4 |
 | 2 | NIP-46 only by a pasted `bunker://` link, on its relays, with `perms` in `connect` (3.4) and a two-minute wait; a malformed link is a field error; NIP-55 asked for the same kinds; `nostrconnect://` and nsec pasting dropped | Landed, C§2 |
 | 3 | Delete my data runs the operator, then every other server, then the phone (7.2); "confirmed" is an OK to every kind 5; a generated key's 10002 and 10063 are deleted, a nostr user's only rewritten | Landed, C§4.7 |
 | 4 | The operator relay deletes a 1059 on its `p`-tagged recipient's kind 5 (NIP-59), accepts a wrap author's kind 5 for the extension's Undo, and drops wraps addressed to a deleted account | Landed, C§3.2 |
@@ -813,9 +813,9 @@ Contract v1.3 took in all eighteen requests, approved with section 14 on 5 Octob
 | 9 | `normalise(url, canonical?)`, its host through UTS-46 by `tr46`; `d` from the final URL with the canonical rule (section 9) for every kind of save; re-keying only before the first publish (FD 80); the X post rule; IDN cases in the fixtures | Landed, C§4.3 |
 | 10 | Save requests: seal signed by the device key; `lang` and `hero` added; `truncated` dropped, HTML over 2 MB sent as `html` null; the guard in the extension; `saved_at` = `captured_at` (never later than now), repeat saves as G2 (4.2); X URLs follow FD 78; the QR's `relay` must be the operator relay | Landed, C§4.1, §4.4 |
 | 11 | Second-phone pairing by an online exchange (FD 85, 3.6): `POST /phone-offers` signed by the user, `GET /phone-offers/<lookup>` with a throwaway key; NIP-49 dropped; Add another device hidden for nostr users | Landed, C§2, §6 |
-| 12 | The switch also governs 10063 and keeps the user's entries and markers; "one default relay" = `defaults.relays[0]`; absence needs every indexer relay and two default relays; the move collects T's library, reads back from min(2, n) of T's relays and stops at a save from a newer Shelf; the early-saves move runs under the restore card | Landed, C§3.1, §4.8 |
+| 12 | The switch also governs 10063 and keeps the user's entries and markers; "one default relay" = `defaults.relays[0]`; absence needs every indexer relay and two default relays; the move collects T's library, reads back from min(2, n) of T's relays and stops at a save from a newer Kefli; the early-saves move runs under the restore card | Landed, C§3.1, §4.8 |
 | 13 | NIP-98 `payload` on every POST, PUT and DELETE; `created_at` within 60 s; `/defaults.json` and NIP-05 unauthenticated; `v` in every request body | Landed, C§6 |
-| 14 | `defaults.json` schema `{v, operator:{relay, blossom, api}, relays[], indexer[], mirrors[]}`, `mirrors[]` tried in order (4.2); a refusing default retired within a day, and replaced where Shelf added it (4.6); "backed up" defined and counted (FD 93) | Landed, C§1, §3.1, §4.2, §5 |
+| 14 | `defaults.json` schema `{v, operator:{relay, blossom, api}, relays[], indexer[], mirrors[]}`, `mirrors[]` tried in order (4.2); a refusing default retired within a day, and replaced where Kefli added it (4.6); "backed up" defined and counted (FD 93) | Landed, C§1, §3.1, §4.2, §5 |
 | 15 | C§2's "at first launch" becomes "at New here, or at the first share"; the Block Store entry rules in 3.1 and 3.3 (FD 79) | Landed, C§2 |
 | 16 | Inbox `since` allows for NIP-59's two-day tweak; only wraps that created, un-archived or matched a save are deleted | Landed, C§4.4 |
 | 17 | Fixtures add the covers on Hermes, an item with `text` null, a move with one `d` T holds, a restore with a deletion, pinned-Chromium page fixtures, and vectors for the projection, NIP-06, the blob, the connected-browsers record and the phone-pair offer; signed fixtures are round-trip tests | Landed, C§9 |
@@ -823,13 +823,13 @@ Contract v1.3 took in all eighteen requests, approved with section 14 on 5 Octob
 
 ## 14. Decided
 
-Richard approved every recommendation in this section as a set on 5 October 2026, with no exceptions. Each item points to the flow decision that records it (FD 79–93). O-9's name is settled as Kefli by FD 95 and its app ID is still open in `CLAUDE.md`; O-10 is recorded there.
+Richard approved every recommendation in this section as a set on 5 October 2026, with no exceptions. Each item points to the flow decision that records it (FD 79–93). O-9's name is settled as Kefli by FD 95, and its app ID as `app.kefli` by FD 96; O-10 is recorded there.
 
 | O | Question | Decision |
 |---|---|---|
-| 1 | Reinstalling where Block Store holds a shelf | FD 79: skip Welcome for Saves with the restore card; an early share stores that key and saves under it (3.1) |
+| 1 | Reinstalling where Block Store holds a key | FD 79: skip Welcome for Saves with the restore card; an early share stores that key and saves under it (3.1) |
 | 2 | A link or offline X post resolving to another address, and so another `d` and cover | FD 80: re-key only before the first publish; the cover crossfades once; a published save's `d` and cover never change |
-| 3 | The original page: drawn as Shelf's view, its build note saying Custom Tab | FD 81: the drawn view, Open in browser covering signed-in sites; loading, failure and offline drawn (`reader-original-loading`, `-failed`, `-offline`) |
+| 3 | The original page: drawn as Kefli's view, its build note saying Custom Tab | FD 81: the drawn view, Open in browser covering signed-in sites; loading, failure and offline drawn (`reader-original-loading`, `-failed`, `-offline`) |
 | 4 | Importing `nostr-article` items, whose `d`, `url` and Open original were undefined | FD 82: web links only, from kind 39701 plus legacy `r` tags; the sheet will seldom show, which is accepted for a one-off |
 | 5 | Listen history and "N listened" have no contract field | FD 83: they stay on the phone; a restored or second phone starts with an empty Listen tab |
 | 6 | Laptop saves made while the phone is closed wait for a background window | FD 84: accepted; the 10 s gate is measured with the app open |
@@ -841,16 +841,16 @@ Richard approved every recommendation in this section as a set on 5 October 2026
 | 12 | Crash reporting | FD 88: none in v1; Play vitals and the beta form |
 | 13 | Small defaults | FD 89, by G number. G2: re-sharing an unread save changes nothing, offering Done and Read now with no Undo (`share-again`, FD 38); re-saving an archived one un-archives it at its new save time (4.2). G3: the embed service failing online saves the post address as pending, retried from 30 s doubling to an hour, with its own line on the Saved sheet and row (`share-embedfail`, `saves-embedfail`). G4: the original view offline says it needs a connection. G5: a full Blossom quota keeps the text on the phone and retries daily. G6: a connection lost mid-flow uses the notice slot and keeps the value. G7: Back on Listen or You goes to Saves; a warm resume keeps the screen; a lock-screen tap counts as opening straight into an article. G8: deletion copy counts the real backup servers. G9: an export failure line with Try again (`adv-exportfail`). G11: no own "Link copied" toast on Android 13+. G12: without a picture, the kind 0 name's first letter in a circle; with no name, or before kind 0 arrives, FD 12's counts line. Also: one speed value for the pill and Default speed; one Reader size and palette, following the phone until a palette is picked; voices for the last played article's language; Export as one HTML bookmark file with each save's text |
 | 14 | Add another device for nostr users, who have no mnemonic; pasting an nsec | FD 90: the row is hidden for nostr users; nsec pasting stays out of v1 and out of C§2 |
-| 15 | States neither the prototype nor FM drew | FD 91, each drawn under its jump name and put on the map before its week: (a) `restore-nothing`: nothing to restore after a sign-in, Block Store restore or pairing lands on first-run Saves with no card; (b) `nostr-timeout`: a NIP-46 expiry or `timeout` returns to the start with "Your nostr app didn't answer. Nothing has changed."; `nostr-badlink`: a bad sign-in link is a field error; (c) `sw-none` and `sw-probe` when switching; (d) `nostr-probe`: "Your nostr app can't keep your saves private yet. Try another app, or start a new shelf on this phone."; (e) Delete my data with a step per server, the explain line counting them and saying the library goes from all devices, `del` to `del-failed` amended; (f) `welcome-early-many` and the import count's plural; (g) `saves-empty-offline`: "Connecting a browser needs a connection", the button disabled; (h) `play-sentence`: the sentence highlight without word timing (5.7); (i) `sw-newer`: a move meeting a save from a newer Shelf in step 2 stops before copying and asks for an update (4.10) |
+| 15 | States neither the prototype nor FM drew | FD 91, each drawn under its jump name and put on the map before its week: (a) `restore-nothing`: nothing to restore after a sign-in, Block Store restore or pairing lands on first-run Saves with no card; (b) `nostr-timeout`: a NIP-46 expiry or `timeout` returns to the start with "Your nostr app didn't answer. Nothing has changed."; `nostr-badlink`: a bad sign-in link is a field error; (c) `sw-none` and `sw-probe` when switching; (d) `nostr-probe`: "Your nostr app can't keep your saves private yet. Try another app, or start a new library on this phone."; (e) Delete my data with a step per server, the explain line counting them and saying the library goes from all devices, `del` to `del-failed` amended; (f) `welcome-early-many` and the import count's plural; (g) `saves-empty-offline`: "Connecting a browser needs a connection", the button disabled; (h) `play-sentence`: the sentence highlight without word timing (5.7); (i) `sw-newer`: a move meeting a save from a newer Kefli in step 2 stops before copying and asks for an update (4.10) |
 | 16 | TK 1.0.0's type values differed from CS and the prototype | FD 92: tokens 1.0.1 with the prototype's values and the fixed optical sizes of 6.3, before any component |
-| 17 | A save refused by its default mirror or relays has no copy off the operator, which weakens "outlives the service" | FD 93: the next mirror is tried (4.2); saves not backed up are counted in Advanced (`adv-notbacked`); a refusing default is retired within a day; the claim stands while that count stays near zero, and the privacy note says a new save can briefly have only Shelf's copy (7.3) |
+| 17 | A save refused by its default mirror or relays has no copy off the operator, which weakens "outlives the service" | FD 93: the next mirror is tried (4.2); saves not backed up are counted in Advanced (`adv-notbacked`); a refusing default is retired within a day; the claim stands while that count stays near zero, and the privacy note says a new save can briefly have only Kefli's copy (7.3) |
 
 ## 15. Risks
 
 | Risk | Mitigation |
 |---|---|
-| `shelf-voice` overruns: a bespoke session with no time base | Spiked in week 0 (12), built in week 2; the clock rule is fixed here; the locked battery hour is a gate |
-| secp256k1 or `react-native-quick-crypto` fails a week-0 gate | `shelf-secp` or the Kotlin crypto module behind the same ports |
+| `kefli-voice` overruns: a bespoke session with no time base | Spiked in week 0 (12), built in week 2; the clock rule is fixed here; the locked battery hour is a gate |
+| secp256k1 or `react-native-quick-crypto` fails a week-0 gate | `kefli-secp` or the Kotlin crypto module behind the same ports |
 | Parser WebView memory, main thread, missing provider | Detached, one job at a time, torn down after 30 s; `no_webview` is an honest failure |
 | Process frozen after the share sheet closes | The spool and queued rows survive; the expedited fallback (4.8) |
 | Hash drift between Blink, Hermes and V8 | Engines pinned per step (2.6), normalise's host step included; normalise and page fixtures on device; no over-the-air updates |
@@ -861,13 +861,13 @@ Richard approved every recommendation in this section as a set on 5 October 2026
 
 ## 16. Definition of done
 
-C§9's fixtures and the cover fixtures pass in CI on every commit, under Node and in the device harness; every row of 11.3 is ticked; every state in section 5 matches its prototype state on the Pixel, checked by Richard; Richard has used the app daily for a month and a save from each of the five apps reads offline on the train; someone else has backed up, restored by recovery code and paired a second phone; the library survives a reinstall through Block Store with Google Backup on and returns anywhere through the recovery code; restore works with the operator off; a NIP-55 user and a `bunker://` user have saved; Delete my data is verified on relay and server; the Play listing carries the data safety form, the deletion page and a production release targeting API 36; O-9, the one item in section 14 still open, has its answer; and the confirmed LICENSE file is committed.
+C§9's fixtures and the cover fixtures pass in CI on every commit, under Node and in the device harness; every row of 11.3 is ticked; every state in section 5 matches its prototype state on the Pixel, checked by Richard; Richard has used the app daily for a month and a save from each of the five apps reads offline on the train; someone else has backed up, restored by recovery code and paired a second phone; the library survives a reinstall through Block Store with Google Backup on and returns anywhere through the recovery code; restore works with the operator off; a NIP-55 user and a `bunker://` user have saved; Delete my data is verified on relay and server; the Play listing carries the data safety form, the deletion page and a production release targeting API 36; O-9, the one item in section 14 left open, has its answer (FD 95 and 96); and the confirmed LICENSE file is committed.
 
 ## Appendix. Flow-map coverage
 
 | FM state-matrix row | Section |
 |---|---|
-| Welcome, Bring back your shelf, Scan, Recovery code entry, Nostr sign-in, Restoring | 5.2, 5.3 |
+| Welcome, Bring back your library, Scan, Recovery code entry, Nostr sign-in, Restoring | 5.2, 5.3 |
 | Saved sheet | 5.4 |
 | Saves Unread and Archive, Search, Reader, Aa sheet | 5.6 |
 | Mini player, Listen (FM's partial, error and offline rows are obsolete under FD 22) | 5.7 |

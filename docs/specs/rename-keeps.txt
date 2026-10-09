@@ -1,0 +1,52 @@
+# Where the old name, Shelf, stays on purpose (docs/specs/10-rename.md, R6 and section 4).
+# Each pattern is an extended regular expression matched against the lines `git grep -n -i shelf` prints
+# (path:line:text); a line that matches one is a keep. The check prints every other line, so it prints
+# nothing while the rename is whole:
+#
+#   git grep -n -i shelf | grep -v -E -f <(grep -v -E '^(#|$)' docs/specs/rename-keeps.txt)
+#
+# Add a pattern only with its reason above it, and as narrow as the keep allows.
+
+# Cover v1 (R6): frozen when it shipped, with its API's name, its golden fixtures, the https://shelf.app/
+# sample and the shelf/icon/ seeds. The prototypes carry a built copy.
+ShelfCover
+https://shelf\.app/
+^shared/cover/
+^docs/design/mockups/cover-v1\.js:
+
+# History (R6): the decision log, the archived specs, and the design studies and explorations it cites.
+^docs/design/flow-decisions\.md:
+^docs/specs/archive/
+^docs/design/icons/
+^docs/design/study/
+^docs/design/style-lab\.html:
+^docs/design/ui-mockups\.html:
+^docs/design/mockups/direction-compare\.html:
+# The Soft pills copies, frozen for comparison (ui-brief.md)
+^docs/design/mockups/(prototype|extension)-softpills\.html:
+^docs/design/mockups/choices\.html:
+# Records: contract v1.1 as it was superseded, the rulings folded into it, the Android spike's results
+# (built as space.shelf.app), and the research
+^docs/specs/00-contract\.md:
+^docs/specs/06-contract-rulings\.md:
+^docs/specs/07-android-test-build\.md:
+^docs/research/
+# The contract's changelog (section 11) records each version as it was, the old namespace included
+^shared/contract/contract\.md:
+# The rename's own plan, and this list
+^docs/specs/10-rename\.md:
+^docs/specs/rename-keeps\.txt:
+
+# Frozen data: the twenty fixture pages of contract section 9, whose text and licence lines are test data,
+# and the brand's source artwork (shared/brand/README.md, "The frozen rule"), comment included.
+^shared/fixtures/
+^shared/brand/src/
+
+# Real names outside the repository: the GitHub repository and this laptop's SSH alias (until R7 renames
+# them), and the handover archive's file name.
+richardminton-glitch/Shelf
+github-shelf
+shelf-handover\.zip
+
+# Where a living doc says what the product used to be called
+was called Shelf

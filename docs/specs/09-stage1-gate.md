@@ -14,15 +14,15 @@ The plan's exit gate is Richard's: he saves from X and from Chrome on his phone,
 - **The live list of thirty addresses** is in `shared/fixtures/live-urls.json`, each with the outcome that is right for it, honest failures included.
   - It runs through the share's own path: the X check for X posts, otherwise `fetchPage` with its user agents, caps and guard.
   - The run is in `apps/mobile/src/gates/live.ts`. `npx tsx apps/mobile/scripts/live-urls.ts` runs it on the desktop with Chrome's parse, to see which pages have moved upstream before the phone runs it.
-- **`npm run verify -w packages/protocol`** checks every save of an identity across the relays. Each save's newest copy must verify and decrypt, and its text blob must be on every server it names and match `text_hash`. It prints one line a save, then the count. `server/dev/smoke.ts` now ends with it. The secret comes from `SHELF_SECRET` and never reaches a log.
-- **`shelfArticle`** in `shared/vendor/parser-runner.js` returns Readability's content HTML, prepared as `shelfParse` prepares it. It is what the extension will send with a save, and what the fixtures record.
+- **`npm run verify -w packages/protocol`** checks every save of an identity across the relays. Each save's newest copy must verify and decrypt, and its text blob must be on every server it names and match `text_hash`. It prints one line a save, then the count. `server/dev/smoke.ts` now ends with it. The secret comes from `KEFLI_SECRET` and never reaches a log.
+- **`kefliArticle`** in `shared/vendor/parser-runner.js` returns Readability's content HTML, prepared as `kefliParse` prepares it. It is what the extension will send with a save, and what the fixtures record.
 
 ## Results
 
 | Check (11.3, stage 1 column) | Result | Evidence |
 |---|---|---|
-| Fixture hashes on device: 20/20 | Pass | `[shelf-gates] parser`: "20/20 pages match Chrome/150.0.7871.114: every field, the Markdown, text_hash, the spoken text and words; first 153 ms (WebView start), then 549 ms at most" |
-| Live list: 20/30 | Pass, 30/30 | `[shelf-gates] live-list`: "30/30 as expected", each page 0.2 to 2.2 s fetched and parsed (`[shelf-live]` lines). The desktop run agreed, 30/30 |
+| Fixture hashes on device: 20/20 | Pass | `[kefli-gates] parser`: "20/20 pages match Chrome/150.0.7871.114: every field, the Markdown, text_hash, the spoken text and words; first 153 ms (WebView start), then 549 ms at most" |
+| Live list: 20/30 | Pass, 30/30 | `[kefli-gates] live-list`: "30/30 as expected", each page 0.2 to 2.2 s fetched and parsed (`[kefli-live]` lines). The desktop run agreed, 30/30 |
 | X post without an outside link | Pass | "no article in that post: nothing saved" |
 | X post offline | Pass | Offline, the post waits ("Will fetch when you're online"); back online it showed "Will check the post when X answers" while X refused, then was checked, and with no article in it went out without text, its row opening the post |
 | X post with an outside link | Richard | X's syndication service was rate-limiting this network, so a post with a link is left to Richard's share from the X app |
@@ -30,8 +30,8 @@ The plan's exit gate is Richard's: he saves from X and from Chrome on his phone,
 | Save offline and reconnect | Pass | In airplane mode a share is "offline: saved, waiting to fetch". Saves showed the offline notice and both waiting rows; an article already saved read in full offline. Back online, the page was fetched and parsed (Readability, 34 min) |
 | Kill the app mid-save | Pass after a fix | Killed 0.35 s after the share, before the save was written: the share was lost. The spec's pickup of unprocessed spools at the next start (8.5) had never been built. Built in `src/share/pickup.ts`, it saved the killed share at the next launch |
 | Share then lock at once: the save publishes | Pass after a fix | First run: shared at 09:01:12.055, screen put to sleep 0.3 s later; the save was written 0.8 s after the share, but its rows stayed held for the sheet's countdown, which doesn't run with the screen off, and nothing was sent in two and a half minutes (it went out when the phone was next unlocked). After the fix: shared at 09:15:27.353 and locked 0.3 s later; the sheet closed without Undo 1.2 s after the save was written, and all three rows (upload, mirror, publish) were sent by 09:15:30.796, 3.4 s after locking, the screen dozing. All three relays hold the save |
-| Word highlight on Google's engine | Pass | `shelf-voice` since week 2: the word follows the voice, after a skip too (`207ed23`), and on unlock after the locked hour |
-| Media card with no notification permission | Pass | Shelf's manifest doesn't declare `POST_NOTIFICATIONS`, so this is its normal state (`POST_NOTIFICATION: ignore`). The media session is active with ±15 as custom actions; the shade's card shows the cover, title, site, pause and ±15, with the bar for display only. Its controls work through the session: next moved the position forward, pause paused |
+| Word highlight on Google's engine | Pass | `kefli-voice` since week 2: the word follows the voice, after a skip too (`207ed23`), and on unlock after the locked hour |
+| Media card with no notification permission | Pass | Kefli's manifest doesn't declare `POST_NOTIFICATIONS`, so this is its normal state (`POST_NOTIFICATION: ignore`). The media session is active with ±15 as custom actions; the shade's card shows the cover, title, site, pause and ±15, with the bar for display only. Its controls work through the session: next moved the position forward, pause paused |
 | Performance budgets (measured) | Measured | Pair-code scrypt 72 to 75 ms (budget 150); Schnorr verify median 0.26 ms and a 1,000-item restore 0.9 s (10 ms, 20 s); a share reached Saves' list within a second; fetch to parsed article 0.2 to 1.5 s on ordinary pages over Wi-Fi (budget 1 s) |
 
 All sixteen week 0 gates still pass on the same build.
@@ -40,9 +40,9 @@ All sixteen week 0 gates still pass on the same build.
 
 1. **Spools left by a killed share were never picked up** (fixed). Spec 8.5 says unprocessed spools are picked up at the next start, and nothing did it. The pickup now runs before the start's sync, single-flight, and skips a spool whose sheet is still open in this process.
 2. **The share card was still week 1's functional card** (fixed). The Saved sheet (5.4) replaced it on 8 October 2026, with every prototype state. Checked on the phone: saved, again, Undo, offline, not a link, no article, and Read now opening the Reader.
-3. **An unknown deep link shows Expo's "Unmatched Route" page** (polish, severity 3). Only a hand-typed `shelf://` address reaches it.
+3. **An unknown deep link shows Expo's "Unmatched Route" page** (polish, severity 3). Only a hand-typed `kefli://` address reaches it.
 4. **A waiting X post that turns out to have no article** shows "x.com" as both its source and its title (polish).
-5. **The inbox now runs the contract's Markdown-only conversion** (`shelfMarkdown`) on a browser save's HTML, with the title and the rest as the extension read them. Before, it ran the whole parse again. Found while building `shelfArticle`.
+5. **The inbox now runs the contract's Markdown-only conversion** (`kefliMarkdown`) on a browser save's HTML, with the title and the rest as the extension read them. Before, it ran the whole parse again. Found while building `kefliArticle`.
 6. **A share made just before locking wasn't published until the phone was used again** (fixed). The sheet held the save's rows for its Undo countdown, which doesn't run with the screen off. A sheet that leaves the screen now closes without Undo, since Undo can't be pressed there (RULED in `share/ShareRoot.tsx`): its rows are released and sent at once, and the spool goes only once the save is written. With the publish no longer lost, 4.8's condition for the one-off expedited WorkManager job isn't met, so it isn't built. The remaining risk is Android freezing a cached app about ten seconds after it leaves the screen, which a large upload on a slow network could outlast; the queued rows then go at the next start, or with 4.8's periodic `expo-background-task` worker once it's built (not yet).
 7. **A failed parse was keyed by where its redirects ended** (fixed). A sign-in wall's login page took the save's address. Now a failed parse keeps the shared address; a parsed page still takes its final address and canonical (FD 80).
 
@@ -60,15 +60,15 @@ Run on the Pixel against the local stack after the Saved sheet (`78f3ad0`):
 
 Two faults found and fixed during the run:
 
-8. **Back from a Reader opened by Read now left Shelf** (fixed). Spec 5.1 has a Reader reached from outside go to Saves on Back. The root layout now anchors the tabs beneath any deep link (`unstable_settings.anchor`).
+8. **Back from a Reader opened by Read now left Kefli** (fixed). Spec 5.1 has a Reader reached from outside go to Saves on Back. The root layout now anchors the tabs beneath any deep link (`unstable_settings.anchor`).
 9. **Read now pressed before the save was written could leave the sheet stuck** (fixed). On a cold start the save takes over a second; Read now waited for it, then closed the activity through Expo's current activity, which wasn't the share sheet, so nothing happened. The sheet now closes its own activity by spool id (`ShareActivity.live`), through its normal exit.
 
 ## Richard's part
 
 With the local stack running (`docker compose -f server/dev/compose.yml up -d`, `node server/dev/api.mjs`, `server/dev/phone.sh`):
 
-1. In Chrome on the phone, open an article and share it to Shelf. Then do the same from the X app with a post that links to an article. Both should land at the top of Saves with their text.
+1. In Chrome on the phone, open an article and share it to Kefli. Then do the same from the X app with a post that links to an article. Both should land at the top of Saves with their text.
 2. Turn on airplane mode, open one of them, read a little, and leave.
 3. Turn airplane mode off. Press Listen on one and check the word follows the voice.
 4. Archive one with a swipe; Undo once, then archive it again.
-5. On the laptop, with the twelve words from You → Recovery code, run `read -rs SHELF_SECRET && export SHELF_SECRET && npm run verify -w packages/protocol`, type or paste the words at the blank prompt and press Enter. Every save should read `ok`, the archived one tagged `[archived]`, ending "N of N saves verify, decrypt and match their text". `read -s` keeps the words off the screen and out of the shell's history, and nothing logs them; close the terminal afterwards.
+5. On the laptop, with the twelve words from You → Recovery code, run `read -rs KEFLI_SECRET && export KEFLI_SECRET && npm run verify -w packages/protocol`, type or paste the words at the blank prompt and press Enter. Every save should read `ok`, the archived one tagged `[archived]`, ending "N of N saves verify, decrypt and match their text". `read -s` keeps the words off the screen and out of the shell's history, and nothing logs them; close the terminal afterwards.

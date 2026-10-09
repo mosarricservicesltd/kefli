@@ -1,4 +1,4 @@
-# Shelf app icons (Lucide companions)
+# Kefli app icons (Lucide companions)
 
 Interface icons that Lucide doesn't have. Three are in use: the skip ±15 pair and speed read (flow decisions 56 and 62). They're drawn by hand to Lucide's rules so they can sit in the same toolbar, player or menu as Lucide icons without looking out of place, and they're used exactly like Lucide SVGs: colour comes from `currentColor`, and they scale from the 24 x 24 viewBox.
 
@@ -10,7 +10,7 @@ Since Fingerprint (decision 65) the files are drawn for a **1.75 stroke**, to si
 | `skip-forward-15.svg` | Player: jump forward 15 seconds | Horizontal mirror of the ring and head (rotate-cw, head top right). The numerals are identical and are not mirrored |
 | `speed-read.svg` | Speed read (RSVP, one word at a time): the Reader's ⋯ sheet row, in place of Lucide's zap | RSVP reticle: two rules with a focus tick above and below, and a word bar running through the gap. The ticks sit on the optimal recognition point, about a third of the way into the word, so this doesn't read as a centred "align" icon |
 | `unused/speed.svg` | Not used (decision 62). Drawn for the playback-speed pill, which stays text only | Speedometer: a 270° dial, a hub dot and a needle at 45° |
-| `unused/shelf.svg` | Not used (decision 62). Drawn for "your shelf" moments; no screen needs one | Outline bookshelf: a plank with one upright book and one leaning towards it |
+| `unused/shelf.svg` | Not used (decision 62). Drawn for "your library" moments; no screen needs one | Outline bookshelf: a plank with one upright book and one leaning towards it |
 
 The two unused drawings are still at stroke 2 and haven't been redrawn for Fingerprint.
 

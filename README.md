@@ -1,4 +1,4 @@
-# Shelf
+# Kefli
 
 A read-it-later app that outlives its service. Save anything from your phone or browser, read it clean and offline, listen to it anywhere. Your library is encrypted with a key on your phone and stored on open nostr relays, so it survives even if our servers don't.
 

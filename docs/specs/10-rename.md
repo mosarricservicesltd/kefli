@@ -13,7 +13,7 @@ The rename has to land **before the first Play upload**, because the app ID is p
 | **R3** | The deep-link scheme `shelf://` | **`kefli://`**, with the reader links (`shelf://reader`) following. |
 | **R4** | "Shelf" as a noun in copy: "Already on your shelf", "Start a new shelf", "Back up your shelf", "Bring back your shelf" and about ten more | **"library"**: "Already in your library", "Start a new library", "Back up your library". The delete flow and the pitch already say library, and keeping "shelf" as the noun would leave the old name in every sentence. The prototypes change first, as the signed-off reference. |
 | **R5** | Internal names: the npm scope `@shelf/*`, the seven native modules `shelf-*` and their Kotlin packages `space.shelf.*`, the `SHELF_*` environment variables, and the stored identifiers (`shelf.db`, the keystore alias `shelf.identity.v1`, the Block Store key `shelf.mnemonic.v1`, `shelf.spoolId`, the `shelf` documents folder) | **Rename them all** to `kefli`. A new app ID makes Kefli a new app on the phone with empty storage, so nothing needs migrating, and one sweep means no code keeps two names. |
-| **R6** | What keeps the old name on purpose | **Cover v1** (`shared/cover/cover-v1.js`, its `ShelfCover` API and its golden fixtures, including the `https://shelf.app/` sample and the `shelf/icon/` seeds): frozen, never edited once shipped, and the API name is never seen by users. **History**: the flow decision log's past entries, the archived specs and the design studies in `docs/design/icons/` and `docs/design/study/`. **The brand's frozen artwork** (`shared/brand/src`), which carries no name. |
+| **R6** | What keeps the old name on purpose | **Cover v1** (`shared/cover/cover-v1.js`, its `ShelfCover` API and its golden fixtures, including the `https://shelf.app/` sample and the `shelf/icon/` seeds): frozen, never edited once shipped, and the API name is never seen by users. **History**: the flow decision log's past entries, the archived specs and the design studies in `docs/design/icons/` and `docs/design/study/`. **The brand's frozen artwork** (`shared/brand/src`), as written, its one comment naming Shelf included. |
 | **R7** | The GitHub repository and the local folder | Rename both to Kefli **last**, after phase 5; GitHub redirects the old URL. Optional. |
 
 The domains, handles and the UK trade mark filing are the naming doc's follow-ups and run alongside; only kefli.app blocks the work (R1).
@@ -46,7 +46,7 @@ Each phase ends with the tests, the shared fixtures, `npm run tokens:check`, the
 
 ## 4. How we know it's done
 
-- `git grep -il shelf` lists only the deliberate keeps of R6. The list goes in `docs/specs/rename-keeps.txt`, so the check is repeatable: anything outside it is a miss.
+- Every line `git grep -n -i shelf` finds is a deliberate keep of R6. The keeps are patterns in `docs/specs/rename-keeps.txt`, each with its reason, so the check is repeatable: `git grep -n -i shelf | grep -v -E -f <(grep -v -E '^(#|$)' docs/specs/rename-keeps.txt)` prints any miss, and nothing once the rename is whole.
 - Every test, fixture and gate passes, and `jumps.mjs` runs clean on the phone prototype.
 - On the Pixel, the renamed build passes the phase 2 checks, and the app, the launcher, the share sheet, the lock screen, the notification and the Downloads export all say Kefli.
 
@@ -62,3 +62,11 @@ Each phase ends with the tests, the shared fixtures, `npm run tokens:check`, the
 ## 6. Effort
 
 Roughly three days of work: phase 1 half a day, phase 2 a day including the device checks, phase 3 half a day, phases 4 and 5 half a day together, plus slack for the native module renames.
+
+## 7. Status
+
+Phases 1 to 5 were done on 9 October 2026, the day the plan was approved: contract v1.5 and the namespace (bc320a2), the app's identity and internals (074e688), the prototypes and the tour (cf9dbc3), the app's copy (2b7b39e), the brand cards and the extension spec (0a03c22), the cut fonts' unique ID, and the living docs. The check in section 4 prints nothing. Still to do:
+
+- **Phase 0:** register kefli.app before the first Play upload.
+- **The device checks** of phase 2 and section 4, on a new development build: a fresh install, New here, a save shared from X, listening with the screen locked, the lock-screen card, Block Store backup and a restore from the recovery code, with Kefli on the launcher, the share sheet, the lock screen, the notification and the Downloads export.
+- **R7, optional:** rename the GitHub repository and the local folder, then drop their two patterns from `rename-keeps.txt`.
