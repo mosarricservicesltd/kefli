@@ -42,10 +42,8 @@ https://shelf\.app/
 ^shared/fixtures/
 ^shared/brand/src/
 
-# Real names outside the repository: the GitHub repository and this laptop's SSH alias (until R7 renames
-# them), and the handover archive's file name.
-richardminton-glitch/Shelf
-github-shelf
+# A real name outside the repository: the handover archive's file name. (The GitHub repository and the
+# old laptop's SSH alias were kept here until R7 renamed the repository on 9 October 2026.)
 shelf-handover\.zip
 
 # Where a living doc says what the product used to be called

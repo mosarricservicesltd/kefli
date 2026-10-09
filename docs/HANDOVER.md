@@ -96,10 +96,10 @@ Written on 6 October 2026, when the work moved off the laptop it started on. Eve
 Install Git, Node 24, Google Chrome, and for the phone build JDK 17 and the Android SDK (Android Studio installs it; set `ANDROID_HOME`). Then:
 
 ```bash
-git clone git@github.com:richardminton-glitch/Shelf.git
+git clone git@github.com:richardminton-glitch/Kefli.git
 ```
 
-On this laptop the remote is the SSH alias `github-shelf`; on a new machine clone with your own GitHub SSH key as above, or over HTTPS (`https://github.com/richardminton-glitch/Shelf.git`). Some networks block SSH's port 22: if `git push` times out, add this to `~/.ssh/config` and clone from `git@github.com:` as usual.
+Clone with your own GitHub SSH key as above, or over HTTPS (`https://github.com/richardminton-glitch/Kefli.git`). The repository took the name Kefli on 9 October 2026 (rename plan R7); GitHub redirects its old address, but point an old clone at the new one with `git remote set-url origin git@github.com:richardminton-glitch/Kefli.git`. Some networks block SSH's port 22: if `git push` times out, add this to `~/.ssh/config` and clone from `git@github.com:` as usual.
 
 ```
 Host github.com

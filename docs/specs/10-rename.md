@@ -69,4 +69,5 @@ Phases 1 to 5 were done on 9 October 2026, the day the plan was approved: contra
 
 - **Phase 0:** register kefli.app before the first Play upload.
 - **The device checks** of phase 2 and section 4, on a new development build: a fresh install, New here, a save shared from X, listening with the screen locked, the lock-screen card, Block Store backup and a restore from the recovery code, with Kefli on the launcher, the share sheet, the lock screen, the notification and the Downloads export.
-- **R7, optional:** rename the GitHub repository and the local folder, then drop their two patterns from `rename-keeps.txt`.
+
+R7 was done on 9 October 2026: the GitHub repository is `richardminton-glitch/Kefli` (GitHub redirects the old address), the local folder is `Kefli`, and their two patterns are gone from `rename-keeps.txt`.
