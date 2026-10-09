@@ -172,8 +172,14 @@ async function deleteAccount(req, res) {
   send(res, 200, { v: 1 });
 }
 
+// CORS on every answer, so the browser extension can call the API without host permissions (extension spec,
+// ruling of 9 October 2026): NIP-98 rides in Authorization, so a request that carries it is preflighted.
+const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, DELETE', 'access-control-allow-headers': 'Authorization, Content-Type', 'access-control-max-age': '600' };
+
 function route(req, res) {
   const u = req.url ?? '';
+  for (const [k, v] of Object.entries(CORS)) res.setHeader(k, v);
+  if (req.method === 'OPTIONS') return void res.writeHead(204).end();
   if (req.method === 'GET' && u.startsWith('/fixtures/')) return fixture(res, u.slice('/fixtures/'.length));
   if (req.method === 'GET' && u === '/defaults.json') return send(res, 200, DEFAULTS);
   if (req.method === 'POST' && u === '/register') return register(req, res);

@@ -1,0 +1,167 @@
+/* The options page, from the signed-off mockup (docs/design/mockups/extension.html, its options page CSS), on the
+   generated tokens.css. The board's static Archivo cuts are bundled, since the extension's policy blocks remote fonts. */
+@font-face{font-family:'Archivo';src:url(fonts/Archivo-400.ttf);font-weight:400;font-stretch:100%}
+@font-face{font-family:'Archivo';src:url(fonts/Archivo-500.ttf);font-weight:500;font-stretch:100%}
+@font-face{font-family:'Archivo';src:url(fonts/Archivo-600.ttf);font-weight:550 650;font-stretch:100%}
+@font-face{font-family:'Archivo';src:url(fonts/ArchivoExpanded-750.ttf);font-weight:750;font-stretch:125%}
+html,body{margin:0;height:100%;background:var(--background)}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+@keyframes breathe{0%,100%{opacity:1}50%{opacity:.3}}
+/* ---------- covers (cover v1; the draw-in CSS comes from ShelfCover.css, added by the script) ---------- */
+.cv{display:block;position:relative;overflow:hidden;flex:none;width:var(--s,40px);height:var(--s,40px);border-radius:var(--radius-image);background:var(--line)}
+.cv svg{display:block;width:100%;height:100%}
+/* a hairline inside every cover keeps a ground close to the surface from bleeding into it */
+.cv::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px var(--cover-edge);pointer-events:none}
+/* ---------- options page (our UI, tokens only) ---------- */
+/* the scrollbar's gutter is kept, so a page that grows or shrinks past the fold never shifts sideways */
+.opts{height:100%;overflow-y:auto;scrollbar-gutter:stable;background:var(--background);color:var(--text);font-family:var(--font-ui);font-size:var(--text-15);line-height:var(--leading-ui)}
+.opts .in{max-width:520px;margin:0 auto;padding:var(--space-32) var(--space-24)}
+/* Every keyed element is a containing block, so a crossfade's ghost can sit exactly where the old layer was. */
+.opts [data-k]{position:relative}
+/* Screen swap: the old page's content fades out over the new one, which fades in (opacity only). */
+.opts.swapghost{position:absolute;inset:0;overflow:hidden;background:none;z-index:1}
+.opts :focus-visible{outline:var(--focus-width) solid var(--focus);outline-offset:var(--focus-offset)}
+.brandrow{display:flex;align-items:center;gap:10px;margin-bottom:var(--space-24);font-family:var(--font-display);font-stretch:var(--font-display-stretch);font-weight:var(--font-display-weight);letter-spacing:var(--font-display-tracking);font-size:var(--text-17);line-height:1}
+/* On Kefli's own page the app icon is a cover too, so it carries the covers' inset hairline (consistency spec, Covers):
+   its cream ground sits close to paper. The corner is the small cuts' 7 in 32. */
+.brandrow .lg{display:inline-flex}
+.brandrow .mark::after{content:"";position:absolute;inset:0;border-radius:calc(var(--m) * 7 / 32);box-shadow:inset 0 0 0 1px var(--cover-edge);pointer-events:none}
+/* one title slot: the display face at 28/1.2 and a muted lead; notices and outcome errors sit between them */
+.opts h1{font-family:var(--font-display);font-stretch:var(--font-display-stretch);font-weight:var(--font-display-weight);letter-spacing:var(--font-display-tracking);font-size:var(--text-28);line-height:var(--leading-display);margin:0 0 var(--space-8)}
+.opts .lead{color:var(--muted);margin:0 0 var(--space-20)}
+.titlerow{display:flex;align-items:center;gap:var(--space-12);margin-bottom:var(--space-8)}
+.titlerow h1{margin:0}
+.titlerow .ok{width:40px;height:40px;border-radius:50%;background:var(--success);color:var(--on-fill);display:inline-flex;align-items:center;justify-content:center;flex:none}
+/* Cards and row groups draw their surface per row (a plate per .li in a .list, per .seg in a .card), so when a row leaves, the
+   rows below and the group's bottom edge glide up by transform and nothing animates height. The first plate carries the top
+   edge and corners (edge-t), the last the bottom ones (edge-b); classes set after each render, and held back from the row
+   taking over an edge until the gap has closed, so the hand-over is seamless. */
+.card{position:relative;z-index:0}
+:is(.list > .li,.card > .seg,.plate-fill){background:var(--surface);border-left:var(--card-edge);border-right:var(--card-edge)}
+:is(.list > .li,.card > .seg,.plate-fill).edge-t{border-top:var(--card-edge);border-top-left-radius:var(--radius);border-top-right-radius:var(--radius)}
+:is(.list > .li,.card > .seg,.plate-fill).edge-b{border-bottom:var(--card-edge);border-bottom-left-radius:var(--radius);border-bottom-right-radius:var(--radius)}
+/* a leaving row keeps its plate under the rows that close over it; a crossfading row fades its content on a still plate */
+:is(.list > .li,.card > .seg).ghost:not(.ghost-c),.plate-fill{z-index:-1}
+:is(.list > .li,.card > .seg).ghost-c{background:none;border-color:transparent}
+.list > .li.ghost-c::before{display:none}
+.card > .seg{padding:0 var(--space-24)}
+.card > .seg.first{padding-top:var(--space-24)}
+.card > .seg.last{padding-bottom:var(--space-24)}
+.card > .seg.pinseg{padding-bottom:var(--space-20)}
+.pair{display:flex;gap:var(--space-24);align-items:center}
+/* the code sits under the QR, as on the phone's showing side; .qr takes the light scheme in every theme so it scans */
+.qr{flex:none;padding:var(--space-12);border-radius:var(--radius);background:var(--surface);color:var(--text);line-height:0;display:flex;flex-direction:column;align-items:center;gap:var(--space-12)}
+@media (prefers-color-scheme:dark){.qr{box-shadow:0 0 0 1px var(--line)}}
+.qr.faded svg{opacity:.12}
+.qr .code{font:var(--weight-title) var(--text-20)/1 var(--font-ui);letter-spacing:.2em;padding-left:.2em;font-variant-numeric:tabular-nums}
+.qr.faded .code{opacity:.4}
+.steps{margin:0;padding-left:1.2em;font-size:var(--text-15)}
+.steps li{margin-bottom:var(--space-8)}
+.steps strong{font-weight:var(--weight-title)}
+.status{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-8);margin-top:var(--space-16);padding-top:var(--space-16);border-top:1px solid var(--line);font-size:var(--text-13);color:var(--muted)}
+.status.plain{border-top:0}
+.status .cd{margin-left:auto;font-variant-numeric:tabular-nums}
+/* waiting line: one 8 px breathing square at the start, in the text colour (the board's waiting mark); it starts breathing
+   once the wait has lasted 150 ms */
+.pdot{width:8px;height:8px;border-radius:2px;background:var(--text);flex:none;animation:breathe var(--motion-ambient-breathe) var(--motion-ambient-delay) infinite}
+/* outcome error: the phone's errline (consistency spec): error at 10% over the surface and an error icon; the words stay
+   in the text colour */
+.errline{display:flex;gap:var(--space-8);align-items:flex-start;padding:var(--space-12) var(--space-16);border-radius:var(--radius);background:color-mix(in srgb, var(--error) 10%, var(--surface));color:var(--text);font-size:var(--text-13);font-weight:var(--weight-meta);margin-bottom:var(--space-16)}
+.errline svg{color:var(--error);flex:none;margin-top:1px}
+/* offline and waiting: the neutral notice */
+.notice{display:flex;gap:var(--space-8);align-items:flex-start;padding:var(--space-12) var(--space-16);border-radius:var(--radius);background:var(--surface);border:1px solid var(--line);color:var(--text);font-size:var(--text-13);font-weight:var(--weight-meta);margin:0 0 var(--space-16)}
+.notice svg{color:var(--muted);flex:none;margin-top:1px}
+.btn{height:48px;padding:0 var(--space-20);border-radius:var(--radius-button);display:inline-flex;align-items:center;justify-content:center;gap:var(--space-8);font-weight:var(--weight-title);font-size:var(--text-15);line-height:1;white-space:nowrap}
+/* the fill rule (decision 66): ink on paper, paper on ink in dark; content on a fill is the page colour */
+.btn.primary{background:var(--fill);color:var(--on-fill)}
+.btn.primary:hover{background:color-mix(in srgb, var(--fill) 86%, var(--background))}
+.btn.secondary{background:var(--surface);color:var(--text);border:1px solid var(--line)}
+.btn.secondary:hover{border-color:var(--line-strong)}
+/* destructive: solid only on the confirm; the control that opens it is quieter (the phone's red text button) */
+.btn.secondary.destructive{color:var(--error)}
+.btn.danger{background:var(--surface);color:var(--error);border:1.5px solid var(--error)}
+.btn.danger:not([disabled]){background:var(--error);color:var(--on-fill)}
+.btn.danger[disabled]{opacity:.45;cursor:default}
+.sect{margin-top:var(--space-24)}
+.sect h2{font-size:var(--text-13);font-weight:600;color:var(--muted);margin:0 0 var(--space-8)}
+/* inline confirm before disconnecting (same pattern as the phone's Disconnect sheet): [Cancel][named consequence], right-aligned */
+.confirm{background:var(--surface);border-radius:var(--radius);border:var(--card-edge);padding:var(--space-16)}
+.confirm h2{font-size:var(--text-17);font-weight:var(--weight-heading);color:var(--text);margin:0 0 var(--space-4)}
+.confirm p{color:var(--muted);margin:0 0 var(--space-16)}
+.confirm .row{display:flex;flex-wrap:wrap;gap:var(--space-8);justify-content:flex-end}
+/* groups of rows, as the phone's You groups: hairline group (drawn by the rows' plates, above), hairlines between rows inset
+   to the label */
+.list{position:relative;z-index:0}
+.li{position:relative;display:flex;align-items:center;gap:14px;min-height:52px;padding:6px var(--space-8) 6px var(--space-16);font-size:var(--text-15);line-height:1.3}
+/* the group's edge now sits on its first and last rows, so they take the extra pixel to keep 52 inside */
+.list > .li.edge-t,.list > .li.edge-b{min-height:53px}
+.list > .li.edge-t.edge-b{min-height:54px}
+.li+.li::before{content:"";position:absolute;left:50px;right:0;top:0;height:1px;background:var(--line)}
+.list.saves .li+.li::before{left:70px}
+.li .ic{color:var(--muted);display:inline-flex;flex:none}
+.li .t{flex:1;min-width:0;font-weight:var(--weight-label);padding:var(--space-4) 0}
+.li .t small{display:block;font-size:var(--text-13);font-weight:var(--weight-body);color:var(--muted);margin-top:2px}
+.li .cv{--s:40px}
+/* the pin line at the top of the pairing card, ruled off from the pairing steps (its segment holds the 20 px below the rule) */
+.card .pinline{padding:0 0 var(--space-16);margin:0;min-height:0;border-bottom:1px solid var(--line)}
+.keys{display:inline-flex;gap:var(--space-4);flex:none;padding-right:var(--space-8)}
+.kbd{display:inline-flex;align-items:center;height:24px;padding:0 var(--space-8);border-radius:var(--radius-control);background:var(--background);border:1px solid var(--line);font-size:var(--text-13);font-weight:600;line-height:1}
+/* row actions are chips: 36 visual with a 48 hit area, hairline edge in line-strong */
+.chip{position:relative;height:36px;padding:0 var(--space-12);border-radius:var(--radius-control);border:1px solid var(--line-strong);color:var(--text);font-weight:600;font-size:var(--text-13);line-height:1;flex:none;display:inline-flex;align-items:center;gap:var(--space-8)}
+.chip::before{content:"";position:absolute;inset:-6px -2px}
+.chip:hover{background:var(--background)}
+/* busy: keeps its colour, three 6 px dots and an '-ing' label, aria-busy, never looks disabled. aria-busy and no pointer events
+   come from the tap; the label crossfades to the dots only once the wait has lasted 150 ms. Both labels share one grid cell,
+   so the chip keeps its size. */
+.chip[aria-busy="true"]{pointer-events:none}
+.chip.stack{display:inline-grid;justify-items:center}
+.chip.stack > span{grid-area:1/1;display:inline-flex;align-items:center;gap:var(--space-8)}
+.chip.stack:not(.showbusy) > .lbl-busy,.chip.stack.showbusy > .lbl-idle{opacity:0}
+.dots{display:inline-flex;gap:4px}
+.dots.inbtn i{width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.showbusy .dots.inbtn i{animation:breathe var(--motion-ambient-breathe) infinite}
+.chip.showbusy .dots.inbtn i:nth-child(2){animation-delay:var(--motion-ambient-breathe-phase)}
+.chip.showbusy .dots.inbtn i:nth-child(3){animation-delay:calc(var(--motion-ambient-breathe-phase) * 2)}
+.li .sent{color:var(--success);display:inline-flex;flex:none;padding:0 var(--space-12)}
+.list :focus-visible{outline-offset:-2px}
+/* Advanced is a row: bare muted icon, 550 label, 18 px chevron that turns when open */
+details.adv{margin-top:var(--space-24)}
+details.adv summary{display:flex;align-items:center;gap:14px;min-height:52px;padding:6px var(--space-8) 6px var(--space-16);background:var(--surface);border-radius:var(--radius);border:var(--card-edge);font-size:var(--text-15);font-weight:var(--weight-label);color:var(--text);cursor:pointer;list-style:none}
+details.adv summary::-webkit-details-marker{display:none}
+details.adv summary .ic{color:var(--muted);display:inline-flex}
+details.adv summary .t{flex:1}
+details.adv summary > .chev{color:var(--muted);display:inline-flex;width:28px;justify-content:center}
+/* the chevron turns a quarter on the enter curve (played by the page's morph, since the page redraws from state) */
+details.adv summary .chevr{display:inline-flex}
+details.adv[open] summary .chevr{transform:rotate(90deg)}
+.sdot{display:inline-flex;align-items:center;gap:var(--space-8);font-size:var(--text-13);color:var(--muted);padding-right:var(--space-8)}
+.sdot::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--success)}
+.sdot.bad::before{background:var(--error)}
+.fine{font-size:var(--text-13);color:var(--muted);margin:var(--space-12) 0 0}
+@media (max-width:640px){.pair{flex-direction:column;align-items:flex-start}}
+/* motion.press: a flat state layer on the control's shape, in at once when pressed and out on quick out; no ripple, no scale.
+   Ink at 8 % on paper and surfaces, the page colour at 12 % on fills (the toast is the fill). */
+.toast{--press-layer:color-mix(in srgb, var(--toast-fg) var(--motion-press-layer-fill), transparent)}
+.popup,.opts{--press-layer:color-mix(in srgb, var(--text) var(--motion-press-layer), transparent)}
+.opts :is(.btn.primary,.btn.danger:not([disabled])){--press-layer:color-mix(in srgb, var(--on-fill) var(--motion-press-layer-fill), transparent)}
+:is(.toast,.popup) :is(.act,.x),.opts .btn,details.adv summary{position:relative}
+:is(.toast,.popup) :is(.act,.x)::after,.opts :is(.btn,.chip)::after,details.adv summary::after{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--press-layer);opacity:0;pointer-events:none;transition:opacity var(--motion-quick-out)}
+:is(.toast,.popup) :is(.act,.x):active::after,.opts :is(.btn,.chip):active::after,details.adv summary:active::after{opacity:1;transition:none}
+/* reduced motion keeps every meaning and drops the travel: the toast fades in place at the same durations, covers appear
+   drawn (ShelfCover.css), marks fade in over 150 ms without scaling, waiting loops rest at full opacity, the chevron turns at
+   once and gaps close at once (in the script); the countdown keeps running, since it carries information */
+@media (prefers-reduced-motion:reduce){
+  @starting-style{.toast{transform:none}}
+  .toast.leave{transform:none}
+  .mk{animation:markFade var(--motion-quick-in) both}
+  .pdot,.chip.showbusy .dots.inbtn i{animation:none;opacity:1}
+}
+@media (forced-colors: active){
+  .toast,.popup,.confirm,.errline,.notice,.titlerow .ok,details.adv summary,:is(.toast,.popup) .tile,.mk{border:1px solid CanvasText}
+  .btn,.toast .act,.toast .x,.popup .act,.popup .x,.chip{border:1px solid ButtonText}
+  .toast .timer i,.popup .timer i,.pdot,.dots i,.sdot::before{forced-color-adjust:none;background:CanvasText}
+  .qr,.cv,.mark{forced-color-adjust:none}
+  :is(.list > .li,.card > .seg){border-color:CanvasText}
+  :is(.list > .li,.card > .seg).ghost-c{border-color:transparent}
+}

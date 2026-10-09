@@ -38,6 +38,13 @@
     "*/shared/fixtures/build-pages.ts",
     "*/docs/design/icons/negative-space/*",
     "*/docs/design/mockups/cover-v1.js",
-    "*/shared/cover/test.cjs"
+    "*/shared/cover/test.cjs",
+    "*/apps/extension/src/bg.ts",
+    "*/apps/extension/src/options.ts",
+    "*/apps/extension/src/toast.ts",
+    "*/apps/extension/src/saved.ts",
+    "*/apps/extension/src/capture.ts",
+    "*/apps/extension/src/relay.ts",
+    "*/apps/extension/scripts/*"
   ]
 }
