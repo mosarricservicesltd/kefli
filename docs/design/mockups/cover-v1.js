@@ -9,9 +9,10 @@
  * stated migration (see README.md). Golden fixtures: fixtures.json; check: node test.cjs.
  *
  * Extracted from the Fingerprint concept board (docs/design/study/fingerprint.html, the GEN block),
- * with its palettes, leaves and derived inks kept exactly. The SVG differs from the board's in one stated
- * way, the seam rule of 4 October 2026 (see SEAM below and README.md, Drawing). test.cjs proves the
- * equality against the board's own functions, and the SVG equality through that rule.
+ * with its leaves and derived inks kept exactly. It differs from the board in two stated ways: the seam
+ * rule of 4 October 2026 (see SEAM below and README.md, Drawing) and the winter rule of 9 October 2026, which
+ * confines the palette's hues to 150-320 degrees at 0.7 of the board's chroma (see Palette below). test.cjs
+ * proves the equality against the board's own functions with both rules restated on the board.
  *
  * Determinism: no Math.random, Date, locale or timezone. Every decision uses only IEEE-754 double
  * + - * /, comparisons, integer operations, % and Math.floor/round, which ECMAScript defines exactly
@@ -277,19 +278,36 @@
   }
   const SCHEMES = [['analogous', 38, -34], ['complement', 180, 26], ['triad', 120, 240], ['split', 150, 210]];
   const DARK_BELOW = 80;                         // byte 3 below 80: a dark ground, about three covers in ten
+  // The winter rule (flow decision 99, 9 October 2026): the hue is confined to 150-320 degrees, greens through teal
+  // and blue to violet and mauve, and every chroma is 0.7 of the board's. The two secondary hues stay inside the
+  // range: analogous's offsets and complement's +26 fold back at its ends; complement's opposite is half the range
+  // on, triad's are a third and two thirds on, split's 0.42 and 0.58 of it on, each wrapped round the range.
+  const HUE_LO = 150, HUE_HI = 320, HUE_W = 170;
+  function wrapHue(h) { return HUE_LO + (((h - HUE_LO) % HUE_W) + HUE_W) % HUE_W; }
+  function foldHue(h) {
+    let x = h;
+    for (let i = 0; i < 4; i++) { if (x > HUE_HI) x = 2 * HUE_HI - x; if (x < HUE_LO) x = 2 * HUE_LO - x; }
+    return x;
+  }
+  function placeHues(hue, scheme) {
+    if (scheme === 'analogous') return [foldHue(hue + 38), foldHue(hue - 34)];
+    if (scheme === 'complement') return [wrapHue(hue + HUE_W / 2), foldHue(hue + 26)];
+    if (scheme === 'triad') return [wrapHue(hue + HUE_W / 3), wrapHue(hue + 2 * HUE_W / 3)];
+    return [wrapHue(hue + 0.42 * HUE_W), wrapHue(hue + 0.58 * HUE_W)];
+  }
   const cache = new Map();
   function palette(hash) {
     hash = checkHash(hash);
     const hit = cache.get(hash);
     if (hit) return hit;
-    const hue = ((byteAt(hash, 0) << 8) | byteAt(hash, 2)) / 65536 * 360;
+    const hue = HUE_LO + ((byteAt(hash, 0) << 8) | byteAt(hash, 2)) / 65536 * HUE_W;
     const sch = SCHEMES[byteAt(hash, 4) & 3];
     const dark = byteAt(hash, 6) < DARK_BELOW;
-    const h1 = hue + sch[1], h2 = hue + sch[2];
-    const signal = oklch(signalL(hue), 0.175, hue);
+    const hs = placeHues(hue, sch[0]), h1 = hs[0], h2 = hs[1];
+    const signal = oklch(signalL(hue), 0.1225, hue);
     const p = dark
-      ? { ground: oklch(0.255, 0.045, h2), deep: oklch(0.93, 0.035, h1), soft: oklch(0.60, 0.12, h1), signal: signal }
-      : { ground: oklch(0.945, 0.028, h2), deep: oklch(0.33, 0.085, h1), soft: oklch(0.81, 0.095, h1), signal: signal };
+      ? { ground: oklch(0.255, 0.0315, h2), deep: oklch(0.93, 0.0245, h1), soft: oklch(0.60, 0.084, h1), signal: signal }
+      : { ground: oklch(0.945, 0.0196, h2), deep: oklch(0.33, 0.0595, h1), soft: oklch(0.81, 0.0665, h1), signal: signal };
     p.hue = Math.round(hue); p.scheme = sch[0]; p.dark = dark; p.hash = hash;
     Object.freeze(p);
     if (cache.size >= 4096) cache.clear();

@@ -2,18 +2,18 @@
 
 Every save in Shelf draws its own cover from the sha256 of its normalised URL, the hash already in its d tag (`shelf/item/<sha256>`, contract section 4.3). The same hash gives the same picture on the phone, in the extension and on the website, today and after a restore on a new phone. This folder is the one shared generator for that picture (flow decisions 65 to 68).
 
-The generator was drawn on the Fingerprint concept board (`docs/design/study/fingerprint.html`, the block between `GEN-START` and `GEN-END`). This module is that code, rewritten so that no JavaScript engine can drift from it. Its palettes, leaves and derived inks are the board's exactly. Its SVG differs from the board's in one stated way, the seam rule of 4 October 2026 (see Drawing).
+The generator was drawn on the Fingerprint concept board (`docs/design/study/fingerprint.html`, the block between `GEN-START` and `GEN-END`). This module is that code, rewritten so that no JavaScript engine can drift from it. Its leaves and derived inks are the board's exactly. It differs from the board in two stated ways: the seam rule of 4 October 2026 (see Drawing), and the winter rule of 9 October 2026, which confines the palette's hues and lowers its chroma (see Palette).
 
 | File | What it is |
 |---|---|
 | `cover-v1.js` | The generator. Dependency-free ES2015. A classic `<script>` defines `window.ShelfCover`; `require()` returns the same object. |
 | `fixtures.json` | 64 golden cases. Every platform's CI must reproduce every value in it. |
-| `test.cjs` | `node shared/cover/test.cjs` checks the source rules, the fixtures, the board's own functions and the served copy. The SVG is checked against the board's through `seamRule()`, which restates the seam rule on the board's markup and changes nothing else. `--exhaustive` adds every possible palette (about two minutes). Exits 1 on any mismatch. |
+| `test.cjs` | `node shared/cover/test.cjs` checks the source rules, the fixtures, the board's own functions and the served copy. The SVG is checked against the board's through `seamRule()`, which restates the seam rule on the board's markup and changes nothing else, and every output is checked against the board's generator with `winterRule()` applied to its source, which restates the winter rule and changes nothing else. `--exhaustive` adds every possible palette (about two minutes). Exits 1 on any mismatch. |
 | `build.mjs` | `node shared/cover/build.mjs` copies the module to `docs/design/mockups/cover-v1.js` (with a "generated, do not edit" header), so the prototypes can load it with `<script src="cover-v1.js">`. |
 
 ## Status and the versioning rule
 
-This is cover v1. Once a build that draws covers ships, v1 is frozen: `cover-v1.js` and `fixtures.json` are never edited again, not even to fix an ugly cover. Any change to any output (a palette colour, a leaf, a byte of SVG, a derived ink) ships as `cover-v2.js` with its own fixtures and version string, next to v1, and with a stated migration. The migration has to say which saves draw which version. Keeping every existing save on v1 needs a way to tell old saves from new (a contract change, such as a cover version in the save event). Moving every save to v2 at once changes every face people already know and needs Richard's sign-off. Until the first ship, a change can still be made to v1 itself, but only with the fixtures regenerated, the board difference stated, and this file updated. The seam rule (4 October 2026) is the one such change so far.
+This is cover v1. Once a build that draws covers ships, v1 is frozen: `cover-v1.js` and `fixtures.json` are never edited again, not even to fix an ugly cover. Any change to any output (a palette colour, a leaf, a byte of SVG, a derived ink) ships as `cover-v2.js` with its own fixtures and version string, next to v1, and with a stated migration. The migration has to say which saves draw which version. Keeping every existing save on v1 needs a way to tell old saves from new (a contract change, such as a cover version in the save event). Moving every save to v2 at once changes every face people already know and needs Richard's sign-off. Until the first ship, a change can still be made to v1 itself, but only with the fixtures regenerated, the board difference stated, and this file updated. Two such changes have been made: the seam rule (4 October 2026) and the winter rule (9 October 2026, flow decision 99).
 
 ## API
 
@@ -50,7 +50,7 @@ ShelfCover.motion                   // the same timings as numbers, for native a
 
 | Bytes | Drives |
 |---|---|
-| 0 and 1 | The hue: the 16-bit number × 360 / 65536 degrees (0 to 359.995). `palette.hue` is the same angle rounded to whole degrees, so it runs from 0 to 360: values from `FFA5` up round to 360, which draws the same as 0. |
+| 0 and 1 | The hue: 150 + the 16-bit number × 170 / 65536 degrees (150 to 319.997), the winter rule's range. `palette.hue` is the same angle rounded to whole degrees, from 150 to 320. |
 | 2 | The scheme, from its lowest two bits. The other six bits are unused. |
 | 3 | The ground: below 80 is a dark ground (80 in 256, about three covers in ten), 80 and above a light one. |
 | 4 to 19 | The composition: four big-endian 32-bit words seed sfc32. |
@@ -58,23 +58,27 @@ ShelfCover.motion                   // the same timings as numbers, for native a
 
 ## Palette
 
-Four inks with fixed roles, built together as one set in OKLCH:
+Four inks with fixed roles, built together as one set in OKLCH, in the winter palette (flow decision 99): hues from 150 to 320 degrees, greens through teal and blue to violet and mauve, at 0.7 of the board's chroma.
 
 | Role | Light ground (L, C, hue) | Dark ground (L, C, hue) |
 |---|---|---|
-| ground | 0.945, 0.028, hue + o2 | 0.255, 0.045, hue + o2 |
-| deep | 0.33, 0.085, hue + o1 | 0.93, 0.035, hue + o1 |
-| soft | 0.81, 0.095, hue + o1 | 0.60, 0.12, hue + o1 |
-| signal | L(hue), 0.175, hue | the same |
+| ground | 0.945, 0.0196, h2 | 0.255, 0.0315, h2 |
+| deep | 0.33, 0.0595, h1 | 0.93, 0.0245, h1 |
+| soft | 0.81, 0.0665, h1 | 0.60, 0.084, h1 |
+| signal | L(hue), 0.1225, hue | the same |
 
-| Scheme (lowest two bits of byte 2) | o1 | o2 |
+The two secondary hues stay inside the range (W = 170 degrees). *Fold* reflects a hue back at the range's ends; *wrap* carries it round the range, from 320 back to 150.
+
+| Scheme (lowest two bits of byte 2) | h1 | h2 |
 |---|---|---|
-| 0 analogous | +38 | −34 |
-| 1 complement | +180 | +26 |
-| 2 triad | +120 | +240 |
-| 3 split | +150 | +210 |
+| 0 analogous | fold(hue + 38) | fold(hue − 34) |
+| 1 complement | wrap(hue + W/2) | fold(hue + 26) |
+| 2 triad | wrap(hue + W/3) | wrap(hue + 2W/3) |
+| 3 split | wrap(hue + 0.42W) | wrap(hue + 0.58W) |
 
-The signal's lightness follows its hue so yellows stay yellow and blues stay deep: L(hue) = 0.63 + 0.17 × e^−(d/38)², where d is the hue's distance in degrees from 100 (the shorter way round).
+The board drew every hue round the wheel at the full chroma (0.175 for the signal; 0.028, 0.085 and 0.095 on a light ground and 0.045, 0.035 and 0.12 on a dark one) with h1 and h2 at the hue plus +38/−34, +180/+26, +120/+240 or +150/+210. The winter rule replaced that before the first ship, after a study of four directions (`docs/design/study/winter-palette.html`).
+
+The signal's lightness follows its hue so yellows stay yellow and blues stay deep: L(hue) = 0.63 + 0.17 × e^−(d/38)², where d is the hue's distance in degrees from 100 (the shorter way round). Inside the winter range it is nearly flat, from about 0.63 to 0.66, since its peak at 100 degrees lies outside it.
 
 An OKLCH colour that falls outside sRGB keeps its lightness and hue and loses chroma: 18 rounds of bisection between 0 and the requested chroma find the largest that fits (a linear channel may stray 0.0001 outside 0 to 1), and the lower bound is used. The linear values are then encoded to sRGB bytes and written as upper-case `#RRGGBB`.
 

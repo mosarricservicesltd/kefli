@@ -36,6 +36,8 @@
     "*/apps/mobile/src/services/voice.ts",
     "*/apps/mobile/src/ui/artwork.ts",
     "*/shared/fixtures/build-pages.ts",
-    "*/docs/design/icons/negative-space/*"
+    "*/docs/design/icons/negative-space/*",
+    "*/docs/design/mockups/cover-v1.js",
+    "*/shared/cover/test.cjs"
   ]
 }

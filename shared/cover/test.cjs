@@ -39,6 +39,40 @@ function ok(what, cond) { checks++; if (!cond) fail(what, true, false); }
 const sha = s => crypto.createHash('sha256').update(s, 'utf8').digest('hex');
 const section = name => console.log('-- ' + name);
 
+/* The winter rule (README, Palette; flow decision 99), restated on the board's generator source: the other way
+   the module differs from the board. The hue from bytes 0 and 1 is mapped into 150-320 degrees instead of round
+   the wheel; the secondary hues are placed inside that range (analogous and complement's +26 folded back at its
+   ends; complement's opposite at half the range, triad at a third and two thirds, split at 0.42 and 0.58, wrapped
+   round it); every chroma is 0.7 of the board's. Everything else in the board's source is kept. */
+function winterRule(gen) {
+  const swaps = [
+    ['const hue = ((b(0) << 8) | b(1)) / 65536 * 360;', 'const hue = 150 + ((b(0) << 8) | b(1)) / 65536 * 170;'],
+    ['const h1 = hue + o1, h2 = hue + o2;', 'const [h1, h2] = winterHues(hue, scheme);'],
+    ['oklch(sigL(hue), 0.175, hue)', 'oklch(sigL(hue), 0.1225, hue)'],
+    ['{ ground: oklch(0.255, 0.045, h2), deep: oklch(0.93, 0.035, h1), soft: oklch(0.60, 0.12, h1), signal }',
+     '{ ground: oklch(0.255, 0.0315, h2), deep: oklch(0.93, 0.0245, h1), soft: oklch(0.60, 0.084, h1), signal }'],
+    ['{ ground: oklch(0.945, 0.028, h2), deep: oklch(0.33, 0.085, h1), soft: oklch(0.81, 0.095, h1), signal }',
+     '{ ground: oklch(0.945, 0.0196, h2), deep: oklch(0.33, 0.0595, h1), soft: oklch(0.81, 0.0665, h1), signal }'],
+    ['  const cache = new Map();\n  function palette(hash){', [
+      '  const winterHues = (hue, scheme) => {',
+      '    const lo = 150, hi = 320, w = 170;',
+      '    const wrap = h => lo + (((h - lo) % w) + w) % w;',
+      '    const fold = h => { let x = h; for (let i = 0; i < 4; i++) { if (x > hi) x = 2 * hi - x; if (x < lo) x = 2 * lo - x; } return x; };',
+      "    if (scheme === 'analogous') return [fold(hue + 38), fold(hue - 34)];",
+      "    if (scheme === 'complement') return [wrap(hue + w / 2), fold(hue + 26)];",
+      "    if (scheme === 'triad') return [wrap(hue + w / 3), wrap(hue + 2 * w / 3)];",
+      '    return [wrap(hue + 0.42 * w), wrap(hue + 0.58 * w)];',
+      '  };',
+      '  const cache = new Map();',
+      '  function palette(hash){'].join('\n')],
+  ];
+  for (const [from, to] of swaps) {
+    if (gen.split(from).length !== 2) throw new Error('winter rule: the board no longer reads ' + JSON.stringify(from.slice(0, 40)));
+    gen = gen.replace(from, () => to);
+  }
+  return gen;
+}
+
 /* The seam rule (README, Drawing), restated on the board's SVG markup: the one way the module's SVG differs
    from the board's. Each leaf's square, which the board draws only for a background that isn't the ground,
    is drawn for every leaf (2 px oversize, as the board's are); each quarter, half, diag and bands module is
@@ -141,7 +175,9 @@ if (!fs.existsSync(BOARD)) { fail('board not found at ' + BOARD, 'present', 'mis
 else {
   const html = fs.readFileSync(BOARD, 'utf8');
   const a = html.indexOf('/*GEN-START*/'), b = html.indexOf('/*GEN-END*/');
-  const FP = vm.runInNewContext(html.slice(a, b) + '\n;FP', { TextEncoder, URL });
+  const GEN = winterRule(html.slice(a, b));
+  const FP = vm.runInNewContext(GEN + '\n;FP', { TextEncoder, URL });
+  ok('the winter rule changes the board\'s palette (it is the stated difference)', vm.runInNewContext(html.slice(a, b) + '\n;FP', { TextEncoder, URL }).palette(F.cases[0].hash.toLowerCase()).ground !== FP.palette(F.cases[0].hash.toLowerCase()).ground);
   const greySrc = html.match(/const GREY = (\{[\s\S]*?\n\});/);
   const BGREY = vm.runInNewContext('(' + greySrc[1] + ')');
   eq('grey tables equal the board', JSON.parse(JSON.stringify(BGREY)), JSON.parse(JSON.stringify(C.grey)));
@@ -193,7 +229,7 @@ else {
     const t0 = Date.now(), h2 = n => (n < 16 ? '0' : '') + n.toString(16), tail = '0'.repeat(56);
     let fresh = FP, pal = 0;
     for (let hue = 0; hue < 65536; hue++) {
-      if ((hue & 4095) === 0) fresh = vm.runInNewContext(html.slice(a, b) + '\n;FP', { TextEncoder, URL }); // the board caches every palette
+      if ((hue & 4095) === 0) fresh = vm.runInNewContext(GEN + '\n;FP', { TextEncoder, URL }); // the board caches every palette
       // byte 3 = 79 (the last dark ground) and 80 (the first light one): every palette input, both sides of the boundary
       for (let s = 0; s < 4; s++) for (const g of ['4f', '50']) {
         const h = h2(hue >> 8) + h2(hue & 255) + h2(s) + g + tail, P = C.palette(h), B = fresh.palette(h); pal++; checks++;
@@ -201,14 +237,14 @@ else {
       }
     }
     console.log('   palettes ' + pal + ' (every input: 65,536 hues x 4 schemes x dark and light)');
-    for (let hue = 0; hue <= 360; hue++) {
-      // Night takes the palette's hue in whole degrees: find bytes 0-1 that round to this hue
+    for (let hue = 150; hue <= 320; hue++) {
+      // Night takes the palette's hue in whole degrees, 150 to 320 under the winter rule: find bytes 0-1 that round to it
       let hh = -1;
-      for (let v = Math.max(0, Math.floor((hue - 0.5) * 65536 / 360)); v < 65536 && hh < 0; v++) if (Math.round(v / 65536 * 360) === hue) hh = v;
+      for (let v = Math.max(0, Math.floor((hue - 150.5) * 65536 / 170)); v < 65536 && hh < 0; v++) if (Math.round(150 + v / 65536 * 170) === hue) hh = v;
       const h = h2(hh >> 8) + h2(hh & 255) + '0000' + tail;
       eq('exhaustive night hue ' + hue, FP.night(h), C.night(h));
     }
-    console.log('   Night hues 0-360');
+    console.log('   Night hues 150-320');
     let lumN = 0;
     for (let r = 0; r < 256; r++) for (let g = 0; g < 256; g++) {
       const pre = '#' + h2(r).toUpperCase() + h2(g).toUpperCase();

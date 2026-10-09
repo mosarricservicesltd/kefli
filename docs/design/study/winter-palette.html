@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Winter Cover Palette</title>
+<meta name="description" content="A study of cooler, winter palettes for Kefli's covers: cover v1's own composition, with only the palette changed, compared on the same saves.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Literata:ital,opsz,wght@0,7..72,200..900;1,7..72,200..900&family=Martian+Mono:wght@400..600&display=swap" rel="stylesheet">
+<!-- cover v1 itself (shared/cover/cover-v1.js): layout, leaves and the seam rule come from here unchanged -->
+<script src="../../../shared/cover/cover-v1.js"></script>
+<style>
+:root{
+  color-scheme:light;
+  --b-bg:#F3F2EE; --b-surface:#FFFFFF; --b-ink:#17171A; --b-muted:#5C5B57; --b-line:#DAD8D2;
+  --night:#111112; --night-ink:#EDECE8; --night-muted:#A3A29C; --night-line:#2C2C30;
+  --f-ui:'Archivo',system-ui,sans-serif; --f-read:'Literata',Georgia,serif; --f-mono:'Martian Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){color-scheme:dark;--b-bg:#111112;--b-surface:#1A1A1C;--b-ink:#EDECE8;--b-muted:#A3A29C;--b-line:#2C2C30}
+}
+:root[data-theme="dark"]{color-scheme:dark;--b-bg:#111112;--b-surface:#1A1A1C;--b-ink:#EDECE8;--b-muted:#A3A29C;--b-line:#2C2C30}
+*{box-sizing:border-box}
+body{margin:0;background:var(--b-bg);color:var(--b-ink);font-family:var(--f-ui);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1360px;margin:0 auto;padding:0 24px 96px}
+.mono{font-family:var(--f-mono);font-size:12px;letter-spacing:-.01em}
+header{padding:56px 0 8px}
+header .eyebrow{font-family:var(--f-mono);font-size:12px;color:var(--b-muted);margin-bottom:10px}
+h1{margin:0;font-weight:800;font-stretch:125%;font-size:clamp(40px,6vw,76px);line-height:.95;letter-spacing:-.03em}
+.lede{font-size:18px;line-height:1.55;max-width:70ch;margin:18px 0 0}
+h2{display:flex;align-items:baseline;gap:16px;margin:0 0 20px;padding-top:64px;font-weight:750;font-stretch:125%;font-size:32px;line-height:1.05;letter-spacing:-.02em}
+h2 .n{font-family:var(--f-mono);font-size:12px;font-weight:500;letter-spacing:0;color:var(--b-muted)}
+p.note{color:var(--b-muted);max-width:76ch;margin:0 0 20px}
+.cols{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px}
+@media (max-width:1100px){.cols{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.cols{grid-template-columns:minmax(0,1fr)}}
+.col h3{margin:0 0 4px;font-size:17px;font-weight:750;font-stretch:112%}
+.col .k{overflow-wrap:anywhere;font-family:var(--f-mono);font-size:11px;color:var(--b-muted);margin:0 0 12px;min-height:3.2em}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.grid .c{aspect-ratio:1;border-radius:6px;overflow:hidden;line-height:0}
+.grid .c svg{width:100%;height:100%;display:block}
+/* the Saves list, as the app draws a row: site, title, minutes, cover on the right */
+.phone{border-radius:18px;padding:6px 16px;margin-bottom:14px}
+.phone.light{background:#F3F2EE;color:#17171A}
+.phone.dark{background:#111112;color:#EDECE8}
+.row{display:grid;grid-template-columns:minmax(0,1fr) 64px;gap:14px;align-items:center;padding:12px 0;border-bottom:1px solid #DAD8D2}
+.phone.dark .row{border-bottom-color:#2C2C30}
+.row:last-child{border-bottom:0}
+.row .site{font-size:12px;color:#5C5B57}
+.phone.dark .row .site{color:#A3A29C}
+.row .t{font-size:14.5px;font-weight:650;line-height:1.25;margin:2px 0 3px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.row .m{font-size:12px;color:#5C5B57}
+.phone.dark .row .m{color:#A3A29C}
+.row .c{width:64px;height:64px;border-radius:6px;overflow:hidden;line-height:0}
+.row .c svg{width:100%;height:100%;display:block}
+.row .bar{height:2px;margin-top:6px;border-radius:1px;background:currentColor;opacity:.12;position:relative}
+.row .bar i{position:absolute;inset:0 auto 0 0;border-radius:1px;opacity:1}
+/* Night reader */
+.night{border-radius:14px;padding:18px 18px 16px;margin-bottom:12px;font-family:var(--f-read)}
+.night .h{font-family:var(--f-ui);font-size:11px;letter-spacing:.02em;margin-bottom:6px}
+.night p{margin:0;font-size:15px;line-height:1.6}
+.night mark{border-radius:3px;padding:0 2px;color:inherit}
+.night .ln{height:2px;border-radius:1px;margin-top:12px}
+.swatches{display:flex;gap:4px;margin-top:8px}
+.swatches span{flex:1;height:14px;border-radius:3px}
+table.rules{border-collapse:collapse;width:100%;font-size:14px;margin-top:8px}
+table.rules th,table.rules td{text-align:left;vertical-align:top;padding:10px 12px 10px 0;border-top:1px solid var(--b-line)}
+table.rules th{font-weight:700;white-space:nowrap}
+table.rules td.mono{font-size:11.5px}
+#err{display:none;background:#B3261E;color:#fff;padding:12px 16px;border-radius:8px;margin-top:20px;font-family:var(--f-mono);font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="eyebrow">Design study · covers · 9 October 2026 · not a decision</div>
+  <h1>A winter palette</h1>
+  <p class="lede">Every cover here is drawn by cover v1 itself (<span class="mono">shared/cover/cover-v1.js</span>): the same layout, leaves, rotations and seams from the same hash. Only the four colours change. Current v1 sits beside three cooler directions, Fjord, Frost &amp; heather and Slate, on the same 28 saves, in the Saves list on paper and on graphite, and in the Night reader, whose paper, line and highlight also come from the palette.</p>
+  <div id="err"></div>
+</header>
+
+<h2><span class="n">01</span>The rules</h2>
+<p class="note">Each option maps the hue bytes (bytes 0 and 2, a 16-bit value) linearly into its range, so saves spread as evenly across the range as v1 spreads them round the wheel. The scheme (byte 4) and the dark ground (byte 6 below 80, about three covers in ten) are kept. Lightness is v1's throughout; only chroma is scaled. Ranges are OKLCH hue in degrees.</p>
+<table class="rules" id="rules"></table>
+
+<h2><span class="n">02</span>Covers</h2>
+<p class="note">The same 28 hashes in each column: the 12 saves in the phone prototype first, then 16 more addresses hashed for this study.</p>
+<div class="cols" id="grids"></div>
+
+<h2><span class="n">03</span>The Saves list</h2>
+<p class="note">Rows as the app draws them, with the cover on the right and the reading progress in the article's line ink. Paper (#F3F2EE) above, graphite (#111112) below.</p>
+<div class="cols" id="lists"></div>
+
+<h2><span class="n">04</span>The Night reader</h2>
+<p class="note">Night reads each article on its own dark paper tinted with the cover's hue; the progress line and the spoken-word highlight are the cover's signal colour, checked for contrast as cover v1 checks them (3:1 for the line, 7:1 for text on the highlight).</p>
+<div class="cols" id="nights"></div>
+</div>
+
+<script>
+'use strict';
+const SC = window.ShelfCover;
+
+/* ---------------- the saves ---------------- */
+// The first 12 are the phone prototype's HASH table (docs/design/mockups/prototype.html); the rest are sha256 of the
+// addresses as written, computed in Node for this study.
+const SAVES = [
+  ['5971c1f7c8fb6934c0db39d1cf17cfede14197bc087924dab4cc59ae13aa8cff', 'The Guardian', 'The quiet return of the read-it-later app, and why it matters this time', 9, 0],
+  ['34331f690e10f4e9184b0c53e40388e8caeb8bd26c8f44a34ae11f7f9e62213d', 'Bitcoin Magazine', 'Why relays, not servers, are the future of personal data', 6, .34],
+  ['9f40a2ca59c109dd3b5c4f5c3c88fd84ff5579309ebdec62e3294eebb5d4fbd4', 'Stratechery', 'Aggregation theory, ten years on', 14, 0],
+  ['08246b635f8db8e14834c0a17044949b490975582e1f61be89c8e6062ae4d30e', 'Ars Technica', 'Mozilla’s Readability library is quietly everywhere', 5, .6],
+  ['862030a9aef3d2bd9f5f93d4986d9c9029bbf72e7f574169014dda44a9fc93ca', 'The New York Times', 'The Long Road Back to the Office', 10, 0],
+  ['02a662fcfb69bec8626bbd14b40ca01b06cfa05b3bb4af946c28168f03ff9e34', 'The Atlantic', 'What we lose when we stop reading long things', 11, .12],
+  ['340732b408a9f0f2e531a95f3c3be03d89fc3f51f5c74e3372ae7fae25e8e79c', 'Aeon', 'The case for boring technology in an age of constant upgrades', 18, 0],
+  ['11ac0d2ee6159446a9271841f8dc2e330c9a9c1d64d74d96be0b8519a7e46389', 'Wired', 'Your bookmarks are a graveyard. Here is how to dig them up', 7, .8],
+  ['bf288ef54ebc4c6fa247adf846c48c057d3f9e9d1051a7957468d87e2e5a0c12', 'BBC Future', 'Why the web keeps losing its memory', 8, 0],
+  ['b918006bec6e3eb07f9ce774a8b52bd95859f03f8f84a914738664f738d93fbe', 'Nautilus', 'The archivist’s dilemma', 12, 0],
+  ['eeba0c53a59d7b8b15283f329f4fd8d9552d9729efa5d25e260e5e1761dbdf93', 'Noema', 'The long now of the web', 16, 0],
+  ['635e880af0dd71266e6a2b721d665a6b9daa06cca06bb14a848516910b75a058', 'x.com', 'A post from X', 1, 0],
+  ['84e7cac5b13636a1b3b8b8f72e1397efdb889466fe038796cabaf86e2c9385c1', 'London Review of Books', 'The long winter', 22, 0],
+  ['a14e2c24344b79343062f542d53190e489c8bf71cfa75303a3a0d37df4680c2f', 'The Economist', 'How glaciers remember', 7, 0],
+  ['276017c57fa26b98484989891b119d3c44f7a3335582786c09df7904f01044e0', 'The New Yorker', 'The saga readers', 25, 0],
+  ['c889c0707056a95e66ad66b950c61d60ca74e8ca75e27d8df43f05e54dfe85c4', 'The Verge', 'Offline-first apps are having a moment', 6, 0],
+  ['621f6bcbf29cd8823480a79565f3bd735f3e8264977f47d3731cb3a8a0c0adcf', 'Financial Times', 'Inside the ethics council of Norway’s sovereign fund', 9, 0],
+  ['e0a3a4af63c1a9d84f90e42e332d263974767c526cf80a5179d7d656ee56077a', 'Smithsonian', 'The rune sticks of Bergen', 11, 0],
+  ['81a5d6caa29177db99a20fa5e4ea06a6694f91530bfd9ed0c48870f2828984e3', 'Quanta', 'The mathematics of snowflakes', 13, 0],
+  ['7d771ae34730a3a98f1ff6b71d6260d46bba82ebe8fc2f0ea4bccc756c0f3da5', 'Simon Willison', 'Local-first, a year on', 8, 0],
+  ['887ebdbeda730d2c6a41a7baf98086f4d541abaf08cd9f2e5f18a539045f385f', 'Vox', 'In praise of slow reading', 10, 0],
+  ['d924b774cbe38919f6187fb354c9036d3492be24f01497c1b391afbdc14ba4df', 'Nature', 'A record of the Arctic’s winters', 6, 0],
+  ['15c78c7c0fbeaf4999a1a976d1f13fb5dda3d0a7bcd17b2ade398f2d1aeedc5b', 'Longreads', 'The last lighthouse keepers', 19, 0],
+  ['adafa37e8814ecce7f33a1e70b2cc347f43551fd24b44b9b94f385553d72fc6d', 'BBC Travel', 'Iceland’s winter light', 7, 0],
+  ['396cb55eaaf668237ad8c0cf06c1faa794a23886eb5727fc660cbdba97b803d0', 'Substack', 'Notes on keeping', 5, 0],
+  ['0922ceadb9edce27f8a2c0a0f780a1aa9806bd468e5a3c9efc326856825780c2', 'github.com', 'mozilla/readability', 4, 0],
+  ['0a92c072cde135b6d9014332ded920b5e6578d22f1047dbdb10c43562827fe0f', 'Wikipedia', 'Hávamál', 15, 0],
+  ['5869348899bf7a3e5f711e122a57d5073f898b31038360241fb17e39c7df126a', 'The Guardian', 'The Norse sagas, retold', 9, 0],
+];
+
+/* ---------------- OKLCH, a study copy ---------------- */
+// cover-v1.js keeps oklch() private, so this is a plain copy of its conversion (Oklab matrices, chroma halved
+// 18 times until the colour fits sRGB, hue and lightness kept), using Math.sin and Math.cos. v1's own palettes
+// below come from ShelfCover.palette, so only the options use this copy.
+function oklabToLinear(L, a, b) {
+  let l = L + 0.3963377774 * a + 0.2158037573 * b, m = L - 0.1055613458 * a - 0.0638541728 * b, s = L - 0.0894841775 * a - 1.2914855480 * b;
+  l = l * l * l; m = m * m * m; s = s * s * s;
+  return [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s, -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s];
+}
+const inGamut = c => c.every(v => v >= -1e-4 && v <= 1 + 1e-4);
+const enc = v => { v = Math.min(1, Math.max(0, v)); return Math.round((v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055) * 255); };
+const hex2 = n => n.toString(16).toUpperCase().padStart(2, '0');
+function oklch(L, C, h) {
+  const r = (((h % 360) + 360) % 360) * Math.PI / 180, cs = Math.cos(r), sn = Math.sin(r);
+  let lo = 0, hi = C, rgb = oklabToLinear(L, C * cs, C * sn);
+  if (!inGamut(rgb)) {
+    for (let i = 0; i < 18; i++) { const mid = (lo + hi) / 2; if (inGamut(oklabToLinear(L, mid * cs, mid * sn))) lo = mid; else hi = mid; }
+    rgb = oklabToLinear(L, lo * cs, lo * sn);
+  }
+  return '#' + rgb.map(enc).map(hex2).join('');
+}
+// v1's signal lightness: 0.63 + 0.17 e^-((d/38)^2), d = the hue's distance from 100 degrees
+function signalL(hue) { const a = Math.abs(hue - 100), d = Math.min(a, 360 - a), q = d / 38; return 0.63 + 0.17 * Math.exp(-(q * q)); }
+const byteAt = (h, i) => parseInt(h.slice(i, i + 2), 16);
+
+/* ---------------- the options ---------------- */
+// lo, hi: the hue range. k: chroma factors for ground, deep, soft and signal (1 = v1's chroma).
+// The secondary hues h1 and h2 (v1: hue + the scheme's two offsets) are placed inside the range:
+//   analogous: v1's +38 and -34 degrees, reflected back at the range's ends (fold)
+//   complement: h1 the hue opposite within the range, +W/2 (W = hi - lo), wrapped round the range; h2 v1's +26, folded
+//   triad: +W/3 and +2W/3, wrapped round the range
+//   split: +0.42W and +0.58W, wrapped round the range (v1's 150 and 210 as fractions of 360)
+const OPTIONS = [
+  { id: 'v1', name: 'Current v1', range: 'Whole wheel, 0–360°', k: [1, 1, 1, 1], why: 'As shipped in the prototypes: every hue, v1 chroma.' },
+  { id: 'fjord', name: 'Fjord', lo: 150, hi: 260, k: [0.62, 0.62, 0.62, 0.62], range: '150–260° (greens, teal, blue)', why: 'Chroma 0.62 of v1 on every colour (38% down).' },
+  { id: 'frost', name: 'Frost & heather', lo: 150, hi: 320, k: [0.70, 0.70, 0.70, 0.70], range: '150–320° (greens, teal, blue, violet, mauve)', why: 'Chroma 0.70 of v1 on every colour (30% down).' },
+  { id: 'slate', name: 'Slate', lo: 150, hi: 320, k: [0.48, 0.48, 0.48, 0.66], range: '150–320° (as Frost & heather)', why: 'Ground, deep and soft at 0.48 of v1 (52% down); the signal at 0.66, so it carries the colour.' },
+];
+const SCHEMES = ['analogous', 'complement', 'triad', 'split'];
+function placed(opt, hue, scheme) {
+  const lo = opt.lo, W = opt.hi - opt.lo;
+  const wrap = h => lo + (((h - lo) % W) + W) % W;
+  const fold = h => { let x = h; for (let i = 0; i < 4; i++) { if (x > opt.hi) x = 2 * opt.hi - x; if (x < lo) x = 2 * lo - x; } return x; };
+  switch (scheme) {
+    case 'analogous': return [fold(hue + 38), fold(hue - 34)];
+    case 'complement': return [wrap(hue + W / 2), fold(hue + 26)];
+    case 'triad': return [wrap(hue + W / 3), wrap(hue + 2 * W / 3)];
+    default: return [wrap(hue + 0.42 * W), wrap(hue + 0.58 * W)];
+  }
+}
+function palette(opt, hash) {
+  if (opt.id === 'v1') return SC.palette(hash);
+  const u = ((byteAt(hash, 0) << 8) | byteAt(hash, 2)) / 65536;
+  const hue = opt.lo + u * (opt.hi - opt.lo);
+  const scheme = SCHEMES[byteAt(hash, 4) & 3];
+  const dark = byteAt(hash, 6) < 80;
+  const [h1, h2] = placed(opt, hue, scheme);
+  const [kg, kd, ks, kx] = opt.k;
+  const signal = oklch(signalL(hue), 0.175 * kx, hue);
+  const p = dark
+    ? { ground: oklch(0.255, 0.045 * kg, h2), deep: oklch(0.93, 0.035 * kd, h1), soft: oklch(0.60, 0.12 * ks, h1), signal }
+    : { ground: oklch(0.945, 0.028 * kg, h2), deep: oklch(0.33, 0.085 * kd, h1), soft: oklch(0.81, 0.095 * ks, h1), signal };
+  return Object.assign(p, { hue: Math.round(hue), scheme, dark, hash });
+}
+
+/* ---------------- drawing ---------------- */
+// The cover is v1's own SVG; each of v1's four colours is swapped for the option's colour in the same role. The
+// swap is by fill value, so it needs v1's four colours to differ; a cover where two coincide is flagged.
+function cover(opt, hash) {
+  const s = SC.svg(hash);
+  if (opt.id === 'v1') return s;
+  const v = SC.palette(hash), p = palette(opt, hash), roles = ['ground', 'deep', 'soft', 'signal'];
+  const map = new Map();
+  for (const r of roles) {
+    if (map.has(v[r]) && map.get(v[r]) !== p[r]) throw new Error('two roles share ' + v[r] + ' in ' + hash);
+    map.set(v[r], p[r]);
+  }
+  return s.replace(/fill="(#[0-9A-Fa-f]{6})"/g, (m, c) => 'fill="' + (map.get(c) || c) + '"');
+}
+// lineInk, highlight and night as cover v1 computes them (the same order and steps), on the option's palette
+function lineInk(P, surface, text) {
+  const light = SC.luminance(surface) > 0.4;
+  const order = light ? [P.signal, P.dark ? P.ground : P.deep, P.soft] : [P.signal, P.soft, P.dark ? P.deep : P.soft];
+  for (const c of order) if (SC.contrast(c, surface) >= 3) return c;
+  for (let t = 0.1; t <= 1; t += 0.1) { const c = SC.mix(P.signal, text, t); if (SC.contrast(c, surface) >= 3) return c; }
+  return text;
+}
+function highlight(P, bg, text) {
+  for (let t = 0.34; t > 0.04; t -= 0.02) { const c = SC.mix(bg, P.signal, t); if (SC.contrast(text, c) >= 7) return c; }
+  return SC.mix(bg, P.signal, 0.06);
+}
+function night(opt, hash) {
+  if (opt.id === 'v1') return SC.night(hash);
+  const P = palette(opt, hash), h = P.hue;
+  const bg = oklch(0.215, 0.022, h), text = oklch(0.905, 0.012, h), muted = oklch(0.745, 0.022, h);
+  return { bg, text, muted, line: lineInk(P, bg, muted), hl: highlight(P, bg, text) };
+}
+
+/* ---------------- the page ---------------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+try {
+  if (!SC) throw new Error('cover-v1.js did not load (window.ShelfCover is missing)');
+  $('rules').innerHTML = '<tr><th>Option</th><th>Hue range</th><th>Chroma</th><th>Schemes inside the range</th></tr>' + OPTIONS.map(o =>
+    '<tr><th>' + esc(o.name) + '</th><td>' + esc(o.range) + '</td><td>' + esc(o.why) + '</td><td class="mono">' +
+    (o.id === 'v1' ? 'analogous +38/−34, complement +180/+26, triad +120/+240, split +150/+210, round the wheel'
+      : 'analogous +38/−34 and complement’s +26 folded back at the ends; complement’s opposite +W/2, triad +W/3 and +2W/3, split +0.42W and +0.58W, wrapped round the range (W = ' + (o.hi - o.lo) + '°)') + '</td></tr>').join('');
+
+  const head = o => '<h3>' + esc(o.name) + '</h3><div class="k">' + esc(o.range) + '<br>' + esc(o.why) + '</div>';
+  $('grids').innerHTML = OPTIONS.map(o => '<div class="col">' + head(o) + '<div class="grid">' +
+    SAVES.map(s => '<div class="c" title="' + esc(s[1]) + '">' + cover(o, s[0]) + '</div>').join('') + '</div></div>').join('');
+
+  const LIST = [0, 1, 3, 5, 7, 12, 17];
+  const rows = (o, surface, text) => LIST.map(i => {
+    const s = SAVES[i], P = palette(o, s[0]), ink = lineInk(P, surface, text);
+    return '<div class="row"><div><div class="site">' + esc(s[1]) + '</div><div class="t">' + esc(s[2]) + '</div><div class="m">' + s[3] + ' min</div>' +
+      (s[4] ? '<div class="bar"><i style="width:' + (s[4] * 100) + '%;background:' + ink + '"></i></div>' : '') +
+      '</div><div class="c">' + cover(o, s[0]) + '</div></div>';
+  }).join('');
+  $('lists').innerHTML = OPTIONS.map(o => '<div class="col">' + head(o) +
+    '<div class="phone light">' + rows(o, '#F3F2EE', '#17171A') + '</div>' +
+    '<div class="phone dark">' + rows(o, '#111112', '#EDECE8') + '</div></div>').join('');
+
+  const NIGHT = [0, 6, 17];
+  $('nights').innerHTML = OPTIONS.map(o => '<div class="col">' + head(o) + NIGHT.map(i => {
+    const s = SAVES[i], N = night(o, s[0]), P = palette(o, s[0]);
+    return '<div class="night" style="background:' + N.bg + ';color:' + N.text + '"><div class="h" style="color:' + N.muted + '">' + esc(s[1]) + ' · hue ' + P.hue + '°</div>' +
+      '<p>Deyr fé, deyja frændr. <mark style="background:' + N.hl + '">The good name</mark> never dies, and neither should the things you meant to read.</p>' +
+      '<div class="ln" style="background:' + N.line + ';width:' + (30 + i * 3) + '%"></div>' +
+      '<div class="swatches">' + ['ground', 'deep', 'soft', 'signal'].map(r => '<span title="' + r + ' ' + P[r] + '" style="background:' + P[r] + '"></span>').join('') + '</div></div>';
+  }).join('') + '</div>').join('');
+} catch (e) {
+  $('err').style.display = 'block';
+  $('err').textContent = 'The study failed to draw: ' + e.message;
+  console.error(e);
+}
+</script>
+</body>
+</html>
