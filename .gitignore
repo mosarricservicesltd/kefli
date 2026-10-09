@@ -44,3 +44,5 @@ apps/mobile/modules/*/android/.cxx/
 # the dev browser's device key and its pairing page (server/dev/browser.ts)
 server/dev/data/browser.json
 server/dev/data/pair.html
+# the keys the local API has registered (server/dev/api.mjs), which every test run adds to
+server/dev/data/registered.json
