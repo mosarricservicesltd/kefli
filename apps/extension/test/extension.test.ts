@@ -15,8 +15,7 @@ import { ackFor, browserLabel, formatCode, OFFER_LIFE, pairingFrom, postOffer } 
 import { ATTEMPTS_MAX, BLOB_KEEP_MAX, dequeue, enqueue, failed, flush, QUEUE_MAX, queued, waiting, whyNot } from '../src/queue';
 import { deliver, prepare, retract, type Net, type Pending } from '../src/save';
 import { KEYS, memoryStore, type Pairing } from '../src/store';
-import { toastCopy } from '../src/toastCopy';
-import { markDelay } from '../src/toast';
+import { markDelay, toastCopy } from '../src/toastCopy';
 
 const DEFAULTS: Defaults = { v: 1, operator: { relay: 'wss://relay.example', blossom: 'https://blossom.example', api: 'https://api.example' }, relays: ['wss://a.example'], mirrors: ['https://m.example'] };
 const NOW = 1_791_600_000;
@@ -224,7 +223,8 @@ describe('the queue (extension spec 4, decisions 30, 31 and 60)', () => {
     expect(left).toHaveLength(1);
     expect(left[0]).toMatchObject({ id: 'no', attempts: ATTEMPTS_MAX, stopped: true, why: 'reach' });
     expect(await flush(store, async () => 'sent', true)).toEqual([]);
-    expect(await flush(store, async () => 'sent', true, true)).toEqual(['no']);
+    expect(await flush(store, async () => 'sent', true, true, 'other')).toEqual([]);
+    expect(await flush(store, async () => 'sent', true, true, 'no')).toEqual(['no']);
   });
 });
 

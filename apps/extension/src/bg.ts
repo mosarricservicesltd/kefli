@@ -57,9 +57,14 @@ async function shortcutWords(): Promise<string | null> {
   return (await chrome.commands.getAll()).find((c) => c.name === 'save-page')?.shortcut || null;
 }
 
-async function toast(tabId: number | null, s: Omit<ToastState, 'shortcut'>): Promise<void> {
-  if (tabId === null) return;
+/** Where a save's notices go: the tab's toast, the toolbar popup where no toast can run, or nowhere (a link menu). */
+type Where = number | 'popup' | null;
+
+async function toast(where: Where, s: Omit<ToastState, 'shortcut'>): Promise<void> {
+  if (where === null) return;
   const state: ToastState = { ...s, shortcut: await shortcutWords() };
+  if (where === 'popup') return void (await session.set('popup', state));
+  const tabId = where;
   try {
     await chrome.scripting.executeScript({ target: { tabId }, files: ['toast.js'] });
     await chrome.scripting.executeScript({ target: { tabId }, func: (st: ToastState) => (globalThis as unknown as { kefliToast: { show(s: ToastState): void } }).kefliToast.show(st), args: [state] });
@@ -76,6 +81,21 @@ async function badge(): Promise<void> {
   await chrome.action.setTitle({ title: n ? `Save to Kefli (${n} waiting to send)` : 'Save to Kefli' });
 }
 
+/**
+ * The popup under the toolbar button, for a save made where no toast can run (decision 59, mockup build notes): set it,
+ * open it, then clear it so the next click still saves. Chrome before 127 can't open it; the tick alone stays there.
+ */
+async function openSavedPopup(): Promise<void> {
+  try {
+    await chrome.action.setPopup({ popup: 'saved.html' });
+    await chrome.action.openPopup();
+  } catch {
+    // no popup on this browser: the tick says it
+  } finally {
+    await chrome.action.setPopup({ popup: '' });
+  }
+}
+
 /** A green tick for four seconds, for a save made where no toast can run (decision 59). */
 async function tick(): Promise<void> {
   await chrome.action.setBadgeBackgroundColor({ color: '#1E7A4A' });
@@ -88,7 +108,7 @@ function sentKind(c: Captured): ToastKind {
   return c.html === null ? 'notext' : 'saved';
 }
 
-async function save(c: Captured, tabId: number | null, link: boolean): Promise<void> {
+async function save(c: Captured, tabId: Where, link: boolean): Promise<void> {
   const ctx = await context();
   if (!ctx) return;
   const { pending, wrapKey } = await prepare(c, ctx);
@@ -98,7 +118,7 @@ async function save(c: Captured, tabId: number | null, link: boolean): Promise<v
   const d = navigator.onLine ? await deliver(pending, ctx.defaults.operator.blossom, ctx.defaults.operator.relay, ctx.device, net) : 'unreachable';
   if (d === 'sent') {
     await toast(tabId, { ...base, kind: sentKind(c) });
-    if (tabId === null) await tick();
+    if (tabId === 'popup') await tick();
     return;
   }
   const why = whyNot(d, navigator.onLine);
@@ -109,17 +129,21 @@ async function save(c: Captured, tabId: number | null, link: boolean): Promise<v
   await chrome.alarms.create('flush', { periodInMinutes: 1 });
   await badge();
   await toast(tabId, { ...base, kind: why === 'offline' ? 'offline' : 'failed' });
+  if (tabId === 'popup' && why === 'offline') await tick();
 }
 
 async function saveTab(tab: chrome.tabs.Tab): Promise<void> {
   if (tab.id === undefined || !tab.url) return;
   const c = await captureTab(tab.id);
-  await save(c ?? linkOnly(tabUrl(tab.url)), c ? tab.id : null, !c);
+  if (!c) {
+    await session.set('popup', null);
+    void openSavedPopup();
+  }
+  await save(c ?? linkOnly(tabUrl(tab.url)), c ? tab.id : 'popup', !c);
 }
 
-async function undo(id: string, tabId: number | undefined): Promise<void> {
+async function undo(id: string, where: Where): Promise<void> {
   const ctx = await context();
-  const where = tabId ?? null;
   if (!ctx) return;
   const waitingSave = (await queued(store)).find((e) => e.id === id);
   if (waitingSave && (await dequeue(store, id))) {
@@ -134,10 +158,10 @@ async function undo(id: string, tabId: number | undefined): Promise<void> {
   await toast(where, { kind: 'undone', title: '', host: '', link: false });
 }
 
-async function flushQueue(all = false): Promise<void> {
+async function flushQueue(all = false, only?: string): Promise<void> {
   const ctx = await context();
   if (!ctx) return;
-  await flush(store, (p) => deliver(p, ctx.defaults.operator.blossom, ctx.defaults.operator.relay, ctx.device, net), navigator.onLine, all);
+  await flush(store, (p) => deliver(p, ctx.defaults.operator.blossom, ctx.defaults.operator.relay, ctx.device, net), navigator.onLine, all, only);
   if (!(await queued(store)).length) await chrome.alarms.clear('flush');
   await badge();
 }
@@ -161,9 +185,9 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
 chrome.runtime.onMessage.addListener((msg: { type: string; id?: string; all?: boolean }, sender, reply) => {
   const done = () => reply(true);
-  if (msg.type === 'undo' && msg.id) void undo(msg.id, sender.tab?.id).then(done, done);
+  if (msg.type === 'undo' && msg.id) void undo(msg.id, sender.tab?.id ?? 'popup').then(done, done);
   else if (msg.type === 'options') void chrome.runtime.openOptionsPage().then(done, done);
-  else if (msg.type === 'retry') void flushQueue(true).then(done, done);
+  else if (msg.type === 'retry') void flushQueue(true, msg.id).then(done, done);
   else return false;
   return true;
 });

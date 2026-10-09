@@ -1,0 +1,53 @@
+/* The browser-page popup (saved.html), from the signed-off mockup's popup CSS: the toast's anatomy in the page's own
+   scheme, on the generated tokens.css, in the bundled Archivo. */
+@font-face{font-family:'Archivo';src:url(fonts/Archivo-400.ttf);font-weight:400;font-stretch:100%}
+@font-face{font-family:'Archivo';src:url(fonts/Archivo-500.ttf);font-weight:500;font-stretch:100%}
+@font-face{font-family:'Archivo';src:url(fonts/Archivo-600.ttf);font-weight:550 650;font-stretch:100%}
+html,body{margin:0;background:var(--surface)}
+body{width:336px}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.cv{display:block;position:relative;overflow:hidden;flex:none;width:var(--s,40px);height:var(--s,40px);border-radius:var(--radius-image);background:var(--line)}
+.cv svg{display:block;width:100%;height:100%}
+.cv::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px var(--cover-edge);pointer-events:none}
+/* The toast and the browser-page popup share one anatomy: the saved page's cover with a mark on its corner (or a plain tile
+   when there is no save to show), title, sub-line, action, ✕ and the 2 px countdown in the article's ink. */
+.popup .row{position:relative;display:flex;align-items:center;gap:var(--space-12);padding:var(--space-12) var(--space-8) var(--space-12) var(--space-12);min-height:64px}
+.popup .lead{position:relative;width:40px;height:40px;flex:none}
+.popup .lead .cv{--s:40px;border-radius:var(--radius-control)}
+/* no save to show (removed, refused): a hairline tile the cover's size, so nothing moves. Its edge is the muted icon colour:
+   line-strong falls to 2.9:1 on the light toast of a dark page, muted keeps 5.8:1 or more in both. */
+.popup .tile{width:40px;height:40px;border-radius:var(--radius-control);box-shadow:inset 0 0 0 1px var(--muted);display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.popup .tile.bad{color:var(--error)}
+/* the corner mark says what happened: ok (sent), off (waiting offline), bad (couldn't send). It lands (motion.mark) with the
+   cover's last leaf, and never later than 1 s after the drawing starts. */
+.mk{position:absolute;right:-5px;bottom:-5px;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 0 2px var(--ring);animation:markIn var(--motion-mark) var(--mk-delay,0ms) both}
+.mk.ok{background:var(--success);color:var(--on-fill)}
+.mk.bad{background:var(--error);color:var(--on-fill)}
+.mk.off{background:var(--ring);color:var(--text);box-shadow:inset 0 0 0 1px var(--muted),0 0 0 2px var(--ring)}
+@keyframes markIn{from{opacity:0;transform:scale(.4)}}
+@keyframes markFade{from{opacity:0}}
+.popup .tx{flex:1;min-width:0}
+.popup .tx b{display:block;font-size:var(--text-15);font-weight:var(--weight-title);line-height:1.3}
+.popup .tx span{display:block;font-size:var(--text-13);color:var(--muted);line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.popup .tx span.wrap2{white-space:normal}
+.popup .act{height:36px;padding:0 var(--space-12);border-radius:var(--radius-control);font-weight:var(--weight-title);font-size:var(--text-13);line-height:1;flex:none;display:inline-flex;align-items:center}
+.popup .x{width:32px;height:32px;border-radius:var(--radius-control);display:inline-flex;align-items:center;justify-content:center;color:var(--muted);flex:none}
+.popup button:focus-visible,.popup.viakey button:focus{outline:var(--focus-width) solid var(--focus);outline-offset:-2px}
+/* the countdown takes the article's ink (ShelfCover.lineInk, 3:1 on the surface under it); with no cover, the text colour.
+   motion.countdown: a full-width fill translated left inside a clipped 2 px strip (never width or scaleX), held by
+   animation-play-state while the toast is hovered or holds focus the person gave it. */
+.popup .timer{height:2px;overflow:hidden}
+.popup .timer i{display:block;height:100%;background:var(--ink, var(--text));animation:countdown var(--motion-countdown-extension) forwards}
+.popup .timer.ghost{position:absolute;left:0;right:0;bottom:0}
+.paused .timer i{animation-play-state:paused}
+/* ---------- Kefli's action popup on browser pages (our UI, tokens only; Chrome draws the bubble it sits in) ---------- */
+.popup{position:relative;width:336px;max-width:100%;--ring:var(--surface);background:var(--surface);color:var(--text);
+  border-radius:var(--radius);box-shadow:var(--shadow-float);font-family:var(--font-ui);font-size:var(--text-15);line-height:var(--leading-ui);overflow:hidden}
+.popup[hidden]{display:none}
+.popup:focus{outline:none}
+.popup .act{color:var(--text)}
+.popup .act:hover,.popup .x:hover{background:var(--background)}
+.popup{box-shadow:none;border-radius:0}
+@media (prefers-reduced-motion:reduce){.mk{animation:markFade var(--motion-quick-in) both}}

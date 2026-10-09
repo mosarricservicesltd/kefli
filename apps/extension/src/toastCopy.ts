@@ -45,6 +45,11 @@ const COPY: Record<ToastKind, Make> = {
   failed: (s) => ({ cover: s.hash, mark: 'bad', title: 'Couldn’t send this save', sub: 'It’s kept here, and Kefli will keep trying.', wrap: true, action: 'Options', timed: true, say: 'Couldn’t send this save. It’s kept here, and Kefli will keep trying.' }),
 };
 
+/** When the corner mark lands: with the cover's last leaf (520 ms, then 34 ms a leaf), and never later than 1 s. */
+export function markDelay(leaves: number): number {
+  return Math.min(1000, 520 + 34 * Math.max(0, leaves - 1));
+}
+
 /** A Saved toast tells keyboard users how to reach Undo with the live binding; with no binding the sentence is dropped. */
 export function toastCopy(s: ToastState): ToastCopy {
   const t = COPY[s.kind](s, s.link ? s.host : s.title);

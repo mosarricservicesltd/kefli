@@ -56,13 +56,13 @@ export function whyNot(d: Exclude<Delivery, 'sent'>, online: boolean): Queued['w
 }
 
 /**
- * One pass over the queue: each entry still trying (or every entry, for Retry) is delivered; a sent one leaves, the
- * others count an attempt and stop at 200. Returns the ids that were sent.
+ * One pass over the queue: each entry still trying (or every entry, or the one named, for Retry) is delivered; a sent one
+ * leaves, the others count an attempt and stop at 200. Returns the ids that were sent.
  */
-export async function flush(store: Store, send: (p: Pending) => Promise<Delivery>, online: boolean, all = false): Promise<string[]> {
+export async function flush(store: Store, send: (p: Pending) => Promise<Delivery>, online: boolean, all = false, only?: string): Promise<string[]> {
   const sent: string[] = [];
   for (const e of await queued(store)) {
-    if (e.stopped && !all) continue;
+    if ((e.stopped && !all) || (only !== undefined && e.id !== only)) continue;
     const d = await send(e);
     const q = await queued(store);
     const i = q.findIndex((x) => x.id === e.id);

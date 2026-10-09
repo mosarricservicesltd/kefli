@@ -5,7 +5,7 @@
 // shortcut reaches Undo (decision 58). One live region, made once, announces what it says.
 import { colors, radius, type ThemeColors } from '../../../packages/tokens/src/index';
 import { icon } from './icons';
-import { toastCopy, type ToastState } from './toastCopy';
+import { markDelay, toastCopy, type ToastState } from './toastCopy';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const ShelfCover = require('../../../shared/cover/cover-v1.js') as {
@@ -67,11 +67,6 @@ button:focus-visible,.viakey button:focus{outline:2px solid var(--focus);outline
 @media (prefers-reduced-motion:reduce){@starting-style{.toast{transform:none}}.toast.leave{transform:none}.mk{animation:markFade 150ms both}}
 @media (forced-colors:active){.toast,.tile,.mk{border:1px solid CanvasText}.act,.x{border:1px solid ButtonText}.timer i{forced-color-adjust:none;background:CanvasText}.cv{forced-color-adjust:none}}
 `;
-
-/** When the corner mark lands: with the cover's last leaf (520 ms, then 34 ms a leaf), and never later than 1 s. */
-export function markDelay(leaves: number): number {
-  return Math.min(1000, 520 + 34 * Math.max(0, leaves - 1));
-}
 
 const MARKS = { ok: icon('check', 12, 'stroke-width="3"'), bad: icon('bang', 12, 'stroke-width="3"'), off: icon('wifioff', 12, 'stroke-width="2.25"') };
 

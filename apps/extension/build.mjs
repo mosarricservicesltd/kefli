@@ -78,7 +78,7 @@ async function build(browser) {
   writeFileSync(join(out, 'parser.js'), kefliBundle());
   // the generated tokens without the mockups' remote font import (the extension bundles its fonts)
   writeFileSync(join(out, 'tokens.css'), readFileSync(join(repo, 'docs', 'design', 'mockups', 'tokens.css'), 'utf8').replace(/^@import url\([^)]*\);\n/m, ''));
-  cpSync(join(here, 'src', 'options.css'), join(out, 'options.css'));
+  for (const css of ['options.css', 'saved.css']) cpSync(join(here, 'src', css), join(out, css));
   for (const page of ['options.html', 'saved.html']) cpSync(join(here, 'src', page), join(out, page));
   for (const n of [16, 32, 48, 128]) cpSync(join(repo, 'shared', 'brand', 'out', 'extension', `icon-${n}.png`), join(out, 'icons', `icon-${n}.png`));
   cpSync(join(repo, 'shared', 'brand', 'out', 'extension', 'options-logo-28.svg'), join(out, 'icons', 'logo-28.svg'));
