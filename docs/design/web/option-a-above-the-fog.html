@@ -184,7 +184,7 @@ svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-widt
   html { scroll-behavior: auto; }
   .hero { height: auto; }
   .stage { position: relative; }
-  .cue svg.i, .veil::before, .veil::after, .drift { animation: none; }
+  .cue svg.i, .veil::before, .veil::after, .drift, .dusk-fog::after { animation: none; }
   .stage::after { content: ""; position: absolute; inset: auto 0 0 0; height: 18%; z-index: 3; background: linear-gradient(to bottom, rgba(243,242,238,0), var(--paper)); }
 }
 
@@ -244,7 +244,7 @@ section.block { padding-block: clamp(84px, 11vw, 168px); position: relative; }
 @media (max-width: 860px) { .name .grid { grid-template-columns: 1fr; } }
 
 /* Get Kefli */
-.get { border-top: 1px solid var(--line); padding-bottom: 0; }
+.get { border-top: 1px solid var(--line); }
 .cards { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: clamp(22px, 2.6vw, 34px); display: grid; gap: 16px; align-content: start; }
 .card .top { display: flex; align-items: center; gap: 12px; }
@@ -257,9 +257,40 @@ section.block { padding-block: clamp(84px, 11vw, 168px); position: relative; }
 @media (max-width: 960px) { .cards { grid-template-columns: 1fr 1fr; } .cards .card:first-child { grid-column: 1 / -1; } }
 @media (max-width: 620px) { .cards { grid-template-columns: 1fr; } }
 
-/* Footer: down off the mountain at dusk */
-.dusk { position: relative; height: clamp(120px, 16vw, 230px); margin-top: clamp(40px, 6vw, 90px); }
-.dusk svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+/* Footer: out from under the cloud at dusk. The same peaks as the summit, after sunset: the paper fog
+   thins and lifts as you scroll in, and the near ridge sinks into the footer's graphite. */
+.dusk { position: relative; height: clamp(380px, 56vw, 780px); overflow: hidden; background: var(--graphite); }
+.dusk-scene { position: absolute; inset: 0; transform-origin: 50% 80%; will-change: transform; }
+.dusk-scene picture, .dusk-scene img, .dusk-scene video {
+  position: absolute; inset: 0; width: 100%; height: 100%; display: block; object-fit: cover; object-position: 40% 62%;
+}
+.dusk-scene video { opacity: 0; transition: opacity 1.2s ease; }
+.dusk-scene video.on { opacity: 1; }
+.dusk-fog {
+  position: absolute; left: -10%; right: -10%; top: 0; height: 62%; z-index: 2; pointer-events: none;
+  background: linear-gradient(to bottom, #F3F2EE 0%, #F3F2EE 18%, rgba(243,242,238,.9) 34%, rgba(243,242,238,.5) 58%, rgba(243,242,238,0) 100%);
+  will-change: transform, opacity;
+}
+.dusk-fog::after {
+  content: ""; position: absolute; left: 0; right: 0; top: 52%; height: 40%;
+  background:
+    radial-gradient(14% 46% at 10% 40%, rgba(243,242,238,.8), rgba(243,242,238,0) 70%),
+    radial-gradient(18% 56% at 31% 30%, rgba(243,242,238,.7), rgba(243,242,238,0) 70%),
+    radial-gradient(13% 42% at 52% 44%, rgba(243,242,238,.75), rgba(243,242,238,0) 70%),
+    radial-gradient(20% 60% at 72% 32%, rgba(243,242,238,.65), rgba(243,242,238,0) 70%),
+    radial-gradient(14% 44% at 92% 42%, rgba(243,242,238,.8), rgba(243,242,238,0) 70%);
+  filter: blur(16px);
+  animation: billow 30s ease-in-out infinite alternate;
+}
+/* The join with the page above never moves, so paper always meets paper */
+.dusk::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 26%; z-index: 2; pointer-events: none;
+  background: linear-gradient(to bottom, #F3F2EE, rgba(243,242,238,.82) 35%, rgba(243,242,238,0));
+}
+.dusk::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 34%; z-index: 2; pointer-events: none;
+  background: linear-gradient(to bottom, rgba(17,17,18,0), rgba(17,17,18,.75) 55%, #111112);
+}
 footer { background: var(--graphite); color: var(--night-text); padding-block: 24px 64px; }
 footer :focus-visible { outline-color: var(--night-text); }
 footer .cols { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 40px; align-items: end; }
@@ -435,8 +466,19 @@ footer .brand svg { width: 26px; height: 26px; }
       </div>
       <a class="guide" href="#">How to install the extension<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
     </div>
-    <div class="dusk" id="dusk" aria-hidden="true"></div>
   </section>
+
+  <div class="dusk" id="dusk" aria-hidden="true">
+    <div class="dusk-scene" id="duskScene">
+      <picture>
+        <source type="image/avif" srcset="assets/dusk-960.avif 960w, assets/dusk-1600.avif 1600w, assets/dusk-2206.avif 2206w" sizes="100vw">
+        <source type="image/webp" srcset="assets/dusk-960.webp 960w, assets/dusk-1600.webp 1600w, assets/dusk-2206.webp 2206w" sizes="100vw">
+        <img src="assets/dusk-2206.jpg" alt="" loading="lazy" decoding="async">
+      </picture>
+      <video id="duskLoop" muted loop playsinline preload="none"></video>
+    </div>
+    <div class="dusk-fog" id="duskFog"></div>
+  </div>
 </main>
 
 <footer>
@@ -497,14 +539,43 @@ footer .brand svg { width: 26px; height: 26px; }
       '<path d="' + ridge(1600, 240, 150, 0.0024, 37) + '" fill="none" stroke="#8C8A83" stroke-width="1" stroke-opacity=".55"/>',
       "xMidYMin slice");
   }
-  // The dusk: walking off the mountain into the footer
-  var dusk = document.getElementById("dusk");
-  if (dusk) {
-    dusk.innerHTML = svg(1600, 230,
-      '<path d="' + ridge(1600, 120, 90, 0.0036, 5, 230) + '" fill="#CFCCC4"/>' +
-      '<path d="' + ridge(1600, 165, 110, 0.0028, 17, 230) + '" fill="#8C8A83"/>' +
-      '<path d="' + ridge(1600, 215, 130, 0.0021, 29, 230) + '" fill="#111112"/>');
-  }
+  // The dusk: out from under the cloud at the foot of the page. Scroll-linked, never scroll-jacked:
+  // the fog lifts and thins and the peaks settle from a slight zoom as the scene comes into view.
+  (function () {
+    var dusk = document.getElementById("dusk"), scene = document.getElementById("duskScene");
+    var fogEl = document.getElementById("duskFog"), loop = document.getElementById("duskLoop");
+    if (!dusk) return;
+    function sm(a, b, x) { var t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
+    function place(p) {
+      scene.style.transform = "scale(" + (1.14 - 0.14 * p).toFixed(4) + ")";
+      fogEl.style.transform = "translate3d(0," + (-p * 46).toFixed(2) + "%,0)";
+      fogEl.style.opacity = (1 - 0.55 * p).toFixed(3);
+    }
+    if (RM) { place(1); return; }
+    var queued = false;
+    function onScroll() {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(function () {
+        queued = false;
+        var r = dusk.getBoundingClientRect(), vh = window.innerHeight;
+        // 0 as the scene's top enters the bottom of the screen, 1 once it has risen to the top quarter
+        place(sm(0, 1, (vh - r.top) / (vh * 0.75 + r.height * 0.25)));
+      });
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll, { passive: true });
+    onScroll();
+    loop.addEventListener("playing", function () { loop.classList.add("on"); });
+    if ("IntersectionObserver" in window) {
+      new IntersectionObserver(function (es) {
+        if (es[0].isIntersecting) {
+          if (!loop.src) { loop.src = window.innerWidth < 760 ? "assets/dusk-loop-1280.mp4" : "assets/dusk-loop-1920.mp4"; loop.preload = "auto"; }
+          var pr = loop.play(); if (pr && pr.catch) pr.catch(function () {});
+        } else if (loop.src) loop.pause();
+      }, { rootMargin: "200px" }).observe(dusk);
+    }
+  })();
 
   /* ---------- Nav turns solid once you're through the cloud ---------- */
   var nav = document.getElementById("nav"), hero = document.getElementById("hero");
