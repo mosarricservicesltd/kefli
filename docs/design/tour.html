@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Shelf Stage 0 Tour</title>
+<title>Kefli Stage 0 Tour</title>
 <link rel="icon" href="../../shared/brand/out/web/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,7 +12,7 @@
 <script src="mockups/cover-v1.js"></script>
 <style>
 /* The Stage 0 walkthrough: a guided route through prototype.html and extension.html, plus the brand outputs, with a
-   verdict and a note per stop. It is a review board, not Shelf UI; its own chrome still uses the tokens. Marks are kept
+   verdict and a note per stop. It is a review board, not Kefli UI; its own chrome still uses the tokens. Marks are kept
    in this browser's localStorage only, and Copy notes turns them into text to paste into the chat. */
 *{box-sizing:border-box}
 [hidden]{display:none !important}
@@ -106,7 +106,7 @@ textarea::placeholder{color:var(--muted);opacity:1}
 .missing .needsrv{display:block}
 .needsrv{display:none;margin:0 0 var(--space-16);padding:var(--space-12) var(--space-16);border-radius:var(--radius-control);border:1px solid var(--warning);color:var(--text);font-size:var(--text-13)}
 /* Presentation colours below are the context the brand files sit in (wallpapers, Chrome's toolbar, launch-screen
-   backgrounds fixed by the brand README), not Shelf UI. */
+   backgrounds fixed by the brand README), not Kefli UI. */
 .home{display:flex;gap:28px;padding:28px 32px 22px;border-radius:var(--radius);flex-wrap:wrap}
 .home.l{background:linear-gradient(160deg,#D9D5CB,#BFC6C9)}
 .home.d{background:linear-gradient(160deg,#2B2C31,#1A1D22)}
@@ -188,13 +188,13 @@ legend{font-weight:var(--weight-title);margin-bottom:var(--space-8);padding:0}
 <body>
 <div class="app">
   <div class="mobilebar">
-    <strong>Shelf tour</strong>
+    <strong>Kefli tour</strong>
     <label class="sr" for="jumpSel">Go to a stop</label>
     <select id="jumpSel"></select>
   </div>
 
   <nav class="rail" aria-label="Tour stops">
-    <div class="brand"><div><h1>Shelf · Stage 0 tour</h1><p>Fingerprint, phone and extension</p></div></div>
+    <div class="brand"><div><h1>Kefli · Stage 0 tour</h1><p>Fingerprint, phone and extension</p></div></div>
     <div class="progress"><span id="progText"></span><div class="bar"><i id="progBar"></i></div></div>
     <div id="route"></div>
   </nav>
@@ -236,26 +236,26 @@ const CHAPTERS = [
       try: ['Drag a row to the left to archive it, then press Undo.', 'Set the prototype to Dark above the frame: the covers keep their colours on ink.'],
       dec: [65, 66, 68] },
   ] },
-  { id: 'first', title: 'First launch', blurb: 'Nothing to sign up for, and the empty shelf teaches the first save.', stops: [
+  { id: 'first', title: 'First launch', blurb: 'Nothing to sign up for, and the empty library teaches the first save.', stops: [
     { id: 'welcome', src: P, jump: 'welcome', l: 'Welcome', title: 'Welcome',
       see: 'The first screen after install. No account and no email.',
-      look: ['Three cards fanned out, each with a cover. Once the front cover has drawn, its line catches up to where that article was left.', 'Two ways in: New here, and I already have a shelf.', 'The small line under the buttons: no account, no email, private to you.'],
+      look: ['Three cards fanned out, each with a cover. Once the front cover has drawn, its line catches up to where that article was left.', 'Two ways in: New here, and I already have a library.', 'The small line under the buttons: no account, no email, private to you.'],
       try: ['Press Reopen above the frame to watch the covers draw again.', 'Press New here.'],
       dec: [73] },
-    { id: 'empty', src: P, jump: 'saves-empty', l: 'Empty', title: 'An empty shelf',
+    { id: 'empty', src: P, jump: 'saves-empty', l: 'Empty', title: 'An empty library',
       see: 'Where New here lands.',
-      look: ['The empty state teaches the first save: share any link from any app, with Shelf in a drawn share row.', 'Connect your browser is the one button, for saving from a laptop.'],
+      look: ['The empty state teaches the first save: share any link from any app, with Kefli in a drawn share row.', 'Connect your browser is the one button, for saving from a laptop.'],
       try: ['Press Connect your browser to see where it leads, then come back with Reopen.'],
       dec: [] },
     { id: 'first-save', src: P, jump: 'saves-first-arrive', l: 'First save', title: 'The first save lands',
-      see: 'The moment the first save arrives on an empty shelf.',
+      see: 'The moment the first save arrives in an empty library.',
       look: ['Drawn once, the first of the two signature moves: the cover draws itself as the save appears, then stays still on every surface.', 'While its text is fetched, the row waits with its cover drawn and its waiting dot. Nothing loops.'],
       try: ['Press Reopen to watch it again.'],
       dec: [69, 73] },
   ] },
   { id: 'saving', title: 'Saving', blurb: 'Share a link from any app and a sheet confirms it. Saves from a browser arrive by themselves.', stops: [
     { id: 'share', src: P, jump: 'share', l: 'Saved', alts: [['After Undo', 'share-undone'], ['Offline', 'share-offline'], ['Not a link', 'share-nolink']], title: 'Saved from another app',
-      see: 'What appears after sharing a page to Shelf from another app, which stays dimmed behind.',
+      see: 'What appears after sharing a page to Kefli from another app, which stays dimmed behind.',
       look: ['The save’s cover draws in the sheet, the same face it will have in the list.', 'One line says what happened and what comes next: “Private. Ready to read offline in a moment.”', 'Undo and Read now. Offline, Read now becomes Done. Sharing something that isn’t a page explains why, with one OK.'],
       try: ['Press Undo.', 'Try the Offline and Not a link states above the frame.'],
       dec: [] },
@@ -294,7 +294,7 @@ const CHAPTERS = [
       try: ['Scroll, then open Aa and try Sepia and Dark.', 'Set the prototype to Dark above the frame.'],
       dec: [65] },
     { id: 'reader-error', src: P, jump: 'reader-error', l: 'Notice', alts: [['Its ⋯ menu', 'reader-error-menu']], title: 'Couldn’t get the text',
-      see: 'When Shelf couldn’t get a clean copy, the original page opens inside Shelf.',
+      see: 'When Kefli couldn’t get a clean copy, the original page opens inside Kefli.',
       look: ['A short notice above the page. It has no stamp, since its sentence says the same. The Saves row keeps its stamp.'],
       try: [],
       dec: [69] },
@@ -326,8 +326,8 @@ const CHAPTERS = [
       try: ['Scroll the list until the card leaves: the mini player slides in.'],
       dec: [68, 69] },
     { id: 'lock', src: P, jump: 'lock', l: 'Lock screen', title: 'The lock screen',
-      see: 'Android’s media controls while Shelf plays with the screen locked.',
-      look: ['The cover as the media artwork, and Shelf’s one-colour glyph, the plain bookmark, in the app slot, as Android 13 and later show it.'],
+      see: 'Android’s media controls while Kefli plays with the screen locked.',
+      look: ['The cover as the media artwork, and Kefli’s one-colour glyph, the plain bookmark, in the app slot, as Android 13 and later show it.'],
       try: [],
       dec: [72, 94] },
     { id: 'rsvp', src: P, jump: 'rsvp', l: 'Running', alts: [['Paused', 'rsvp-paused'], ['Finished', 'rsvp-done']], title: 'Speed read',
@@ -343,7 +343,7 @@ const CHAPTERS = [
       try: ['Press Show recovery code, then Done. The card goes, and focus lands on the Recovery code row.'],
       dec: [68, 74] },
     { id: 'code', src: P, jump: 'rec-shown', l: 'Shown', alts: [['Hidden', 'rec-hidden'], ['Copied', 'rec-copied']], title: 'The recovery code',
-      see: 'The twelve words that bring the shelf back on any phone.',
+      see: 'The twelve words that bring the library back on any phone.',
       look: ['Twelve numbered words in two columns, with Copy and Done.'],
       try: [],
       dec: [] },
@@ -354,14 +354,14 @@ const CHAPTERS = [
       try: [],
       dec: [] },
     { id: 'delete', src: P, jump: 'del', l: 'Start', alts: [['DELETE typed', 'del-typed'], ['Deleting', 'del-running'], ['A server didn’t confirm', 'del-partial']], title: 'Delete my data',
-      see: 'Leaving Shelf.',
+      see: 'Leaving Kefli.',
       look: ['What goes, listed plainly, and DELETE typed to confirm. This is the one confirmation in the app, because Undo can’t bring the data back.', 'If a backup server doesn’t confirm, the screen says which one and what that means.'],
       try: ['Type DELETE and press Delete everything. When it finishes, Welcome’s covers draw in again, as on a fresh install.'],
       dec: [74] },
   ] },
-  { id: 'return', title: 'A new phone', blurb: 'Bringing the shelf back, with every cover the same as before.', stops: [
-    { id: 'return', src: P, jump: 'return', l: 'Choose', alts: [['Offline', 'return-offline']], title: 'Bring back your shelf',
-      see: 'I already have a shelf, from Welcome.',
+  { id: 'return', title: 'A new phone', blurb: 'Bringing the library back, with every cover the same as before.', stops: [
+    { id: 'return', src: P, jump: 'return', l: 'Choose', alts: [['Offline', 'return-offline']], title: 'Bring back your library',
+      see: 'I already have a library, from Welcome.',
       look: ['Three ways back: scan from your other phone, your recovery code, or your nostr app.'],
       try: [],
       dec: [] },
@@ -372,15 +372,15 @@ const CHAPTERS = [
       dec: [] },
     { id: 'restoring', src: P, jump: 'restoring', l: 'Restoring', alts: [['Halfway', 'restoring-mid'], ['Paused offline', 'restoring-offline']], title: 'Restoring',
       see: 'Saves coming back onto the new phone.',
-      look: ['Saves come into the list as they arrive, each cover drawing once, with the same face it had on the old phone.', 'A card counts them in and says why this works even when Shelf’s own server is down.'],
+      look: ['Saves come into the list as they arrive, each cover drawing once, with the same face it had on the old phone.', 'A card counts them in and says why this works even when Kefli’s own server is down.'],
       try: ['Press Reopen to watch from the start.'],
       dec: [65, 73] },
   ] },
   { id: 'ext', title: 'The browser extension', blurb: 'A toast on the page you saved, a popup where no toast can run, and an options page.', stops: [
     { id: 'toast', src: X, jump: 'saved', l: 'Saved', alts: [['Undo reached', 'reach'], ['After Undo', 'undone'], ['Phone will fetch the text', 'notext']], title: 'Saved from the toolbar',
-      see: 'Chrome, after pressing Shelf’s toolbar button on an article.',
-      look: ['The toast wears the article’s cover, the same face The Atlantic piece has on the phone.', 'It never takes focus. Pressing the shortcut again reaches Undo.', 'Shelf’s toolbar button is the app icon’s 16 and 32 px cuts.'],
-      try: ['Click Shelf’s button in the toolbar.', 'Click in the page, then press Alt+Shift+S twice.'],
+      see: 'Chrome, after pressing Kefli’s toolbar button on an article.',
+      look: ['The toast wears the article’s cover, the same face The Atlantic piece has on the phone.', 'It never takes focus. Pressing the shortcut again reaches Undo.', 'Kefli’s toolbar button is the app icon’s 16 and 32 px cuts.'],
+      try: ['Click Kefli’s button in the toolbar.', 'Click in the page, then press Alt+Shift+S twice.'],
       dec: [] },
     { id: 'ext-offline', src: X, jump: 'offline', l: 'Saved offline', alts: [['Ninth offline save', 'full'], ['After Undo, offline', 'unqueued']], title: 'Saving offline',
       see: 'Saving without a connection.',
@@ -388,18 +388,18 @@ const CHAPTERS = [
       try: [],
       dec: [31, 64] },
     { id: 'ext-failed', src: X, jump: 'failed', l: 'Toast', alts: [['On the options page', 'o-failed']], title: 'Couldn’t send',
-      see: 'When a save can’t reach Shelf’s server.',
+      see: 'When a save can’t reach Kefli’s server.',
       look: ['The toast offers Options. The options page lists what didn’t send, each with Retry.', 'Retry keeps the width of its busy label, “Sending”, so the row doesn’t shift while it sends.'],
       try: ['On the options page, press Retry.'],
       dec: [74] },
     { id: 'popup', src: X, jump: 'popup', l: 'Popup', alts: [['Tick only (Chrome before 127)', 'restricted']], title: 'On a browser page',
       see: 'Saving from a page where no toast can run, such as Chrome’s settings.',
-      look: ['A small popup opens under Shelf’s button instead, with the same words and Undo.'],
+      look: ['A small popup opens under Kefli’s button instead, with the same words and Undo.'],
       try: [],
       dec: [] },
     { id: 'rclick', src: X, jump: 'menu', l: 'Menu', title: 'Right-click a link',
       see: 'Saving a link without opening it.',
-      look: ['“Save link to Shelf” in Chrome’s own menu, with the 16 px icon.'],
+      look: ['“Save link to Kefli” in Chrome’s own menu, with the 16 px icon.'],
       try: [],
       dec: [] },
     { id: 'pair', src: X, jump: 'o-pair', l: 'Not connected', alts: [['Phone scans the code', 'o-scanned'], ['Code expired', 'o-expired'], ['Can’t connect', 'o-offline'], ['Not pinned yet', 'o-unpinned']], title: 'Connect to your phone',
@@ -446,7 +446,7 @@ STOPS.push({ id: 'signoff', signoff: true, title: 'Sign off', ch: null });
 const REAL = STOPS.filter(s => !s.intro && !s.signoff);
 
 /* ---------------- state, kept in this browser only ---------------- */
-const KEY = 'shelf-stage0-tour-1';
+const KEY = 'kefli-stage0-tour-1';
 let S = { cur: 'intro', dark: false, v: {}, sign: {}, signNote: '' };
 try { const raw = localStorage.getItem(KEY); if (raw) S = { ...S, ...JSON.parse(raw) }; } catch (e) { /* private window or blocked storage: the tour still works, unsaved */ }
 let saveTimer = null;
@@ -462,13 +462,13 @@ const ICON = {
 };
 const VLABEL = { ok: 'Looks right', change: 'Needs a change', unsure: 'Not sure' };
 
-/* ---------------- chapter covers (decorative), drawn by cover v1 from sha256("shelf/tour/<chapter>") ---------------- */
+/* ---------------- chapter covers (decorative), drawn by cover v1 from sha256("kefli/tour/<chapter>") ---------------- */
 const covers = {};
 async function drawCovers(){
   if (!window.ShelfCover || !(window.crypto && crypto.subtle)) return;
   for (const c of CHAPTERS) {
     try {
-      const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('shelf/tour/' + c.id));
+      const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('kefli/tour/' + c.id));
       const hex = [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, '0')).join('');
       covers[c.id] = ShelfCover.svg(hex, { depth: 2 });
     } catch (e) { /* no cover: the chapter shows without one */ }
@@ -554,15 +554,15 @@ function adaptive(cls, label, mono){
 const BOARDS = {
   icon: () => `${NEEDSRV}<div class="board">
     <h3>On a home screen</h3>
-    <div class="home l">${adaptive('r-circle', 'Shelf')}<div class="app-ic"><span class="ghost"></span>&nbsp;</div><div class="app-ic"><span class="ghost"></span>&nbsp;</div>${adaptive('r-circle', 'Themed', ['#E7E1D2', '#3B362B'])}</div>
-    <div class="home d" style="margin-top:12px">${adaptive('r-circle', 'Shelf')}<div class="app-ic"><span class="ghost"></span>&nbsp;</div><div class="app-ic"><span class="ghost"></span>&nbsp;</div>${adaptive('r-circle', 'Themed', ['#3B362B', '#E7E1D2'])}</div>
+    <div class="home l">${adaptive('r-circle', 'Kefli')}<div class="app-ic"><span class="ghost"></span>&nbsp;</div><div class="app-ic"><span class="ghost"></span>&nbsp;</div>${adaptive('r-circle', 'Themed', ['#E7E1D2', '#3B362B'])}</div>
+    <div class="home d" style="margin-top:12px">${adaptive('r-circle', 'Kefli')}<div class="app-ic"><span class="ghost"></span>&nbsp;</div><div class="app-ic"><span class="ghost"></span>&nbsp;</div>${adaptive('r-circle', 'Themed', ['#3B362B', '#E7E1D2'])}</div>
     <p class="cap">The adaptive icon’s two layers, masked as a launcher would at 56 px. The themed icon is the one-colour layer in the system’s tones (Android 13 and later).</p>
     <h3>Android’s mask shapes</h3>
     <div class="row shapes">${['r-circle', 'r-squircle', 'r-rounded', 'r-square'].map(c => `<div class="fig">${adaptive(c, '')}${c.slice(2)}</div>`).join('')}<div class="fig"><div class="app-ic"><div class="mask"><img src="${B}android/icon.png" alt="" style="left:0;top:0;width:100%;height:100%" onerror="document.getElementById('panel').classList.add('missing')"></div></div>legacy icon</div></div>
     <h3>In the browser, at real size</h3>
     <div class="row" style="flex-direction:column;align-items:flex-start;gap:10px">
-      <div class="chrome l"><span class="tab"><img src="${B}web/favicon.svg" alt="" onerror="document.getElementById('panel').classList.add('missing')">Shelf</span><span class="omni">shelf.example</span><img src="${B}extension/icon-16.png" srcset="${B}extension/icon-16.png 1x, ${B}extension/icon-32.png 2x" alt="Shelf toolbar button"></div>
-      <div class="chrome d"><span class="tab"><img src="${B}web/favicon.svg" alt="">Shelf</span><span class="omni">shelf.example</span><img src="${B}extension/icon-16.png" srcset="${B}extension/icon-16.png 1x, ${B}extension/icon-32.png 2x" alt="Shelf toolbar button, dark"></div>
+      <div class="chrome l"><span class="tab"><img src="${B}web/favicon.svg" alt="" onerror="document.getElementById('panel').classList.add('missing')">Kefli</span><span class="omni">kefli.example</span><img src="${B}extension/icon-16.png" srcset="${B}extension/icon-16.png 1x, ${B}extension/icon-32.png 2x" alt="Kefli toolbar button"></div>
+      <div class="chrome d"><span class="tab"><img src="${B}web/favicon.svg" alt="">Kefli</span><span class="omni">kefli.example</span><img src="${B}extension/icon-16.png" srcset="${B}extension/icon-16.png 1x, ${B}extension/icon-32.png 2x" alt="Kefli toolbar button, dark"></div>
       <div class="status">9:41 ${img('android/notification-icon.png', 'Notification glyph')} <span style="opacity:.7">status bar glyph</span></div>
     </div>
     <p class="cap">Your screen is showing the ${devicePixelRatio >= 1.5 ? '32 px cut (a high-density screen)' : '16 px cut (a standard-density screen)'} in the toolbar.</p>
@@ -616,7 +616,7 @@ function summaryText(){
   const unmarked = REAL.filter(s => !(S.v[s.id] && S.v[s.id].mark));
   const line = s => `- ${s.n} ${s.title} (${s.src ? (s.src === P ? 'phone' : 'extension') + ' #' + s.jump : 'brand board'})${S.v[s.id].note ? ': ' + S.v[s.id].note.trim().replace(/\n+/g, ' / ') : ''}`;
   const d = new Date();
-  let t = `Shelf Stage 0 tour notes, ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}\n\n`;
+  let t = `Kefli Stage 0 tour notes, ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}\n\n`;
   const ok = by('ok').length, ch = by('change').length;
   t += `Marked ${REAL.length - unmarked.length} of ${REAL.length} stops: ${ok} ${ok === 1 ? 'looks' : 'look'} right, ${ch} ${ch === 1 ? 'needs' : 'need'} a change, ${by('unsure').length} not sure.\n`;
   if (by('change').length) t += `\nNeeds a change\n${by('change').map(line).join('\n')}\n`;

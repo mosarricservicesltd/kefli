@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Shelf Extension</title>
+<title>Kefli Extension</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- tokens.css v0.2 (Fingerprint) imports Archivo, Literata and Martian Mono from Google Fonts for the mockups only.
@@ -14,7 +14,7 @@
 <style>
 *{box-sizing:border-box}
 html,body{margin:0}
-/* The board's presentation colours, for the panel and the desk around the window only (not Shelf UI, so not tokens). */
+/* The board's presentation colours, for the panel and the desk around the window only (not Kefli UI, so not tokens). */
 :root{--b-bg:#E6E4DE;--b-paper:#F3F2EE;--b-ink:#17171A;--b-muted:#56554F;--b-line:#CFCCC4;--b-faint:#DAD7CF;--b-strong:#8C8A83}
 body{font-family:var(--font-ui);font-size:var(--text-15);line-height:var(--leading-ui);background:var(--b-bg);color:var(--b-ink);-webkit-font-smoothing:antialiased}
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
@@ -58,8 +58,8 @@ html.embed .wrap{padding:var(--space-16)}
 .tab.on{background:var(--chrome-2);color:var(--chrome-text)}
 .tab .lbl{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .tab .fav{width:16px;height:16px;border-radius:4px;background:var(--chrome-muted);opacity:.5;flex:none}
-/* Shelf's icon wherever Chrome shows the extension: tab favicon, toolbar, menu, address bar (the extension's icon, see MARK). */
-.tab .fav.shelf{background:none;border-radius:0;opacity:1;display:inline-flex}
+/* Kefli's icon wherever Chrome shows the extension: tab favicon, toolbar, menu, address bar (the extension's icon, see MARK). */
+.tab .fav.kefli{background:none;border-radius:0;opacity:1;display:inline-flex}
 .mark{display:block;flex:none;position:relative;width:var(--m);height:var(--m)}
 .mark svg{display:block;width:100%;height:100%}
 /* A 16 px slot holds both tuned cuts and shows the one Chrome would use: icon-16 on a 1x screen, and icon-32 drawn at
@@ -73,7 +73,7 @@ html.embed .wrap{padding:var(--space-16)}
 .tb{position:relative;width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:var(--chrome-muted);flex:none}
 .tb[hidden]{display:none}
 .tb:hover{background:#0000000F}
-.tb.shelf .ico{display:inline-flex}
+.tb.kefli .ico{display:inline-flex}
 /* The badge is drawn by Chrome from the colours the build passes to setBadgeBackgroundColor / setBadgeTextColor
    (drawn system UI, one colour set for every browser theme): the light theme's success for the tick, the light theme's
    muted grey for the waiting count (decision 64), and the light paper for the text, by the fill rule. */
@@ -111,7 +111,7 @@ html.embed .wrap{padding:var(--space-16)}
 /* a hairline inside every cover keeps a ground close to the surface from bleeding into it */
 .cv::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px var(--cover-edge);pointer-events:none}
 
-/* ---------- Shelf's toast (our UI, tokens only) ---------- */
+/* ---------- Kefli's toast (our UI, tokens only) ---------- */
 /* The house inverted toast (decisions 46 and 57): buildToast gives the toast the opposite token scheme, so every role colour
    inside it (muted, success, error, the fill, the focus ring) comes from one contrast-checked set. Its surface and text are the
    page scheme's text and background colours, exactly as on the phone, and its shadow is the page scheme's. The properties
@@ -166,7 +166,7 @@ html.embed .wrap{padding:var(--space-16)}
 /* crossfades leave the old layer in place as an inert ghost while it fades out (motion.quick) */
 .ghost{pointer-events:none}
 
-/* ---------- Shelf's action popup on browser pages (our UI, tokens only; Chrome draws the bubble it sits in) ---------- */
+/* ---------- Kefli's action popup on browser pages (our UI, tokens only; Chrome draws the bubble it sits in) ---------- */
 .popup{position:absolute;top:84px;right:44px;width:336px;max-width:calc(100% - 16px);z-index:8;--ring:var(--surface);background:var(--surface);color:var(--text);
   border-radius:var(--radius);box-shadow:var(--shadow-float);font-family:var(--font-ui);font-size:var(--text-15);line-height:var(--leading-ui);overflow:hidden}
 .popup[hidden]{display:none}
@@ -184,7 +184,7 @@ html.embed .wrap{padding:var(--space-16)}
 .opts.swapghost{position:absolute;inset:0;overflow:hidden;background:none;z-index:1}
 .opts :focus-visible{outline:var(--focus-width) solid var(--focus);outline-offset:var(--focus-offset)}
 .brandrow{display:flex;align-items:center;gap:10px;margin-bottom:var(--space-24);font-family:var(--font-display);font-stretch:var(--font-display-stretch);font-weight:var(--font-display-weight);letter-spacing:var(--font-display-tracking);font-size:var(--text-17);line-height:1}
-/* On Shelf's own page the app icon is a cover too, so it carries the covers' inset hairline (consistency spec, Covers):
+/* On Kefli's own page the app icon is a cover too, so it carries the covers' inset hairline (consistency spec, Covers):
    its cream ground sits close to paper. The corner is the small cuts' 7 in 32. */
 .brandrow .lg{display:inline-flex}
 .brandrow .mark::after{content:"";position:absolute;inset:0;border-radius:calc(var(--m) * 7 / 32);box-shadow:inset 0 0 0 1px var(--cover-edge);pointer-events:none}
@@ -331,8 +331,8 @@ details.adv[open] summary .chevr{transform:rotate(90deg)}
 <body>
 <div class="wrap">
   <div class="panel">
-    <h1>Shelf prototype · batch 5 · browser extension · Fingerprint</h1>
-    <p>Click the Shelf button in the toolbar or press Alt+Shift+S to save the page, or jump to any state below. The toast never takes focus: press the shortcut again while it says Saved to reach Undo, then Tab, Escape or ✕ to go back to the page. It pauses while the pointer is over it or focus you gave it is inside it. On a browser page, a small popup opens under Shelf’s button instead. Shelf’s options open in their own tab; click the article’s tab to go back. When Shelf isn’t pinned, click the puzzle piece to pin it. The browser window, tab strip, badge and right-click menu are Chrome’s, drawn only for context; the toast, the popup and the options page are Shelf’s. Decisions and build notes are under the window.</p>
+    <h1>Kefli prototype · batch 5 · browser extension · Fingerprint</h1>
+    <p>Click the Kefli button in the toolbar or press Alt+Shift+S to save the page, or jump to any state below. The toast never takes focus: press the shortcut again while it says Saved to reach Undo, then Tab, Escape or ✕ to go back to the page. It pauses while the pointer is over it or focus you gave it is inside it. On a browser page, a small popup opens under Kefli’s button instead. Kefli’s options open in their own tab; click the article’s tab to go back. When Kefli isn’t pinned, click the puzzle piece to pin it. The browser window, tab strip, badge and right-click menu are Chrome’s, drawn only for context; the toast, the popup and the options page are Kefli’s. Decisions and build notes are under the window.</p>
     <p>Every save wears its cover, drawn by cover v1 from the sha256 of its normalised address, so the Atlantic article has the same face here, on the board and on the phone. The options page and the popup use Archivo: the extension bundles it as local font files, because its content security policy blocks remote fonts, while this mockup loads it from Google Fonts. The injected toast keeps system-ui.</p>
     <div class="grid">
       <div><h2>Theme</h2><div class="btns"><button data-theme-set="light" class="on">Light</button><button data-theme-set="dark">Dark</button></div></div>
@@ -361,7 +361,7 @@ details.adv[open] summary .chevr{transform:rotate(90deg)}
         <button data-jump="o-connected">Connected</button>
         <button data-jump="o-waiting">Connected, offline, 3 waiting</button>
         <button data-jump="o-failed">Connected, some couldn’t send</button>
-        <button data-jump="o-blocked">Connected, something is blocking Shelf’s server</button>
+        <button data-jump="o-blocked">Connected, something is blocking Kefli’s server</button>
         <button data-jump="o-unsent">Disconnect with unsent saves</button>
         <button data-jump="o-scanned">Simulate: phone scans the code</button>
       </div></div>
@@ -375,15 +375,15 @@ details.adv[open] summary .chevr{transform:rotate(90deg)}
       <span class="nav" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></span>
       <span class="nav" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></span>
       <div class="omni" id="omni"></div>
-      <button class="tb shelf" id="shelfbtn" aria-label="Save to Shelf (Alt+Shift+S)" title="Save to Shelf (Alt+Shift+S)"><span class="ico" id="shelfico"></span><span id="badge"></span></button>
-      <!-- Chrome's Extensions menu (the puzzle piece). While Shelf isn't pinned, clicking it here pins Shelf. -->
+      <button class="tb kefli" id="keflibtn" aria-label="Save to Kefli (Alt+Shift+S)" title="Save to Kefli (Alt+Shift+S)"><span class="ico" id="kefliicon"></span><span id="badge"></span></button>
+      <!-- Chrome's Extensions menu (the puzzle piece). While Kefli isn't pinned, clicking it here pins Kefli. -->
       <button class="tb" id="puzzle" aria-hidden="true" tabindex="-1"></button>
       <span class="me" aria-hidden="true"></span>
     </div>
     <div class="page" id="page">
       <div id="content"></div>
       <!-- Build contract for the toast (spec 05 §4).
-           - The host is a custom element <shelf-toast> with a closed shadow root:
+           - The host is a custom element <kefli-toast> with a closed shadow root:
              :host{all:initial !important;position:fixed;right:16px;bottom:16px;z-index:2147483647}.
            - Declared on the inner .toast element, not on :host, because page rules that match the host win for normal
              declarations and all:initial doesn't reset custom properties: the toast's tokens, --motion-enter and
@@ -401,7 +401,7 @@ details.adv[open] summary .chevr{transform:rotate(90deg)}
              document.fullscreenElement when one is set, or else to document.documentElement.
            - Accepted as they are: bottom right, 336 wide (the board's width, for the 40 px cover), radius 14, the 16 px
              inset, and system-ui first. Remote and shadow-root @font-face are unreliable.
-           - Page CSS can still reach the host element (rules matching <shelf-toast>, and inheritance into the shadow tree),
+           - Page CSS can still reach the host element (rules matching <kefli-toast>, and inheritance into the shadow tree),
              which is why the list above lives inside the shadow root. Spec 05's claim that page CSS cannot touch a closed
              shadow root needs correcting.
            - The toast never takes focus on its own. The live region below is created once and only its text changes. -->
@@ -409,14 +409,14 @@ details.adv[open] summary .chevr{transform:rotate(90deg)}
       <!-- The options page's one persistent status region. -->
       <div id="optlive" class="sr" role="status" aria-live="polite"></div>
     </div>
-    <!-- Shelf's action popup (saved.html in the build), opened on pages where no toast can run. Chrome anchors it under the
+    <!-- Kefli's action popup (saved.html in the build), opened on pages where no toast can run. Chrome anchors it under the
          toolbar button; its document takes focus as a browser popup does, but Undo is not focused. It has its own status region. -->
-    <div class="popup" id="apopup" role="dialog" aria-label="Shelf" tabindex="-1" hidden></div>
+    <div class="popup" id="apopup" role="dialog" aria-label="Kefli" tabindex="-1" hidden></div>
   </div>
   <div class="panel after">
     <div class="note">
       <p><strong>Settled (decision 31):</strong> a ninth save made offline while eight are waiting is refused with a clear message, so nothing you saved is ever silently lost. Spec 05 says the same.</p>
-      <p><strong>Changed in this pass (Fingerprint, decisions 65 to 67 and 70):</strong> the look only; flows, copy, controls and behaviour are as before. The toast’s leading circle becomes the saved page’s cover, drawing itself while Shelf saves, and a small mark on its corner says what happened: a tick once it is saved, the offline mark while it waits to send, the alert mark when it couldn’t send. A removed or refused save shows a plain tile the same size, since there is no save to show. The countdown runs in the article’s ink, chosen for 3:1 on the toast. Saves listed under Couldn’t send wear their covers too. Fills are ink on paper, or paper on ink in dark, with the page colour on them; there is no Terracotta and no gradient. The toolbar button, tab, address bar, menu and options logo show the app icon Richard chose (decision 70): C·L·063 with the paper mark, a paper bookmark and bar in an ink outline on orange bands and cream, with its own drawings for 16, 28 and 32 px. The badge stays neutral grey (decision 64).</p>
+      <p><strong>Changed in this pass (Fingerprint, decisions 65 to 67 and 70):</strong> the look only; flows, copy, controls and behaviour are as before. The toast’s leading circle becomes the saved page’s cover, drawing itself while Kefli saves, and a small mark on its corner says what happened: a tick once it is saved, the offline mark while it waits to send, the alert mark when it couldn’t send. A removed or refused save shows a plain tile the same size, since there is no save to show. The countdown runs in the article’s ink, chosen for 3:1 on the toast. Saves listed under Couldn’t send wear their covers too. Fills are ink on paper, or paper on ink in dark, with the page colour on them; there is no Terracotta and no gradient. The toolbar button, tab, address bar, menu and options logo show the app icon Richard chose (decision 70): C·L·063 with the paper mark, a paper bookmark and bar in an ink outline on orange bands and cream, with its own drawings for 16, 28 and 32 px. The badge stays neutral grey (decision 64).</p>
       <p><strong>Motion (decision 73, motion-spec.md):</strong> the toast rises 24 px as it fades in and sinks by the exact reverse; a second save, Saving… becoming Saved, and Undo change it in place by crossfade. The cover draws itself once in the leading slot, and its corner mark lands with the last leaf, never more than a second in. The countdown runs by transform. The popup has no entrance of its own, since the browser opens it, but its cover draws as in the toast. On the options page, Retry turns busy at the tap and shows its dots after 150 ms; a sent row holds Sent for 1.5 s, then leaves and the rows below close the gap. Advanced, the Disconnect confirm and an expired code crossfade, Connected swaps the page, and the pin hint leaves like a row. With reduced motion everything fades in place and nothing travels; the countdown keeps running.</p>
       <p><strong>Earlier pass (decisions 57 to 64):</strong> the toast never takes focus; a second press of the shortcut reaches Undo (58, updates 44). Browser pages show a small popup as well as the tick (59). Offline saves offer Undo (60, changes 30). The badge, the button’s name and the options notice count offline saves only (30); saves that couldn’t send are listed on the options page. Disconnecting names every unsent save it would delete, including ones that couldn’t send.</p>
     </div>
@@ -429,13 +429,13 @@ details.adv[open] summary .chevr{transform:rotate(90deg)}
         <li><strong>Icon:</strong> decision 94’s icons, built from <code>shared/brand/src</code> into <code>shared/brand/out/extension/</code>. The manifest’s <code>icons</code> and <code>action.default_icon</code> take <code>icon-16.png</code> and <code>icon-32.png</code>, the toolbar button (the plain bookmark, <code>toolbar-16.svg</code> and <code>toolbar-32.svg</code>), and <code>icon-48.png</code> and <code>icon-128.png</code>, the app icon D (<code>small-48.svg</code>, and the 108 dp drawing with the Web Store’s padding); Firefox takes <code>icon-16.svg</code> and <code>icon-32.svg</code> for its 16 and 32 keys. Chrome picks the size for the screen, 16 on a 1x screen and 32 drawn at 16 on anything denser, and this mockup does the same. The options page’s 28 px logo inlines <code>options-logo-28.svg</code>, D’s tuned 28 px cut built from <code>small-28.svg</code>. It is static artwork.</li>
         <li><strong>Second press:</strong> while a Saved toast shows, the command handler asks the tab’s content script to reach Undo and passes the keyboard flag.</li>
         <li><strong>Install:</strong> on runtime.onInstalled with reason 'install', call runtime.openOptionsPage() so Connect opens by itself. The Firefox manifest overlay sets action.default_area:'navbar'.</li>
-        <li><strong>Pin line:</strong> read action.getUserSettings().isOnToolbar (Chrome 91+, Firefox 118+); re-check on focus, visibilitychange and action.onUserSettingsChanged where it exists, and drop the line once Shelf is pinned.</li>
+        <li><strong>Pin line:</strong> read action.getUserSettings().isOnToolbar (Chrome 91+, Firefox 118+); re-check on focus, visibilitychange and action.onUserSettingsChanged where it exists, and drop the line once Kefli is pinned.</li>
         <li><strong>Browser-page popup:</strong> in the command or click handler, action.setPopup({popup:'saved.html'}), then action.openPopup(), then setPopup({popup:''}) so the next click still saves. Needs Chrome 127+; below that the tick alone stays. Firefox allows openPopup() from the same user-action handler.</li>
         <li><strong>Badge:</strong> setBadgeBackgroundColor '#5C5B56' (the light muted grey) while saves wait to send and '#1E7A4A' (the light success green, tokens 0.2.1) for the tick; setBadgeTextColor('#F3F2EE') in both builds.</li>
         <li><strong>Shortcut:</strong> read the live binding with commands.getAll() in both browsers. 'Set a shortcut' opens chrome://extensions/shortcuts with tabs.create (Edge and Brave redirect it); in Firefox, commands.openShortcutSettings() where it exists, otherwise the words 'Add-ons, then the gear, then Manage Extension Shortcuts'. In this mock it simulates setting Alt+Shift+S there and coming back.</li>
         <li><strong>Fonts:</strong> the options page and the popup use Archivo (Archivo Expanded, width 125, for the titles and the wordmark), bundled as local @font-face files, because the extension’s content security policy blocks remote fonts. Ship the static cuts the board lists (Regular, Medium, SemiBold, Expanded Bold). This mockup loads them from Google Fonts through tokens.css. The injected toast stays system-ui.</li>
         <li><strong>Browser name:</strong> the connected lead takes it from the pairing label; fall back to navigator.userAgent where navigator.userAgentData is missing (Firefox).</li>
-        <li><strong>Firefox build:</strong> the menu item is titled 'Save Link to Shelf' (Title Case) and the options row repeats that wording; the options page lives at moz-extension://…/options.html; a save from about:reader?url=… sends the inner url. No Firefox window is drawn here.</li>
+        <li><strong>Firefox build:</strong> the menu item is titled 'Save Link to Kefli' (Title Case) and the options row repeats that wording; the options page lives at moz-extension://…/options.html; a save from about:reader?url=… sends the inner url. No Firefox window is drawn here.</li>
         <li><strong>Check:</strong> verify in a light and a dark Windows contrast theme (for example Desert and Night sky).</li>
       </ul>
     </details>
@@ -473,10 +473,10 @@ const SAVES = {
   ars:      { url: 'https://arstechnica.com/gadgets/2026/09/mozillas-readability-library-is-quietly-everywhere',       hash: '08246b635f8db8e14834c0a17044949b490975582e1f61be89c8e6062ae4d30e' },
   strat:    { url: 'https://stratechery.com/2026/aggregation-theory-ten-years-on',                                     hash: '9f40a2ca59c109dd3b5c4f5c3c88fd84ff5579309ebdec62e3294eebb5d4fbd4' },
   settings: { url: 'chrome://settings',                                                                                hash: '8a2881da7438c0e112e1fc575190fdc3a0a2e76ec45b68fa880d99e43fe65cda' },
-  options:  { url: 'chrome-extension://shelf/options.html',                                                            hash: 'ba0e9d66f202c9756b3e154ef6dc9c997c4601be24c23dee7e76bc00d627ebaa' },
+  options:  { url: 'chrome-extension://kefli/options.html',                                                            hash: 'bdb0f9002c9d62d2463236713abf3c3f4688d76f82a7d623b3286eb8e108062c' },
 };
 
-/* Shelf's icons in the browser (decision 94). Wherever Chrome shows the extension at 16 px (the toolbar button, the
+/* Kefli's icons in the browser (decision 94). Wherever Chrome shows the extension at 16 px (the toolbar button, the
    context menu, the options page's tab) it shows the extension's own icon: the plain bookmark in D's proportions, since
    the extension only saves and the app icon's split reads as a pause control at that size. These are shared/brand/src's
    toolbar-16.svg and toolbar-32.svg, copied unchanged (a graphite tile and the bookmark, no clip); both are inlined and
@@ -579,12 +579,12 @@ const LINK_HOST = 'arstechnica.com';                   // where the article's "r
 const URL_ = 'theatlantic.com/ideas/archive/2026/09/reading-long-things';
 const CAP = 8;                                        // offline queue limit (decision 31)
 const KEY = 'Alt+Shift+S';                            // the manifest's suggested binding
-/* "Couldn't send" lists every save no relay has accepted yet. 'Shelf' alone means the app; the server is "Shelf's server".
+/* "Couldn't send" lists every save no relay has accepted yet. 'Kefli' alone means the app; the server is "Kefli's server".
    'stopped' is for entries past the 200-attempt cap, where Retry is the only way on; otherwise Retry means "try now". */
 const WHY = {
-  reach: 'Couldn’t reach Shelf’s server. It will keep trying.',
-  blocked: 'Something in this browser is blocking Shelf’s server. See Advanced.',
-  stopped: 'Couldn’t reach Shelf’s server. Retry to send it.',
+  reach: 'Couldn’t reach Kefli’s server. It will keep trying.',
+  blocked: 'Something in this browser is blocking Kefli’s server. See Advanced.',
+  stopped: 'Couldn’t reach Kefli’s server. Retry to send it.',
 };
 const FAILED = () => [
   { id: 'f1', title: 'Aggregation theory, ten years on', host: 'stratechery.com', hash: SAVES.strat.hash, why: 'reach' },
@@ -594,7 +594,7 @@ const THIS_SAVE = () => ({ id: 'f0', title: TITLE, host: HOST, hash: SAVES.atlan
 const FRESH = () => ({
   view: 'site',            // 'site' | 'restricted' | 'options': what the active tab shows
   base: 'site',            // what the first tab holds: the article, or a browser page
-  optsOpen: false,         // Shelf's options open in a second tab
+  optsOpen: false,         // Kefli's options open in a second tab
   paired: true, pinned: true, online: true, waiting: 0,
   tick: false,             // false, or the kind of save the icon tick confirms ('notext' | 'offline')
   oldChrome: false,        // before Chrome 127 an extension can't open its popup, so browser pages get the tick only
@@ -651,7 +651,7 @@ function menuHTML(){
   return `<div class="cmenu" style="left:190px;top:238px" role="menu" aria-label="Link menu">
     <div>Open link in new tab</div><div>Open link in new window</div><div>Open link in incognito window</div><div class="hr"></div>
     <div>Copy link address</div><div class="hr"></div>
-    <div class="hl" role="menuitem" tabindex="0" id="savelink"><span class="sico">${MARK(16)}</span>Save link to Shelf</div>
+    <div class="hl" role="menuitem" tabindex="0" id="savelink"><span class="sico">${MARK(16)}</span>Save link to Kefli</div>
     <div class="hr"></div><div><span class="sp"></span>Inspect</div></div>`;
 }
 
@@ -662,14 +662,14 @@ function menuHTML(){
    instead when there is no save to show (removed, or refused), with tone 'bad' for the refusal. */
 const TOASTS = {
   saving:   c => ({ cover: c.hash, title: 'Saving…', sub: c.link ? c.host : TITLE, say: '' }),
-  saved:    c => ({ cover: c.hash, mark: 'ok', title: 'Saved to Shelf', sub: TITLE, action: 'Undo', timer: CD, say: 'Saved to Shelf' }),
-  notext:   c => ({ cover: c.hash, mark: 'ok', title: 'Saved to Shelf', sub: `${c.host} · your phone will fetch the text`, wrap: true, action: 'Undo', timer: CD, say: 'Saved to Shelf. Your phone will fetch the text.' }),
+  saved:    c => ({ cover: c.hash, mark: 'ok', title: 'Saved to Kefli', sub: TITLE, action: 'Undo', timer: CD, say: 'Saved to Kefli' }),
+  notext:   c => ({ cover: c.hash, mark: 'ok', title: 'Saved to Kefli', sub: `${c.host} · your phone will fetch the text`, wrap: true, action: 'Undo', timer: CD, say: 'Saved to Kefli. Your phone will fetch the text.' }),
   offline:  c => ({ cover: c.hash, mark: 'off', title: 'Saved — will send when you’re online', sub: c.link ? c.host : TITLE, action: 'Undo', timer: CD, say: 'Saved. It will send when you’re online.' }),
-  undone:   c => ({ tile: 'undo', title: 'Removed from Shelf', sub: 'If your phone already has it, remove it there.', wrap: true, timer: CD, say: 'Removed from Shelf. If your phone already has it, remove it there.' }),
+  undone:   c => ({ tile: 'undo', title: 'Removed from Kefli', sub: 'If your phone already has it, remove it there.', wrap: true, timer: CD, say: 'Removed from Kefli. If your phone already has it, remove it there.' }),
   // Undo on an offline save: it was still in this browser's queue, so nothing needs doing on the phone (decision 60).
-  unqueued: c => ({ tile: 'undo', title: 'Removed from Shelf', sub: c.link ? c.host : TITLE, timer: CD, say: 'Removed from Shelf' }),
+  unqueued: c => ({ tile: 'undo', title: 'Removed from Kefli', sub: c.link ? c.host : TITLE, timer: CD, say: 'Removed from Kefli' }),
   full:     c => ({ tile: 'alert', tone: 'bad', title: `Not saved: ${CAP} are already waiting`, sub: 'They’ll send when you’re online. Save this again then.', wrap: true, timer: CD, say: `Not saved: ${CAP} are already waiting. They’ll send when you’re online. Save this again then.` }),
-  failed:   c => ({ cover: c.hash, mark: 'bad', title: 'Couldn’t send this save', sub: 'It’s kept here, and Shelf will keep trying.', wrap: true, action: 'Options', timer: CD, say: 'Couldn’t send this save. It’s kept here, and Shelf will keep trying.' }),
+  failed:   c => ({ cover: c.hash, mark: 'bad', title: 'Couldn’t send this save', sub: 'It’s kept here, and Kefli will keep trying.', wrap: true, action: 'Options', timer: CD, say: 'Couldn’t send this save. It’s kept here, and Kefli will keep trying.' }),
 };
 /* The corner marks: 12 px glyphs on a 20 px disc, heavier than 1.75 so they hold at that size. */
 const MK = {
@@ -691,7 +691,7 @@ const failRow = f => {
   return `<div class="li" data-k="row-${f.id}" data-gap>${coverHTML(f.hash)}<span class="t">${esc(f.title)}<small data-k="sub-${f.id}">${esc(f.host)} · ${f.sent ? 'Sent' : WHY[f.why]}</small></span>${end}</div>`;
 };
 
-const PIN = `<span class="ic">${ic('puzzle', 20)}</span><span class="t">Pin Shelf to your toolbar: click the puzzle piece, then the pin next to Shelf.</span>`;
+const PIN = `<span class="ic">${ic('puzzle', 20)}</span><span class="t">Pin Kefli to your toolbar: click the puzzle piece, then the pin next to Kefli.</span>`;
 
 function shortcutRow(){
   if (!S.shortcut) return `<div class="li" data-k="keyrow"><span class="ic">${ic('keyboard', 20)}</span><span class="t">No shortcut set</span><button class="chip" id="setkey" data-act="setkey">Set a shortcut</button></div>`;
@@ -699,20 +699,20 @@ function shortcutRow(){
 }
 
 function optionsHTML(){
-  const head = `<div class="brandrow" data-k="brand"><span class="lg">${MARK(28)}</span>Shelf</div>`;
+  const head = `<div class="brandrow" data-k="brand"><span class="lg">${MARK(28)}</span>Kefli</div>`;
   if (!S.paired) {
     const expired = S.pair === 'expired', offline = S.pair === 'offline', dim = expired || offline;
     // the QR fades to 12 % and back (opacity only, so it never moves or scales); its digits and the status line crossfade
     return `<div class="opts"><div class="in" data-k="root" data-keep>${head}
       <h1 id="connecthead" tabindex="-1" data-k="title">Connect to your phone</h1>
       ${offline ? `<div class="errline" data-k="err" data-gap>${ic('alert', 16)}<span>Can’t connect right now. Check your connection. Trying again every ten seconds.</span></div>` : ''}
-      <p class="lead" data-k="lead">Pages you save here arrive in Shelf on your phone. Your phone decides which browsers it trusts, so you connect them from there.</p>
+      <p class="lead" data-k="lead">Pages you save here arrive in Kefli on your phone. Your phone decides which browsers it trusts, so you connect them from there.</p>
       <div class="card" data-k="paircard" data-keep>
         ${S.pinned ? '' : `<div class="seg pinseg" data-k="pin" data-gap><div class="li pinline">${PIN}</div></div>`}
         <div class="seg" data-k="pairmain" data-keep>
         <div class="pair" data-k="pair" data-keep>
           <div class="qr ${dim ? 'faded' : ''}" data-theme="light" data-k="qr" data-keep>${qrSVG(168, dim ? 'Connection code, not available' : 'Connection code', 'data-k="qrimg" data-op="enter"')}${dim ? `<div class="code" aria-hidden="true" data-k="qrcode">––––-––––</div>` : `<div class="code" id="paircode" tabindex="-1" data-k="qrcode">K7QM-4XPD</div>`}</div>
-          <ol class="steps"><li>Open Shelf on your phone.</li><li>Go to <strong>You</strong>, then <strong>Connected browsers</strong>, then <strong>Connect a browser</strong>.</li><li>Scan the code, or type the code under it.</li><li>Check that your phone names this browser <strong>Chrome on a Windows laptop</strong>, then tap <strong>Connect</strong>.</li></ol>
+          <ol class="steps"><li>Open Kefli on your phone.</li><li>Go to <strong>You</strong>, then <strong>Connected browsers</strong>, then <strong>Connect a browser</strong>.</li><li>Scan the code, or type the code under it.</li><li>Check that your phone names this browser <strong>Chrome on a Windows laptop</strong>, then tap <strong>Connect</strong>.</li></ol>
         </div>
         ${expired ? `<div class="status plain" data-k="status"><div class="errline" style="margin:0;flex:1">${ic('alert', 16)}<span>This code has expired.</span></div><button class="btn primary" id="newcode" data-act="newcode">${ic('refresh', 18)}Show a new one</button></div>`
           : offline ? '' : `<div class="status" data-k="status"><span class="pdot" aria-hidden="true" data-loop="pairwait"></span>Waiting for your phone<span class="cd">Code expires in <span id="cd">${mmss(S.countdown)}</span></span></div>`}
@@ -725,7 +725,7 @@ function optionsHTML(){
   const failed = S.failed.length
     ? `<section class="sect" aria-labelledby="failhead" data-k="failed" data-gap data-keep><h2 id="failhead" tabindex="-1">Couldn’t send</h2><div class="list saves" data-k="faillist" data-keep>${S.failed.map(failRow).join('')}</div></section>`
     : '';
-  const relays = [['Shelf', 'relay.shelf.app', S.blocked], ['Backup 1', 'nos.lol', false], ['Backup 2', 'relay.damus.io', false]];
+  const relays = [['Kefli', 'relay.kefli.app', S.blocked], ['Backup 1', 'nos.lol', false], ['Backup 2', 'relay.damus.io', false]];
   const n = unsent();
   // the button gives way to the inline confirm by crossfade (the whole 'unpair' block is one keyed layer)
   const unpair = S.confirmUnpair
@@ -743,9 +743,9 @@ function optionsHTML(){
     ${failed}
     <section class="sect" aria-labelledby="wayshead" data-k="ways" data-keep><h2 id="wayshead" tabindex="-1">Ways to save</h2><div class="list" data-k="wayslist" data-keep>
       ${S.pinned ? '' : `<div class="li" data-k="pinrow" data-gap>${PIN}</div>`}
-      <div class="li" data-k="clickrow"><span class="ic">${ic('bookmark', 20)}</span><span class="t">Click the Shelf button in the toolbar</span></div>
+      <div class="li" data-k="clickrow"><span class="ic">${ic('bookmark', 20)}</span><span class="t">Click the Kefli button in the toolbar</span></div>
       ${shortcutRow()}
-      <div class="li" data-k="mouserow"><span class="ic">${ic('mouse', 20)}</span><span class="t">Right-click a link, then Save link to Shelf</span></div>
+      <div class="li" data-k="mouserow"><span class="ic">${ic('mouse', 20)}</span><span class="t">Right-click a link, then Save link to Kefli</span></div>
     </div></section>
     <details class="adv" data-k="adv" data-keep ${S.advOpen ? 'open' : ''}><summary id="advsum" data-act="adv"><span class="ic">${ic('settings', 20)}</span><span class="t">Advanced</span><span class="chev"><span class="chevr" data-k="chev" data-rot>${ic('chev', 18)}</span></span></summary>
       ${S.advOpen ? `<section class="sect" aria-labelledby="relayhead" style="margin-top:var(--space-8)" data-k="relays" data-gap><h2 id="relayhead">Relays</h2><div class="list">
@@ -763,9 +763,9 @@ function renderChrome(){
   const baseLabel = S.base === 'restricted' ? 'Settings' : TITLE;
   $('tabs').innerHTML = `<span class="dotsw" aria-hidden="true"><i></i><i></i><i></i></span>
     <button class="tab ${opts ? '' : 'on'}" role="tab" aria-selected="${!opts}" data-tab="base"><span class="fav"></span><span class="lbl">${esc(baseLabel)}</span></button>
-    ${S.optsOpen ? `<button class="tab ${opts ? 'on' : ''}" role="tab" aria-selected="${opts}" data-tab="options"><span class="fav shelf">${MARK(16)}</span><span class="lbl">${S.paired ? 'Shelf · Options' : 'Shelf · Connect'}</span></button>` : ''}`;
+    ${S.optsOpen ? `<button class="tab ${opts ? 'on' : ''}" role="tab" aria-selected="${opts}" data-tab="options"><span class="fav kefli">${MARK(16)}</span><span class="lbl">${S.paired ? 'Kefli · Options' : 'Kefli · Connect'}</span></button>` : ''}`;
   if (keepTab) { const t = document.querySelector(`[data-tab="${keepTab}"]`); if (t) t.focus(); }
-  $('omni').innerHTML = opts ? `${MARK(16)}<b>Shelf</b>&nbsp;·&nbsp;chrome-extension://shelf/options.html` : `<b>${S.base === 'restricted' ? 'chrome://settings' : URL_}</b>`;
+  $('omni').innerHTML = opts ? `${MARK(16)}<b>Kefli</b>&nbsp;·&nbsp;chrome-extension://kefli/options.html` : `<b>${S.base === 'restricted' ? 'chrome://settings' : URL_}</b>`;
   const n = S.waiting;                                      // offline saves only (decision 30)
   const b = $('badge');
   if (S.tick) { b.className = 'badge ok'; b.textContent = '✓'; }
@@ -773,10 +773,10 @@ function renderChrome(){
   else { b.className = ''; b.textContent = ''; }
   // chrome.action.setTitle in the build: the badge is visual only, so its meaning goes in the name too.
   const k = S.shortcut ? ` (${keyLabel()})` : '';
-  const name = S.tick ? (S.tick === 'offline' ? 'Saved — will send when you’re online' : 'Saved to Shelf · your phone will fetch the text')
-    : n ? `Save to Shelf${k} · ${n} waiting to send`
-    : `Save to Shelf${k}`;
-  const btn = $('shelfbtn');
+  const name = S.tick ? (S.tick === 'offline' ? 'Saved — will send when you’re online' : 'Saved to Kefli · your phone will fetch the text')
+    : n ? `Save to Kefli${k} · ${n} waiting to send`
+    : `Save to Kefli${k}`;
+  const btn = $('keflibtn');
   btn.title = name; btn.setAttribute('aria-label', name);
   btn.hidden = !S.pinned && !S.popup;                       // unpinned: Chrome pops the button out only while its popup shows
   const pz = $('puzzle');
@@ -833,7 +833,7 @@ function syncLoops(scope){
   for (const id in LOOP0) if (!seen.has(id)) delete LOOP0[id];
 }
 
-/* ---------------- motion on Shelf's options page ----------------
+/* ---------------- motion on Kefli's options page ----------------
    The page redraws from state. morph(update) measures every keyed element before and after the redraw and plays only the
    difference, on transform and opacity:
    - moved: glides back from where it was (FLIP, translateY); motion.reflow when a gap closes, after the leaving row's 100 ms
@@ -1137,7 +1137,7 @@ const toastCtx = () => ({ host: S.toastHost, link: S.toastLink, hash: S.toastHas
 function buildToast(){
   const el = document.createElement('div');
   el.className = 'toast'; el.id = 'toast'; el.dataset.theme = toastFlip();
-  el.setAttribute('role', 'group'); el.setAttribute('aria-label', 'Shelf');
+  el.setAttribute('role', 'group'); el.setAttribute('aria-label', 'Kefli');
   el.innerHTML = cardShell();
   el.addEventListener('mouseenter', () => { if (el !== toastEl()) return; TT.hover = true; TT.pause(); });
   el.addEventListener('mouseleave', () => { if (el !== toastEl()) return; TT.hover = false; TT.resume(); });
@@ -1239,7 +1239,7 @@ function openPopup(kind, o = {}){
   if (o.host) S.popHost = o.host;
   if (o.hash) S.popHash = o.hash;
   if (o.timed !== undefined) S.popTimed = o.timed; else if (opening) S.popTimed = true;
-  // The browser opens and closes the bubble; Shelf's content inside has no entrance of its own, but its cover draws and its
+  // The browser opens and closes the bubble; Kefli's content inside has no entrance of its own, but its cover draws and its
   // mark lands as in the toast, and later states (Undo) crossfade in place.
   if (opening) {
     S.popReturn = document.activeElement; PT.stop(); PT.hover = false; PT.focus = false; pop.classList.remove('viakey');
@@ -1274,7 +1274,7 @@ function closePopup(o = {}){
 function placePopup(){
   const pop = popEl();
   if (pop.hidden) return;
-  const btn = $('shelfbtn');
+  const btn = $('keflibtn');
   if (btn.hidden) return;
   const w = win.getBoundingClientRect(), a = btn.getBoundingClientRect();
   pop.style.top = `${Math.round(a.bottom - w.top + 6)}px`;
@@ -1359,7 +1359,7 @@ function tick(kind = 'notext'){
 
 function save(o = {}){
   if (!S.paired) { openOptions(); return; }                 // first click with no phone: options open in a new tab
-  if (S.view !== 'site') { browserPageSave(); return; }     // browser pages and Shelf's own options tab: no toast can run
+  if (S.view !== 'site') { browserPageSave(); return; }     // browser pages and Kefli's own options tab: no toast can run
   S.toastHost = o.linkOnly ? LINK_HOST : HOST; S.toastLink = !!o.linkOnly;
   S.toastHash = o.linkOnly ? SAVES.ars.hash : SAVES.atlantic.hash;
   if (!S.online) {
@@ -1373,11 +1373,11 @@ function save(o = {}){
   later(() => showToast(o.linkOnly ? 'notext' : 'saved', { inPlace: true }), 900, 'save');
 }
 
-/* No toast can run on browser pages (chrome:// and about: pages, the Web Store, PDFs, reader view): Shelf saves the address,
+/* No toast can run on browser pages (chrome:// and about: pages, the Web Store, PDFs, reader view): Kefli saves the address,
    the icon ticks for four seconds, and on Chrome 127+ and Firefox a small popup confirms the save under the button. */
 function browserPageSave(){
   const onOpts = S.view === 'options';
-  const where = onOpts ? 'chrome-extension://shelf' : 'chrome://settings';
+  const where = onOpts ? 'chrome-extension://kefli' : 'chrome://settings';
   let kind = 'notext';
   if (!S.online) { if (S.waiting >= CAP) kind = 'full'; else { S.waiting++; kind = 'offline'; } }
   else if (S.waiting) S.waiting = 0;                        // back online: the queue has sent
@@ -1421,16 +1421,16 @@ function retry(id){
   }, 1200, 'retry');
 }
 
-$('shelfico').innerHTML = MARK(16);
+$('kefliicon').innerHTML = MARK(16);
 $('puzzle').innerHTML = ic('puzzle', 18, 'stroke-width="2"');   // Chrome's own icon, at Chrome's weight
 initPopup();
-$('shelfbtn').onclick = () => save();
-$('puzzle').onclick = () => {                              // stands for: puzzle piece, then the pin next to Shelf
+$('keflibtn').onclick = () => save();
+$('puzzle').onclick = () => {                              // stands for: puzzle piece, then the pin next to Kefli
   if (S.pinned) return;
   const had = document.activeElement === $('puzzle');
   S.pinned = true;
   if (S.view === 'options') morph(render); else render();   // the pin hint leaves by row out
-  if (had) $('shelfbtn').focus();                           // the puzzle piece goes back to being decoration here
+  if (had) $('keflibtn').focus();                           // the puzzle piece goes back to being decoration here
 };
 $('tabs').addEventListener('click', e => {
   const t = e.target.closest('[data-tab]');
@@ -1497,17 +1497,17 @@ setInterval(() => {
 
 /* ---------------- panel ---------------- */
 const TOAST_JUMPS = ['saving', 'saved', 'undone', 'notext', 'offline', 'unqueued', 'full', 'failed'];
-const BROWSER_PAGE = 'Browser pages like this one don’t allow extensions to read them. Shelf saves the address, and your phone fetches the page.';
+const BROWSER_PAGE = 'Browser pages like this one don’t allow extensions to read them. Kefli saves the address, and your phone fetches the page.';
 const NOTES = {
-  saving: 'The address is known before the text, so the cover draws itself while Shelf saves, its leaves landing in hash order over about a second. When the save goes through, Saved crossfades in and its tick lands with the last leaf (never more than a second in), or as soon as the save is confirmed if that comes later. This state is held still: click the jump to replay the drawing, or click Shelf’s button to watch a whole save.',
+  saving: 'The address is known before the text, so the cover draws itself while Kefli saves, its leaves landing in hash order over about a second. When the save goes through, Saved crossfades in and its tick lands with the last leaf (never more than a second in), or as soon as the save is confirmed if that comes later. This state is held still: click the jump to replay the drawing, or click Kefli’s button to watch a whole save.',
   reach: 'Pressing the shortcut again while a Saved toast shows moves focus to Undo. Tab past the last button, Shift+Tab before the first, Escape or ✕ take focus back to where it was.',
   menu: 'A link saved from this menu wears the cover of the page it points to, the same face the phone shows in its row while it fetches the text.',
   unqueued: 'The offline save was still in this browser’s queue, so Undo takes it out and the waiting count drops by one. Nothing needs doing on the phone.',
-  popup: `${BROWSER_PAGE} On Chrome 127+ and Firefox a small popup confirms the save under Shelf’s button, with its own status message. It closes after 8 seconds, on Escape, or when you click away.`,
+  popup: `${BROWSER_PAGE} On Chrome 127+ and Firefox a small popup confirms the save under Kefli’s button, with its own status message. It closes after 8 seconds, on Escape, or when you click away.`,
   restricted: `${BROWSER_PAGE} Before Chrome 127 an extension can’t open its popup from a shortcut, so the icon tick alone confirms the save, for 4 seconds.`,
-  'o-unpinned': 'Installing Shelf opens this page by itself. Until Shelf is pinned, the pin line shows at the top of the pairing card, and first under Ways to save once connected. Here, click the puzzle piece in the toolbar to pin Shelf.',
+  'o-unpinned': 'Installing Kefli opens this page by itself. Until Kefli is pinned, the pin line shows at the top of the pairing card, and first under Ways to save once connected. Here, click the puzzle piece in the toolbar to pin Kefli.',
   'o-waiting': 'Saves made offline wait in this browser. The toolbar badge, the button’s name and this notice show the same count.',
-  'o-unsent': 'Saves that haven’t reached Shelf’s server live only in this browser, so the confirm counts them and the button names the consequence.',
+  'o-unsent': 'Saves that haven’t reached Kefli’s server live only in this browser, so the confirm counts them and the button names the consequence.',
 };
 function syncToggles(){
   document.querySelectorAll('[data-toggle]').forEach(b => {
