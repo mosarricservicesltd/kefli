@@ -1,4 +1,4 @@
-// The kefli-voice gate (mobile spec 12, week 0): the phone's voice through Shelf's own media session, with
+// The kefli-voice gate (mobile spec 12, week 0): the phone's voice through Kefli's own media session, with
 // ±15 on the lock-screen card, for 30 minutes locked on battery. The engine logs progress every 30 s to a
 // file read back here afterwards.
 import { useEffect, useMemo, useState } from 'react';

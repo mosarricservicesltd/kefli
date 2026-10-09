@@ -161,7 +161,7 @@ describe('The move (contract 4.8, mobile spec 4.10)', () => {
     expect(rowsOf(w, w.T.pubkey())).toEqual([{ hash: h(1), state: 'unread' }, { hash: h(2), state: 'archived' }]);
   });
 
-  test('a save from a newer Shelf stops it before anything is copied, S untouched', async () => {
+  test('a save from a newer Kefli stops it before anything is copied, S untouched', async () => {
     const w = world();
     await w.save(w.S, 1);
     w.db.run("INSERT INTO items_future (owner, d, event_json, created_at) VALUES (?, 'kefli/item/x', '{}', 1)", w.T.pubkey());

@@ -45,7 +45,7 @@ class KefliSystemModule : Module() {
       true
     }
 
-    // Export my saves (8.6, 5.8): the file in Downloads. From API 29 through MediaStore, replacing the export Shelf
+    // Export my saves (8.6, 5.8): the file in Downloads. From API 29 through MediaStore, replacing the export Kefli
     // wrote before (MediaStore only shows an app the files it made, so another app's file of that name is left and
     // the new one is numbered); on 26 to 28, through the system's save dialog, which needs no storage permission.
     AsyncFunction("exportToDownloads") { fileName: String, contents: String, promise: Promise ->

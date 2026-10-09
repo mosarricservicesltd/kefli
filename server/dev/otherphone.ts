@@ -1,7 +1,7 @@
-// Plays "your other phone" for Scan from my other phone (mobile spec 5.3, contract 2): it makes a throwaway shelf
+// Plays "your other phone" for Scan from my other phone (mobile spec 5.3, contract 2): it makes a throwaway library
 // with a few saves (as library.ts does), posts its mnemonic as a phone offer, and shows the QR in the terminal and in
 // server/dev/data/pair.html with the six digits under it. Scan it with the phone, type the digits, and the phone
-// restores the throwaway shelf. The words are a test identity's and are never printed.
+// restores the throwaway library. The words are a test identity's and are never printed.
 //   npx tsx server/dev/otherphone.ts   (with the stack and api.mjs running)
 
 import { execFileSync } from 'node:child_process';
@@ -51,7 +51,7 @@ async function main() {
   const text = JSON.stringify(qr);
   writeFileSync(join(__dirname, 'data', 'pair.html'), page(text, six));
   console.log(`\n${terminalQR(text)}\n`);
-  console.log(`  Six digits: ${six.slice(0, 3)} ${six.slice(3)}   (a throwaway shelf of 4 saves, pubkey ${signer.pubkey().slice(0, 12)}…)`);
+  console.log(`  Six digits: ${six.slice(0, 3)} ${six.slice(3)}   (a throwaway library of 4 saves, pubkey ${signer.pubkey().slice(0, 12)}…)`);
   console.log(`  The same QR, larger: ${join(__dirname, 'data', 'pair.html')}`);
 }
 

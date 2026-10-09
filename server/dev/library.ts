@@ -1,4 +1,4 @@
-// A throwaway shelf on the local stack, for testing a restore on the phone (mobile spec 5.3, contract 8): a new
+// A throwaway library on the local stack, for testing a restore on the phone (mobile spec 5.3, contract 8): a new
 // identity, registered, with its relay and server lists and N saves taken from the fixture pages' Markdown, each
 // text encrypted, uploaded to the operator Blossom server and mirrored, and the save published to every relay.
 // It prints the identity's twelve words. They belong to this test identity only and are printed so a restore can
@@ -57,7 +57,7 @@ async function main() {
     for (const e of events) await relay.publish(e).catch(() => undefined);
     relay.close();
   }
-  console.log(`A throwaway shelf, ${pages.length} saves (the last archived), pubkey ${signer.pubkey().slice(0, 12)}…`);
+  console.log(`A throwaway library, ${pages.length} saves (the last archived), pubkey ${signer.pubkey().slice(0, 12)}…`);
   console.log(`Its twelve test words: ${words}`);
   process.exit(0);
 }

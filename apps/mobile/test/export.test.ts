@@ -33,7 +33,7 @@ describe('Export my saves (mobile spec 5.8, FD 89)', () => {
     expect(html).not.toContain('e.com/4');
   });
 
-  test('an empty shelf still makes a valid file', () => {
+  test('an empty library still makes a valid file', () => {
     const w = world();
     const html = exportHtml(exportRows(w.db, 'a'.repeat(64)), () => null, NAMES);
     expect(html).toContain('<DT><H3>Unread</H3>\n<DL><p>\n</DL><p>');

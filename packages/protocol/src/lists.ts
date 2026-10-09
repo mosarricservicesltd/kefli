@@ -1,6 +1,6 @@
 // The user's relay list (NIP-65 kind 10002) and Blossom server list (BUD-03 kind 10063), contract 3.1, 4.2;
 // mobile spec 4.6. Builders, readers that keep what they don't understand, and the pure merge for Keep backup
-// copies: Shelf's entries are added only where missing, and every other entry keeps its place and marker.
+// copies: Kefli's entries are added only where missing, and every other entry keeps its place and marker.
 import { KIND } from './constants';
 import { signWithinCeiling } from './events';
 import type { NostrEvent, Signer } from './signer';

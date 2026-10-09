@@ -2,7 +2,7 @@
 // sw-declined, sw-offline, sw-moving, sw-none, sw-probe, sw-newer). The explanation with Keep backup copies; the
 // primary opens the phone's signer app, or the link field when there is none. Waiting, ← does what Cancel does.
 // Declined, unanswered and refused by the probe return to the explanation with their line. Moving shows "N of M"
-// with no ← and Back swallowed; done, a root swap to You with its toast. A save from a newer Shelf stops the move
+// with no ← and Back swallowed; done, a root swap to You with its toast. A save from a newer Kefli stops the move
 // before anything is copied and asks for an update. RULED: an unanswered request uses sign-in's line, since the
 // prototype draws no timeout here.
 import { useEffect, useRef, useState } from 'react';

@@ -1,7 +1,7 @@
 // The move (contract 4.8, mobile spec 4.10): a library goes from the source key S, a local key the phone holds, to
 // the target T, any signer. Its steps, each recorded in the move job so a move cut short resumes where it stopped:
 //   0. prepare T: registered, and its lists in place (as at any sign-in);
-//   1. collect both libraries; a save from a newer Shelf in either stops the move here, S untouched;
+//   1. collect both libraries; a save from a newer Kefli in either stops the move here, S untouched;
 //   2. copy each of S's saves to T through the outbox (data/move.ts), S's own unsent rows withdrawn;
 //   3. move S's connected browsers: POST /devices as T, and a pair-ack sealed by S carrying T and moved_from;
 //   4. confirm: T's outbox empty, then every copied save read back and opened from min(2, n) of T's write relays;
@@ -47,7 +47,7 @@ export type MovePorts = {
   report?: (moved: number, total: number) => void;
 };
 
-/** done; newer: a save from a newer Shelf stopped it before step 2; waiting: a later run carries on. */
+/** done; newer: a save from a newer Kefli stopped it before step 2; waiting: a later run carries on. */
 export type MoveOutcome = 'done' | 'newer' | 'waiting';
 
 const targetsOf = (d: MoveDefaults): SaveTargets => ({ api: d.operator.api, blossom: d.operator.blossom, mirror: d.mirrors[0] });

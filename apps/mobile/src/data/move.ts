@@ -42,7 +42,7 @@ export function saveMove(db: SqlDb, now: number, job: MoveJob, state: 'running' 
     state, job.step, JSON.stringify({ from: job.from, to: job.to, moved: job.moved }), now, job.id);
 }
 
-/** A save from a newer Shelf in either library stops the move before anything is copied (C§10, FD 91 (i)). */
+/** A save from a newer Kefli in either library stops the move before anything is copied (C§10, FD 91 (i)). */
 export function newerInEither(db: SqlDb, from: string, to: string): boolean {
   return !!db.get('SELECT 1 FROM items_future WHERE owner IN (?, ?)', from, to);
 }

@@ -20,9 +20,9 @@ import java.util.Locale
 import java.io.File
 import kotlin.math.roundToInt
 
-// The phone's own voice reading an article (mobile spec 8.1, 5.7), in Shelf's own audio. The engine writes each
-// sentence to a file a few ahead (synthesizeToFile), reporting each word's frame; Shelf plays the files through
-// one AudioTrack in its own process, so Android routes media buttons, the car and Bluetooth to Shelf's session
+// The phone's own voice reading an article (mobile spec 8.1, 5.7), in Kefli's own audio. The engine writes each
+// sentence to a file a few ahead (synthesizeToFile), reporting each word's frame; Kefli plays the files through
+// one AudioTrack in its own process, so Android routes media buttons, the car and Bluetooth to Kefli's session
 // (week-0 gate), and the word is read from the playback head. An engine that reports no word ranges makes the
 // sentence the unit (FD 91 (h)). Everything here runs on the main looper except the audio writes.
 object VoiceEngine {

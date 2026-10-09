@@ -1,6 +1,6 @@
 // Week 1: the phone's test identity, shown on screen (never logged) so the desktop can check a save with
 // npm run decrypt. Only for the local stack's test identities. Forget wipes the key file, Block Store's entry and
-// the database, so the next launch starts at Welcome: for testing Bring back your shelf (week 4).
+// the database, so the next launch starts at Welcome: for testing Bring back your library (week 4).
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { KefliKeystore } from '../../modules/kefli-keystore/src';
@@ -24,7 +24,7 @@ export function IdentityGate() {
     for (const id of r?.identities ?? []) await KefliKeystore.wipe(id.pubkey).catch(() => undefined);
     await KefliKeystore.blockStoreRemove().catch(() => undefined);
     wipe(store());
-    setShown('Forgotten: the key file, Block Store and the database are empty. Close Shelf and open it again to reach Welcome.');
+    setShown('Forgotten: the key file, Block Store and the database are empty. Close Kefli and open it again to reach Welcome.');
   };
   return (
     <View style={s.box}>
@@ -33,7 +33,7 @@ export function IdentityGate() {
         <Text style={s.btnText}>Show the test identity</Text>
       </Pressable>
       <Pressable style={s.btn} onPress={forget}>
-        <Text style={s.btnText}>Forget this phone’s shelf</Text>
+        <Text style={s.btnText}>Forget this phone’s library</Text>
       </Pressable>
       {shown && <Text selectable style={s.meta}>{shown}</Text>}
     </View>

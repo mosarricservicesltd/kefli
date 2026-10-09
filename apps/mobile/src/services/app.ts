@@ -1,4 +1,4 @@
-// What the app shows at the root (mobile spec 3.1, 5.1, 6.1): Welcome until it is answered, then the shelf. The
+// What the app shows at the root (mobile spec 3.1, 5.1, 6.1): Welcome until it is answered, then the library. The
 // resolver decides at launch; New here and the end of a restore move it on. Screens read it with useApp().
 import { useSyncExternalStore } from 'react';
 import { activeOwner } from '../data/library';
@@ -40,7 +40,7 @@ export async function answerNewHere(): Promise<void> {
   set({ route: 'saves', owner, restoreCard: false });
 }
 
-/** A recovery code that found a shelf, or another phone's:  the key stored, and a root swap to Saves with the restore card (5.3). */
+/** A recovery code that found a library, or another phone's:  the key stored, and a root swap to Saves with the restore card (5.3). */
 export async function answerRecovered(mnemonic: string, origin: 'recovery_code' | 'phone_pair' = 'recovery_code'): Promise<void> {
   const owner = await adoptRecovery(mnemonic, origin);
   set({ route: 'saves', owner, restoreCard: true });
@@ -59,7 +59,7 @@ export function answerSignedIn(owner: string): void {
   runSync().catch(() => undefined);
 }
 
-// a finished move (C§4.8) leaves T as the phone's identity: the shelf on screen follows, wherever the move ran
+// a finished move (C§4.8) leaves T as the phone's identity: the library on screen follows, wherever the move ran
 onMoveDone((owner) => {
   if (state && state.owner !== owner) set({ ...state, owner });
 });

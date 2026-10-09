@@ -79,7 +79,7 @@ CREATE TABLE devices (token TEXT, owner TEXT, device_pubkey TEXT, label TEXT, re
   connected_at INTEGER, revoked_at INTEGER, last_save_at INTEGER, PRIMARY KEY (token, owner));
 `;
 
-// v3: the newest event a relay Shelf doesn't run has accepted, for Advanced's count of saves not backed up (FD 93,
+// v3: the newest event a relay Kefli doesn't run has accepted, for Advanced's count of saves not backed up (FD 93,
 // C§3.1). RULED: saves already published count as backed up, since the phone kept no record before.
 const V3 = `
 ALTER TABLE items ADD COLUMN backed_event TEXT;

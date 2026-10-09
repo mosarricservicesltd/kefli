@@ -3,7 +3,7 @@
 import Constants from 'expo-constants';
 
 type BuildConfig = { variant: 'local' | 'release'; defaultsUrl: string };
-const build = (Constants.expoConfig?.extra?.shelf ?? { variant: 'release', defaultsUrl: '' }) as BuildConfig;
+const build = (Constants.expoConfig?.extra?.kefli ?? { variant: 'release', defaultsUrl: '' }) as BuildConfig;
 
 export const DEFAULTS_URL = build.defaultsUrl;
 /** The local stack's ws:// relays and http:// servers are allowed only in the local build. */

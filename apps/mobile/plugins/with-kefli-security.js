@@ -4,7 +4,7 @@
 // whichever library asks for them.
 //
 // RULED: VIBRATE stays, for the haptics the motion spec asks for (MS); it is a normal permission and grants nothing
-// else. ACCESS_WIFI_STATE and MODIFY_AUDIO_SETTINGS, which libraries add, are blocked: Shelf reads only the network
+// else. ACCESS_WIFI_STATE and MODIFY_AUDIO_SETTINGS, which libraries add, are blocked: Kefli reads only the network
 // type and plays its own audio.
 const fs = require('fs');
 const path = require('path');

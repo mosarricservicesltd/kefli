@@ -36,7 +36,7 @@ interface Native {
 
 const native = requireNativeModule<Native>('KefliVoice');
 
-/** mobile spec 8.1: the phone's voice in Shelf's own audio. */
+/** mobile spec 8.1: the phone's voice in Kefli's own audio. */
 export const KefliVoice = {
   ...native,
   addListener: native.addListener.bind(native),

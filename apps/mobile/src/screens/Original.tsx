@@ -1,5 +1,5 @@
-// The original page in Shelf's view (FD 81; prototype reader-error, reader-original, reader-original-loading,
-// reader-original-failed, reader-original-offline, reader-error-menu): react-native-webview under Shelf's bar, with
+// The original page in Kefli's view (FD 81; prototype reader-error, reader-original, reader-original-loading,
+// reader-original-failed, reader-original-offline, reader-error-menu): react-native-webview under Kefli's bar, with
 // ⋯ (Open in browser, Copy link, Delete) and the floating Archive. A save whose text couldn't be fetched opens here
 // with its notice. While the page loads, the Reader's skeleton sits under the bar; a page that won't load points to
 // Open in browser; offline, the view says it needs a connection.

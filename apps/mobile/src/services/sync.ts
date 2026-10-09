@@ -2,7 +2,7 @@
 // from every read relay, paged back to the cursor, then the texts. The relay pool and files are ports, so this
 // runs in tests.
 //
-// RULED: until nostr sign-in arrives (week 4), every identity on the phone is Shelf's own, so one with no relay
+// RULED: until nostr sign-in arrives (week 4), every identity on the phone is Kefli's own, so one with no relay
 // rows (a reinstall that adopted Block Store's key) is seeded with the generated lists before its published
 // 10002 is read; relays that list adds are read from too.
 //

@@ -1,8 +1,8 @@
 // app.config.js decides whether a build may use cleartext: only KEFLI_VARIANT=local, and only to localhost.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const appConfig = require('../app.config.js') as (a: { config: Record<string, unknown> }) => { plugins: unknown[]; extra: { shelf: unknown } };
+const appConfig = require('../app.config.js') as (a: { config: Record<string, unknown> }) => { plugins: unknown[]; extra: { kefli: unknown } };
 
-const base = { name: 'Shelf', plugins: ['expo-router'], extra: { other: 1 } };
+const base = { name: 'Kefli', plugins: ['expo-router'], extra: { other: 1 } };
 const withEnv = (env: Record<string, string | undefined>, f: () => void) => {
   const saved = { v: process.env.KEFLI_VARIANT, u: process.env.KEFLI_DEFAULTS_URL };
   process.env.KEFLI_VARIANT = env.KEFLI_VARIANT;
@@ -21,7 +21,7 @@ describe('app.config.js', () => {
   test('the local variant points at the local stack and adds the localhost-only cleartext plugin', () => {
     withEnv({ KEFLI_VARIANT: 'local' }, () => {
       const c = appConfig({ config: base });
-      expect(c.extra).toEqual({ other: 1, shelf: { variant: 'local', defaultsUrl: 'http://localhost:8447/defaults.json' } });
+      expect(c.extra).toEqual({ other: 1, kefli: { variant: 'local', defaultsUrl: 'http://localhost:8447/defaults.json' } });
       expect(c.plugins).toEqual(['expo-router', './plugins/with-local-cleartext']);
     });
   });
@@ -29,7 +29,7 @@ describe('app.config.js', () => {
   test('a release build takes an https defaults URL and allows no cleartext', () => {
     withEnv({ KEFLI_DEFAULTS_URL: 'https://api.example/defaults.json' }, () => {
       const c = appConfig({ config: base });
-      expect(c.extra.shelf).toEqual({ variant: 'release', defaultsUrl: 'https://api.example/defaults.json' });
+      expect(c.extra.kefli).toEqual({ variant: 'release', defaultsUrl: 'https://api.example/defaults.json' });
       expect(c.plugins).toEqual(['expo-router']);
     });
   });

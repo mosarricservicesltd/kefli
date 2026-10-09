@@ -102,7 +102,7 @@ export function runSync(): Promise<SyncResult> {
       const r = await syncInbound(syncPorts());
       const owner = store().get<{ pubkey: string }>("SELECT pubkey FROM identities WHERE role = 'active'")?.pubkey;
       if (owner) settleRestore(store(), Math.floor(Date.now() / 1000), owner);
-      // early saves move into the shelf just brought back, after the restore's first pass (C§4.8, FD 6)
+      // early saves move into the library just brought back, after the restore's first pass (C§4.8, FD 6)
       if (owner) await runMoveJob().catch((e) => console.log(`[kefli-move] ${JSON.stringify({ error: String((e as Error).message) })}`));
       // links a sign-in chose to bring in join after the restore's first pass (FD 82)
       const imported = owner ? takeImport(store(), owner) : null;
@@ -371,7 +371,7 @@ let inboxSoon: ReturnType<typeof setTimeout> | null = null;
 let inboxStarting = false;
 
 /**
- * While Shelf is in front, a live subscription on the operator relay (4.7) drains the inbox within a second of a
+ * While Kefli is in front, a live subscription on the operator relay (4.7) drains the inbox within a second of a
  * wrap arriving. limit 0 asks for new wraps only; the drain itself reads back from the cursor. A dropped
  * subscription is opened again after 5 s.
  */

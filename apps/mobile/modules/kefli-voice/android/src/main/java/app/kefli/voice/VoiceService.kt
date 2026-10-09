@@ -40,7 +40,7 @@ class VoiceService : MediaSessionService() {
       // media3 never posts the card, the service never goes to the foreground, and Android freezes the app
       // a minute after the screen locks (week-0 gate, first run).
       .also { addSession(it) }
-    // The small icon is Shelf's one-colour glyph (FD 72), drawn into the app by the with-kefli-notification plugin.
+    // The small icon is Kefli's one-colour glyph (FD 72), drawn into the app by the with-kefli-notification plugin.
     val icon = resources.getIdentifier("kefli_notification", "drawable", packageName)
     setMediaNotificationProvider(DefaultMediaNotificationProvider.Builder(this).build().also { if (icon != 0) it.setSmallIcon(icon) })
     VoiceEngine.addListener(listener)

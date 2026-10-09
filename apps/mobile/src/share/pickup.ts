@@ -36,7 +36,7 @@ async function pickUp(): Promise<number> {
   let saved = 0;
   for (const id of KefliShare.listSpools()) {
     if (activeSpools.has(id)) continue;
-    // a spool this young belongs to a sheet still rising: the share brought Shelf to the front, which starts a sync
+    // a spool this young belongs to a sheet still rising: the share brought Kefli to the front, which starts a sync
     // before the sheet has claimed it (seen on the Pixel, 8 October)
     const entry = KefliShare.read(id);
     if (entry && Date.now() - entry.receivedAt < FRESH_MS) continue;

@@ -86,7 +86,7 @@ async function withinMinute(p: DelPorts, attempt: () => Promise<boolean>): Promi
   }
 }
 
-/** Every d this identity holds: saves, saves from a newer Shelf, and the connected-browsers record. */
+/** Every d this identity holds: saves, saves from a newer Kefli, and the connected-browsers record. */
 function allDs(db: SqlDb, owner: string): string[] {
   const items = db.all<{ hash: string }>('SELECT hash FROM items WHERE owner = ?', owner).map((r) => ITEM_D_PREFIX + r.hash);
   const future = db.all<{ d: string }>('SELECT d FROM items_future WHERE owner = ?', owner).map((r) => r.d);
@@ -124,7 +124,7 @@ async function listDeletion(p: DelPorts): Promise<NostrEvent> {
 /**
  * A nostr user's lists (C§4.7): never deleted, since their other apps share them, but republished without the
  * operator's relay and Blossom server and without any default this phone added. RULED: a list with nothing of
- * theirs left in it (Shelf made it, finding none) is left as it is, neither emptied nor deleted.
+ * theirs left in it (Kefli made it, finding none) is left as it is, neither emptied nor deleted.
  */
 async function listRewrites(p: DelPorts): Promise<NostrEvent[]> {
   const pk = p.signer.pubkey();

@@ -15,7 +15,7 @@ import expo.modules.kotlin.Promise
 import org.json.JSONObject
 import org.json.JSONTokener
 
-// A page that turns Shelf's own fetch away (a bot check answering 403) is loaded once in a browser engine, as a person's
+// A page that turns Kefli's own fetch away (a bot check answering 403) is loaded once in a browser engine, as a person's
 // browser would load it (mobile spec 8.2, 7.1), and its rendered HTML handed back for the usual parse. The WebView is
 // attached to no window, holds no bridge, has no file or content access and opens no windows; it follows only http(s)
 // navigations, loads no images, and goes as soon as it answers. RULED: the HTML handed back has no scripts, styles,

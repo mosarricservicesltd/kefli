@@ -1,4 +1,4 @@
-// Article text on the phone (mobile spec 4.1): Paths.document/shelf/text/<hash>.md, and the Reader's blocks
+// Article text on the phone (mobile spec 4.1): Paths.document/kefli/text/<hash>.md, and the Reader's blocks
 // beside it. Per hash, so a file goes only when no row holds the hash.
 import { Directory, File, Paths } from 'expo-file-system';
 import { DERIVED_VERSION, deriveArticle, type Derived } from '../reader/blocks';
@@ -17,7 +17,7 @@ function writeDerived(hash: string, derived: Derived) {
 
 const imgDir = () => new Directory(Paths.document, 'kefli', 'img');
 
-/** Article images: Paths.document/shelf/img/<sha256 of the image's address> (4.1), app storage, kept offline. */
+/** Article images: Paths.document/kefli/img/<sha256 of the image's address> (4.1), app storage, kept offline. */
 export const imageFiles = {
   write(name: string, bytes: Uint8Array): string {
     const d = imgDir();

@@ -27,7 +27,7 @@ async function world(held: Record<string, (s: LocalSigner) => Promise<NostrEvent
 }
 
 describe('signing in with a nostr app (mobile spec 4.6, 5.3)', () => {
-  test('their lists are kept, and Keep backup copies adds Shelf’s, so they are published', async () => {
+  test('their lists are kept, and Keep backup copies adds Kefli’s, so they are published', async () => {
     const w = await world({
       'ws://idx': async (s) => [await buildRelayList(s, [{ url: 'wss://mine', read: true, write: false }], 5), await buildServerList(s, ['https://my.blossom'], 5)],
     });

@@ -46,7 +46,7 @@ export async function takePhonePair(p: TakePorts, qr: PhoneQr, six: string): Pro
   const body = (await res.json().catch(() => null)) as { offer?: unknown } | null;
   const mnemonic = typeof body?.offer === 'string' ? await openPhoneOffer(body.offer, key, p.crypto) : null;
   if (!mnemonic) return 'wrong';
-  // the key must be the QR's, so an offer swapped on the server can't hand over someone else's shelf
+  // the key must be the QR's, so an offer swapped on the server can't hand over someone else's library
   const sk = await secretKeyFromMnemonic(mnemonic, p.crypto).catch(() => null);
   if (!sk || new LocalSigner(sk).pubkey() !== qr.pubkey) return 'wrong';
   return { mnemonic };

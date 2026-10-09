@@ -1,7 +1,7 @@
 // Sign in with your nostr app (mobile spec 5.3, 4.6, 4.10, contract 2, 3.1, 4.6; FD 5, FD 41, FD 76, FD 82). With a
 // signer from the user's app (NIP-55 or a bunker), the capability probe runs first; then their lists are read from
 // the indexer and default relays, their web bookmarks counted, and only then is the identity stored, its restore
-// queued and, when Shelf added to their lists or made them, the lists queued to publish. A list neither found nor
+// queued and, when Kefli added to their lists or made them, the lists queued to publish. A list neither found nor
 // confirmed absent is read again at the next sync, and nothing is published meanwhile. Ports keep it testable.
 import { KIND, bookmarkLinks, itemHash, newest, probeSigner, readRelayList, readServerList, type NostrEvent, type RelayEntry, type Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
@@ -57,8 +57,8 @@ export async function checkSignIn(p: SignInPorts, signer: Signer): Promise<Check
 }
 
 /**
- * The lists once known (4.6): kept, with Shelf's copies added when the switch is on, or the default set when
- * confirmed absent; published only when Shelf changed them. Returns false while still unknown.
+ * The lists once known (4.6): kept, with Kefli's copies added when the switch is on, or the default set when
+ * confirmed absent; published only when Kefli changed them. Returns false while still unknown.
  */
 export function settleUserLists(db: SqlDb, now: number, owner: string, d: DefaultsLike, lists: UserLists, keepCopies: boolean): boolean {
   if (!lists.known) return false;

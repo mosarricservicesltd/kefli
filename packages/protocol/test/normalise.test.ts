@@ -29,7 +29,7 @@ describe('the d tag', () => {
     expect(itemD('https://Bücher.example/a/#x')).toBe(`kefli/item/${want}`);
   });
 
-  test('tells saves from other shelf records', () => {
+  test('tells saves from other kefli records', () => {
     expect(isItemD(itemD('https://example.com/'))).toBe(true);
     expect(isItemD('kefli/devices')).toBe(false);
     expect(isItemD(`kefli/item/${'A'.repeat(64)}`)).toBe(false);

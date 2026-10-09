@@ -1,7 +1,7 @@
 // Advanced (mobile spec 5.8, FD 76, FD 93; prototype adv, adv-down, adv-offline, adv-notbacked): the relays in the
-// identity's 10002, Shelf's own first, each with whether it answers; the count of saves not backed up while there
+// identity's 10002, Kefli's own first, each with whether it answers; the count of saves not backed up while there
 // are any, after which the note under the relays speaks of "your other saves"; a relay not answering is named in
-// the note. Export my saves writes shelf-export.html to Downloads, offline too, then the toast; a failed export puts
+// the note. Export my saves writes kefli-export.html to Downloads, offline too, then the toast; a failed export puts
 // its line in the notice slot with Try again (adv-exportfail, G9). Use my nostr app instead opens the switch, and is
 // hidden for a nostr user, who has nothing to switch from. "relay" appears in the copy here only (FD 86).
 import { useCallback, useEffect, useState } from 'react';
@@ -106,10 +106,10 @@ export default function Advanced() {
     };
   }, [relays.join(',')])); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Shelf's relay first, then the backups in the 10002's order
+  // Kefli's relay first, then the backups in the 10002's order
   const ordered = [...relays].sort((a, b) => (a === operator ? -1 : b === operator ? 1 : 0));
   let k = 0;
-  const label = (u: string) => (u === operator ? S.adv.shelf : S.adv.backup(++k));
+  const label = (u: string) => (u === operator ? S.adv.operator : S.adv.backup(++k));
   const statusOf = (u: string): Status => (!online ? 'off' : status[u] ?? 'checking');
   const down = online ? ordered.filter((u) => status[u] === 'down').map(hostOf) : [];
 

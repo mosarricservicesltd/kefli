@@ -1,4 +1,4 @@
-// Lets Shelf see the phone's NIP-55 signer apps (mobile spec 8.4): Android 11 hides other apps unless the manifest
+// Lets Kefli see the phone's NIP-55 signer apps (mobile spec 8.4): Android 11 hides other apps unless the manifest
 // names what it looks for, here the nostrsigner: scheme.
 const { withAndroidManifest } = require('expo/config-plugins');
 

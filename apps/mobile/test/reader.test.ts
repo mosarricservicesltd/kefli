@@ -54,7 +54,7 @@ describe('the Reader (mobile spec 5.6, 6.7)', () => {
     expect(alpha('#17171A', 2)).toBe('#17171AFF');
     expect(mix('#000000', '#FFFFFF', 0.5)).toBe('#808080');
     expect([say(1), say(9), say(10)]).toEqual(['one', 'nine', '10']);
-    expect(S.welcome.earlyMany(3)).toBe('You’ve already saved three articles. They’ll be on your shelf either way.');
+    expect(S.welcome.earlyMany(3)).toBe('You’ve already saved three articles. They’ll be in your library either way.');
     const now = Date.UTC(2026, 9, 7, 12) / 1000;
     expect(savedWhen(now - 60, now)).toBe('Saved today');
     expect(savedWhen(now - 86_400, now)).toBe('Saved yesterday');

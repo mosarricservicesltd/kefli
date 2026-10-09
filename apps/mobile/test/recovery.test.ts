@@ -30,7 +30,7 @@ describe('the recovery code’s first pass (mobile spec 5.3, contract 8)', () =>
     expect(await findLibrary(w.p, w.s.pubkey())).toBe('found');
   });
 
-  test('a shelf whose relays moved is found through its 10002', async () => {
+  test('a library whose relays moved is found through its 10002', async () => {
     const w = await world();
     w.held['ws://idx'] = [w.list];
     w.held['ws://moved'] = [w.item];

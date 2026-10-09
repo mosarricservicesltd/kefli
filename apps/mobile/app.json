@@ -68,7 +68,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Shelf uses the camera only to read the code your browser shows.",
+          "cameraPermission": "Kefli uses the camera only to read the code your browser shows.",
           "microphonePermission": false,
           "recordAudioAndroid": false
         }

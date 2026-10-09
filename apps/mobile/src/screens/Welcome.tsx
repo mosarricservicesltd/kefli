@@ -1,5 +1,5 @@
 // Welcome (mobile spec 5.2; prototype welcome, welcome-early, welcome-early-many): three saves fanned out, each
-// wearing its cover, the front one part read in its own ink; then New here and I already have a shelf. After a
+// wearing its cover, the front one part read in its own ink; then New here and I already have a library. After a
 // share before the first open, a note with the newest early save's cover says the saves are kept either way.
 import { useEffect, useState } from 'react';
 import { useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
@@ -93,7 +93,7 @@ export default function Welcome() {
       </View>
       <View style={{ paddingHorizontal: 16, paddingBottom: 24 + insets.bottom, gap: 8 }}>
         <Button label={S.welcome.newHere} full busy={busy} onPress={() => { setBusy(true); answerNewHere().catch(() => setBusy(false)); }} />
-        <Button label={S.welcome.haveShelf} kind="secondary" full onPress={() => router.push('/return')} />
+        <Button label={S.welcome.haveLibrary} kind="secondary" full onPress={() => router.push('/return')} />
         <View style={{ marginTop: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
           <Icon name="shield" size={14} color={c.muted} />
           <T muted style={ui(13, 'body', 1.45)}>{S.welcome.fine}</T>

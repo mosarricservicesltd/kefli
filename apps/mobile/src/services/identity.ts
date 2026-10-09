@@ -81,7 +81,7 @@ async function adopt(mnemonic: string, origin: Origin): Promise<LocalSigner> {
   return s;
 }
 
-/** Block Store's shelf on this phone (FD 79): the identity, welcome.answered, and a restore to run. */
+/** Block Store's key on this phone (FD 79): the identity, welcome.answered, and a restore to run. */
 async function adoptBlockStore(mnemonic: string): Promise<LocalSigner> {
   const s = await adopt(mnemonic, 'block_store');
   setSetting(store(), WELCOME_ANSWERED, '1');
@@ -89,7 +89,7 @@ async function adoptBlockStore(mnemonic: string): Promise<LocalSigner> {
   return s;
 }
 
-/** At launch: what to open, after wiping a database whose key is gone or adopting Block Store's shelf. */
+/** At launch: what to open, after wiping a database whose key is gone or adopting Block Store's key. */
 export async function launch(): Promise<LaunchPlan> {
   const db = store();
   const id = await activeIdentity();
@@ -106,7 +106,7 @@ export async function launch(): Promise<LaunchPlan> {
   return plan;
 }
 
-/** The signer a share saves under (3.1): the identity, else Block Store's shelf, else a key the share mints. */
+/** The signer a share saves under (3.1): the identity, else Block Store's key, else a key the share mints. */
 export async function ensureSigner(): Promise<SignerProvider> {
   const existing = await currentSigner();
   if (existing) return existing;
@@ -143,7 +143,7 @@ export async function pubkeyOfCode(mnemonic: string): Promise<string> {
 }
 
 /**
- * A recovery code that found a shelf, or a mnemonic another phone handed over (5.3): its key stored, Welcome answered and the restore queued. Block Store
+ * A recovery code that found a library, or a mnemonic another phone handed over (5.3): its key stored, Welcome answered and the restore queued. Block Store
  * takes it (3.3), except after an early share, whose key S stays in the key file and in Block Store as the move's
  * source until the move's step 5 (C§4.8, built in week 5); its saves are kept under S meanwhile. Returns the pubkey.
  */
@@ -177,7 +177,7 @@ export async function adoptRecovery(mnemonic: string, origin: 'recovery_code' | 
 
 /**
  * Delete my data's step 3 (7.2): the key file, Block Store's entry, the database and every file under
- * Paths.document/shelf (texts, images, staged blobs), and the lock-screen artwork cache. Shelf starts as if just
+ * Paths.document/kefli (texts, images, staged blobs), and the lock-screen artwork cache. Kefli starts as if just
  * installed.
  */
 export async function wipeEverything(): Promise<void> {

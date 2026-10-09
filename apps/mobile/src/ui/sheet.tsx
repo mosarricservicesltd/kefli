@@ -1,4 +1,4 @@
-// Sheets (prototype .scrim and .sheet, mobile spec 6.8): Shelf's own, on Reanimated and Gesture Handler. The sheet
+// Sheets (prototype .scrim and .sheet, mobile spec 6.8): Kefli's own, on Reanimated and Gesture Handler. The sheet
 // rises on the enter curve and sinks on the exit curve; the scrim's opacity follows its travel. A drag closes past
 // 30% of the height or at 1,000 px/s, otherwise the release spring returns it; nothing moves above rest. The scrim
 // and Android Back close it. A toast under a sheet waits (sheetOpen). Sheets are dialogs that take focus.

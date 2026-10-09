@@ -10,7 +10,7 @@ import com.google.android.gms.tasks.Task
 // Block Store (mobile spec 3.3): one entry, kefli.mnemonic.v1, holding the active local identity's
 // mnemonic. Written for device-to-device restore always, and with shouldBackupToCloud only while
 // end-to-end encryption is available, checked at each write. Adapted from expo-block-store 1.0.0
-// (MIT, © its authors): the client calls and their bridging, cut to the one entry Shelf keeps.
+// (MIT, © its authors): the client calls and their bridging, cut to the one entry Kefli keeps.
 object BlockStore {
   const val KEY = "kefli.mnemonic.v1"
 

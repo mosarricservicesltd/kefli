@@ -1,4 +1,4 @@
-// Shelf's relay pool (mobile spec 4.4): one connection per relay on nostr-tools' AbstractRelay, with the
+// Kefli's relay pool (mobile spec 4.4): one connection per relay on nostr-tools' AbstractRelay, with the
 // verifier injected and AUTH through Signer. Reconnects back off from 1 s to 60 s; only wss:// is accepted,
 // unless allowInsecure (the local stack in server/dev). AUTH is per connection: a publish answered
 // auth-required, or a query closed with it, authenticates and tries once more (contract 3.2).

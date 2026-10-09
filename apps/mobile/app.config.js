@@ -11,6 +11,6 @@ module.exports = ({ config }) => {
   return {
     ...config,
     plugins: [...config.plugins, ...(local ? ['./plugins/with-local-cleartext'] : [])],
-    extra: { ...config.extra, shelf: { variant: local ? 'local' : 'release', defaultsUrl } },
+    extra: { ...config.extra, kefli: { variant: local ? 'local' : 'release', defaultsUrl } },
   };
 };

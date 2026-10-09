@@ -5,7 +5,7 @@ export type KeyIdentity = {
   pubkey: string; provider: 'local' | 'nip55' | 'nip46'; sk?: string; mnemonic?: string; origin?: string;
   /** NIP-55: the signer app's package. */
   package?: string;
-  /** NIP-46: the bunker:// link signed in with, and the client key Shelf made for it (hex). */
+  /** NIP-46: the bunker:// link signed in with, and the client key Kefli made for it (hex). */
   bunker?: string; client?: string;
 };
 export type KeyRecord = { v: 1; identities: KeyIdentity[] };

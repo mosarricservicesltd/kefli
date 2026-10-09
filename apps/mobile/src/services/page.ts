@@ -10,7 +10,7 @@ import { deriveArticle, type Derived } from '../reader/blocks';
 
 export const PAGE_MAX_BYTES = 5 * 1024 * 1024;
 /**
- * RULED: a page rendered by the engine may be larger: the 5 MB cap bounds what Shelf downloads, and a rendered page's
+ * RULED: a page rendered by the engine may be larger: the 5 MB cap bounds what Kefli downloads, and a rendered page's
  * size is mostly what its scripts built (a Substack comment thread came to 5.1 MB stripped), which the parse discards.
  */
 export const RENDER_MAX_BYTES = 16 * 1024 * 1024;

@@ -6,7 +6,7 @@
 // so importers that read DD as a description still parse the file and a browser still shows it readably.
 import type { SqlDb } from './db';
 
-export const EXPORT_FILE = 'shelf-export.html';
+export const EXPORT_FILE = 'kefli-export.html';
 
 export type ExportRow = { hash: string; url: string; title: string | null; saved_at: number; state: 'unread' | 'archived' };
 
@@ -32,8 +32,8 @@ export function exportHtml(rows: ExportRow[], textOf: (hash: string) => string |
   return [
     '<!DOCTYPE NETSCAPE-Bookmark-file-1>',
     '<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">',
-    '<TITLE>Shelf</TITLE>',
-    '<H1>Shelf</H1>',
+    '<TITLE>Kefli</TITLE>',
+    '<H1>Kefli</H1>',
     '<DL><p>',
     folder(names.unread, rows.filter((r) => r.state === 'unread'), textOf),
     folder(names.archive, rows.filter((r) => r.state === 'archived'), textOf),

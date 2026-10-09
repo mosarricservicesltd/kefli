@@ -194,5 +194,5 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   createServer((req, res) => {
     console.log(`${req.method} ${req.url}`);
     route(req, res);
-  }).listen(PORT, () => console.log(`Shelf local API on ${BASE}`));
+  }).listen(PORT, () => console.log(`Kefli local API on ${BASE}`));
 }

@@ -19,7 +19,7 @@ export async function blossomAuth(signer: Signer, verb: BlossomVerb, sha256: str
     kind: KIND.blossomAuth,
     created_at: now,
     tags: [['t', verb], ['x', sha256], ['expiration', String(now + 3600)]],
-    content: verb === 'upload' ? 'Upload a Shelf text blob' : 'Delete a Shelf text blob',
+    content: verb === 'upload' ? 'Upload a Kefli text blob' : 'Delete a Kefli text blob',
   });
   return `Nostr ${base64.encode(utf8ToBytes(JSON.stringify(event)))}`;
 }

@@ -5,7 +5,7 @@
 import type { EventTemplate, NostrEvent, Signer, SignerProvider } from './signer';
 import { isXOnlyPubkey } from './pairing';
 
-/** The kinds Shelf signs (C§2): saves, deletions, seals, the two lists, AUTH, NIP-98, Blossom and kind 39701. */
+/** The kinds Kefli signs (C§2): saves, deletions, seals, the two lists, AUTH, NIP-98, Blossom and kind 39701. */
 export const SIGNED_KINDS = [30078, 5, 13, 10002, 10063, 22242, 27235, 24242, 39701] as const;
 
 /** NIP-46 connect's perms parameter. */

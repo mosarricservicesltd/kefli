@@ -115,7 +115,7 @@ function Row({ icon, label, sub, warn, value, danger, disabled, onPress, first }
   );
 }
 
-/** One square of the quilt: a save's cover, or a dashed gap while the shelf is small. */
+/** One square of the quilt: a save's cover, or a dashed gap while the library is small. */
 function Tile({ q, size }: { q: { hash: string; failed: boolean } | undefined; size: number }) {
   const { c } = useTheme();
   if (q) return <Cover hash={q.hash} size={size} failed={q.failed} square radius={0} />;

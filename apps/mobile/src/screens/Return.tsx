@@ -1,4 +1,4 @@
-// Bring back your shelf (mobile spec 5.3; prototype return, return-offline): three ways back. The flows behind the
+// Bring back your library (mobile spec 5.3; prototype return, return-offline): three ways back. The flows behind the
 // rows (scan, recovery code, sign-in) are week 4's; the recovery code leads to Code, the scan to Scan, the sign-in to Nostr. Offline, the notice sits under the title and the rows
 // are disabled.
 import { router } from 'expo-router';

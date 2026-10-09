@@ -1,4 +1,4 @@
-// Patched copy of blossom-server 6.4.1's src/utils/ip-guard.ts for Shelf's local mirror (server/dev only):
+// Patched copy of blossom-server 6.4.1's src/utils/ip-guard.ts for Kefli's local mirror (server/dev only):
 // its two entry points allow every address, so the mirror can fetch from the local operator server.
 /**
  * SSRF guard primitives for outbound fetches (PUT /mirror, BUD-04).
@@ -199,7 +199,7 @@ function ipv4FromBits(v: bigint, shift: bigint): number[] | null {
  * or a name (names must be resolved and checked with validateResolvedRecords).
  */
 export function checkLiteralHost(hostname: string): string | null {
-  return null; // Shelf local stack only: the local mirror may fetch from this machine.
+  return null; // Kefli local stack only: the local mirror may fetch from this machine.
   const bare = hostname.replace(/^\[|\]$/g, "");
   const v4 = parseIPv4(bare);
   if (v4) return classifyIPv4(v4);
@@ -218,7 +218,7 @@ export function validateResolvedRecords(
   aRecords: string[],
   aaaaRecords: string[],
 ): string | null {
-  return null; // Shelf local stack only: the local mirror may fetch from this machine.
+  return null; // Kefli local stack only: the local mirror may fetch from this machine.
   for (const record of aRecords) {
     const v4 = parseIPv4(record);
     if (!v4) return `hostname resolved to an invalid IPv4 address: ${record}`;

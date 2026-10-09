@@ -8,7 +8,7 @@
 // - Already saved and unread (G2): nothing changes; Done and Read now, no Undo.
 // - Offline, or X not answering (G3): saved and waiting; Undo and Done, no countdown.
 // - Not a link; an X post with no article: nothing saved; OK. Checking an X post: Cancel.
-// - Undo: "Removed from Shelf" for 1.5 s, then back to the host app.
+// - Undo: "Removed from Kefli" for 1.5 s, then back to the host app.
 //
 // The spool goes once the save is written, so a process that dies before then leaves it for the start-up pickup
 // (pickup.ts). A sheet that leaves the screen closes without Undo (stage 1 gate, share then lock).

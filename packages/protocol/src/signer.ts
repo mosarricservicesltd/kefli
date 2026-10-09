@@ -17,7 +17,7 @@ export interface Signer {
   nip44Decrypt(peer: string, ciphertext: string): Promise<string>;
 }
 
-/** Shelf's own extension of the contract interface. */
+/** Kefli's own extension of the contract interface. */
 export interface SignerProvider extends Signer {
   kind: 'local' | 'nip55' | 'nip46';
   /** Gates inbox drains (mobile spec 4.7). */

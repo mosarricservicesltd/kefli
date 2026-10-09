@@ -6,7 +6,7 @@ import type { SqlDb } from './db';
 export type DefaultsLike = { operator: { relay: string; blossom: string }; relays: string[]; indexer: string[]; mirrors: string[] };
 
 /** A generated identity's lists on its first save (C§3.1, C§4.2): operator plus relays[0..1], read and write;
- *  operator Blossom plus mirrors[0]. Every entry is Shelf's own. Existing rows are left as they are. */
+ *  operator Blossom plus mirrors[0]. Every entry is Kefli's own. Existing rows are left as they are. */
 export function seedGeneratedLists(db: SqlDb, owner: string, d: DefaultsLike): void {
   db.tx(() => {
     const relay = (url: string, source: string, rw: number) =>
@@ -54,7 +54,7 @@ export function recordList(db: SqlDb, owner: string, kind: number, eventId: stri
  * kept entry for entry, markers too; with Keep backup copies on, the operator relay and defaults.relays[0] join the
  * 10002 and the operator Blossom server and the default mirror the 10063, each marked added_by_app, where not
  * already listed. A list confirmed absent gets the default set, whatever the switch says. Returns whether the
- * lists must be published: only when Shelf added to them or made them, so a list their other apps share is never
+ * lists must be published: only when Kefli added to them or made them, so a list their other apps share is never
  * rewritten for nothing.
  */
 export function adoptUserLists(
@@ -70,7 +70,7 @@ export function adoptUserLists(
   });
 }
 
-/** Their relays, markers kept; with the switch on, Shelf's relay and one backup added. Returns whether any were added. */
+/** Their relays, markers kept; with the switch on, Kefli's relay and one backup added. Returns whether any were added. */
 function keepUserRelays(db: SqlDb, owner: string, d: DefaultsLike, relays: RelayEntry[], keepCopies: boolean): boolean {
   for (const r of relays) {
     db.run("INSERT OR IGNORE INTO relays (url, owner, read, write, source, added_by_app) VALUES (?, ?, ?, ?, 'user', 0)", r.url, owner, r.read ? 1 : 0, r.write ? 1 : 0);
@@ -81,7 +81,7 @@ function keepUserRelays(db: SqlDb, owner: string, d: DefaultsLike, relays: Relay
     .some((n) => n > 0);
 }
 
-/** Their servers; with the switch on, Shelf's Blossom server and the default mirror added. Returns whether any were added. */
+/** Their servers; with the switch on, Kefli's Blossom server and the default mirror added. Returns whether any were added. */
 function keepUserServers(db: SqlDb, owner: string, d: DefaultsLike, servers: string[], keepCopies: boolean): boolean {
   for (const url of servers) db.run("INSERT OR IGNORE INTO servers (url, owner, role, in_10063, added_by_app) VALUES (?, ?, 'user', 1, 0)", url, owner);
   if (!keepCopies) return false;

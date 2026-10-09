@@ -1,7 +1,7 @@
 // Use my nostr app instead (mobile spec 5.8, contract 4.8, FD 13, FD 26, FD 76, FD 91 (c) (i)): the phone's own key S
 // moves the library to the user's nostr app T. T joins the key file and the database beside S as the move's target,
 // with its lists settled under Keep backup copies, and the move job runs. S stays the phone's identity, and its
-// recovery code keeps working, until the move's last step; a move a save from a newer Shelf stops leaves S as it was.
+// recovery code keeps working, until the move's last step; a move a save from a newer Kefli stops leaves S as it was.
 import type { SignerProvider } from '@kefli/protocol';
 import { KefliKeystore } from '../../modules/kefli-keystore/src';
 import { queueSwitch, retireLocal } from '../data/move';
@@ -34,7 +34,7 @@ export async function beginSwitch(t: SignerProvider, how: How, lists: UserLists,
   return from;
 }
 
-/** A move stopped by a save from a newer Shelf: the job and T leave the phone; S and every save stay (FD 91 (i)). */
+/** A move stopped by a save from a newer Kefli: the job and T leave the phone; S and every save stay (FD 91 (i)). */
 export async function abandonSwitch(from: string, to: string): Promise<void> {
   const db = store();
   db.run('DELETE FROM jobs WHERE id = ?', `move:${from}`);

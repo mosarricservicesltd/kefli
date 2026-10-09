@@ -39,7 +39,7 @@ class ShareActivity : ReactActivity() {
       override fun getLaunchOptions(): Bundle = Bundle().apply { putString("spoolId", spoolId) }
     }
 
-  /** Back to the sender with no transition; with a hash, open the Reader in Shelf as well. */
+  /** Back to the sender with no transition; with a hash, open the Reader in Kefli as well. */
   fun close(readHash: String?) {
     if (readHash != null) {
       val open = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("kefli://reader/$readHash"))

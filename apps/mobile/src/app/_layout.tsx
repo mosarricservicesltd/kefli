@@ -60,7 +60,7 @@ export default function Layout() {
   }, [path, sheetUp]);
   // Until the fonts and the resolver are ready, the splash stays (6.9).
   if (!fonts || !app) return <View style={{ flex: 1, backgroundColor: c.background }} />;
-  const shelf = app.route === 'saves';
+  const library = app.route === 'saves';
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: c.background }}>
       <SafeAreaProvider>
@@ -79,7 +79,7 @@ export default function Layout() {
             },
           }}
         >
-          <Stack.Protected guard={shelf}>
+          <Stack.Protected guard={library}>
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="search" />
             <Stack.Screen name="browsers" />
@@ -90,7 +90,7 @@ export default function Layout() {
             <Stack.Screen name="switch" />
             <Stack.Screen name="voice" />
           </Stack.Protected>
-          <Stack.Protected guard={!shelf}>
+          <Stack.Protected guard={!library}>
             <Stack.Screen name="welcome" />
             <Stack.Screen name="return" />
             <Stack.Screen name="code" />

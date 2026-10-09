@@ -1,4 +1,4 @@
-// Ciphertext waiting for upload: Paths.document/shelf/staging/<sha256>.bin (mobile spec 4.2), kept until the
+// Ciphertext waiting for upload: Paths.document/kefli/staging/<sha256>.bin (mobile spec 4.2), kept until the
 // operator holds the blob.
 import { Directory, File, Paths } from 'expo-file-system';
 

@@ -1,4 +1,4 @@
-# Shelf's local stack for phone work before the VPS exists (docs/specs/02-backend.md is the real one):
+# Kefli's local stack for phone work before the VPS exists (docs/specs/02-backend.md is the real one):
 # the operator relay (NIP-42 on, as contract 3.2), two relays standing in for the default public ones,
 # the operator Blossom server and a mirror. Host networking, so localhost:<port> is the same address to
 # this machine, to the containers and, through adb reverse, to the phone.

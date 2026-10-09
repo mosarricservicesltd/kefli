@@ -1,7 +1,7 @@
 // The recovery code's first pass (mobile spec 5.3, contract 2 and 8): before a key typed in is stored, ask whether
 // anything was ever saved with it. The relays asked are the baked-in defaults (the operator relay, the default
-// relays and the indexer), then any read relay the key's own 10002 names, so a shelf that moved its relays is
-// found too. found: a Shelf save on any of them; none: every relay answered and none holds one; offline: none
+// relays and the indexer), then any read relay the key's own 10002 names, so a library that moved its relays is
+// found too. found: a Kefli save on any of them; none: every relay answered and none holds one; offline: none
 // could be reached, so the value is kept and the notice shows (G6).
 import { ITEM_D_PREFIX, KIND, T_TAG, readRelayList, type NostrEvent } from '@kefli/protocol';
 import type { Filter } from './sync';

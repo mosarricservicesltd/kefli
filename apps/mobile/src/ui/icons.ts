@@ -1,5 +1,5 @@
 // The prototype's icon set (docs/design/mockups/prototype.html, const I): Lucide paths at the token stroke, plus
-// Shelf's own ±15 and Speed read glyphs. Copied by script so the app draws exactly what was signed off. Do not edit.
+// Kefli's own ±15 and Speed read glyphs. Copied by script so the app draws exactly what was signed off. Do not edit.
 export const ICONS = {
   search: "<circle cx=\"11\" cy=\"11\" r=\"8\"/><path d=\"m21 21-4.3-4.3\"/>",
   back: "<path d=\"m12 19-7-7 7-7\"/><path d=\"M19 12H5\"/>",

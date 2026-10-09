@@ -1,4 +1,4 @@
-# Shelf local Blossom server: the operator (contract section 5). Ciphertext only, so one rule for every type.
+# Kefli local Blossom server: the operator (contract section 5). Ciphertext only, so one rule for every type.
 publicDomain: ""
 host: "0.0.0.0"
 port: 3447

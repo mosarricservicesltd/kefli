@@ -1,5 +1,5 @@
 // NIP-46 by a pasted bunker:// link (mobile spec 3.4, contract 2): BunkerSigner on a pool of its own, holding only
-// the link's wss:// relays and Shelf's verifier, outside RelayPool's backoff. connect sends the standing perms,
+// the link's wss:// relays and Kefli's verifier, outside RelayPool's backoff. connect sends the standing perms,
 // since nostr-tools 2.25.2's connect() sends none. Every request waits at most two minutes.
 import { hexToBytes } from '@noble/hashes/utils.js';
 import { AbstractSimplePool } from 'nostr-tools/abstract-pool';

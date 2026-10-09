@@ -18,11 +18,11 @@ describe('launch (mobile spec 3.1)', () => {
     expect(resolveLaunch({ ...base, identity: id('new'), dbHasData: true })).toEqual({ wipeDb: false, route: 'saves', restoreCard: false, adoptBlockStore: false });
     expect(resolveLaunch({ ...base, identity: id('recovery_code'), restoreRunning: true })).toMatchObject({ route: 'saves', restoreCard: true });
   });
-  test('no identity but Block Store holds a shelf: adopt it, Saves with the restore card (FD 79)', () => {
+  test('no identity but Block Store holds a key: adopt it, Saves with the restore card (FD 79)', () => {
     expect(resolveLaunch({ ...base, blockStore: 'words' })).toEqual({ wipeDb: false, route: 'saves', restoreCard: true, adoptBlockStore: true });
     expect(resolveLaunch({ ...base, blockStore: 'words', dbHasData: true })).toMatchObject({ wipeDb: true, adoptBlockStore: true });
   });
-  test('a failed Block Store read is not a shelf', () => {
+  test('a failed Block Store read is not a key', () => {
     expect(resolveLaunch({ ...base, blockStore: undefined })).toMatchObject({ route: 'welcome', adoptBlockStore: false });
   });
 });
@@ -31,7 +31,7 @@ describe('share (mobile spec 3.1)', () => {
   test('an existing identity is used', () => {
     expect(resolveShare({ identity: { pubkey: 'p' }, blockStore: 'words' })).toEqual({ use: 'existing' });
   });
-  test('Block Store’s shelf is adopted before minting', () => {
+  test('Block Store’s key is adopted before minting', () => {
     expect(resolveShare({ identity: null, blockStore: 'words' })).toEqual({ use: 'block_store' });
   });
   test('a minted key goes to Block Store only when the entry was read empty', () => {

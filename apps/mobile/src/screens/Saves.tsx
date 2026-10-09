@@ -106,7 +106,7 @@ function FirstRun({ online }: { online: boolean }) {
           </View>
           <View>
             <T allowFontScaling={false} style={{ fontFamily: 'Archivo-400', fontSize: 11, color: c.muted, marginBottom: 8, includeFontPadding: false }}>{S.saves.shareTo}</T>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>{S.saves.shareApps.map((a) => app(a, a === 'Shelf'))}</View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>{S.saves.shareApps.map((a) => app(a, a === 'Kefli'))}</View>
           </View>
         </View>
       )}

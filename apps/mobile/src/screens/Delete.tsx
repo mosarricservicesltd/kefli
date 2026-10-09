@@ -1,7 +1,7 @@
 // Delete my data (mobile spec 5.8, 7.2, FD 14, FD 28, FD 74, FD 91 (e); prototype del, del-typed, del-running,
 // del-partial, del-failed): what goes and what can only be asked for, the backup servers counted from the real
 // lists; the danger button only once DELETE is typed and the phone is online. Deleting shows a row for each
-// server as its request resolves, with no way back; a server that didn't confirm is named. Done, Shelf starts
+// server as its request resolves, with no way back; a server that didn't confirm is named. Done, Kefli starts
 // fresh at Welcome with a toast.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, TextInput, View } from 'react-native';
@@ -102,7 +102,7 @@ export default function Delete() {
     const r = await deleteEverything(ports, setProg, signed).catch(() => 'failed' as const);
     if (r === 'failed') return setPhase('failed');
     if (r === 'partial') return setPhase('partial');
-    // a moment for the last mark to land, then Shelf starts fresh (prototype runDelete)
+    // a moment for the last mark to land, then Kefli starts fresh (prototype runDelete)
     setTimeout(finish, 400);
   };
 
