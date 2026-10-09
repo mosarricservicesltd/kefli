@@ -4,7 +4,7 @@
 import { hexToBytes } from '@noble/hashes/utils.js';
 import { AbstractSimplePool } from 'nostr-tools/abstract-pool';
 import { BunkerSigner } from 'nostr-tools/nip46';
-import { NIP46_TIMEOUT_MS, Nip46Signer, nip46Perms, readBunkerLink, verifyEventWith, withTimeout, type BunkerLink } from '@shelf/protocol';
+import { NIP46_TIMEOUT_MS, Nip46Signer, nip46Perms, readBunkerLink, verifyEventWith, withTimeout, type BunkerLink } from '@kefli/protocol';
 import { nativeSecp } from '../crypto/secp';
 
 const pool = () => new AbstractSimplePool({ verifyEvent: (e) => verifyEventWith(nativeSecp, e as never), maxWaitForConnection: 10_000 });

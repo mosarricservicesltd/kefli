@@ -1,7 +1,7 @@
 // Spools left by a share that never finished (mobile spec 8.5): the process died, or was killed, before its sheet
 // closed. Each is saved at the next start as the sheet would have saved it, its rows released at once (there is no
 // sheet left to Undo from), and the spool deleted. A sheet still open in this process keeps its spool.
-import { ShelfShare } from '../../modules/shelf-share/src';
+import { KefliShare } from '../../modules/kefli-share/src';
 import { release } from '../data/outbox';
 import { saveLink } from '../services/save';
 import { store } from '../services/store';
@@ -34,19 +34,19 @@ export function pickUpSpools(): Promise<number> {
 
 async function pickUp(): Promise<number> {
   let saved = 0;
-  for (const id of ShelfShare.listSpools()) {
+  for (const id of KefliShare.listSpools()) {
     if (activeSpools.has(id)) continue;
     // a spool this young belongs to a sheet still rising: the share brought Shelf to the front, which starts a sync
     // before the sheet has claimed it (seen on the Pixel, 8 October)
-    const entry = ShelfShare.read(id);
+    const entry = KefliShare.read(id);
     if (entry && Date.now() - entry.receivedAt < FRESH_MS) continue;
     const url = firstLink(entry?.text ?? null);
     if (url) {
-      const r = await saveLink(url, (st) => console.log(`[shelf-pickup] ${JSON.stringify(st)}`));
+      const r = await saveLink(url, (st) => console.log(`[kefli-pickup] ${JSON.stringify(st)}`));
       release(store(), r.held);
       if (r.hash) saved++;
     }
-    ShelfShare.deleteSpool(id);
+    KefliShare.deleteSpool(id);
   }
   return saved;
 }

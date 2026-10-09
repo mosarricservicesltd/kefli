@@ -2,7 +2,7 @@
 // stage the text, record the item, and queue its outbox rows held, to be released when the share sheet closes
 // without Undo. The outbox sends them (send.ts, runner.ts). What happened comes back as a kind, which picks the
 // Saved sheet's state.
-import { encryptText, isXPost, itemHash, textHash } from '@shelf/protocol';
+import { encryptText, isXPost, itemHash, textHash } from '@kefli/protocol';
 import { phonePagePorts } from './pagePorts';
 import { phoneCrypto } from '../crypto/port';
 import type { SqlDb } from '../data/db';

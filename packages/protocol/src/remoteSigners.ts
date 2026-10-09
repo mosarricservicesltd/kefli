@@ -72,7 +72,7 @@ export function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([p, new Promise<never>((_, fail) => (t = setTimeout(() => fail(new TimeoutError()), ms)))]).finally(() => clearTimeout(t));
 }
 
-/** What a NIP-55 signer app does, through the shelf-nip55 module (mobile spec 8.4). */
+/** What a NIP-55 signer app does, through the kefli-nip55 module (mobile spec 8.4). */
 export interface Nip55Port {
   signEvent(pkg: string, eventJson: string, pubkey: string): Promise<string>;
   nip44Encrypt(pkg: string, plaintext: string, peer: string, pubkey: string): Promise<string>;

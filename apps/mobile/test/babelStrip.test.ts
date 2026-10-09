@@ -6,7 +6,7 @@ const strip = (code: string) => transformSync(code, { plugins: [stripConsole], b
 
 describe('release builds strip console below warn (mobile spec 7.1)', () => {
   test('log, info, debug and trace go; warn and error stay', () => {
-    const out = strip("console.log('[shelf-save]', title); console.info(1); console.debug(2); console.trace(); console.warn('w'); console.error('e');");
+    const out = strip("console.log('[kefli-save]', title); console.info(1); console.debug(2); console.trace(); console.warn('w'); console.error('e');");
     expect(out).not.toMatch(/console\.(log|info|debug|trace)/);
     expect(out).toContain("console.warn('w')");
     expect(out).toContain("console.error('e')");

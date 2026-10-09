@@ -9,7 +9,7 @@
 //      answered OK to every kind 5, a server when it answered 2xx or 404 to every delete; each gets a minute.
 //   3. the phone: the key file, Block Store, the database and the files.
 // Each step's result is kept in a delete_account job, so a deletion cut short resumes where it stopped.
-import { DEVICES_D, ITEM_D_PREFIX, KIND, buildDeletions, buildRelayList, buildServerList, deleteBlob, httpAuth, type CryptoPort, type NostrEvent, type Signer } from '@shelf/protocol';
+import { DEVICES_D, ITEM_D_PREFIX, KIND, buildDeletions, buildRelayList, buildServerList, deleteBlob, httpAuth, type CryptoPort, type NostrEvent, type Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import type { RelayAnswer } from './send';
 
@@ -128,9 +128,9 @@ async function listDeletion(p: DelPorts): Promise<NostrEvent> {
  */
 async function listRewrites(p: DelPorts): Promise<NostrEvent[]> {
   const pk = p.signer.pubkey();
-  const relays = p.db.all<{ url: string; read: number; write: number }>("SELECT url, read, write FROM relays WHERE owner = ? AND source != 'indexer' AND added_by_shelf = 0 ORDER BY rowid", pk)
+  const relays = p.db.all<{ url: string; read: number; write: number }>("SELECT url, read, write FROM relays WHERE owner = ? AND source != 'indexer' AND added_by_app = 0 ORDER BY rowid", pk)
     .map((r) => ({ url: r.url, read: !!r.read, write: !!r.write }));
-  const servers = p.db.all<{ url: string }>('SELECT url FROM servers WHERE owner = ? AND added_by_shelf = 0 AND in_10063 = 1 ORDER BY rowid', pk).map((r) => r.url);
+  const servers = p.db.all<{ url: string }>('SELECT url FROM servers WHERE owner = ? AND added_by_app = 0 AND in_10063 = 1 ORDER BY rowid', pk).map((r) => r.url);
   const out: NostrEvent[] = [];
   if (relays.length) out.push(await buildRelayList(p.signer, relays, p.now()));
   if (servers.length) out.push(await buildServerList(p.signer, servers, p.now()));

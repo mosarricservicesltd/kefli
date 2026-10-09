@@ -1,0 +1,6 @@
+{
+  "name": "kefli-keystore",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.ts"
+}

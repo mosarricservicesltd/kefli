@@ -1,7 +1,7 @@
 // npm run decrypt -w packages/protocol -- <event.json | -> [--blob <file>] [--fetch]
 //
 // Prints a save event's decrypted item JSON and checks its text blob (mobile spec 13.1), so the stage
-// gates and the extension can check output without a phone. The secret comes from SHELF_SECRET: 64 hex
+// gates and the extension can check output without a phone. The secret comes from KEFLI_SECRET: 64 hex
 // characters, an nsec, or the twelve words. Use test identities only; the secret never reaches a log.
 //
 //   --blob <file>  check a blob already on disk

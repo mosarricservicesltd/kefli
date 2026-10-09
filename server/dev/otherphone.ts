@@ -1,5 +1,5 @@
 // Plays "your other phone" for Scan from my other phone (mobile spec 5.3, contract 2): it makes a throwaway shelf
-// with a few saves (as shelf.ts does), posts its mnemonic as a phone offer, and shows the QR in the terminal and in
+// with a few saves (as library.ts does), posts its mnemonic as a phone offer, and shows the QR in the terminal and in
 // server/dev/data/pair.html with the six digits under it. Scan it with the phone, type the digits, and the phone
 // restores the throwaway shelf. The words are a test identity's and are never printed.
 //   npx tsx server/dev/otherphone.ts   (with the stack and api.mjs running)
@@ -36,10 +36,10 @@ function page(text: string, six: string): string {
 }
 
 async function main() {
-  // a throwaway shelf to hand over: shelf.ts makes it and prints its words, which stay in this process
-  const out = execFileSync('npx', ['tsx', join(__dirname, 'shelf.ts'), '4'], { encoding: 'utf8' });
+  // a throwaway library to hand over: library.ts makes it and prints its words, which stay in this process
+  const out = execFileSync('npx', ['tsx', join(__dirname, 'library.ts'), '4'], { encoding: 'utf8' });
   const words = /Its twelve test words: (.+)/.exec(out)?.[1]?.trim();
-  if (!words) throw new Error('shelf.ts gave no words');
+  if (!words) throw new Error('library.ts gave no words');
   const signer = new LocalSigner(await secretKeyFromMnemonic(words, nodeCrypto));
   const defaults = await (await fetch('http://localhost:8447/defaults.json')).json();
   const { qr, six } = newPhonePair(nodeCrypto, signer.pubkey(), Math.floor(Date.now() / 1000));

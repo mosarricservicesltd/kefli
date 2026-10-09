@@ -1,4 +1,4 @@
-import { normaliseMarkdown } from '@shelf/protocol';
+import { normaliseMarkdown } from '@kefli/protocol';
 import { articleBlocks } from '../src/reader/blocks';
 import { readPrefs, readerColors } from '../src/reader/palette';
 import { scrollYForWord, wordAtScroll, type Place } from '../src/reader/position';

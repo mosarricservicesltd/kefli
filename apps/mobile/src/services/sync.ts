@@ -8,9 +8,9 @@
 //
 // Every relay's pages are collected before anything is applied, and saves are applied before deletions, so a
 // save still held by a relay that missed its deletion can't come back in the same run.
-import { DEVICES_D, KIND, T_TAG, decryptText, newest, readDevicesEvent, readItemEvent, readRelayList } from '@shelf/protocol';
+import { DEVICES_D, KIND, T_TAG, decryptText, newest, readDevicesEvent, readItemEvent, readRelayList } from '@kefli/protocol';
 import { deriveArticle, type Derived } from '../reader/blocks';
-import type { CryptoPort, NostrEvent, Signer } from '@shelf/protocol';
+import type { CryptoPort, NostrEvent, Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { absorbRecord, queueRecord } from '../data/devices';
 import { KEEP_COPIES, getSetting } from '../data/settings';
@@ -197,7 +197,7 @@ export async function syncLists(p: SyncPorts, owner: string): Promise<void> {
     recordList(p.db, owner, kind, latest.id, latest.created_at, JSON.stringify(latest));
     if (kind !== KIND.relayList) continue;
     for (const e of readRelayList(latest)) {
-      p.db.run("INSERT OR IGNORE INTO relays (url, owner, read, write, source, added_by_shelf) VALUES (?, ?, ?, ?, 'user', 0)", e.url, owner, e.read ? 1 : 0, e.write ? 1 : 0);
+      p.db.run("INSERT OR IGNORE INTO relays (url, owner, read, write, source, added_by_app) VALUES (?, ?, ?, ?, 'user', 0)", e.url, owner, e.read ? 1 : 0, e.write ? 1 : 0);
     }
   }
 }

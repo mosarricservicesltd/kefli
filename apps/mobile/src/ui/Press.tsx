@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
-import { motion } from '@shelf/tokens';
+import { motion } from '@kefli/tokens';
 import { alpha } from './theme';
 
 export function Press({ children, layer, style, ...p }: Omit<PressableProps, 'style' | 'children'> & {

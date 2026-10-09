@@ -4,8 +4,8 @@
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import Animated, { FadeIn, FadeOut, useSharedValue, withTiming } from 'react-native-reanimated';
-import { radius } from '@shelf/tokens';
-import { reflow } from '@shelf/tokens/reanimated';
+import { radius } from '@kefli/tokens';
+import { reflow } from '@kefli/tokens/reanimated';
 import { DONE_HOLD_S, restoreCardShows, restoreOf } from '../data/restore';
 import { store } from '../services/store';
 import { Icon } from '../ui/Icon';

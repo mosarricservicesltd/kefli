@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { radius } from '@shelf/tokens';
+import { radius } from '@kefli/tokens';
 import { Icon, type IconName } from '../ui/Icon';
 import { Press, pressLayer } from '../ui/Press';
 import { S } from '../ui/strings';

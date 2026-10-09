@@ -1,5 +1,5 @@
 // Cleartext HTTP to this phone's localhost only, for the local stack in server/dev (reached over adb reverse).
-// Applied by app.config.js for SHELF_VARIANT=local alone; every other build allows no cleartext at all.
+// Applied by app.config.js for KEFLI_VARIANT=local alone; every other build allows no cleartext at all.
 const { withAndroidManifest, withDangerousMod, AndroidConfig } = require('expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
@@ -19,12 +19,12 @@ module.exports = function withLocalCleartext(config) {
   config = withDangerousMod(config, ['android', (c) => {
     const dir = path.join(c.modRequest.platformProjectRoot, 'app', 'src', 'main', 'res', 'xml');
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'shelf_network_security.xml'), XML);
+    fs.writeFileSync(path.join(dir, 'kefli_network_security.xml'), XML);
     return c;
   }]);
   return withAndroidManifest(config, (c) => {
     const app = AndroidConfig.Manifest.getMainApplicationOrThrow(c.modResults);
-    app.$['android:networkSecurityConfig'] = '@xml/shelf_network_security';
+    app.$['android:networkSecurityConfig'] = '@xml/kefli_network_security';
     delete app.$['android:usesCleartextTraffic'];
     return c;
   });

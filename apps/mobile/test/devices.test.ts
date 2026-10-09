@@ -1,8 +1,8 @@
 import {
   LocalSigner, PAIR_ACK_D, buildDevicesEvent, derivePairCode, newPairCode, readDevicesEvent, sealOffer, unwrap,
   type NostrEvent, type PairOffer,
-} from '@shelf/protocol';
-import { nodeCrypto } from '@shelf/protocol/node';
+} from '@kefli/protocol';
+import { nodeCrypto } from '@kefli/protocol/node';
 import { schnorr } from '@noble/curves/secp256k1.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { migrate } from '../src/data/schema';

@@ -2,7 +2,7 @@
 // through the relay pool (4.4).
 import { AppState } from 'react-native';
 import { phonePagePorts } from './pagePorts';
-import { verifyEventWith } from '@shelf/protocol';
+import { verifyEventWith } from '@kefli/protocol';
 import { phoneCrypto } from '../crypto/port';
 import { nativeSecp } from '../crypto/secp';
 import { RelayPool } from '../net/pool';
@@ -21,7 +21,7 @@ import { runPendingParses } from './pending';
 import { drainInbox } from './inbox';
 import { pickUpSpools } from '../share/pickup';
 import { xRetryDelay } from './xpost';
-import { ShelfParser } from '../../modules/shelf-parser/src';
+import { KefliParser } from '../../modules/kefli-parser/src';
 import type { ParserResult } from './page';
 import { stageBlob } from './staging';
 import { File } from 'expo-file-system';
@@ -35,7 +35,7 @@ import { takeImport } from './nostrSignIn';
 import { disconnect } from '../data/devices';
 import type { ConnectPorts } from './connect';
 import type { ShowPorts } from './phonePair';
-import { ShelfKeystore } from '../../modules/shelf-keystore/src';
+import { KefliKeystore } from '../../modules/kefli-keystore/src';
 
 let running: Promise<number> | null = null;
 let defaults: Defaults | null = null;
@@ -103,7 +103,7 @@ export function runSync(): Promise<SyncResult> {
       const owner = store().get<{ pubkey: string }>("SELECT pubkey FROM identities WHERE role = 'active'")?.pubkey;
       if (owner) settleRestore(store(), Math.floor(Date.now() / 1000), owner);
       // early saves move into the shelf just brought back, after the restore's first pass (C§4.8, FD 6)
-      if (owner) await runMoveJob().catch((e) => console.log(`[shelf-move] ${JSON.stringify({ error: String((e as Error).message) })}`));
+      if (owner) await runMoveJob().catch((e) => console.log(`[kefli-move] ${JSON.stringify({ error: String((e as Error).message) })}`));
       // links a sign-in chose to bring in join after the restore's first pass (FD 82)
       const imported = owner ? takeImport(store(), owner) : null;
       if (owner && imported) {
@@ -165,12 +165,12 @@ export function runMoveJob(): Promise<MoveOutcome> {
       if (!job) {
         const ids = store().all<{ role: string; origin: string }>('SELECT role, origin FROM identities');
         const jobs = store().all<{ kind: string; state: string }>('SELECT kind, state FROM jobs');
-        if (ids.length > 1) console.log(`[shelf-move] ${JSON.stringify({ outcome: 'no job', ids, jobs })}`);
+        if (ids.length > 1) console.log(`[kefli-move] ${JSON.stringify({ outcome: 'no job', ids, jobs })}`);
         return 'done';
       }
       const [source, target] = await Promise.all([signerOf(job.from), signerOf(job.to)]);
       if (!source || !target) {
-        console.log(`[shelf-move] ${JSON.stringify({ outcome: 'waiting', missing: !source ? 'source key' : 'target key' })}`);
+        console.log(`[kefli-move] ${JSON.stringify({ outcome: 'waiting', missing: !source ? 'source key' : 'target key' })}`);
         return 'waiting';
       }
       const r = await runMove({
@@ -194,12 +194,12 @@ export function runMoveJob(): Promise<MoveOutcome> {
         drainSourceInbox: async () => void (await drainInbox({
           db: store(), now: () => Math.floor(Date.now() / 1000), signer: source,
           query: (url, filters) => pool.query(url, filters as never), fetch,
-          markdown: (html, u) => ShelfParser.markdown(html, u) as Promise<ParserResult>, defaults: loadDefaults, ...parserPorts(),
+          markdown: (html, u) => KefliParser.markdown(html, u) as Promise<ParserResult>, defaults: loadDefaults, ...parserPorts(),
         }, job.from)),
         retireKeys: () => retireSourceKeys(job.from, job.to),
         report: (n, m) => moveListeners.forEach((l) => l(n, m)),
       }, job);
-      console.log(`[shelf-move] ${JSON.stringify({ outcome: r, step: moveJob(store())?.step ?? 'done' })}`);
+      console.log(`[kefli-move] ${JSON.stringify({ outcome: r, step: moveJob(store())?.step ?? 'done' })}`);
       if (r === 'done') {
         // the key file now starts with T, the signer every later call reads
         setCurrentSigner(null);
@@ -218,7 +218,7 @@ export function runMoveJob(): Promise<MoveOutcome> {
  * so a sync never runs before Block Store's key is adopted. Returns the cleanup, for useEffect.
  */
 export function startSync(): () => void {
-  const log = (tag: string, v: unknown) => console.log(`[shelf-${tag}] ${JSON.stringify(v)}`);
+  const log = (tag: string, v: unknown) => console.log(`[kefli-${tag}] ${JSON.stringify(v)}`);
   const sync = () =>
     launchPlan()
       .catch(() => null)
@@ -349,11 +349,11 @@ export function runInbox(owner: string): Promise<void> {
         signer,
         query: (url, filters) => pool.query(url, filters as never),
         fetch,
-        markdown: (html, u) => ShelfParser.markdown(html, u) as Promise<ParserResult>,
+        markdown: (html, u) => KefliParser.markdown(html, u) as Promise<ParserResult>,
         defaults: loadDefaults,
         ...parserPorts(),
       }, owner);
-      console.log(`[shelf-inbox] ${JSON.stringify(r)}`);
+      console.log(`[kefli-inbox] ${JSON.stringify(r)}`);
       if (r.created || r.merged || r.unarchived) {
         await runOutbox().catch(() => 0);
         await parsePending(owner).catch(() => undefined);
@@ -407,7 +407,7 @@ function unwatchInbox(): void {
 
 /** Add another device's ports (5.8): the user's key signs the offer, which carries the mnemonic from the key file. */
 export function phonePorts(owner: string): ShowPorts {
-  return { ...connectPorts(owner), mnemonic: () => ShelfKeystore.readMnemonic(owner).catch(() => null) };
+  return { ...connectPorts(owner), mnemonic: () => KefliKeystore.readMnemonic(owner).catch(() => null) };
 }
 
 /** Advanced's relay rows (5.8, FD 76): each relay in the identity's 10002, answering or not. */

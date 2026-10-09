@@ -4,7 +4,7 @@
 // auth-required, or a query closed with it, authenticates and tries once more (contract 3.2).
 import { AbstractRelay } from 'nostr-tools/abstract-relay';
 import type { Filter } from 'nostr-tools/filter';
-import type { EventTemplate, NostrEvent, Signer } from '@shelf/protocol';
+import type { EventTemplate, NostrEvent, Signer } from '@kefli/protocol';
 
 export type RelayAnswer = { ok: true } | { ok: false; reason: string };
 

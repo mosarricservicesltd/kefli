@@ -1,8 +1,8 @@
 // Asking the user's nostr app for their key (mobile spec 5.3, 8.4): the phone's signer app through NIP-55 (Android's
 // chooser when there are several), or a pasted bunker:// link through NIP-46. Sign-in and switching both use it.
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { Nip55Signer, failureOf, type BunkerLink, type SignerProvider } from '@shelf/protocol';
-import { ShelfNip55, nip55Port } from '../../modules/shelf-nip55/src';
+import { Nip55Signer, failureOf, type BunkerLink, type SignerProvider } from '@kefli/protocol';
+import { KefliNip55, nip55Port } from '../../modules/kefli-nip55/src';
 import { phoneCrypto } from '../crypto/port';
 import { connectBunker } from './nip46';
 
@@ -11,10 +11,10 @@ export type Asked = { signer: SignerProvider; how: How };
 
 /** The signer app's answer, or null when the phone has none. Throws when declined or unanswered. asking: the app is being opened. */
 export async function askApp(asking: () => void): Promise<Asked | null> {
-  const signers = await ShelfNip55.listSigners().catch(() => []);
+  const signers = await KefliNip55.listSigners().catch(() => []);
   if (!signers.length) return null;
   asking();
-  const r = await ShelfNip55.getPublicKey(signers.length === 1 ? signers[0].package : null);
+  const r = await KefliNip55.getPublicKey(signers.length === 1 ? signers[0].package : null);
   return { signer: new Nip55Signer(nip55Port, r.package, r.pubkey), how: { provider: 'nip55', package: r.package } };
 }
 

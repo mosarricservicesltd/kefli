@@ -1,6 +1,6 @@
 // Fetching and parsing a page (mobile spec 5.4, section 9), for a share and for a pending parse: a desktop Chrome
 // user agent and a mobile one on 403, a 20 s timeout, a 5 MB cap, and only text/html and application/xhtml+xml
-// parse. The parse runs in the shelf-parser WebView (a port here), then contract 4.2's guard: not readerable and
+// parse. The parse runs in the kefli-parser WebView (a port here), then contract 4.2's guard: not readerable and
 // fewer than 120 spoken words is a failed parse. A network failure is "offline": the save waits and tries again.
 // A page still turned away with 403 by both is loaded once in a browser engine (the render port, 8.2), since bot
 // checks such as Cloudflare's tell Android's HTTP client from a browser; its rendered HTML takes the same parse. So is a
@@ -86,7 +86,7 @@ export async function fetchPage(p: PagePorts, url: string): Promise<PageOutcome>
   const refused = refusal(res.status, contentType, bytes.length);
   if (refused) {
     // the status alone, never the address (7.1); release builds strip it
-    console.log(`[shelf-page] ${JSON.stringify({ refused, status: res.status, type: contentType.split(';')[0], bytes: bytes.length })}`);
+    console.log(`[kefli-page] ${JSON.stringify({ refused, status: res.status, type: contentType.split(';')[0], bytes: bytes.length })}`);
     return { kind: 'failed', reason: refused, finalUrl };
   }
   return parseHtml(p, bytes, contentType, finalUrl);

@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Shelf test",
-    "slug": "mobile",
-    "scheme": "shelf",
+    "name": "Kefli",
+    "slug": "kefli",
+    "scheme": "kefli",
     "version": "0.0.1",
     "orientation": "portrait",
     "icon": "./assets/brand/icon.png",
@@ -11,7 +11,7 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "space.shelf.app",
+      "package": "app.kefli",
       "adaptiveIcon": {
         "foregroundImage": "./assets/brand/adaptive-foreground.png",
         "backgroundImage": "./assets/brand/adaptive-background.png",
@@ -64,7 +64,7 @@
           }
         }
       ],
-      "./plugins/with-shelf-notification",
+      "./plugins/with-kefli-notification",
       [
         "expo-camera",
         {
@@ -74,7 +74,7 @@
         }
       ],
       "./plugins/with-nip55-queries",
-      "./plugins/with-shelf-security"
+      "./plugins/with-kefli-security"
     ]
   }
 }

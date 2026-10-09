@@ -11,7 +11,7 @@ import { memo, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Canvas, Group, ImageSVG, Skia, type SkSVG } from '@shopify/react-native-skia';
 import { Easing, useDerivedValue, useReducedMotion, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
-import { radius as R } from '@shelf/tokens';
+import { radius as R } from '@kefli/tokens';
 import { drawMs } from '../data/covers';
 import { ShelfCover } from './cover';
 import { splitCover } from './coverLeaves';

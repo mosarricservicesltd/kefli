@@ -63,13 +63,13 @@ async function main() {
   back.close();
   if (!got) throw new Error('the save did not come back');
   step(`read back from ${defaults.relays[1]}`);
-  const dir = mkdtempSync(join(tmpdir(), 'shelf-smoke-'));
+  const dir = mkdtempSync(join(tmpdir(), 'kefli-smoke-'));
   writeFileSync(join(dir, 'event.json'), JSON.stringify(got));
   const lines: string[] = [];
-  const ok = await decryptCommand([join(dir, 'event.json'), '--fetch'], { SHELF_SECRET: words }, (l) => lines.push(l));
+  const ok = await decryptCommand([join(dir, 'event.json'), '--fetch'], { KEFLI_SECRET: words }, (l) => lines.push(l));
   for (const l of lines.filter((x) => /^(ok|FAIL)/.test(x))) step(l);
   // and as the stage gates check a phone's saves: every relay, newest copy, blob on every server
-  const verified = await verifyCommand(['--relays', [defaults.operator.relay, ...defaults.relays].join(',')], { SHELF_SECRET: words }, (l) => step(`verify: ${l}`));
+  const verified = await verifyCommand(['--relays', [defaults.operator.relay, ...defaults.relays].join(',')], { KEFLI_SECRET: words }, (l) => step(`verify: ${l}`));
   console.log(ok && verified ? 'SMOKE PASS' : 'SMOKE FAIL');
   process.exit(ok && verified ? 0 : 1);
 }

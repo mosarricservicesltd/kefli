@@ -6,13 +6,13 @@
 //   - a token that isn't a connected entry of the record, or a seal by another key: ignored_token.
 // An accepted request becomes a save. Its HTML, when there is some, comes from the operator Blossom server only,
 // capped and checked against its sha256: Readability's content HTML, which the canonical Markdown conversion
-// (shelfMarkdown) turns into the save's text, with the title and the rest as the extension read them; a blob that can't be read is failed_blob and
+// (kefliMarkdown) turns into the save's text, with the title and the rest as the extension read them; a blob that can't be read is failed_blob and
 // tried again from wrap_json at each drain. Only created, merged and unarchived queue delete_wrap; every other
 // wrap is left, so a phone without the record yet can't remove a save another phone still needs.
 //
 // RULED: a request naming another server for its HTML is taken without it, and the page is fetched instead, so a
 // save from a connected browser is never lost to a bad field.
-import { KIND, acceptSaveRequest, decryptText, unwrap, type CryptoPort, type NostrEvent, type Rumor, type SaveRequest, type Signer } from '@shelf/protocol';
+import { KIND, acceptSaveRequest, decryptText, unwrap, type CryptoPort, type NostrEvent, type Rumor, type SaveRequest, type Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { localRecord } from '../data/devices';
 import {
@@ -34,7 +34,7 @@ export type InboxPorts = Pick<PendingPorts, 'db' | 'now' | 'crypto' | 'stage' | 
   signer: Signer;
   query: (relay: string, filters: Filter[]) => Promise<NostrEvent[]>;
   fetch: typeof fetch;
-  /** shelfMarkdown in the parser WebView (C§4.4). */
+  /** kefliMarkdown in the parser WebView (C§4.4). */
   markdown: (contentHtml: string, url: string) => Promise<ParserResult>;
   defaults: () => Promise<{ operator: { relay: string; blossom: string } }>;
 };

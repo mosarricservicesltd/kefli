@@ -1,12 +1,12 @@
 // The canonical parse (contract 4.2, mobile spec 9), shared by every platform that runs it in a browser
-// engine: the phone's hidden WebView (shelf-parser), the extension, and the pinned headless Chromium that
+// engine: the phone's hidden WebView (kefli-parser), the extension, and the pinned headless Chromium that
 // makes the page fixtures. Changing this file changes text_hash, so it regenerates the fixtures and bumps
 // the contract.
 //
-//   shelfParse(bodyBase64, contentType, url, rules)  the page's bytes, as fetched, to a result
-//   shelfMarkdown(contentHtml, url, rules)            Readability's content HTML (an extension save) to a result
-//   shelfRun(jobId)                                   the shelf-parser entry: reads the job from, and writes the
-//                                                     result to, the ShelfHost object, so megabyte strings never
+//   kefliParse(bodyBase64, contentType, url, rules)  the page's bytes, as fetched, to a result
+//   kefliMarkdown(contentHtml, url, rules)            Readability's content HTML (an extension save) to a result
+//   kefliRun(jobId)                                   the kefli-parser entry: reads the job from, and writes the
+//                                                     result to, the KefliHost object, so megabyte strings never
 //                                                     pass through evaluateJavascript
 //
 // A result is {ok: true, title, byline, site, lang, hero, canonical, readerable, markdown}, with null for
@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  var DEFAULT_RULES = window.SHELF_RULES;
+  var DEFAULT_RULES = window.KEFLI_RULES;
 
   function absoluteHttp(href, base) {
     if (typeof href !== 'string' || href.trim() === '') return null;
@@ -132,7 +132,7 @@
     return typeof s === 'string' && s.trim() !== '' ? s : null;
   };
 
-  function shelfParse(bodyBase64, contentType, url, rules) {
+  function kefliParse(bodyBase64, contentType, url, rules) {
     var doc = documentFor(decode(base64Bytes(bodyBase64), contentType), url);
     // canonical, hero and readerable are read first, since parse() changes the document (contract 4.2).
     var canonical = canonicalOf(doc, url);
@@ -153,16 +153,16 @@
     };
   }
 
-  // Readability's content HTML for a page, prepared as shelfParse prepares it: what the extension sends with a
+  // Readability's content HTML for a page, prepared as kefliParse prepares it: what the extension sends with a
   // save (contract 4.4), and the fixtures' Readability output (contract 9).
-  function shelfArticle(bodyBase64, contentType, url) {
+  function kefliArticle(bodyBase64, contentType, url) {
     var doc = documentFor(decode(base64Bytes(bodyBase64), contentType), url);
     var article = new Readability(doc).parse();
     return article && article.content ? { ok: true, content: article.content } : { ok: false };
   }
 
   // An extension save: the extension has already read canonical, hero and the guard from the live page.
-  function shelfMarkdown(contentHtml, url, rules) {
+  function kefliMarkdown(contentHtml, url, rules) {
     var doc = documentFor(contentHtml, url);
     return {
       ok: true, title: null, byline: null, site: null, lang: null, hero: null, canonical: null, readerable: true,
@@ -170,20 +170,20 @@
     };
   }
 
-  function shelfRun(jobId) {
+  function kefliRun(jobId) {
     var result;
     try {
-      var job = JSON.parse(window.ShelfHost.input(jobId));
-      result = job.kind === 'markdown' ? shelfMarkdown(job.html, job.url) : shelfParse(job.body, job.contentType, job.url);
+      var job = JSON.parse(window.KefliHost.input(jobId));
+      result = job.kind === 'markdown' ? kefliMarkdown(job.html, job.url) : kefliParse(job.body, job.contentType, job.url);
     } catch (e) {
       result = { ok: false, reason: 'error', message: String(e && e.message ? e.message : e) };
     }
-    window.ShelfHost.output(jobId, JSON.stringify(result));
+    window.KefliHost.output(jobId, JSON.stringify(result));
   }
 
-  window.shelfParse = shelfParse;
-  window.shelfMarkdown = shelfMarkdown;
-  window.shelfArticle = shelfArticle;
-  window.shelfRun = shelfRun;
-  window.shelfNormaliseMarkdown = normaliseMarkdown;
+  window.kefliParse = kefliParse;
+  window.kefliMarkdown = kefliMarkdown;
+  window.kefliArticle = kefliArticle;
+  window.kefliRun = kefliRun;
+  window.kefliNormaliseMarkdown = normaliseMarkdown;
 })();

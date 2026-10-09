@@ -1,5 +1,5 @@
 // Week-0 gates (mobile spec 12) on one screen. "Run all" runs the JavaScript gates and logs each result to
-// logcat under [shelf-gates]; below them, eight covers drawn by Skia and every static font cut, for the eye.
+// logcat under [kefli-gates]; below them, eight covers drawn by Skia and every static font cut, for the eye.
 
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -16,7 +16,7 @@ const COVERS: { id: string; hash: string }[] = require('../../../../shared/cover
 
 /* eslint-enable @typescript-eslint/no-require-imports */
 
-const log = (r: unknown) => console.log(`[shelf-gates] ${JSON.stringify(r)}`);
+const log = (r: unknown) => console.log(`[kefli-gates] ${JSON.stringify(r)}`);
 const SIZE = 80;
 
 function Covers() {

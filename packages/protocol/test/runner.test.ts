@@ -8,7 +8,7 @@ import { normaliseMarkdown } from '../src';
 const runner = readFileSync(join(__dirname, '../../../shared/vendor/parser-runner.js'), 'utf8');
 const window: Record<string, unknown> = {};
 runInNewContext(runner, { window });
-const runnerNormalise = window.shelfNormaliseMarkdown as (md: string) => string;
+const runnerNormalise = window.kefliNormaliseMarkdown as (md: string) => string;
 
 test.each([
   ['plain', 'one\ntwo'],

@@ -4,8 +4,8 @@ import { useEffect } from 'react';
 import { View } from 'react-native';
 import { CameraView } from 'expo-camera';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withTiming } from 'react-native-reanimated';
-import { motion, radius } from '@shelf/tokens';
-import { ambient } from '@shelf/tokens/reanimated';
+import { motion, radius } from '@kefli/tokens';
+import { ambient } from '@kefli/tokens/reanimated';
 import { PhoneQR } from './PhoneQR';
 import { T, ui } from './text';
 

@@ -9,7 +9,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import * as Clipboard from 'expo-clipboard';
-import { radius } from '@shelf/tokens';
+import { radius } from '@kefli/tokens';
 import { rowByHash, rowStatus, type LibRow } from '../data/library';
 import { useApp } from '../services/app';
 import { store } from '../services/store';

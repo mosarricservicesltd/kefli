@@ -1,5 +1,5 @@
-import { itemHash, xEmbedUrl } from '@shelf/protocol';
-import { nodeCrypto } from '@shelf/protocol/node';
+import { itemHash, xEmbedUrl } from '@kefli/protocol';
+import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow, queueSave } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';

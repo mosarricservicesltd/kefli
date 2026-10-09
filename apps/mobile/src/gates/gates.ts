@@ -1,6 +1,6 @@
 // The week-0 gates that run in JavaScript on the phone (mobile spec 12): quick-crypto on a release build,
 // Schnorr and NIP-44 timing, and the hash- and count-critical protocol code on Hermes against values Node
-// computed. Each gate returns a result; the screen logs every result to logcat under [shelf-gates].
+// computed. Each gate returns a result; the screen logs every result to logcat under [kefli-gates].
 
 import { finalizeEvent, generateSecretKey, getPublicKey, verifyEvent } from 'nostr-tools/pure';
 import { phonePagePorts } from '../services/pagePorts';
@@ -10,12 +10,12 @@ import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { base64 } from '@scure/base';
 import {
   ITEM_D_PREFIX, LocalSigner, NotALinkError, PROBE_TEXT, T_TAG, checkSecp, countWords, conversationKey, nobleSecp, verifyEventWith, derivePairCode, normalise, normaliseMarkdown, project, secretKeyFromMnemonic, sentences, textHash,
-} from '@shelf/protocol';
+} from '@kefli/protocol';
 import { phoneCrypto } from '../crypto/port';
 import { nativeSecp } from '../crypto/secp';
-import { ShelfParser } from '../../modules/shelf-parser/src';
+import { KefliParser } from '../../modules/kefli-parser/src';
 import { runLive, type LiveUrl } from './live';
-import type { Bip340Vector, SecpPort } from '@shelf/protocol';
+import type { Bip340Vector, SecpPort } from '@kefli/protocol';
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const NORMALISE = require('../../../../shared/normalise.fixtures.json') as { cases: { name: string; url: string; canonical?: string; expect: string | null }[] };
@@ -120,7 +120,7 @@ export const GATES: Gate[] = [
   },
   {
     id: 'secp-native',
-    title: 'shelf-secp: BIP-340 vectors through libsecp256k1',
+    title: 'kefli-secp: BIP-340 vectors through libsecp256k1',
     async run() {
       const bad = checkSecp(nativeSecp, BIP340);
       if (bad.length) fail(bad.join(', '));
@@ -135,7 +135,7 @@ export const GATES: Gate[] = [
   },
   {
     id: 'schnorr-timing',
-    title: 'Schnorr timing with shelf-secp: verify median ≤ 10 ms, 1,000-item restore ≤ 20 s (spec 11.3)',
+    title: 'Schnorr timing with kefli-secp: verify median ≤ 10 ms, 1,000-item restore ≤ 20 s (spec 11.3)',
     run: () => schnorrTiming(nativeSecp),
   },
   {
@@ -157,7 +157,7 @@ export const GATES: Gate[] = [
         const want = expected.pages.find((e) => e.id === p.id)!;
         const bytes = new Uint8Array(await (await fetch(`${base}/pages/${p.id}.html`)).arrayBuffer());
         const t = now();
-        const got = (await ShelfParser.parse(base64.encode(bytes), p.contentType, p.url)) as Record<string, unknown>;
+        const got = (await KefliParser.parse(base64.encode(bytes), p.contentType, p.url)) as Record<string, unknown>;
         times.push(now() - t);
         for (const k of ['ok', 'title', 'byline', 'site', 'lang', 'hero', 'canonical', 'readerable', 'markdown', 'reason']) {
           if (!same(got[k], want[k])) bad.push(`${p.id}: ${k}`);
@@ -173,7 +173,7 @@ export const GATES: Gate[] = [
   },
   {
     id: 'parser-live',
-    title: 'shelf-parser on a live page, fetched as bytes',
+    title: 'kefli-parser on a live page, fetched as bytes',
     async run() {
       const url = 'https://en.wikipedia.org/wiki/Bookmark_(digital)';
       const t = now();
@@ -182,7 +182,7 @@ export const GATES: Gate[] = [
       const bytes = new Uint8Array(await res.arrayBuffer());
       const fetched = now() - t;
       const t2 = now();
-      const r = await ShelfParser.parse(base64.encode(bytes), res.headers.get('content-type') ?? '', res.url || url);
+      const r = await KefliParser.parse(base64.encode(bytes), res.headers.get('content-type') ?? '', res.url || url);
       const parsed = now() - t2;
       if (!r.ok) return fail(`${r.reason} ${r.message ?? ''}`);
       const words = countWords(r.markdown);
@@ -196,7 +196,7 @@ export const GATES: Gate[] = [
     async run() {
       const list = ((await (await fetch('http://localhost:8447/fixtures/live-urls.json')).json()) as { urls: LiveUrl[] }).urls;
       const results = await runLive(phonePagePorts(), { fetch }, list, now);
-      for (const r of results) console.log(`[shelf-live] ${JSON.stringify(r)}`);
+      for (const r of results) console.log(`[kefli-live] ${JSON.stringify(r)}`);
       const passed = results.filter((r) => r.pass).length;
       const misses = results.filter((r) => !r.pass).map((r) => `${r.kind}: ${r.got} for ${r.expect}`);
       const line = `${passed}/${results.length} as expected${misses.length ? `; misses: ${misses.join('; ')}` : ''}`;
@@ -209,13 +209,13 @@ export const GATES: Gate[] = [
     title: 'The browser engine on a page behind Cloudflare: rendered, stripped and parsed (8.2)',
     async run() {
       const t0 = Date.now();
-      const r = await ShelfParser.render('https://www.astralcodexten.com/p/an-open-letter-to-steven-pinker-on');
+      const r = await KefliParser.render('https://www.astralcodexten.com/p/an-open-letter-to-steven-pinker-on');
       if (!r.ok) fail(`render: ${r.reason}`);
       const html = (r as { html: string }).html;
       const bytes = new TextEncoder().encode(html);
       if (/<script/i.test(html)) fail('scripts left in the rendered HTML');
       if (bytes.length > RENDER_MAX_BYTES) fail(`${Math.round(bytes.length / 1024)} KB rendered, over the 16 MB cap`);
-      const parsed = await ShelfParser.parse(base64.encode(bytes), 'text/html; charset=utf-8', (r as { url: string }).url);
+      const parsed = await KefliParser.parse(base64.encode(bytes), 'text/html; charset=utf-8', (r as { url: string }).url);
       if (!parsed.ok) fail(`parse: ${parsed.reason}`);
       return `${Math.round(bytes.length / 1024)} KB rendered in ${ms(Date.now() - t0)}: “${(parsed as { title: string | null }).title}”`;
     },

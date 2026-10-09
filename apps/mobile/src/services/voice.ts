@@ -2,8 +2,8 @@
 // it plays, its rate. Word events set the article's one position directly (MS Signature 2); the position is
 // published when the session pauses, ends or closes, and a sync follows the end of a session (4.5).
 import { useSyncExternalStore } from 'react';
-import type { Sentence } from '@shelf/protocol';
-import { ShelfVoice, type PhoneVoice, type VoiceState } from '../../modules/shelf-voice/src';
+import type { Sentence } from '@kefli/protocol';
+import { KefliVoice, type PhoneVoice, type VoiceState } from '../../modules/kefli-voice/src';
 import { rowByHash, setPosition, type LibRow } from '../data/library';
 import { playFrom, recordPlayed } from '../data/listen';
 import { getSetting, setSetting } from '../data/settings';
@@ -53,7 +53,7 @@ let wired = false;
 function wire() {
   if (wired) return;
   wired = true;
-  ShelfVoice.addListener('word', (e) => {
+  KefliVoice.addListener('word', (e) => {
     if (!session || e.hash !== session.hash) return;
     set({ ...session, word: e.word });
     if (Date.now() - lastKept > 1000) {
@@ -61,17 +61,17 @@ function wire() {
       keep(e.word, false);
     }
   });
-  ShelfVoice.addListener('sentence', (e) => {
+  KefliVoice.addListener('sentence', (e) => {
     if (session && e.hash === session.hash) set({ ...session, sentence: e.index });
   });
-  ShelfVoice.addListener('state', (e: VoiceState) => {
+  KefliVoice.addListener('state', (e: VoiceState) => {
     if (!session || e.hash !== session.hash) return;
     const paused = session.playing && !e.playing;
     set({ ...session, playing: e.playing, word: e.word, rate: e.rate, wordTiming: e.wordTiming, wps: e.wps });
     if (Math.abs(e.wps - readWps(getSetting(store(), wpsKey))) > 0.05) setSetting(store(), wpsKey, e.wps.toFixed(3));
     if (paused) keep(e.word, true);
   });
-  ShelfVoice.addListener('ended', (e) => {
+  KefliVoice.addListener('ended', (e) => {
     if (!session || e.hash !== session.hash) return;
     // The article was heard to its end: its position is the last word; the player shows it rewound and paused.
     keep(session.totalWords - 1, true);
@@ -85,7 +85,7 @@ function wire() {
 /** Warms the engine when a Reader opens, since the first word took about 2 s cold (T§2). */
 export function warmVoice(): void {
   wire();
-  ShelfVoice.warmUp().catch(() => undefined);
+  KefliVoice.warmUp().catch(() => undefined);
 }
 
 /** Starts the article at a word (5.7): its sentences from the spoken projection, at the stored rate and wps. */
@@ -115,7 +115,7 @@ export async function listen(row: Pick<LibRow, 'hash' | 'title' | 'site' | 'url'
   } catch {
     art = null; // the card shows without artwork rather than not at all
   }
-  await ShelfVoice.start({ hash: row.hash, title, site: row.site ?? '', sentences: list, startWord: word, totalWords, rate, wps, artworkPath: art, ...voice });
+  await KefliVoice.start({ hash: row.hash, title, site: row.site ?? '', sentences: list, startWord: word, totalWords, rate, wps, artworkPath: art, ...voice });
 }
 
 // Play all's snapshot of the Played list, the articles still to come (FD 35).
@@ -148,21 +148,21 @@ export function toggleRow(row: LibRow): void {
 
 export function toggle(): void {
   if (!session) return;
-  if (session.playing) ShelfVoice.pause();
-  else ShelfVoice.play();
+  if (session.playing) KefliVoice.pause();
+  else KefliVoice.play();
 }
 
 /** Opening Speed read pauses the voice (FD 21). */
 export function pauseVoice(): void {
-  if (session?.playing) ShelfVoice.pause();
+  if (session?.playing) KefliVoice.pause();
 }
 
 export function skip(seconds: 15 | -15): void {
-  ShelfVoice.skip(seconds);
+  KefliVoice.skip(seconds);
 }
 
 export function jumpTo(word: number): void {
-  ShelfVoice.jumpToWord(word);
+  KefliVoice.jumpToWord(word);
 }
 
 /** The speed pill: the next rate, kept for every article (O-13). */
@@ -171,7 +171,7 @@ export function cycleRate(): void {
   const r = nextRate(session.rate);
   setSetting(store(), 'voice.speed', String(r));
   set({ ...session, rate: r });
-  ShelfVoice.setRate(r);
+  KefliVoice.setRate(r);
 }
 
 /** You → Voice → Default speed: the one speed value (FD 36), applied to a session under way too. */
@@ -179,7 +179,7 @@ export function setDefaultRate(r: number): void {
   setSetting(store(), 'voice.speed', String(r));
   if (!session) return;
   set({ ...session, rate: r });
-  ShelfVoice.setRate(r);
+  KefliVoice.setRate(r);
 }
 
 let voices: Promise<{ voices: PhoneVoice[]; defaultLocale: string | null }> | null = null;
@@ -188,21 +188,21 @@ let voices: Promise<{ voices: PhoneVoice[]; defaultLocale: string | null }> | nu
 export function listPhoneVoices(fresh = false): Promise<{ voices: PhoneVoice[]; defaultLocale: string | null }> {
   if (fresh || !voices) {
     wire();
-    voices = ShelfVoice.listVoices().catch(() => ({ voices: [], defaultLocale: null }));
+    voices = KefliVoice.listVoices().catch(() => ({ voices: [], defaultLocale: null }));
   }
   return voices;
 }
 
 /** A voice's sample (5.8), resolved when it has been spoken. */
 export function playSample(voiceId: string, text: string): Promise<void> {
-  return ShelfVoice.sample(voiceId, text);
+  return KefliVoice.sample(voiceId, text);
 }
 
 /** ✕: ends the session everywhere (5.7). */
 export function closeVoice(): void {
   if (!session) return;
   if (!session.ended) keep(session.word, true);
-  ShelfVoice.close();
+  KefliVoice.close();
   set(null);
 }
 

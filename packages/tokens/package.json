@@ -1,5 +1,5 @@
 {
-  "name": "@shelf/tokens",
+  "name": "@kefli/tokens",
   "version": "1.0.1",
   "private": true,
   "description": "Design tokens for the app, generated from shared/tokens/tokens.json by shared/tokens/build-ts.mjs",

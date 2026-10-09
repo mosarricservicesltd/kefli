@@ -1,5 +1,5 @@
 // Where the operator's defaults come from, set by the build (app.config.js): the local stack in server/dev for
-// SHELF_VARIANT=local, otherwise the operator's https URL. The release build also bakes in a copy (contract 3.1).
+// KEFLI_VARIANT=local, otherwise the operator's https URL. The release build also bakes in a copy (contract 3.1).
 import Constants from 'expo-constants';
 
 type BuildConfig = { variant: 'local' | 'release'; defaultsUrl: string };

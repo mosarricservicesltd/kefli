@@ -1,5 +1,5 @@
 // A sheet's menu row (prototype .menuitem): 52 tall, a muted icon and 15/500 text; danger in the error colour.
-import { radius } from '@shelf/tokens';
+import { radius } from '@kefli/tokens';
 import { Icon, type IconName } from './Icon';
 import { Press, pressLayer } from './Press';
 import { T, ui } from './text';

@@ -1,5 +1,5 @@
-import { LocalSigner, encryptText, normaliseMarkdown, textHash, unwrap, type NostrEvent, type Signer } from '@shelf/protocol';
-import { nodeCrypto } from '@shelf/protocol/node';
+import { LocalSigner, encryptText, normaliseMarkdown, textHash, unwrap, type NostrEvent, type Signer } from '@kefli/protocol';
+import { nodeCrypto } from '@kefli/protocol/node';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow, queueSave } from '../src/data/saves';

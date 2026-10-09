@@ -1,7 +1,7 @@
 // Speed read (mobile spec 5.6, FD 21, FD 36, FD 71; prototype rsvp), platform-free: the article's words as one stream
 // numbered as reading and listening number them, so all three share the one position; the focus letter; each word's
 // time; moving by sentence.
-import type { Sentence } from '@shelf/protocol';
+import type { Sentence } from '@kefli/protocol';
 import type { Block } from './blocks';
 
 export const WPM_KEY = 'speedread.wpm';

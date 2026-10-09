@@ -6,7 +6,7 @@
 // RULED: a request with HTML joins Saves as text_state 'fetching' ("Getting the text…") until its inbox blob is
 // read; pending parses (phase 7) take only 'queued', so they never fetch the page over a browser's own HTML. The
 // browser's label is kept in origin_device for the row's "From Chrome".
-import { browserSavedAt, isXPost, itemHash, type SaveRequest } from '@shelf/protocol';
+import { browserSavedAt, isXPost, itemHash, type SaveRequest } from '@kefli/protocol';
 import type { SqlDb } from './db';
 import { enqueue, release } from './outbox';
 import { queueSave, type SaveTargets } from './saves';

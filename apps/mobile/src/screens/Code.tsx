@@ -9,13 +9,13 @@ import { useEffect, useRef, useState } from 'react';
 import { TextInput, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
-import { radius } from '@shelf/tokens';
-import { cleanMnemonic, couldBeRecoveryWord, isRecoveryWord, suggestWords } from '@shelf/protocol';
-import { ShelfSystem } from '../../modules/shelf-system/src';
+import { radius } from '@kefli/tokens';
+import { cleanMnemonic, couldBeRecoveryWord, isRecoveryWord, suggestWords } from '@kefli/protocol';
+import { KefliSystem } from '../../modules/kefli-system/src';
 import { answerNewHere, answerRecovered } from '../services/app';
 import { loadDefaults } from '../services/config';
 import { pubkeyOfCode } from '../services/identity';
-import { findShelf } from '../services/recovery';
+import { findLibrary } from '../services/recovery';
 import { pool } from '../services/runner';
 import { Button } from '../ui/Button';
 import { Icon } from '../ui/Icon';
@@ -42,9 +42,9 @@ export default function Code() {
   const fields = useRef<(TextInput | null)[]>([]);
 
   useEffect(() => {
-    ShelfSystem.setSecure(true);
+    KefliSystem.setSecure(true);
     return () => {
-      ShelfSystem.setSecure(false);
+      KefliSystem.setSecure(false);
       setWords(empty());
     };
   }, []);
@@ -93,7 +93,7 @@ export default function Code() {
     setChecking(true);
     try {
       const pubkey = await pubkeyOfCode(mnemonic);
-      const found = await findShelf({ query: (url, f) => pool.query(url, f as never), defaults: await loadDefaults() }, pubkey);
+      const found = await findLibrary({ query: (url, f) => pool.query(url, f as never), defaults: await loadDefaults() }, pubkey);
       if (found === 'found') return void (await answerRecovered(mnemonic));
       if (found === 'none') setNotFound(true);
       else setLostConnection(true);

@@ -1,7 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { addNip55Query } = require('../plugins/with-nip55-queries.js');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { secureManifest, BLOCKED, RULES } = require('../plugins/with-shelf-security.js');
+const { secureManifest, BLOCKED, RULES } = require('../plugins/with-kefli-security.js');
 
 describe('the NIP-55 manifest query (mobile spec 8.4)', () => {
   test('is added once, beside queries already there', () => {
@@ -24,7 +24,7 @@ describe('backup and permissions (mobile spec 7.1)', () => {
       application: [{ $: { 'android:name': '.MainApplication', 'android:allowBackup': 'true' } }],
       'uses-permission': [{ $: { 'android:name': 'android.permission.CAMERA' } }, { $: { 'android:name': 'android.permission.SYSTEM_ALERT_WINDOW' } }],
     });
-    expect(m.application[0].$).toMatchObject({ 'android:allowBackup': 'false', 'android:dataExtractionRules': '@xml/shelf_data_extraction', 'android:fullBackupContent': '@xml/shelf_backup' });
+    expect(m.application[0].$).toMatchObject({ 'android:allowBackup': 'false', 'android:dataExtractionRules': '@xml/kefli_data_extraction', 'android:fullBackupContent': '@xml/kefli_backup' });
     const perms = m['uses-permission'].map((p: { $: Record<string, string> }) => `${p.$['android:name']}${p.$['tools:node'] ? ' x' : ''}`);
     expect(perms).toContain('android.permission.CAMERA');
     expect(perms).not.toContain('android.permission.SYSTEM_ALERT_WINDOW');

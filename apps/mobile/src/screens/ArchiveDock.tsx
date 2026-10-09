@@ -2,7 +2,7 @@
 // surface; Back to Unread for an archived article.
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { radius } from '@shelf/tokens';
+import { radius } from '@kefli/tokens';
 import { Icon } from '../ui/Icon';
 import { Press, pressLayer } from '../ui/Press';
 import { S } from '../ui/strings';

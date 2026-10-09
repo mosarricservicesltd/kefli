@@ -18,10 +18,10 @@ import * as Haptics from 'expo-haptics';
 import { File } from 'expo-file-system';
 import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ITEM_D_PREFIX, isXPost, itemHash } from '@shelf/protocol';
-import { motion, radius } from '@shelf/tokens';
-import { enter, exit, mark } from '@shelf/tokens/reanimated';
-import { ShelfShare } from '../../modules/shelf-share/src';
+import { ITEM_D_PREFIX, isXPost, itemHash } from '@kefli/protocol';
+import { motion, radius } from '@kefli/tokens';
+import { enter, exit, mark } from '@kefli/tokens/reanimated';
+import { KefliShare } from '../../modules/kefli-share/src';
 import { drawMs } from '../data/covers';
 import { release } from '../data/outbox';
 import { undoSave } from '../data/saves';
@@ -41,7 +41,7 @@ import { hostOf } from '../screens/SaveRow';
 
 type Mode = 'saving' | 'checking' | 'saved' | 'again' | 'offline' | 'xwait' | 'noarticle' | 'nolink' | 'failed' | 'removed';
 
-const log = (r: unknown) => console.log(`[shelf-save] ${JSON.stringify(r)}`);
+const log = (r: unknown) => console.log(`[kefli-save] ${JSON.stringify(r)}`);
 const REMOVED_MS = 1500;
 
 function modeOf(q: Queued): Mode {
@@ -83,7 +83,7 @@ export default function ShareRoot({ spoolId }: { spoolId?: string }) {
 function SavedSheet({ spoolId }: { spoolId?: string }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
-  const entry = useMemo(() => (spoolId ? ShelfShare.read(spoolId) : null), [spoolId]);
+  const entry = useMemo(() => (spoolId ? KefliShare.read(spoolId) : null), [spoolId]);
   const url = firstLink(entry?.text ?? null);
   const first = useMemo(() => {
     try {
@@ -120,14 +120,14 @@ function SavedSheet({ spoolId }: { spoolId?: string }) {
     leaving.current = true;
     y.value = withTiming(h || 600, exit);
     setTimeout(() => {
-      const ok = ShelfShare.finish(mode, mode === 'read' ? hash : null, spoolId ?? null);
+      const ok = KefliShare.finish(mode, mode === 'read' ? hash : null, spoolId ?? null);
       log({ step: 'finish', ok, detail: mode });
     }, motion.exit.duration);
   };
 
   // ---- the save's outcome ----
   const dropSpool = () => {
-    if (spoolId && result.current && (done.current || undone.current)) ShelfShare.deleteSpool(spoolId);
+    if (spoolId && result.current && (done.current || undone.current)) KefliShare.deleteSpool(spoolId);
   };
   const releaseHeld = () => {
     const r = result.current;

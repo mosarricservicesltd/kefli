@@ -1,6 +1,6 @@
 // CryptoPort on react-native-quick-crypto (OpenSSL), the phone's implementation (mobile spec 2.6).
 import QC from 'react-native-quick-crypto';
-import type { CryptoPort } from '@shelf/protocol';
+import type { CryptoPort } from '@kefli/protocol';
 
 type Bytes = { buffer: ArrayBufferLike; byteOffset: number; byteLength: number };
 const u8 = (b: Bytes) => new Uint8Array(b.buffer, b.byteOffset, b.byteLength).slice();

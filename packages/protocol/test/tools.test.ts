@@ -12,7 +12,7 @@ import { decryptCommand, unwrapCommand, verifyCommand } from '../tools/commands'
 const WORDS = 'leader monkey parrot ring guide accident before fence cannon height naive bean';
 const SK = '7f7ff03d123792d6ac594bfa67bf6d0c0ab55b6b1fdb6249303fe861f1ccba9a';
 let dir: string;
-beforeAll(() => { dir = mkdtempSync(join(tmpdir(), 'shelf-tools-')); });
+beforeAll(() => { dir = mkdtempSync(join(tmpdir(), 'kefli-tools-')); });
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 describe('parseSecret', () => {
@@ -23,7 +23,7 @@ describe('parseSecret', () => {
     expect(bytesToHex(await parseSecret(WORDS, nodeCrypto))).toBe(SK);
   });
   test('refusals', async () => {
-    await expect(parseSecret(undefined)).rejects.toThrow('SHELF_SECRET');
+    await expect(parseSecret(undefined)).rejects.toThrow('KEFLI_SECRET');
     await expect(parseSecret(WORDS)).rejects.toThrow('64 hex'); // words need crypto
     await expect(parseSecret(nip19.npubEncode('ab'.repeat(32)))).rejects.toThrow();
   });
@@ -51,7 +51,7 @@ describe('npm run decrypt', () => {
     const { eventPath, blobPath, blob } = await sample(true);
     const lines: string[] = [];
     const get = (async () => new Response(Buffer.from(blob))) as unknown as typeof fetch;
-    expect(await decryptCommand([eventPath, '--blob', blobPath, '--fetch'], { SHELF_SECRET: WORDS }, (l) => lines.push(l), get)).toBe(true);
+    expect(await decryptCommand([eventPath, '--blob', blobPath, '--fetch'], { KEFLI_SECRET: WORDS }, (l) => lines.push(l), get)).toBe(true);
     expect(JSON.parse(lines[0]).url).toBe('https://example.com/a');
     expect(lines.filter((l) => l.startsWith('ok'))).toHaveLength(2);
   });
@@ -62,18 +62,18 @@ describe('npm run decrypt', () => {
     writeFileSync(bad, 'nope');
     const log = () => {};
     const notFound = (async () => new Response('', { status: 404 })) as unknown as typeof fetch;
-    expect(await decryptCommand([eventPath, '--blob', bad], { SHELF_SECRET: SK }, log)).toBe(false);
-    expect(await decryptCommand([eventPath, '--fetch'], { SHELF_SECRET: SK }, log, notFound)).toBe(false);
+    expect(await decryptCommand([eventPath, '--blob', bad], { KEFLI_SECRET: SK }, log)).toBe(false);
+    expect(await decryptCommand([eventPath, '--fetch'], { KEFLI_SECRET: SK }, log, notFound)).toBe(false);
     const forged = join(dir, 'forged.json');
     writeFileSync(forged, JSON.stringify({ ...event, created_at: 3 }));
-    expect(await decryptCommand([forged], { SHELF_SECRET: SK }, log)).toBe(false);
-    await expect(decryptCommand([], { SHELF_SECRET: SK }, log)).rejects.toThrow('usage');
+    expect(await decryptCommand([forged], { KEFLI_SECRET: SK }, log)).toBe(false);
+    await expect(decryptCommand([], { KEFLI_SECRET: SK }, log)).rejects.toThrow('usage');
   });
 
   test('an item without text passes', async () => {
     const { eventPath } = await sample(false);
     const lines: string[] = [];
-    expect(await decryptCommand([eventPath], { SHELF_SECRET: SK }, (l) => lines.push(l))).toBe(true);
+    expect(await decryptCommand([eventPath], { KEFLI_SECRET: SK }, (l) => lines.push(l))).toBe(true);
     expect(lines[1]).toMatch(/no text/);
   });
 });
@@ -88,7 +88,7 @@ describe('npm run unwrap', () => {
     const path = join(dir, 'wrap.json');
     writeFileSync(path, JSON.stringify(wrap));
     const lines: string[] = [];
-    expect(await unwrapCommand([path], { SHELF_SECRET: bytesToHex(deviceSk) }, (l) => lines.push(l))).toBe(true);
+    expect(await unwrapCommand([path], { KEFLI_SECRET: bytesToHex(deviceSk) }, (l) => lines.push(l))).toBe(true);
     const out = JSON.parse(lines[0]);
     expect(out.seal_signer).toBe(user.pubkey());
     expect(out.rumor.content).toEqual(ack);
@@ -110,7 +110,7 @@ describe('npm run verify', () => {
     const lines: string[] = [];
     const get = (async () => new Response(Buffer.from(blob))) as unknown as typeof fetch;
     const query = async (r: string) => relays[r] as never;
-    expect(await verifyCommand(['--relays', 'ws://a,ws://b'], { SHELF_SECRET: SK }, (l) => lines.push(l), query, get)).toBe(true);
+    expect(await verifyCommand(['--relays', 'ws://a,ws://b'], { KEFLI_SECRET: SK }, (l) => lines.push(l), query, get)).toBe(true);
     expect(lines).toContain('ok   A (on 2/2 relays)');
     expect(lines).toContain('     kefli/devices (on 1/2 relays)');
     expect(lines.at(-1)).toBe('1 of 1 saves verify, decrypt and match their text');
@@ -118,9 +118,9 @@ describe('npm run verify', () => {
     relays['ws://b'] = [newer];
     lines.length = 0;
     const notFound = (async () => new Response('', { status: 404 })) as unknown as typeof fetch;
-    expect(await verifyCommand(['--relays', 'ws://a,ws://b'], { SHELF_SECRET: SK }, (l) => lines.push(l), query, notFound)).toBe(true);
+    expect(await verifyCommand(['--relays', 'ws://a,ws://b'], { KEFLI_SECRET: SK }, (l) => lines.push(l), query, notFound)).toBe(true);
     expect(lines[0]).toBe('ok   A [archived] [no text] (on 2/2 relays)');
     relays['ws://b'] = [];
-    expect(await verifyCommand(['--relays', 'ws://a,ws://b'], { SHELF_SECRET: SK }, () => {}, query, notFound)).toBe(false);
+    expect(await verifyCommand(['--relays', 'ws://a,ws://b'], { KEFLI_SECRET: SK }, () => {}, query, notFound)).toBe(false);
   });
 });

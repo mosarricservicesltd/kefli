@@ -1,5 +1,5 @@
-import { LocalSigner, encryptText, giftWrap, itemHash, wrapSaveRequest, type NostrEvent, type SaveRequest } from '@shelf/protocol';
-import { nodeCrypto } from '@shelf/protocol/node';
+import { LocalSigner, encryptText, giftWrap, itemHash, wrapSaveRequest, type NostrEvent, type SaveRequest } from '@kefli/protocol';
+import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
@@ -37,7 +37,7 @@ function world() {
       const b = blobs.get(url);
       return b ? new Response(b as never) : new Response('', { status: 404 });
     }) as never,
-    // shelfMarkdown: the content HTML's heading, then the words; metadata comes from the request
+    // kefliMarkdown: the content HTML's heading, then the words; metadata comes from the request
     markdown: async (html): Promise<ParserResult> => {
       parses++;
       const h1 = /<h1>(.*?)<\/h1>/.exec(html)?.[1] ?? '';
@@ -177,12 +177,12 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
 });
 
 // Against server/dev's stack (relays with AUTH, the operator Blossom server):
-//   SHELF_LOCAL_STACK=1 npx jest -c apps/mobile/jest.config.js inbox
-const local = process.env.SHELF_LOCAL_STACK === '1' ? describe : describe.skip;
+//   KEFLI_LOCAL_STACK=1 npx jest -c apps/mobile/jest.config.js inbox
+const local = process.env.KEFLI_LOCAL_STACK === '1' ? describe : describe.skip;
 local('the inbox on the local stack', () => {
   test('a browser save sent through the operator relay and Blossom server arrives with its text', async () => {
     const { RelayPool } = await import('../src/net/pool');
-    const { uploadBlob, verifyEventWith, nobleSecp } = await import('@shelf/protocol');
+    const { uploadBlob, verifyEventWith, nobleSecp } = await import('@kefli/protocol');
     const w = world();
     const live = { relay: 'ws://localhost:7447', blossom: 'http://localhost:3447' };
     const pool = new RelayPool({ verify: (e) => verifyEventWith(nobleSecp, e), signer: async () => w.user, allowInsecure: true });

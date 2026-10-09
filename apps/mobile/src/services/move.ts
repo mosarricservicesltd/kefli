@@ -9,7 +9,7 @@
 //      connected-browsers record to its write relays, DELETE /account as S, then S off the phone.
 // S stays whole until step 5, so a save is never deleted before its copy exists under T.
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { DEVICES_D, ITEM_D_PREFIX, KIND, T_TAG, buildDeletions, httpAuth, readItemEvent, type CryptoPort, type NostrEvent, type Signer } from '@shelf/protocol';
+import { DEVICES_D, ITEM_D_PREFIX, KIND, T_TAG, buildDeletions, httpAuth, readItemEvent, type CryptoPort, type NostrEvent, type Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { enqueue } from '../data/outbox';
 import { listServers, writeRelays } from '../data/lists';

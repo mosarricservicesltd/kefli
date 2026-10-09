@@ -1,10 +1,10 @@
-// The shelf-voice gate (mobile spec 12, week 0): the phone's voice through Shelf's own media session, with
+// The kefli-voice gate (mobile spec 12, week 0): the phone's voice through Shelf's own media session, with
 // ±15 on the lock-screen card, for 30 minutes locked on battery. The engine logs progress every 30 s to a
 // file read back here afterwards.
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { normaliseMarkdown, project, sentences } from '@shelf/protocol';
-import { ShelfVoice } from '../../modules/shelf-voice/src';
+import { normaliseMarkdown, project, sentences } from '@kefli/protocol';
+import { KefliVoice } from '../../modules/kefli-voice/src';
 
 const PARTS = [
   'A saved article waits quietly until there is time for it.',
@@ -36,18 +36,18 @@ export function VoiceGate() {
 
   useEffect(() => {
     const subs = [
-      ShelfVoice.addListener('word', (e) => setWord(e.word)),
-      ShelfVoice.addListener('state', (e) => { setPlaying(e.playing); setWord(e.word); }),
-      ShelfVoice.addListener('ended', () => setPlaying(false)),
-      ShelfVoice.addListener('error', (e) => console.log(`[shelf-gates] ${JSON.stringify({ id: 'voice-error', ok: false, detail: e.code, ms: 0 })}`)),
+      KefliVoice.addListener('word', (e) => setWord(e.word)),
+      KefliVoice.addListener('state', (e) => { setPlaying(e.playing); setWord(e.word); }),
+      KefliVoice.addListener('ended', () => setPlaying(false)),
+      KefliVoice.addListener('error', (e) => console.log(`[kefli-gates] ${JSON.stringify({ id: 'voice-error', ok: false, detail: e.code, ms: 0 })}`)),
     ];
     return () => subs.forEach((s) => s.remove());
   }, []);
 
   // 0.8× stretches the reading to about 56 minutes: the stage 2 gate's locked hour (FD 87)
   const start = async (rate = 1) => {
-    ShelfVoice.clearLog();
-    await ShelfVoice.start({
+    KefliVoice.clearLog();
+    await KefliVoice.start({
       hash: 'gate'.padEnd(64, '0'), title: 'Thirty minutes locked', site: 'Week 0 gate',
       sentences: reading.sentences, startWord: 0, totalWords: reading.totalWords, rate, wps: 3.9,
     });
@@ -56,19 +56,19 @@ export function VoiceGate() {
 
   return (
     <View style={s.box}>
-      <Text style={s.h2}>shelf-voice: 30 minutes locked on battery</Text>
+      <Text style={s.h2}>kefli-voice: 30 minutes locked on battery</Text>
       <Text style={s.meta}>
         {reading.totalWords.toLocaleString()} words in {reading.sentences.length} sentences, about {minutes(reading.totalWords)} minutes. Now at word {word} ({minutes(word)} min), {playing ? 'speaking' : 'stopped'}.
       </Text>
       <View style={s.row}>
         <Btn label="Start" onPress={() => start()} />
         <Btn label="Hour (0.8×)" onPress={() => start(0.8)} />
-        <Btn label={playing ? 'Pause' : 'Play'} onPress={() => (playing ? ShelfVoice.pause() : ShelfVoice.play())} />
-        <Btn label="−15" onPress={() => ShelfVoice.skip(-15)} />
-        <Btn label="+15" onPress={() => ShelfVoice.skip(15)} />
-        <Btn label="✕" onPress={() => ShelfVoice.close()} />
+        <Btn label={playing ? 'Pause' : 'Play'} onPress={() => (playing ? KefliVoice.pause() : KefliVoice.play())} />
+        <Btn label="−15" onPress={() => KefliVoice.skip(-15)} />
+        <Btn label="+15" onPress={() => KefliVoice.skip(15)} />
+        <Btn label="✕" onPress={() => KefliVoice.close()} />
       </View>
-      <Btn label="Show the log" onPress={() => { const l = ShelfVoice.readLog(); setLog(l); console.log(`[shelf-voice-log]\n${l}`); }} />
+      <Btn label="Show the log" onPress={() => { const l = KefliVoice.readLog(); setLog(l); console.log(`[kefli-voice-log]\n${l}`); }} />
       {log ? <Text style={s.log}>{log.trim().split('\n').slice(-14).join('\n')}</Text> : null}
     </View>
   );

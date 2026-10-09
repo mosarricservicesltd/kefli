@@ -50,10 +50,10 @@ CREATE TABLE outbox_targets (outbox_id INTEGER REFERENCES outbox(id) ON DELETE C
   next_at INTEGER, last_error TEXT, event_id TEXT, PRIMARY KEY (outbox_id, target));
 
 CREATE TABLE relays (url TEXT, owner TEXT, read INTEGER, write INTEGER,
-  source TEXT CHECK (source IN ('operator','default','user','indexer')), added_by_shelf INTEGER,
+  source TEXT CHECK (source IN ('operator','default','user','indexer')), added_by_app INTEGER,
   status TEXT, last_ok_at INTEGER, PRIMARY KEY (url, owner));
 CREATE TABLE servers (url TEXT, owner TEXT, role TEXT CHECK (role IN ('operator','mirror','user')),
-  in_10063 INTEGER, added_by_shelf INTEGER, status TEXT, PRIMARY KEY (url, owner));
+  in_10063 INTEGER, added_by_app INTEGER, status TEXT, PRIMARY KEY (url, owner));
 CREATE TABLE lists (owner TEXT, kind INTEGER, d TEXT NOT NULL DEFAULT '', event_id TEXT, created_at INTEGER,
   raw TEXT, PRIMARY KEY (owner, kind, d));
 CREATE TABLE sync_cursors (relay TEXT, stream TEXT CHECK (stream IN ('items','deletions','inbox','lists')),

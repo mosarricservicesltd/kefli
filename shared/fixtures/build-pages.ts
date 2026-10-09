@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 // @ts-expect-error: plain ES modules without types
 import { launch } from '../../tools/design-qa/cdp.mjs';
 // @ts-expect-error: plain ES modules without types
-import { shelfBundle } from '../vendor/build-parser-bundle.mjs';
+import { kefliBundle } from '../vendor/build-parser-bundle.mjs';
 import { countWords, project, textHash } from '../../packages/protocol/src';
 import { nodeCrypto } from '../../packages/protocol/src/node';
 
@@ -136,14 +136,14 @@ async function main() {
 
   const chrome = await launch();
   try {
-    await chrome.eval(shelfBundle());
+    await chrome.eval(kefliBundle());
     const version = (await (await fetch(`http://127.0.0.1:${chrome.port}/json/version`)).json()).Browser;
     const out = [];
     for (const p of pages) {
       const b64 = readFileSync(join(pagesDir, `${p.id}.html`)).toString('base64');
       const args = `${JSON.stringify(b64)}, ${JSON.stringify(p.contentType)}, ${JSON.stringify(p.url)}`;
-      const result = await chrome.eval(`shelfParse(${args})`);
-      const article = await chrome.eval(`shelfArticle(${args})`);
+      const result = await chrome.eval(`kefliParse(${args})`);
+      const article = await chrome.eval(`kefliArticle(${args})`);
       const md: string | null = result.ok ? result.markdown : null;
       const expected = {
         id: p.id, ...result, content: article.ok ? article.content : null,

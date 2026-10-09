@@ -1,6 +1,6 @@
-import { LocalSigner, buildRelayList } from '@shelf/protocol';
-import { nodeCrypto } from '@shelf/protocol/node';
-import { findShelf, type FindPorts } from '../src/services/recovery';
+import { LocalSigner, buildRelayList } from '@kefli/protocol';
+import { nodeCrypto } from '@kefli/protocol/node';
+import { findLibrary, type FindPorts } from '../src/services/recovery';
 
 const D = { operator: { relay: 'ws://op' }, relays: ['ws://a'], indexer: ['ws://idx'] };
 
@@ -27,23 +27,23 @@ describe('the recovery code’s first pass (mobile spec 5.3, contract 8)', () =>
   test('a save on any default relay is found', async () => {
     const w = await world();
     w.held['ws://a'] = [w.item];
-    expect(await findShelf(w.p, w.s.pubkey())).toBe('found');
+    expect(await findLibrary(w.p, w.s.pubkey())).toBe('found');
   });
 
   test('a shelf whose relays moved is found through its 10002', async () => {
     const w = await world();
     w.held['ws://idx'] = [w.list];
     w.held['ws://moved'] = [w.item];
-    expect(await findShelf(w.p, w.s.pubkey())).toBe('found');
+    expect(await findLibrary(w.p, w.s.pubkey())).toBe('found');
     expect(w.asked).toContain('ws://moved 30078');
   });
 
   test('nothing saved is none; only a devices record is none; nothing reachable is offline', async () => {
     const w = await world();
-    expect(await findShelf(w.p, w.s.pubkey())).toBe('none');
+    expect(await findLibrary(w.p, w.s.pubkey())).toBe('none');
     w.held['ws://op'] = [w.devices];
-    expect(await findShelf(w.p, w.s.pubkey())).toBe('none');
+    expect(await findLibrary(w.p, w.s.pubkey())).toBe('none');
     for (const r of ['ws://op', 'ws://a', 'ws://idx']) w.down.add(r);
-    expect(await findShelf(w.p, w.s.pubkey())).toBe('offline');
+    expect(await findLibrary(w.p, w.s.pubkey())).toBe('offline');
   });
 });

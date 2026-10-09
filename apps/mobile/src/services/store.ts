@@ -9,7 +9,7 @@ let db: SqlDb | null = null;
 
 export function store(): SqlDb {
   if (db) return db;
-  db = openExpoDb('shelf.db');
+  db = openExpoDb('kefli.db');
   migrate(db);
   releaseOrphans(db);
   return db;

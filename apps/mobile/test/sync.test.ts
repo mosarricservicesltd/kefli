@@ -1,6 +1,6 @@
-import { LocalSigner, buildDeletions, buildRelayList, buildItemEvent, encryptText, normaliseMarkdown, textHash } from '@shelf/protocol';
-import type { Item, NostrEvent, ParsedItem } from '@shelf/protocol';
-import { nodeCrypto } from '@shelf/protocol/node';
+import { LocalSigner, buildDeletions, buildRelayList, buildItemEvent, encryptText, normaliseMarkdown, textHash } from '@kefli/protocol';
+import type { Item, NostrEvent, ParsedItem } from '@kefli/protocol';
+import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';

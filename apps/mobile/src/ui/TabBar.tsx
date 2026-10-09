@@ -4,8 +4,8 @@
 import { View } from 'react-native';
 import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { radius } from '@shelf/tokens';
-import { quickIn, quickOut } from '@shelf/tokens/reanimated';
+import { radius } from '@kefli/tokens';
+import { quickIn, quickOut } from '@kefli/tokens/reanimated';
 import { Icon, type IconName } from './Icon';
 import { Press, pressLayer } from './Press';
 import { S } from './strings';

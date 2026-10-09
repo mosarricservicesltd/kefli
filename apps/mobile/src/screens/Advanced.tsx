@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { radius } from '@shelf/tokens';
+import { radius } from '@kefli/tokens';
 import { notBackedUp } from '../data/backup';
 import { relayEntries } from '../data/lists';
 import { useApp } from '../services/app';

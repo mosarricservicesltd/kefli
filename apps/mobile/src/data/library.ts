@@ -1,7 +1,7 @@
 // The library as the screens read and change it (mobile spec 5.6): the two lists, archive and Back to Unread,
 // delete, the next unread, and the reading position. Every change writes the row first and the network through
 // held outbox rows, so Undo reverts the row and deletes them before anything leaves the phone (4.3, FD 7, FD 38).
-import { ITEM_D_PREFIX, progressAt } from '@shelf/protocol';
+import { ITEM_D_PREFIX, progressAt } from '@kefli/protocol';
 import type { SqlDb } from './db';
 import { enqueue, release, undo } from './outbox';
 import { writeRelays } from './lists';

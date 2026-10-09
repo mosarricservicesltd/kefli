@@ -1,5 +1,5 @@
-import { LocalSigner, buildRelayList, buildServerList, itemHash, type NostrEvent } from '@shelf/protocol';
-import { nodeCrypto } from '@shelf/protocol/node';
+import { LocalSigner, buildRelayList, buildServerList, itemHash, type NostrEvent } from '@kefli/protocol';
+import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow, queueImported } from '../src/data/saves';
 import { relayEntries, listServers } from '../src/data/lists';

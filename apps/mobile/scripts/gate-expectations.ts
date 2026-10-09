@@ -4,8 +4,8 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { normaliseMarkdown, parseBip340, project, sentences, textHash } from '@shelf/protocol';
-import { nodeCrypto } from '@shelf/protocol/node';
+import { normaliseMarkdown, parseBip340, project, sentences, textHash } from '@kefli/protocol';
+import { nodeCrypto } from '@kefli/protocol/node';
 
 const SAMPLES = [
   '# A heading\r\n\r\n\r\nSome *emphasis* and [a link](https://example.com).  \nNext line.\n\n- one\n- two!\n',
@@ -31,7 +31,7 @@ const path = join(__dirname, '..', 'src', 'gates', 'expected.json');
 writeFileSync(path, `${JSON.stringify(out)}\n`);
 console.log(`wrote ${path}: ${out.length} samples`);
 
-// BIP-340's vectors, parsed, for the shelf-secp gate (Metro doesn't load CSV).
+// BIP-340's vectors, parsed, for the kefli-secp gate (Metro doesn't load CSV).
 const csv = readFileSync(join(__dirname, '..', '..', '..', 'packages', 'protocol', 'test', 'vectors', 'bip340.vectors.csv'), 'utf8');
 const bip = join(__dirname, '..', 'src', 'gates', 'bip340.json');
 writeFileSync(bip, `${JSON.stringify(parseBip340(csv))}\n`);

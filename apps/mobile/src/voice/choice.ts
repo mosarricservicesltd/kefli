@@ -5,7 +5,7 @@
 // RULED: before any article has been played, the language is the phone's own voice's. RULED: voice.id is one setting;
 // an article in another language is read by the phone's own voice for that language.
 import type { SqlDb } from '../data/db';
-import type { PhoneVoice } from '../../modules/shelf-voice/src';
+import type { PhoneVoice } from '../../modules/kefli-voice/src';
 
 export const VOICE_ID = 'voice.id';
 

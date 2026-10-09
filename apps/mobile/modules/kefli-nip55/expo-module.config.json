@@ -1,0 +1,6 @@
+{
+  "platforms": ["android"],
+  "android": {
+    "modules": ["app.kefli.nip55.KefliNip55Module"]
+  }
+}

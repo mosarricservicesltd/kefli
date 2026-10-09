@@ -2,7 +2,7 @@
 // set and Android never synthesises one. includeFontPadding is off everywhere, so a label centres on its capitals
 // inside a bordered or filled element (CLAUDE.md, UI).
 import { Text, type TextProps, type TextStyle } from 'react-native';
-import { fontFamily, type } from '@shelf/tokens';
+import { fontFamily, type } from '@kefli/tokens';
 import { useTheme } from './theme';
 
 type Weight = keyof typeof fontFamily.ui;

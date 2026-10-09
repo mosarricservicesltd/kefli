@@ -3,7 +3,7 @@
 // Can't connect, and the queued rows are withdrawn, so a browser never connects later behind the person's back.
 // Ports keep it testable.
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { checkOffer, derivePairCode, httpAuth, openOffer, readPairCode, type CryptoPort, type PairOffer, type Signer } from '@shelf/protocol';
+import { checkOffer, derivePairCode, httpAuth, openOffer, readPairCode, type CryptoPort, type PairOffer, type Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { cancelConnect, connectState, queueConnect } from '../data/devices';
 import { registerFirst } from '../data/saves';

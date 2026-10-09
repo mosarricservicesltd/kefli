@@ -6,7 +6,7 @@ import { useCallback } from 'react';
 import { View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import { motion, radius } from '@shelf/tokens';
+import { motion, radius } from '@kefli/tokens';
 import { connectedBrowsers, type Browser } from '../data/devices';
 import { useApp } from '../services/app';
 import { disconnectBrowser } from '../services/runner';

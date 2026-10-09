@@ -1,6 +1,6 @@
 // Items: the saves on this phone (mobile spec 4.1, 4.2). The item JSON is rebuilt from the row at send time,
 // unknown fields re-emitted from extra, so the outbox always publishes the latest state.
-import type { Item, ItemText, ParsedItem } from '@shelf/protocol';
+import type { Item, ItemText, ParsedItem } from '@kefli/protocol';
 import type { SqlDb } from './db';
 
 export type ItemRow = {

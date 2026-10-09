@@ -19,7 +19,7 @@ export const URL_ = process.env.PURL || pathToFileURL(path.join(REPO, 'docs', 'd
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 export async function launch(port = 9333 + Math.floor(Math.random() * 500), w = 1180, h = 980){
-  const dir = path.join(os.tmpdir(), 'shelf-qa-chrome-' + port);
+  const dir = path.join(os.tmpdir(), 'kefli-qa-chrome-' + port);
   const proc = spawn(CHROME, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${dir}`, `--window-size=${w},${h}`,
     '--no-first-run', '--no-default-browser-check', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files', 'about:blank'], { stdio: 'ignore' });
   let ver;
@@ -32,22 +32,24 @@ export async function launch(port = 9333 + Math.floor(Math.random() * 500), w = 
   return c;
 }
 
+// The message for an exception that Runtime.evaluate reports from the page.
+const evalError = d => 'eval: ' + (d.exception?.description || d.text);
+
 export async function connect(wsUrl){
   const ws = new WebSocket(wsUrl);
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
   let id = 0; const pend = new Map(); const handlers = new Map();
-  ws.onmessage = ev => {
-    const m = JSON.parse(ev.data);
-    if (m.id && pend.has(m.id)) { const { res, rej } = pend.get(m.id); pend.delete(m.id); m.error ? rej(new Error(JSON.stringify(m.error))) : res(m.result); }
-    else if (m.method) (handlers.get(m.method) || []).forEach(f => f(m.params));
-  };
+  // a reply settles the request it answers; anything else is an event for its handlers
+  const settle = m => { const { res, rej } = pend.get(m.id); pend.delete(m.id); if (m.error) rej(new Error(JSON.stringify(m.error))); else res(m.result); };
+  const dispatch = m => (handlers.get(m.method) ?? []).forEach(f => f(m.params));
+  ws.onmessage = ev => { const m = JSON.parse(ev.data); (pend.has(m.id) ? settle : dispatch)(m); };
   const c = {
     ws,
     send: (method, params = {}) => new Promise((res, rej) => { const i = ++id; pend.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); }),
     on: (method, f) => { if (!handlers.has(method)) handlers.set(method, []); handlers.get(method).push(f); },
     async eval(expr, awaitPromise = true){
       const r = await c.send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise });
-      if (r.exceptionDetails) throw new Error('eval: ' + (r.exceptionDetails.exception && r.exceptionDetails.exception.description || r.exceptionDetails.text));
+      if (r.exceptionDetails) throw new Error(evalError(r.exceptionDetails));
       return r.result.value;
     },
     async mouse(type, x, y, extra = {}){ await c.send('Input.dispatchMouseEvent', { type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1, pointerType: 'mouse', ...extra }); },

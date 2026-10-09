@@ -7,9 +7,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { BackHandler, Pressable, TextInput, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { radius } from '@shelf/tokens';
-import { quickIn } from '@shelf/tokens/reanimated';
-import { readBunkerLink, type SignerProvider } from '@shelf/protocol';
+import { radius } from '@kefli/tokens';
+import { quickIn } from '@kefli/tokens/reanimated';
+import { readBunkerLink, type SignerProvider } from '@kefli/protocol';
 import { KEEP_COPIES, setSetting } from '../data/settings';
 import { answerNewHere, answerSignedIn } from '../services/app';
 import { loadDefaults } from '../services/config';

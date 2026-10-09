@@ -1,0 +1,22 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'app.kefli'
+version = '0.1.0'
+
+android {
+  namespace "app.kefli.secp"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+}
+
+dependencies {
+  // libsecp256k1 through JNI, for Schnorr and ECDH (mobile spec 8, the week-0 Schnorr gate's fallback).
+  // 0.22.0, not the spec's 0.24.0: 0.23 and later are built with Kotlin 2.3, which React Native 0.86's
+  // Kotlin 2.1 compiler can't read.
+  implementation 'fr.acinq.secp256k1:secp256k1-kmp-jni-android:0.22.0'
+}

@@ -1,5 +1,5 @@
 {
-  "name": "shelf",
+  "name": "kefli",
   "private": true,
   "workspaces": [
     "apps/*",

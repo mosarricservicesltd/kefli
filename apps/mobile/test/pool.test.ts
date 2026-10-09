@@ -1,5 +1,5 @@
-import { LocalSigner, verifyEventWith, nobleSecp } from '@shelf/protocol';
-import { nodeCrypto } from '@shelf/protocol/node';
+import { LocalSigner, verifyEventWith, nobleSecp } from '@kefli/protocol';
+import { nodeCrypto } from '@kefli/protocol/node';
 import { RelayPool, acceptsUrl, publishAnswer, reconnectDelay } from '../src/net/pool';
 
 const verify = (e: Parameters<typeof verifyEventWith>[1]) => verifyEventWith(nobleSecp, e);
@@ -86,8 +86,8 @@ describe('relay pool (mobile spec 4.4)', () => {
   });
 });
 
-// Against server/dev's relays: SHELF_LOCAL_STACK=1 npx jest -c apps/mobile/jest.config.js pool
-const local = process.env.SHELF_LOCAL_STACK === '1' ? describe : describe.skip;
+// Against server/dev's relays: KEFLI_LOCAL_STACK=1 npx jest -c apps/mobile/jest.config.js pool
+const local = process.env.KEFLI_LOCAL_STACK === '1' ? describe : describe.skip;
 local('relay pool on the local stack', () => {
   const signer = new LocalSigner(nodeCrypto.randomBytes(32));
   const pool = new RelayPool({ verify, signer: async () => signer, allowInsecure: true });

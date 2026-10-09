@@ -2,7 +2,7 @@
 // operator holds the blob.
 import { Directory, File, Paths } from 'expo-file-system';
 
-const dir = () => new Directory(Paths.document, 'shelf', 'staging');
+const dir = () => new Directory(Paths.document, 'kefli', 'staging');
 
 export function stageBlob(sha256: string, bytes: Uint8Array): string {
   const d = dir();

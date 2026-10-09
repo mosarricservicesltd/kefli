@@ -34,7 +34,7 @@ export class LocalSigner implements SignerProvider {
 
   readonly #secp: SecpPort;
 
-  /** secp defaults to noble; the phone passes shelf-secp. */
+  /** secp defaults to noble; the phone passes kefli-secp. */
   constructor(secretKey: Uint8Array, secp: SecpPort = nobleSecp) {
     if (secretKey.length !== 32) throw new RangeError('a secret key is 32 bytes');
     this.#sk = secretKey;

@@ -11,8 +11,8 @@ import type { StackCardInterpolationProps } from 'expo-router/js-stack';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { motion } from '@shelf/tokens';
-import { ShelfSystem } from '../../modules/shelf-system/src';
+import { motion } from '@kefli/tokens';
+import { KefliSystem } from '../../modules/kefli-system/src';
 import { boot, useApp } from '../services/app';
 import { startSync } from '../services/runner';
 import { FONTS } from '../ui/fonts';
@@ -56,7 +56,7 @@ export default function Layout() {
   // Back belongs to the sheet.
   const sheetUp = useSyncExternalStore(sheetOpen.subscribe, sheetOpen.get);
   useEffect(() => {
-    ShelfSystem.setRootBack(ROOTS.includes(path) && !sheetUp);
+    KefliSystem.setRootBack(ROOTS.includes(path) && !sheetUp);
   }, [path, sheetUp]);
   // Until the fonts and the resolver are ready, the splash stays (6.9).
   if (!fonts || !app) return <View style={{ flex: 1, backgroundColor: c.background }} />;

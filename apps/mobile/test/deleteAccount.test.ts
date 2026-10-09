@@ -1,5 +1,5 @@
-import { LocalSigner, type NostrEvent } from '@shelf/protocol';
-import { nodeCrypto } from '@shelf/protocol/node';
+import { LocalSigner, type NostrEvent } from '@kefli/protocol';
+import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
@@ -149,14 +149,14 @@ describe('a nostr user’s lists', () => {
 });
 
 import { signDeletion } from '../src/services/deleteAccount';
-import { readRelayList, readServerList } from '@shelf/protocol';
+import { readRelayList, readServerList } from '@kefli/protocol';
 
 describe('a nostr user’s deletion (contract 4.7)', () => {
   test('their lists are republished without Shelf’s entries', async () => {
     const w = world();
     w.db.run("UPDATE identities SET provider = 'nip55'");
-    w.db.run("INSERT INTO relays (url, owner, read, write, source, added_by_shelf) VALUES ('wss://mine', ?, 1, 0, 'user', 0)", w.pk);
-    w.db.run("INSERT INTO servers (url, owner, role, in_10063, added_by_shelf) VALUES ('https://my.blossom', ?, 'user', 1, 0)", w.pk);
+    w.db.run("INSERT INTO relays (url, owner, read, write, source, added_by_app) VALUES ('wss://mine', ?, 1, 0, 'user', 0)", w.pk);
+    w.db.run("INSERT INTO servers (url, owner, role, in_10063, added_by_app) VALUES ('https://my.blossom', ?, 'user', 1, 0)", w.pk);
     await deleteEverything(w.p, () => undefined);
     const lists = w.sent.filter((s) => s.relay === 'ws://idx').map((s) => s.event);
     expect(lists.map((e) => e.kind).sort()).toEqual([10002, 10063]);

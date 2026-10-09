@@ -1,0 +1,6 @@
+{
+  "platforms": ["android"],
+  "android": {
+    "modules": ["app.kefli.system.KefliSystemModule"]
+  }
+}

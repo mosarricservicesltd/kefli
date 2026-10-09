@@ -9,9 +9,9 @@ import { useEffect, useRef, useState } from 'react';
 import { BackHandler, Linking, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSharedValue, withTiming } from 'react-native-reanimated';
-import { radius } from '@shelf/tokens';
-import { reflow } from '@shelf/tokens/reanimated';
-import { readBunkerLink, type SignerProvider } from '@shelf/protocol';
+import { radius } from '@kefli/tokens';
+import { reflow } from '@kefli/tokens/reanimated';
+import { readBunkerLink, type SignerProvider } from '@kefli/protocol';
 import { moveJob } from '../data/move';
 import { useApp } from '../services/app';
 import { loadDefaults } from '../services/config';
@@ -37,7 +37,7 @@ type Step = 'explain' | 'none' | 'waiting' | 'moving' | 'newer';
 type Problem = 'declined' | 'timeout' | 'probe' | null;
 
 const RETRY_MS = 5000;
-const STORE_URL = 'market://details?id=space.shelf.app';
+const STORE_URL = 'market://details?id=app.kefli';
 
 function Point({ icon, title, sub, warn }: { icon: IconName; title: string; sub: string; warn?: boolean }) {
   const { c } = useTheme();

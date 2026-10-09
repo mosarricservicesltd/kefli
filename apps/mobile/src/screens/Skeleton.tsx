@@ -3,8 +3,8 @@
 import { useEffect } from 'react';
 import { View } from 'react-native';
 import Animated, { FadeIn, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
-import { motion, radius } from '@shelf/tokens';
-import { ambient } from '@shelf/tokens/reanimated';
+import { motion, radius } from '@kefli/tokens';
+import { ambient } from '@kefli/tokens/reanimated';
 import { alpha } from '../ui/theme';
 
 const WIDTHS = [100, 96, 92, 98, 60, 100, 94, 97, 72];

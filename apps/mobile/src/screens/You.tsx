@@ -10,9 +10,9 @@ import { Image, ScrollView, View, useWindowDimensions } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { motion, radius } from '@shelf/tokens';
-import { ShelfKeystore } from '../../modules/shelf-keystore/src';
-import { ShelfSystem } from '../../modules/shelf-system/src';
+import { motion, radius } from '@kefli/tokens';
+import { KefliKeystore } from '../../modules/kefli-keystore/src';
+import { KefliSystem } from '../../modules/kefli-system/src';
 import { initialOf, readProfile } from '../data/profile';
 import { backupDone, markBackupDone, showBackupCard, snoozeBackup, youStats } from '../data/you';
 import { useApp } from '../services/app';
@@ -42,14 +42,14 @@ function RecoverySheet({ owner, close }: { owner: string; close: () => void }) {
   const [copied, setCopied] = useState(false);
   // the window is secured while the sheet is up (7.1); the words go when it closes
   useEffect(() => {
-    ShelfSystem.setSecure(true);
+    KefliSystem.setSecure(true);
     return () => {
-      ShelfSystem.setSecure(false);
+      KefliSystem.setSecure(false);
       setWords(null);
     };
   }, []);
   const reveal = async () => {
-    const m = await ShelfKeystore.readMnemonic(owner).catch(() => null);
+    const m = await KefliKeystore.readMnemonic(owner).catch(() => null);
     if (!m) return;
     setWords(m.trim().split(/\s+/));
     markBackupDone(store());
@@ -80,7 +80,7 @@ function RecoverySheet({ owner, close }: { owner: string; close: () => void }) {
         {words ? (
           <>
             <Button label={copied ? S.you.copied : S.you.copy} icon={copied ? 'check' : 'clipboard'} kind="secondary" style={{ flex: 1 }}
-              onPress={() => { ShelfSystem.copySensitive(S.you.sheetTitle, words.join(' ')); setCopied(true); }} />
+              onPress={() => { KefliSystem.copySensitive(S.you.sheetTitle, words.join(' ')); setCopied(true); }} />
             <Button label={S.you.done} style={{ flex: 1 }} onPress={close} />
           </>
         ) : <Button label={S.you.notNow} kind="secondary" style={{ flex: 1 }} onPress={close} />}

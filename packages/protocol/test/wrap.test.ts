@@ -10,13 +10,13 @@ import { nodeCrypto } from '../src/node';
 
 const signer = () => new LocalSigner(nodeCrypto.randomBytes(32));
 const NOW = 1_760_000_000;
-const RELAY = 'wss://relay.shelf.example';
-const BLOSSOM = 'https://blossom.shelf.example';
+const RELAY = 'wss://relay.kefli.example';
+const BLOSSOM = 'https://blossom.kefli.example';
 
 const request = (over: Partial<SaveRequest> = {}): SaveRequest => ({
   v: 1, url: 'https://example.com/a', canonical: null, title: 'A', site: 'example.com', byline: null, lang: 'en',
   hero: null, captured_at: NOW, token: 'aa'.repeat(32),
-  html: { sha256: 'bb'.repeat(32), key: 'k', nonce: 'n', server: 'https://blossom.shelf.example' }, ...over,
+  html: { sha256: 'bb'.repeat(32), key: 'k', nonce: 'n', server: 'https://blossom.kefli.example' }, ...over,
 });
 
 describe('gift wraps (NIP-59, C§4.4)', () => {

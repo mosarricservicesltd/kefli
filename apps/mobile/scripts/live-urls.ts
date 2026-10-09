@@ -8,15 +8,15 @@ import { join } from 'node:path';
 // @ts-expect-error: plain ES modules without types
 import { launch } from '../../../tools/design-qa/cdp.mjs';
 // @ts-expect-error: plain ES modules without types
-import { shelfBundle } from '../../../shared/vendor/build-parser-bundle.mjs';
+import { kefliBundle } from '../../../shared/vendor/build-parser-bundle.mjs';
 import { runLive, type LiveUrl } from '../src/gates/live';
 
 async function main() {
   const list = JSON.parse(readFileSync(join(__dirname, '../../../shared/fixtures/live-urls.json'), 'utf8')).urls as LiveUrl[];
   const chrome = await launch();
   try {
-    await chrome.eval(shelfBundle());
-    const parse = (b: string, ct: string, url: string) => chrome.eval(`shelfParse(${JSON.stringify(b)}, ${JSON.stringify(ct)}, ${JSON.stringify(url)})`);
+    await chrome.eval(kefliBundle());
+    const parse = (b: string, ct: string, url: string) => chrome.eval(`kefliParse(${JSON.stringify(b)}, ${JSON.stringify(ct)}, ${JSON.stringify(url)})`);
     const results = await runLive({ fetch, parse }, { fetch }, list, () => performance.now());
     for (const r of results) console.log(`${r.pass ? 'pass' : 'FAIL'} ${r.kind}: ${r.got}${r.pass ? '' : ` (expected ${r.expect})`} ${r.detail} — ${r.url}`);
     console.log(`${results.filter((r) => r.pass).length}/${results.length} as expected`);

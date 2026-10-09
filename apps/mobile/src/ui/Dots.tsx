@@ -3,8 +3,8 @@
 import { useEffect } from 'react';
 import { View } from 'react-native';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
-import { motion } from '@shelf/tokens';
-import { ambient } from '@shelf/tokens/reanimated';
+import { motion } from '@kefli/tokens';
+import { ambient } from '@kefli/tokens/reanimated';
 
 function Breathe({ color, size, delay }: { color: string; size: number; delay: number }) {
   const o = useSharedValue(1);

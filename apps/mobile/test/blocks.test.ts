@@ -1,4 +1,4 @@
-import { countWords, normaliseMarkdown } from '@shelf/protocol';
+import { countWords, normaliseMarkdown } from '@kefli/protocol';
 import { articleBlocks, blockOfWord } from '../src/reader/blocks';
 
 const MD = normaliseMarkdown(`# A title

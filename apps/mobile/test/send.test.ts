@@ -1,6 +1,6 @@
-import { LocalSigner, encryptText, normaliseMarkdown, readItemEvent, textHash } from '@shelf/protocol';
-import type { NostrEvent } from '@shelf/protocol';
-import { nodeCrypto } from '@shelf/protocol/node';
+import { LocalSigner, encryptText, normaliseMarkdown, readItemEvent, textHash } from '@kefli/protocol';
+import type { NostrEvent } from '@kefli/protocol';
+import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow, queueSave } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';

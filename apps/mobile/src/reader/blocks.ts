@@ -4,7 +4,7 @@
 // spoken characters to Markdown offsets (C§7), so a stored word position finds its block and back.
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import type { Nodes, PhrasingContent, RootContent } from 'mdast';
-import { projectTree, sentences, type Sentence } from '@shelf/protocol';
+import { projectTree, sentences, type Sentence } from '@kefli/protocol';
 
 export type Span = { text: string; em?: boolean; strong?: boolean; code?: boolean; href?: string };
 

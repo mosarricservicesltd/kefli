@@ -1,5 +1,5 @@
 // The secp256k1 work behind signing, verifying and NIP-44 (mobile spec 2.6 and 8). The default runs noble
-// in JavaScript, as the extension and the tests use it; the phone passes shelf-secp (libsecp256k1 through
+// in JavaScript, as the extension and the tests use it; the phone passes kefli-secp (libsecp256k1 through
 // JNI), since noble on Hermes misses the week-0 Schnorr gate (docs/specs/08-week0-gates.md).
 
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';

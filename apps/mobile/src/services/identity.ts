@@ -1,9 +1,9 @@
 // The identity the app signs with (mobile spec 3.1–3.3), carrying out the resolver's plans (src/data/resolver.ts).
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
-import { LocalSigner, Nip55Signer, newMnemonic, secretKeyFromMnemonic, type SignerProvider } from '@shelf/protocol';
-import { nip55Port } from '../../modules/shelf-nip55/src';
+import { LocalSigner, Nip55Signer, newMnemonic, secretKeyFromMnemonic, type SignerProvider } from '@kefli/protocol';
+import { nip55Port } from '../../modules/kefli-nip55/src';
 import { nip46Signer } from './nip46';
-import { ShelfKeystore, type KeyIdentity } from '../../modules/shelf-keystore/src';
+import { KefliKeystore, type KeyIdentity } from '../../modules/kefli-keystore/src';
 import { phoneCrypto } from '../crypto/port';
 import { nativeSecp } from '../crypto/secp';
 import { resolveLaunch, resolveShare, type LaunchPlan, type Origin } from '../data/resolver';
@@ -17,7 +17,7 @@ const now = () => Math.floor(Date.now() / 1000);
 
 /** The active identity is the key file's first; a move's source, if any, follows it. */
 async function activeIdentity(): Promise<KeyIdentity | null> {
-  const r = await ShelfKeystore.read();
+  const r = await KefliKeystore.read();
   return r?.identities[0] ?? null;
 }
 
@@ -31,7 +31,7 @@ function signerFor(id: KeyIdentity): SignerProvider | null {
 /** Block Store's entry: the mnemonic, null when empty, undefined when the read failed. */
 async function readBlockStore(): Promise<string | null | undefined> {
   try {
-    return await ShelfKeystore.blockStoreGet();
+    return await KefliKeystore.blockStoreGet();
   } catch {
     return undefined;
   }
@@ -48,7 +48,7 @@ export async function currentSigner(): Promise<SignerProvider | null> {
 export async function signerOf(pubkey: string): Promise<SignerProvider | null> {
   const current = await currentSigner();
   if (current?.pubkey() === pubkey) return current;
-  const r = await ShelfKeystore.read().catch(() => null);
+  const r = await KefliKeystore.read().catch(() => null);
   const id = r?.identities.find((i) => i.pubkey === pubkey);
   return id ? signerFor(id) : null;
 }
@@ -58,11 +58,11 @@ export async function signerOf(pubkey: string): Promise<SignerProvider | null> {
  * or is emptied when T is a nostr app and has none.
  */
 export async function retireSourceKeys(from: string, to: string): Promise<void> {
-  await ShelfKeystore.wipe(from);
-  const r = await ShelfKeystore.read().catch(() => null);
-  const words = r?.identities.find((i) => i.pubkey === to)?.provider === 'local' ? await ShelfKeystore.readMnemonic(to).catch(() => null) : null;
-  if (words) await ShelfKeystore.blockStoreSet(words).catch(() => undefined);
-  else await ShelfKeystore.blockStoreRemove().catch(() => undefined);
+  await KefliKeystore.wipe(from);
+  const r = await KefliKeystore.read().catch(() => null);
+  const words = r?.identities.find((i) => i.pubkey === to)?.provider === 'local' ? await KefliKeystore.readMnemonic(to).catch(() => null) : null;
+  if (words) await KefliKeystore.blockStoreSet(words).catch(() => undefined);
+  else await KefliKeystore.blockStoreRemove().catch(() => undefined);
 }
 
 /** A signer just signed in with becomes the current one (nostrSignIn.ts). */
@@ -74,7 +74,7 @@ export function setCurrentSigner(s: SignerProvider | null): void {
 async function adopt(mnemonic: string, origin: Origin): Promise<LocalSigner> {
   const sk = await secretKeyFromMnemonic(mnemonic, phoneCrypto);
   const s = new LocalSigner(sk.slice(), nativeSecp);
-  await ShelfKeystore.write({ v: 1, identities: [{ pubkey: s.pubkey(), provider: 'local', sk: bytesToHex(sk), mnemonic, origin }] });
+  await KefliKeystore.write({ v: 1, identities: [{ pubkey: s.pubkey(), provider: 'local', sk: bytesToHex(sk), mnemonic, origin }] });
   sk.fill(0);
   ensureIdentityRow(store(), now(), s.pubkey(), origin, true);
   signer = s;
@@ -115,7 +115,7 @@ export async function ensureSigner(): Promise<SignerProvider> {
   if (plan.use === 'block_store' && blockStore) return adoptBlockStore(blockStore);
   const mnemonic = newMnemonic(phoneCrypto);
   const s = await adopt(mnemonic, 'early_share');
-  if (plan.use === 'mint' && plan.writeBlockStore) await ShelfKeystore.blockStoreSet(mnemonic).catch(() => undefined);
+  if (plan.use === 'mint' && plan.writeBlockStore) await KefliKeystore.blockStoreSet(mnemonic).catch(() => undefined);
   return s;
 }
 
@@ -127,7 +127,7 @@ export async function newHere(): Promise<string> {
   const s = (await currentSigner()) ?? (await (async () => {
     const mnemonic = newMnemonic(phoneCrypto);
     const made = await adopt(mnemonic, 'new');
-    await ShelfKeystore.blockStoreSet(mnemonic).catch(() => undefined);
+    await KefliKeystore.blockStoreSet(mnemonic).catch(() => undefined);
     return made;
   })());
   setSetting(store(), WELCOME_ANSWERED, '1');
@@ -155,10 +155,10 @@ export async function adoptRecovery(mnemonic: string, origin: 'recovery_code' | 
   const s = new LocalSigner(sk.slice(), nativeSecp);
   const identities: KeyIdentity[] = [{ pubkey: s.pubkey(), provider: 'local', sk: bytesToHex(sk), mnemonic, origin }];
   if (keepEarly) {
-    const words = await ShelfKeystore.readMnemonic(keepEarly.pubkey).catch(() => null);
+    const words = await KefliKeystore.readMnemonic(keepEarly.pubkey).catch(() => null);
     identities.push({ ...keepEarly, ...(words ? { mnemonic: words } : {}) });
   }
-  await ShelfKeystore.write({ v: 1, identities });
+  await KefliKeystore.write({ v: 1, identities });
   sk.fill(0);
   db.tx(() => {
     if (keepEarly) {
@@ -170,7 +170,7 @@ export async function adoptRecovery(mnemonic: string, origin: 'recovery_code' | 
     setSetting(db, WELCOME_ANSWERED, '1');
     queueRestore(db, now(), s.pubkey());
   });
-  if (!keepEarly) await ShelfKeystore.blockStoreSet(mnemonic).catch(() => undefined);
+  if (!keepEarly) await KefliKeystore.blockStoreSet(mnemonic).catch(() => undefined);
   signer = s;
   return s.pubkey();
 }
@@ -181,11 +181,11 @@ export async function adoptRecovery(mnemonic: string, origin: 'recovery_code' | 
  * installed.
  */
 export async function wipeEverything(): Promise<void> {
-  const r = await ShelfKeystore.read().catch(() => null);
-  for (const id of r?.identities ?? []) await ShelfKeystore.wipe(id.pubkey).catch(() => undefined);
-  await ShelfKeystore.blockStoreRemove().catch(() => undefined);
+  const r = await KefliKeystore.read().catch(() => null);
+  for (const id of r?.identities ?? []) await KefliKeystore.wipe(id.pubkey).catch(() => undefined);
+  await KefliKeystore.blockStoreRemove().catch(() => undefined);
   wipe(store());
-  for (const d of [new Directory(Paths.document, 'shelf'), new Directory(Paths.cache, 'artwork')]) if (d.exists) d.delete();
+  for (const d of [new Directory(Paths.document, 'kefli'), new Directory(Paths.cache, 'artwork')]) if (d.exists) d.delete();
   signer = null;
 }
 
@@ -200,10 +200,10 @@ export async function adoptNostr(s: SignerProvider, how: Pick<KeyIdentity, 'prov
   const keepEarly = early?.origin === 'early_share' ? early : null;
   const identities: KeyIdentity[] = [{ pubkey: s.pubkey(), origin: 'nostr_signin', ...how }];
   if (keepEarly) {
-    const words = await ShelfKeystore.readMnemonic(keepEarly.pubkey).catch(() => null);
+    const words = await KefliKeystore.readMnemonic(keepEarly.pubkey).catch(() => null);
     identities.push({ ...keepEarly, ...(words ? { mnemonic: words } : {}) });
   }
-  await ShelfKeystore.write({ v: 1, identities });
+  await KefliKeystore.write({ v: 1, identities });
   db.tx(() => {
     if (keepEarly) {
       db.run("UPDATE identities SET role = 'move_source' WHERE pubkey = ?", keepEarly.pubkey);
@@ -214,7 +214,7 @@ export async function adoptNostr(s: SignerProvider, how: Pick<KeyIdentity, 'prov
     setSetting(db, WELCOME_ANSWERED, '1');
     queueRestore(db, now(), s.pubkey());
   });
-  if (!keepEarly) await ShelfKeystore.blockStoreRemove().catch(() => undefined);
+  if (!keepEarly) await KefliKeystore.blockStoreRemove().catch(() => undefined);
   signer = s;
   return s.pubkey();
 }

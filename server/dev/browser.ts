@@ -17,7 +17,7 @@ import { toQR } from 'toqr';
 // @ts-expect-error: plain ES modules without types
 import { launch } from '../../tools/design-qa/cdp.mjs';
 // @ts-expect-error: plain ES modules without types
-import { shelfBundle } from '../../shared/vendor/build-parser-bundle.mjs';
+import { kefliBundle } from '../../shared/vendor/build-parser-bundle.mjs';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import {
   LocalSigner, acceptPairAck, derivePairCode, encryptText, httpAuth, newPairCode, sealOffer, unwrap, uploadBlob, wrapSaveRequest,
@@ -88,10 +88,10 @@ async function save(url: string, withHtml: boolean) {
     let article: { ok: boolean; content?: string };
     let parsed: { title?: string | null; site?: string | null; byline?: string | null; lang?: string | null; canonical?: string | null; hero?: string | null };
     try {
-      await chrome.eval(shelfBundle());
+      await chrome.eval(kefliBundle());
       const args = `${JSON.stringify(bytes.toString('base64'))}, ${JSON.stringify(res.headers.get('content-type') ?? 'text/html')}, ${JSON.stringify(res.url || url)}`;
-      article = await chrome.eval(`shelfArticle(${args})`);
-      parsed = await chrome.eval(`shelfParse(${args})`);
+      article = await chrome.eval(`kefliArticle(${args})`);
+      parsed = await chrome.eval(`kefliParse(${args})`);
     } finally {
       chrome.close();
       chrome.proc.kill();

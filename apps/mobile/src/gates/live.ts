@@ -1,7 +1,7 @@
 // The live list (mobile spec 11.3): each address through the share's own path, the X check for X posts and
 // otherwise fetchPage with its user agents, caps and guard, scored against the outcome that is right for it.
 // Ports, so the same run checks the list on the desktop (scripts/live-urls.ts) before the phone runs it.
-import { isXPost } from '@shelf/protocol';
+import { isXPost } from '@kefli/protocol';
 import { fetchPage, type PagePorts } from '../services/page';
 import { checkXPost, type XPorts } from '../services/xpost';
 

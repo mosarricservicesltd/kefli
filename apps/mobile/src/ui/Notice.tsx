@@ -1,6 +1,6 @@
 // In-flow notices (prototype .banner): one component on the surface with a hairline, the icon muted, 13/500 text.
 import { View, type StyleProp, type ViewStyle } from 'react-native';
-import { radius } from '@shelf/tokens';
+import { radius } from '@kefli/tokens';
 import { mix } from './colour';
 import { Icon, type IconName } from './Icon';
 import { T, ui } from './text';

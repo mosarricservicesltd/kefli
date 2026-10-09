@@ -45,7 +45,7 @@ async function fetchBlob(log: Log, server: string, text: ItemText, expectHash: s
 }
 
 /** npm run decrypt: true when the event verifies and decrypts and every blob checked matches. */
-export async function decryptCommand(argv: string[], env: { SHELF_SECRET?: string }, log: Log, get: typeof fetch = fetch): Promise<boolean> {
+export async function decryptCommand(argv: string[], env: { KEFLI_SECRET?: string }, log: Log, get: typeof fetch = fetch): Promise<boolean> {
   const from = source(argv);
   if (!from) throw new Error('usage: decrypt <event.json | -> [--blob <file>] [--fetch]');
   const event = readJson(from) as NostrEvent;
@@ -53,7 +53,7 @@ export async function decryptCommand(argv: string[], env: { SHELF_SECRET?: strin
     log('FAIL the event’s id or signature does not verify');
     return false;
   }
-  const signer = new LocalSigner(await parseSecret(env.SHELF_SECRET, nodeCrypto));
+  const signer = new LocalSigner(await parseSecret(env.KEFLI_SECRET, nodeCrypto));
   const { hash, item } = await readItemEvent(signer, event);
   log(JSON.stringify({ d: `${ITEM_D_PREFIX}${hash}`, created_at: event.created_at, ...item.extra, ...item.item }, null, 2));
   const text = item.item.text;
@@ -69,10 +69,10 @@ export async function decryptCommand(argv: string[], env: { SHELF_SECRET?: strin
 }
 
 /** npm run unwrap: prints the seal's signer and the rumor, its content parsed when it is JSON. */
-export async function unwrapCommand(argv: string[], env: { SHELF_SECRET?: string }, log: Log): Promise<boolean> {
+export async function unwrapCommand(argv: string[], env: { KEFLI_SECRET?: string }, log: Log): Promise<boolean> {
   if (!argv[0]) throw new Error('usage: unwrap <wrap.json | ->');
   const wrap = readJson(argv[0]) as NostrEvent;
-  const { rumor, seal } = await unwrap(new LocalSigner(await parseSecret(env.SHELF_SECRET)), wrap);
+  const { rumor, seal } = await unwrap(new LocalSigner(await parseSecret(env.KEFLI_SECRET)), wrap);
   let content: unknown = rumor.content;
   try {
     content = JSON.parse(rumor.content);
@@ -114,13 +114,13 @@ export async function relayQuery(relay: string, filter: Record<string, unknown>)
 const LOCAL = ['ws://localhost:7447', 'ws://localhost:7448', 'ws://localhost:7449'];
 
 /**
- * npm run verify (the stage gates, mobile spec 13.1): every save of SHELF_SECRET's identity on the relays, newest
+ * npm run verify (the stage gates, mobile spec 13.1): every save of KEFLI_SECRET's identity on the relays, newest
  * copy of each, checked as decrypt --fetch does: the event verifies, decrypts, and its text blob is on every server
  * it names, matching text_hash. One line a save, then the count. --relays a,b,c (default: the local stack).
  */
-export async function verifyCommand(argv: string[], env: { SHELF_SECRET?: string }, log: Log, query: Query = relayQuery, get: typeof fetch = fetch): Promise<boolean> {
+export async function verifyCommand(argv: string[], env: { KEFLI_SECRET?: string }, log: Log, query: Query = relayQuery, get: typeof fetch = fetch): Promise<boolean> {
   const relays = argAfter(argv, '--relays')?.split(',') ?? LOCAL;
-  const signer = new LocalSigner(await parseSecret(env.SHELF_SECRET, nodeCrypto));
+  const signer = new LocalSigner(await parseSecret(env.KEFLI_SECRET, nodeCrypto));
   const newest = await newestCopies(relays, signer.pubkey(), query);
   let bad = 0;
   let saves = 0;

@@ -4,8 +4,8 @@
 // RULED: an event with v above 1 that is newer than the local row goes to items_future and the local row is
 // removed with its pending sends, since this phone may not write over a version it doesn't understand (C§10);
 // an older one is ignored. A save with no text arrives as text_state 'queued', so this phone tries the parse.
-import { ITEM_D_PREFIX, deletedHashes, deletionRemoves, mergeItem, wordReached } from '@shelf/protocol';
-import type { LocalVersion, MergeOutcome, NostrEvent, ParsedItem } from '@shelf/protocol';
+import { ITEM_D_PREFIX, deletedHashes, deletionRemoves, mergeItem, wordReached } from '@kefli/protocol';
+import type { LocalVersion, MergeOutcome, NostrEvent, ParsedItem } from '@kefli/protocol';
 import type { SqlDb } from './db';
 import { enqueue } from './outbox';
 import { writeRelays } from './lists';

@@ -5,7 +5,7 @@
 import {
   LocalSigner, derivePhonePair, httpAuth, newPhonePair, openPhoneOffer, sealPhoneOffer, secretKeyFromMnemonic,
   type CryptoPort, type PhoneQr,
-} from '@shelf/protocol';
+} from '@kefli/protocol';
 import { registered, type ConnectPorts } from './connect';
 
 export type ShowPorts = Pick<ConnectPorts, 'db' | 'now' | 'owner' | 'defaults' | 'signer' | 'fetch' | 'crypto' | 'runOutbox'> & {

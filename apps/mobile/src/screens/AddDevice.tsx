@@ -6,9 +6,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { useKeepAwake } from 'expo-keep-awake';
-import { colors, radius } from '@shelf/tokens';
-import type { PhoneQr } from '@shelf/protocol';
-import { ShelfSystem } from '../../modules/shelf-system/src';
+import { colors, radius } from '@kefli/tokens';
+import type { PhoneQr } from '@kefli/protocol';
+import { KefliSystem } from '../../modules/kefli-system/src';
 import { useApp } from '../services/app';
 import { showPhonePair } from '../services/phonePair';
 import { phonePorts } from '../services/runner';
@@ -33,8 +33,8 @@ export default function AddDevice() {
   useKeepAwake();
 
   useEffect(() => {
-    ShelfSystem.setSecure(true);
-    return () => void ShelfSystem.setSecure(false);
+    KefliSystem.setSecure(true);
+    return () => void KefliSystem.setSecure(false);
   }, []);
   const make = useCallback(() => {
     setOffer(null);

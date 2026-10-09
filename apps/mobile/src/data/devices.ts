@@ -2,7 +2,7 @@
 // record, one row per token. A copy from a relay merges in by token, keeping every entry and the earlier
 // revoked_at; when this phone holds anything the copy lacks, the record is republished. Connect queues
 // post_device then pair_ack; the pair-ack's success writes the row. Disconnect revokes at once.
-import { DEVICES_D, KIND, mergeDevices, type DevicesRecord } from '@shelf/protocol';
+import { DEVICES_D, KIND, mergeDevices, type DevicesRecord } from '@kefli/protocol';
 import type { SqlDb } from './db';
 import { indexerRelays, writeRelays } from './lists';
 import { enqueue } from './outbox';

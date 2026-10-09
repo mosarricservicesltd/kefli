@@ -3,8 +3,8 @@
 // post_device, pair_ack, delete_device and delete_wrap.
 import {
   buildDeletions, buildDevicesEvent, buildItemEvent, buildRelayList, buildServerList, deleteBlob, httpAuth, mirrorBlob, uploadBlob, wrapPairAck,
-} from '@shelf/protocol';
-import type { CryptoPort, NostrEvent, Signer } from '@shelf/protocol';
+} from '@kefli/protocol';
+import type { CryptoPort, NostrEvent, Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { hasDevices, localRecord, noteRecord, pairAcked, recordCreatedAt, type PairPayload } from '../data/devices';
 import { getItem, itemJson, markPublished } from '../data/items';

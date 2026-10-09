@@ -1,7 +1,7 @@
 // The reading palettes (tokens reader.palette, FD 16, FD 71): Light and Sepia from the tokens, Dark as the
 // article's own tinted Night (ShelfCover.night). Each takes the article's ink, for its lines and link underlines,
 // and its spoken-word highlight. The palette follows the phone until one is picked (FD 89).
-import { reader } from '@shelf/tokens';
+import { reader } from '@kefli/tokens';
 import { ShelfCover } from '../ui/cover';
 import { alpha } from '../ui/colour';
 

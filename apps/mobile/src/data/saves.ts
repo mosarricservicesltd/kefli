@@ -1,7 +1,7 @@
 // Queues a save (mobile spec 4.3, 5.4): the item row, its staged blob, and the outbox rows, held until the
 // share sheet closes without Undo. register runs first if this identity hasn't registered; the upload follows
 // it, the mirror follows the upload, and the publish follows the upload (or register, with no text).
-import { itemHash } from '@shelf/protocol';
+import { itemHash } from '@kefli/protocol';
 import type { SqlDb } from './db';
 import { insertItem, type NewItem } from './items';
 import { enqueue, undo } from './outbox';

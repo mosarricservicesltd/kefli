@@ -1,6 +1,6 @@
 // The crypto the protocol needs from its platform (mobile spec 2.1, 2.6). On the phone it is
 // react-native-quick-crypto (OpenSSL); in the extension WebCrypto; in Node tests node:crypto
-// (@shelf/protocol/node). Schnorr, ECDH and NIP-44 are not here: they run in noble through nostr-tools.
+// (@kefli/protocol/node). Schnorr, ECDH and NIP-44 are not here: they run in noble through nostr-tools.
 
 export interface CryptoPort {
   randomBytes(length: number): Uint8Array;

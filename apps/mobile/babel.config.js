@@ -1,5 +1,5 @@
 // Release builds strip console below warn (mobile spec 7.1): logs never reach a user's phone. The local stack's build
-// (SHELF_VARIANT=local) keeps them, since testing reads them over adb.
+// (KEFLI_VARIANT=local) keeps them, since testing reads them over adb.
 const STRIP = new Set(['log', 'info', 'debug', 'trace']);
 
 function stripConsole({ types: t }) {
@@ -18,7 +18,7 @@ function stripConsole({ types: t }) {
 }
 
 module.exports = function config(api) {
-  const keep = process.env.SHELF_VARIANT === 'local';
+  const keep = process.env.KEFLI_VARIANT === 'local';
   api.cache.using(() => String(keep));
   return { presets: ['babel-preset-expo'], plugins: keep ? [] : [stripConsole] };
 };

@@ -2,8 +2,8 @@
 // moves the library to the user's nostr app T. T joins the key file and the database beside S as the move's target,
 // with its lists settled under Keep backup copies, and the move job runs. S stays the phone's identity, and its
 // recovery code keeps working, until the move's last step; a move a save from a newer Shelf stops leaves S as it was.
-import type { SignerProvider } from '@shelf/protocol';
-import { ShelfKeystore } from '../../modules/shelf-keystore/src';
+import type { SignerProvider } from '@kefli/protocol';
+import { KefliKeystore } from '../../modules/kefli-keystore/src';
 import { queueSwitch, retireLocal } from '../data/move';
 import type { Defaults } from './config';
 import { currentSigner } from './identity';
@@ -21,9 +21,9 @@ async function sourceKey(): Promise<string> {
 
 /** T joins the key file after S, so S is still the phone's identity if the app stops part way; the move resumes. */
 async function addTarget(to: string, how: How): Promise<void> {
-  const r = await ShelfKeystore.read();
+  const r = await KefliKeystore.read();
   const rest = (r?.identities ?? []).filter((i) => i.pubkey !== to);
-  await ShelfKeystore.write({ v: 1, identities: [...rest, { pubkey: to, origin: 'nostr_signin', ...how }] });
+  await KefliKeystore.write({ v: 1, identities: [...rest, { pubkey: to, origin: 'nostr_signin', ...how }] });
 }
 
 /** T beside S, and the move queued. Returns S's pubkey. */
@@ -39,5 +39,5 @@ export async function abandonSwitch(from: string, to: string): Promise<void> {
   const db = store();
   db.run('DELETE FROM jobs WHERE id = ?', `move:${from}`);
   retireLocal(db, to, null);
-  await ShelfKeystore.wipe(to).catch(() => undefined);
+  await KefliKeystore.wipe(to).catch(() => undefined);
 }

@@ -1,6 +1,6 @@
 // The tabs (mobile spec 6.1): Saves, Listen and You under Shelf's own tab bar, switching with a 150 ms fade.
 import Tabs from 'expo-router/js-tabs';
-import { motion } from '@shelf/tokens';
+import { motion } from '@kefli/tokens';
 import { TabBar } from '../../ui/TabBar';
 import { useTheme } from '../../ui/theme';
 

@@ -3,7 +3,7 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import { DERIVED_VERSION, deriveArticle, type Derived } from '../reader/blocks';
 
-const dir = () => new Directory(Paths.document, 'shelf', 'text');
+const dir = () => new Directory(Paths.document, 'kefli', 'text');
 
 function remove(name: string) {
   const f = new File(dir(), name);
@@ -15,7 +15,7 @@ function writeDerived(hash: string, derived: Derived) {
   new File(dir(), `${hash}.blocks.json`).write(JSON.stringify(kept));
 }
 
-const imgDir = () => new Directory(Paths.document, 'shelf', 'img');
+const imgDir = () => new Directory(Paths.document, 'kefli', 'img');
 
 /** Article images: Paths.document/shelf/img/<sha256 of the image's address> (4.1), app storage, kept offline. */
 export const imageFiles = {

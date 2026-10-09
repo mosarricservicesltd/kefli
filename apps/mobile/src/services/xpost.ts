@@ -2,7 +2,7 @@
 // leaves X is. The embed service is asked with a 5 s timeout; t.co links are followed without a browser user agent,
 // five hops at most; the rules for which link counts are packages/protocol's (x.ts). Offline, or with X's service
 // failing, the post waits as a pending save and is checked again. Ports, so this runs in tests.
-import { linksInEmbed, pickXLink, xEmbedUrl } from '@shelf/protocol';
+import { linksInEmbed, pickXLink, xEmbedUrl } from '@kefli/protocol';
 
 export const X_TIMEOUT_MS = 5_000;
 export const MAX_HOPS = 5;

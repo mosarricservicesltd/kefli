@@ -1,7 +1,7 @@
 // Buttons (prototype .btn): one fill rule, ink on paper and paper on ink in dark (FD 66). 48 tall, radius 12,
 // 15/620 labels centred on their capitals. Busy shows three dots at full opacity and is never disabled (fix 28).
 import { View, type StyleProp, type ViewStyle } from 'react-native';
-import { radius } from '@shelf/tokens';
+import { radius } from '@kefli/tokens';
 import { Icon, type IconName } from './Icon';
 import { Press, pressLayer } from './Press';
 import { T, ui } from './text';

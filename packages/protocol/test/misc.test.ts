@@ -71,18 +71,18 @@ describe('NIP-98 (C§6)', () => {
   test('a POST carries u, method and the body’s hash', async () => {
     const s = signer();
     const body = JSON.stringify({ v: 1 });
-    const ev = decode(await httpAuth(s, 'https://api.shelf.example/register', 'POST', body, nodeCrypto, 100));
+    const ev = decode(await httpAuth(s, 'https://api.kefli.example/register', 'POST', body, nodeCrypto, 100));
     expect(verifyEvent(ev)).toBe(true);
     expect(ev.kind).toBe(27235);
     expect(ev.created_at).toBe(100);
-    expect(ev.tags).toEqual([['u', 'https://api.shelf.example/register'], ['method', 'POST'], ['payload', createHash('sha256').update(body).digest('hex')]]);
+    expect(ev.tags).toEqual([['u', 'https://api.kefli.example/register'], ['method', 'POST'], ['payload', createHash('sha256').update(body).digest('hex')]]);
   });
 
   test('a DELETE with no body hashes the empty string; a GET has no payload', async () => {
     const s = signer();
-    const del = decode(await httpAuth(s, 'https://api.shelf.example/account', 'DELETE', null, nodeCrypto));
+    const del = decode(await httpAuth(s, 'https://api.kefli.example/account', 'DELETE', null, nodeCrypto));
     expect(del.tags[2]).toEqual(['payload', 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855']);
-    const get = decode(await httpAuth(s, 'https://api.shelf.example/pair-offers/ab', 'GET', null, nodeCrypto));
+    const get = decode(await httpAuth(s, 'https://api.kefli.example/pair-offers/ab', 'GET', null, nodeCrypto));
     expect(get.tags).toHaveLength(2);
   });
 });

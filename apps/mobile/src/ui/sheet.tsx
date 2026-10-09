@@ -7,8 +7,8 @@ import { BackHandler, Pressable, StyleSheet, View, type LayoutChangeEvent } from
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { radius } from '@shelf/tokens';
-import { enter, exit, release } from '@shelf/tokens/reanimated';
+import { radius } from '@kefli/tokens';
+import { enter, exit, release } from '@kefli/tokens/reanimated';
 import { useTheme } from './theme';
 
 type Spec = { id: number; label: string; render: (close: () => void) => ReactNode; onClosed?: () => void; dismissable?: boolean };

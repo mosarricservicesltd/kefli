@@ -1,7 +1,7 @@
 // Sync's phase 7 (mobile spec 4.5): pending parses, one at a time, until the network goes. Each is fetched and
 // parsed as a share is (page.ts); its text is encrypted under a fresh key, staged, written and indexed, and its
 // sends queued (data/pending.ts). Ports, so this runs in tests.
-import { encryptText, isPublicWebUrl, itemHash, textHash, type CryptoPort } from '@shelf/protocol';
+import { encryptText, isPublicWebUrl, itemHash, textHash, type CryptoPort } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { applyFailed, applyParsed, pendingParses, xFound, xNoArticle, type Pending } from '../data/pending';
 import { checkXPost, type XPorts } from './xpost';

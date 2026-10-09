@@ -1,5 +1,5 @@
-import { LocalSigner, newMnemonic, secretKeyFromMnemonic, type PhoneQr } from '@shelf/protocol';
-import { nodeCrypto } from '@shelf/protocol/node';
+import { LocalSigner, newMnemonic, secretKeyFromMnemonic, type PhoneQr } from '@kefli/protocol';
+import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { showPhonePair, takePhonePair, type ShowPorts } from '../src/services/phonePair';

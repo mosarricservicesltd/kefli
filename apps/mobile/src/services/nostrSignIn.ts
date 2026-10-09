@@ -3,7 +3,7 @@
 // the indexer and default relays, their web bookmarks counted, and only then is the identity stored, its restore
 // queued and, when Shelf added to their lists or made them, the lists queued to publish. A list neither found nor
 // confirmed absent is read again at the next sync, and nothing is published meanwhile. Ports keep it testable.
-import { KIND, bookmarkLinks, itemHash, newest, probeSigner, readRelayList, readServerList, type NostrEvent, type RelayEntry, type Signer } from '@shelf/protocol';
+import { KIND, bookmarkLinks, itemHash, newest, probeSigner, readRelayList, readServerList, type NostrEvent, type RelayEntry, type Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { adoptUserLists, confirmedAbsent, type DefaultsLike } from '../data/lists';
 import { queueRecord } from '../data/devices';

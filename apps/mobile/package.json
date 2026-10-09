@@ -1,13 +1,13 @@
 {
-  "name": "@shelf/mobile",
+  "name": "@kefli/mobile",
   "version": "1.0.0",
   "main": "index.ts",
   "dependencies": {
     "@expo/metro-runtime": "~57.0.16",
     "@noble/hashes": "2.0.1",
     "@scure/base": "2.0.0",
-    "@shelf/protocol": "*",
-    "@shelf/tokens": "*",
+    "@kefli/protocol": "*",
+    "@kefli/tokens": "*",
     "@shopify/react-native-skia": "2.6.2",
     "expo": "~57.0.25",
     "expo-build-properties": "~57.0.22",

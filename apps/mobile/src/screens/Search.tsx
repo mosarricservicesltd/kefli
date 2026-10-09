@@ -8,7 +8,7 @@ import { FlatList, TextInput, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { motion, radius } from '@shelf/tokens';
+import { motion, radius } from '@kefli/tokens';
 import type { LibRow } from '../data/library';
 import { search } from '../data/search';
 import { useApp } from '../services/app';

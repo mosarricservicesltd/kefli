@@ -2,7 +2,7 @@
 // own stroke width (the ±15 numerals) keep it.
 import { memo } from 'react';
 import { SvgXml } from 'react-native-svg';
-import { icons as iconTokens } from '@shelf/tokens';
+import { icons as iconTokens } from '@kefli/tokens';
 import { ICONS, type IconName } from './icons';
 
 export type { IconName };

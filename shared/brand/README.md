@@ -57,7 +57,7 @@ It reads `shared/cover/cover-v1.js` only for the strip of covers on the OG card 
 | `out/android/adaptive-{foreground,background,monochrome}.png` (1024) | Expo `android.adaptiveIcon` foreground, background, monochrome (themed icons) |
 | `out/android/splash-icon.png` (1024) | Light launch screen image: the mark in ink, for a paper background (#F3F2EE) |
 | `out/android/splash-icon-dark.png` (1024) | Dark launch screen image: the mark in paper, for the dark background (#111112). Same footprint as the light one |
-| `out/android/shelf_notification.xml` | Status-bar and media-notification small icon as a VectorDrawable (24 dp, white), from `glyph-24.svg`. See the wiring notes |
+| `out/android/kefli_notification.xml` | Status-bar and media-notification small icon as a VectorDrawable (24 dp, white), from `glyph-24.svg`. See the wiring notes |
 | `out/android/notification-icon.png` (96) | The same glyph as a bitmap, for anything that needs a PNG |
 | `out/android/play-store-icon.png` (512) | Google Play listing icon (32-bit PNG) |
 | `out/android/play-feature-graphic.png` (1024 × 500) | Google Play feature graphic, 24-bit PNG with no alpha, as Play asks: paper ground, the icon tile, the name in ink and a strip of eight covers under it |
@@ -74,6 +74,6 @@ It reads `shared/cover/cover-v1.js` only for the strip of covers on the OG card 
 
 - **Launcher layers:** `apps/mobile/app.json` takes the icon and the adaptive layers from `apps/mobile/assets/brand`, copies of `out/android/icon.png` and `adaptive-*.png`. Copy them again after any rebuild.
 - **Splash:** `apps/mobile/app.json` configures the expo-splash-screen plugin: `splash-icon.png` on paper, #F3F2EE, and in its `dark` block `splash-icon-dark.png` on the dark theme's background, #111112, at an `imageWidth` of 200 dp, from copies in `apps/mobile/assets/brand`. The two images have the same footprint, so the mark sits in the same place in either theme; Android picks the dark pair from the phone's dark theme before the app has run, and the app follows the same setting (flow decision 16). The splash hides when the app is ready, the plugin's default. It is baked into the native project at prebuild, so copy the two PNGs again after a rebuild and make a new development build. At 200 dp the mark reaches about 79 dp from the centre; up to about 244 dp keeps it inside Android 12's 192 dp icon circle.
-- **Media notification icon:** `apps/mobile/plugins/with-shelf-notification.js` copies `out/android/shelf_notification.xml` into the app's drawables at prebuild, and shelf-voice's service sets it on media3's notification provider by name, so a rebuild of the brand files reaches the app at the next prebuild.
+- **Media notification icon:** `apps/mobile/plugins/with-kefli-notification.js` copies `out/android/kefli_notification.xml` into the app's drawables at prebuild, and kefli-voice's service sets it on media3's notification provider by name, so a rebuild of the brand files reaches the app at the next prebuild.
 
 The in-app interface icons are Lucide at 1.75 stroke, plus Shelf's own skip ±15 pair and speed-read icon in `docs/design/icons/app/` (decisions 62 and 65).
