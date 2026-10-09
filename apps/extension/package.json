@@ -10,6 +10,7 @@
     "watch": "node build.mjs dev --watch",
     "typecheck": "tsc --noEmit",
     "fixtures": "node build.mjs dev && node scripts/fixtures.mjs",
+    "normalise": "node scripts/normalise.mjs",
     "shot": "node build.mjs dev && node scripts/chrome.mjs"
   },
   "dependencies": {

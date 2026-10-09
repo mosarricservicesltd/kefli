@@ -24,7 +24,8 @@ const CHROME_KEY = {
 };
 const GECKO_ID = { dev: 'dev@extension.kefli.app', beta: 'beta@extension.kefli.app' };
 
-const flavour = process.argv[2] ?? 'dev';
+const direct = process.argv[1] === fileURLToPath(import.meta.url);
+const flavour = direct ? (process.argv[2] ?? 'dev') : 'dev';
 if (!(flavour in CHROME_KEY)) throw new Error(`unknown flavour ${flavour}: dev or beta`);
 const defaultsUrl = flavour === 'dev' ? 'http://localhost:8447/defaults.json' : process.env.KEFLI_DEFAULTS_URL;
 if (!defaultsUrl || (flavour !== 'dev' && !defaultsUrl.startsWith('https://'))) throw new Error('set KEFLI_DEFAULTS_URL to the operator\'s https defaults.json');
@@ -54,6 +55,18 @@ function manifest(browser) {
 }
 
 const ENTRIES = ['bg', 'options', 'capture', 'toast', 'saved'];
+
+/**
+ * The shared normaliser takes its URL record from whatwg-url, for Hermes; in a browser the platform's URL is the same
+ * Standard, so the extension gets src/urlRecord.ts in its place and leaves out whatwg-url, tr46 and @exodus/bytes (about
+ * 800 KB a bundle). test/urlRecord.test.ts and scripts/normalise.mjs hold it to shared/normalise.fixtures.json.
+ */
+export const platformUrl = {
+  name: 'platform-url',
+  setup(b) {
+    b.onResolve({ filter: /^whatwg-url\/lib\/url-state-machine$/ }, () => ({ path: join(here, 'src', 'urlRecord.ts') }));
+  },
+};
 // The board's static cuts for the options page and the popup (mockup build notes, Fonts); the toast stays system-ui.
 const FONTS = ['Archivo-400', 'Archivo-500', 'Archivo-600', 'ArchivoExpanded-750'];
 
@@ -71,6 +84,7 @@ async function build(browser) {
     legalComments: 'inline',
     define: { KEFLI_DEFAULTS_URL: JSON.stringify(defaultsUrl), KEFLI_FLAVOUR: JSON.stringify(flavour), KEFLI_BROWSER: JSON.stringify(browser) },
     loader: { '.svg': 'text' },
+    plugins: [platformUrl],
     logLevel: 'warning',
   });
   await ctx.rebuild();
@@ -89,8 +103,10 @@ async function build(browser) {
   return ctx;
 }
 
-const contexts = [await build('chrome'), await build('firefox')];
-if (process.argv.includes('--watch')) {
-  await Promise.all(contexts.map((c) => c.watch()));
-  console.log('watching');
-} else await Promise.all(contexts.map((c) => c.dispose()));
+if (direct) {
+  const contexts = [await build('chrome'), await build('firefox')];
+  if (process.argv.includes('--watch')) {
+    await Promise.all(contexts.map((c) => c.watch()));
+    console.log('watching');
+  } else await Promise.all(contexts.map((c) => c.dispose()));
+}
