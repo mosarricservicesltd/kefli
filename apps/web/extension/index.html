@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en-GB" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Install the extension · Kefli</title>
+  <meta name="description" content="Install the Kefli browser extension in Chrome, Brave, Edge or Firefox, and pair it with your phone.">
+  <link rel="canonical" href="%VITE_SITE_URL%/extension/">
+  <meta name="theme-color" content="#F3F2EE">
+  <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <script type="module" src="/src/page.ts"></script>
+</head>
+<body class="page">
+<!--partial:nav-->
+
+<main id="main" class="doc">
+  <div class="wrap">
+    <header>
+      <span class="label">The browser extension</span>
+      <h1>Save from your laptop to your phone.</h1>
+      <p class="lead">Click the Kefli button, press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>, or right-click a link and choose Save link to Kefli. The article is waiting in your library on your phone. Until the extension is in the stores, it installs by hand: this page walks you through it.</p>
+      <span class="updated">Chrome 116 or later, and Brave, Edge, Vivaldi and Arc · Firefox 121 or later</span>
+    </header>
+
+    <nav class="toc" aria-label="On this page">
+      <span class="label">On this page</span>
+      <ol>
+        <li><a href="#chrome">Chrome, Brave and Edge</a></li>
+        <li><a href="#firefox">Firefox</a></li>
+        <li><a href="#pair">Pair with your phone</a></li>
+        <li><a href="#updates">Updates</a></li>
+        <li><a href="#permissions">What it can access</a></li>
+      </ol>
+    </nav>
+
+    <div class="prose">
+      <h2 id="chrome">Chrome, Brave and Edge</h2>
+      <div class="downloads">
+        <a class="btn btn-fill" data-link="CHROME_STORE" href="#">Add from the Chrome Web Store</a>
+        <a class="btn btn-line" data-link="CHROME_ZIP" href="#"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>Download the extension (.zip)</a>
+      </div>
+      <p>Until the store listing is live, install the download by hand:</p>
+      <ol class="steps">
+        <li><span>Unzip the download into a folder you won't delete or move. The browser loads the extension from that folder every time it starts.</span></li>
+        <li><span>Open <code>chrome://extensions</code>. In Brave it's <code>brave://extensions</code>, in Edge <code>edge://extensions</code>.</span></li>
+        <li><span>Switch on <strong>Developer mode</strong>, at the top right of the page.</span></li>
+        <li><span>Press <strong>Load unpacked</strong> and choose the folder you unzipped.</span></li>
+        <li><span>Open the jigsaw-piece menu in the toolbar and pin Kefli, so its button is always to hand.</span></li>
+      </ol>
+      <p>The browser may show a banner suggesting you turn off extensions in developer mode. You can dismiss it; it appears for every extension installed this way.</p>
+
+      <h2 id="firefox">Firefox</h2>
+      <div class="downloads">
+        <a class="btn btn-fill" data-link="FIREFOX_STORE" href="#">Add from Firefox Add-ons</a>
+        <a class="btn btn-line" data-link="FIREFOX_XPI" href="#"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>Download the extension (.xpi)</a>
+      </div>
+      <p>The Firefox download is signed by Mozilla, so it installs like any add-on:</p>
+      <ol class="steps">
+        <li><span>Open the downloaded <code>.xpi</code> file in Firefox, or drag it onto a Firefox window.</span></li>
+        <li><span>Press <strong>Add</strong> when Firefox asks.</span></li>
+        <li><span>Pin Kefli from the extensions menu in the toolbar.</span></li>
+      </ol>
+
+      <h2 id="pair">Pair with your phone</h2>
+      <p>The extension sends what you save to your phone, so it needs to know which phone. It never holds your library's key; it gets a key of its own when you pair.</p>
+      <ol class="steps">
+        <li><span>Click the Kefli button. The first time, it opens its settings page and shows a QR code.</span></li>
+        <li><span>On your phone, open Kefli, go to <strong>You</strong> and choose <strong>Connect a browser</strong>.</span></li>
+        <li><span>Scan the QR code. The extension says it's paired, and you can start saving.</span></li>
+      </ol>
+      <p>To unpair, use the extension's settings page, and remove the browser under <strong>Connected browsers</strong> on your phone as well.</p>
+
+      <h2 id="updates">Updates</h2>
+      <p>The Firefox extension updates itself. The Chrome download doesn't: when there's a new version, unzip it over the same folder and press the reload arrow on the Kefli card in <code>chrome://extensions</code>. Your pairing stays in place.</p>
+      <p>A <strong>BETA</strong> badge on the Kefli button means you're running a test build. Everything works as normal; it's there so testers can tell builds apart.</p>
+
+      <h2 id="permissions">What it can access</h2>
+      <p>The extension asks for as little as it can. It reads a page only when you save it, and never your browsing history.</p>
+      <div class="table">
+        <table>
+          <thead><tr><th scope="col">Permission</th><th scope="col">Why</th></tr></thead>
+          <tbody>
+            <tr><td><code>activeTab</code></td><td>Read the page in front of you, only when you click Save, press the shortcut or use the menu.</td></tr>
+            <tr><td><code>scripting</code></td><td>Run the code that captures the article, and show the Saved to Kefli message on the page.</td></tr>
+            <tr><td><code>storage</code></td><td>Remember the pairing, and hold saves made while you're offline.</td></tr>
+            <tr><td><code>alarms</code></td><td>Try again later when a save couldn't be sent.</td></tr>
+            <tr><td><code>contextMenus</code></td><td>Add Save link to Kefli to the right-click menu.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>It asks for no access to your tabs, history, cookies, notifications or network traffic, and to no websites in advance. <a href="/extension-privacy/">The extension's privacy note</a> sets out what it sends, and where.</p>
+    </div>
+  </div>
+</main>
+
+<!--partial:footer-->
+</body>
+</html>

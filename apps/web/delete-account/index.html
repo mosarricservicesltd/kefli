@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en-GB" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Delete your data · Kefli</title>
+  <meta name="description" content="How to delete your Kefli library from your devices, from Kefli's server and from the backup servers that hold copies.">
+  <link rel="canonical" href="%VITE_SITE_URL%/delete-account/">
+  <meta name="theme-color" content="#F3F2EE">
+  <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <script type="module" src="/src/page.ts"></script>
+</head>
+<body class="page">
+<!--partial:nav-->
+
+<main id="main" class="doc">
+  <div class="wrap">
+    <header>
+      <span class="label">Delete your data</span>
+      <h1>Deleting your Kefli library.</h1>
+      <p class="lead">Kefli has no accounts to close: your library is tied to a key on your phone. Deleting it removes your library from all your devices and from Kefli's server, and asks every backup server to delete its copies.</p>
+      <span class="updated">Last updated 9 October 2026 · Kefli for Android (app.kefli)</span>
+    </header>
+
+    <nav class="toc" aria-label="On this page">
+      <span class="label">On this page</span>
+      <ol>
+        <li><a href="#how">How to delete</a></li>
+        <li><a href="#what">What's deleted</a></li>
+        <li><a href="#nostr">With a nostr app</a></li>
+        <li><a href="#limits">What can't be promised</a></li>
+        <li><a href="#no-app">Without the app</a></li>
+      </ol>
+    </nav>
+
+    <div class="prose">
+      <h2 id="how">How to delete</h2>
+      <ol class="steps">
+        <li><span>Open Kefli on your phone, and make sure it's online.</span></li>
+        <li><span>Go to <strong>You</strong>, then choose <strong>Delete my data</strong> at the bottom.</span></li>
+        <li><span>Read what will be deleted, type <strong>DELETE</strong> to confirm, and press <strong>Delete everything</strong>.</span></li>
+        <li><span>Kefli shows each step as it goes. When it's done, it says <em>Your data is deleted</em> and starts fresh, as if just installed.</span></li>
+      </ol>
+      <p>If Kefli can't reach its server, nothing is deleted, and it says so. Check your connection and try again.</p>
+
+      <h2 id="what">What's deleted</h2>
+      <p>Kefli deletes in this order, so your phone keeps the key the servers need to see until they're done:</p>
+      <ol>
+        <li><strong>Kefli's server.</strong> Your saves and the encrypted text of every article are deleted, and your library is removed from the server.</li>
+        <li><strong>The backup servers.</strong> Kefli asks each server holding copies of your library to delete them.</li>
+        <li><strong>This phone.</strong> Your key, the copy Android keeps to restore it on a new phone, your library and every saved file are deleted.</li>
+      </ol>
+      <p>Encrypted copies can remain in our server's own backups for up to eight weeks, until those backups expire. Nobody can read them without your key.</p>
+
+      <h2 id="nostr">If you signed in with your nostr app</h2>
+      <p>Kefli asks your nostr app to approve the deletion, and nothing is deleted unless you approve it there. Your nostr key itself stays in your nostr app; Kefli deletes your saves and its own data, and leaves everything else your key is used for alone.</p>
+
+      <h2 id="limits">What can't be promised</h2>
+      <div class="note">
+        <span class="label">Backup servers decide for themselves</span>
+        <p>We don't run the backup servers, so we can ask them to delete your copies but can't make them. Anything a server keeps is encrypted, and only your recovery code could open it. Once you've deleted your data, destroy any copy of your recovery code you've kept, and nobody will be able to read it again.</p>
+      </div>
+      <p>If you use your nostr app, the same is true, with the key in your nostr app in place of the recovery code.</p>
+
+      <h2 id="no-app">If you no longer have the app</h2>
+      <p>Your library is tied to your key, not to a name or an email address, so we can't find it or prove it's yours from a message alone. To delete it, install Kefli again, choose to bring back an existing library with your recovery code, and then follow the steps above.</p>
+      <p>If you can't do that, write to <a href="mailto:%VITE_CONTACT_EMAIL%">%VITE_CONTACT_EMAIL%</a> and we'll help. Never send anyone your recovery code. If it's lost, nobody can read your library: without the key, every copy of it is unreadable.</p>
+    </div>
+  </div>
+</main>
+
+<!--partial:footer-->
+</body>
+</html>

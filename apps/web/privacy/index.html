@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en-GB" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Privacy · Kefli</title>
+  <meta name="description" content="What Kefli keeps, where, and who can read it: your saves are encrypted on your phone before they leave it.">
+  <link rel="canonical" href="%VITE_SITE_URL%/privacy/">
+  <meta name="theme-color" content="#F3F2EE">
+  <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <script type="module" src="/src/page.ts"></script>
+</head>
+<body class="page">
+<!--partial:nav-->
+
+<main id="main" class="doc">
+  <div class="wrap">
+    <header>
+      <span class="label">Privacy</span>
+      <h1>What Kefli keeps, and who can read it.</h1>
+      <p class="lead">Your saves are encrypted on your phone before they leave it. We can't read which pages you've saved or what they say. This page sets out what we, and anyone else involved, can see.</p>
+      <span class="updated">Last updated 9 October 2026</span>
+    </header>
+
+    <nav class="toc" aria-label="On this page">
+      <span class="label">On this page</span>
+      <ol>
+        <li><a href="#phone">On your phone</a></li>
+        <li><a href="#server">On our server</a></li>
+        <li><a href="#copies">The copies</a></li>
+        <li><a href="#others">What other sites learn</a></li>
+        <li><a href="#logs">Logs and backups</a></li>
+        <li><a href="#website">This website</a></li>
+        <li><a href="#extension">The browser extension</a></li>
+        <li><a href="#delete">Deleting your data</a></li>
+        <li><a href="#contact">Questions</a></li>
+      </ol>
+    </nav>
+
+    <div class="prose">
+      <h2 id="phone">On your phone</h2>
+      <p>Kefli has no accounts. When you start a library, your phone makes a key that belongs to you alone, and shows it to you as a recovery code. The key stays in your phone's secure storage. Write the recovery code down: it's the only way to bring your library back on a new phone, and we can't recover it for you.</p>
+      <p>Your phone keeps a readable copy of your library in Kefli's private storage, so you can read and listen without a connection. Other apps can't open that storage.</p>
+
+      <h2 id="server">On our server</h2>
+      <p>Each save is encrypted with your key on your phone, and only then sent to Kefli's server. The article's text is encrypted the same way and stored as a separate file. What the server can see is limited to:</p>
+      <ul>
+        <li>your library's public identifier, which is made from your key and doesn't say who you are;</li>
+        <li>how many saves you have, and when each was made or changed;</li>
+        <li>a label showing those saves belong to Kefli;</li>
+        <li>the size of each encrypted file, and how much of your 200 MB of storage they use.</li>
+      </ul>
+      <p>Nobody but you can read which pages you've saved, their titles or their text. Listening uses your phone's own voice, so no server ever sees an article's text in readable form.</p>
+
+      <h2 id="copies">The copies</h2>
+      <p>By default, every save is also copied to independent backup servers that we don't run. That's why your library outlives us: if Kefli closed tomorrow, everything you've already saved would still be there, and still readable and listenable in the app. The backup servers see the same encrypted saves our server sees, and no more.</p>
+      <p>Two things to know about timing:</p>
+      <ul>
+        <li>A new save waits on your phone until our server can be reached, then goes out.</li>
+        <li>A new save can briefly have only Kefli's copy, until a backup server accepts it. The app counts any saves that aren't backed up yet, under Advanced.</li>
+      </ul>
+
+      <h2 id="others">What other sites learn</h2>
+      <p>Some of what Kefli does has to talk to other websites, and they learn a little from it:</p>
+      <ul>
+        <li>When you save a post from X, Kefli asks X for the post, so X learns which post was saved.</li>
+        <li>Pictures in an article are fetched when you read it, so the site hosting a picture learns which article is open.</li>
+        <li>If a site turns Kefli's fetch away, Kefli loads the page once in a browser engine on your phone, which runs the page's own scripts as any browser would.</li>
+      </ul>
+
+      <h2 id="logs">Logs and backups</h2>
+      <p>Nothing in any of our logs is a web address, a title or a piece of text you saved. Our servers log the time, the kind of request, the first part of its path, whether it worked, its size and how long it took. They don't log query strings, sign-in headers, what was sent or the page you came from. Where a log needs to tell libraries apart, it keeps a short, one-way fingerprint of the identifier, never the identifier itself. Logs are deleted after seven days.</p>
+      <p>We back up our server so a fault can't lose your library. Those backups hold the same encrypted files, and are kept for up to eight weeks, so after you delete your data, encrypted copies can remain in them for up to eight weeks before they expire.</p>
+
+      <h2 id="website">This website</h2>
+      <p>This website sets no cookies, runs no analytics and loads nothing from other sites: its fonts, pictures and films are all served from here.</p>
+
+      <h2 id="extension">The browser extension</h2>
+      <p>The extension has its own privacy note, which covers what it reads from a page and where it sends it: <a href="/extension-privacy/">Extension privacy</a>.</p>
+
+      <h2 id="delete">Deleting your data</h2>
+      <p>You can delete your library from all your devices and from our server, from inside the app. <a href="/delete-account/">How to delete your data</a> explains what's deleted, what we ask others to delete, and what can't be promised.</p>
+
+      <h2 id="contact">Questions</h2>
+      <p>Write to <a href="mailto:%VITE_CONTACT_EMAIL%">%VITE_CONTACT_EMAIL%</a>. We'll never ask for your recovery code, and you should never send it to anyone.</p>
+    </div>
+  </div>
+</main>
+
+<!--partial:footer-->
+</body>
+</html>

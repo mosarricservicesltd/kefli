@@ -1,0 +1,28 @@
+{
+  "name": "@kefli/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The Kefli website: the landing page, privacy, the extension install guide and the delete-account page Play requires",
+  "type": "module",
+  "scripts": {
+    "predev": "node scripts/brand.mjs",
+    "dev": "vite",
+    "prebuild": "node scripts/brand.mjs",
+    "build": "vite build",
+    "preview": "vite preview",
+    "fonts": "node scripts/fonts.mjs",
+    "test": "jest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.28.0",
+    "@babel/preset-env": "^7.28.0",
+    "@babel/preset-typescript": "^7.27.0",
+    "@types/jest": "^29.5.14",
+    "babel-jest": "~29.7.0",
+    "jest": "~29.7.0",
+    "subset-font": "2.9.0",
+    "typescript": "~6.0.3",
+    "vite": "8.3.1"
+  }
+}

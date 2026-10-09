@@ -1,0 +1,223 @@
+/* The landing page: the summit above the fog, the sections printed on the paper it becomes,
+   and the dusk that leads into the footer (docs/design/web/option-a-above-the-fog.html). */
+:root {
+  --scene-word: #2B2D31;   /* the wordmark standing among the peaks */
+  --stage-ground: #E2E0DC; /* the summit's sky, under the plate before it loads */
+  --rock: #1A1A1D;         /* the near ridge's rock, below its own photographed edge */
+}
+
+/* Hero: the summit */
+.hero { position: relative; height: 240vh; height: 240svh; background: var(--background); }
+.stage { position: sticky; top: 0; height: 100vh; height: 100svh; min-height: 560px; overflow: hidden; background: var(--stage-ground); }
+/* The frame is the photograph's own box, cover-fitted to the stage by script, so the plate, the video,
+   the wordmark and the cut-out ridge share one coordinate system. The CSS here is the no-script fit. */
+.frame {
+  position: absolute; left: 50%; top: 50%;
+  width: max(100%, calc(100svh * 2.332)); aspect-ratio: 2206 / 946;
+  transform: translate(-50%, -50%);
+  transform-origin: 50% 100%;
+  will-change: transform;
+}
+.frame.fitted { transform: none; }
+.frame > picture, .frame > picture img, .frame > video, .frame > .ridge {
+  position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+}
+.frame > picture img { object-fit: cover; }
+.frame > video { object-fit: cover; opacity: 0; transition: opacity 1.2s ease; }
+.frame > video.on { opacity: 1; }
+.frame > .ridge { z-index: 3; pointer-events: none; }
+/* Rock below the ridge's own bottom edge, for when the near ridge rises during the descent */
+.frame::after { content: ""; position: absolute; left: 0; right: 0; top: 99.5%; height: 60%; background: var(--rock); z-index: 3; }
+.word {
+  position: absolute; z-index: 2; left: 50%; top: 58%;
+  transform: translate3d(-50%, 0, 0);
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700; font-stretch: var(--font-display-stretch);
+  font-size: clamp(5.5rem, 24vw, 26rem);
+  line-height: .78; letter-spacing: -0.045em;
+  color: var(--scene-word);
+  white-space: nowrap;
+  will-change: transform;
+  user-select: none;
+}
+/* The cloud you descend into: a bank of paper-coloured fog that rises from below with a billowing crest,
+   until it is the page. Its solid part starts 30% down, so at the end of the descent it fills the stage. */
+.veil {
+  position: absolute; left: -10%; right: -10%; top: 0; height: 150%; z-index: 3; pointer-events: none;
+  transform: translate3d(0, 100%, 0);
+  will-change: transform;
+  background: linear-gradient(to bottom,
+    color-mix(in srgb, var(--background) 0%, transparent) 0%,
+    color-mix(in srgb, var(--background) 55%, transparent) 12%,
+    color-mix(in srgb, var(--background) 92%, transparent) 22%,
+    var(--background) 30%);
+}
+.veil::before, .veil::after, .dusk-fog::after {
+  content: ""; position: absolute; left: 0; right: 0;
+  filter: blur(14px);
+  animation: billow 26s ease-in-out infinite alternate;
+}
+.veil::before, .veil::after {
+  top: -6%; height: 22%;
+  background:
+    radial-gradient(14% 46% at 8% 70%, rgba(243,242,238,.95), rgba(243,242,238,0) 70%),
+    radial-gradient(18% 60% at 27% 62%, rgba(246,245,242,.9), rgba(246,245,242,0) 70%),
+    radial-gradient(12% 40% at 44% 74%, rgba(243,242,238,.95), rgba(243,242,238,0) 70%),
+    radial-gradient(20% 64% at 63% 60%, rgba(248,247,244,.88), rgba(248,247,244,0) 70%),
+    radial-gradient(13% 44% at 81% 72%, rgba(243,242,238,.95), rgba(243,242,238,0) 70%),
+    radial-gradient(16% 52% at 96% 64%, rgba(246,245,242,.9), rgba(246,245,242,0) 70%);
+}
+.veil::after { top: 2%; opacity: .8; transform: scaleX(-1); animation-duration: 34s; animation-direction: alternate-reverse; }
+@keyframes billow { from { translate: -4% 0; } to { translate: 4% 0; } }
+
+.hero-copy {
+  position: absolute; z-index: 4;
+  top: calc(68px + clamp(28px, 6vh, 72px));
+  left: 0; right: 0;
+  will-change: transform, opacity;
+}
+.hero-copy .inner { max-width: 35rem; display: grid; gap: 18px; }
+.hero-copy .tag {
+  font-family: var(--font-reader); font-weight: 400; font-style: italic;
+  font-size: clamp(1.7rem, 3.2vw, 2.6rem); line-height: 1.12; letter-spacing: -0.01em;
+  font-variation-settings: "opsz" 72;
+}
+.hero-copy .sub { color: var(--body-text); max-width: 31rem; }
+.cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; }
+.cue {
+  position: absolute; z-index: 4; left: 50%; bottom: max(22px, env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 10px; white-space: nowrap;
+  text-decoration: none; color: var(--night-text);
+  text-shadow: 0 1px 8px rgba(17,17,18,.6);
+}
+.cue .label { color: inherit; }
+.cue:focus-visible { outline-color: var(--night-text); }
+.cue svg.i { width: 16px; height: 16px; animation: bob 2.4s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateY(4px); } }
+@media (max-width: 760px) {
+  .hero { height: 200vh; height: 200svh; }
+  .word { font-size: 31vw; }
+  .cue { left: auto; right: var(--gutter); transform: none; }
+  .cue .label { display: none; }
+}
+
+/* Sections, printed on the paper the fog became */
+section.block { padding-block: clamp(84px, 11vw, 168px); position: relative; }
+.head { display: grid; gap: 18px; max-width: 46rem; margin-bottom: clamp(44px, 6vw, 80px); }
+.lead { font-family: var(--font-reader); font-size: clamp(1.1rem, 1.6vw, 1.3rem); line-height: 1.55; color: var(--body-text); max-width: 40rem; }
+
+.trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(24px, 3.5vw, 56px); }
+.step { display: grid; gap: 14px; align-content: start; padding-top: 22px; border-top: 1px solid var(--text); }
+.step .top { display: flex; align-items: center; justify-content: space-between; }
+.step p { font-family: var(--font-reader); color: var(--body-text); }
+@media (max-width: 860px) { .trio { grid-template-columns: 1fr; } }
+
+/* Kept, with a hairline echo of the ridges behind it */
+.kept { overflow: hidden; border-top: 1px solid var(--line); }
+.echo { position: absolute; inset: 0 0 auto 0; height: 260px; pointer-events: none; }
+.echo svg { width: 100%; height: 100%; display: block; }
+.drift {
+  position: absolute; left: -20%; right: -20%; top: 120px; height: 140px; pointer-events: none;
+  background:
+    radial-gradient(40% 50% at 30% 50%, rgba(255,255,255,.95), rgba(255,255,255,0) 70%),
+    radial-gradient(35% 45% at 72% 40%, rgba(255,255,255,.85), rgba(255,255,255,0) 70%);
+  filter: blur(8px);
+  animation: drift 38s ease-in-out infinite alternate;
+}
+@keyframes drift { to { transform: translate3d(9%, 0, 0); } }
+.kept .wrap { position: relative; }
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--line); }
+.fact { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 18px; padding: 30px 28px 34px 0; border-bottom: 1px solid var(--line); }
+.fact:nth-child(odd) { border-right: 1px solid var(--line); }
+.fact:nth-child(even) { padding-left: 28px; }
+.fact .ic { width: 44px; height: 44px; border: 1px solid var(--line-strong); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
+.fact .ic svg.i { width: 20px; height: 20px; }
+.fact div { display: grid; gap: 8px; }
+.fact p { font-family: var(--font-reader); color: var(--body-text); }
+.fact a { text-underline-offset: 3px; }
+@media (max-width: 760px) {
+  .facts { grid-template-columns: 1fr; }
+  .fact, .fact:nth-child(even) { padding: 26px 0; border-right: 0; }
+  .fact:nth-child(odd) { border-right: 0; }
+}
+
+/* The name */
+.name { border-top: 1px solid var(--line); }
+.name .grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: clamp(36px, 6vw, 96px); align-items: center; }
+.say { display: grid; gap: 22px; justify-items: start; }
+.big {
+  font-family: var(--font-reader); font-style: italic; font-weight: 300;
+  font-size: clamp(5rem, 13vw, 11rem); line-height: .9; letter-spacing: -0.03em;
+  font-variation-settings: "opsz" 72;
+}
+.mark { display: flex; align-items: center; gap: 16px; }
+.mark img { width: 64px; height: 64px; border-radius: 15px; display: block; }
+.name .text { display: grid; gap: 20px; }
+.name .text p { font-family: var(--font-reader); font-size: 1.12rem; color: var(--body-text); }
+.name .text em { color: var(--text); }
+@media (max-width: 860px) { .name .grid { grid-template-columns: 1fr; } }
+
+/* Get Kefli */
+.get { border-top: 1px solid var(--line); }
+.cards { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.card { background: var(--surface); border: var(--card-edge); border-radius: var(--radius); padding: clamp(22px, 2.6vw, 34px); display: grid; gap: 16px; align-content: start; }
+.card .top { display: flex; align-items: center; gap: 12px; }
+.card p { font-family: var(--font-reader); color: var(--body-text); }
+.card .cta { margin-top: 4px; }
+.meta { font-family: var(--font-mono); font-size: 12px; color: var(--muted); letter-spacing: .02em; }
+.pill {
+  display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px; justify-self: start;
+  border: 1px dashed var(--line-strong); border-radius: var(--radius-pill);
+  font: 500 12px/1 var(--font-mono); color: var(--muted);
+}
+.guide { margin-top: 28px; display: inline-flex; align-items: center; gap: 8px; font-weight: 600; text-decoration: none; border-bottom: 1px solid var(--text); padding-bottom: 2px; }
+.guide svg.i { width: 16px; height: 16px; }
+@media (max-width: 960px) { .cards { grid-template-columns: 1fr 1fr; } .cards .card:first-child { grid-column: 1 / -1; } }
+@media (max-width: 620px) { .cards { grid-template-columns: 1fr; } }
+
+/* The dusk: out from under the cloud. The same peaks after sunset; the paper fog thins and lifts as you
+   scroll in, and the near ridge sinks into the footer's graphite. */
+.dusk { position: relative; height: clamp(380px, 56vw, 780px); overflow: hidden; background: var(--graphite); }
+.dusk-scene { position: absolute; inset: 0; transform-origin: 50% 80%; will-change: transform; }
+.dusk-scene picture, .dusk-scene img, .dusk-scene video {
+  position: absolute; inset: 0; width: 100%; height: 100%; display: block; object-fit: cover; object-position: 40% 62%;
+}
+.dusk-scene video { opacity: 0; transition: opacity 1.2s ease; }
+.dusk-scene video.on { opacity: 1; }
+.dusk-fog {
+  position: absolute; left: -10%; right: -10%; top: 0; height: 62%; z-index: 2; pointer-events: none;
+  background: linear-gradient(to bottom, var(--background) 0%, var(--background) 18%,
+    color-mix(in srgb, var(--background) 90%, transparent) 34%,
+    color-mix(in srgb, var(--background) 50%, transparent) 58%, transparent 100%);
+  will-change: transform, opacity;
+}
+.dusk-fog::after {
+  top: 52%; height: 40%;
+  background:
+    radial-gradient(14% 46% at 10% 40%, rgba(243,242,238,.8), rgba(243,242,238,0) 70%),
+    radial-gradient(18% 56% at 31% 30%, rgba(243,242,238,.7), rgba(243,242,238,0) 70%),
+    radial-gradient(13% 42% at 52% 44%, rgba(243,242,238,.75), rgba(243,242,238,0) 70%),
+    radial-gradient(20% 60% at 72% 32%, rgba(243,242,238,.65), rgba(243,242,238,0) 70%),
+    radial-gradient(14% 44% at 92% 42%, rgba(243,242,238,.8), rgba(243,242,238,0) 70%);
+  filter: blur(16px);
+  animation-duration: 30s;
+}
+/* The join with the page above never moves, so paper always meets paper */
+.dusk::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 26%; z-index: 2; pointer-events: none;
+  background: linear-gradient(to bottom, var(--background), color-mix(in srgb, var(--background) 82%, transparent) 35%, transparent);
+}
+.dusk::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 34%; z-index: 2; pointer-events: none;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--graphite) 0%, transparent), color-mix(in srgb, var(--graphite) 75%, transparent) 55%, var(--graphite));
+}
+
+/* Reduced motion: the photographs alone, no loops, no descent, nothing drifting */
+@media (prefers-reduced-motion: reduce) {
+  .hero { height: auto; }
+  .stage { position: relative; }
+  .cue svg.i, .veil::before, .veil::after, .drift, .dusk-fog::after { animation: none; }
+  .stage::after { content: ""; position: absolute; inset: auto 0 0 0; height: 18%; z-index: 3; background: linear-gradient(to bottom, transparent, var(--background)); }
+}

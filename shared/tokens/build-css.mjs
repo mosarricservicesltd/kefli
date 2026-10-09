@@ -142,3 +142,13 @@ const lines = [
 const out = join(repo, 'docs', 'design', 'mockups', 'tokens.css');
 writeFileSync(out, lines.join('\n'));
 console.log(`wrote ${out}`);
+
+// The website serves its own font files, so a visit asks no third party for anything: the same tokens,
+// with the Google Fonts import swapped for apps/web's fonts.css (made by apps/web/scripts/fonts.mjs).
+const webLines = lines.map((l) =>
+  l.startsWith('@import') ? `@import './fonts.css';`
+  : l.startsWith('/* Web fonts for') ? `/* The website's copy: the fonts are self-hosted from shared/fonts/src (apps/web/scripts/fonts.mjs). */`
+  : l);
+const webOut = join(repo, 'apps', 'web', 'src', 'styles', 'tokens.css');
+writeFileSync(webOut, webLines.join('\n'));
+console.log(`wrote ${webOut}`);

@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en-GB" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Kefli: read it later, keep it for good</title>
+  <meta name="description" content="A free read-it-later app. Save from anywhere, read it clean, listen on the go. Your library lives under your own key, so it outlives us.">
+  <link rel="canonical" href="%VITE_SITE_URL%/">
+  <meta name="theme-color" content="#F3F2EE">
+  <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Kefli">
+  <meta property="og:description" content="A free read-it-later app. Save from anywhere, read it clean, listen on the go. Your library outlives us.">
+  <meta property="og:url" content="%VITE_SITE_URL%/">
+  <meta property="og:image" content="%VITE_SITE_URL%/og-card.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="preload" href="/fonts/archivo.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/media/plate-1600.avif" as="image" type="image/avif" fetchpriority="high">
+  <script type="module" src="/src/landing.ts"></script>
+</head>
+<body class="landing">
+<!--partial:nav-->
+
+<main id="main">
+  <section class="hero" id="hero" aria-label="Kefli">
+    <div class="stage" id="stage">
+      <div class="frame" id="frame">
+        <picture>
+          <source type="image/avif" srcset="/media/plate-960.avif 960w, /media/plate-1600.avif 1600w, /media/plate-2206.avif 2206w" sizes="(max-width: 760px) 240vh, 100vw">
+          <source type="image/webp" srcset="/media/plate-960.webp 960w, /media/plate-1600.webp 1600w, /media/plate-2206.webp 2206w" sizes="(max-width: 760px) 240vh, 100vw">
+          <img src="/media/plate-2206.jpg" alt="" decoding="async" fetchpriority="high">
+        </picture>
+        <video id="loop" muted loop playsinline preload="none" aria-hidden="true"></video>
+        <h1 class="word" id="word">Kefli</h1>
+        <img class="ridge" id="ridge" src="/media/ridge-2206.webp" srcset="/media/ridge-1280.webp 1280w, /media/ridge-2206.webp 2206w" sizes="(max-width: 760px) 240vh, 100vw" alt="" decoding="async">
+      </div>
+      <div class="veil" id="veil" aria-hidden="true"></div>
+      <div class="hero-copy" id="heroCopy">
+        <div class="wrap">
+          <div class="inner">
+            <span class="label">Free · Android and your browser</span>
+            <p class="tag">Save it now. Read it in the quiet.</p>
+            <p class="sub">A free read-it-later app. Save from anywhere, read it clean, listen on the go. Your library lives under your own key, so it outlives us.</p>
+            <div class="cta">
+              <a class="btn btn-fill" href="#get">Get Kefli</a>
+              <a class="btn btn-line" href="#how">How it works</a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <a class="cue" id="cue" href="#how" aria-label="Down through the cloud to how it works"><span class="label">Down through the cloud</span><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg></a>
+    </div>
+  </section>
+
+  <section class="block how" id="how">
+    <div class="wrap">
+      <div class="head">
+        <span class="label">How it works</span>
+        <h2>Everything you meant to read, kept.</h2>
+      </div>
+      <div class="trio">
+        <article class="step">
+          <div class="top"><span class="label">Save</span><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></svg></div>
+          <h3>Save from anywhere</h3>
+          <p>Share a link from any app on your phone, or click the extension in Chrome or Firefox. Kefli fetches the article and keeps its text.</p>
+        </article>
+        <article class="step">
+          <div class="top"><span class="label">Read</span><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></div>
+          <h3>Read it clean</h3>
+          <p>Just the words and pictures, set for reading, without the clutter around them. It's all on your phone, so it reads the same on a train with no signal.</p>
+        </article>
+        <article class="step">
+          <div class="top"><span class="label">Listen</span><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg></div>
+          <h3>Listen on the go</h3>
+          <p>Any article can be read aloud in your phone's own voice. Lock the screen and keep listening, with the controls on the lock screen.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="block kept" id="kept">
+    <div class="echo" id="echo" aria-hidden="true"></div>
+    <div class="drift" aria-hidden="true"></div>
+    <div class="wrap">
+      <div class="head">
+        <span class="label">Kept</span>
+        <h2>Your library outlives us.</h2>
+        <p class="lead">A read-it-later app is only as good as its promise to keep what you give it. Kefli is built so that promise doesn't depend on us.</p>
+      </div>
+      <div class="facts">
+        <div class="fact">
+          <span class="ic"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+          <div><h3>Encrypted on your phone</h3><p>Your saves are encrypted with your own key before they leave your phone, so we can't read what you've saved.</p></div>
+        </div>
+        <div class="fact">
+          <span class="ic"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></span>
+          <div><h3>Copied beyond our servers</h3><p>By default your library is also copied to servers we don't run. If Kefli closed tomorrow, your library would still be there. <a href="/privacy/#copies">How the copies work</a></p></div>
+        </div>
+        <div class="fact">
+          <span class="ic"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></svg></span>
+          <div><h3>No signup</h3><p>Start a library and write down your recovery code. There's no email address, no password and no profile. No feed, no tags, no social layer either.</p></div>
+        </div>
+        <div class="fact">
+          <span class="ic"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span>
+          <div><h3>Open source</h3><p>The apps are published under the AGPL, so anyone can read what they do and keep them running.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block name" id="name">
+    <div class="wrap grid">
+      <div class="say">
+        <span class="big" lang="non">kefli</span>
+        <div class="mark"><img src="/mark-full.svg" alt="" width="64" height="64"><span class="label">Said KEF-lee</span></div>
+      </div>
+      <div class="text">
+        <span class="label">The name</span>
+        <p><em>Kefli</em> is Old Norse for a short wooden stick. Rune sticks, <em lang="non">rúnakefli</em>, were everyday notes and labels carved into wood so they could be carried and kept.</p>
+        <p>Many are still legible after centuries in the ground. A note made to outlast the hand that carved it is what we want your library to be.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="block get" id="get">
+    <div class="wrap">
+      <div class="head">
+        <span class="label">Get Kefli</span>
+        <h2>Free on Android and in your browser.</h2>
+      </div>
+      <div class="cards">
+        <article class="card">
+          <div class="top"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg><h3>Android</h3></div>
+          <p>Kefli isn't on Google Play yet. Until it is, install it from Zapstore, or download the APK and install it yourself.</p>
+          <div class="cta">
+            <a class="btn btn-fill" data-link="ZAPSTORE" href="#">Get it on Zapstore</a>
+            <a class="btn btn-line" data-link="APK" href="#"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>Download the APK</a>
+          </div>
+          <span class="meta">%VITE_APK_LABEL%</span>
+          <span class="pill">Coming to Google Play</span>
+        </article>
+        <article class="card">
+          <div class="top"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg><h3>Chrome</h3></div>
+          <p>Save the page you're reading with one click, and it's waiting on your phone. Works in Chrome, Brave and Edge.</p>
+          <div class="cta"><a class="btn btn-line" href="/extension/#chrome">Install for Chrome</a></div>
+        </article>
+        <article class="card">
+          <div class="top"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg><h3>Firefox</h3></div>
+          <p>The same extension for Firefox. Click once and the article is in your library.</p>
+          <div class="cta"><a class="btn btn-line" href="/extension/#firefox">Install for Firefox</a></div>
+        </article>
+      </div>
+      <a class="guide" href="/extension/">How to install the extension<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
+    </div>
+  </section>
+
+  <div class="dusk" id="dusk" aria-hidden="true">
+    <div class="dusk-scene" id="duskScene">
+      <picture>
+        <source type="image/avif" srcset="/media/dusk-960.avif 960w, /media/dusk-1600.avif 1600w, /media/dusk-2206.avif 2206w" sizes="100vw">
+        <source type="image/webp" srcset="/media/dusk-960.webp 960w, /media/dusk-1600.webp 1600w, /media/dusk-2206.webp 2206w" sizes="100vw">
+        <img src="/media/dusk-2206.jpg" alt="" loading="lazy" decoding="async">
+      </picture>
+      <video id="duskLoop" muted loop playsinline preload="none"></video>
+    </div>
+    <div class="dusk-fog" id="duskFog"></div>
+  </div>
+</main>
+
+<!--partial:footer-->
+</body>
+</html>

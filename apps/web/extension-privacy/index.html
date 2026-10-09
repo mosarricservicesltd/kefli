@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en-GB" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Extension privacy · Kefli</title>
+  <meta name="description" content="What the Kefli browser extension reads, what it sends and where: only the pages you save, encrypted before they leave your browser.">
+  <link rel="canonical" href="%VITE_SITE_URL%/extension-privacy/">
+  <meta name="theme-color" content="#F3F2EE">
+  <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <script type="module" src="/src/page.ts"></script>
+</head>
+<body class="page">
+<!--partial:nav-->
+
+<main id="main" class="doc">
+  <div class="wrap">
+    <header>
+      <span class="label">Extension privacy</span>
+      <h1>The browser extension's privacy note.</h1>
+      <p class="lead">The Kefli browser extension saves web pages to the Kefli app on your phone. It reads a page only when you save it, encrypts what it captures before it leaves your browser, and collects nothing else.</p>
+      <span class="updated">Last updated 9 October 2026</span>
+    </header>
+
+    <nav class="toc" aria-label="On this page">
+      <span class="label">On this page</span>
+      <ol>
+        <li><a href="#reads">What it reads</a></li>
+        <li><a href="#sends">What it sends</a></li>
+        <li><a href="#keeps">What it keeps</a></li>
+        <li><a href="#never">What it never does</a></li>
+        <li><a href="#contact">Questions</a></li>
+      </ol>
+    </nav>
+
+    <div class="prose">
+      <h2 id="reads">What it reads</h2>
+      <p>When you click Save, press the shortcut or choose Save link to Kefli, the extension reads the page in front of you: the article's text, its title, its author and its address. It reads nothing at any other time, and never pages you don't save.</p>
+
+      <h2 id="sends">What it sends</h2>
+      <p>The extension encrypts the capture in your browser, with a new key made for that one save, and sends it to Kefli's server for your phone to collect:</p>
+      <ul>
+        <li>the encrypted capture, which expires from Kefli's server after 14 days;</li>
+        <li>a sealed message to your phone with the page's address, title, site and author and the key that opens the capture. Only your phone can open it, and it's deleted once your phone has it, or after 30 days.</li>
+      </ul>
+      <p>If a page couldn't be captured, the message carries just its address and title, and your phone fetches the page itself.</p>
+      <p>Your phone then saves the article to your library in the usual way (see <a href="/privacy/">Privacy</a>). Kefli's server can't read the capture or the message; it sees only encrypted files, their sizes, and when they were sent.</p>
+      <p>When you pair the extension with your phone, the two exchange keys through Kefli's server, the same way. The extension never holds your library's key: it has a key of its own, which your phone can remove under Connected browsers.</p>
+
+      <h2 id="keeps">What it keeps</h2>
+      <p>In your browser's storage for the extension, it keeps the pairing (your library's public identifier, the servers to send to, and the date you paired) and any saves waiting to be sent while you're offline, already encrypted. Unpairing deletes them.</p>
+
+      <h2 id="never">What it never does</h2>
+      <ul>
+        <li>It collects no analytics, and sends nothing about you or your browsing to us or anyone else.</li>
+        <li>It doesn't read your history, your other tabs, your cookies or your network traffic.</li>
+        <li>It doesn't show adverts or sell data, and it has no data to sell.</li>
+      </ul>
+
+      <h2 id="contact">Questions</h2>
+      <p>Write to <a href="mailto:%VITE_CONTACT_EMAIL%">%VITE_CONTACT_EMAIL%</a>.</p>
+    </div>
+  </div>
+</main>
+
+<!--partial:footer-->
+</body>
+</html>

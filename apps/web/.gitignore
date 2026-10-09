@@ -1,0 +1,13 @@
+dist/
+.env.local
+# Copied from shared/brand/out/web by scripts/brand.mjs
+public/apple-touch-icon.png
+public/favicon.ico
+public/favicon.svg
+public/icon-192.png
+public/icon-512.png
+public/maskable-512.png
+public/og-card.png
+public/site.webmanifest
+public/mark-28.svg
+public/mark-full.svg

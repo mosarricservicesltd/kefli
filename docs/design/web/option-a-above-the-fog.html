@@ -339,13 +339,13 @@ footer .brand svg { width: 26px; height: 26px; }
     <div class="stage" id="stage">
       <div class="frame" id="frame">
         <picture>
-          <source type="image/avif" srcset="assets/plate-960.avif 960w, assets/plate-1600.avif 1600w, assets/plate-2206.avif 2206w" sizes="(max-width: 760px) 240vh, 100vw">
-          <source type="image/webp" srcset="assets/plate-960.webp 960w, assets/plate-1600.webp 1600w, assets/plate-2206.webp 2206w" sizes="(max-width: 760px) 240vh, 100vw">
-          <img src="assets/plate-2206.jpg" alt="" decoding="async" fetchpriority="high">
+          <source type="image/avif" srcset="../../../apps/web/public/media/plate-960.avif 960w, ../../../apps/web/public/media/plate-1600.avif 1600w, ../../../apps/web/public/media/plate-2206.avif 2206w" sizes="(max-width: 760px) 240vh, 100vw">
+          <source type="image/webp" srcset="../../../apps/web/public/media/plate-960.webp 960w, ../../../apps/web/public/media/plate-1600.webp 1600w, ../../../apps/web/public/media/plate-2206.webp 2206w" sizes="(max-width: 760px) 240vh, 100vw">
+          <img src="../../../apps/web/public/media/plate-2206.jpg" alt="" decoding="async" fetchpriority="high">
         </picture>
         <video id="loop" muted loop playsinline preload="none" aria-hidden="true"></video>
         <h1 class="word" id="word">Kefli</h1>
-        <img class="ridge" src="assets/ridge-2206.webp" srcset="assets/ridge-1280.webp 1280w, assets/ridge-2206.webp 2206w" sizes="(max-width: 760px) 240vh, 100vw" alt="" decoding="async">
+        <img class="ridge" src="../../../apps/web/public/media/ridge-2206.webp" srcset="../../../apps/web/public/media/ridge-1280.webp 1280w, ../../../apps/web/public/media/ridge-2206.webp 2206w" sizes="(max-width: 760px) 240vh, 100vw" alt="" decoding="async">
       </div>
       <div class="veil" id="veil" aria-hidden="true"></div>
       <div class="hero-copy" id="heroCopy">
@@ -471,9 +471,9 @@ footer .brand svg { width: 26px; height: 26px; }
   <div class="dusk" id="dusk" aria-hidden="true">
     <div class="dusk-scene" id="duskScene">
       <picture>
-        <source type="image/avif" srcset="assets/dusk-960.avif 960w, assets/dusk-1600.avif 1600w, assets/dusk-2206.avif 2206w" sizes="100vw">
-        <source type="image/webp" srcset="assets/dusk-960.webp 960w, assets/dusk-1600.webp 1600w, assets/dusk-2206.webp 2206w" sizes="100vw">
-        <img src="assets/dusk-2206.jpg" alt="" loading="lazy" decoding="async">
+        <source type="image/avif" srcset="../../../apps/web/public/media/dusk-960.avif 960w, ../../../apps/web/public/media/dusk-1600.avif 1600w, ../../../apps/web/public/media/dusk-2206.avif 2206w" sizes="100vw">
+        <source type="image/webp" srcset="../../../apps/web/public/media/dusk-960.webp 960w, ../../../apps/web/public/media/dusk-1600.webp 1600w, ../../../apps/web/public/media/dusk-2206.webp 2206w" sizes="100vw">
+        <img src="../../../apps/web/public/media/dusk-2206.jpg" alt="" loading="lazy" decoding="async">
       </picture>
       <video id="duskLoop" muted loop playsinline preload="none"></video>
     </div>
@@ -572,7 +572,7 @@ footer .brand svg { width: 26px; height: 26px; }
     if ("IntersectionObserver" in window) {
       new IntersectionObserver(function (es) {
         if (es[0].isIntersecting) {
-          if (!loop.src) { loop.src = window.innerWidth < 760 ? "assets/dusk-loop-1280.mp4" : "assets/dusk-loop-1920.mp4"; loop.preload = "auto"; }
+          if (!loop.src) { loop.src = window.innerWidth < 760 ? "../../../apps/web/public/media/dusk-loop-1280.mp4" : "../../../apps/web/public/media/dusk-loop-1920.mp4"; loop.preload = "auto"; }
           var pr = loop.play(); if (pr && pr.catch) pr.catch(function () {});
         } else if (loop.src) loop.pause();
       }, { rootMargin: "200px" }).observe(dusk);
@@ -651,7 +651,7 @@ footer .brand svg { width: 26px; height: 26px; }
   if (RM) { place(0, 0, 0); return; }
 
   // The cloud loop: a smaller file on phones; it fades in over the still once it plays.
-  video.src = window.innerWidth < 760 ? "assets/loop-1280.mp4" : "assets/loop-1920.mp4";
+  video.src = window.innerWidth < 760 ? "../../../apps/web/public/media/loop-1280.mp4" : "../../../apps/web/public/media/loop-1920.mp4";
   video.preload = "auto";
   video.addEventListener("playing", function () { video.classList.add("on"); });
   function playLoop() { var p = video.play(); if (p && p.catch) p.catch(function () {}); }
