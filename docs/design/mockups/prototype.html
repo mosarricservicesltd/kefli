@@ -454,6 +454,23 @@ svg .arc{transform-box:view-box;transform-origin:center}
 
 /* ---------- first launch, return and pushed screens ---------- */
 .onb{background:var(--background);color:var(--text)}
+/* The launch screen (decision 97): the system splash's mark in the same place (the icon's central 72 dp drawn at 200 dp),
+   then the name and the Hávamál lines fade in; it holds, then fades out over the first screen beneath it. */
+.launch{position:absolute;inset:0;z-index:40;background:var(--background);color:var(--text);transition:opacity var(--motion-launch-out)}
+.launch.out{opacity:0;pointer-events:none}
+.launch .mark{position:absolute;left:50%;top:50%;width:200px;height:200px;margin:-100px 0 0 -100px}
+.launch .in{opacity:0;animation:launchIn var(--motion-launch-in) var(--motion-launch-in-delay) forwards}
+.launch .name{position:absolute;left:0;right:0;top:calc(50% + 76px);text-align:center;margin:0;font-family:var(--font-display);font-stretch:var(--font-display-stretch);font-weight:var(--font-display-weight);letter-spacing:var(--font-display-tracking);font-size:var(--text-28);line-height:var(--leading-display)}
+/* the lines sit midway between the name (76 px below centre, 28 at the display leading) and the bottom of the screen */
+.launch blockquote{position:absolute;left:var(--gutter);right:var(--gutter);top:calc(50% + 76px + var(--text-28) * var(--leading-display));bottom:0;margin:0;display:flex;flex-direction:column;justify-content:center;text-align:center;font-family:var(--font-reader);font-style:italic}
+.launch blockquote p{margin:0;text-wrap:balance}
+/* the block is as wide as the Old Norse; the English wraps inside that width and adds none of its own */
+.launch .q{width:fit-content;margin:0 auto}
+.launch .q .en,.launch .q cite{width:0;min-width:100%}
+.launch .non{font-size:var(--text-17);line-height:1.4}
+.launch .en{font-size:var(--text-15);line-height:1.4;color:var(--muted);margin-top:var(--space-24)}
+.launch cite{display:block;margin-top:var(--space-8);font-family:var(--font-ui);font-style:normal;font-size:var(--text-13);color:var(--muted)}
+@keyframes launchIn{to{opacity:1}}
 .onbtop{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 var(--space-8);position:relative}
 /* the large title fades into the pinned bar once it scrolls under it (fix 15) */
 .onbtop .bartitle{position:absolute;left:64px;right:var(--gutter);top:0;line-height:56px;font-size:var(--text-15);font-weight:var(--weight-title);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:0;transition:opacity var(--motion-quick-out);pointer-events:none}
@@ -825,6 +842,8 @@ svg .arc{transform-box:view-box;transform-origin:center}
     </div>
     <h2>First launch and return (batch 3)</h2>
     <div class="btns">
+      <button data-jump="launch">Launch screen, then Welcome</button>
+      <button data-jump="launch-return">Launch screen, then Saves</button>
       <button data-jump="welcome">Welcome</button>
       <button data-jump="welcome-early">Welcome, after an early share</button>
       <button data-jump="welcome-early-many">…after several early shares</button>
@@ -1645,6 +1664,38 @@ function welcomeScreen(){
       <button class="btn secondary full" data-onb-go="return">I already have a library</button>
       <p class="fine">${ic('shield', 14)}No account, no email. Private to you.</p>
     </div></div>`;
+}
+
+// The launch screen on a cold open (decision 97, motion.launch). The mark is D's, the system splash's own drawing in
+// the theme's text colour, so the hand-over from the splash doesn't move it.
+const LAUNCH_MARK = `<svg class="mark" viewBox="18 18 72 72" aria-hidden="true" focusable="false"><g transform="translate(54 54) scale(0.9) translate(-54 -54)"><path fill="currentColor" fill-rule="evenodd" d="M37.368 28.885L48.974 28.885A1.919 1.919 0 0 1 50.893 30.804L50.893 61.439A1.919 1.919 0 0 1 48.014 63.101L33.21 54.554A1.919 1.919 0 0 1 32.25 52.892L32.25 34.003A5.118 5.118 0 0 1 37.368 28.885ZM35.129 61.403L46.15 67.766A1.919 1.919 0 0 1 46.15 71.09L35.129 77.453A1.919 1.919 0 0 1 32.25 75.791L32.25 63.065A1.919 1.919 0 0 1 35.129 61.403ZM59.026 28.885L70.632 28.885A5.118 5.118 0 0 1 75.75 34.003L75.75 75.791A1.919 1.919 0 0 1 72.871 77.453L58.067 68.905A1.919 1.919 0 0 1 57.107 67.243L57.107 30.804A1.919 1.919 0 0 1 59.026 28.885Z"/></g></svg>`;
+function launchScreen(){
+  return `<div class="launch${S.launch === 'out' ? ' out' : ''}" data-mk="screen-launch" data-launch-lift role="button" aria-label="Kefli. Cattle die, kinsmen die, but the good name never dies. Hávamál.">
+    ${LAUNCH_MARK}
+    <h1 class="name in" aria-hidden="true">Kefli</h1>
+    <blockquote class="in" aria-hidden="true"><div class="q">
+      <p class="non" lang="non">Deyr fé, deyja frændr …<br>en orðstírr deyr aldregi.</p>
+      <p class="en">Cattle die, kinsmen die …<br>but the good name<br>never dies.</p>
+      <cite>Hávamál</cite>
+    </div></blockquote></div>`;
+}
+// It holds for motion.launch's hold from its first frame, then fades over the first screen; Welcome's covers start
+// drawing as the fade ends.
+function startLaunch(){
+  const cs = getComputedStyle(document.documentElement);
+  const hold = parseFloat(cs.getPropertyValue('--motion-launch-hold')) || 2000;
+  const out = parseFloat(cs.getPropertyValue('--motion-launch-out')) || 300;
+  S.launch = 'hold';
+  if (S.firstLaunch) S.welcomeT0 = performance.now() + hold + out;
+  // a tap anywhere dismisses it early
+  const lift = () => {
+    if (S.launch !== 'hold') return;
+    S.launch = 'out';
+    vp.querySelector(':scope > .launch')?.classList.add('out');
+    later(() => { if (S.launch !== 'out') return; S.launch = null; vp.querySelector(':scope > .launch')?.remove(); }, out);
+  };
+  later(lift, hold);
+  S.launchLift = () => { if (S.firstLaunch && S.launch === 'hold') S.welcomeT0 = performance.now() + out; lift(); };
 }
 
 function returnScreen(){
@@ -3713,7 +3764,7 @@ function render(){
   else if (S.screen === 'delete') html = deleteScreen();
   let sheet = sheetHTML();
   if (S.sheet) sheet = sheet.replace('class="scrim"', `class="scrim" data-mk="scrim-${S.sheet}"`);
-  vp.innerHTML = html + playerHTML() + toastHTML() + sheet + lockHTML() + rsvpHTML();
+  vp.innerHTML = html + playerHTML() + toastHTML() + sheet + lockHTML() + rsvpHTML() + (S.launch ? launchScreen() : '');
   S.playerEnter = false;
   // leaving rows keep flying or fading if the same list re-renders under them
   const newScroll = vp.querySelector(':scope > .screen > .scroll:not(#rs)');
@@ -3929,6 +3980,8 @@ function openItem(id, back){
 
 /* ---------------- events ---------------- */
 vp.addEventListener('click', e => {
+  // the launch screen takes every tap while it holds, and a tap ends the hold (decision 97)
+  if (e.target.closest('[data-launch-lift]')) { S.launchLift?.(); return; }
   const t = e.target.closest('[data-keep-copies],[data-tab],[data-list],[data-go],[data-back],[data-clear],[data-sheet],[data-close],[data-rtheme],[data-size],[data-delete],[data-undo],[data-undo-share],[data-readnow],[data-archive-open],[data-next],[data-stop],[data-play],[data-skip],[data-rate],[data-listen],[data-playall],[data-playitem],[data-open-audio],[data-stop-audio],[data-rsvp],[data-rsvp-exit],[data-rsvp-toggle],[data-rsvp-sent],[data-wpm],[data-rsvp-archive],[data-rsvp-unarchive],[data-new],[data-onb-go],[data-allow-camera],[data-perm],[data-open-settings],[data-paste],[data-sugg],[data-code-continue],[data-code-retry],[data-nostr],[data-link-go],[data-import],[data-open],[data-rowmenu],[data-row-restore],[data-row-delete],[data-unarchive-open],[data-orig],[data-orig-close],[data-copylink],[data-openbrowser]');
   if (!t || t.closest('.ghost')) return;
   const d = t.dataset;
@@ -4149,7 +4202,7 @@ function jumpTo(b){
   S.listenMini = false; S.playerEnter = false; S.restoreScroll = null; S.restoreListenMini = false; S.searchFocus = false;
   S.shareRemoved = false; S.shareT = null; S.lastKey = null; S.lastSheet = null; S.lastNav = null; S.navHint = null;
   S.exiting = null; S.opened = null; S.plate = null; S.rowExit = null; S.skipFx = null; S.sizeAnchor = null; S.searchReturn = null; S.rsvpGlide = null;
-  S.searchNone = false; S.searchLast = null; S.listScroll = {}; S.tabScroll = {}; S.firstLaunch = false; S.welcomeT0 = null; S.welcomeLine = false; S.sheetRelease = null;
+  S.searchNone = false; S.searchLast = null; S.listScroll = {}; S.tabScroll = {}; S.firstLaunch = false; S.welcomeT0 = null; S.welcomeLine = false; S.sheetRelease = null; S.launch = null;
   clearTimeout(rsvpTimer); S.rsvp = null; S.flashWord = null;
   S.you = freshYou();
   clearOnb(); clearRestore(); S.early = 0; S.restoring = null; S.onbOffline = false; S.scan = 'prime'; S.six = ''; S.nostr = 'intro'; S.keepCopies = true; S.code = freshCode();
@@ -4157,6 +4210,8 @@ function jumpTo(b){
   if (youJump(j)) return;
   // Welcome on first launch: its covers draw and the front card's line catches up, once
   if (j === 'welcome') { S.screen = 'welcome'; S.items = []; S.firstLaunch = true; }
+  if (j === 'launch') { S.screen = 'welcome'; S.items = []; S.firstLaunch = true; startLaunch(); }
+  if (j === 'launch-return') { S.screen = 'saves'; startLaunch(); }
   if (j === 'welcome-early') { S.screen = 'welcome'; S.early = 1; S.items = earlyItems(); S.firstLaunch = true; }
   if (j === 'welcome-early-many') { S.screen = 'welcome'; S.early = 3; S.items = earlyItems(); S.firstLaunch = true; }
   if (j === 'saves-arrive') {

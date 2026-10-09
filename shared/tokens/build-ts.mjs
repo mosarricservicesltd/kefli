@@ -144,6 +144,7 @@ const data = {
       scan: { ...timing(mo.ambient.scan) },
       eq: { ...timing(mo.ambient.eq) },
     },
+    launch: { hold: mo.launch.hold, in: { ...timing(mo.launch.in), delay: mo.launch.in.delay }, out: timing(mo.launch.out) },
   },
 };
 
@@ -223,6 +224,8 @@ export const pressOut = timing(motion.press.out);
 export const mark = timing(motion.mark);
 export const catchUp = timing(motion.catchUp);
 export const catchUpFinish = timing(motion.catchUp.finish);
+export const launchIn = timing(motion.launch.in);
+export const launchOut = timing(motion.launch.out);
 
 /** The release spring; pass the gesture's velocity alongside it. */
 export const release: WithSpringConfig = { ...motion.release };

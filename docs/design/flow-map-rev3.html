@@ -90,7 +90,7 @@ code{font-size:13px;background:var(--accent-soft);padding:1px 5px;border-radius:
 <div class="grid2">
   <div class="card"><strong>Entry points</strong>
     <ul>
-      <li>Cold open, first launch → Welcome</li>
+      <li>Cold open, first launch → launch screen (up to 5 s, a tap skips it) → Welcome <span class="changed">new · 97</span></li>
       <li>Cold open after a reinstall, with a key in Block Store → Saves with the restore card, never Welcome <span class="changed">changed · 79</span></li>
       <li>Share sheet from any app, including before the first open <span class="changed">new</span></li>
       <li>Returning open → where the user was <span class="changed">new</span></li>
@@ -265,7 +265,7 @@ code{font-size:13px;background:var(--accent-soft);padding:1px 5px;border-radius:
 <tr><td>Taps to first value</td><td class="num">4 (2 with Read now)</td><td class="num">5 (3 with Read now)</td><td>+1 for "New here" on Welcome.</td></tr>
 <tr><td>Inputs</td><td class="num">0</td><td class="num">0</td><td>Nothing typed, chosen or scanned.</td></tr>
 <tr><td>Decisions</td><td class="num">0</td><td class="num">1</td><td>New here / I already have a library. Accepted: without it, a returning user has no front door and a silent key would be thrown away.</td></tr>
-<tr><td>Waits</td><td class="num">1</td><td class="num">1</td><td>Parse after save, in the background; Read now shows a sub-second skeleton at worst.</td></tr>
+<tr><td>Waits</td><td class="num">1</td><td class="num">2</td><td>Parse after save, in the background; Read now shows a sub-second skeleton at worst. The launch screen holds up to five seconds on a cold open, and a tap skips it <span class="changed">new · 97</span>.</td></tr>
 <tr><td>Permissions before value</td><td class="num">0</td><td class="num">0</td><td>Camera only when scanning; no notifications at all.</td></tr>
 <tr><td>Screens traversed</td><td class="num">3</td><td class="num">4</td><td>Welcome · Saves (empty) · Saved sheet · Reader.</td></tr>
 </table></div>

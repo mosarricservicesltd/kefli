@@ -1,4 +1,4 @@
-// Generated from shared/tokens/tokens.json (v1.0.1, fingerprint) by shared/tokens/build-ts.mjs. Do not edit.
+// Generated from shared/tokens/tokens.json (v1.1.0, fingerprint) by shared/tokens/build-ts.mjs. Do not edit.
 
 // Motion as Reanimated configs. Each token's use text in tokens.json says where it applies and what
 // reduced motion does; this module only turns the numbers into configs.
@@ -28,6 +28,8 @@ export const pressOut = timing(motion.press.out);
 export const mark = timing(motion.mark);
 export const catchUp = timing(motion.catchUp);
 export const catchUpFinish = timing(motion.catchUp.finish);
+export const launchIn = timing(motion.launch.in);
+export const launchOut = timing(motion.launch.out);
 
 /** The release spring; pass the gesture's velocity alongside it. */
 export const release: WithSpringConfig = { ...motion.release };

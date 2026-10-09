@@ -1,4 +1,4 @@
-/* Generated from shared/tokens/tokens.json (v1.0.1, fingerprint) by build-css.mjs. Do not edit. */
+/* Generated from shared/tokens/tokens.json (v1.1.0, fingerprint) by build-css.mjs. Do not edit. */
 /* Web fonts for the mockups and the website only; the app and the extension bundle the font files. */
 @import url('https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Literata:ital,opsz,wght@0,7..72,200..900;1,7..72,200..900&family=Martian+Mono:wght@400..600&display=swap');
 :root, [data-theme="light"] {
@@ -154,6 +154,10 @@
   --motion-ambient-sweep: 1200ms ease-in-out;
   --motion-ambient-scan: 1800ms ease-in-out;
   --motion-ambient-eq: 1000ms ease-in-out;
+  --motion-launch-hold: 5000ms;
+  --motion-launch-in: 400ms cubic-bezier(.2,.8,.2,1);
+  --motion-launch-in-delay: 150ms;
+  --motion-launch-out: 300ms cubic-bezier(.4,0,1,1);
 }
 [data-reader="light"] {
   /* paper, labelled Light */

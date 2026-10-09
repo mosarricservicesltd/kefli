@@ -10,7 +10,7 @@
 import { memo, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Canvas, Group, ImageSVG, Skia, type SkSVG } from '@shopify/react-native-skia';
-import { Easing, useDerivedValue, useReducedMotion, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
+import { Easing, useDerivedValue, useReducedMotion, useSharedValue, withDelay, withTiming, type SharedValue } from 'react-native-reanimated';
 import { radius as R } from '@kefli/tokens';
 import { drawMs } from '../data/covers';
 import { ShelfCover } from './cover';
@@ -63,8 +63,10 @@ function Drawing({ hash, cols, w, h, from }: { hash: string; cols: number; w: nu
   const total = drawMs(parts.leaves.length, M);
   const t = useSharedValue(Math.max(0, Date.now() - from));
   useEffect(() => {
-    t.value = withTiming(total, { duration: Math.max(0, total - t.value), easing: Easing.linear });
-  }, [t, total]);
+    // a draw that starts later (Welcome's, behind the launch screen) waits for its start
+    const wait = Math.max(0, from - Date.now());
+    t.value = withDelay(wait, withTiming(total, { duration: Math.max(0, total - t.value), easing: Easing.linear }));
+  }, [t, total, from]);
   const k = w / parts.width;
   return (
     <Canvas style={{ width: w, height: h }}>

@@ -1,6 +1,6 @@
-// Generated from shared/tokens/tokens.json (v1.0.1, fingerprint) by shared/tokens/build-ts.mjs. Do not edit.
+// Generated from shared/tokens/tokens.json (v1.1.0, fingerprint) by shared/tokens/build-ts.mjs. Do not edit.
 
-export const version = "1.0.1" as const;
+export const version = "1.1.0" as const;
 
 /** Chrome colours per app theme, plus the scrim, the float shadow (a boxShadow string) and the cover greys. */
 export const colors = {
@@ -506,6 +506,28 @@ export const motion = {
         0.42,
         0,
         0.58,
+        1
+      ]
+    }
+  },
+  "launch": {
+    "hold": 5000,
+    "in": {
+      "duration": 400,
+      "easing": [
+        0.2,
+        0.8,
+        0.2,
+        1
+      ],
+      "delay": 150
+    },
+    "out": {
+      "duration": 300,
+      "easing": [
+        0.4,
+        0,
+        1,
         1
       ]
     }

@@ -18,6 +18,7 @@ import { Button } from '../ui/Button';
 import { Cover } from '../ui/Cover';
 import { ShelfCover } from '../ui/cover';
 import { Icon } from '../ui/Icon';
+import { launchDrawFrom } from '../ui/Launch';
 import { S } from '../ui/strings';
 import { T, display28, ui } from '../ui/text';
 import { alpha, useTheme } from '../ui/theme';
@@ -70,7 +71,7 @@ export default function Welcome() {
   const { height } = useWindowDimensions();
   const [busy, setBusy] = useState(false);
   // Welcome's covers draw in on the first launch only; back on Welcome later they are simply there (signature 1).
-  const [draws] = useState(() => coverDraws(store(), Object.values(HERO), 'welcome', Date.now(), true));
+  const [draws] = useState(() => coverDraws(store(), Object.values(HERO), 'welcome', launchDrawFrom(), true));
   // saves shared before the first open (FD 6): the newest one's cover and the count
   const owner = activeOwner(store());
   const early = owner ? listRows(store(), owner, 'unread') : [];

@@ -67,6 +67,10 @@ const motionVars = [
   `--motion-ambient-breathe: ${ms(mo.ambient.breathe)};`,
   `--motion-ambient-breathe-phase: ${mo.ambient.breathe.phase}ms;`,
   ...['pulse', 'sweep', 'scan', 'eq'].map((k) => `--motion-ambient-${k}: ${ms(mo.ambient[k])};`),
+  `--motion-launch-hold: ${mo.launch.hold}ms;`,
+  `--motion-launch-in: ${ms(mo.launch.in)};`,
+  `--motion-launch-in-delay: ${mo.launch.in.delay}ms;`,
+  `--motion-launch-out: ${ms(mo.launch.out)};`,
 ];
 
 const staticVars = [

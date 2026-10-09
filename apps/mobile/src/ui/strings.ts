@@ -8,6 +8,15 @@ export function say(n: number): string {
 }
 
 export const S = {
+  // the launch screen on a cold open (FD 97): the website's Hávamál line, in Old Norse with the English beneath
+  launch: {
+    name: 'Kefli',
+    norse: 'Deyr fé, deyja frændr …\nen orðstírr deyr aldregi.',
+    english: 'Cattle die, kinsmen die …\nbut the good name\nnever dies.',
+    source: 'Hávamál',
+    label: 'Kefli. Cattle die, kinsmen die, but the good name never dies. Hávamál.',
+    hint: 'Tap to continue',
+  },
   // welcome, welcome-early, welcome-early-many
   welcome: {
     title: 'Kefli',

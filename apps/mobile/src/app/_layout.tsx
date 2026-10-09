@@ -19,6 +19,7 @@ import { FONTS } from '../ui/fonts';
 import { PlayerHost } from '../screens/Player';
 import { SheetHost, sheetOpen } from '../ui/sheet';
 import { ToastHost, settleToast } from '../ui/toast';
+import { Launch } from '../ui/Launch';
 import { useTheme } from '../ui/theme';
 
 const bezier = (e: 'linear' | readonly number[]) => (e === 'linear' ? Easing.linear : Easing.bezier(e[0], e[1], e[2], e[3]));
@@ -43,7 +44,7 @@ export default function Layout() {
   const path = usePathname();
   const [fonts] = useFonts(FONTS);
   const app = useApp();
-  const { c, name } = useTheme();
+  const { c } = useTheme();
   useEffect(() => {
     boot();
     // A toast still counting down when the app leaves the screen counts as closed without Undo.
@@ -58,8 +59,19 @@ export default function Layout() {
   useEffect(() => {
     KefliSystem.setRootBack(ROOTS.includes(path) && !sheetUp);
   }, [path, sheetUp]);
-  // Until the fonts and the resolver are ready, the splash stays (6.9).
-  if (!fonts || !app) return <View style={{ flex: 1, backgroundColor: c.background }} />;
+  // Until the fonts and the resolver are ready, the launch screen stays over a blank page (6.9, FD 97). It keeps one
+  // place in the tree, so the app arriving beneath it doesn't mount it again.
+  const ready = !!fonts && !!app;
+  return (
+    <View style={{ flex: 1, backgroundColor: c.background }}>
+      {ready && <Main app={app} />}
+      <Launch ready={ready} />
+    </View>
+  );
+}
+
+function Main({ app }: { app: NonNullable<ReturnType<typeof useApp>> }) {
+  const { c, name } = useTheme();
   const library = app.route === 'saves';
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: c.background }}>

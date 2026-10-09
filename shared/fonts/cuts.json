@@ -1,5 +1,5 @@
 {
-  "$generated": "Generated from shared/tokens/tokens.json (v1.0.1, fingerprint) by shared/tokens/build-ts.mjs. Do not edit.",
+  "$generated": "Generated from shared/tokens/tokens.json (v1.1.0, fingerprint) by shared/tokens/build-ts.mjs. Do not edit.",
   "cuts": {
     "Archivo-400": {
       "source": "Archivo",

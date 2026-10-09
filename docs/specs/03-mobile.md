@@ -593,7 +593,7 @@ Sheets are Kefli's own component on Reanimated and Gesture Handler, to MS Sheets
 
 ### 6.9 System surfaces
 
-`expo-splash-screen` with `splash-icon.png` on #F3F2EE and the dark image on #111112, `imageWidth` 200, hidden after the first frame (FD 72 and 94, `shared/brand/README.md`; wired in `app.json`). Edge-to-edge is React Native 0.86's default, so the Reader and Speed read draw the reading paper under transparent system bars, and `expo-navigation-bar` and `expo-status-bar` set the icon style to match the palette. `react-native-keyboard-controller` keeps action bars above the keyboard. Haptics follow MS: a tick when a swipe arms, reject on a code mismatch, success on a QR read, confirm with the share sheet's check.
+`expo-splash-screen` with `splash-icon.png` on #F3F2EE and the dark image on #111112, `imageWidth` 200, hidden after the first frame (FD 72 and 94, `shared/brand/README.md`; wired in `app.json`). The app's launch screen (`ui/Launch.tsx`, FD 97, `motion.launch`) takes over with the same image in the same place, adds the name and the Hávamál line, holds for five seconds or until a tap, and fades over the first screen; it shows once per process and never on the share surface. Edge-to-edge is React Native 0.86's default, so the Reader and Speed read draw the reading paper under transparent system bars, and `expo-navigation-bar` and `expo-status-bar` set the icon style to match the palette. `react-native-keyboard-controller` keeps action bars above the keyboard. Haptics follow MS: a tick when a swipe arms, reject on a code mismatch, success on a QR read, confirm with the share sheet's check.
 
 ### 6.10 Accessibility
 
