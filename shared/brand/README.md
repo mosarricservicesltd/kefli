@@ -1,6 +1,6 @@
-# Shelf brand assets
+# Kefli brand assets
 
-**The app icon is D, "split and play"** (flow decision 94, chosen by Richard on 9 October 2026, replacing decisions 70 and 72). Shelf's bookmark in paper (#F3F2EE) on graphite (#111112, the dark theme's background), cut twice with nothing stamped on:
+**The app icon is D, "split and play"** (flow decision 94, chosen by Richard on 9 October 2026, replacing decisions 70 and 72). Kefli's bookmark in paper (#F3F2EE) on graphite (#111112, the dark theme's background), cut twice with nothing stamped on:
 
 - a **slot** down the centre line, 1/7 of the bookmark's width, makes the two halves a pause;
 - a **diagonal** that carries the notch's right edge on across the left half, 0.8 of the slot's width, makes the left tail a play pointing into the gap.
@@ -45,8 +45,8 @@ Every cut is drawn on its own pixel grid: straight edges on whole pixels, cut co
 `build-icons.cjs` derives every size and format into `out/`. Run it after any change to `src/`, with `@resvg/resvg-js@2` on `NODE_PATH`:
 
 ```
-npm install --prefix ~/.cache/shelf-resvg @resvg/resvg-js@2     # once, anywhere outside the repo
-NODE_PATH=~/.cache/shelf-resvg/node_modules node shared/brand/build-icons.cjs
+npm install --prefix ~/.cache/kefli-resvg @resvg/resvg-js@2     # once, anywhere outside the repo
+NODE_PATH=~/.cache/kefli-resvg/node_modules node shared/brand/build-icons.cjs
 ```
 
 It reads `shared/cover/cover-v1.js` only for the strip of covers on the OG card and the feature graphic, and `shared/fonts/out` for the name and tagline on those cards, which are set in Archivo so they come out the same on any machine. Besides the layer checks above, every run checks that the mark stays inside Android's 66 dp safe circle (it reaches 28.3 dp) and the maskable icon's 40% circle (32.9%), that the two launch screens are one drawing, that the feature graphic is opaque 24-bit RGB, and that every PNG has its expected size. Sizes up to 48 px are rendered at 8× and box-averaged, so the diagonals rasterise evenly.
@@ -68,7 +68,7 @@ It reads `shared/cover/cover-v1.js` only for the strip of covers on the OG card 
 | `out/web/favicon.svg`, `favicon.ico` (16/32/48), `apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, `maskable-512.png`, `site.webmanifest` | Website. `favicon.svg` is the 16 px cut; the ICO carries the 16, 32 and 48 px cuts. The manifest's `theme_color` is ink (#17171A) and its `background_color` paper (#F3F2EE), and it fixes `id`, `start_url` and `scope` at `/` so installs keep one identity |
 | `out/web/og-card.png` (1200 × 630) | Social sharing card: paper ground, the icon tile, the name in ink, the tagline in the muted grey (#5C5B56) and a short strip of eight covers under it |
 
-**The cards.** The strip is real cover v1 output at depth 3, the Fingerprint board's eight sample articles (sha256 of each normalised URL, as `shared/cover/fixtures.json` records them), drawn at build time; if cover v1 changes before it ships, the strip changes with it and the icon doesn't. "Shelf" is the working name: regenerate both cards when the name is final.
+**The cards.** The strip is real cover v1 output at depth 3, the Fingerprint board's eight sample articles (sha256 of each normalised URL, as `shared/cover/fixtures.json` records them), drawn at build time; if cover v1 changes before it ships, the strip changes with it and the icon doesn't. Both cards carry the product's name, Kefli (flow decision 95).
 
 ## Wiring notes for the mobile build
 
@@ -76,4 +76,4 @@ It reads `shared/cover/cover-v1.js` only for the strip of covers on the OG card 
 - **Splash:** `apps/mobile/app.json` configures the expo-splash-screen plugin: `splash-icon.png` on paper, #F3F2EE, and in its `dark` block `splash-icon-dark.png` on the dark theme's background, #111112, at an `imageWidth` of 200 dp, from copies in `apps/mobile/assets/brand`. The two images have the same footprint, so the mark sits in the same place in either theme; Android picks the dark pair from the phone's dark theme before the app has run, and the app follows the same setting (flow decision 16). The splash hides when the app is ready, the plugin's default. It is baked into the native project at prebuild, so copy the two PNGs again after a rebuild and make a new development build. At 200 dp the mark reaches about 79 dp from the centre; up to about 244 dp keeps it inside Android 12's 192 dp icon circle.
 - **Media notification icon:** `apps/mobile/plugins/with-kefli-notification.js` copies `out/android/kefli_notification.xml` into the app's drawables at prebuild, and kefli-voice's service sets it on media3's notification provider by name, so a rebuild of the brand files reaches the app at the next prebuild.
 
-The in-app interface icons are Lucide at 1.75 stroke, plus Shelf's own skip ±15 pair and speed-read icon in `docs/design/icons/app/` (decisions 62 and 65).
+The in-app interface icons are Lucide at 1.75 stroke, plus Kefli's own skip ±15 pair and speed-read icon in `docs/design/icons/app/` (decisions 62 and 65).
