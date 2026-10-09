@@ -65,9 +65,14 @@ Roughly three days of work: phase 1 half a day, phase 2 a day including the devi
 
 ## 7. Status
 
-Phases 1 to 5 were done on 9 October 2026, the day the plan was approved: contract v1.5 and the namespace (bc320a2), the app's identity and internals (074e688), the prototypes and the tour (cf9dbc3), the app's copy (2b7b39e), the brand cards and the extension spec (0a03c22), the cut fonts' unique ID, and the living docs. The check in section 4 prints nothing. Still to do:
+Phases 1 to 5 were done on 9 October 2026, the day the plan was approved: contract v1.5 and the namespace (bc320a2), the app's identity and internals (074e688), the prototypes and the tour (cf9dbc3), the app's copy (2b7b39e), the brand cards and the extension spec (0a03c22), the cut fonts' unique ID, and the living docs. The check in section 4 prints nothing.
+
+The device checks of phase 2 and section 4 passed on the Pixel the same evening, on a clean prebuild and a new development build against the local stack. The build is `app.kefli`, labelled Kefli. It installed fresh beside nothing, and New here opened an empty library. A save shared from X went to Kefli on the share sheet, showed "Saved to Kefli", registered the key, and reached all three relays under `kefli/item/` and `t` = `kefli`, with its blob uploaded and mirrored. Listening with the screen locked worked once play after pause had been fixed (below). The lock-screen card carries the title, the site, the cover and Kefli's icon; Android's media card shows no app name. Block Store brought the library back after an uninstall and reinstall without the code; after a clear-data, which removes the Block Store entry (mobile spec 3.3), the recovery code restored it. Export my saves wrote `kefli-export.html` to Downloads, titled Kefli.
+
+The checks found one fault, older than the rename: play after pause from the lock-screen card stayed silent until a skip. A paused AudioTrack cuts a blocking write short, so the engine lost the rest of a sentence while counting it as written, wrote nothing more, and Android never restarted the resumed track, whose buffer wasn't full. Pausing now drops the audio, and play writes it again from the word reached, as a skip does (`VoiceEngine.pause`); resume was quick on the Pixel.
+
+Still to do:
 
 - **Phase 0:** register kefli.app before the first Play upload.
-- **The device checks** of phase 2 and section 4, on a new development build: a fresh install, New here, a save shared from X, listening with the screen locked, the lock-screen card, Block Store backup and a restore from the recovery code, with Kefli on the launcher, the share sheet, the lock screen, the notification and the Downloads export.
 
 R7 was done on 9 October 2026: the GitHub repository is `richardminton-glitch/Kefli` (GitHub redirects the old address), the local folder is `Kefli`, and their two patterns are gone from `rename-keeps.txt`.

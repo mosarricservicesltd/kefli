@@ -74,7 +74,7 @@ object VoiceEngine {
   private var firstOffset = 0
   private var firstSentence = 0
   private var synthesizing: Synth? = null
-  /** Audio must be written again from `word` before it plays (after a jump or a rate change while paused). */
+  /** Audio must be written again from `word` before it plays (after a pause, or a jump or a rate change). */
   private var stale = true
   private var lastSentenceEvent = -1
   private val order = RangeOrder()
@@ -155,11 +155,17 @@ object VoiceEngine {
     emitState()
   }
 
+  /**
+   * Pausing drops the audio, and play writes it again from the word reached, as a skip does. A paused track cuts
+   * the writer's blocking write short, so the rest of that sentence was lost while counted as written; the engine
+   * then wrote nothing more, and Android never restarts a resumed stream track whose buffer isn't full, so play
+   * after pause stayed silent (the rename's device checks, 9 October 2026).
+   */
   fun pause() {
     if (!playing) return
     playing = false
-    track?.pause()
-    main.removeCallbacks(poll)
+    reset()
+    stale = true
     unregisterNoisy()
     emitState()
   }
@@ -231,7 +237,6 @@ object VoiceEngine {
     val v = voices().firstOrNull { it.name == voiceId } ?: return done()
     sampleDone?.invoke()
     pause()
-    if (loaded) { reset(); stale = true }
     if (sessionVoice == null) sessionVoice = t.voice
     sampleDone = done
     t.voice = v
