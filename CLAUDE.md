@@ -1,6 +1,6 @@
 # Shelf — project memory for Claude Code
 
-Working name **Shelf** (placeholder; the name appears in the protocol only as the `shelf/` d-tag namespace). A free read-it-later app, phone-first, whose library lives on nostr under the user's own key so it outlives the service. The v1 premise is the original 2011 Pocket: save anything, read it clean and offline, listen to it. No discovery feed, no social layer, no tags, no signup.
+The product is named **Kefli** (Richard, 9 October 2026; see `docs/research/naming.md`), with Norse connotations as the brand identity. Until the rename lands, code, docs and copy still say **Shelf**, and the name appears in the protocol only as the `shelf/` d-tag namespace. A free read-it-later app, phone-first, whose library lives on nostr under the user's own key so it outlives the service. The v1 premise is the original 2011 Pocket: save anything, read it clean and offline, listen to it. No discovery feed, no social layer, no tags, no signup.
 
 ## Source of truth
 
@@ -54,5 +54,5 @@ If all three work, Expo is confirmed and the Android spec is rewritten as an Exp
 
 ## Open items for Richard
 
-- **Name** (mobile spec O-9): the app ID is permanent from the first Play upload and owns the Block Store data, so the name, or at least its domain, is needed by the end of week 3 of the build.
+- **Name** (mobile spec O-9): decided as **Kefli** on 9 October 2026 (`docs/research/naming.md`). Still open: the Play app ID (permanent from the first upload and owner of the Block Store data; `app.kefli` was free), the domains, the UK trade mark filing, a flow decision recording the name, and the rename itself.
 - **Licence text:** the licence was decided by Richard on 5 October 2026 (mobile spec O-10): AGPL-3.0-or-later, with an added permission for Google Play services and other proprietary system libraries (open-sourcing the clients supports the "outlives the service" story; AGPL stops a closed fork). The LICENSE file is added once Richard confirms its exact text. `apps/mobile/LICENSE` is Expo's template and is not committed.
