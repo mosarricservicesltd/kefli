@@ -1,7 +1,7 @@
 // The library as the screens read and change it (mobile spec 5.6): the two lists, archive and Back to Unread,
 // delete, the next unread, and the reading position. Every change writes the row first and the network through
 // held outbox rows, so Undo reverts the row and deletes them before anything leaves the phone (4.3, FD 7, FD 38).
-import { progressAt } from '@shelf/protocol';
+import { ITEM_D_PREFIX, progressAt } from '@shelf/protocol';
 import type { SqlDb } from './db';
 import { enqueue, release, undo } from './outbox';
 import { writeRelays } from './lists';
@@ -99,7 +99,7 @@ export function deleteItem(db: SqlDb, now: number, owner: string, hash: string):
     const row = db.get<{ text_sha256: string | null; text_servers: string | null }>('SELECT text_sha256, text_servers FROM items WHERE owner = ? AND hash = ?', owner, hash);
     if (!row) return { held: [], revert: () => {} };
     db.run('UPDATE items SET pending_delete_at = ? WHERE owner = ? AND hash = ?', now, owner, hash);
-    const del = enqueue(db, now, { op: 'delete_item', signer: owner, subject: hash, payload: { ds: [`shelf/item/${hash}`] }, targets: writeRelays(db, owner), held: true });
+    const del = enqueue(db, now, { op: 'delete_item', signer: owner, subject: hash, payload: { ds: [ITEM_D_PREFIX + hash] }, targets: writeRelays(db, owner), held: true });
     const held = [del];
     const servers = row.text_servers ? (JSON.parse(row.text_servers) as string[]) : [];
     const mine = row.text_sha256 && db.get('SELECT 1 FROM blobs WHERE sha256 = ? AND owner = ?', row.text_sha256, owner);

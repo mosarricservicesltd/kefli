@@ -1,9 +1,9 @@
 {
   "v": 1,
   "contract": "1.4",
-  "about": "normalise(url, canonical?) from contract section 4.3. Every port must produce expect exactly; expect null means the input is refused as not a link. d is shelf/item/ followed by the lowercase hex sha256 of the UTF-8 of expect.",
+  "about": "normalise(url, canonical?) from contract section 4.3. Every port must produce expect exactly; expect null means the input is refused as not a link. d is kefli/item/ followed by the lowercase hex sha256 of the UTF-8 of expect.",
   "rulings": [
-    "Settled on 6 October 2026 with contract 1.4 (section 11.1), Richard having left these to the engineer's judgement. These cases pin choices the contract text leaves open:",
+    "Settled on 6 October 2026 with contract 1.4 (section 11.2), Richard having left these to the engineer's judgement. These cases pin choices the contract text leaves open:",
     "1. Parsing and serialisation follow the WHATWG URL Standard (the whatwg-url package on every engine), so default ports, dot segments, IPv4 forms and percent-encoding come out as a browser's location.href would give them.",
     "2. Anything other than http and https is refused.",
     "3. Query names are matched and sorted in their decoded form, as URLSearchParams reads them, but kept byte for byte; matching is case-sensitive, and the sort is stable, so repeated names keep their order.",

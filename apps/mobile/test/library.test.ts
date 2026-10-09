@@ -140,7 +140,7 @@ describe('the library (mobile spec 5.6)', () => {
     expect(await sendOne(ports)).toBe(true);
     expect(sent.map((s) => s.relay).sort()).toEqual(['ws://a', 'ws://b', 'ws://op']);
     expect(sent[0].event.kind).toBe(5);
-    expect(sent[0].event.tags).toContainEqual(['a', `30078:${w.pk}:shelf/item/${h(1)}`]);
+    expect(sent[0].event.tags).toContainEqual(['a', `30078:${w.pk}:kefli/item/${h(1)}`]);
     expect(w.db.get<{ state: string }>("SELECT state FROM outbox_targets WHERE target = 'ws://b'")).toEqual({ state: 'pending' });
   });
 });

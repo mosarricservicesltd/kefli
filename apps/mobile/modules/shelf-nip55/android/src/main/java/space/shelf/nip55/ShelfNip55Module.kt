@@ -112,7 +112,7 @@ class ShelfNip55Module : Module() {
     // Whether the signer answers through its resolver, without its screen: then background drains can run (4.7).
     AsyncFunction("canActInBackground") { pkg: String, peer: String, hex: String ->
       try {
-        resolve(pkg, "NIP44_ENCRYPT", arrayOf("shelf-probe", peer, hex))?.first != null
+        resolve(pkg, "NIP44_ENCRYPT", arrayOf("kefli-probe", peer, hex))?.first != null
       } catch (e: Exception) {
         false
       }

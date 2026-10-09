@@ -164,7 +164,7 @@ describe('The move (contract 4.8, mobile spec 4.10)', () => {
   test('a save from a newer Shelf stops it before anything is copied, S untouched', async () => {
     const w = world();
     await w.save(w.S, 1);
-    w.db.run("INSERT INTO items_future (owner, d, event_json, created_at) VALUES (?, 'shelf/item/x', '{}', 1)", w.T.pubkey());
+    w.db.run("INSERT INTO items_future (owner, d, event_json, created_at) VALUES (?, 'kefli/item/x', '{}', 1)", w.T.pubkey());
     expect(await runMove(w.p)).toBe('newer');
     expect(rowsOf(w, w.S.pubkey()).length).toBe(1);
     expect(rowsOf(w, w.T.pubkey())).toEqual([]);

@@ -167,7 +167,7 @@ describe('inbound sync (mobile spec 4.5)', () => {
     w.publish(save);
     await syncInbound(w.ports);
     expect(w.files.has(h(4))).toBe(true);
-    const [del] = await buildDeletions(w.signer, [`shelf/item/${h(4)}`], 6100);
+    const [del] = await buildDeletions(w.signer, [`kefli/item/${h(4)}`], 6100);
     w.publish(del, ['ws://op', 'ws://a']);
     w.relays.get('ws://op')!.splice(w.relays.get('ws://op')!.indexOf(save), 1);
     w.tick(60);
@@ -181,7 +181,7 @@ describe('inbound sync (mobile spec 4.5)', () => {
   test('a deletion older than the save leaves it', async () => {
     const w = world();
     w.publish(await remoteSave(w, h(5), 6000, null));
-    const [del] = await buildDeletions(w.signer, [`shelf/item/${h(5)}`], 5999);
+    const [del] = await buildDeletions(w.signer, [`kefli/item/${h(5)}`], 5999);
     w.publish(del);
     await syncInbound(w.ports);
     expect(row(w, h(5))).toBeDefined();
@@ -194,10 +194,10 @@ describe('inbound sync (mobile spec 4.5)', () => {
     w.db.run("INSERT INTO outbox (op, signer, subject, created_at, state, lane) VALUES ('publish_item', ?, ?, 1, 'queued', 'interactive')", w.pk, h(6));
     // The protocol refuses to write v 2, so the newer client's event is built by hand.
     const content = await w.signer.nip44Encrypt(w.pk, JSON.stringify({ ...item().item, v: 2 }));
-    w.publish(await w.signer.signEvent({ kind: 30078, created_at: 7000, tags: [['d', `shelf/item/${h(6)}`], ['t', 'shelf']], content }));
+    w.publish(await w.signer.signEvent({ kind: 30078, created_at: 7000, tags: [['d', `kefli/item/${h(6)}`], ['t', 'kefli']], content }));
     await syncInbound(w.ports);
     expect(row(w, h(6))).toBeUndefined();
-    expect(w.db.get('SELECT created_at FROM items_future WHERE d = ?', `shelf/item/${h(6)}`)).toEqual({ created_at: 7000 });
+    expect(w.db.get('SELECT created_at FROM items_future WHERE d = ?', `kefli/item/${h(6)}`)).toEqual({ created_at: 7000 });
     expect(w.db.get('SELECT 1 FROM outbox WHERE subject = ?', h(6))).toBeUndefined();
   });
 

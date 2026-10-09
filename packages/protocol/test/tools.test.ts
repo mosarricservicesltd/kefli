@@ -105,14 +105,14 @@ describe('npm run verify', () => {
       v: 1, url: 'https://example.com/a', canonical: null, title: 'A', site: null, byline: null, saved_at: 1, state: 'archived', progress: 0,
       words: 5, lang: 'en', text: null, text_hash: null, hero: null, source_kind: 'web', audio_pref: null,
     })), 3)).event;
-    const record = { ...bare, tags: [['d', 'shelf/devices'], ['t', 'shelf']] };
+    const record = { ...bare, tags: [['d', 'kefli/devices'], ['t', 'kefli']] };
     const relays: Record<string, unknown[]> = { 'ws://a': [event, record], 'ws://b': [event] };
     const lines: string[] = [];
     const get = (async () => new Response(Buffer.from(blob))) as unknown as typeof fetch;
     const query = async (r: string) => relays[r] as never;
     expect(await verifyCommand(['--relays', 'ws://a,ws://b'], { SHELF_SECRET: SK }, (l) => lines.push(l), query, get)).toBe(true);
     expect(lines).toContain('ok   A (on 2/2 relays)');
-    expect(lines).toContain('     shelf/devices (on 1/2 relays)');
+    expect(lines).toContain('     kefli/devices (on 1/2 relays)');
     expect(lines.at(-1)).toBe('1 of 1 saves verify, decrypt and match their text');
     // a newer copy on one relay wins; a missing blob fails
     relays['ws://b'] = [newer];

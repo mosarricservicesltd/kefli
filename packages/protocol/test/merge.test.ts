@@ -84,11 +84,11 @@ describe('merging an inbound save (mobile spec 4.5)', () => {
     expect(deletionRemoves({ eventId: null, createdAt: null, dirty: true, modifiedAt: 50 }, 60)).toBe(true);
   });
 
-  test("a kind 5's save hashes: only the owner's, only shelf/item addresses", () => {
+  test("a kind 5's save hashes: only the owner's, only kefli/item addresses", () => {
     const e = {
       kind: 5, pubkey: PK, created_at: 1, id: '', sig: '', content: '',
-      tags: [['a', `30078:${PK}:shelf/item/${H1}`], ['a', `30078:${PK}:shelf/item/${H1}`], ['a', `30078:${PK}:shelf/devices`],
-        ['a', `30078:${'cd'.repeat(32)}:shelf/item/${H2}`], ['a', `30023:${PK}:shelf/item/${H2}`], ['e', H2], ['k', '30078']],
+      tags: [['a', `30078:${PK}:kefli/item/${H1}`], ['a', `30078:${PK}:kefli/item/${H1}`], ['a', `30078:${PK}:kefli/devices`],
+        ['a', `30078:${'cd'.repeat(32)}:kefli/item/${H2}`], ['a', `30023:${PK}:kefli/item/${H2}`], ['e', H2], ['k', '30078']],
     } as NostrEvent;
     expect(deletedHashes(e, PK)).toEqual([H1]);
     expect(deletedHashes({ ...e, pubkey: 'cd'.repeat(32) }, PK)).toEqual([]);

@@ -1,4 +1,4 @@
-// The connected-browsers record (C§4.9): kind 30078, d shelf/devices, self-encrypted like a save.
+// The connected-browsers record (C§4.9): kind 30078, d kefli/devices, self-encrypted like a save.
 
 import { DEVICES_D, KIND, MAX_EVENT_BYTES, T_TAG } from './constants';
 import { signedSize, signWithinCeiling } from './events';

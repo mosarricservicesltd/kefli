@@ -18,7 +18,7 @@ import * as Haptics from 'expo-haptics';
 import { File } from 'expo-file-system';
 import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { isXPost, itemHash } from '@shelf/protocol';
+import { ITEM_D_PREFIX, isXPost, itemHash } from '@shelf/protocol';
 import { motion, radius } from '@shelf/tokens';
 import { enter, exit, mark } from '@shelf/tokens/reanimated';
 import { ShelfShare } from '../../modules/shelf-share/src';
@@ -150,7 +150,7 @@ function SavedSheet({ spoolId }: { spoolId?: string }) {
         if (f.exists) f.delete();
       }
     }
-    log({ step: 'undo', ok: true, detail: `shelf/item/${r.hash}` });
+    log({ step: 'undo', ok: true, detail: ITEM_D_PREFIX + r.hash });
   };
 
   /** Closed without Undo: the rows go to the queue and the outbox starts sending. */
@@ -181,7 +181,7 @@ function SavedSheet({ spoolId }: { spoolId?: string }) {
     saveLink(url, (st) => log(st))
       .then((r) => {
         result.current = r;
-        log({ step: 'done', ok: true, detail: `${r.kind}: shelf/item/${r.hash}, ${r.held.length} rows held` });
+        log({ step: 'done', ok: true, detail: `${r.kind}: ${ITEM_D_PREFIX}${r.hash}, ${r.held.length} rows held` });
         if (undone.current) {
           takeBack();
           dropSpool();

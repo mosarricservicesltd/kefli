@@ -94,7 +94,7 @@ local('relay pool on the local stack', () => {
   afterAll(() => pool.close());
 
   test('publishes to the operator relay and reads it back', async () => {
-    const event = await signer.signEvent({ kind: 30078, created_at: Math.floor(Date.now() / 1000), tags: [['d', 'shelf/devices'], ['t', 'shelf']], content: 'x' });
+    const event = await signer.signEvent({ kind: 30078, created_at: Math.floor(Date.now() / 1000), tags: [['d', 'kefli/devices'], ['t', 'kefli']], content: 'x' });
     expect(await pool.publish('ws://localhost:7447', event)).toEqual({ ok: true });
     const back = await pool.query('ws://localhost:7447', [{ ids: [event.id] }]);
     expect(back.map((e) => e.id)).toEqual([event.id]);

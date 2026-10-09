@@ -56,8 +56,8 @@ describe('NIP-44 through LocalSigner', () => {
 
   test('self-encryption round trips, and a zeroed signer refuses', async () => {
     const s = new LocalSigner(nodeCrypto.randomBytes(32));
-    const c = await s.nip44Encrypt(s.pubkey(), 'shelf-probe');
-    expect(await s.nip44Decrypt(s.pubkey(), c)).toBe('shelf-probe');
+    const c = await s.nip44Encrypt(s.pubkey(), 'kefli-probe');
+    expect(await s.nip44Decrypt(s.pubkey(), c)).toBe('kefli-probe');
     s.zero();
     await expect(s.nip44Decrypt(s.pubkey(), c)).rejects.toThrow('zeroed');
   });
@@ -105,7 +105,7 @@ describe('save events (C§4.1, C§3.3)', () => {
     const { event, overTarget } = await buildItemEvent(s, HASH, item(), 1757000001);
     expect(verifyEvent(event)).toBe(true);
     expect(event.kind).toBe(KIND.appData);
-    expect(event.tags).toEqual([['d', `shelf/item/${HASH}`], ['t', 'shelf']]);
+    expect(event.tags).toEqual([['d', `kefli/item/${HASH}`], ['t', 'kefli']]);
     expect(overTarget).toBe(false);
     const back = await readItemEvent(s, event);
     expect(back.hash).toBe(HASH);
@@ -144,7 +144,7 @@ describe('save events (C§4.1, C§3.3)', () => {
     const b = new LocalSigner(nodeCrypto.randomBytes(32));
     const { event } = await buildItemEvent(a, HASH, item(), 1);
     await expect(readItemEvent(b, event)).rejects.toThrow('identity');
-    const devices = await a.signEvent({ kind: 30078, created_at: 1, tags: [['d', 'shelf/devices']], content: '' });
+    const devices = await a.signEvent({ kind: 30078, created_at: 1, tags: [['d', 'kefli/devices']], content: '' });
     await expect(readItemEvent(a, devices)).rejects.toThrow('not a save');
   });
 });

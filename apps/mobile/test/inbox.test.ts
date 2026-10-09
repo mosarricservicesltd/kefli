@@ -114,7 +114,7 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
 
   test('unreadable JSON is failed_parse; a disconnected browser is ignored', async () => {
     const w = world();
-    const rumor = { kind: 30078, created_at: T0, tags: [['d', 'shelf/save-request/1']], content: '{nope', pubkey: w.device.pubkey(), id: '' };
+    const rumor = { kind: 30078, created_at: T0, tags: [['d', 'kefli/save-request/1']], content: '{nope', pubkey: w.device.pubkey(), id: '' };
     expect(judge(w.db, w.owner, rumor as never, { pubkey: w.device.pubkey() } as never, D.operator.blossom)).toEqual({ outcome: 'failed_parse' });
     w.db.run('UPDATE devices SET revoked_at = 5');
     await w.send(w.request());

@@ -119,7 +119,7 @@ describe('connected browsers (mobile spec 5.5, contract 4.4 and 4.9)', () => {
     expect(connectedBrowsers(w.db, w.owner)).toEqual([{ device_pubkey: dev.pubkey, label: 'Chrome on a Linux laptop', connected_at: T0 }]);
     expect(youStats(w.db, w.owner).browsers).toBe(1);
     // the record went to the write relays, never to the indexer alone
-    const records = w.events.filter((e) => e.event.kind === 30078 && e.event.tags.some((t) => t[1] === 'shelf/devices'));
+    const records = w.events.filter((e) => e.event.kind === 30078 && e.event.tags.some((t) => t[1] === 'kefli/devices'));
     expect(records.map((e) => e.relay).sort()).toEqual(['ws://a', 'ws://b', 'ws://op']);
     const record = await readDevicesEvent(w.signer, records[0].event);
     expect(record.devices).toEqual([{ device_pubkey: dev.pubkey, label: 'Chrome on a Linux laptop', token: ack.token, connected_at: T0, revoked_at: null }]);
@@ -153,7 +153,7 @@ describe('connected browsers (mobile spec 5.5, contract 4.4 and 4.9)', () => {
     w.events.length = 0;
     await drain(w.send);
     expect(w.calls).toContain(`DELETE http://api/devices/${dev.pubkey}`);
-    const record = await readDevicesEvent(w.signer, w.events.find((e) => e.event.tags.some((t) => t[1] === 'shelf/devices'))!.event);
+    const record = await readDevicesEvent(w.signer, w.events.find((e) => e.event.tags.some((t) => t[1] === 'kefli/devices'))!.event);
     expect(record.devices[0].revoked_at).toBe(T0 + 60);
   });
 

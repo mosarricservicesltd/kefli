@@ -31,7 +31,7 @@ describe('gift wraps (NIP-59, C§4.4)', () => {
     expect(wrap.created_at).toBeGreaterThan(NOW - WRAP_BACKDATE_MAX);
     const { rumor, seal } = await unwrap(user, wrap);
     expect(seal.pubkey).toBe(device.pubkey());
-    expect(rumor.tags).toEqual([['d', 'shelf/save-request/u-1']]);
+    expect(rumor.tags).toEqual([['d', 'kefli/save-request/u-1']]);
     expect(JSON.parse(rumor.content)).toEqual(request());
   });
 
@@ -73,7 +73,7 @@ describe('gift wraps (NIP-59, C§4.4)', () => {
     const { wrap } = await wrapPairAck(user, device.pubkey(), ack, NOW);
     const { rumor, seal } = await unwrap(device, wrap);
     expect(seal.pubkey).toBe(user.pubkey());
-    expect(rumor.tags).toEqual([['d', 'shelf/pair-ack']]);
+    expect(rumor.tags).toEqual([['d', 'kefli/pair-ack']]);
     expect(JSON.parse(rumor.content)).toEqual(ack);
   });
 });
@@ -129,9 +129,11 @@ describe('accepting a save request (C§4.4)', () => {
 });
 
 describe('typed pair code (C§4.4)', () => {
-  test('K7QM4XPD gives the lookup recorded in the Android test build', async () => {
+  // The reference lookup under v1.5's salt, from Node's scrypt. Under v1.4's salt the Android test build recorded
+  // 8a0b73e6…, which this derivation also reproduces with that salt.
+  test('K7QM4XPD gives the reference lookup', async () => {
     const { lookup, key } = await derivePairCode('K7QM4XPD', nodeCrypto);
-    expect(lookup).toBe('8a0b73e641602ecd6e49f3c64dee51f053f79edfdea90594c8df40de02202d76');
+    expect(lookup).toBe('2ca73b673edb4f51cfdb460599a6411f580992cf1fbe823f2e49a74b8e25695e');
     expect(key).toHaveLength(32);
   });
 

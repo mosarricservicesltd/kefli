@@ -2,7 +2,7 @@
 
 import { readFileSync } from 'node:fs';
 import { verifyEvent } from 'nostr-tools/pure';
-import { LocalSigner, decryptText, parseSecret, readItemEvent, textHash, unwrap } from '../src';
+import { ITEM_D_PREFIX, LocalSigner, T_TAG, decryptText, parseSecret, readItemEvent, textHash, unwrap } from '../src';
 import type { ItemText, NostrEvent } from '../src';
 import { nodeCrypto } from '../src/node';
 
@@ -55,7 +55,7 @@ export async function decryptCommand(argv: string[], env: { SHELF_SECRET?: strin
   }
   const signer = new LocalSigner(await parseSecret(env.SHELF_SECRET, nodeCrypto));
   const { hash, item } = await readItemEvent(signer, event);
-  log(JSON.stringify({ d: `shelf/item/${hash}`, created_at: event.created_at, ...item.extra, ...item.item }, null, 2));
+  log(JSON.stringify({ d: `${ITEM_D_PREFIX}${hash}`, created_at: event.created_at, ...item.extra, ...item.item }, null, 2));
   const text = item.item.text;
   if (!text) {
     log('no text: a failed parse, which opens the original page');
@@ -126,7 +126,7 @@ export async function verifyCommand(argv: string[], env: { SHELF_SECRET?: string
   let saves = 0;
   for (const [d, { event, on }] of newest) {
     const where = `(on ${on.size}/${relays.length} relays)`;
-    if (!d.startsWith('shelf/item/')) {
+    if (!d.startsWith(ITEM_D_PREFIX)) {
       log(`     ${d} ${where}`);
       continue;
     }
@@ -144,7 +144,7 @@ export async function verifyCommand(argv: string[], env: { SHELF_SECRET?: string
 async function newestCopies(relays: string[], author: string, query: Query): Promise<Map<string, { event: NostrEvent; on: Set<string> }>> {
   const newest = new Map<string, { event: NostrEvent; on: Set<string> }>();
   for (const relay of relays) {
-    for (const e of await query(relay, { kinds: [30078], authors: [author], '#t': ['shelf'] })) {
+    for (const e of await query(relay, { kinds: [30078], authors: [author], '#t': [T_TAG] })) {
       const d = e.tags.find((t) => t[0] === 'd')?.[1] ?? '';
       const held = newest.get(d);
       if (!held) newest.set(d, { event: e, on: new Set([relay]) });

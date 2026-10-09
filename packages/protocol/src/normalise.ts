@@ -8,19 +8,19 @@ import { ITEM_D_PREFIX } from './constants';
 
 export { normalise, NotALinkError } from '../../../shared/normalise';
 
-const ITEM_D = /^shelf\/item\/[0-9a-f]{64}$/;
+const ITEM_D = new RegExp(`^${ITEM_D_PREFIX}[0-9a-f]{64}$`);   // the prefix is letters and slashes only
 
 /** Lowercase hex SHA-256 of the normalised URL: the save's hash, which also draws its cover. */
 export function itemHash(url: string, canonical?: string | null): string {
   return bytesToHex(sha256(utf8ToBytes(normalise(url, canonical))));
 }
 
-/** The d tag for a save of this URL: shelf/item/<hash>. */
+/** The d tag for a save of this URL: kefli/item/<hash>. */
 export function itemD(url: string, canonical?: string | null): string {
   return ITEM_D_PREFIX + itemHash(url, canonical);
 }
 
-/** True when d addresses a save, as opposed to another shelf/ record such as shelf/devices (C§4.1). */
+/** True when d addresses a save, as opposed to another kefli/ record such as kefli/devices (C§4.1). */
 export function isItemD(d: string): boolean {
   return ITEM_D.test(d);
 }

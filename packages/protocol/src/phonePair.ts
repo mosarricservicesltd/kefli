@@ -10,7 +10,7 @@ import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { isXOnlyPubkey, OFFER_SKEW } from './pairing';
 import type { CryptoPort } from './ports';
 
-export const PHONE_PAIR_SALT = 'shelf/phone-pair/v1';
+export const PHONE_PAIR_SALT = 'kefli/phone-pair/v1';
 export const PHONE_OFFER_LIFE = 300;
 
 export interface PhoneQr {
@@ -39,7 +39,7 @@ export function readSix(typed: string): string | null {
   return /^\d{6}$/.test(d) ? d : null;
 }
 
-/** HKDF-SHA256(ikm secret, salt shelf/phone-pair/v1, info the six digits) to 64 bytes: lookup (hex) and AES key. */
+/** HKDF-SHA256(ikm secret, salt kefli/phone-pair/v1, info the six digits) to 64 bytes: lookup (hex) and AES key. */
 export function derivePhonePair(secretHex: string, six: string): { lookup: string; key: Uint8Array } {
   const out = hkdf(sha256, hexToBytes(secretHex), utf8ToBytes(PHONE_PAIR_SALT), utf8ToBytes(six), 64);
   return { lookup: bytesToHex(out.subarray(0, 32)), key: out.slice(32) };

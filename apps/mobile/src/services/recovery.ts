@@ -3,7 +3,7 @@
 // relays and the indexer), then any read relay the key's own 10002 names, so a shelf that moved its relays is
 // found too. found: a Shelf save on any of them; none: every relay answered and none holds one; offline: none
 // could be reached, so the value is kept and the notice shows (G6).
-import { KIND, T_TAG, readRelayList, type NostrEvent } from '@shelf/protocol';
+import { ITEM_D_PREFIX, KIND, T_TAG, readRelayList, type NostrEvent } from '@shelf/protocol';
 import type { Filter } from './sync';
 
 export type FindPorts = {
@@ -24,6 +24,6 @@ export async function findShelf(p: FindPorts, pubkey: string): Promise<Found> {
   const theirs = lists.events.filter((e) => e.pubkey === pubkey).flatMap((e) => readRelayList(e).filter((r) => r.read).map((r) => r.url));
   const relays = [...new Set([...base, ...theirs])];
   const saves = await ask(p, relays, { kinds: [KIND.appData], authors: [pubkey], '#t': [T_TAG], limit: 1 });
-  if (saves.events.some((e) => e.pubkey === pubkey && e.tags.some((t) => t[0] === 'd' && t[1]?.startsWith('shelf/item/')))) return 'found';
+  if (saves.events.some((e) => e.pubkey === pubkey && e.tags.some((t) => t[0] === 'd' && t[1]?.startsWith(ITEM_D_PREFIX)))) return 'found';
   return saves.answered === 0 ? 'offline' : 'none';
 }

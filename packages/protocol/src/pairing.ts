@@ -49,7 +49,7 @@ export function checkOffer(o: Partial<PairOffer> | null, operatorRelay: string, 
 
 // Crockford's base32 without I, L, O and U.
 const CODE = /^[0-9A-HJKMNP-TV-Z]{8}$/;
-export const PAIR_CODE_SALT = 'shelf/pair-code/v1';
+export const PAIR_CODE_SALT = 'kefli/pair-code/v1';
 
 /** Read a typed code leniently: upper case, hyphens and spaces dropped, O as 0, I and L as 1. Null unless eight valid characters. */
 export function readPairCode(typed: string): string | null {
@@ -69,7 +69,7 @@ export function newPairCode(crypto: CryptoPort): string {
   return out;
 }
 
-/** scrypt(code, shelf/pair-code/v1, N 16384, r 8, p 1) to 64 bytes: the lookup (hex) and the offer's AES key. */
+/** scrypt(code, kefli/pair-code/v1, N 16384, r 8, p 1) to 64 bytes: the lookup (hex) and the offer's AES key. */
 export async function derivePairCode(code: string, crypto: CryptoPort): Promise<{ lookup: string; key: Uint8Array }> {
   if (!CODE.test(code)) throw new Error('not a pair code');
   const out = await crypto.scrypt(utf8ToBytes(code), utf8ToBytes(PAIR_CODE_SALT), { N: 16384, r: 8, p: 1 }, 64);
@@ -97,8 +97,8 @@ export async function openOffer(sealed: string, key: Uint8Array, crypto: CryptoP
   }
 }
 
-export const PAIR_ACK_D = 'shelf/pair-ack';
-export const SAVE_REQUEST_D_PREFIX = 'shelf/save-request/';
+export const PAIR_ACK_D = 'kefli/pair-ack';
+export const SAVE_REQUEST_D_PREFIX = 'kefli/save-request/';
 
 export interface PairAck {
   v: 1;

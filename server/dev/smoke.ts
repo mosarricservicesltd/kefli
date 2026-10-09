@@ -6,7 +6,7 @@
 import { Relay } from 'nostr-tools/relay';
 import {
   LocalSigner, buildItemEvent, encryptText, httpAuth, itemHash, mirrorBlob, newMnemonic, normaliseMarkdown, parseItem,
-  secretKeyFromMnemonic, textHash, uploadBlob, countWords,
+  secretKeyFromMnemonic, textHash, uploadBlob, countWords, T_TAG,
 } from '../../packages/protocol/src';
 import { nodeCrypto } from '../../packages/protocol/src/node';
 import { decryptCommand, verifyCommand } from '../../packages/protocol/tools/commands';
@@ -55,7 +55,7 @@ async function main() {
   const back = await Relay.connect(defaults.relays[1]);
   const got = await new Promise<typeof event | null>((ok) => {
     let found: typeof event | null = null;
-    const sub = back.subscribe([{ kinds: [30078], authors: [signer.pubkey()], '#t': ['shelf'] }], {
+    const sub = back.subscribe([{ kinds: [30078], authors: [signer.pubkey()], '#t': [T_TAG] }], {
       onevent: (e) => { found = e as typeof event; },
       oneose: () => { sub.close(); ok(found); },
     });

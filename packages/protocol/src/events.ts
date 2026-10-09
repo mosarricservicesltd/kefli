@@ -55,7 +55,7 @@ export async function readItemEvent(signer: Signer, event: NostrEvent): Promise<
   if (event.pubkey !== signer.pubkey()) throw new Error('not this identity’s save');
   const d = event.tags.find((t) => t[0] === 'd')?.[1] ?? '';
   if (!isItemD(d)) throw new Error('not a save');
-  if (!event.tags.some((t) => t[0] === 't' && t[1] === T_TAG)) throw new Error('no t tag shelf');
+  if (!event.tags.some((t) => t[0] === 't' && t[1] === T_TAG)) throw new Error(`no t tag ${T_TAG}`);
   const item = parseItem(await signer.nip44Decrypt(signer.pubkey(), event.content));
   return { hash: d.slice(ITEM_D_PREFIX.length), item };
 }

@@ -40,9 +40,9 @@ export function readBunkerLink(input: string): BunkerLink | null {
   return { pubkey, relays: [...new Set(relays)], secret: u.searchParams.get('secret') };
 }
 
-export const PROBE_TEXT = 'shelf-probe';
+export const PROBE_TEXT = 'kefli-probe';
 
-/** C§2: encrypt shelf-probe to the signer's own pubkey, decrypt it, compare. A signer that fails is refused. */
+/** C§2: encrypt kefli-probe to the signer's own pubkey, decrypt it, compare. A signer that fails is refused. */
 export async function probeSigner(s: Signer): Promise<boolean> {
   try {
     const pk = s.pubkey();

@@ -6,8 +6,8 @@ const D = { operator: { relay: 'ws://op' }, relays: ['ws://a'], indexer: ['ws://
 
 async function world() {
   const s = new LocalSigner(nodeCrypto.randomBytes(32));
-  const item = await s.signEvent({ kind: 30078, created_at: 1, tags: [['d', 'shelf/item/' + 'ab'.repeat(32)], ['t', 'shelf']], content: 'x' });
-  const devices = await s.signEvent({ kind: 30078, created_at: 1, tags: [['d', 'shelf/devices'], ['t', 'shelf']], content: 'x' });
+  const item = await s.signEvent({ kind: 30078, created_at: 1, tags: [['d', 'kefli/item/' + 'ab'.repeat(32)], ['t', 'kefli']], content: 'x' });
+  const devices = await s.signEvent({ kind: 30078, created_at: 1, tags: [['d', 'kefli/devices'], ['t', 'kefli']], content: 'x' });
   const list = await buildRelayList(s, [{ url: 'ws://moved', read: true, write: true }], 1);
   const held: Record<string, unknown[]> = {};
   const down = new Set<string>();

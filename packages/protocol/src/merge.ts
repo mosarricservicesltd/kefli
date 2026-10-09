@@ -50,7 +50,7 @@ export function deletionRemoves(local: LocalVersion, deletedAt: number): boolean
   return deletedAt >= (local.createdAt ?? 0);
 }
 
-/** The save hashes a verified kind 5 by owner deletes: its a tags naming 30078:<owner>:shelf/item/<64 hex>. */
+/** The save hashes a verified kind 5 by owner deletes: its a tags naming 30078:<owner>:kefli/item/<64 hex>. */
 export function deletedHashes(event: NostrEvent, owner: string): string[] {
   if (event.kind !== KIND.deletion || event.pubkey !== owner) return [];
   const prefix = `${KIND.appData}:${owner}:`;

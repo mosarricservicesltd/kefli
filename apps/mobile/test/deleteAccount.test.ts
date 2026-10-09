@@ -67,7 +67,7 @@ describe('Delete my data (mobile spec 7.2, contract 4.7)', () => {
     // the wrap's deletion and the saves' (the operator relay is in the 10002), with the devices record among them
     const op = w.sent.filter((s) => s.relay === 'ws://op').map((s) => s.event.tags);
     expect(op.some((t) => t.some((x) => x[0] === 'e' && x[1] === h(500)))).toBe(true);
-    expect(op.flat().filter((x) => x[0] === 'a').map((x) => x[1].split(':')[2])).toEqual(expect.arrayContaining([`shelf/item/${h(1)}`, 'shelf/devices']));
+    expect(op.flat().filter((x) => x[0] === 'a').map((x) => x[1].split(':')[2])).toEqual(expect.arrayContaining([`kefli/item/${h(1)}`, 'kefli/devices']));
     // the generated identity's lists go from every relay in the 10002, the operator's included, and the indexer
     expect(w.sent.some((s) => s.relay === 'ws://op' && s.event.tags.some((t) => t[1] === `10063:${w.pk}:`))).toBe(true);
     // and the indexer

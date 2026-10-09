@@ -1,6 +1,6 @@
 // URL normalisation, the reference implementation of contract section 4.3.
 //
-// A save's d tag is "shelf/item/" + sha256(normalise(finalUrl, canonical)), so this function must give
+// A save's d tag is "kefli/item/" + sha256(normalise(finalUrl, canonical)), so this function must give
 // the same string on every engine: V8 in the extension, Hermes on the phone. It therefore never uses
 // the platform's URL. Parsing and serialisation come from the whatwg-url package, which is the URL
 // Standard in plain JavaScript and takes its host through UTS-46 with tr46 (non-transitional, CheckBidi
@@ -9,7 +9,7 @@
 // whose webidl-conversions reads SharedArrayBuffer at load, which Hermes doesn't have.
 //
 // Where the contract text leaves a choice open, the choice is marked RULED: settled with contract 1.4
-// (section 11.1) and listed in the fixtures' rulings.
+// (section 11.2) and listed in the fixtures' rulings.
 
 /// <reference path="./whatwg-url-state-machine.d.ts" />
 import type { URLRecord } from 'whatwg-url';

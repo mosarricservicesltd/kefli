@@ -4,7 +4,7 @@
 // RULED: an event with v above 1 that is newer than the local row goes to items_future and the local row is
 // removed with its pending sends, since this phone may not write over a version it doesn't understand (C§10);
 // an older one is ignored. A save with no text arrives as text_state 'queued', so this phone tries the parse.
-import { deletedHashes, deletionRemoves, mergeItem, wordReached } from '@shelf/protocol';
+import { ITEM_D_PREFIX, deletedHashes, deletionRemoves, mergeItem, wordReached } from '@shelf/protocol';
 import type { LocalVersion, MergeOutcome, NostrEvent, ParsedItem } from '@shelf/protocol';
 import type { SqlDb } from './db';
 import { enqueue } from './outbox';
@@ -141,7 +141,7 @@ export function applyItem(db: SqlDb, now: number, owner: string, hash: string, e
 
 function future(db: SqlDb, owner: string, hash: string, event: NostrEvent, row: Row | undefined, v: unknown): Applied {
   if (!(typeof v === 'number' && v > 1)) return { outcome: 'ignored' };
-  const d = `shelf/item/${hash}`;
+  const d = ITEM_D_PREFIX + hash;
   const held = db.get<{ created_at: number }>('SELECT created_at FROM items_future WHERE owner = ? AND d = ?', owner, d);
   if (held && held.created_at >= event.created_at) return { outcome: 'ignored' };
   if (row && row.event_created_at !== null && row.event_created_at >= event.created_at) return { outcome: 'ignored' };
@@ -155,7 +155,7 @@ export function applyDeletion(db: SqlDb, owner: string, event: NostrEvent): stri
   return db.tx(() => {
     const removed: string[] = [];
     for (const hash of deletedHashes(event, owner)) {
-      db.run('DELETE FROM items_future WHERE owner = ? AND d = ? AND created_at <= ?', owner, `shelf/item/${hash}`, event.created_at);
+      db.run('DELETE FROM items_future WHERE owner = ? AND d = ? AND created_at <= ?', owner, ITEM_D_PREFIX + hash, event.created_at);
       const row = db.get<Row>('SELECT * FROM items WHERE owner = ? AND hash = ?', owner, hash);
       if (!row || !deletionRemoves(version(row)!, event.created_at)) continue;
       removeItem(db, row.id, owner, hash);

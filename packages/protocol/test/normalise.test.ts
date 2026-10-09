@@ -23,16 +23,16 @@ describe('normalise fixtures (C§4.3)', () => {
 });
 
 describe('the d tag', () => {
-  test('is shelf/item/ and the SHA-256 of the normalised URL', () => {
+  test('is kefli/item/ and the SHA-256 of the normalised URL', () => {
     const want = createHash('sha256').update('https://xn--bcher-kva.example/a', 'utf8').digest('hex');
     expect(itemHash('https://Bücher.example/a/#x')).toBe(want);
-    expect(itemD('https://Bücher.example/a/#x')).toBe(`shelf/item/${want}`);
+    expect(itemD('https://Bücher.example/a/#x')).toBe(`kefli/item/${want}`);
   });
 
   test('tells saves from other shelf records', () => {
     expect(isItemD(itemD('https://example.com/'))).toBe(true);
-    expect(isItemD('shelf/devices')).toBe(false);
-    expect(isItemD(`shelf/item/${'A'.repeat(64)}`)).toBe(false);
+    expect(isItemD('kefli/devices')).toBe(false);
+    expect(isItemD(`kefli/item/${'A'.repeat(64)}`)).toBe(false);
   });
 });
 

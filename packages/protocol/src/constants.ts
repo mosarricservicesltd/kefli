@@ -1,4 +1,4 @@
-// Kinds, addresses and limits from contract v1.4. Kind numbers and d namespaces never change after launch (C§10).
+// Kinds, addresses and limits from contract v1.5. Kind numbers and d namespaces never change after launch (C§10).
 
 export const CONTRACT_VERSION = '1.4';
 
@@ -25,11 +25,11 @@ export const KIND = {
   appData: 30078,
 } as const;
 
-/** Every save and every other Shelf record carries this t tag. */
-export const T_TAG = 'shelf';
-export const D_PREFIX = 'shelf/';
-export const ITEM_D_PREFIX = 'shelf/item/';
-export const DEVICES_D = 'shelf/devices';
+/** Every save and every other Kefli record carries this t tag (C§4.1, v1.5). */
+export const T_TAG = 'kefli';
+export const D_PREFIX = 'kefli/';
+export const ITEM_D_PREFIX = 'kefli/item/';
+export const DEVICES_D = 'kefli/devices';
 
 /** No client publishes an event over 16 KB serialised (C§3.3). */
 export const MAX_EVENT_BYTES = 16_384;

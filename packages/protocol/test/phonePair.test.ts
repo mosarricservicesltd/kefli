@@ -5,7 +5,7 @@ import { hkdfSync } from 'node:crypto';
 describe('second-phone pairing (contract 2)', () => {
   test('the derivation is HKDF-SHA256 with the contract salt and the digits as info', () => {
     const secret = 'ab'.repeat(32);
-    const ref = Buffer.from(hkdfSync('sha256', Buffer.from(secret, 'hex'), 'shelf/phone-pair/v1', '482913', 64));
+    const ref = Buffer.from(hkdfSync('sha256', Buffer.from(secret, 'hex'), 'kefli/phone-pair/v1', '482913', 64));
     const { lookup, key } = derivePhonePair(secret, '482913');
     expect(lookup).toBe(ref.subarray(0, 32).toString('hex'));
     expect(Buffer.from(key).toString('hex')).toBe(ref.subarray(32).toString('hex'));

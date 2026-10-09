@@ -2,7 +2,7 @@
   "name": "@shelf/protocol",
   "version": "0.1.0",
   "private": true,
-  "description": "Platform-free protocol code for Shelf: normalise, the item JSON, events, encryption (contract v1.4)",
+  "description": "Platform-free protocol code for Shelf: normalise, the item JSON, events, encryption (contract v1.5)",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "scripts": {

@@ -46,7 +46,7 @@ describe('X posts (C§4.3)', () => {
 describe('deletions (C§4.1)', () => {
   test('batches of 50 with the k tag', async () => {
     const s = signer();
-    const ds = Array.from({ length: 120 }, (_, i) => `shelf/item/${i.toString(16).padStart(64, '0')}`);
+    const ds = Array.from({ length: 120 }, (_, i) => `kefli/item/${i.toString(16).padStart(64, '0')}`);
     const evs = await buildDeletions(s, ds, 10);
     expect(evs.map((e) => e.tags.filter((t) => t[0] === 'a').length)).toEqual([50, 50, 20]);
     for (const e of evs) {
@@ -61,7 +61,7 @@ describe('deletions (C§4.1)', () => {
   test('a wrap deletion', async () => {
     const e = await buildWrapDeletion(signer(), 'ab'.repeat(32), 1);
     expect(e.tags).toEqual([['e', 'ab'.repeat(32)], ['k', '1059']]);
-    expect(itemAddress('pk', 'shelf/devices')).toBe('30078:pk:shelf/devices');
+    expect(itemAddress('pk', 'kefli/devices')).toBe('30078:pk:kefli/devices');
   });
 });
 

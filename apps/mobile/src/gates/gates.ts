@@ -9,7 +9,7 @@ import { v2 as nip44 } from 'nostr-tools/nip44';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { base64 } from '@scure/base';
 import {
-  LocalSigner, NotALinkError, checkSecp, countWords, conversationKey, nobleSecp, verifyEventWith, derivePairCode, normalise, normaliseMarkdown, project, secretKeyFromMnemonic, sentences, textHash,
+  ITEM_D_PREFIX, LocalSigner, NotALinkError, PROBE_TEXT, T_TAG, checkSecp, countWords, conversationKey, nobleSecp, verifyEventWith, derivePairCode, normalise, normaliseMarkdown, project, secretKeyFromMnemonic, sentences, textHash,
 } from '@shelf/protocol';
 import { phoneCrypto } from '../crypto/port';
 import { nativeSecp } from '../crypto/secp';
@@ -82,7 +82,7 @@ export const GATES: Gate[] = [
       const t = now();
       const { lookup } = await derivePairCode('K7QM4XPD', phoneCrypto);
       const took = now() - t;
-      if (lookup !== '8a0b73e641602ecd6e49f3c64dee51f053f79edfdea90594c8df40de02202d76') fail(`lookup ${lookup}`);
+      if (lookup !== '2ca73b673edb4f51cfdb460599a6411f580992cf1fbe823f2e49a74b8e25695e') fail(`lookup ${lookup}`);
       return `lookup matches in ${ms(took)} (2,600 ms in JavaScript)`;
     },
   },
@@ -102,7 +102,7 @@ export const GATES: Gate[] = [
     title: 'finalizeEvent and nip44.v2 on a release build',
     async run() {
       const sk = generateSecretKey();
-      const ev = finalizeEvent({ kind: 30078, created_at: 1, tags: [['d', 'shelf/item/x']], content: 'hi' }, sk);
+      const ev = finalizeEvent({ kind: 30078, created_at: 1, tags: [['d', `${ITEM_D_PREFIX}x`]], content: 'hi' }, sk);
       if (!verifyEvent(ev)) fail('signed event does not verify');
       let n = 0;
       for (const v of NIP44) {
@@ -113,8 +113,8 @@ export const GATES: Gate[] = [
         n++;
       }
       const s = new LocalSigner(generateSecretKey());
-      const c = await s.nip44Encrypt(s.pubkey(), 'shelf-probe');
-      if ((await s.nip44Decrypt(s.pubkey(), c)) !== 'shelf-probe') fail('self-encryption round trip');
+      const c = await s.nip44Encrypt(s.pubkey(), PROBE_TEXT);
+      if ((await s.nip44Decrypt(s.pubkey(), c)) !== PROBE_TEXT) fail('self-encryption round trip');
       return `signs and verifies; all ${n} NIP-44 vectors pass; self-encryption round trips`;
     },
   },
@@ -323,7 +323,7 @@ async function schnorrTiming(secp: SecpPort, enforce = true): Promise<string> {
   const t0 = now();
   for (let i = 0; i < 50; i++) {
     const content = await signer.nip44Encrypt(signer.pubkey(), item);
-    signed.push(JSON.stringify(await signer.signEvent({ kind: 30078, created_at: i, tags: [['d', `shelf/item/${i}`], ['t', 'shelf']], content })));
+    signed.push(JSON.stringify(await signer.signEvent({ kind: 30078, created_at: i, tags: [['d', `${ITEM_D_PREFIX}${i}`], ['t', T_TAG]], content })));
   }
   const sign = (now() - t0) / 50;
   const one: number[] = [];
