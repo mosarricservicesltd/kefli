@@ -15,6 +15,7 @@ import { ackFor, browserLabel, formatCode, OFFER_LIFE, pairingFrom, postOffer } 
 import { ATTEMPTS_MAX, BLOB_KEEP_MAX, dequeue, enqueue, failed, flush, QUEUE_MAX, queued, waiting, whyNot } from '../src/queue';
 import { deliver, prepare, retract, type Net, type Pending } from '../src/save';
 import { KEYS, memoryStore, type Pairing } from '../src/store';
+import { applyMove, followMoves } from '../src/move';
 import { markDelay, toastCopy } from '../src/toastCopy';
 
 const DEFAULTS: Defaults = { v: 1, operator: { relay: 'wss://relay.example', blossom: 'https://blossom.example', api: 'https://api.example' }, relays: ['wss://a.example'], mirrors: ['https://m.example'] };
@@ -180,7 +181,7 @@ describe('delivery', () => {
 });
 
 describe('the queue (extension spec 4, decisions 30, 31 and 60)', () => {
-  const p = (id: string, blob: string | null = null): Pending => ({ id, wrap: { id } as NostrEvent, blob, sha256: blob ? 's' : null, hash: 'h', title: 't', host: 'h', created_at: NOW, attempts: 0 });
+  const p = (id: string, blob: string | null = null): Pending => ({ id, wrap: { id } as NostrEvent, sealed: '', blob, sha256: blob ? 's' : null, hash: 'h', title: 't', host: 'h', created_at: NOW, attempts: 0 });
 
   test('eight wait; a ninth is refused', async () => {
     const store = memoryStore();
@@ -271,5 +272,45 @@ describe('the toast', () => {
     expect(markDelay(1)).toBe(520);
     expect(markDelay(5)).toBe(656);
     expect(markDelay(40)).toBe(1000);
+  });
+});
+
+describe('following a move (contract 4.4 and 4.8)', () => {
+  const T = new LocalSigner(hexToBytes('33'.repeat(32)));
+  const U = new LocalSigner(hexToBytes('44'.repeat(32)));
+  const ackFor = (to: LocalSigner, from: string, token: string): PairAck => ({ v: 1, user_pubkey: to.pubkey(), write_relays: ['wss://t.example'], blossom_servers: ['https://bt.example'], token, moved_from: from });
+  const wrapAck = async (sealer: LocalSigner, ack: PairAck, at: number) => (await wrapPairAck(sealer, device.pubkey(), ack, at)).wrap;
+
+  test('a pair-ack from the current user, moving to another key, is followed', async () => {
+    const w = await wrapAck(user, ackFor(T, user.pubkey(), 'a1'.repeat(32)), NOW);
+    expect((await followMoves(device, [w], user.pubkey()))?.user_pubkey).toBe(T.pubkey());
+  });
+  test('a chain is followed step by step, whatever order the wraps came in', async () => {
+    const st = await wrapAck(user, ackFor(T, user.pubkey(), 'a1'.repeat(32)), NOW);
+    const tu = await wrapAck(T, ackFor(U, T.pubkey(), 'b1'.repeat(32)), NOW + 60);
+    expect((await followMoves(device, [tu, st], user.pubkey()))).toMatchObject({ user_pubkey: U.pubkey(), token: 'b1'.repeat(32) });
+  });
+  test('a move sealed by anyone but the current user, or from another key, is ignored', async () => {
+    const forged = await wrapAck(T, ackFor(T, user.pubkey(), 'a1'.repeat(32)), NOW);
+    const other = await wrapAck(U, ackFor(T, U.pubkey(), 'a1'.repeat(32)), NOW);
+    const firstPairing = await wrapAck(user, { ...ackFor(T, user.pubkey(), 'a1'.repeat(32)), moved_from: undefined, nonce: 'n' }, NOW);
+    expect(await followMoves(device, [forged, other, firstPairing], user.pubkey())).toBeNull();
+  });
+  test('the pairing is replaced and a waiting save goes to the new key with its token', async () => {
+    const store = memoryStore();
+    await store.set(KEYS.pairing, PAIRING);
+    const { pending } = await prepare(PAGE, { device, defaults: DEFAULTS, pairing: PAIRING, crypto: webCrypto, now: NOW });
+    await enqueue(store, pending, 'offline');
+    const p = await applyMove(store, device, ackFor(T, user.pubkey(), 'c1'.repeat(32)), NOW + 10);
+    expect(p).toMatchObject({ user_pubkey: T.pubkey(), token: 'c1'.repeat(32), label: PAIRING.label, paired_at: PAIRING.paired_at, write_relays: ['wss://t.example'] });
+    const [moved] = await queued(store);
+    expect(moved.id).not.toBe(pending.id);
+    expect(moved.blob).toBe(pending.blob);
+    const { rumor } = await unwrap(T, moved.wrap);
+    const req = JSON.parse(rumor.content) as SaveRequest;
+    expect(req).toMatchObject({ url: PAGE.url, token: 'c1'.repeat(32) });
+    expect(rumor.tags).toEqual((await unwrap(user, pending.wrap)).rumor.tags);
+    await expect(unwrap(user, moved.wrap)).rejects.toThrow();
+    expect(await store.get(KEYS.pairing)).toEqual(p);
   });
 });

@@ -1,0 +1,64 @@
+// Following the library to another key (contract 4.4 and 4.8). When the phone moves a library from S to T it sends each
+// connected browser a pair-ack sealed by S, the key the browser knows, carrying T's pubkey, relays, servers and a new
+// token, with moved_from = S. The browser takes it only from its current user, replaces its pairing, and wraps any save
+// still waiting again for T, so nothing queued goes to the library that moved away.
+import { acceptPairAck, wrapSaveRequest, type PairAck, type SaveRequest } from '../../../packages/protocol/src/pairing';
+import type { LocalSigner, NostrEvent } from '../../../packages/protocol/src/signer';
+import { unwrap } from '../../../packages/protocol/src/wrap';
+import { queued, type Queued } from './queue';
+import { KEYS, type Pairing, type Store } from './store';
+
+/**
+ * The move to follow, if any: each pair-ack must come from the current user (moved_from and the seal's signer), so a chain
+ * S → T → U is followed one step at a time, oldest first. Returns the final ack, or null when nothing applies.
+ */
+export async function followMoves(device: LocalSigner, wraps: NostrEvent[], current: string): Promise<PairAck | null> {
+  let user = current;
+  let found: PairAck | null = null;
+  const open = await Promise.all(wraps.map(async (w) => unwrap(device, w).catch(() => null)));
+  const candidates = open
+    .filter((o): o is NonNullable<typeof o> => o !== null)
+    .sort((a, b) => a.rumor.created_at - b.rumor.created_at);
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const { rumor, seal } of candidates) {
+      const v = acceptPairAck(rumor, seal, { offerNonce: null, pairedUser: user });
+      if (!v.ok || !v.move || v.ack.user_pubkey === user) continue;
+      found = v.ack;
+      user = v.ack.user_pubkey;
+      changed = true;
+    }
+  }
+  return found;
+}
+
+/**
+ * A queued save wrapped again for the new user, with the new token; its blob and everything else stay. One whose sealed
+ * request can't be read (queued before requests were kept) stays as it was.
+ */
+export async function rewrap(e: Queued, device: LocalSigner, pairing: Pairing, now: number): Promise<Queued> {
+  let kept: { uuid: string; request: SaveRequest };
+  try {
+    kept = JSON.parse(await device.nip44Decrypt(device.pubkey(), e.sealed));
+  } catch {
+    return e;
+  }
+  const { uuid, request } = kept;
+  const moved: SaveRequest = { ...request, token: pairing.token };
+  const { wrap } = await wrapSaveRequest(device, pairing.user_pubkey, uuid, moved, now);
+  const sealed = await device.nip44Encrypt(device.pubkey(), JSON.stringify({ uuid, request: moved }));
+  return { ...e, id: wrap.id, wrap, sealed };
+}
+
+/** Takes the move: the pairing replaced (its label and date kept) and the queue wrapped again for the new user. */
+export async function applyMove(store: Store, device: LocalSigner, ack: PairAck, now: number): Promise<Pairing> {
+  const old = await store.get<Pairing>(KEYS.pairing);
+  const pairing: Pairing = { v: 1, user_pubkey: ack.user_pubkey, write_relays: ack.write_relays, blossom_servers: ack.blossom_servers, token: ack.token, label: old?.label ?? '', paired_at: old?.paired_at ?? now };
+  const q = await queued(store);
+  const again: Queued[] = [];
+  for (const e of q) again.push(await rewrap(e, device, pairing, now));
+  await store.set(KEYS.queue, again);
+  await store.set(KEYS.pairing, pairing);
+  return pairing;
+}
+

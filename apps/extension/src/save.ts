@@ -33,6 +33,11 @@ export interface Pending {
   /** The wrap's id. */
   id: string;
   wrap: NostrEvent;
+  /**
+   * The request and its uuid, NIP-44 encrypted to the device's own key, so a save still queued when the library moves
+   * to another key can be wrapped again for it (contract 4.4); the wrap itself can't be opened by its sender.
+   */
+  sealed: string;
   /** The inbox blob as base64 until it is uploaded; null once uploaded, or when there was no HTML. */
   blob: string | null;
   sha256: string | null;
@@ -76,8 +81,9 @@ export async function prepare(c: Captured, ctx: SaveContext): Promise<Prepared> 
   };
   const uuid = bytesToHex(ctx.crypto.randomBytes(16));
   const { wrap, wrapKey } = await wrapSaveRequest(ctx.device, ctx.pairing.user_pubkey, uuid, request, ctx.now);
+  const sealed = await ctx.device.nip44Encrypt(ctx.device.pubkey(), JSON.stringify({ uuid, request }));
   const pending: Pending = {
-    id: wrap.id, wrap, blob: enc ? base64.encode(enc.blob) : null, sha256: enc?.text.sha256 ?? null,
+    id: wrap.id, wrap, sealed, blob: enc ? base64.encode(enc.blob) : null, sha256: enc?.text.sha256 ?? null,
     hash: itemHash(c.url, c.canonical), title: c.title ?? hostOf(c.url), host: hostOf(c.url), created_at: ctx.now, attempts: 0,
   };
   return { pending, wrapKey };

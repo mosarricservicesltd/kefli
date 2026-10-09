@@ -16,15 +16,17 @@ export function chromeStore(area: chrome.storage.StorageArea): Store {
   };
 }
 
+/** For the tests: a Map that copies through JSON, as chrome.storage stores values. */
 export function memoryStore(): Store & { data: Map<string, unknown> } {
   const data = new Map<string, unknown>();
+  const copy = (v: unknown) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
   return {
     data,
     async get<T>(key: string) {
-      return structuredClone(data.get(key)) as T | undefined;
+      return copy(data.get(key)) as T | undefined;
     },
     async set(key, value) {
-      data.set(key, structuredClone(value));
+      data.set(key, copy(value));
     },
     async remove(key) {
       data.delete(key);
@@ -43,4 +45,4 @@ export interface Pairing {
   paired_at: number;
 }
 
-export const KEYS = { device: 'device', pairing: 'pairing', defaults: 'defaults', queue: 'queue', history: 'history' } as const;
+export const KEYS = { device: 'device', pairing: 'pairing', defaults: 'defaults', queue: 'queue', history: 'history', movesChecked: 'movesChecked' } as const;

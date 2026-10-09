@@ -6,8 +6,9 @@ import { BROWSER, DEFAULTS_URL, FLAVOUR } from './config';
 import { webCrypto } from './crypto';
 import { loadDefaults } from './defaults';
 import { deviceSigner } from './device';
+import { applyMove, followMoves } from './move';
 import { dequeue, enqueue, flush, queued, waiting, whyNot } from './queue';
-import { publish } from './relay';
+import { fetchWraps, publish } from './relay';
 import { deliver, fetchNet, prepare, retract, type SaveContext } from './save';
 import { chromeStore, KEYS, type Pairing } from './store';
 import type { ToastKind, ToastState } from './toastCopy';
@@ -25,7 +26,42 @@ chrome.contextMenus.removeAll(() => chrome.contextMenus.create({ id: 'save-link'
 chrome.runtime.onInstalled.addListener((d) => {
   if (d.reason === 'install') void chrome.runtime.openOptionsPage();
   void badge();
+  void watchMoves();
 });
+chrome.runtime.onStartup.addListener(() => void watchMoves());
+
+/** How often the background looks for a move while the browser runs, and how soon after one look a send may look again. */
+const MOVES_EVERY_MINUTES = 30;
+const MOVES_AFTER_SEND = 300;
+
+/**
+ * Following a move (contract 4.4 and 4.8): the gift wraps addressed to this browser since the last look, less NIP-59's two
+ * days of backdating, are checked for a pair-ack from the current user carrying moved_from; one that is found replaces
+ * the pairing and wraps the queue again for the new key. A service worker can't hold a subscription open, so the
+ * background looks at start, every half hour and after sending (ruling, extension spec 15).
+ */
+async function checkMoves(): Promise<void> {
+  const pairing = await store.get<Pairing>(KEYS.pairing);
+  const defaults = pairing ? await loadDefaults(store, DEFAULTS_URL) : null;
+  if (!pairing || !defaults) return;
+  const device = await deviceSigner(store, webCrypto);
+  const since = ((await store.get<number>(KEYS.movesChecked)) ?? pairing.paired_at) - 172_800 - 300;
+  const wraps = await fetchWraps(defaults.operator.relay, device, since).catch(() => null);
+  if (!wraps) return;
+  const ack = await followMoves(device, wraps, pairing.user_pubkey);
+  if (ack) await applyMove(store, device, ack, now());
+  await store.set(KEYS.movesChecked, now());
+}
+
+async function watchMoves(): Promise<void> {
+  await chrome.alarms.create('moves', { periodInMinutes: MOVES_EVERY_MINUTES });
+  await checkMoves();
+}
+
+async function checkMovesSoon(): Promise<void> {
+  const last = (await store.get<number>(KEYS.movesChecked)) ?? 0;
+  if (now() - last > MOVES_AFTER_SEND) await checkMoves();
+}
 
 async function context(): Promise<SaveContext | null> {
   const pairing = await store.get<Pairing>(KEYS.pairing);
@@ -109,6 +145,8 @@ function sentKind(c: Captured): ToastKind {
 }
 
 async function save(c: Captured, tabId: Where, link: boolean): Promise<void> {
+  // a move found now means this save is wrapped for the new key from the start
+  await checkMovesSoon();
   const ctx = await context();
   if (!ctx) return;
   const { pending, wrapKey } = await prepare(c, ctx);
@@ -160,6 +198,8 @@ async function undo(id: string, where: Where): Promise<void> {
 }
 
 async function flushQueue(all = false, only?: string): Promise<void> {
+  // a save queued before a move must go to the new key, so a waiting queue looks for one first
+  await checkMovesSoon();
   const ctx = await context();
   if (!ctx) return;
   await flush(store, (p) => deliver(p, ctx.defaults.operator.blossom, ctx.defaults.operator.relay, ctx.device, net), navigator.onLine, all, only);
@@ -193,6 +233,9 @@ chrome.runtime.onMessage.addListener((msg: { type: string; id?: string; all?: bo
   return true;
 });
 
-chrome.alarms.onAlarm.addListener((a) => a.name === 'flush' && void flushQueue());
+chrome.alarms.onAlarm.addListener((a) => {
+  if (a.name === 'flush') void flushQueue();
+  if (a.name === 'moves') void checkMoves();
+});
 self.addEventListener('online', () => void flushQueue());
 void badge();
