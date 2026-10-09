@@ -1,0 +1,716 @@
+<title>Kefli · Every Save a Range</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Literata:ital,opsz,wght@0,7..72,400;1,7..72,400&family=Martian+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a dark panorama hero where every save is a ridge, then ink on paper sections in one 1120px column. */
+:root {
+  --bg: #F3F2EE; --surface: #FFFFFF; --line: #DEDCD5; --line-strong: #8C8A83;
+  --text: #17171A; --muted: #5C5B56; --fill: #17171A; --on-fill: #F3F2EE; --focus: #17171A;
+  /* the hero is a single dark look in both themes */
+  --h-bg: #0A0C10; --h-text: #EDECE8; --h-muted: #A7A59F; --h-line: #2E2E31; --h-line-strong: #7A7983;
+  --h-surface: #1A1A1C; --h-fill: #EDECE8; --h-on-fill: #111112; --h-error: #FF8B7B;
+  --f-ui: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --f-read: "Literata", Georgia, "Times New Roman", serif;
+  --f-mono: "Martian Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --col: 1120px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111112; --surface: #1A1A1C; --line: #2E2E31; --line-strong: #7A7983;
+    --text: #EDECE8; --muted: #A7A59F; --fill: #EDECE8; --on-fill: #111112; --focus: #EDECE8;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111112; --surface: #1A1A1C; --line: #2E2E31; --line-strong: #7A7983;
+  --text: #EDECE8; --muted: #A7A59F; --fill: #EDECE8; --on-fill: #111112; --focus: #EDECE8;
+  color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: var(--f-ui); font-size: 16px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
+.wrap { max-width: var(--col); margin: 0 auto; padding-inline: 24px; }
+@media (max-width: 560px) { .wrap { padding-inline: 16px; } }
+.mono { font-family: var(--f-mono); font-size: 11px; letter-spacing: .02em; font-variant-numeric: tabular-nums; }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+p { margin: 0; }
+
+/* buttons: text centred in every filled or bordered element */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px;
+  font: 600 15px/1 var(--f-ui); text-decoration: none; border: 1px solid transparent; cursor: pointer; white-space: nowrap;
+  transition: transform .2s cubic-bezier(.2,.7,.2,1), background-color .2s, color .2s; }
+.btn:active { transform: scale(.97); }
+.btn svg { width: 18px; height: 18px; flex: none; }
+.btn-fill { background: var(--fill); color: var(--on-fill); }
+.btn-fill:hover { background: var(--muted); }
+.btn-line { border-color: var(--line-strong); color: var(--text); background: transparent; }
+.btn-line:hover { background: var(--fill); color: var(--on-fill); border-color: var(--fill); }
+
+/* ---------- hero ---------- */
+.hero { position: relative; background: var(--h-bg); color: var(--h-text); overflow: hidden; isolation: isolate; }
+.hero :focus-visible { outline-color: var(--h-text); }
+.hero canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; display: block; }
+.nav { display: flex; align-items: center; gap: 28px; padding-block: 20px; }
+.brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 700; font-stretch: 125%; font-size: 18px; letter-spacing: .01em; }
+.brand svg { width: 28px; height: 28px; border-radius: 7px; }
+.nav ul { display: flex; gap: 24px; list-style: none; margin: 0 0 0 auto; padding: 0; }
+.nav ul a { text-decoration: none; font-size: 14px; color: var(--h-muted); }
+.nav ul a:hover { color: var(--h-text); }
+.hero .btn-fill { background: var(--h-fill); color: var(--h-on-fill); }
+.hero .btn-fill:hover { background: #FFFFFF; }
+.hero .btn-line { border-color: var(--h-line-strong); color: var(--h-text); }
+.hero .btn-line:hover { background: var(--h-fill); color: var(--h-on-fill); border-color: var(--h-fill); }
+.nav .btn { min-height: 38px; padding: 0 16px; font-size: 14px; }
+@media (max-width: 760px) { .nav ul { display: none; } .nav .btn { margin-left: auto; } }
+
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, .75fr); gap: 40px; align-items: end;
+  padding-block: clamp(36px, 7vh, 88px) 0; }
+.eyebrow { color: var(--h-muted); text-transform: uppercase; letter-spacing: .12em; font-size: 10.5px; }
+.hero h1 { font-weight: 800; font-stretch: 125%; font-size: clamp(38px, 6.4vw, 84px); line-height: .98; letter-spacing: -.02em; margin-top: 18px; }
+.notches { display: block; width: min(100%, 420px); height: 16px; margin: 26px 0 22px; color: var(--h-line-strong); }
+.sub { font-size: clamp(16px, 1.5vw, 19px); color: var(--h-muted); max-width: 34em; }
+.sub strong { color: var(--h-text); font-weight: 500; }
+
+.raise { margin-top: 30px; max-width: 560px; }
+.raise label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px; letter-spacing: .01em; }
+.field { display: flex; gap: 8px; padding: 5px; border: 1px solid var(--h-line-strong); border-radius: 999px; background: rgba(17,17,18,.62);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.field:focus-within { border-color: var(--h-text); }
+.field input { flex: 1; min-width: 0; background: transparent; border: 0; color: var(--h-text); font: 400 14px/1.2 var(--f-mono); padding: 0 14px; outline: none; }
+.field input::placeholder { color: var(--h-muted); }
+.field .btn { min-height: 40px; }
+.raise .help { color: #C4C2BC; text-shadow: 0 0 10px #0A0C10, 0 0 3px #0A0C10; margin-top: 10px; max-width: 52ch; line-height: 1.7; }
+.raise .err { color: var(--h-error); margin-top: 10px; font-size: 14px; }
+.ctas { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+
+.card { justify-self: end; width: min(100%, 300px); background: rgba(26,26,28,.78); border: 1px solid var(--h-line); border-radius: 14px; padding: 14px;
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); display: grid; grid-template-columns: 92px minmax(0,1fr); gap: 14px; align-items: center; }
+.card .cv { width: 92px; height: 92px; border-radius: 6px; overflow: hidden; box-shadow: inset 0 0 0 1px #EDECE81A; }
+.card .cv svg { display: block; width: 100%; height: 100%; }
+.card .k { color: var(--h-muted); text-transform: uppercase; letter-spacing: .1em; font-size: 9.5px; }
+.card .host { font-weight: 600; font-size: 15px; margin-top: 4px; overflow-wrap: anywhere; line-height: 1.25; }
+.card .hash { color: var(--h-muted); margin-top: 6px; }
+.card .cap { grid-column: 1 / -1; font-size: 12.5px; color: var(--h-muted); border-top: 1px solid var(--h-line); padding-top: 10px; line-height: 1.5; }
+.range-floor { height: clamp(230px, 36vh, 400px); }
+@media (max-width: 860px) {
+  .hero-grid { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  .card { justify-self: start; }
+}
+
+/* ---------- sections ---------- */
+section.s { padding-block: clamp(64px, 10vw, 128px); border-top: 1px solid var(--line); }
+section.s:first-of-type { border-top: 0; }
+.s-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: end; margin-bottom: 48px; }
+.s-head h2 { font-weight: 700; font-stretch: 125%; font-size: clamp(28px, 3.6vw, 46px); line-height: 1.05; letter-spacing: -.015em; }
+.s-head p { color: var(--muted); max-width: 46ch; }
+.tag { color: var(--muted); text-transform: uppercase; letter-spacing: .12em; font-size: 10.5px; display: block; margin-bottom: 16px; }
+@media (max-width: 760px) { .s-head { grid-template-columns: minmax(0,1fr); gap: 16px; } }
+
+.covers { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; list-style: none; padding: 0; margin: 0; }
+.covers li { min-width: 0; }
+.covers .cv { aspect-ratio: 1; border-radius: 6px; overflow: hidden; box-shadow: inset 0 0 0 1px #17171A17; max-width: 100%; }
+.covers .cv svg { display: block; width: 100%; height: 100%; }
+.covers .host { font-size: 14px; font-weight: 600; margin-top: 10px; overflow-wrap: anywhere; }
+.covers .mono { color: var(--muted); display: block; margin-top: 2px; }
+@media (max-width: 900px) { .covers { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 460px) { .covers { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--text); }
+.three > div { padding: 24px 28px 8px 0; min-width: 0; }
+.three > div + div { padding-left: 28px; border-left: 1px solid var(--line); }
+.three svg { width: 26px; height: 26px; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.three h3 { font-weight: 700; font-stretch: 125%; font-size: 22px; margin: 18px 0 10px; }
+.three p { color: var(--muted); max-width: 34ch; }
+.nots { margin-top: 40px; color: var(--muted); }
+@media (max-width: 760px) {
+  .three { grid-template-columns: minmax(0,1fr); }
+  .three > div, .three > div + div { padding: 22px 0 18px; border-left: 0; }
+  .three > div + div { border-top: 1px solid var(--line); }
+}
+
+.kept { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; }
+.kept > div { padding: 26px 32px 30px 0; border-top: 1px solid var(--line); min-width: 0; }
+.kept > div:nth-child(even) { padding-left: 32px; border-left: 1px solid var(--line); }
+.kept h3 { font-weight: 650; font-size: 19px; margin-bottom: 8px; display: flex; gap: 12px; align-items: baseline; }
+.kept h3 .mono { color: var(--muted); font-weight: 400; }
+.kept p { color: var(--muted); max-width: 44ch; }
+@media (max-width: 760px) {
+  .kept { grid-template-columns: minmax(0,1fr); }
+  .kept > div, .kept > div:nth-child(even) { padding: 22px 0; border-left: 0; }
+}
+
+.name { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; align-items: start; }
+.name h2 { font-weight: 700; font-stretch: 125%; font-size: clamp(28px, 3.6vw, 46px); line-height: 1.05; letter-spacing: -.015em; }
+.name .body p { color: var(--muted); max-width: 46ch; }
+.name .body p + p { margin-top: 14px; }
+.name em { color: var(--text); }
+blockquote { margin: 0; font-family: var(--f-read); font-style: italic; font-size: clamp(20px, 2.2vw, 26px); line-height: 1.4; }
+blockquote footer { font-family: var(--f-ui); font-style: normal; font-size: 14px; color: var(--muted); margin-top: 12px; }
+.stick { margin-top: 56px; color: var(--text); }
+.stick svg { display: block; width: 100%; height: auto; }
+.stick .mono { color: var(--muted); margin-top: 10px; display: block; }
+@media (max-width: 760px) { .name { grid-template-columns: minmax(0,1fr); gap: 28px; } }
+
+.get { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.get > div { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 28px; min-width: 0; display: flex; flex-direction: column; }
+.get h3 { font-weight: 700; font-stretch: 125%; font-size: 24px; }
+.get p { color: var(--muted); margin-top: 8px; max-width: 40ch; }
+.get .row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+.get .meta { color: var(--muted); margin-top: auto; padding-top: 20px; display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.get .meta a { color: var(--text); }
+@media (max-width: 760px) { .get { grid-template-columns: minmax(0,1fr); } .get > div { padding: 22px; } }
+
+footer.site { border-top: 1px solid var(--line); padding-block: 36px 56px; color: var(--muted); font-size: 14px; }
+footer.site .wrap { display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: center; }
+footer.site .brand { color: var(--text); font-size: 16px; }
+footer.site .brand svg { width: 24px; height: 24px; border-radius: 6px; }
+footer.site a { text-decoration: none; }
+footer.site a:hover { color: var(--text); }
+footer.site .end { margin-left: auto; }
+
+.opt { position: fixed; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 50; background: var(--fill); color: var(--on-fill);
+  font: 500 10.5px/1 var(--f-mono); letter-spacing: .03em; padding: 8px 10px; border-radius: 999px; display: inline-flex; text-decoration: none; align-items: center; }
+
+@media (prefers-reduced-motion: reduce) { .btn { transition: none; } }
+</style>
+<style id="cover-css"></style>
+
+<a class="opt" href="#top" aria-label="Option C, Every Save a Range. Back to top">Option C · Every Save a Range</a>
+
+<header class="hero" id="top">
+  <canvas id="range" aria-hidden="true"></canvas>
+  <div class="wrap">
+    <nav class="nav" aria-label="Main">
+      <a class="brand" href="#top" aria-label="Kefli home">
+        <svg viewBox="0 0 108 108" aria-hidden="true"><rect width="108" height="108" fill="#1A1A1C"/><g transform="translate(54 54) scale(0.9) translate(-54 -54)"><path fill="#F3F2EE" fill-rule="evenodd" d="M37.368 28.885L48.974 28.885A1.919 1.919 0 0 1 50.893 30.804L50.893 61.439A1.919 1.919 0 0 1 48.014 63.101L33.21 54.554A1.919 1.919 0 0 1 32.25 52.892L32.25 34.003A5.118 5.118 0 0 1 37.368 28.885ZM35.129 61.403L46.15 67.766A1.919 1.919 0 0 1 46.15 71.09L35.129 77.453A1.919 1.919 0 0 1 32.25 75.791L32.25 63.065A1.919 1.919 0 0 1 35.129 61.403ZM59.026 28.885L70.632 28.885A5.118 5.118 0 0 1 75.75 34.003L75.75 75.791A1.919 1.919 0 0 1 72.871 77.453L58.067 68.905A1.919 1.919 0 0 1 57.107 67.243L57.107 30.804A1.919 1.919 0 0 1 59.026 28.885Z"/></g></svg>
+        Kefli
+      </a>
+      <ul>
+        <li><a href="#how">How it works</a></li>
+        <li><a href="#extension">Extension</a></li>
+        <li><a href="#privacy">Privacy</a></li>
+      </ul>
+      <a class="btn btn-fill" href="#get">Get Kefli</a>
+    </nav>
+
+    <div class="hero-grid">
+      <div class="hero-copy" id="heroCopy">
+        <span class="eyebrow mono">Free · Android and browser</span>
+        <h1>Read it later. Keep it for good.</h1>
+        <svg class="notches" id="notches" viewBox="0 0 420 16" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <p class="sub">A free read-it-later app. Save from anywhere, read it clean, listen on the go. <strong>Your library lives under your own key, so it outlives us.</strong></p>
+
+        <form class="raise" id="raise" novalidate>
+          <label for="url">Paste any link</label>
+          <div class="field">
+            <input id="url" name="url" type="text" inputmode="url" autocomplete="off" spellcheck="false" value="https://www.paulgraham.com/hwh.html" aria-describedby="help err">
+            <button class="btn btn-fill" type="submit">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 3 4 8 5-5 5 15H2L8 3z"/></svg>
+              Raise it
+            </button>
+          </div>
+          <p class="err" id="err" role="alert" hidden></p>
+          <p class="help mono" id="help">Every save in Kefli gets its own cover, drawn from its address, and here its own ridge. The app tidies the address first, so a messy link can draw differently there.</p>
+        </form>
+
+        <div class="ctas">
+          <a class="btn btn-fill" href="#get">Get Kefli</a>
+          <a class="btn btn-line" href="#how">How it works</a>
+        </div>
+      </div>
+
+      <aside class="card" id="card" aria-live="polite">
+        <div class="cv" id="cardCover"></div>
+        <div>
+          <span class="k mono">Raised from</span>
+          <div class="host" id="cardHost">paulgraham.com</div>
+          <div class="hash mono" id="cardHash">sha256 ············</div>
+        </div>
+        <p class="cap">The cover Kefli gives this save, the same on every device. The nearest ridge is drawn from the same hash.</p>
+      </aside>
+    </div>
+  </div>
+  <div class="range-floor" aria-hidden="true"></div>
+</header>
+
+<main>
+  <section class="s" aria-labelledby="covers-h">
+    <div class="wrap">
+      <div class="s-head">
+        <div><span class="tag mono">Covers</span><h2 id="covers-h">Every save gets its own cover, the same on every device.</h2></div>
+        <p>Kefli draws each cover from the save's address. It looks the same on your phone, in the extension and after you restore your library on a new phone. Nobody picks it, and nothing is uploaded to make it.</p>
+      </div>
+      <ul class="covers" id="covers"></ul>
+    </div>
+  </section>
+
+  <section class="s" id="how" aria-labelledby="how-h">
+    <div class="wrap">
+      <div class="s-head">
+        <div><span class="tag mono">How it works</span><h2 id="how-h">Save it, read it, listen to it.</h2></div>
+        <p>Kefli does the three things a read-it-later app should do, and keeps everything you save in one library on your phone.</p>
+      </div>
+      <div class="three">
+        <div>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>
+          <h3>Save</h3>
+          <p>Share any link to Kefli from your phone, or click the extension in Chrome or Firefox. It's in your library a moment later.</p>
+        </div>
+        <div>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2zM22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/></svg>
+          <h3>Read</h3>
+          <p>Articles open clean, in a calm reading typeface, without the ads and pop-ups. Everything you save is there offline.</p>
+        </div>
+        <div>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg>
+          <h3>Listen</h3>
+          <p>Kefli reads any article aloud in your phone's own voice, with controls on the lock screen.</p>
+        </div>
+      </div>
+      <p class="nots mono">No signup · No feed · No tags · No social layer</p>
+    </div>
+  </section>
+
+  <section class="s" id="privacy" aria-labelledby="kept-h">
+    <div class="wrap">
+      <div class="s-head">
+        <div><span class="tag mono">Kept</span><h2 id="kept-h">If Kefli closed tomorrow, your library would still be there.</h2></div>
+        <p>Your saves belong to you, under a key only you hold. We built Kefli so that nothing you keep depends on us staying in business.</p>
+      </div>
+      <div class="kept">
+        <div><h3><span class="mono">01</span>Encrypted on your phone</h3><p>Your saves are encrypted on your phone before they leave it, so we can't read what you've saved.</p></div>
+        <div><h3><span class="mono">02</span>Copied beyond us</h3><p>By default your library is also copied to servers we don't run. It doesn't rely on ours.</p></div>
+        <div><h3><span class="mono">03</span>No account to lose</h3><p>There's no signup. You start a library and keep its recovery code, and that code brings your library back on a new phone.</p></div>
+        <div><h3><span class="mono">04</span>Open source</h3><p>The apps are open source under the AGPL, so anyone can read the code and check what it does.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="s" aria-labelledby="name-h">
+    <div class="wrap">
+      <div class="name">
+        <div>
+          <span class="tag mono">The name</span>
+          <h2 id="name-h">A stick for carrying words.</h2>
+        </div>
+        <div class="body">
+          <p><em>Kefli</em> is Old Norse for a short wooden stick. Rune sticks, <em>rúnakefli</em>, were everyday notes carved into wood so they could be carried and kept.</p>
+          <p>Kefli is the same idea for what you read. It's said KEF-lee.</p>
+        </div>
+      </div>
+      <div class="stick" id="stick"></div>
+      <div class="name" style="margin-top:56px">
+        <div></div>
+        <blockquote>
+          deyr fé, deyja frændr … en orðstírr deyr aldregi
+          <footer>Cattle die, kinsmen die … but the good name never dies. From the <cite>Hávamál</cite>.</footer>
+        </blockquote>
+      </div>
+    </div>
+  </section>
+
+  <section class="s" id="get" aria-labelledby="get-h">
+    <div class="wrap">
+      <div class="s-head">
+        <div><span class="tag mono">Get Kefli</span><h2 id="get-h">Free on Android and in your browser.</h2></div>
+        <p>The Android app is ready to sideload today and is coming to Google Play. The extension saves from Chrome and Firefox straight to your library.</p>
+      </div>
+      <div class="get">
+        <div>
+          <h3>Android</h3>
+          <p>Install from Zapstore, or download the APK and install it yourself.</p>
+          <div class="row">
+            <a class="btn btn-fill" href="#">Get it on Zapstore</a>
+            <a class="btn btn-line" href="#">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M7 10l5 5 5-5M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></svg>
+              Download the APK
+            </a>
+          </div>
+          <!-- example text: real version, minimum Android and checksum come from the release -->
+          <div class="meta mono"><span>v0.1 · Android 10+</span><span>Coming to Google Play</span></div>
+        </div>
+        <div id="extension">
+          <h3>Browser extension</h3>
+          <p>Save the page you're on with one click. It goes straight to the library on your phone.</p>
+          <div class="row">
+            <a class="btn btn-fill" href="#">Add to Chrome</a>
+            <a class="btn btn-line" href="#">Add to Firefox</a>
+          </div>
+          <div class="meta mono"><a href="#">Extension install guide</a></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="Kefli, back to top">
+      <svg viewBox="0 0 108 108" aria-hidden="true"><rect width="108" height="108" fill="#111112"/><g transform="translate(54 54) scale(0.9) translate(-54 -54)"><path fill="#F3F2EE" fill-rule="evenodd" d="M37.368 28.885L48.974 28.885A1.919 1.919 0 0 1 50.893 30.804L50.893 61.439A1.919 1.919 0 0 1 48.014 63.101L33.21 54.554A1.919 1.919 0 0 1 32.25 52.892L32.25 34.003A5.118 5.118 0 0 1 37.368 28.885ZM35.129 61.403L46.15 67.766A1.919 1.919 0 0 1 46.15 71.09L35.129 77.453A1.919 1.919 0 0 1 32.25 75.791L32.25 63.065A1.919 1.919 0 0 1 35.129 61.403ZM59.026 28.885L70.632 28.885A5.118 5.118 0 0 1 75.75 34.003L75.75 75.791A1.919 1.919 0 0 1 72.871 77.453L58.067 68.905A1.919 1.919 0 0 1 57.107 67.243L57.107 30.804A1.919 1.919 0 0 1 59.026 28.885Z"/></g></svg>
+      Kefli
+    </a>
+    <a href="#privacy">Privacy</a>
+    <a href="#">Source code</a>
+    <a href="#">Extension install guide</a>
+    <span class="end mono">Said KEF-lee · Free and open source (AGPL)</span>
+  </div>
+</footer>
+
+<script src="cover-v1.js"></script>
+<script>
+(function () {
+  'use strict';
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  /* ---------- SHA-256, synchronous, so the page draws complete at rest ---------- */
+  var K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  function sha256(str) {
+    var bytes = new TextEncoder().encode(str), l = bytes.length;
+    var n = ((l + 9 + 63) >> 6) << 6, m = new Uint8Array(n);
+    m.set(bytes); m[l] = 0x80;
+    var bits = l * 8; m[n - 4] = bits >>> 24; m[n - 3] = bits >>> 16; m[n - 2] = bits >>> 8; m[n - 1] = bits;
+    m[n - 5] = Math.floor(bits / 4294967296);
+    var h = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19], w = new Array(64);
+    for (var o = 0; o < n; o += 64) {
+      for (var i = 0; i < 16; i++) w[i] = (m[o+4*i] << 24) | (m[o+4*i+1] << 16) | (m[o+4*i+2] << 8) | m[o+4*i+3];
+      for (i = 16; i < 64; i++) {
+        var a = w[i-15], b = w[i-2];
+        var s0 = ((a>>>7)|(a<<25)) ^ ((a>>>18)|(a<<14)) ^ (a>>>3);
+        var s1 = ((b>>>17)|(b<<15)) ^ ((b>>>19)|(b<<13)) ^ (b>>>10);
+        w[i] = (w[i-16] + s0 + w[i-7] + s1) | 0;
+      }
+      var A=h[0],B=h[1],C=h[2],D=h[3],E=h[4],F=h[5],G=h[6],H=h[7];
+      for (i = 0; i < 64; i++) {
+        var S1 = ((E>>>6)|(E<<26)) ^ ((E>>>11)|(E<<21)) ^ ((E>>>25)|(E<<7));
+        var t1 = (H + S1 + ((E & F) ^ (~E & G)) + K[i] + w[i]) | 0;
+        var S0 = ((A>>>2)|(A<<30)) ^ ((A>>>13)|(A<<19)) ^ ((A>>>22)|(A<<10));
+        var t2 = (S0 + ((A & B) ^ (A & C) ^ (B & C))) | 0;
+        H=G; G=F; F=E; E=(D+t1)|0; D=C; C=B; B=A; A=(t1+t2)|0;
+      }
+      h[0]=(h[0]+A)|0; h[1]=(h[1]+B)|0; h[2]=(h[2]+C)|0; h[3]=(h[3]+D)|0; h[4]=(h[4]+E)|0; h[5]=(h[5]+F)|0; h[6]=(h[6]+G)|0; h[7]=(h[7]+H)|0;
+    }
+    return h.map(function (x) { return ('00000000' + (x >>> 0).toString(16)).slice(-8); }).join('');
+  }
+  function byte(hex, i) { return parseInt(hex.substr(i * 2, 2), 16); }
+  function word(hex, i) { return parseInt(hex.substr(i * 8, 8), 16) >>> 0; }
+  function rng(hex) { // sfc32 seeded from the first 16 bytes
+    var a = word(hex,0), b = word(hex,1), c = word(hex,2), d = word(hex,3);
+    function next() { var t = (a + b | 0) + d | 0; d = d + 1 | 0; a = b ^ b >>> 9; b = c + (c << 3) | 0; c = c << 21 | c >>> 11; c = c + t | 0; return (t >>> 0) / 4294967296; }
+    for (var i = 0; i < 12; i++) next();
+    return next;
+  }
+  function hostOf(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return u; } }
+
+  /* periodic fractal noise from a hash: u in [0,1) wraps cleanly */
+  function noiseFrom(hex, oct) {
+    var r = rng(hex), tabs = [];
+    for (var o = 0; o < oct; o++) { var n = 5 << o, t = []; for (var k = 0; k < n; k++) t.push(r()); tabs.push(t); }
+    return function (u) {
+      var s = 0, amp = 1, norm = 0;
+      for (var o = 0; o < oct; o++) {
+        var t = tabs[o], n = t.length, x = u * n, i = Math.floor(x), f = x - i, e = f * f * (3 - 2 * f);
+        var i0 = ((i % n) + n) % n, i1 = (i0 + 1) % n;
+        s += (t[i0] * (1 - e) + t[i1] * e) * amp; norm += amp; amp *= 0.5;
+      }
+      return s / norm;
+    };
+  }
+
+  /* ---------- samples: real addresses, labelled only by hostname ---------- */
+  var SAMPLES = [
+    'https://www.paulgraham.com/hwh.html',
+    'https://en.wikipedia.org/wiki/Runestone',
+    'https://www.theguardian.com/books',
+    'https://www.lrb.co.uk/',
+    'https://aeon.co/essays',
+    'https://www.newyorker.com/magazine',
+    'https://www.bbc.co.uk/news',
+    'https://www.nature.com/'
+  ].map(function (u) { return { url: u, host: hostOf(u), hash: sha256(u) }; });
+
+  /* ---------- covers grid ---------- */
+  var grid = document.getElementById('covers');
+  SAMPLES.slice(0, 6).forEach(function (s) {
+    var li = document.createElement('li');
+    li.innerHTML = '<div class="cv">' + ShelfCover.svg(s.hash) + '</div><div class="host">' + s.host + '</div><span class="mono">' + s.hash.slice(0, 12) + '</span>';
+    grid.appendChild(li);
+  });
+  document.getElementById('cover-css').textContent = ShelfCover.css || '';
+
+  /* ---------- carved notches under the headline ---------- */
+  (function () {
+    var hx = sha256('kefli'), svg = document.getElementById('notches'), p = '<path d="M0 1.5H420" stroke="currentColor" stroke-width="1" vector-effect="non-scaling-stroke"/>', x = 4, i = 0;
+    while (x < 416) {
+      var b = byte(hx, i % 32), h = 4 + (b % 4) * 2.5;
+      p += '<path d="M' + x.toFixed(1) + ' 1.5V' + (1.5 + h).toFixed(1) + '" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/>';
+      x += 7 + (b >> 4) * 0.9; i++;
+    }
+    svg.innerHTML = p;
+  })();
+
+  /* ---------- rune stick carved from a hash ---------- */
+  (function () {
+    var hx = sha256('kefli') + sha256('rúnakefli'), W = 1000, out = '';
+    out += '<svg viewBox="0 0 1000 84" aria-hidden="true"><rect x="1" y="18" width="998" height="48" rx="24" fill="none" stroke="currentColor" stroke-width="1"/>';
+    for (var i = 0; i < 30; i++) {
+      var b = byte(hx, i), x = 52 + i * 31.2, top = 28, bot = 56, mid = 42;
+      out += '<path d="M' + x + ' ' + top + 'V' + bot + '" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>';
+      var kind = b & 7, side = (b >> 3) & 1 ? 1 : -1, d = 8;
+      var br = '';
+      if (kind === 1 || kind === 5) br = 'M' + x + ' ' + top + 'L' + (x + side * d) + ' ' + (top + d);
+      if (kind === 2 || kind === 5) br += 'M' + x + ' ' + mid + 'L' + (x + side * d) + ' ' + (mid - d);
+      if (kind === 3) br = 'M' + (x - d) + ' ' + (top + 2) + 'L' + (x + d) + ' ' + (bot - 2);
+      if (kind === 4) br = 'M' + x + ' ' + top + 'L' + (x + d) + ' ' + (top + d) + 'M' + x + ' ' + (top + d) + 'L' + (x + d) + ' ' + (top + 2 * d);
+      if (kind === 6) br = 'M' + (x - d) + ' ' + mid + 'L' + x + ' ' + (mid - d) + 'L' + (x + d) + ' ' + mid;
+      if (br) out += '<path d="' + br + '" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>';
+    }
+    out += '</svg><span class="mono">Carved from the hash of the word kefli, the way every save is drawn from the hash of its address.</span>';
+    document.getElementById('stick').innerHTML = out;
+  })();
+
+  /* ---------- the panorama ---------- */
+  var canvas = document.getElementById('range'), ctx = canvas.getContext('2d');
+  var hero = document.querySelector('.hero');
+  var W = 0, H = 0, DPR = 1;
+  var N = 7, LAYERS = [];
+  for (var li = 0; li < N; li++) {
+    var d = li / (N - 1);
+    LAYERS.push({
+      d: d,
+      noise: noiseFrom(sha256('kefli-layer-' + li), 5),
+      period: 1900 + 1500 * d,
+      speed: 3 + 22 * Math.pow(d, 1.6),
+      par: 4 + 34 * d,
+      peaks: [],
+      fogSeed: noiseFrom(sha256('kefli-fog-' + li), 4)
+    });
+  }
+  // each sample save is a named summit somewhere on the middle layers
+  SAMPLES.forEach(function (s, k) {
+    var L = LAYERS[1 + (k % 4)];
+    L.peaks.push({ host: s.host, u: ((k * 0.37) + byte(s.hash, 4) / 255 * 0.2) % 1, w: 0.018 + byte(s.hash, 5) / 255 * 0.022, h: 0.55 + byte(s.hash, 6) / 255 * 0.4, jag: noiseFrom(s.hash, 5) });
+  });
+
+  function mix(a, b, t) {
+    var pa = [parseInt(a.substr(1,2),16), parseInt(a.substr(3,2),16), parseInt(a.substr(5,2),16)];
+    var pb = [parseInt(b.substr(1,2),16), parseInt(b.substr(3,2),16), parseInt(b.substr(5,2),16)];
+    return 'rgb(' + pa.map(function (v, i) { return Math.round(v + (pb[i] - v) * t); }).join(',') + ')';
+  }
+
+  function layerY(L, xw, base, amp) {
+    var u = ((xw / L.period) % 1 + 1) % 1;
+    var f = Math.pow(L.noise(u), 1.5) * 0.85;
+    for (var p = 0; p < L.peaks.length; p++) {
+      var pk = L.peaks[p], du = u - pk.u; du -= Math.round(du);
+      var g = Math.exp(-(du / pk.w) * (du / pk.w));
+      if (g > 0.002) f = Math.max(f, g * pk.h * (0.86 + 0.28 * pk.jag((u * 7) % 1)));
+    }
+    return base - amp * f;
+  }
+
+  // the raised ridges: the nearest layer, one per paste
+  var raised = []; // {hash, host, born, prof}
+  function profileFrom(hex) {
+    var r = rng(hex), n = noiseFrom(hex.slice(32) + hex.slice(0, 32), 6), masses = [];
+    var main = 0.56 + byte(hex, 20) / 255 * 0.32;
+    masses.push({ c: main, w: 0.09 + byte(hex, 21) / 255 * 0.07, h: 1 });
+    for (var i = 0; i < 3; i++) masses.push({ c: r(), w: 0.06 + r() * 0.16, h: 0.35 + r() * 0.4 });
+    return function (x) {
+      var g = 0.12;
+      for (var i = 0; i < masses.length; i++) { var m = masses[i], t = (x - m.c) / m.w; g = Math.max(g, m.h * Math.exp(-t * t)); }
+      var j = n(x * 0.999);
+      return g * (0.8 + 0.4 * j) + 0.05 * (j - 0.5);
+    };
+  }
+  function raise(hex, host, instant) {
+    var now = performance.now();
+    raised.forEach(function (r) { if (!r.sunk) r.sunk = instant ? now - 9999 : now; });
+    raised.push({ hash: hex, host: host, born: instant ? now - 9999 : now, prof: profileFrom(hex), peakX: 0 });
+    raised = raised.filter(function (r) { return !r.sunk || now - r.sunk < 2600; });
+    wake();
+  }
+
+  var STARS = (function () { var r = rng(sha256('kefli-stars')), s = []; for (var i = 0; i < 90; i++) s.push([r(), r() * 0.5, r() * 0.9 + 0.3, r() * 6.28]); return s; })();
+
+  var pointer = { tx: 0, ty: 0, x: 0, y: 0 };
+  hero.addEventListener('pointermove', function (e) {
+    var r = hero.getBoundingClientRect();
+    pointer.tx = (e.clientX - r.left) / r.width * 2 - 1; pointer.ty = (e.clientY - r.top) / r.height * 2 - 1;
+  });
+  hero.addEventListener('pointerleave', function () { pointer.tx = 0; pointer.ty = 0; });
+
+  var blockers = [], horizonAt = 0;
+  function measure() {
+    var r = hero.getBoundingClientRect();
+    W = r.width; H = r.height; DPR = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+    var cb = Math.max(document.getElementById('heroCopy').getBoundingClientRect().bottom, document.getElementById('card').getBoundingClientRect().bottom) - r.top;
+    horizonAt = Math.max(H * 0.3, Math.min(H - 300, cb - 150));
+    blockers = ['heroCopy', 'card'].map(function (id) { var b = document.getElementById(id).getBoundingClientRect(); return { l: b.left - r.left - 12, t: b.top - r.top - 12, r: b.right - r.left + 12, b: b.bottom - r.top + 12 }; });
+    wake();
+  }
+  function blocked(x, y, w) {
+    for (var i = 0; i < blockers.length; i++) { var b = blockers[i]; if (x + w > b.l && x < b.r && y > b.t && y - 14 < b.b) return true; }
+    return false;
+  }
+
+  function easeOut(t) { return 1 - Math.pow(1 - t, 4); }
+  var t0 = performance.now(), clock = 0, last = t0;
+
+  function draw(now) {
+    var dt = Math.min(64, now - last); last = now;
+    if (!reduce.matches) clock += dt / 1000;
+    var k = reduce.matches ? 1 : 0.05;
+    pointer.x += (pointer.tx - pointer.x) * k; pointer.y += (pointer.ty - pointer.y) * k;
+    if (reduce.matches) { pointer.x = 0; pointer.y = 0; }
+
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    var horizon = horizonAt || H * 0.45, zone = H - horizon;
+
+    // sky before dawn
+    var sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, '#07080B'); sky.addColorStop(Math.max(0.05, horizon / H * 0.7), '#10141A');
+    sky.addColorStop(Math.min(0.95, (horizon + zone * 0.35) / H), '#3A424C'); sky.addColorStop(1, '#5A636D');
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+    var glow = ctx.createRadialGradient(W * 0.72, horizon + zone * 0.3, 0, W * 0.72, horizon + zone * 0.3, Math.max(W, H) * 0.6);
+    glow.addColorStop(0, 'rgba(196,206,216,0.22)'); glow.addColorStop(1, 'rgba(196,206,216,0)');
+    ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+    for (var s = 0; s < STARS.length; s++) {
+      var st = STARS[s], a = 0.12 + 0.18 * (0.5 + 0.5 * Math.sin(clock * 0.6 + st[3]));
+      ctx.fillStyle = 'rgba(237,236,232,' + (a * (1 - st[1] * 1.4)).toFixed(3) + ')';
+      ctx.fillRect(st[0] * W, st[1] * horizon * 1.2, st[2], st[2]);
+    }
+
+    var step = W < 600 ? 3 : 4, labels = [];
+    for (var i = 0; i < N; i++) {
+      var L = LAYERS[i], d = L.d;
+      var base = horizon + zone * (0.2 + 0.62 * d), amp = zone * (0.2 + 0.26 * d);
+      var off = clock * L.speed * 6 + pointer.x * L.par * 3;
+      var lift = pointer.y * L.par * 0.35;
+      ctx.beginPath(); ctx.moveTo(0, H);
+      for (var x = 0; x <= W + step; x += step) ctx.lineTo(x, layerY(L, x + off, base, amp) + lift);
+      ctx.lineTo(W, H); ctx.closePath();
+      ctx.fillStyle = mix('#5F6873', '#0E1013', Math.pow(d, 0.75)); ctx.fill();
+
+      for (var p = 0; p < L.peaks.length; p++) {
+        var pk = L.peaks[p], P = L.period;
+        var xw = pk.u * P - off; xw = ((xw % P) + P) % P;
+        for (var rep = xw; rep < W + 40; rep += P) {
+          if (rep > 16 && rep < W - 16) labels.push({ x: rep, y: layerY(L, rep + off, base, amp) + lift, host: pk.host, d: d });
+        }
+      }
+
+      // a fog band drifting between this ridge and the next
+      if (i < N - 1) {
+        var fy = base + amp * 0.05, th = zone * (0.1 + 0.06 * d), foff = clock * L.speed * 11 + pointer.x * L.par * 3.6;
+        var g = ctx.createLinearGradient(0, fy - th, 0, fy + th);
+        var fc = d < 0.5 ? '172,182,194' : '120,128,140', fa = 0.42 - 0.18 * d;
+        g.addColorStop(0, 'rgba(' + fc + ',0)'); g.addColorStop(0.55, 'rgba(' + fc + ',' + fa + ')'); g.addColorStop(1, 'rgba(' + fc + ',0)');
+        ctx.beginPath(); ctx.moveTo(0, fy + th);
+        for (x = 0; x <= W + 12; x += 12) {
+          var u = (((x + foff) / (L.period * 0.6)) % 1 + 1) % 1;
+          ctx.lineTo(x, fy - th * (0.35 + 0.9 * L.fogSeed(u)) + lift);
+        }
+        ctx.lineTo(W, fy + th); ctx.closePath(); ctx.fillStyle = g; ctx.fill();
+      }
+    }
+
+    // raised ridges, nearest of all
+    var animating = false, rLabel = null;
+    for (var q = 0; q < raised.length; q++) {
+      var R = raised[q], up = Math.min(1, (now - R.born) / 2200), down = R.sunk ? Math.min(1, (now - R.sunk) / 2200) : 0;
+      if (reduce.matches) { up = 1; down = R.sunk ? 1 : 0; }
+      if (up < 1 || (down > 0 && down < 1)) animating = true;
+      var e = easeOut(up) * (1 - easeOut(down));
+      if (e <= 0.001) continue;
+      var sink = (1 - e) * zone * 0.9, rpx = pointer.x * 52, rpy = pointer.y * 8;
+      var top = H, topX = 0;
+      ctx.beginPath(); ctx.moveTo(0, H);
+      for (x = 0; x <= W + step; x += step) {
+        var y = H - zone * 0.78 * R.prof((x + rpx) / W) + sink + rpy;
+        if (y < top) { top = y; topX = x; }
+        ctx.lineTo(x, y);
+      }
+      ctx.lineTo(W, H); ctx.closePath();
+      ctx.fillStyle = '#08090B'; ctx.fill();
+      ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(214,222,230,' + (0.35 * e).toFixed(3) + ')'; ctx.stroke();
+      if (!R.sunk) rLabel = { x: topX, y: top, host: R.host, a: e };
+    }
+
+    // ground fog in front, so ridges rise out of it
+    var gf = ctx.createLinearGradient(0, H - zone * 0.32, 0, H);
+    gf.addColorStop(0, 'rgba(110,118,128,0)'); gf.addColorStop(0.6, 'rgba(110,118,128,0.30)'); gf.addColorStop(1, 'rgba(10,12,16,0.85)');
+    ctx.fillStyle = gf; ctx.fillRect(0, H - zone * 0.32, W, zone * 0.32);
+
+    // summit labels
+    ctx.font = '400 10px "Martian Mono", ui-monospace, monospace'; ctx.textBaseline = 'alphabetic';
+    for (var l = 0; l < labels.length; l++) {
+      var lb = labels[l], tw = ctx.measureText(lb.host).width, lx = lb.x - tw / 2, ly = lb.y - 22;
+      if (blocked(lx, ly, tw)) continue;
+      var la = 0.42 + 0.4 * lb.d;
+      ctx.strokeStyle = 'rgba(237,236,232,' + (la * 0.6).toFixed(3) + ')'; ctx.beginPath(); ctx.moveTo(lb.x + 0.5, lb.y - 4); ctx.lineTo(lb.x + 0.5, lb.y - 16); ctx.stroke();
+      ctx.fillStyle = 'rgba(237,236,232,' + la.toFixed(3) + ')'; ctx.fillText(lb.host, lx, ly);
+    }
+    if (rLabel) {
+      var txt = 'your save · ' + rLabel.host; ctx.font = '500 11px "Martian Mono", ui-monospace, monospace';
+      var w2 = ctx.measureText(txt).width, x2 = Math.max(12, Math.min(W - w2 - 12, rLabel.x - w2 / 2)), y2 = rLabel.y - 26;
+      if (!blocked(x2, y2, w2)) {
+        ctx.strokeStyle = 'rgba(237,236,232,' + (0.7 * rLabel.a).toFixed(3) + ')'; ctx.beginPath(); ctx.moveTo(rLabel.x + 0.5, rLabel.y - 5); ctx.lineTo(rLabel.x + 0.5, rLabel.y - 20); ctx.stroke();
+        ctx.fillStyle = 'rgba(237,236,232,' + (0.95 * rLabel.a).toFixed(3) + ')'; ctx.fillText(txt, x2, y2);
+      }
+    }
+    return animating;
+  }
+
+  // run only while visible; with reduced motion, draw only when something changes
+  var visible = true, raf = 0;
+  function loop(now) {
+    raf = 0;
+    var animating = draw(now);
+    if (visible && !document.hidden && (!reduce.matches || animating)) raf = requestAnimationFrame(loop);
+  }
+  function wake() { if (!raf && visible && !document.hidden) { last = performance.now(); raf = requestAnimationFrame(loop); } }
+  new IntersectionObserver(function (es) { visible = es[0].isIntersecting; if (visible) wake(); }).observe(hero);
+  document.addEventListener('visibilitychange', wake);
+  reduce.addEventListener && reduce.addEventListener('change', wake);
+  window.addEventListener('resize', measure);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(measure);
+
+  /* ---------- the form ---------- */
+  var form = document.getElementById('raise'), input = document.getElementById('url'), err = document.getElementById('err');
+  function show(url, hex, instant) {
+    var host = hostOf(url);
+    document.getElementById('cardHost').textContent = host;
+    document.getElementById('cardHash').textContent = 'sha256 ' + hex.slice(0, 12);
+    document.getElementById('cardCover').innerHTML = ShelfCover.svg(hex, { draw: !instant && !reduce.matches, title: 'Kefli cover for ' + host });
+    raise(hex, host, instant);
+  }
+  function parse(v) {
+    v = v.trim();
+    if (!v) return { error: 'Paste a link first, for example https://aeon.co/essays.' };
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(v)) v = 'https://' + v;
+    var u; try { u = new URL(v); } catch (e) { u = null; }
+    if (!u || !/^https?:$/.test(u.protocol) || u.hostname.indexOf('.') < 1) return { error: "That doesn't look like a web address. Try one that starts with https://" };
+    return { url: v };
+  }
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var r = parse(input.value);
+    if (r.error) { err.textContent = r.error; err.hidden = false; input.setAttribute('aria-invalid', 'true'); input.focus(); return; }
+    err.hidden = true; input.removeAttribute('aria-invalid');
+    var done = function (hex) { show(r.url, hex, false); };
+    if (window.crypto && crypto.subtle && window.isSecureContext) {
+      crypto.subtle.digest('SHA-256', new TextEncoder().encode(r.url)).then(function (buf) {
+        done(Array.prototype.map.call(new Uint8Array(buf), function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''));
+      }, function () { done(sha256(r.url)); });
+    } else done(sha256(r.url));
+  });
+  input.addEventListener('input', function () { if (!err.hidden) { err.hidden = true; input.removeAttribute('aria-invalid'); } });
+
+  // complete at rest: one save already raised
+  show(SAMPLES[0].url, SAMPLES[0].hash, true);
+  measure();
+})();
+</script>

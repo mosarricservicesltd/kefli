@@ -1,0 +1,705 @@
+<title>Kefli · Above the Fog</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Literata:ital,opsz,wght@0,7..72,300..700;1,7..72,300..700&family=Martian+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a tall scroll track holds a sticky summit scene (two WebGL canvases with the wordmark between them);
+   scrolling lowers the camera into the cloud until the fog is the paper the rest of the page is printed on.
+   A deliberate single light look: every colour is set explicitly. */
+:root {
+  color-scheme: light;
+  --paper: #F3F2EE;
+  --surface: #FFFFFF;
+  --line: #DEDCD5;
+  --line-strong: #8C8A83;
+  --ink: #17171A;
+  --muted: #5C5B56;
+  --graphite: #111112;
+  --night-text: #EDECE8;
+  --night-muted: #A7A59F;
+  --scene-word: #2B2D31;
+  --f-ui: "Archivo", "Helvetica Neue", Arial, system-ui, sans-serif;
+  --f-read: "Literata", Georgia, "Times New Roman", serif;
+  --f-mono: "Martian Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --gutter: max(16px, 4vw);
+  --max: 1240px;
+  --radius: 8px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--f-ui);
+  font-size: 17px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 4px; }
+.wrap { max-width: var(--max); margin: 0 auto; padding-inline: var(--gutter); }
+.label {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+h1, h2, h3 { margin: 0; font-weight: 600; text-wrap: balance; }
+h2 {
+  font-stretch: 125%;
+  font-size: clamp(2rem, 4.6vw, 3.9rem);
+  line-height: 1.04;
+  letter-spacing: -0.025em;
+}
+h3 { font-size: 1.15rem; letter-spacing: -0.005em; }
+p { margin: 0; }
+.read { font-family: var(--f-read); }
+svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+/* Buttons: text centred in every filled or bordered control */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  height: 48px; padding: 0 22px;
+  border-radius: var(--radius);
+  font: 600 15px/1 var(--f-ui);
+  letter-spacing: 0.005em;
+  text-decoration: none;
+  border: 1px solid var(--ink);
+  transition: transform .25s cubic-bezier(.2,.7,.2,1), background-color .2s, color .2s;
+}
+.btn-fill { background: var(--ink); color: var(--paper); }
+.btn-fill:hover { background: #2A2A2E; }
+.btn-line { background: transparent; color: var(--ink); border-color: var(--line-strong); }
+.btn-line:hover { border-color: var(--ink); background: rgba(23,23,26,.04); }
+.btn:active { transform: translateY(1px); }
+.btn svg.i { width: 18px; height: 18px; }
+
+/* Nav */
+.nav {
+  position: fixed; inset: 0 0 auto 0; z-index: 20;
+  padding-top: env(safe-area-inset-top, 0px);
+  transition: background-color .3s, border-color .3s;
+  border-bottom: 1px solid transparent;
+}
+.nav.solid { background: rgba(243,242,238,.9); border-bottom-color: var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.nav .wrap { display: flex; align-items: center; gap: 28px; height: 68px; }
+.brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 600; font-stretch: 125%; font-size: 18px; letter-spacing: -0.01em; }
+.brand svg { width: 28px; height: 28px; border-radius: 7px; }
+.nav ul { display: flex; gap: 26px; list-style: none; margin: 0 0 0 auto; padding: 0; font-size: 15px; }
+.nav ul a { text-decoration: none; color: var(--ink); opacity: .78; }
+.nav ul a:hover { opacity: 1; text-decoration: underline; text-underline-offset: 5px; text-decoration-thickness: 1px; }
+.nav .btn { height: 40px; padding: 0 16px; font-size: 14px; }
+@media (max-width: 760px) { .nav ul { display: none; } .nav .btn { margin-left: auto; } }
+
+/* Hero: the summit */
+.hero { position: relative; height: 240vh; height: 240svh; background: var(--paper); }
+.stage { position: sticky; top: 0; height: 100vh; height: 100svh; min-height: 560px; overflow: hidden; background: #E7EBEE; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#fogBack { z-index: 1; }
+.word {
+  position: absolute; z-index: 2; left: 50%; bottom: 23%;
+  transform: translate3d(-50%, 0, 0);
+  margin: 0;
+  font-weight: 700; font-stretch: 125%;
+  font-size: clamp(5.5rem, 25vw, 27rem);
+  line-height: .78; letter-spacing: -0.045em;
+  color: var(--scene-word);
+  white-space: nowrap;
+  will-change: transform;
+  user-select: none;
+}
+#fogFront { z-index: 3; pointer-events: none; }
+.hero-copy {
+  position: absolute; z-index: 4;
+  top: calc(68px + clamp(28px, 6vh, 72px));
+  left: 0; right: 0;
+  will-change: transform, opacity;
+}
+.hero-copy .inner { max-width: 35rem; display: grid; gap: 18px; }
+.hero-copy .tag {
+  font-family: var(--f-read); font-weight: 400; font-style: italic;
+  font-size: clamp(1.7rem, 3.2vw, 2.6rem); line-height: 1.12; letter-spacing: -0.01em;
+  font-variation-settings: "opsz" 72;
+}
+.hero-copy .sub { color: #3E3F43; max-width: 31rem; font-size: 17px; }
+.cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; }
+.cue {
+  position: absolute; z-index: 4; left: 50%; bottom: max(22px, env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 10px;
+  text-decoration: none; color: var(--ink);
+}
+.cue svg.i { width: 16px; height: 16px; animation: bob 2.4s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateY(4px); } }
+.fallback { position: absolute; inset: 0; z-index: 1; display: none; }
+.fallback svg { width: 100%; height: 100%; display: block; }
+.nogl .fallback { display: block; }
+.nogl canvas { display: none; }
+.cue { white-space: nowrap; }
+@media (max-width: 760px) {
+  .hero { height: 200vh; height: 200svh; }
+  .word { bottom: 40%; font-size: 27vw; }
+  .cue { left: auto; right: var(--gutter); transform: none; }
+  .cue .cue-text { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .hero { height: auto; }
+  .stage { position: relative; }
+  .cue svg.i { animation: none; }
+  .stage::after { content: ""; position: absolute; inset: auto 0 0 0; height: 18%; z-index: 3; background: linear-gradient(to bottom, rgba(243,242,238,0), var(--paper)); }
+}
+
+/* Sections */
+section.block { padding-block: clamp(84px, 11vw, 168px); position: relative; }
+.head { display: grid; gap: 18px; max-width: 46rem; margin-bottom: clamp(44px, 6vw, 80px); }
+.lead { font-family: var(--f-read); font-size: clamp(1.1rem, 1.6vw, 1.3rem); line-height: 1.55; color: #3E3F43; max-width: 40rem; }
+
+.trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(24px, 3.5vw, 56px); }
+.step { display: grid; gap: 14px; align-content: start; padding-top: 22px; border-top: 1px solid var(--ink); }
+.step .top { display: flex; align-items: center; justify-content: space-between; }
+.step p { font-family: var(--f-read); color: #3E3F43; }
+@media (max-width: 860px) { .trio { grid-template-columns: 1fr; } }
+
+/* Kept, with its fog echo */
+.kept { overflow: hidden; border-top: 1px solid var(--line); }
+.echo { position: absolute; inset: 0 0 auto 0; height: 260px; pointer-events: none; }
+.echo svg { width: 100%; height: 100%; display: block; }
+.drift {
+  position: absolute; left: -20%; right: -20%; top: 120px; height: 140px; pointer-events: none;
+  background:
+    radial-gradient(40% 50% at 30% 50%, rgba(255,255,255,.95), rgba(255,255,255,0) 70%),
+    radial-gradient(35% 45% at 72% 40%, rgba(255,255,255,.85), rgba(255,255,255,0) 70%);
+  filter: blur(8px);
+  animation: drift 38s ease-in-out infinite alternate;
+}
+@keyframes drift { to { transform: translate3d(9%, 0, 0); } }
+.kept .wrap { position: relative; }
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); }
+.fact { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 18px; padding: 30px 28px 34px 0; border-bottom: 1px solid var(--line); }
+.fact:nth-child(odd) { border-right: 1px solid var(--line); }
+.fact:nth-child(even) { padding-left: 28px; }
+.fact .ic { width: 44px; height: 44px; border: 1px solid var(--line-strong); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
+.fact .ic svg.i { width: 20px; height: 20px; }
+.fact div { display: grid; gap: 8px; }
+.fact p { font-family: var(--f-read); color: #3E3F43; }
+@media (max-width: 760px) {
+  .facts { grid-template-columns: 1fr; }
+  .fact, .fact:nth-child(even) { padding: 26px 0; border-right: 0; }
+  .fact:nth-child(odd) { border-right: 0; }
+}
+
+/* The name */
+.name { border-top: 1px solid var(--line); }
+.name .grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: clamp(36px, 6vw, 96px); align-items: center; }
+.say { display: grid; gap: 22px; justify-items: start; }
+.big {
+  font-family: var(--f-read); font-style: italic; font-weight: 300;
+  font-size: clamp(5rem, 13vw, 11rem); line-height: .9; letter-spacing: -0.03em;
+  font-variation-settings: "opsz" 72;
+}
+.mark { display: flex; align-items: center; gap: 16px; }
+.mark svg { width: 64px; height: 64px; border-radius: 15px; }
+.name .text { display: grid; gap: 20px; }
+.name .text p { font-family: var(--f-read); font-size: 1.12rem; color: #3E3F43; }
+.name .text em { color: var(--ink); }
+@media (max-width: 860px) { .name .grid { grid-template-columns: 1fr; } }
+
+/* Get Kefli */
+.get { border-top: 1px solid var(--line); padding-bottom: 0; }
+.cards { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: clamp(22px, 2.6vw, 34px); display: grid; gap: 16px; align-content: start; }
+.card .top { display: flex; align-items: center; gap: 12px; }
+.card p { font-family: var(--f-read); color: #3E3F43; }
+.card .cta { margin-top: 4px; }
+.meta { font-family: var(--f-mono); font-size: 12px; color: var(--muted); letter-spacing: .02em; }
+.soon { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px; border: 1px dashed var(--line-strong); border-radius: 999px; font: 500 12px/1 var(--f-mono); color: var(--muted); justify-self: start; }
+.guide { margin-top: 28px; display: inline-flex; align-items: center; gap: 8px; font-weight: 600; text-decoration: none; border-bottom: 1px solid var(--ink); padding-bottom: 2px; }
+.guide svg.i { width: 16px; height: 16px; }
+@media (max-width: 960px) { .cards { grid-template-columns: 1fr 1fr; } .cards .card:first-child { grid-column: 1 / -1; } }
+@media (max-width: 620px) { .cards { grid-template-columns: 1fr; } }
+
+/* Footer: down off the mountain at dusk */
+.dusk { position: relative; height: clamp(120px, 16vw, 230px); margin-top: clamp(40px, 6vw, 90px); }
+.dusk svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+footer { background: var(--graphite); color: var(--night-text); padding-block: 24px 64px; }
+footer :focus-visible { outline-color: var(--night-text); }
+footer .cols { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 40px; align-items: end; }
+footer blockquote { margin: 0; display: grid; gap: 10px; }
+footer blockquote p { font-family: var(--f-read); font-style: italic; font-size: clamp(1.25rem, 2.2vw, 1.7rem); line-height: 1.3; }
+footer blockquote span { color: var(--night-muted); font-family: var(--f-read); }
+footer nav { display: flex; flex-wrap: wrap; gap: 10px 26px; justify-content: flex-end; }
+footer nav a { text-decoration: none; color: var(--night-text); opacity: .85; }
+footer nav a:hover { opacity: 1; text-decoration: underline; text-underline-offset: 5px; }
+footer .base { margin-top: 56px; padding-top: 22px; border-top: 1px solid #2E2E31; display: flex; flex-wrap: wrap; gap: 12px 28px; justify-content: space-between; color: var(--night-muted); }
+footer .base .label { color: var(--night-muted); }
+footer .brand svg { width: 26px; height: 26px; }
+@media (max-width: 760px) { footer .cols { grid-template-columns: 1fr; } footer nav { justify-content: flex-start; } }
+
+.option {
+  position: fixed; z-index: 30; left: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  display: inline-flex; align-items: center; height: 28px; padding: 0 12px;
+  background: var(--ink); color: var(--paper); border-radius: 999px;
+  font: 500 11px/1 var(--f-mono); letter-spacing: .04em;
+}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="kefli-mark" viewBox="0 0 108 108">
+      <rect width="108" height="108" fill="#111112"/>
+      <g transform="translate(54 54) scale(0.9) translate(-54 -54)"><path fill="#F3F2EE" fill-rule="evenodd" d="M37.368 28.885L48.974 28.885A1.919 1.919 0 0 1 50.893 30.804L50.893 61.439A1.919 1.919 0 0 1 48.014 63.101L33.21 54.554A1.919 1.919 0 0 1 32.25 52.892L32.25 34.003A5.118 5.118 0 0 1 37.368 28.885ZM35.129 61.403L46.15 67.766A1.919 1.919 0 0 1 46.15 71.09L35.129 77.453A1.919 1.919 0 0 1 32.25 75.791L32.25 63.065A1.919 1.919 0 0 1 35.129 61.403ZM59.026 28.885L70.632 28.885A5.118 5.118 0 0 1 75.75 34.003L75.75 75.791A1.919 1.919 0 0 1 72.871 77.453L58.067 68.905A1.919 1.919 0 0 1 57.107 67.243L57.107 30.804A1.919 1.919 0 0 1 59.026 28.885Z"/></g>
+    </symbol>
+  </defs>
+</svg>
+
+<header class="nav" id="nav">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="Kefli, back to the top"><svg aria-hidden="true"><use href="#kefli-mark"/></svg>Kefli</a>
+    <ul>
+      <li><a href="#how">How it works</a></li>
+      <li><a href="#get">Extension</a></li>
+      <li><a href="#kept">Privacy</a></li>
+    </ul>
+    <a class="btn btn-fill" href="#get">Get Kefli</a>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero" id="hero" aria-label="Kefli">
+    <div class="stage" id="stage">
+      <canvas id="fogBack" aria-hidden="true"></canvas>
+      <div class="fallback" id="fallback" aria-hidden="true"></div>
+      <h1 class="word" id="word">Kefli</h1>
+      <canvas id="fogFront" aria-hidden="true"></canvas>
+      <div class="hero-copy" id="heroCopy">
+        <div class="wrap">
+          <div class="inner">
+            <span class="label">Free · Android and your browser</span>
+            <p class="tag">Save it now. Read it in the quiet.</p>
+            <p class="sub">A free read-it-later app. Save from anywhere, read it clean, listen on the go. Your library lives under your own key, so it outlives us.</p>
+            <div class="cta">
+              <a class="btn btn-fill" href="#get">Get Kefli</a>
+              <a class="btn btn-line" href="#how">How it works</a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <a class="cue label" id="cue" href="#how" aria-label="Down through the cloud"><span class="cue-text">Down through the cloud</span><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg></a>
+    </div>
+  </section>
+
+  <section class="block how" id="how">
+    <div class="wrap">
+      <div class="head">
+        <span class="label">How it works</span>
+        <h2>Everything you meant to read, kept.</h2>
+      </div>
+      <div class="trio">
+        <article class="step">
+          <div class="top"><span class="label">Save</span><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></svg></div>
+          <h3>Save from anywhere</h3>
+          <p>Share a link from any app on your phone, or click the extension in Chrome or Firefox. Kefli fetches the article and keeps its text.</p>
+        </article>
+        <article class="step">
+          <div class="top"><span class="label">Read</span><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></div>
+          <h3>Read it clean</h3>
+          <p>Just the words and pictures, set for reading, without the clutter around them. It's all on your phone, so it reads the same on a train with no signal.</p>
+        </article>
+        <article class="step">
+          <div class="top"><span class="label">Listen</span><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg></div>
+          <h3>Listen on the go</h3>
+          <p>Any article can be read aloud in your phone's own voice. Lock the screen and keep listening, with the controls on the lock screen.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="block kept" id="kept">
+    <div class="echo" id="echo" aria-hidden="true"></div>
+    <div class="drift" aria-hidden="true"></div>
+    <div class="wrap">
+      <div class="head">
+        <span class="label">Kept</span>
+        <h2>Your library outlives us.</h2>
+        <p class="lead">A read-it-later app is only as good as its promise to keep what you give it. Kefli is built so that promise doesn't depend on us.</p>
+      </div>
+      <div class="facts">
+        <div class="fact">
+          <span class="ic"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+          <div><h3>Encrypted on your phone</h3><p>Your saves are encrypted with your own key before they leave your phone, so we can't read what you've saved.</p></div>
+        </div>
+        <div class="fact">
+          <span class="ic"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></span>
+          <div><h3>Copied beyond our servers</h3><p>By default your library is also copied to servers we don't run. If Kefli closed tomorrow, your library would still be there.</p></div>
+        </div>
+        <div class="fact">
+          <span class="ic"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></svg></span>
+          <div><h3>No signup</h3><p>Start a library and write down your recovery code. There's no email address, no password and no profile. No feed, no tags, no social layer either.</p></div>
+        </div>
+        <div class="fact">
+          <span class="ic"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span>
+          <div><h3>Open source</h3><p>The apps are published under the AGPL, so anyone can read what they do and keep them running.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block name" id="name">
+    <div class="wrap grid">
+      <div class="say">
+        <span class="big" lang="non">kefli</span>
+        <div class="mark"><svg aria-hidden="true"><use href="#kefli-mark"/></svg><span class="label">Said KEF-lee</span></div>
+      </div>
+      <div class="text">
+        <span class="label">The name</span>
+        <p><em>Kefli</em> is Old Norse for a short wooden stick. Rune sticks, <em lang="non">rúnakefli</em>, were everyday notes and labels carved into wood so they could be carried and kept.</p>
+        <p>Many are still legible after centuries in the ground. A note made to outlast the hand that carved it is what we want your library to be.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="block get" id="get">
+    <div class="wrap">
+      <div class="head">
+        <span class="label">Get Kefli</span>
+        <h2>Free on Android and in your browser.</h2>
+      </div>
+      <div class="cards">
+        <article class="card">
+          <div class="top"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg><h3>Android</h3></div>
+          <p>Kefli isn't on Google Play yet. Until it is, install it from Zapstore, or download the APK and install it yourself.</p>
+          <div class="cta">
+            <a class="btn btn-fill" href="#">Get it on Zapstore</a>
+            <a class="btn btn-line" href="#"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>Download the APK</a>
+          </div>
+          <!-- Example text: the real version and minimum Android come from the release. -->
+          <span class="meta">v0.1 · Android 10+</span>
+          <span class="soon">Coming to Google Play</span>
+        </article>
+        <article class="card">
+          <div class="top"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg><h3>Chrome</h3></div>
+          <p>Save the page you're reading with one click, and it's waiting on your phone.</p>
+          <div class="cta"><a class="btn btn-line" href="#">Add to Chrome</a></div>
+        </article>
+        <article class="card">
+          <div class="top"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg><h3>Firefox</h3></div>
+          <p>The same extension for Firefox. Click once and the article is in your library.</p>
+          <div class="cta"><a class="btn btn-line" href="#">Add to Firefox</a></div>
+        </article>
+      </div>
+      <a class="guide" href="#">How to install the extension<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
+    </div>
+    <div class="dusk" id="dusk" aria-hidden="true"></div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="cols">
+      <blockquote>
+        <p lang="non">Deyr fé, deyja frændr … en orðstírr deyr aldregi.</p>
+        <span>Cattle die, kinsmen die … but the good name never dies. Hávamál</span>
+      </blockquote>
+      <nav aria-label="Footer">
+        <a href="#">Privacy</a>
+        <a href="#">Source code</a>
+        <a href="#">Extension install guide</a>
+      </nav>
+    </div>
+    <div class="base">
+      <a class="brand" href="#top"><svg aria-hidden="true"><use href="#kefli-mark"/></svg>Kefli</a>
+      <span class="label">Said KEF-lee · Open source, AGPL</span>
+    </div>
+  </div>
+</footer>
+
+<span class="option">Option A · Above the Fog</span>
+
+<script>
+(function () {
+  "use strict";
+  var RM = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------- 1D ridge noise for the SVG ridges (fallback, the echo, the dusk) ---------- */
+  function h1(i, s) { var x = Math.sin(i * 127.1 + s * 311.7) * 43758.5453; return x - Math.floor(x); }
+  function n1(x, s) { var i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return h1(i, s) * (1 - u) + h1(i + 1, s) * u; }
+  function mountain(x, s) {
+    var big = n1(x * 0.45, s); big = big * big * (3 - 2 * big);
+    var v = 0, a = 0.5, f = 1;
+    for (var o = 0; o < 6; o++) { var n = n1(x * f, s + o * 7.3); n = 1 - Math.abs(n * 2 - 1); v += a * n * n; f *= 2.07; a *= 0.47; }
+    return big * 0.62 + v * 0.48;
+  }
+  function ridge(w, base, amp, freq, s, closeH) {
+    var d = "", step = 6;
+    for (var x = 0; x <= w; x += step) {
+      var y = base - mountain(x * freq, s) * amp;
+      d += (x === 0 ? "M" : " L") + x + " " + y.toFixed(1);
+    }
+    if (closeH != null) d += " L" + w + " " + closeH + " L0 " + closeH + " Z";
+    return d;
+  }
+  function svg(vbW, vbH, body, par) {
+    return '<svg viewBox="0 0 ' + vbW + " " + vbH + '" preserveAspectRatio="' + (par || "xMidYMax slice") + '">' + body + "</svg>";
+  }
+
+  // The echo in Kept: three hairline ridges, as if seen through thinning cloud
+  var echo = document.getElementById("echo");
+  if (echo) {
+    echo.innerHTML = svg(1600, 260,
+      '<path d="' + ridge(1600, 150, 110, 0.0042, 11) + '" fill="none" stroke="#DEDCD5" stroke-width="1"/>' +
+      '<path d="' + ridge(1600, 190, 130, 0.0031, 23) + '" fill="none" stroke="#CFCCC4" stroke-width="1"/>' +
+      '<path d="' + ridge(1600, 240, 150, 0.0024, 37) + '" fill="none" stroke="#8C8A83" stroke-width="1" stroke-opacity=".55"/>',
+      "xMidYMin slice");
+  }
+  // The dusk: walking off the mountain into the footer
+  var dusk = document.getElementById("dusk");
+  if (dusk) {
+    dusk.innerHTML = svg(1600, 230,
+      '<path d="' + ridge(1600, 120, 90, 0.0036, 5, 230) + '" fill="#CFCCC4"/>' +
+      '<path d="' + ridge(1600, 165, 110, 0.0028, 17, 230) + '" fill="#8C8A83"/>' +
+      '<path d="' + ridge(1600, 215, 130, 0.0021, 29, 230) + '" fill="#111112"/>');
+  }
+
+  /* ---------- Nav turns solid once you're through the cloud ---------- */
+  var nav = document.getElementById("nav"), hero = document.getElementById("hero");
+  function navState() {
+    var end = hero.offsetTop + hero.offsetHeight - 80;
+    nav.classList.toggle("solid", window.scrollY > end);
+  }
+  window.addEventListener("scroll", navState, { passive: true });
+  navState();
+
+  /* ---------- The summit: two WebGL layers with the wordmark between ---------- */
+  var stage = document.getElementById("stage");
+  var back = document.getElementById("fogBack"), front = document.getElementById("fogFront");
+  var word = document.getElementById("word"), copy = document.getElementById("heroCopy"), cue = document.getElementById("cue");
+
+  var VERT = "attribute vec2 p;void main(){gl_Position=vec4(p,0.0,1.0);}";
+  var FRAG = [
+    "precision highp float;",
+    "uniform vec2 uRes; uniform float uTime; uniform float uDescent; uniform vec2 uPtr; uniform float uFront;",
+    "const vec3 PAPER = vec3(0.9529,0.9490,0.9333);",
+    "const vec3 INK = vec3(0.090,0.090,0.102);",
+    "float hash1(float p){ p = fract(p*0.1031); p *= p + 33.33; p *= p + p; return fract(p); }",
+    "float hash2(vec2 p){ vec3 p3 = fract(vec3(p.xyx)*0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y)*p3.z); }",
+    "float vn1(float x){ float i = floor(x); float f = fract(x); float u = f*f*(3.0-2.0*f); return mix(hash1(i), hash1(i+1.0), u); }",
+    "float vn2(vec2 p){ vec2 i = floor(p); vec2 f = fract(p); vec2 u = f*f*(3.0-2.0*f);",
+    "  return mix(mix(hash2(i), hash2(i+vec2(1.0,0.0)), u.x), mix(hash2(i+vec2(0.0,1.0)), hash2(i+vec2(1.0,1.0)), u.x), u.y); }",
+    "float fbm(vec2 p){ float v = 0.0; float a = 0.5; mat2 m = mat2(1.6,1.2,-1.2,1.6);",
+    "  for(int i=0;i<5;i++){ v += a*vn2(p); p = m*p + vec2(3.1,1.7); a *= 0.5; } return v; }",
+    "float mountain(float x, float seed){",
+    "  float big = vn1(x*0.45 + seed*17.0); big = big*big*(3.0-2.0*big);",
+    "  float v = 0.0; float a = 0.5; float f = 1.0;",
+    "  for(int o=0;o<6;o++){ float n = vn1(x*f + seed*31.0 + float(o)*11.7); n = 1.0 - abs(n*2.0-1.0); v += a*n*n; f *= 2.07; a *= 0.47; }",
+    "  return big*0.62 + v*0.48; }",
+    "void over(inout vec3 c, inout float a, vec3 s, float sa){ c = s*sa + c*(1.0-sa); a = sa + a*(1.0-sa); }",
+    "void main(){",
+    "  vec2 uv = gl_FragCoord.xy/uRes;",
+    "  float asp = uRes.x/uRes.y;",
+    "  float x = (uv.x-0.5)*asp;",
+    "  float y = uv.y;",
+    "  float t = uTime;",
+    "  float d = uDescent;",
+    "  float HOR = asp < 1.0 ? 0.56 : 0.6;",
+    "  float S = asp < 1.0 ? 0.30 : 0.5;",
+    "  float camH = mix(1.0, -0.35, d) + uPtr.y*0.035;",
+    "  float camX = uPtr.x*0.16;",
+    "  vec3 skyHor = vec3(0.905,0.922,0.935);",
+    "  vec3 skyTop = vec3(0.770,0.790,0.812);",
+    "  vec3 sky = mix(skyHor, skyTop, smoothstep(HOR-0.04, 1.05, y));",
+    "  vec2 sp = vec2(x - 0.34*min(asp,1.6), (y - HOR - 0.07)*1.35);",
+    "  float sd = length(sp);",
+    "  sky += vec3(0.085,0.075,0.055)*exp(-sd*4.5);",
+    "  sky = mix(sky, vec3(0.995,0.99,0.975), smoothstep(0.055, 0.0, sd)*0.7);",
+    "  vec3 c; float a;",
+    "  if(uFront > 0.5){ c = vec3(0.0); a = 0.0; } else { c = sky; a = 1.0; }",
+    "  float aa = 1.6/uRes.y;",
+    "  for(int i=0;i<5;i++){",
+    "    float fi = float(i);",
+    "    bool nearL = (i == 4);",
+    "    if(uFront > 0.5 && !nearL) continue;",
+    "    if(uFront < 0.5 && nearL) continue;",
+    "    float z = i==0 ? 7.5 : (i==1 ? 4.6 : (i==2 ? 2.9 : (i==3 ? 1.95 : 1.32)));",
+    "    float k = S/z;",
+    "    float wx = x/k + camX + fi*37.0;",
+    "    float fq = 0.42;",
+    "    float m0 = mountain(wx*fq, fi+1.0);",
+    "    float hm = m0*m0*1.7 - 0.45;",
+    "    float m1 = mountain((wx+0.3)*fq, fi+1.0);",
+    "    float slope = (m1*m1*1.7 - 0.45 - hm)/0.3;",
+    "    float peakY = HOR + (hm - camH)*k;",
+    "    float m = smoothstep(peakY + aa, peakY - aa, y);",
+    "    float haze = 1.0 - exp(-(z - 1.0)*0.34);",
+    "    float worldY = camH + (y - HOR)/k;",
+    "    float below = hm - worldY;",
+    "    float face = fbm(vec2(wx*2.4 + below*0.8, worldY*6.0));",
+    "    float lit = clamp(-slope*0.45 + (face - 0.5)*0.9, 0.0, 1.0);",
+    "    float snow = smoothstep(0.5, 0.64, face + (worldY - 0.15)*0.55 - below*0.6);",
+    "    vec3 rock = mix(INK, vec3(0.30,0.315,0.335), lit*0.7);",
+    "    rock = mix(rock, vec3(0.86,0.875,0.89), snow*0.75);",
+    "    rock = mix(rock, vec3(0.80,0.82,0.84), smoothstep(0.18, -0.1, worldY)*0.35);",
+    "    vec3 rc = mix(rock, skyHor, haze);",
+    "    over(c, a, rc, m);",
+    "    float fh = (fbm(vec2(wx*0.5 + t*0.035, fi*3.7 + t*0.018)) - 0.5)*0.45 - 0.02;",
+    "    float fogY = HOR + (fh - camH)*k;",
+    "    float soft = 0.006 + 0.05*k;",
+    "    float into = (fogY - y)/k;",
+    "    vec2 q = vec2(wx*0.9 - t*0.05, into*3.0 + fi*5.0);",
+    "    vec2 w = vec2(fbm(q + vec2(0.0, t*0.02)), fbm(q + vec2(5.2,1.3) - t*0.015));",
+    "    float bil = fbm(q*1.3 + w*1.6);",
+    "    float dens = smoothstep(-soft*0.7, soft, (fogY - y) + (bil - 0.5)*soft*1.8);",
+    "    dens *= mix(0.8, 1.0, bil);",
+    "    dens = clamp(dens + smoothstep(0.0, 0.25, into)*0.35, 0.0, 1.0);",
+    "    vec3 fogC = mix(vec3(0.988,0.987,0.98), vec3(0.79,0.81,0.835), clamp(clamp(into*1.2,0.0,1.0)*0.55 + (0.5 - bil)*0.4, 0.0, 1.0));",
+    "    fogC = mix(fogC, skyHor, haze*0.55);",
+    "    over(c, a, fogC, dens);",
+    "  }",
+    "  if(uFront > 0.5){",
+    "    float band = smoothstep(0.1, 0.28, y)*smoothstep(0.6, 0.36, y);",
+    "    float wn = fbm(vec2(x*1.1 - t*0.025, y*7.0 + t*0.01) + vec2(fbm(vec2(x*2.0 + t*0.02, y*3.0)), 0.0));",
+    "    float wa = smoothstep(0.56, 0.86, wn)*band*0.5*(1.0 - d*0.4);",
+    "    over(c, a, vec3(0.975,0.976,0.972), wa);",
+    "  }",
+    "  float fn = fbm(vec2(x*1.4, y*1.6) + vec2(t*0.03, -t*0.05));",
+    "  float f = clamp((d*1.35 - 0.33) + (fn - 0.5)*0.55*(1.0 - d), 0.0, 1.0);",
+    "  f = smoothstep(0.0, 1.0, f);",
+    "  f = max(f, smoothstep(0.9, 0.985, d));",
+    "  over(c, a, PAPER, f);",
+    "  c += (hash2(gl_FragCoord.xy) - 0.5)/255.0*a;",
+    "  gl_FragColor = vec4(c, a);",
+    "}"
+  ].join("\n");
+
+  function makeLayer(canvas, isFront) {
+    var gl = canvas.getContext("webgl", { alpha: isFront, premultipliedAlpha: true, antialias: false, depth: false, stencil: false, powerPreference: "high-performance" });
+    if (!gl) return null;
+    function sh(type, src) {
+      var s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { throw new Error(gl.getShaderInfoLog(s)); }
+      return s;
+    }
+    var prog = gl.createProgram();
+    gl.attachShader(prog, sh(gl.VERTEX_SHADER, VERT));
+    gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FRAG));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+    gl.useProgram(prog);
+    var buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    var loc = gl.getAttribLocation(prog, "p");
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    return {
+      gl: gl, canvas: canvas,
+      uRes: gl.getUniformLocation(prog, "uRes"), uTime: gl.getUniformLocation(prog, "uTime"),
+      uDescent: gl.getUniformLocation(prog, "uDescent"), uPtr: gl.getUniformLocation(prog, "uPtr"),
+      uFront: gl.getUniformLocation(prog, "uFront"), front: isFront ? 1 : 0
+    };
+  }
+
+  function fallbackScene() {
+    stage.classList.add("nogl");
+    var fb = document.getElementById("fallback");
+    fb.innerHTML = svg(1600, 1000,
+      '<rect width="1600" height="1000" fill="#DCE1E5"/>' +
+      '<rect y="560" width="1600" height="440" fill="#F3F2EE"/>' +
+      '<path d="' + ridge(1600, 470, 70, 0.006, 3, 1000) + '" fill="#C7CDD2"/>' +
+      '<rect y="520" width="1600" height="480" fill="#EEEFEE" opacity=".9"/>' +
+      '<path d="' + ridge(1600, 560, 120, 0.004, 9, 1000) + '" fill="#8E949A"/>' +
+      '<rect y="640" width="1600" height="360" fill="#F1F1EF" opacity=".92"/>' +
+      '<path d="' + ridge(1600, 760, 230, 0.0026, 21, 1000) + '" fill="#1E1F22"/>' +
+      '<rect y="800" width="1600" height="200" fill="#F3F2EE"/>', "xMidYMid slice");
+  }
+
+  var layers = [];
+  try {
+    var lb = makeLayer(back, false), lf = makeLayer(front, true);
+    if (lb && lf) layers = [lb, lf];
+  } catch (e) { layers = []; }
+  if (!layers.length) { fallbackScene(); return; }
+
+  var scale = Math.min(window.devicePixelRatio || 1, 1.5);
+  function resize() {
+    layers.forEach(function (L) {
+      var w = Math.max(1, Math.round(L.canvas.clientWidth * scale)), h = Math.max(1, Math.round(L.canvas.clientHeight * scale));
+      if (L.canvas.width !== w || L.canvas.height !== h) { L.canvas.width = w; L.canvas.height = h; }
+      L.gl.viewport(0, 0, w, h);
+    });
+  }
+  function draw(t, d, px, py) {
+    layers.forEach(function (L) {
+      var gl = L.gl;
+      gl.uniform2f(L.uRes, L.canvas.width, L.canvas.height);
+      gl.uniform1f(L.uTime, t);
+      gl.uniform1f(L.uDescent, d);
+      gl.uniform2f(L.uPtr, px, py);
+      gl.uniform1f(L.uFront, L.front);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    });
+  }
+  function smooth(a, b, x) { var t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
+
+  // The DOM layers ride the same camera: the word sits between the far ranges and the near one.
+  function placeDom(d) {
+    var H = stage.clientHeight;
+    word.style.transform = "translate3d(-50%," + (-d * 0.42 * H).toFixed(1) + "px,0)";
+    var o = 1 - smooth(0.06, 0.38, d);
+    copy.style.opacity = o.toFixed(3);
+    copy.style.transform = "translate3d(0," + (-d * 0.22 * H).toFixed(1) + "px,0)";
+    copy.style.visibility = o < 0.01 ? "hidden" : "visible";
+    cue.style.opacity = (1 - smooth(0.0, 0.12, d)).toFixed(3);
+  }
+
+  resize();
+  window.addEventListener("resize", function () { resize(); if (RM) draw(36, 0, 0, 0); }, { passive: true });
+
+  if (RM) { draw(36, 0, 0, 0); placeDom(0); return; }
+
+  var ptr = { x: 0, y: 0, tx: 0, ty: 0 }, dS = 0;
+  window.addEventListener("pointermove", function (e) {
+    ptr.tx = (e.clientX / window.innerWidth) * 2 - 1;
+    ptr.ty = -((e.clientY / window.innerHeight) * 2 - 1);
+  }, { passive: true });
+
+  function descentTarget() {
+    var r = hero.getBoundingClientRect();
+    var span = r.height - stage.clientHeight;
+    return span > 0 ? Math.min(1, Math.max(0, -r.top / span)) : 0;
+  }
+
+  var running = false, raf = 0, inView = true, t0 = performance.now(), last = t0, slow = 0, frames = 0;
+  function frame(now) {
+    raf = 0;
+    if (!running) return;
+    var dt = now - last; last = now;
+    frames++; if (dt > 26) slow++;
+    if (frames === 45) {
+      if (slow > 22 && scale > 0.55) { scale *= 0.78; resize(); }
+      frames = 0; slow = 0;
+    }
+    ptr.x += (ptr.tx - ptr.x) * 0.045;
+    ptr.y += (ptr.ty - ptr.y) * 0.045;
+    var target = descentTarget();
+    dS += (target - dS) * 0.14;
+    if (Math.abs(target - dS) < 0.0005) dS = target;
+    draw(30 + (now - t0) / 1000, dS, ptr.x, ptr.y);
+    placeDom(dS);
+    raf = requestAnimationFrame(frame);
+  }
+  function update() {
+    var should = inView && !document.hidden;
+    if (should && !running) { running = true; last = performance.now(); raf = requestAnimationFrame(frame); }
+    else if (!should && running) { running = false; if (raf) cancelAnimationFrame(raf); raf = 0; }
+  }
+  if ("IntersectionObserver" in window) {
+    new IntersectionObserver(function (es) { inView = es[0].isIntersecting; update(); }, { rootMargin: "80px" }).observe(stage);
+  }
+  document.addEventListener("visibilitychange", update);
+  update();
+})();
+</script>

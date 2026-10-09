@@ -1,0 +1,668 @@
+<title>Kefli · Fjord Contours</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Literata:ital,opsz,wght@0,7..72,300..600;1,7..72,300..600&family=Martian+Mono:wght@300..500&display=swap">
+<style>
+/* Layout: a fixed survey-map canvas of the fjord seen from above; content cards ride a left column as
+   waypoints down the fjord, each tied to the map by a leader line; the page ends on a paper slab at the sea. */
+:root {
+  --graphite: #111112;
+  --surface: #1A1A1C;
+  --line: #2E2E31;
+  --line-strong: #7A7983;
+  --paper-text: #EDECE8;
+  --ash: #A7A59F;
+  --paper: #F3F2EE;
+  --ink: #17171A;
+  --p-line: #DEDCD5;
+  --p-line-strong: #8C8A83;
+  --p-muted: #5C5B56;
+  --white: #FFFFFF;
+
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --read: "Literata", Georgia, "Times New Roman", serif;
+  --mono: "Martian Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --gutter: clamp(16px, 6vw, 96px);
+  --fg: var(--paper-text);
+  --bgc: var(--graphite);
+  --muted: var(--ash);
+  --edge: var(--line-strong);
+  color-scheme: dark;
+}
+html { background: var(--graphite); }
+body {
+  background: var(--graphite);
+  color: var(--fg);
+  font-family: var(--display);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+}
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; border-radius: 4px; }
+
+#map { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z-index: 0; touch-action: pan-y; }
+
+.mono { font-family: var(--mono); font-size: 11px; line-height: 1.6; letter-spacing: 0.02em; }
+
+/* Nav */
+.nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+  padding: env(safe-area-inset-top, 0px) var(--gutter) 0;
+  display: flex; align-items: center; gap: 28px; height: calc(64px + env(safe-area-inset-top, 0px));
+  background: rgba(17, 17, 18, 0.74);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 700; font-stretch: 125%; font-size: 17px; letter-spacing: 0.01em; }
+.brand svg { width: 22px; height: 24px; display: block; }
+.links { display: flex; gap: 24px; margin-left: auto; }
+.links a { text-decoration: none; font-size: 14px; color: var(--muted); padding-block: 6px; background: linear-gradient(currentColor, currentColor) left bottom / 0 1px no-repeat; transition: background-size .3s ease, color .2s; }
+.links a:hover { color: var(--fg); background-size: 100% 1px; }
+
+/* Buttons: fill = text colour, content = page colour */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 46px; padding-inline: 20px; border-radius: 6px;
+  font: 600 15px/1 var(--display); text-decoration: none; white-space: nowrap;
+  transition: transform .2s ease, background-color .2s ease, color .2s ease;
+}
+.btn svg { width: 18px; height: 18px; flex: none; }
+.btn-fill { background: var(--fg); color: var(--bgc); border: 1px solid var(--fg); }
+.btn-fill:hover { transform: translateY(-1px); }
+.btn-line { border: 1px solid var(--edge); color: var(--fg); background: transparent; }
+.btn-line:hover { background: var(--fg); color: var(--bgc); border-color: var(--fg); }
+.nav .btn { height: 38px; padding-inline: 16px; font-size: 14px; }
+
+main { position: relative; z-index: 1; }
+
+/* Hero */
+.hero { padding: calc(64px + 15vh) var(--gutter) 12vh; max-width: 760px; }
+.eyebrow { color: var(--muted); margin: 0 0 18px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.wordmark {
+  margin: 0; font-weight: 800; font-stretch: 125%;
+  font-size: clamp(84px, 16vw, 232px); line-height: 0.84; letter-spacing: -0.03em;
+}
+.lede { font-family: var(--read); font-weight: 400; font-size: clamp(26px, 3.4vw, 40px); line-height: 1.15; margin: 26px 0 0; text-wrap: balance; }
+.lede em { font-style: italic; }
+.sub { color: var(--muted); max-width: 46ch; margin: 18px 0 0; font-size: 17px; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+.meta { color: var(--muted); margin: 18px 0 0; }
+.hint { color: var(--muted); margin: 36px 0 0; display: flex; align-items: center; gap: 10px; }
+.hint::before { content: ""; width: 26px; height: 1px; background: var(--edge); }
+
+/* Waypoint cards */
+.wp { padding: 24vh var(--gutter) 0; }
+.wp:last-of-type { padding-bottom: 34vh; }
+.card {
+  max-width: 540px; padding: 28px; border-radius: 6px;
+  background: rgba(26, 26, 28, 0.9); border: 1px solid var(--line);
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+}
+.coord { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; color: var(--muted); margin: 0 0 18px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.card h2, .get h2 { font-weight: 650; font-stretch: 112%; font-size: clamp(28px, 3.3vw, 40px); line-height: 1.08; letter-spacing: -0.01em; margin: 0 0 22px; text-wrap: balance; }
+.feats { list-style: none; margin: 0; padding: 0; display: grid; gap: 20px; }
+.feats li { display: grid; grid-template-columns: 26px 1fr; gap: 14px; align-items: start; }
+.feats li > div { min-width: 0; }
+.feats svg { width: 22px; height: 22px; margin-top: 2px; }
+.feats h3 { margin: 0 0 4px; font-size: 16px; font-weight: 650; }
+.feats p { margin: 0; color: var(--muted); font-size: 15px; }
+.note { margin: 24px 0 0; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 15px; }
+.prose { font-family: var(--read); font-size: 18px; line-height: 1.6; margin: 0 0 16px; }
+.prose em { font-style: italic; }
+blockquote { margin: 24px 0 0; padding: 18px 0 0; border-top: 1px solid var(--line); }
+blockquote p { margin: 0; font-family: var(--read); font-style: italic; font-size: 19px; line-height: 1.45; }
+blockquote p + p { font-style: normal; color: var(--muted); font-size: 16px; margin-top: 6px; }
+blockquote cite { display: block; margin-top: 10px; font-style: normal; color: var(--muted); }
+.said { margin: 20px 0 0; color: var(--fg); }
+
+/* Paper slab: the sea, and the download */
+.get {
+  --fg: var(--ink); --bgc: var(--paper); --muted: var(--p-muted); --edge: var(--p-line-strong);
+  position: relative; z-index: 1; background: var(--paper); color: var(--ink);
+  padding: 96px var(--gutter) 40px; border-top: 1px solid var(--p-line-strong);
+}
+.get .coord { border-color: var(--p-line); max-width: 1100px; }
+.get-intro { max-width: 60ch; color: var(--p-muted); font-size: 17px; margin: 0 0 40px; }
+.dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; max-width: 1100px; }
+.dl-card { background: var(--white); border: 1px solid var(--p-line); border-radius: 6px; padding: 24px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.dl-card header { display: flex; align-items: center; gap: 10px; }
+.dl-card header svg { width: 22px; height: 22px; }
+.dl-card h3 { margin: 0; font-size: 18px; font-weight: 650; font-stretch: 112%; }
+.dl-card p { margin: 0; color: var(--p-muted); font-size: 15px; }
+.dl-card .btns { display: flex; flex-wrap: wrap; gap: 10px; margin-top: auto; padding-top: 6px; }
+.chip { display: inline-flex; align-items: center; height: 24px; padding-inline: 10px; border: 1px solid var(--p-line-strong); border-radius: 999px; font: 500 10px/1 var(--mono); letter-spacing: 0.04em; color: var(--p-muted); align-self: flex-start; }
+.ver { color: var(--p-muted); margin: 0; }
+.guide { display: inline-flex; align-items: center; gap: 8px; margin-top: 28px; font-weight: 600; text-decoration: none; border-bottom: 1px solid var(--p-line-strong); padding-bottom: 2px; }
+.guide:hover { border-color: var(--ink); }
+
+footer { margin-top: 96px; padding-top: 24px; border-top: 1px solid var(--p-line); display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: baseline; justify-content: space-between; max-width: 1100px; }
+footer nav { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+footer nav a { text-decoration: none; font-size: 14px; }
+footer nav a:hover { text-decoration: underline; text-underline-offset: 3px; }
+footer .mono { color: var(--p-muted); margin: 0; }
+
+/* Survey marginalia (fixed) */
+.hud {
+  position: fixed; right: var(--gutter); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); z-index: 5;
+  color: #EDECE8; mix-blend-mode: difference; pointer-events: none;
+  display: grid; justify-items: end; gap: 6px; text-align: right;
+}
+.hud p { margin: 0; }
+.hud .north { width: 18px; height: 30px; }
+.hud .scale { width: 150px; height: 22px; }
+.optlabel {
+  position: fixed; left: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 11;
+  background: var(--graphite); color: var(--paper-text); border: 1px solid var(--line-strong);
+  border-radius: 999px; height: 28px; display: inline-flex; align-items: center; padding-inline: 12px;
+  font-size: 10px; letter-spacing: 0.06em;
+}
+
+@media (max-width: 700px) {
+  .links { display: none; }
+  .nav { gap: 12px; justify-content: space-between; }
+  .hero { padding-top: calc(64px + 9vh); }
+  .wp { padding-top: 16vh; }
+  .card { padding: 22px; background: rgba(26, 26, 28, 0.93); }
+  .hud .scale, .hud .north, .hud .sheet { display: none; }
+  .hud { bottom: calc(56px + env(safe-area-inset-bottom, 0px)); right: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hint { display: none; }
+  .btn, .links a { transition: none; }
+}
+</style>
+
+<canvas id="map" aria-hidden="true"></canvas>
+
+<header class="nav">
+  <a class="brand" href="#top" aria-label="Kefli, back to top">
+    <svg viewBox="30 27 48 52" aria-hidden="true"><g transform="translate(54 54) scale(0.9) translate(-54 -54)"><path fill="currentColor" fill-rule="evenodd" d="M37.368 28.885L48.974 28.885A1.919 1.919 0 0 1 50.893 30.804L50.893 61.439A1.919 1.919 0 0 1 48.014 63.101L33.21 54.554A1.919 1.919 0 0 1 32.25 52.892L32.25 34.003A5.118 5.118 0 0 1 37.368 28.885ZM35.129 61.403L46.15 67.766A1.919 1.919 0 0 1 46.15 71.09L35.129 77.453A1.919 1.919 0 0 1 32.25 75.791L32.25 63.065A1.919 1.919 0 0 1 35.129 61.403ZM59.026 28.885L70.632 28.885A5.118 5.118 0 0 1 75.75 34.003L75.75 75.791A1.919 1.919 0 0 1 72.871 77.453L58.067 68.905A1.919 1.919 0 0 1 57.107 67.243L57.107 30.804A1.919 1.919 0 0 1 59.026 28.885Z"/></g></svg>
+    <span>Kefli</span>
+  </a>
+  <nav class="links" aria-label="Sections">
+    <a href="#how">How it works</a>
+    <a href="#get">Extension</a>
+    <a href="#kept">Privacy</a>
+  </nav>
+  <a class="btn btn-fill" href="#get">Get Kefli</a>
+</header>
+
+<main id="top">
+  <section class="hero" data-lat="60.8800" data-lon="6.8500" data-name="WP 01">
+    <p class="mono eyebrow"><span>Sheet 01 · Nærøyfjorden</span><span>60.8800° N 6.8500° E</span></p>
+    <h1 class="wordmark">Kefli</h1>
+    <p class="lede">Read it later.<br><em>Keep it for good.</em></p>
+    <p class="sub">A free read-it-later app. Save from anywhere, read it clean, listen on the go. Your library lives under your own key, so it outlives us.</p>
+    <div class="actions">
+      <a class="btn btn-fill" href="#get">Get Kefli</a>
+      <a class="btn btn-line" href="#how">How it works</a>
+    </div>
+    <p class="mono meta">Free · Android · Chrome · Firefox</p>
+    <p class="mono hint">Move over the map to lift the ground. Press and hold to raise a peak.</p>
+  </section>
+
+  <section class="wp" id="how" data-lat="61.2070" data-lon="6.5340" data-name="WP 02">
+    <article class="card">
+      <p class="mono coord"><span>WP 02 · Balestrand, Sognefjorden</span><span>61.2070° N 6.5340° E</span></p>
+      <h2>Save it now. Read it in the quiet.</h2>
+      <ul class="feats">
+        <li>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></svg>
+          <div><h3>Save</h3><p>Share any link from your phone, or click the extension in Chrome or Firefox. Kefli fetches the article and keeps a clean copy.</p></div>
+        </li>
+        <li>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+          <div><h3>Read</h3><p>The article's text and pictures, set for reading, without the clutter around them. A copy lives on your phone, so it opens offline.</p></div>
+        </li>
+        <li>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg>
+          <div><h3>Listen</h3><p>Any article can be read aloud in your phone's own voice, with controls on the lock screen. Good for the walk, the washing-up and the drive.</p></div>
+        </li>
+      </ul>
+      <p class="note">No signup. Start a library, keep your recovery code, and you're reading. No feed, no tags, no social layer.</p>
+    </article>
+  </section>
+
+  <section class="wp" id="kept" data-lat="61.08" data-lon="4.84" data-name="WP 03">
+    <article class="card">
+      <p class="mono coord"><span>WP 03 · Solund, mouth of Sognefjorden</span><span>61.08° N 4.84° E</span></p>
+      <h2>Your library outlives us.</h2>
+      <ul class="feats">
+        <li>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <div><h3>Encrypted on your phone</h3><p>Your saves are encrypted on your phone before they leave it. We can't read what you keep.</p></div>
+        </li>
+        <li>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg>
+          <div><h3>Copied beyond our servers</h3><p>By default your library is also copied to servers we don't run. If Kefli closed tomorrow, your library would still be there.</p></div>
+        </li>
+        <li>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          <div><h3>Open source</h3><p>The apps are open source under the AGPL, so anyone can read the code and check these claims.</p></div>
+        </li>
+      </ul>
+    </article>
+  </section>
+
+  <section class="wp" id="name" data-lat="60.3975" data-lon="5.3240" data-name="WP 04">
+    <article class="card">
+      <p class="mono coord"><span>WP 04 · Bryggen, Bergen</span><span>60.3975° N 5.3240° E</span></p>
+      <h2>A short wooden stick.</h2>
+      <p class="prose">In Old Norse, a <em>kefli</em> is a short stick of wood. Rune sticks, <em>rúnakefli</em>, were everyday notes carved into wood so they could be carried and kept. Many have been found at Bryggen, the old wharf in Bergen.</p>
+      <p class="prose">We named the app after them, as a place for the things you mean to keep.</p>
+      <blockquote>
+        <p>Deyr fé, deyja frændr … en orðstírr deyr aldregi.</p>
+        <p>Cattle die, kinsmen die … but the good name never dies.</p>
+        <cite class="mono">Hávamál</cite>
+      </blockquote>
+      <p class="mono said">Said KEF-lee.</p>
+    </article>
+  </section>
+</main>
+
+<section class="get" id="get" data-lat="60.40" data-lon="4.50" data-name="WP 05">
+  <p class="mono coord"><span>WP 05 · Open sea</span><span>60.40° N 4.50° E</span></p>
+  <h2>Get Kefli</h2>
+  <p class="get-intro">Free on Android, with an extension for Chrome and Firefox. Google Play is coming. Until then, install the app from Zapstore or download the APK.</p>
+  <div class="dl">
+    <article class="dl-card">
+      <header>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg>
+        <h3>Android</h3>
+      </header>
+      <span class="chip">COMING TO GOOGLE PLAY</span>
+      <p>Install it from Zapstore, or download the APK and install it yourself.</p>
+      <!-- Example text: the version line is a placeholder until the first release. -->
+      <p class="mono ver">v0.1 · Android 10+</p>
+      <div class="btns">
+        <a class="btn btn-fill" href="#">Get it on Zapstore</a>
+        <a class="btn btn-line" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+          Download the APK
+        </a>
+      </div>
+    </article>
+    <article class="dl-card">
+      <header>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.439 7.85c-.049.322.059.648.289.878l1.568 1.568c.47.47.706 1.087.706 1.704s-.235 1.233-.706 1.704l-1.611 1.611a.98.98 0 0 1-.837.276c-.47-.07-.802-.48-.968-.925a2.501 2.501 0 1 0-3.214 3.214c.446.166.855.497.925.968a.979.979 0 0 1-.276.837l-1.61 1.61a2.404 2.404 0 0 1-1.705.707 2.402 2.402 0 0 1-1.704-.706l-1.568-1.568a1.026 1.026 0 0 0-.877-.29c-.493.074-.84.504-1.02.968a2.5 2.5 0 1 1-3.237-3.237c.464-.18.894-.527.967-1.02a1.026 1.026 0 0 0-.289-.877l-1.568-1.568A2.402 2.402 0 0 1 1.998 12c0-.617.236-1.234.706-1.704L4.23 8.77c.24-.24.581-.353.917-.303.515.077.877.528 1.073 1.01a2.5 2.5 0 1 0 3.259-3.259c-.482-.196-.933-.558-1.01-1.073-.05-.336.062-.676.303-.917l1.525-1.525A2.402 2.402 0 0 1 12 1.998c.617 0 1.234.236 1.704.706l1.568 1.568c.23.23.556.338.877.29.493-.074.84-.504 1.02-.968a2.5 2.5 0 1 1 3.237 3.237c-.464.18-.894.527-.967 1.02Z"/></svg>
+        <h3>Chrome</h3>
+      </header>
+      <p>Save any page from your laptop straight into your library. Click the toolbar button and it's on your phone.</p>
+      <div class="btns"><a class="btn btn-fill" href="#">Add to Chrome</a></div>
+    </article>
+    <article class="dl-card">
+      <header>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.439 7.85c-.049.322.059.648.289.878l1.568 1.568c.47.47.706 1.087.706 1.704s-.235 1.233-.706 1.704l-1.611 1.611a.98.98 0 0 1-.837.276c-.47-.07-.802-.48-.968-.925a2.501 2.501 0 1 0-3.214 3.214c.446.166.855.497.925.968a.979.979 0 0 1-.276.837l-1.61 1.61a2.404 2.404 0 0 1-1.705.707 2.402 2.402 0 0 1-1.704-.706l-1.568-1.568a1.026 1.026 0 0 0-.877-.29c-.493.074-.84.504-1.02.968a2.5 2.5 0 1 1-3.237-3.237c.464-.18.894-.527.967-1.02a1.026 1.026 0 0 0-.289-.877l-1.568-1.568A2.402 2.402 0 0 1 1.998 12c0-.617.236-1.234.706-1.704L4.23 8.77c.24-.24.581-.353.917-.303.515.077.877.528 1.073 1.01a2.5 2.5 0 1 0 3.259-3.259c-.482-.196-.933-.558-1.01-1.073-.05-.336.062-.676.303-.917l1.525-1.525A2.402 2.402 0 0 1 12 1.998c.617 0 1.234.236 1.704.706l1.568 1.568c.23.23.556.338.877.29.493-.074.84-.504 1.02-.968a2.5 2.5 0 1 1 3.237 3.237c-.464.18-.894.527-.967 1.02Z"/></svg>
+        <h3>Firefox</h3>
+      </header>
+      <p>The same extension for Firefox. Save any page from your laptop straight into your library.</p>
+      <div class="btns"><a class="btn btn-fill" href="#">Add to Firefox</a></div>
+    </article>
+  </div>
+  <a class="guide" href="#">Extension install guide <span aria-hidden="true">→</span></a>
+
+  <footer>
+    <nav aria-label="Footer">
+      <a href="#">Privacy</a>
+      <a href="#">Source code</a>
+      <a href="#">Extension install guide</a>
+    </nav>
+    <p class="mono">Said KEF-lee. The map on this page is drawn from noise. The coordinates are real.</p>
+  </footer>
+</section>
+
+<aside class="hud" aria-hidden="true">
+  <svg class="north" viewBox="0 0 18 30" fill="none" stroke="currentColor" stroke-width="1"><path d="M9 2 L14 20 L9 16 L4 20 Z"/><path d="M9 2 L9 16 L4 20 Z" fill="currentColor"/><text x="9" y="29" text-anchor="middle" font-family="Martian Mono, monospace" font-size="7" fill="currentColor" stroke="none">N</text></svg>
+  <svg class="scale" viewBox="0 0 150 22"><g stroke="currentColor" stroke-width="1" fill="none"><path d="M1 6 H149"/><path d="M1 3 V9 M38 4 V8 M75 3 V9 M112 4 V8 M149 3 V9"/></g><rect x="1" y="5" width="37" height="2" fill="currentColor"/><rect x="75" y="5" width="37" height="2" fill="currentColor"/><g font-family="Martian Mono, monospace" font-size="7" fill="currentColor"><text x="1" y="20">0</text><text x="75" y="20" text-anchor="middle">1</text><text x="149" y="20" text-anchor="end">2 km</text></g></svg>
+  <p class="mono"><span id="lat">60.8800° N</span>&nbsp;&nbsp;<span id="lon">6.8500° E</span></p>
+  <p class="mono sheet">Sheet 01 · Kefli · 1:50 000</p>
+</aside>
+
+<div class="optlabel mono">Option B · Fjord Contours</div>
+
+<script>
+(() => {
+  const cv = document.getElementById('map');
+  const ctx = cv.getContext('2d');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const latEl = document.getElementById('lat'), lonEl = document.getElementById('lon');
+
+  const BG = '#111112';
+  const INT = 100;            // contour interval, metres
+  const K = 0.62;             // map pans at this fraction of scroll speed
+  let W = 0, H = 0, dpr = 1, cell = 8;
+  let seaA = 1e9, seaB = 1e9 + 1;
+  let points = [];
+  let Hb = new Float32Array(0);
+
+  const mouse = { x: 0, y: 0, tx: 0, ty: 0, amp: 0, tamp: 0, active: false, down: false, fine: false };
+
+  // Value noise and fbm
+  function hash(i, j) {
+    let h = (Math.imul(i, 374761393) + Math.imul(j, 668265263)) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    h ^= h >>> 16;
+    return (h & 0xffff) / 65535;
+  }
+  function vnoise(x, y) {
+    const xi = Math.floor(x), yi = Math.floor(y);
+    const xf = x - xi, yf = y - yi;
+    const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+    const a = hash(xi, yi), b = hash(xi + 1, yi), c = hash(xi, yi + 1), d = hash(xi + 1, yi + 1);
+    return (a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v) * 2 - 1;
+  }
+  function fbm(x, y, oct) {
+    let s = 0, a = 0.5, f = 1;
+    for (let i = 0; i < oct; i++) { s += a * vnoise(x * f + i * 17.3, y * f - i * 9.1); f *= 2.03; a *= 0.5; }
+    return s;
+  }
+  const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+  // The fjord's centreline and half-width, in world pixels
+  const fjX = y => 130 * Math.sin(y * 0.0017) + 70 * Math.sin(y * 0.0043 + 1.3) + 34 * Math.sin(y * 0.0101 + 0.4);
+  const fjW = y => Math.min(260, 66 + 22 * Math.sin(y * 0.0029 + 0.5) + Math.max(0, y - seaA * 0.55) * 0.05);
+
+  function heightRow(x, y, t, c, w, sea, bx, by, amp) {
+    const s = 0.0019, px = x * s, py = y * s;
+    const wx = fbm(px * 0.6 + 3.1 + t, py * 0.6 - 1.7, 2);
+    const wy = fbm(px * 0.6 - 5.2, py * 0.6 + 2.3 + t * 0.7, 2);
+    const n = fbm(px + wx * 1.1, py + wy * 1.1, 4);
+    let r = 1 - Math.abs(n * 1.6); if (r < 0) r = 0; r *= r;
+    const base = 0.62 * r + 0.38 * (n * 0.5 + 0.5);
+    const d = Math.abs(x - c);
+    let h;
+    if (d > w) {
+      let v = (d - w) / 300; if (v > 1) v = 1;
+      const sh = 1 - (1 - v) * (1 - v) * (1 - v);
+      h = base * 1850 * sh + 24 * v;
+    } else {
+      h = (d - w) * 0.8;
+    }
+    h -= sea * 1350;
+    if (amp > 1) { const dx = x - bx, dy = y - by; h += amp * Math.exp(-(dx * dx + dy * dy) / 12800); }
+    return h;
+  }
+
+  function layout() {
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    W = document.documentElement.clientWidth; H = window.innerHeight;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    cell = Math.max(7, Math.round(Math.max(W, H) / 185));
+    const sy = window.scrollY;
+    points = [...document.querySelectorAll('[data-lat]')].map(el => {
+      const target = el.querySelector('.card') || el;
+      const r = target.getBoundingClientRect();
+      let scrollAt;
+      if (el.classList.contains('hero')) scrollAt = 0;
+      else if (el.classList.contains('get')) scrollAt = r.top + sy - H * 0.7;
+      else scrollAt = Math.max(0, r.top + sy + r.height / 2 - H / 2);
+      return { el, card: el.querySelector('.card'), lat: +el.dataset.lat, lon: +el.dataset.lon, name: el.dataset.name, scrollAt, wy: scrollAt * K + H / 2 };
+    });
+    const nameP = points.find(p => p.name === 'WP 04');
+    const getP = points.find(p => p.name === 'WP 05');
+    const getTop = document.getElementById('get').getBoundingClientRect().top + sy;
+    seaA = nameP ? nameP.wy - H * 0.1 : 1e9;
+    seaB = Math.max(seaA + 300, (getTop - H) * K + H * 0.45);
+    for (const p of points) p.wx = fjX(p.wy) - fjW(p.wy) - 34;
+    if (getP) getP.hidden = true;
+  }
+
+  function updateHud(sy) {
+    if (!points.length) return;
+    let a = points[0], b = points[points.length - 1], f = 0;
+    for (let i = 0; i < points.length - 1; i++) {
+      if (sy >= points[i].scrollAt && sy <= points[i + 1].scrollAt) { a = points[i]; b = points[i + 1]; f = (sy - a.scrollAt) / Math.max(1, b.scrollAt - a.scrollAt); break; }
+      if (sy > points[points.length - 1].scrollAt) { a = b; f = 0; }
+    }
+    const lat = (a.lat + (b.lat - a.lat) * f).toFixed(4) + '° N';
+    const lon = (a.lon + (b.lon - a.lon) * f).toFixed(4) + '° E';
+    if (latEl.textContent !== lat) latEl.textContent = lat;
+    if (lonEl.textContent !== lon) lonEl.textContent = lon;
+  }
+
+  function render(time) {
+    const t = reduce ? 0 : time * 0.000012;
+    const sy = reduce ? 0 : window.scrollY;
+    const desk = W >= 900;
+    const camY = sy * K;
+    const camX = fjX(camY + H * 0.5) - W * (desk ? 0.66 : 0.56);
+
+    const gi0 = Math.floor(camX / cell), gj0 = Math.floor(camY / cell);
+    const nx = Math.ceil(W / cell) + 2, ny = Math.ceil(H / cell) + 2;
+    const stride = nx + 1;
+    if (Hb.length < stride * (ny + 1)) Hb = new Float32Array(stride * (ny + 1));
+    const bx = mouse.x + camX, by = mouse.y + camY, amp = mouse.amp;
+
+    for (let j = 0; j <= ny; j++) {
+      const wy = (gj0 + j) * cell;
+      const c = fjX(wy), w = fjW(wy), sea = smooth(seaA, seaB, wy);
+      const row = j * stride;
+      for (let i = 0; i <= nx; i++) Hb[row + i] = heightRow((gi0 + i) * cell, wy, t, c, w, sea, bx, by, amp);
+    }
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = BG;
+    ctx.fillRect(0, 0, W, H);
+    const ox = gi0 * cell - camX, oy = gj0 * cell - camY;
+
+    // Water: drifting ripple hairlines on every third world row
+    ctx.lineWidth = 0.75;
+    ctx.strokeStyle = 'rgba(170, 192, 208, 0.42)';
+    ctx.fillStyle = 'rgba(150, 172, 190, 0.07)';
+    for (let j = 0; j < ny; j++) {
+      const row = j * stride; let st = -1;
+      for (let i = 0; i <= nx + 1; i++) {
+        const wet = i <= nx && Hb[row + i] < 0;
+        if (wet && st < 0) st = i;
+        if (!wet && st >= 0) { ctx.fillRect(ox + st * cell - cell / 2, oy + j * cell, (i - st) * cell, cell); st = -1; }
+      }
+    }
+    for (let j = 0; j <= ny; j++) {
+      const gj = gj0 + j;
+      if (((gj % 3) + 3) % 3 !== 0) continue;
+      const row = j * stride, y = oy + j * cell;
+      ctx.setLineDash([5 + (Math.abs(gj) * 7) % 13, 8 + (Math.abs(gj) * 5) % 17]);
+      ctx.lineDashOffset = (reduce ? 0 : -time * 0.006 * (1 + (Math.abs(gj) % 5) * 0.25)) + gj * 17;
+      ctx.beginPath();
+      let start = -1;
+      for (let i = 0; i <= nx + 1; i++) {
+        const wet = i <= nx && Hb[row + i] < -6;
+        if (wet && start < 0) start = i;
+        if (!wet && start >= 0) {
+          if (i - 1 > start) { ctx.moveTo(ox + start * cell + 3, y); ctx.lineTo(ox + (i - 1) * cell - 3, y); }
+          start = -1;
+        }
+      }
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    // Contours by marching squares
+    const pMinor = new Path2D(), pIndex = new Path2D(), pCoast = new Path2D();
+    const labels = [];
+    for (let j = 0; j < ny; j++) {
+      const y0 = oy + j * cell;
+      for (let i = 0; i < nx; i++) {
+        const a = Hb[j * stride + i], b = Hb[j * stride + i + 1];
+        const c = Hb[(j + 1) * stride + i + 1], d = Hb[(j + 1) * stride + i];
+        const mn = Math.min(a, b, c, d), mx = Math.max(a, b, c, d);
+        let k0 = Math.ceil(mn / INT), k1 = Math.floor(mx / INT);
+        if (k0 < 0) k0 = 0;
+        if (k1 < k0) continue;
+        const x0 = ox + i * cell;
+        for (let k = k0; k <= k1; k++) {
+          const L = k * INT;
+          const cs = (a > L ? 8 : 0) | (b > L ? 4 : 0) | (c > L ? 2 : 0) | (d > L ? 1 : 0);
+          if (cs === 0 || cs === 15) continue;
+          const path = k === 0 ? pCoast : (k % 5 === 0 ? pIndex : pMinor);
+          const tX = x0 + cell * (L - a) / (b - a), rY = y0 + cell * (L - b) / (c - b);
+          const bX = x0 + cell * (L - d) / (c - d), lY = y0 + cell * (L - a) / (d - a);
+          const x1 = x0 + cell, y1 = y0 + cell;
+          let s1 = null, s2 = null;
+          switch (cs) {
+            case 1: case 14: s1 = [x0, lY, bX, y1]; break;
+            case 2: case 13: s1 = [bX, y1, x1, rY]; break;
+            case 3: case 12: s1 = [x0, lY, x1, rY]; break;
+            case 4: case 11: s1 = [tX, y0, x1, rY]; break;
+            case 6: case 9: s1 = [tX, y0, bX, y1]; break;
+            case 7: case 8: s1 = [x0, lY, tX, y0]; break;
+            case 5: s1 = [tX, y0, x1, rY]; s2 = [x0, lY, bX, y1]; break;
+            case 10: s1 = [x0, lY, tX, y0]; s2 = [bX, y1, x1, rY]; break;
+          }
+          path.moveTo(s1[0], s1[1]); path.lineTo(s1[2], s1[3]);
+          if (s2) { path.moveTo(s2[0], s2[1]); path.lineTo(s2[2], s2[3]); }
+          if (k > 0 && k % 5 === 0 && labels.length < 12) {
+            const gi = gi0 + i, gj = gj0 + j;
+            if (((Math.imul(gi, 73856093) ^ Math.imul(gj, 19349663)) >>> 0) % 260 === 0) labels.push({ s: s1, v: L });
+          }
+        }
+      }
+    }
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(237, 236, 232, 0.2)'; ctx.lineWidth = 0.75; ctx.stroke(pMinor);
+    ctx.strokeStyle = 'rgba(237, 236, 232, 0.46)'; ctx.lineWidth = 1.05; ctx.stroke(pIndex);
+    ctx.strokeStyle = 'rgba(237, 236, 232, 0.72)'; ctx.lineWidth = 1.15; ctx.stroke(pCoast);
+
+    // Elevation labels on index contours, knocked out of the lines
+    ctx.font = '400 9px "Martian Mono", ui-monospace, monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const l of labels) {
+      const [xa, ya, xb, yb] = l.s;
+      let ang = Math.atan2(yb - ya, xb - xa);
+      if (ang > Math.PI / 2) ang -= Math.PI; if (ang < -Math.PI / 2) ang += Math.PI;
+      const txt = String(l.v), tw = ctx.measureText(txt).width;
+      ctx.save(); ctx.translate((xa + xb) / 2, (ya + yb) / 2); ctx.rotate(ang);
+      ctx.fillStyle = BG; ctx.fillRect(-tw / 2 - 4, -6, tw + 8, 12);
+      ctx.fillStyle = 'rgba(237, 236, 232, 0.62)'; ctx.fillText(txt, 0, 0.5);
+      ctx.restore();
+    }
+
+    // Spot heights: the highest vertex in each world-aligned tile
+    const T = 34;
+    ctx.textAlign = 'left';
+    for (let tj = Math.floor(gj0 / T) * T; tj < gj0 + ny; tj += T) {
+      for (let ti = Math.floor(gi0 / T) * T; ti < gi0 + nx; ti += T) {
+        let best = 1350, bi = -1, bj = -1;
+        for (let j = Math.max(1, tj - gj0 + 2); j < Math.min(ny, tj - gj0 + T - 2); j++)
+          for (let i = Math.max(1, ti - gi0 + 2); i < Math.min(nx, ti - gi0 + T - 2); i++) {
+            const v = Hb[j * stride + i]; if (v > best) { best = v; bi = i; bj = j; }
+          }
+        if (bi < 0) continue;
+        const px = ox + bi * cell, py = oy + bj * cell;
+        ctx.fillStyle = 'rgba(237, 236, 232, 0.8)';
+        ctx.beginPath(); ctx.moveTo(px, py - 4); ctx.lineTo(px + 3.6, py + 2.4); ctx.lineTo(px - 3.6, py + 2.4); ctx.closePath(); ctx.fill();
+        const txt = String(Math.round(best)), tw = ctx.measureText(txt).width;
+        ctx.fillStyle = BG; ctx.fillRect(px + 6, py - 6, tw + 6, 12);
+        ctx.fillStyle = 'rgba(237, 236, 232, 0.72)'; ctx.fillText(txt, px + 9, py + 0.5);
+      }
+    }
+
+    // Fog drifting over the map
+    const R = Math.max(W, H) * 0.34;
+    for (let i = 0; i < 4; i++) {
+      const fx = W * (0.5 + 0.48 * Math.sin(time * 0.00004 * (1 + i * 0.3) + i * 2.1));
+      const fy = H * (0.5 + 0.46 * Math.cos(time * 0.000033 * (1 + i * 0.22) + i * 1.3));
+      const g = ctx.createRadialGradient(fx, fy, 0, fx, fy, R);
+      g.addColorStop(0, 'rgba(17, 17, 18, 0.5)'); g.addColorStop(1, 'rgba(17, 17, 18, 0)');
+      ctx.fillStyle = g; ctx.fillRect(fx - R, fy - R, R * 2, R * 2);
+    }
+
+    // Veil behind the hero type, lifting as you scroll away
+    const veil = 1 - Math.min(1, sy / (H * 0.8));
+    if (veil > 0) {
+      const g = desk ? ctx.createLinearGradient(0, 0, W * 0.6, 0) : ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, `rgba(17, 17, 18, ${0.82 * veil})`); g.addColorStop(1, 'rgba(17, 17, 18, 0)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    }
+
+    // Waypoints and leader lines
+    if (!reduce) {
+      ctx.font = '500 9px "Martian Mono", ui-monospace, monospace';
+      ctx.textAlign = 'left';
+      for (const p of points) {
+        if (p.hidden) continue;
+        const px = p.wx - camX, py = p.wy - camY;
+        if (py < -20 || py > H + 20) continue;
+        if (!desk && p.name === 'WP 01') continue;
+        if (desk && p.card) {
+          const r = p.card.getBoundingClientRect();
+          const ay = Math.min(Math.max(r.top + 34, 0), H);
+          ctx.strokeStyle = 'rgba(237, 236, 232, 0.55)'; ctx.lineWidth = 0.9;
+          ctx.beginPath(); ctx.moveTo(r.right, ay); ctx.lineTo(r.right + 28, ay); ctx.lineTo(px - 6, py); ctx.stroke();
+        }
+        ctx.strokeStyle = 'rgba(237, 236, 232, 0.9)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = 'rgba(237, 236, 232, 0.95)';
+        ctx.beginPath(); ctx.arc(px, py, 1.8, 0, Math.PI * 2); ctx.fill();
+        const tw = ctx.measureText(p.name).width;
+        ctx.fillStyle = BG; ctx.fillRect(px + 10, py - 7, tw + 8, 14);
+        ctx.fillStyle = 'rgba(237, 236, 232, 0.9)'; ctx.fillText(p.name, px + 14, py + 0.5);
+      }
+    }
+
+    // The survey probe under a mouse pointer
+    if (!reduce && mouse.active && mouse.fine) {
+      const hx = heightRow(bx, by, t, fjX(by), fjW(by), smooth(seaA, seaB, by), bx, by, amp);
+      const mx = mouse.x, my = mouse.y;
+      ctx.strokeStyle = 'rgba(237, 236, 232, 0.85)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(mx - 9, my); ctx.lineTo(mx - 3, my); ctx.moveTo(mx + 3, my); ctx.lineTo(mx + 9, my);
+      ctx.moveTo(mx, my - 9); ctx.lineTo(mx, my - 3); ctx.moveTo(mx, my + 3); ctx.lineTo(mx, my + 9); ctx.stroke();
+      ctx.font = '400 9px "Martian Mono", ui-monospace, monospace';
+      ctx.fillStyle = 'rgba(237, 236, 232, 0.85)';
+      ctx.fillText(hx < 0 ? 'sea' : Math.round(hx) + ' m', mx + 12, my + 14);
+    }
+
+    updateHud(window.scrollY);
+  }
+
+  // Pointer: the map rises under it, with inertia
+  function setTarget(e) {
+    mouse.tx = e.clientX; mouse.ty = e.clientY;
+    if (!mouse.active) { mouse.x = mouse.tx; mouse.y = mouse.ty; }
+    mouse.active = true; mouse.fine = e.pointerType === 'mouse';
+    mouse.tamp = mouse.down ? 1500 : 650;
+  }
+  if (!reduce) {
+    addEventListener('pointermove', setTarget, { passive: true });
+    addEventListener('pointerdown', e => {
+      if (e.target.closest('a, button, .card, .get')) return;
+      mouse.down = true; setTarget(e);
+    }, { passive: true });
+    addEventListener('pointerup', e => {
+      mouse.down = false;
+      if (e.pointerType !== 'mouse') { mouse.tamp = 0; mouse.active = false; } else mouse.tamp = 650;
+    }, { passive: true });
+    document.documentElement.addEventListener('pointerleave', () => { mouse.tamp = 0; mouse.active = false; });
+    addEventListener('blur', () => { mouse.tamp = 0; mouse.down = false; });
+  }
+
+  let last = 0;
+  function loop(ts) {
+    requestAnimationFrame(loop);
+    if (document.hidden || ts - last < 33) return;
+    last = ts;
+    mouse.x += (mouse.tx - mouse.x) * 0.14;
+    mouse.y += (mouse.ty - mouse.y) * 0.14;
+    mouse.amp += (mouse.tamp - mouse.amp) * 0.07;
+    render(ts);
+  }
+
+  let resizeQueued = false;
+  function relayout() {
+    if (resizeQueued) return;
+    resizeQueued = true;
+    requestAnimationFrame(() => { resizeQueued = false; layout(); render(performance.now()); });
+  }
+  addEventListener('resize', relayout);
+  if ('ResizeObserver' in window) new ResizeObserver(relayout).observe(document.body);
+  if (reduce) addEventListener('scroll', () => updateHud(window.scrollY), { passive: true });
+
+  layout();
+  render(0);
+  const start = () => { layout(); render(performance.now()); if (!reduce) requestAnimationFrame(loop); };
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(start); else start();
+})();
+</script>
