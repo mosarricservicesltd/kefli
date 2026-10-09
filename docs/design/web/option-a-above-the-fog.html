@@ -547,9 +547,11 @@ footer .brand svg { width: 26px; height: 26px; }
     if (!dusk) return;
     function sm(a, b, x) { var t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
     function place(p) {
-      scene.style.transform = "scale(" + (1.14 - 0.14 * p).toFixed(4) + ")";
-      fogEl.style.transform = "translate3d(0," + (-p * 46).toFixed(2) + "%,0)";
-      fogEl.style.opacity = (1 - 0.55 * p).toFixed(3);
+      // The fog clears on its own, quicker clock: gone by just over half way, while the peaks keep settling.
+      var q = sm(0, 0.55, p);
+      scene.style.transform = "scale(" + (1.14 - 0.14 * sm(0, 1, p)).toFixed(4) + ")";
+      fogEl.style.transform = "translate3d(0," + (-q * 60).toFixed(2) + "%,0)";
+      fogEl.style.opacity = (1 - 0.8 * q).toFixed(3);
     }
     if (RM) { place(1); return; }
     var queued = false;
@@ -560,7 +562,7 @@ footer .brand svg { width: 26px; height: 26px; }
         queued = false;
         var r = dusk.getBoundingClientRect(), vh = window.innerHeight;
         // 0 as the scene's top enters the bottom of the screen, 1 once it has risen to the top quarter
-        place(sm(0, 1, (vh - r.top) / (vh * 0.75 + r.height * 0.25)));
+        place(Math.min(1, Math.max(0, (vh - r.top) / (vh * 0.75 + r.height * 0.25))));
       });
     }
     window.addEventListener("scroll", onScroll, { passive: true });
