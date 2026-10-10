@@ -9,6 +9,9 @@ ConditionPathExists=/etc/kefli/restic.env
 Type=oneshot
 EnvironmentFile=/etc/kefli/restic.env
 Environment=KEEP_DAILY={{ kefli_backup_keep_daily }} KEEP_WEEKLY={{ kefli_backup_keep_weekly }}
+# restic keeps its index cache here; without a home directory under systemd it would have none and reread the box.
+CacheDirectory=kefli-restic
+Environment=RESTIC_CACHE_DIR=/var/cache/kefli-restic
 ExecStart=/usr/local/lib/kefli/kefli-backup
 Nice=10
 IOSchedulingClass=idle

@@ -83,6 +83,24 @@ sudo systemctl restart kefli-mailfwd && journalctl -u kefli-mailfwd -f
 
 Then send a test message to `privacy@kefli.app` from another account.
 
+## Backups
+
+Nightly at about 04:15 UTC (backend spec 3.8), `kefli-backup` exports the relay's events, copies keflid's database and the write policy's record through SQLite's backup, and sends them with the blobs to a Hetzner Storage Box with restic, keeping 14 daily and 8 weekly snapshots. restic encrypts everything on the box before it leaves, under a password kept in `/etc/kefli/restic.env` (root only) and in the operator's password manager; without it the backups can't be read.
+
+| | |
+|---|---|
+| Storage Box | `u688582`, `u688582.your-storagebox.de`, reached over SFTP on port 23 as `kefli-backup-box` (root's `~/.ssh/config`, written by the playbook from `kefli_backup_box` in the inventory) with a key used for nothing else, `/root/.ssh/kefli-backup`. Its host key is pinned to the fingerprint Hetzner publishes |
+| Repository | `sftp:kefli-backup-box:kefli` |
+| Commands | `sudo kefli-restic snapshots`, `sudo kefli-restic restore latest --target /tmp/restore`, and any other restic command; `sudo systemctl start kefli-backup` runs one now |
+
+Setting it up on a new box, once the playbook has run:
+
+1. In the Hetzner Console, turn on SSH support for the Storage Box.
+2. Add the backup key, with the Storage Box's password: `ssh -t kefli 'sudo sh -c "ssh -p 23 -o PubkeyAuthentication=no <user>@<host> install-ssh-key < /root/.ssh/kefli-backup.pub"'`.
+3. `ssh -t kefli sudo kefli-backup-setup`: it writes `restic.env` with a new random password, shows the password once for the password manager, and creates the repository.
+
+The first backup on 10 October 2026 was restored to a scratch directory and matched the live data: keflid's database and the wraps record passed SQLite's integrity check with the same accounts, the relay export had every event, and every blob was byte for byte the same. Rehearse a restore like that after any change to the backup.
+
 ## Not yet on the box
 
-Backups to a Storage Box: the `backup` role installs restic and a nightly timer, which does nothing until `/etc/kefli/restic.env` holds the repository, its password and the healthchecks address. Monitoring and an outside uptime probe, NIP-11's operator pubkey, and the 90-day trim of unrelated public kinds (only registered keys can write, so none arrive yet). NIP-05's `_` name went live by hand on 10 October 2026, the same file the playbook writes.
+The healthchecks address for the backup, so that a night without one alerts. Monitoring and an outside uptime probe, NIP-11's operator pubkey, and the 90-day trim of unrelated public kinds (only registered keys can write, so none arrive yet). NIP-05's `_` name went live by hand on 10 October 2026, the same file the playbook writes.

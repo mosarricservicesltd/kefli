@@ -1,0 +1,26 @@
+#!/bin/bash
+# One-time setup of the nightly backup (README, "Backups"), run by the operator in their own terminal:
+#   ssh -t kefli sudo kefli-backup-setup
+# Writes /etc/kefli/restic.env (root only) with the Storage Box repository, a new random restic password and the
+# healthchecks address, shows the password once for the operator's password manager, and creates the repository.
+# Without that password the backups can't be read, so it must be kept somewhere other than this box.
+set -euo pipefail
+env=/etc/kefli/restic.env
+[ "$(id -u)" = 0 ] || { echo "run it with sudo" >&2; exit 1; }
+[ ! -e "$env" ] || { echo "$env already exists; remove it first to start again" >&2; exit 1; }
+ssh -o BatchMode=yes kefli-backup-box ls >/dev/null 2>&1 \
+  || { echo "can't reach the Storage Box as kefli-backup-box; add /root/.ssh/kefli-backup.pub to it first" >&2; exit 1; }
+
+read -rp "Healthchecks ping URL (Enter for none): " hc
+password=$(openssl rand -base64 33)
+umask 077
+printf 'RESTIC_REPOSITORY=sftp:kefli-backup-box:kefli\nRESTIC_PASSWORD=%s\nHEALTHCHECK_URL=%s\n' "$password" "$hc" > "$env"
+
+echo
+echo "The restic password. Save it in your password manager now; it isn't shown again:"
+echo
+echo "    $password"
+echo
+read -rp "Press Enter once it's saved. " _
+kefli-restic init
+echo "Done. The first backup runs at 04:15 UTC, or now with: sudo systemctl start kefli-backup"

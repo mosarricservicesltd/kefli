@@ -6,3 +6,9 @@ operator:
     kefli-1:
       ansible_host: kefli
       kefli_ssh_allow4: [86.188.26.146]
+      # The Hetzner Storage Box the nightly backups go to (README, "Backups"), over SFTP on port 23. Its host key is
+      # pinned: the fingerprint, SHA256:XqONwb1S0zuj5A1CDxpOSuD2hnAArV1A3wKY7Z3sdgM, is the one Hetzner publishes.
+      kefli_backup_box:
+        user: u688582
+        host: u688582.your-storagebox.de
+        host_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIICf9svRenC/PLKIL9nk6K/pxQgoiFC41wTNvoIncOxs

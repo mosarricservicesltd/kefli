@@ -12,6 +12,49 @@
   loop:
     - { name: kefli-backup, dest: /usr/local/lib/kefli }
     - { name: kefli-restic, dest: /usr/local/bin }
+    - { name: kefli-backup-setup, dest: /usr/local/bin }
+
+- name: The Storage Box, for root's SSH and so for restic's SFTP
+  when: kefli_backup_box is defined
+  block:
+    - name: Root's SSH directory
+      ansible.builtin.file:
+        path: /root/.ssh
+        state: directory
+        mode: "0700"
+    - name: A key for the backups alone
+      ansible.builtin.command: ssh-keygen -q -t ed25519 -N "" -C "kefli-backup@{{ inventory_hostname }}" -f /root/.ssh/kefli-backup
+      args:
+        creates: /root/.ssh/kefli-backup
+    - name: The kefli-backup-box alias, which restic.env's repository names
+      ansible.builtin.blockinfile:
+        path: /root/.ssh/config
+        create: true
+        mode: "0600"
+        marker: "# {mark} kefli-backup-box (Ansible)"
+        block: |
+          Host kefli-backup-box
+            HostName {{ kefli_backup_box.host }}
+            User {{ kefli_backup_box.user }}
+            Port 23
+            IdentityFile /root/.ssh/kefli-backup
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ServerAliveInterval 60
+    - name: Its host key, pinned
+      ansible.builtin.known_hosts:
+        path: /root/.ssh/known_hosts
+        name: "[{{ kefli_backup_box.host }}]:23"
+        key: "[{{ kefli_backup_box.host }}]:23 {{ kefli_backup_box.host_key }}"
+    - name: The public key, to add to the Storage Box
+      ansible.builtin.slurp:
+        src: /root/.ssh/kefli-backup.pub
+      register: backup_pub
+      check_mode: false
+      failed_when: false
+    - name: Show it
+      ansible.builtin.debug:
+        msg: "{{ backup_pub.content | default('') | b64decode | trim }}"
 
 - name: Units
   ansible.builtin.template:
