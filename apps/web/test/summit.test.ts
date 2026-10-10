@@ -71,11 +71,12 @@ describe('initSummit', () => {
     expect(Number($('cue').style.opacity)).toBe(0);
   });
 
-  it('moves the wordmark against the scene with the pointer', () => {
+  it('moves the wordmark against the scene with the pointer, up and down only', () => {
     initSummit(false);
     window.dispatchEvent(Object.assign(new Event('pointermove'), { clientX: 1440, clientY: 0 }));
     frames.step(60);
-    expect($('word').style.transform).toMatch(/calc\(-50% \+ 1\d\.\d\dpx\)/);
+    expect($('word').style.transform).toMatch(/^translate3d\(-50%,-\d\.\d\dpx,0\)$/);
+    expect($('frame').style.transform).toMatch(/^translate3d\(0,\d\.\d\dpx,0\)/);
   });
 
   it('stops when the summit is off-screen or the tab is hidden, and starts again on return', () => {

@@ -40,11 +40,11 @@ export function initSummit(reducedMotion: boolean): void {
   }
 
   // Every layer rides one camera: lowering it lifts the scene from its foot, the near ridge lifts most,
-  // and the cloud bank climbs past you. The pointer moves the wordmark against the scene, for depth.
-  function place(d: number, px: number, py: number): void {
+  // and the cloud bank climbs past you. The pointer moves the wordmark against the scene, up and down only, for depth.
+  function place(d: number, py: number): void {
     const h = stage.clientHeight;
-    frame.style.transform = `translate3d(${(px * -10).toFixed(2)}px,${(py * 6).toFixed(2)}px,0) scale(${(1 + d * 0.32).toFixed(4)})`;
-    word.style.transform = `translate3d(calc(-50% + ${(px * 18).toFixed(2)}px),${(d * 0.05 * box.height + py * -8).toFixed(2)}px,0)`;
+    frame.style.transform = `translate3d(0,${(py * 6).toFixed(2)}px,0) scale(${(1 + d * 0.32).toFixed(4)})`;
+    word.style.transform = `translate3d(-50%,${(d * 0.05 * box.height + py * -8).toFixed(2)}px,0)`;
     ridge.style.transform = `translate3d(0,${(-d * 0.04 * box.height).toFixed(2)}px,0)`;
     veil.style.transform = `translate3d(0,${veilOffset(d).toFixed(2)}%,0)`;
     const o = 1 - smooth(0.06, 0.38, d);
@@ -60,7 +60,7 @@ export function initSummit(reducedMotion: boolean): void {
 
   // Reduced motion: the photograph alone, no loop and no descent.
   if (reducedMotion) {
-    place(0, 0, 0);
+    place(0, 0);
     return;
   }
 
@@ -70,10 +70,9 @@ export function initSummit(reducedMotion: boolean): void {
   video.addEventListener('playing', () => video.classList.add('on'));
   const playLoop = () => video.play().catch(() => {});
 
-  const ptr = { x: 0, y: 0, tx: 0, ty: 0 };
+  const ptr = { y: 0, ty: 0 };
   let d = 0;
   window.addEventListener('pointermove', (e) => {
-    ptr.tx = (e.clientX / window.innerWidth) * 2 - 1;
     ptr.ty = -((e.clientY / window.innerHeight) * 2 - 1);
   }, { passive: true });
 
@@ -83,13 +82,12 @@ export function initSummit(reducedMotion: boolean): void {
   function frameTick(): void {
     raf = 0;
     if (!running) return;
-    ptr.x += (ptr.tx - ptr.x) * 0.045;
     ptr.y += (ptr.ty - ptr.y) * 0.045;
     const r = hero.getBoundingClientRect();
     const target = descent(r.top, r.height, stage.clientHeight);
     d += (target - d) * 0.14;
     if (Math.abs(target - d) < 0.0005) d = target;
-    place(d, ptr.x, ptr.y);
+    place(d, ptr.y);
     raf = requestAnimationFrame(frameTick);
   }
   function update(): void {

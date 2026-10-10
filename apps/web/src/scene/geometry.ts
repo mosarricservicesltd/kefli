@@ -20,7 +20,7 @@ export const CREST: readonly number[] = [
 export const NARROW = 760;
 
 /** The share of the wordmark's height hidden behind the rock. */
-export const BURY = { wide: 0.4, narrow: 0.24 } as const;
+export const BURY = { wide: 0.3, narrow: 0.1 } as const;
 
 export interface Frame {
   /** The photograph's box in stage pixels. */

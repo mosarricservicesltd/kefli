@@ -49,7 +49,7 @@ describe('wordTop', () => {
   it('stands the wordmark with its foot just behind the rock', () => {
     const top = wordTop(frame, 720 - frame.left, 800, 270, BURY.wide);
     const foot = top + 270;
-    // The foot sits below the crest under the word by 40% of its height.
+    // The foot sits below the crest under the word by 30% of its height.
     expect(foot).toBeGreaterThan(0.7 * frame.height);
     expect(foot).toBeLessThan(frame.height);
   });
