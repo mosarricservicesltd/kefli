@@ -31,3 +31,5 @@
     enabled: true
     state: started
     daemon_reload: true
+  # A dry run writes no unit, so there is no timer yet to find.
+  ignore_errors: "{{ ansible_check_mode }}"

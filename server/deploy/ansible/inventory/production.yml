@@ -1,8 +1,8 @@
-# The production host. The address and the SSH allowlist are placeholders until they are filled in from the Hetzner
-# console (server/deploy/README.md lists the live box); 203.0.113.0/24 and 198.51.100.0/24 are documentation ranges.
+# The production host (server/deploy/README.md). ansible_host is the `kefli` alias in ~/.ssh/config, which run.sh
+# mounts, so Ansible logs in exactly as `ssh kefli` does: 2.31.53.13 as richard with ~/.ssh/id_ed25519_kefli.
+# kefli_ssh_allow4 is the nftables SSH allowlist; when the home address changes, change it here and deploy.
 operator:
   hosts:
     kefli-1:
-      ansible_host: 203.0.113.10
-      ansible_user: richard
-      kefli_ssh_allow4: [198.51.100.7]
+      ansible_host: kefli
+      kefli_ssh_allow4: [86.188.26.146]

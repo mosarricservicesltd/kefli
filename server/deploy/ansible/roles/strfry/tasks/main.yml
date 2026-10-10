@@ -42,14 +42,17 @@
         version: "{{ strfry_commit }}"
         recursive: true
         force: true
+    # A dry run (--check) checks nothing out, so it reports the build and install without running them.
     - name: Build it
       ansible.builtin.shell: make setup-golpe && make -j{{ strfry_make_jobs }}
       args:
         chdir: /usr/local/src/strfry
       changed_when: true
+      when: not ansible_check_mode
     - name: Install it
       ansible.builtin.command: install -m 755 -s /usr/local/src/strfry/strfry /usr/local/bin/strfry
       changed_when: true
+      when: not ansible_check_mode
       notify: Restart strfry
     - name: Note the commit
       ansible.builtin.copy:
