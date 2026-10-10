@@ -45,6 +45,13 @@ kefli.app {
 	handle /.well-known/nostr.json {
 		import keflid 127.0.0.1:8447
 	}
+	# Resend's email.received webhook, for mail to privacy@kefli.app (kefli-mailfwd)
+	handle /hooks/resend {
+		request_body {
+			max_size 1MB
+		}
+		reverse_proxy 127.0.0.1:8449
+	}
 	handle {
 		root * /var/www/kefli
 		# Hashed assets, and media and fonts that change only with their names (apps/web/README.md)

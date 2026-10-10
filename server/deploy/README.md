@@ -7,7 +7,7 @@ The production host, set up by hand on 10 October 2026 and recorded here until t
 | Host | `kefli-1`, Hetzner Cloud, 1 vCPU, 2 GB RAM, 38 GB disk, plus a 2 GB swap file |
 | OS | Debian 13 (trixie), UTC |
 | Addresses | `2.31.53.13`, `2a01:4f8:1c16:497a::1` |
-| DNS | Hetzner DNS: the apex, `relay`, `api` and `blossom` have A and AAAA records for the host, `www` is a CNAME to the apex. CAA allows Let's Encrypt only. SPF `-all` and DMARC `p=reject`, because the domain sends no mail |
+| DNS | Hetzner DNS: the apex, `relay`, `api` and `blossom` have A and AAAA records for the host, `www` is a CNAME to the apex. CAA allows Let's Encrypt only. The apex's SPF is `-all` and DMARC `p=reject`: the only mail the domain sends is the forwarder's, through Resend, which is DKIM-signed for `kefli.app` and bounces to `send.kefli.app`. Resend's records are under Mail below |
 | Login | `richard` by key only (`~/.ssh/id_ed25519_kefli`), with passwordless sudo. Root and password login are off |
 
 The box is smaller than the spec's CCX23 because on-device speech (flow decision 22) takes the Kokoro worker out of v1. Rescale in the Hetzner console when load calls for it.
@@ -57,6 +57,34 @@ sudo install -m 755 -s strfry /usr/local/bin/strfry && sudo systemctl restart st
 The database lives in `/var/lib/strfry/db`, owned by the `strfry` system user, with the write policy's record of the wraps the relay holds next to it in `/var/lib/strfry/wraps.db`. strfry listens on `127.0.0.1:7777` only, behind Caddy on `relay.kefli.app`. It holds events to 64 KB, and the write policy, `kefli-writepolicy`, applies the rest of contract 3.2 against keflid's database: registered authors, wraps to registered users and authorised devices, the extension's Undo, kinds 30078 and 1059 at 16 KB, and 60 events a minute.
 
 `relay-sweep` runs nightly at 03:30 UTC (backend spec 6): it drops gift wraps older than 30 days, wraps addressed to keys `DELETE /account` removed, and every event by a removed key once it has been gone 30 days. It logs counts only. Run it by hand with `sudo systemctl start relay-sweep` and read `journalctl -u relay-sweep`.
+
+## Mail
+
+Mail to `privacy@kefli.app`, the address on the website's privacy and delete-account pages, goes to the company inbox, `mosarricservicesltd@gmail.com`. Resend receives everything sent to the domain and calls `https://kefli.app/hooks/resend` with an `email.received` webhook. `kefli-mailfwd` checks the signature, fetches the message and its attachments, and sends them on from `privacy@kefli.app` with Reply-To set to the sender, so a reply from the inbox goes to them. Mail for any other address on the domain is dropped. Its journal holds each message's Resend id and whether it went, never an address or a subject.
+
+| File | Goes to |
+|---|---|
+| `kefli/kefli-mailfwd.service` | `/etc/systemd/system/kefli-mailfwd.service` |
+| `kefli/kefli-mailfwd.env` | `/etc/kefli/kefli-mailfwd.env`: the address it accepts, the sender and the inbox |
+| (by hand) | `/etc/kefli/kefli-mailfwd.secret.env`, root only: `RESEND_API_KEY` and `RESEND_WEBHOOK_SECRET` |
+
+It listens on `127.0.0.1:8449` and doesn't start until the secret file exists. Setting it up:
+
+1. In Resend, add the domain `kefli.app` in the EU region and put the records it lists into Hetzner DNS: the DKIM TXT at `resend._domainkey`, and the MX and SPF TXT at `send` for bounces. Leave the apex's own SPF as it is.
+2. Turn on receiving for the domain and add the MX record it gives at the apex. The apex has no other MX, so Resend's takes all mail for `kefli.app`.
+3. Create an API key with full access (a sending-only key can't read received mail).
+4. Add a webhook for `email.received` at `https://kefli.app/hooks/resend` and copy its signing secret.
+5. On the box, write the secrets and start it:
+
+```
+sudo install -m 600 /dev/stdin /etc/kefli/kefli-mailfwd.secret.env <<'EOF'
+RESEND_API_KEY=re_…
+RESEND_WEBHOOK_SECRET=whsec_…
+EOF
+sudo systemctl restart kefli-mailfwd && journalctl -u kefli-mailfwd -f
+```
+
+Then send a test message to `privacy@kefli.app` from another account.
 
 ## Not yet on the box
 
