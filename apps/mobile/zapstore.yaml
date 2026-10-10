@@ -1,0 +1,24 @@
+# The Zapstore listing (zsp v0.4.17). Published offline: zsp builds the events for the Kefli account unsigned, the
+# files go to Zapstore's Blossom server, and Amber signs through the repo's bunker connection. See scripts/build-release.sh
+# for the APK.
+release_source: ./dist/kefli-0.0.1.apk
+repository: https://github.com/mosarricservicesltd/kefli
+name: Kefli
+summary: Save anything, read it clean and offline, listen to it.
+description: |
+  Kefli is a free read-it-later app. Share an article to Kefli from any app, or save it from the browser extension,
+  and Kefli keeps a clean, readable copy on your phone to read offline or listen to with your phone's own voice.
+
+  Your library is encrypted under your own key and copied beyond our servers, so it outlives the service.
+
+  - No signup, no ads, no tracking
+  - A calm reading view, offline
+  - Listen to anything you've saved, with on-device speech
+  - A browser extension for Chrome and Firefox
+license: AGPL-3.0-or-later
+website: https://kefli.app
+icon: ./assets/brand/icon.png
+tags:
+  - reading
+  - productivity
+  - read-it-later

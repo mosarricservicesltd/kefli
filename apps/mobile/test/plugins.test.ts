@@ -2,6 +2,8 @@
 const { addNip55Query } = require('../plugins/with-nip55-queries.js');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { secureManifest, BLOCKED, RULES } = require('../plugins/with-kefli-security.js');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { addReleaseSigning } = require('../plugins/with-release-signing.js');
 
 describe('the NIP-55 manifest query (mobile spec 8.4)', () => {
   test('is added once, beside queries already there', () => {
@@ -38,5 +40,44 @@ describe('backup and permissions (mobile spec 7.1)', () => {
       const part = RULES.slice(RULES.indexOf(`<${tag}>`), RULES.indexOf(`</${tag}>`));
       for (const d of ['root', 'file', 'database', 'sharedpref', 'external']) expect(part).toContain(`domain="${d}"`);
     }
+  });
+});
+
+describe('release signing (with-release-signing.js)', () => {
+  // The signing part of Expo SDK 57's generated app/build.gradle.
+  const GRADLE = `android {
+    signingConfigs {
+        debug {
+            storeFile file('debug.keystore')
+        }
+    }
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            // Caution! In production, you need to generate your own keystore file.
+            signingConfig signingConfigs.debug
+            minifyEnabled enableMinifyInReleaseBuilds
+        }
+    }
+}`;
+
+  test('signs release with the Kefli key when the properties exist, and never with the debug key', () => {
+    const out = addReleaseSigning(GRADLE);
+    expect(out).toContain('storeFile file(KEFLI_RELEASE_STORE_FILE)');
+    expect(out).toContain("signingConfig project.hasProperty('KEFLI_RELEASE_STORE_FILE') ? signingConfigs.release : null");
+    const release = out.slice(out.indexOf('buildTypes'));
+    expect(release.slice(release.indexOf('release {')).split('}')[0]).not.toContain('signingConfigs.debug');
+    expect(out).toMatch(/debug \{\s*signingConfig signingConfigs\.debug/);
+  });
+
+  test('patches once', () => {
+    const once = addReleaseSigning(GRADLE);
+    expect(addReleaseSigning(once)).toBe(once);
+  });
+
+  test('stops the build when the template no longer matches', () => {
+    expect(() => addReleaseSigning(GRADLE.replace('signingConfig signingConfigs.debug\n            minify', 'minify'))).toThrow('no longer looks as expected');
   });
 });
