@@ -1,4 +1,4 @@
-# Kefli operator VPS (backend spec 3.6). The apex serves a holding page until apps/web is deployed.
+# Kefli operator VPS (backend spec 3.6). The apex serves apps/web from /var/www/kefli (apps/web/deploy.sh puts it there).
 (common) {
 	header {
 		Strict-Transport-Security "max-age=31536000"
@@ -46,7 +46,12 @@ kefli.app {
 		import keflid 127.0.0.1:8447
 	}
 	handle {
-		respond "Kefli is coming soon." 200
+		root * /var/www/kefli
+		# Hashed assets, and media and fonts that change only with their names (apps/web/README.md)
+		@lasting path /assets/* /media/* /fonts/*
+		header @lasting Cache-Control "public, max-age=31536000, immutable"
+		encode zstd gzip
+		file_server
 	}
 }
 

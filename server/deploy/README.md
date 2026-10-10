@@ -22,7 +22,7 @@ The box is smaller than the spec's CCX23 because on-device speech (flow decision
 
 Caddy 2.11.4 is installed from the `.deb` on its GitHub release page, checked against the release's sha512 checksums. Its Cloudsmith apt repository answered 402 on 10 October 2026, and Debian's package is 2.6.2. Nothing upgrades it automatically, so new releases go on by hand the same way.
 
-`caddy/Caddyfile` goes to `/etc/caddy/Caddyfile` (`deploy.sh` validates it first). Certificates come from Let's Encrypt and renew themselves. `api.kefli.app` and `blossom.kefli.app` go to keflid, with request bodies held to 1 MB and 9 MB; the apex sends `/.well-known/nostr.json` to keflid and otherwise serves a holding page until apps/web is deployed. The access log, `/var/log/caddy/access.log`, follows the backend spec's log policy: time, method, the path's first segment, status, bytes and latency, with no address, query or header, kept seven days. The spec's per-address limits in Caddy need a plugin that the packaged Caddy lacks; keflid's own limits per key and per address stand in.
+`caddy/Caddyfile` goes to `/etc/caddy/Caddyfile` (`deploy.sh` validates it first). Certificates come from Let's Encrypt and renew themselves. `api.kefli.app` and `blossom.kefli.app` go to keflid, with request bodies held to 1 MB and 9 MB; the apex sends `/.well-known/nostr.json` to keflid and otherwise serves the website from `/var/www/kefli`, which `apps/web/deploy.sh` puts there. The access log, `/var/log/caddy/access.log`, follows the backend spec's log policy: time, method, the path's first segment, status, bytes and latency, with no address, query or header, kept seven days. The spec's per-address limits in Caddy need a plugin that the packaged Caddy lacks; keflid's own limits per key and per address stand in.
 
 ## keflid
 
@@ -60,4 +60,4 @@ The database lives in `/var/lib/strfry/db`, owned by the `strfry` system user, w
 
 ## Not yet on the box
 
-The website, backups to a Storage Box (which needs the box and its credentials), monitoring and an outside uptime probe, NIP-11's operator pubkey and NIP-05's `_` name (both wait for the operator's key), the 90-day trim of unrelated public kinds (only registered keys can write, so none arrive yet), and the Ansible playbook.
+Backups to a Storage Box (which needs the box and its credentials), monitoring and an outside uptime probe, NIP-11's operator pubkey and NIP-05's `_` name (both wait for the operator's key), the 90-day trim of unrelated public kinds (only registered keys can write, so none arrive yet), and the Ansible playbook.
