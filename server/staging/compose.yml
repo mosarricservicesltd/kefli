@@ -1,0 +1,45 @@
+# Kefli staging on this machine: the operator relay with its write policy and keflid (API and Blossom), the production
+# components on the dev stack's operator ports, so the phone, the extension and server/dev's scripts reach them unchanged.
+# The stand-in public relays and the mirror stay ../dev's. Build the binaries first: make -C server/api build.
+#   docker compose -f server/dev/compose.yml stop relay-operator blossom-operator   (and stop api.mjs)
+#   docker compose -f server/staging/compose.yml up -d
+services:
+  data-owner:
+    image: debian:bookworm-slim
+    command: ["chown", "1000:1000", "/data"]
+    volumes: [data:/data]
+  relay-operator:
+    image: ghcr.io/hoytech/strfry:latest
+    network_mode: host
+    user: "1000:1000"
+    command: ["--config=/etc/strfry.conf", "relay"]
+    volumes:
+      - ./strfry.conf:/etc/strfry.conf:ro
+      - ./writepolicy.sh:/kefli/writepolicy.sh:ro
+      - ../api/bin/kefli-writepolicy:/kefli/kefli-writepolicy:ro
+      - relay:/app/strfry-db
+      - data:/data
+    depends_on: { keflid: { condition: service_started } }
+  keflid:
+    image: debian:bookworm-slim
+    network_mode: host
+    user: "1000:1000"
+    command: ["/kefli/keflid"]
+    depends_on: { data-owner: { condition: service_completed_successfully } }
+    environment:
+      KEFLID_DB: /data/keflid.db
+      KEFLID_BLOBS: /data/blobs
+      KEFLID_API_ADDR: 0.0.0.0:8447
+      KEFLID_BLOSSOM_ADDR: 0.0.0.0:3447
+      KEFLID_API_BASE: http://localhost:8447
+      KEFLID_BLOSSOM_BASE: http://localhost:3447
+      KEFLID_DEFAULTS: /kefli/defaults.json
+    volumes:
+      - ../api/bin/keflid:/kefli/keflid:ro
+      - ../api/bin/keflictl:/kefli/keflictl:ro
+      - ./defaults.json:/kefli/defaults.json:ro
+      - data:/data
+
+volumes:
+  relay:
+  data:

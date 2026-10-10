@@ -1,0 +1,1 @@
+{"v":1,"operator":{"relay":"ws://localhost:7447","blossom":"http://localhost:3447","api":"http://localhost:8447"},"relays":["ws://localhost:7448","ws://localhost:7449"],"indexer":["ws://localhost:7448"],"mirrors":["http://localhost:3448"]}

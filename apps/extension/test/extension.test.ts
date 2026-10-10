@@ -337,4 +337,9 @@ describe('Undo (contract 4.4, decision 101)', () => {
   test('otherwise it is removed', async () => {
     expect((await run([false, false])).out).toBe('undone');
   });
+  test('a refused retraction still finds the save on the phone, and is reported if it isn’t there', async () => {
+    const refusing = async () => { throw new Error('blocked: deletes only a gift wrap of its own that this relay holds'); };
+    expect(await settleUndo(refusing, async () => true, async () => undefined)).toBe('onphone');
+    await expect(settleUndo(refusing, async () => false, async () => undefined)).rejects.toThrow('blocked');
+  });
 });
