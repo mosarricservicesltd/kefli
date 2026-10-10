@@ -17,6 +17,8 @@ description: |
   - A calm reading view, offline
   - Listen to anything you've saved, with on-device speech
   - A browser extension for Chrome and Firefox
+
+  Get the browser extension at https://kefli.app/extension. More about Kefli at https://kefli.app.
 license: AGPL-3.0-or-later
 website: https://kefli.app
 icon: ./apps/mobile/assets/brand/icon.png
