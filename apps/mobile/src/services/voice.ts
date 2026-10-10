@@ -4,7 +4,7 @@
 import { useSyncExternalStore } from 'react';
 import type { Sentence } from '@kefli/protocol';
 import { KefliVoice, type PhoneVoice, type VoiceState } from '../../modules/kefli-voice/src';
-import { rowByHash, setPosition, type LibRow } from '../data/library';
+import { reconcileWords, rowByHash, setPosition, type LibRow } from '../data/library';
 import { playFrom, recordPlayed } from '../data/listen';
 import { getSetting, setSetting } from '../data/settings';
 import { readRate, readWps, nextRate } from '../voice/clock';
@@ -97,6 +97,8 @@ export async function listen(row: Pick<LibRow, 'hash' | 'title' | 'site' | 'url'
   const list = article.sentences;
   const totalWords = article.words;
   if (!totalWords) return;
+  const owner = appState()?.owner;
+  if (owner) reconcileWords(store(), now(), owner, row.hash, totalWords);
   if (session && session.hash !== row.hash) keep(session.word, true);
   const rate = readRate(getSetting(store(), 'voice.speed'));
   const lang = store().get<{ lang: string | null }>('SELECT lang FROM items WHERE hash = ? AND lang IS NOT NULL LIMIT 1', row.hash)?.lang ?? null;
@@ -106,7 +108,6 @@ export async function listen(row: Pick<LibRow, 'hash' | 'title' | 'site' | 'url'
   const wps = readWps(getSetting(store(), wpsKey));
   const word = Math.max(0, Math.min(fromWord, totalWords - 1));
   const title = row.title ?? row.url;
-  const owner = appState()?.owner;
   if (owner) recordPlayed(store(), owner, row.hash, Math.floor(Date.now() / 1000));
   set({ hash: row.hash, title, playing: true, word, rate, wordTiming: true, wps, ended: false, totalWords, sentences: list, sentence: 0, firstWords: list.map((x) => x.firstWord) });
   let art: string | null = null;

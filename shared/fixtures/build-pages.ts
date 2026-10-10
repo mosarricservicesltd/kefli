@@ -2,6 +2,7 @@
 // desktop Chrome with the vendored parser bundle. Every platform must give the same Markdown and text_hash.
 //   npx tsx shared/fixtures/build-pages.ts           rerun Chrome on the saved pages, rewriting expected.json
 //   npx tsx shared/fixtures/build-pages.ts --fetch   download the real pages again first (they change upstream)
+//   npx tsx shared/fixtures/build-pages.ts --spoken  recompute only the spoken projection and words, after a projection change
 //
 // Eight pages are written here for the awkward cases; twelve are real pages under open licences (pages/SOURCES.md).
 // expected.json holds, per page: the parse's fields, Readability's content HTML, the normalised Markdown, its
@@ -124,7 +125,22 @@ async function fetchReal(): Promise<Page[]> {
   return pages;
 }
 
+/** --spoken: the projection changed and the parse didn't, so only spoken and words are recomputed from the stored Markdown. */
+function respeak() {
+  const path = join(here, 'expected.json');
+  const expected = JSON.parse(readFileSync(path, 'utf8')) as { chrome: string; pages: { id: string; markdown: string | null; spoken: string | null; words: number | null }[] };
+  for (const p of expected.pages) {
+    const before = p.words;
+    p.spoken = typeof p.markdown !== 'string' ? null : project(p.markdown).text;
+    p.words = typeof p.markdown !== 'string' ? null : countWords(p.markdown);
+    if (before !== p.words) console.log(`${p.id}: ${before} → ${p.words} words`);
+  }
+  writeFileSync(path, `${JSON.stringify(expected, null, 1)}\n`);
+  console.log('rewrote spoken and words in shared/fixtures/expected.json');
+}
+
 async function main() {
+  if (process.argv.includes('--spoken')) return respeak();
   mkdirSync(pagesDir, { recursive: true });
   const indexPath = join(pagesDir, 'pages.json');
   const real: Page[] = process.argv.includes('--fetch') || !existsSync(indexPath)

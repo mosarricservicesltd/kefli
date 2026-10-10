@@ -4,9 +4,9 @@ The product is named **Kefli** (Richard, 9 October 2026; see `docs/research/nami
 
 ## Source of truth
 
-1. `shared/contract/contract.md` — contract v1.5. Protocol, event kinds, API, limits. It wins over every other document. Change it only deliberately, bump its version, and add a changelog entry.
+1. `shared/contract/contract.md` — contract v1.6. Protocol, event kinds, API, limits. It wins over every other document. Change it only deliberately, bump its version, and add a changelog entry.
 2. `docs/specs/01-project-plan.md` — sequence, gates, testing. Read the scope revision at the top.
-3. `docs/specs/` — backend, extension and mobile specs. The mobile spec (`03-mobile.md`, version 2.1, Expo, Android first) codes against contract v1.3, which took in the requests in its section 13.2, plus v1.4's clarifications (contract section 11.2) and v1.5's namespace (section 11.1); its section 14 records Richard's decisions (flow decisions 79 to 93, the licence below), and the name was settled later as Kefli (flow decision 95). The backend and extension specs were written against v1.0, so apply the contract's section 11 changelog where they differ. The iOS spec is parked; iOS will later come from the mobile spec's codebase.
+3. `docs/specs/` — backend, extension and mobile specs. The mobile spec (`03-mobile.md`, version 2.1, Expo, Android first) codes against contract v1.3, which took in the requests in its section 13.2, plus v1.4's clarifications (contract section 11.3), v1.5's namespace (section 11.2) and v1.6's silent citation markers (section 11.1); its section 14 records Richard's decisions (flow decisions 79 to 93, the licence below), and the name was settled later as Kefli (flow decision 95). The backend and extension specs were written against v1.0, so apply the contract's section 11 changelog where they differ. The iOS spec is parked; iOS will later come from the mobile spec's codebase.
 4. `docs/design/flow-map-rev3.html` — UX flow map rev. 3, weight audit, state matrix, with the decision log `docs/design/flow-decisions.md` (later decisions override the map). Nothing gets built that isn't on the map; additions go on the map first.
 
 ## Current decisions

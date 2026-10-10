@@ -126,8 +126,8 @@ export type Article = { blocks: Block[]; words: number };
 /** Everything the Reader and the voice need from an article, from one Markdown parse (6.7: blocks are derived once). */
 export type Derived = Article & { v: number; sentences: Sentence[]; spoken: string };
 
-/** The version of what deriveArticle writes; a stored file of another version is derived again. */
-export const DERIVED_VERSION = 1;
+/** The version of what deriveArticle writes; a stored file of another version is derived again. 2: citation markers go silent (contract 1.6). */
+export const DERIVED_VERSION = 2;
 
 export function deriveArticle(markdown: string): Derived {
   const tree = fromMarkdown(markdown);

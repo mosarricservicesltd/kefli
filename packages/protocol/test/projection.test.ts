@@ -24,6 +24,25 @@ describe('spoken projection (C§4.2)', () => {
     ['thematic break is silent', 'a\n\n---\n\nb', 'a\n\nb'],
     ['reference links keep their text', 'A [ref][1] here.\n\n[1]: https://example.com', 'A ref here.'],
     ['code blocks are read', '```\nlet a = 1;\nlet b;\n```', 'let a = 1; let b;'],
+    // Citation and footnote markers (flow decision 102)
+    ['a citation marker is silent', 'In 1993.[\\[3\\]](https://en.wikipedia.org/wiki/Bookmark_\\(digital\\)#cite_note-3) Next.', 'In 1993. Next.'],
+    ['any text to #cite_note- is silent', 'である[\\[原 1\\]](https://ja.wikipedia.org/wiki/X#cite_note-1)。', 'である。'],
+    ['a percent-encoded fragment', 'Word[\\[a\\]](https://el.wikipedia.org/wiki/X#%63ite_note-a) on.', 'Word on.'],
+    ['bracketed IPA linking elsewhere is read', 'Greek [\\[eliniˈka\\]](https://el.wikipedia.org/wiki/Help:IPA) here.', 'Greek [eliniˈka] here.'],
+    ['citation needed goes with its brackets', 'A claim.\\[_[citation needed](https://en.wikipedia.org/wiki/Wikipedia:Citation_needed "Wikipedia:Citation needed")_\\] Then more.', 'A claim. Then more.'],
+    ['a localised dead-link tag goes', '[本](http://a.example/)\\[_[リンク切れ](https://ja.wikipedia.org/wiki/Wikipedia:%E5%87%BA%E5%85%B8#x)_\\] - 一覧。', '本 - 一覧。'],
+    ['a tag without emphasis goes', '[書](http://a.example/)\\[[永久失效連結](https://zh.wikipedia.org/wiki/Wikipedia:%E5%A4%B1%E6%95%88 "Wikipedia:失效链接")\\]', '書'],
+    ['a project page in prose is read', 'Read [the style guide](https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style) first.', 'Read the style guide first.'],
+    ['bracketed IPA to a help page is read', 'Said \\[[ˈbʊk](https://en.wikipedia.org/wiki/Help:IPA/English)\\] aloud.', 'Said [ˈbʊk] aloud.'],
+    ['a numbered footnote is silent', 'A point[1](https://x.substack.com/p/a#footnote-1) made.', 'A point made.'],
+    ['an fn footnote is silent', 'A point[\\[2\\]](#fn2) made.', 'A point made.'],
+    ['a number to another fragment is read', 'See [2](#section-2) below.', 'See 2 below.'],
+    ['a word to a footnote is read', 'See [the note](#fn2) below.', 'See the note below.'],
+    ['footnote back-link is silent', 'The note itself. [↩︎](#fnref1)', 'The note itself.'],
+    ['reference entries are silent', 'Body.\n\n1. [↑](https://w.org/wiki/X#cite_ref-1) "A source". Retrieved 2009.\n2. [↑](https://w.org/wiki/X#cite_ref-2) Another.', 'Body.'],
+    ['an entry with numbered back-links', '1. [1](https://w.org/wiki/X#cite_ref-a_1-0) [2](https://w.org/wiki/X#cite_ref-a_1-1) A source.', ''],
+    ['an entry opening with a caret', '1. ^ [**1.0**](https://zh.wikipedia.org/wiki/X#cite_ref-1) 来源。', ''],
+    ['an ordinary list item opening with a link is read', '1. [A source](https://example.com) worth reading.', 'A source worth reading.'],
   ])('%s', (_name, md, want) => {
     expect(spoken(md)).toBe(want);
   });
@@ -45,6 +64,14 @@ describe('spoken projection (C§4.2)', () => {
       if (c === 'é') expect(md.slice(p.offsets[i], p.offsets[i] + 8)).toBe('&eacute;');
       else expect([i, md[p.offsets[i]]]).toEqual([i, c]);
     }
+    for (let i = 1; i < p.offsets.length; i++) expect(p.offsets[i]).toBeGreaterThanOrEqual(p.offsets[i - 1]);
+  });
+
+  test('text around a skipped marker still maps to itself', () => {
+    const md = normaliseMarkdown('A claim.\\[_[citation needed](https://en.wikipedia.org/wiki/Wikipedia:Citation_needed)_\\] Then[\\[1\\]](https://w.org/wiki/X#cite_note-1) more.');
+    const p = project(md);
+    expect(p.text).toBe('A claim. Then more.');
+    for (let i = 0; i < p.text.length; i++) if (!/\s/.test(p.text[i])) expect([i, md[p.offsets[i]]]).toEqual([i, p.text[i]]);
     for (let i = 1; i < p.offsets.length; i++) expect(p.offsets[i]).toBeGreaterThanOrEqual(p.offsets[i - 1]);
   });
 

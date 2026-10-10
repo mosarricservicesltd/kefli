@@ -158,6 +158,21 @@ export function setPosition(db: SqlDb, now: number, owner: string, hash: string,
   });
 }
 
+/**
+ * The words of an article derived again under a newer spoken projection (contract 4.2, 1.6: citation markers go
+ * silent): words is the projection's count, so a changed count is stored with its progress, and the item goes out
+ * with the next published position. The position is a word index and stays, kept inside the new length.
+ */
+export function reconcileWords(db: SqlDb, now: number, owner: string, hash: string, words: number): void {
+  db.tx(() => {
+    const r = db.get<{ words: number | null; position_word: number }>('SELECT words, position_word FROM items WHERE owner = ? AND hash = ?', owner, hash);
+    if (!r || r.words === null || r.words === words) return;
+    const w = Math.max(0, Math.min(r.position_word, Math.max(0, words - 1)));
+    db.run('UPDATE items SET words = ?, position_word = ?, progress = ?, modified_at = ?, dirty = 1 WHERE owner = ? AND hash = ?',
+      words, w, progressAt(w, words), now, owner, hash);
+  });
+}
+
 /** Whether any row still holds a hash's files once a delete is done (files are per hash, 4.1). */
 export function hashInUseAfterDelete(db: SqlDb, hash: string): boolean {
   return !!db.get('SELECT 1 FROM items WHERE hash = ?', hash);
