@@ -21,7 +21,7 @@ relay {
 
     auth {
         enabled = true
-        serviceUrl = "wss://relay.kefli.app"
+        serviceUrl = "wss://relay.{{ kefli_domain }}"
 
         # Contract 3.2: only kind 1059 reads need NIP-42, and only for the wrap's p-tagged pubkey
         restrictedReadKinds = "1059"

@@ -1,0 +1,64 @@
+#!/bin/bash
+# Tests the playbook without a VPS: lints it, then runs it twice against a fresh Debian 13 container with systemd (the
+# second run must change nothing) and checks that the services answer through Caddy and the write policy reads
+# keflid's database. The container is removed afterwards; KEEP=1 leaves it for a look inside.
+#   server/deploy/ansible/test.sh
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+name=kefli-ansible-test
+run() { KEFLI_DOCKER_SOCKET=1 "$here/run.sh" "$@"; }
+box() { docker exec "$name" "$@"; }
+
+make -s -C "$here/../../api" build
+run ansible-lint --offline site.yml
+run ansible-playbook --syntax-check site.yml
+
+docker rm -f "$name" >/dev/null 2>&1 || true
+[ -n "${KEEP:-}" ] || trap 'docker rm -f "$name" >/dev/null' EXIT
+docker build -q -t kefli-ansible-host -f "$here/test.Dockerfile" "$here" >/dev/null
+# Not --privileged: that hands the container the host's consoles, and its getty on tty1 took the desktop session down.
+# SYS_ADMIN lets the image remount its own cgroup subtree for systemd; NET_ADMIN is what the firewall role needs, and
+# stays inside the container's network namespace. Neither gives it any host device.
+docker run -d --name "$name" --hostname kefli-test --cgroupns=private --cap-add SYS_ADMIN --cap-add NET_ADMIN \
+  --security-opt apparmor=unconfined \
+  --tmpfs /run --tmpfs /run/lock kefli-ansible-host >/dev/null
+for _ in $(seq 60); do
+  box systemctl is-system-running 2>/dev/null | grep -qE 'running|degraded' && break
+  [ "$(docker inspect -f '{{.State.Running}}' "$name")" = true ] || { docker logs "$name" >&2; exit 1; }
+  sleep 1
+done
+
+run ansible-playbook -i inventory/test.yml site.yml
+second=$(run ansible-playbook -i inventory/test.yml site.yml | tee /dev/stderr | grep -E '^kefli-test')
+grep -q 'changed=0 ' <<<"$second" || { echo "the second run changed something" >&2; exit 1; }
+
+failures=0
+check() {
+  if eval "$2" >/dev/null 2>&1; then echo "✓ $1"; else echo "✗ $1"; failures=$((failures + 1)); fi
+}
+via() { box curl -sfk --resolve "$1:443:127.0.0.1" "${@:2}"; }
+check 'keflid, strfry and Caddy are running' 'box systemctl is-active keflid strfry caddy'
+check 'the sweep and backup timers are on' 'box systemctl is-active relay-sweep.timer kefli-backup.timer'
+check 'the mail forwarder waits for its secrets' '[ "$(box systemctl show -p ConditionResult --value kefli-mailfwd)" = no ]'
+check 'defaults.json through Caddy names the operator' \
+  'via api.kefli.app https://api.kefli.app/defaults.json | jq -e ".operator.relay == \"wss://relay.kefli.app\""'
+check "the operator's NIP-05 through Caddy" \
+  'via kefli.app "https://kefli.app/.well-known/nostr.json?name=_" | jq -e ".names._ | test(\"^[0-9a-f]{64}$\")"'
+check "the relay's NIP-11 through Caddy" \
+  'via relay.kefli.app -H "Accept: application/nostr+json" https://relay.kefli.app/ | jq -e ".name == \"Kefli\""'
+check 'Blossom answers 404 for a blob it lacks' \
+  '[ "$(box curl -sk -o /dev/null -w %{http_code} --resolve blossom.kefli.app:443:127.0.0.1 https://blossom.kefli.app/$(printf %064d 0))" = 404 ]'
+check 'HSTS is set' 'via api.kefli.app -I https://api.kefli.app/defaults.json | grep -qi strict-transport-security'
+key=$(printf 'a%.0s' {1..64})
+check 'keflictl registers a key' "box keflictl register $key"
+line='{"type":"new","event":{"id":"'$(printf 'b%.0s' {1..64})'","pubkey":"%s","kind":30078,"tags":[],"content":"x","created_at":1,"sig":""},"receivedAt":1,"sourceType":"IP4","sourceInfo":"192.0.2.1"}'
+policy() { printf "$line\n" "$1" | docker exec -i "$name" runuser -u strfry -- /usr/local/lib/kefli/relay-write-policy | jq -r .action; }
+check 'the write policy, as strfry, accepts the registered key' '[ "$(policy $key)" = accept ]'
+check 'and refuses another' '[ "$(policy $(printf "c%.0s" {1..64}))" = reject ]'
+check 'the sweep runs' 'box systemctl start relay-sweep'
+check 'the access log holds no address' '! box grep -q 127.0.0.1 /var/log/caddy/access.log'
+check 'SSH takes keys only' 'box sshd -T | grep -qx "passwordauthentication no"'
+check 'the firewall is loaded' 'box nft list set inet filter ssh_allow4 | grep -q 198.51.100.7'
+
+echo "${failures} failed"
+exit $((failures > 0))

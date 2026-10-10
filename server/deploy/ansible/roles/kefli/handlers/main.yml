@@ -1,0 +1,11 @@
+- name: Restart keflid
+  ansible.builtin.systemd_service:
+    name: keflid
+    state: restarted
+    daemon_reload: true
+
+- name: Restart kefli-mailfwd
+  ansible.builtin.systemd_service:
+    name: kefli-mailfwd
+    state: restarted
+    daemon_reload: true

@@ -1,0 +1,24 @@
+# nftables (README, "Host"; backend spec 3.6): SSH from the listed addresses, 80 and 443 from anywhere, nothing else.
+# Change the Hetzner Cloud firewall to match.
+- name: Some address may still reach SSH
+  ansible.builtin.assert:
+    that: (kefli_ssh_allow4 + kefli_ssh_allow6) | length > 0
+    fail_msg: kefli_ssh_allow4 and kefli_ssh_allow6 are both empty, which would shut SSH to everyone.
+
+- name: nftables
+  ansible.builtin.apt:
+    name: nftables
+
+- name: The ruleset
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: /etc/nftables.conf
+    mode: "0755"
+    validate: nft -c -f %s
+  notify: Load the ruleset
+
+- name: Loaded at boot
+  ansible.builtin.systemd_service:
+    name: nftables
+    enabled: true
+    state: started

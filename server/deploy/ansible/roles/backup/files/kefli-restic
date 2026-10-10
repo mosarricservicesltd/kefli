@@ -1,0 +1,7 @@
+#!/bin/sh
+# restic against the backup repository, with its settings from /etc/kefli/restic.env: `sudo kefli-restic init` once,
+# then `sudo kefli-restic snapshots`, `sudo kefli-restic restore latest --target /tmp/restore` and so on.
+set -a
+. /etc/kefli/restic.env
+set +a
+exec restic "$@"

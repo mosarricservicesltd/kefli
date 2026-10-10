@@ -1,0 +1,53 @@
+# Caddy (README, "Caddy"; backend spec 3.6): TLS for the apex and relay, api and blossom, the log policy of backend
+# spec 5, and the website's directory, which apps/web/deploy.sh fills.
+- name: Which version is installed
+  ansible.builtin.command: dpkg-query -W -f=${Version} caddy
+  register: caddy_installed
+  changed_when: false
+  failed_when: false
+
+- name: Caddy from its release, checked against the release's checksums
+  when: caddy_installed.stdout != caddy_version
+  block:
+    - name: Fetch the package
+      ansible.builtin.get_url:
+        url: https://github.com/caddyserver/caddy/releases/download/v{{ caddy_version }}/caddy_{{ caddy_version }}_linux_{{ caddy_arch }}.deb
+        dest: /tmp/caddy.deb
+        checksum: sha512:{{ caddy_deb_sha512[caddy_arch] }}
+        mode: "0644"
+    - name: Install it
+      ansible.builtin.apt:
+        deb: /tmp/caddy.deb
+      notify: Restart caddy
+
+- name: Log directory
+  ansible.builtin.file:
+    path: /var/log/caddy
+    state: directory
+    owner: caddy
+    group: caddy
+    mode: "0750"
+
+- name: The website's directory
+  ansible.builtin.file:
+    path: /var/www/kefli
+    state: directory
+    owner: "{{ kefli_admin_user }}"
+    group: "{{ kefli_admin_user }}"
+    mode: "0755"
+
+# Validated as caddy, so the access log it opens stays Caddy's. Ansible's copy sits in root's own temp directory, which
+# caddy can't open, so root reads it in.
+- name: The Caddyfile
+  ansible.builtin.template:
+    src: Caddyfile.j2
+    dest: /etc/caddy/Caddyfile
+    mode: "0644"
+    validate: sh -c 'runuser -u caddy -- caddy validate --adapter caddyfile --config /dev/stdin < "$1"' - %s
+  notify: Reload caddy
+
+- name: Caddy runs
+  ansible.builtin.systemd_service:
+    name: caddy
+    enabled: true
+    state: started

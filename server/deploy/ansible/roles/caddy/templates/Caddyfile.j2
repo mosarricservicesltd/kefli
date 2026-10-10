@@ -1,4 +1,12 @@
+# {{ ansible_managed }}
 # Kefli operator VPS (backend spec 3.6). The apex serves apps/web from /var/www/kefli (apps/web/deploy.sh puts it there).
+{% if kefli_tls_internal %}
+# A test host has no public name, so Caddy signs its own certificates.
+{
+	local_certs
+}
+
+{% endif %}
 (common) {
 	header {
 		Strict-Transport-Security "max-age=31536000"
@@ -39,7 +47,7 @@
 	}
 }
 
-kefli.app {
+{{ kefli_domain }} {
 	import common
 	import log
 	handle /.well-known/nostr.json {
@@ -62,12 +70,12 @@ kefli.app {
 	}
 }
 
-www.kefli.app {
+www.{{ kefli_domain }} {
 	import common
-	redir https://kefli.app{uri} permanent
+	redir https://{{ kefli_domain }}{uri} permanent
 }
 
-relay.kefli.app {
+relay.{{ kefli_domain }} {
 	import common
 	import log
 	reverse_proxy 127.0.0.1:7777 {
@@ -75,7 +83,7 @@ relay.kefli.app {
 	}
 }
 
-api.kefli.app {
+api.{{ kefli_domain }} {
 	import common
 	import log
 	request_body {
@@ -85,7 +93,7 @@ api.kefli.app {
 }
 
 # Blobs are ciphertext of at most 8 MB (contract 5).
-blossom.kefli.app {
+blossom.{{ kefli_domain }} {
 	import common
 	import log
 	request_body {

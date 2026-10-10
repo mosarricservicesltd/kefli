@@ -1,0 +1,19 @@
+# The operator VPS (backend spec 2 and 12, server/deploy/README.md). deploy.sh runs it in Docker after building the Go
+# binaries; `--tags deploy` puts on only keflid, the relay's write policy and sweep, and the Caddy and strfry
+# configuration, as the old deploy.sh did.
+- name: Operator VPS
+  hosts: operator
+  become: true
+  roles:
+    - role: base
+      tags: [host]
+    - role: firewall
+      tags: [host]
+    - role: kefli
+      tags: [deploy]
+    - role: strfry
+      tags: [deploy]
+    - role: caddy
+      tags: [deploy]
+    - role: backup
+      tags: [host]

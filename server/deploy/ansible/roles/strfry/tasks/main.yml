@@ -1,0 +1,106 @@
+# The operator relay (README, "strfry"): strfry built from source at a pinned commit, the write policy over keflid's
+# database, and the nightly retention sweep.
+- name: Build dependencies
+  ansible.builtin.apt:
+    name: [git, g++, make, pkg-config, libtool, autoconf, automake, libyaml-libyaml-perl, libtemplate-perl,
+           libregexp-grammars-perl, libssl-dev, zlib1g-dev, liblmdb-dev, libflatbuffers-dev, libsecp256k1-dev,
+           libzstd-dev]
+
+- name: The strfry user
+  ansible.builtin.user:
+    name: strfry
+    system: true
+    home: /var/lib/strfry
+    create_home: false
+    shell: /usr/sbin/nologin
+    # The write policy reads keflid's database, which the kefli group may read.
+    groups: [kefli]
+    append: true
+
+- name: Its database directory
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: strfry
+    group: strfry
+    mode: "0750"
+  loop: [/var/lib/strfry, /var/lib/strfry/db]
+
+- name: Which commit is installed
+  ansible.builtin.slurp:
+    src: /usr/local/lib/kefli/strfry.commit
+  register: strfry_installed
+  failed_when: false
+
+- name: Build and install strfry
+  when: (strfry_installed.content | default('') | b64decode | trim) != strfry_commit
+  block:
+    - name: Source at the pinned commit
+      ansible.builtin.git:
+        repo: https://github.com/hoytech/strfry.git
+        dest: /usr/local/src/strfry
+        version: "{{ strfry_commit }}"
+        recursive: true
+        force: true
+    - name: Build it
+      ansible.builtin.shell: make setup-golpe && make -j{{ strfry_make_jobs }}
+      args:
+        chdir: /usr/local/src/strfry
+      changed_when: true
+    - name: Install it
+      ansible.builtin.command: install -m 755 -s /usr/local/src/strfry/strfry /usr/local/bin/strfry
+      changed_when: true
+      notify: Restart strfry
+    - name: Note the commit
+      ansible.builtin.copy:
+        dest: /usr/local/lib/kefli/strfry.commit
+        content: "{{ strfry_commit }}\n"
+        mode: "0644"
+
+- name: The write policy
+  ansible.builtin.copy:
+    src: "{{ kefli_bin }}/kefli-writepolicy"
+    dest: /usr/local/lib/kefli/kefli-writepolicy
+    mode: "0755"
+  notify: Restart strfry
+
+- name: Scripts
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: /usr/local/lib/kefli/{{ item }}
+    mode: "0755"
+  loop: [relay-write-policy, relay-sweep]
+  notify: Restart strfry
+
+- name: Configuration
+  ansible.builtin.template:
+    src: strfry.conf.j2
+    dest: /etc/strfry.conf
+    mode: "0644"
+  notify: Restart strfry
+
+- name: Units
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: /etc/systemd/system/{{ item }}
+    mode: "0644"
+  loop: [strfry.service, relay-sweep.service, relay-sweep.timer]
+  notify: Restart strfry
+
+- name: The write policy opens keflid's database, so wait for keflid to make it
+  ansible.builtin.wait_for:
+    path: /var/lib/kefli/keflid.db
+    timeout: 30
+
+- name: strfry runs
+  ansible.builtin.systemd_service:
+    name: strfry
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: The sweep runs nightly
+  ansible.builtin.systemd_service:
+    name: relay-sweep.timer
+    enabled: true
+    state: started

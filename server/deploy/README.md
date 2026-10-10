@@ -1,6 +1,6 @@
 # Operator VPS
 
-The production host, set up by hand on 10 October 2026 and recorded here until the Ansible playbook (backend spec section 8, week 0) replaces these notes. Every file in this directory is the copy that is live on the box. `deploy.sh` builds the Go binaries and installs keflid, the relay's write policy and sweep, and the strfry and Caddy configuration, and restarts them; the host setup below (SSH, nftables, Caddy and strfry themselves) stays by hand.
+The production host, set up by hand on 10 October 2026. Its configuration now lives in the Ansible playbook in `ansible/` (backend spec section 8): `site.yml` and one role per part (`base`, `firewall`, `caddy`, `strfry`, `kefli`, `backup`), with the settings in `ansible/group_vars/all.yml` and the host in `ansible/inventory/production.yml`. `deploy.sh` builds the Go binaries and runs the playbook through Docker, so this machine needs only Docker and SSH; `deploy.sh --check --diff` shows what a run would change without changing anything, and `--tags deploy` limits it to keflid, the relay's policy and sweep, and the configuration. `ansible/test.sh` runs the playbook twice against a throwaway Debian 13 container and checks the services through Caddy. The live box was set up by hand before the playbook existed, and the inventory still holds placeholder addresses: the first run against it starts with `--check --diff`.
 
 | | |
 |---|---|
@@ -14,45 +14,42 @@ The box is smaller than the spec's CCX23 because on-device speech (flow decision
 
 ## Host
 
-- `host/sshd-10-kefli.conf` goes to `/etc/ssh/sshd_config.d/10-kefli.conf`.
-- `host/nftables.conf` goes to `/etc/nftables.conf`. It allows SSH from the addresses in `ssh_allow4` only, plus 80 and 443 from anywhere. When the home address changes, log in through the Hetzner console, add the new address to the set, and run `sudo nft -f /etc/nftables.conf`. Change the Hetzner Cloud firewall to match.
+- `ansible/roles/base/templates/sshd-10-kefli.conf.j2` goes to `/etc/ssh/sshd_config.d/10-kefli.conf`.
+- `ansible/roles/firewall/templates/nftables.conf.j2` goes to `/etc/nftables.conf`. It allows SSH from the addresses in `ssh_allow4` (`kefli_ssh_allow4` in the inventory) only, plus 80 and 443 from anywhere. When the home address changes, log in through the Hetzner console, add the new address to the set, and run `sudo nft -f /etc/nftables.conf`. Change the Hetzner Cloud firewall to match.
 - Unattended upgrades are on for Debian security updates.
 
 ## Caddy
 
 Caddy 2.11.4 is installed from the `.deb` on its GitHub release page, checked against the release's sha512 checksums. Its Cloudsmith apt repository answered 402 on 10 October 2026, and Debian's package is 2.6.2. Nothing upgrades it automatically, so new releases go on by hand the same way.
 
-`caddy/Caddyfile` goes to `/etc/caddy/Caddyfile` (`deploy.sh` validates it first). Certificates come from Let's Encrypt and renew themselves. `api.kefli.app` and `blossom.kefli.app` go to keflid, with request bodies held to 1 MB and 9 MB; the apex sends `/.well-known/nostr.json` to keflid and otherwise serves the website from `/var/www/kefli`, which `apps/web/deploy.sh` puts there. The access log, `/var/log/caddy/access.log`, follows the backend spec's log policy: time, method, the path's first segment, status, bytes and latency, with no address, query or header, kept seven days. The spec's per-address limits in Caddy need a plugin that the packaged Caddy lacks; keflid's own limits per key and per address stand in.
+`ansible/roles/caddy/templates/Caddyfile.j2` goes to `/etc/caddy/Caddyfile` (the playbook validates it first, as the `caddy` user). Certificates come from Let's Encrypt and renew themselves. `api.kefli.app` and `blossom.kefli.app` go to keflid, with request bodies held to 1 MB and 9 MB; the apex sends `/.well-known/nostr.json` to keflid and otherwise serves the website from `/var/www/kefli`, which `apps/web/deploy.sh` puts there. The access log, `/var/log/caddy/access.log`, follows the backend spec's log policy: time, method, the path's first segment, status, bytes and latency, with no address, query or header, kept seven days. The spec's per-address limits in Caddy need a plugin that the packaged Caddy lacks; keflid's own limits per key and per address stand in.
 
 ## keflid
 
-`keflid` (API and Blossom), `keflictl` and `kefli-writepolicy` are built by `make -C server/api build` (Go in Docker, static binaries) and installed by `deploy.sh`.
+`keflid` (API and Blossom), `keflictl` and `kefli-writepolicy` are built by `make -C server/api build` (Go in Docker, static binaries) and installed by the playbook's `kefli` role. Its files are under `ansible/roles/kefli/`.
 
 | File | Goes to |
 |---|---|
-| `kefli/keflid.service` | `/etc/systemd/system/keflid.service` |
-| `kefli/keflid.env` | `/etc/kefli/keflid.env` |
-| `kefli/defaults.json` | `/etc/kefli/defaults.json`, served as `https://api.kefli.app/defaults.json` (contract 3.1) |
-| `kefli/keflictl.sh` | `/usr/local/bin/keflictl` |
+| `files/keflid.service` | `/etc/systemd/system/keflid.service` |
+| `templates/keflid.env.j2` | `/etc/kefli/keflid.env` |
+| `templates/defaults.json.j2` (from `kefli_defaults`) | `/etc/kefli/defaults.json`, served as `https://api.kefli.app/defaults.json` (contract 3.1) |
+| `templates/nip05.json.j2` (from `kefli_nip05`) | `/etc/kefli/nip05.json`, served as `https://kefli.app/.well-known/nostr.json`: the operator's own `_` and `kefli` names (contract 6). The Kefli account's key stays in Richard's signer |
+| `files/keflictl.sh` | `/usr/local/bin/keflictl` |
 
-keflid runs as the `kefli` system user. Its database and blobs are in `/var/lib/kefli` (`keflid.db`, `blobs/`), readable by the `kefli` group, which `strfry` belongs to so that the write policy can read the allowlist. It listens on `127.0.0.1:8447` (API) and `127.0.0.1:3447` (Blossom). The operator's commands are `sudo keflictl register|disable|enable <pubkey>` and `sudo keflictl gone <days>`. `defaults.json` is read at start, so after changing it run `deploy.sh` or `sudo systemctl restart keflid`; retiring a relay or mirror that refuses saves happens within a day (contract 3.1, flow decision 93).
+keflid runs as the `kefli` system user. Its database and blobs are in `/var/lib/kefli` (`keflid.db`, `blobs/`), readable by the `kefli` group, which `strfry` belongs to so that the write policy can read the allowlist. It listens on `127.0.0.1:8447` (API) and `127.0.0.1:3447` (Blossom). The operator's commands are `sudo keflictl register|disable|enable <pubkey>` and `sudo keflictl gone <days>`. `defaults.json` and `nip05.json` are read at start, so after changing them run `deploy.sh`, which restarts keflid; retiring a relay or mirror that refuses saves happens within a day (contract 3.1, flow decision 93).
 
 ## strfry
 
-strfry is built on the box from source at commit `4cd3cf6` on its `master` branch (4 September 2026). The 1.1.3 tag sits on the `release` branch, which lacks the NIP-42 settings (`relay.auth`) that contract section 3.2 relies on; master has them with tests, and it is what the dev stack's `ghcr.io/hoytech/strfry:latest` image runs.
+strfry is built on the box from source by the playbook's `strfry` role, at the commit in `strfry_commit` (`4cd3cf6`) on its `master` branch (4 September 2026). The 1.1.3 tag sits on the `release` branch, which lacks the NIP-42 settings (`relay.auth`) that contract section 3.2 relies on; master has them with tests, and it is what the dev stack's `ghcr.io/hoytech/strfry:latest` image runs.
 
-```
-cd ~/src/strfry && git fetch && git checkout <commit> && git submodule update --init
-make setup-golpe && make -j1
-sudo install -m 755 -s strfry /usr/local/bin/strfry && sudo systemctl restart strfry
-```
+To move to a new commit, change `strfry_commit` and run `deploy.sh`; it builds with `strfry_make_jobs` jobs (one, which fits the 2 GB box) and restarts strfry.
 
 | File | Goes to |
 |---|---|
-| `strfry/strfry.conf` | `/etc/strfry.conf` |
-| `strfry/strfry.service` | `/etc/systemd/system/strfry.service` |
-| `strfry/relay-write-policy` | `/usr/local/lib/kefli/relay-write-policy` |
-| `strfry/relay-sweep`, `.service`, `.timer` | `/usr/local/lib/kefli/relay-sweep`, `/etc/systemd/system/` |
+| `ansible/roles/strfry/templates/strfry.conf.j2` | `/etc/strfry.conf` |
+| `ansible/roles/strfry/files/strfry.service` | `/etc/systemd/system/strfry.service` |
+| `ansible/roles/strfry/files/relay-write-policy` | `/usr/local/lib/kefli/relay-write-policy` |
+| `ansible/roles/strfry/files/relay-sweep`, `.service`, `.timer` | `/usr/local/lib/kefli/relay-sweep`, `/etc/systemd/system/` |
 
 The database lives in `/var/lib/strfry/db`, owned by the `strfry` system user, with the write policy's record of the wraps the relay holds next to it in `/var/lib/strfry/wraps.db`. strfry listens on `127.0.0.1:7777` only, behind Caddy on `relay.kefli.app`. It holds events to 64 KB, and the write policy, `kefli-writepolicy`, applies the rest of contract 3.2 against keflid's database: registered authors, wraps to registered users and authorised devices, the extension's Undo, kinds 30078 and 1059 at 16 KB, and 60 events a minute.
 
@@ -64,8 +61,8 @@ Mail to `privacy@kefli.app`, the address on the website's privacy and delete-acc
 
 | File | Goes to |
 |---|---|
-| `kefli/kefli-mailfwd.service` | `/etc/systemd/system/kefli-mailfwd.service` |
-| `kefli/kefli-mailfwd.env` | `/etc/kefli/kefli-mailfwd.env`: the address it accepts, the sender and the inbox |
+| `ansible/roles/kefli/files/kefli-mailfwd.service` | `/etc/systemd/system/kefli-mailfwd.service` |
+| `ansible/roles/kefli/templates/kefli-mailfwd.env.j2` | `/etc/kefli/kefli-mailfwd.env`: the address it accepts, the sender and the inbox |
 | (by hand) | `/etc/kefli/kefli-mailfwd.secret.env`, root only: `RESEND_API_KEY` and `RESEND_WEBHOOK_SECRET` |
 
 It listens on `127.0.0.1:8449` and doesn't start until the secret file exists. Setting it up:
@@ -88,4 +85,4 @@ Then send a test message to `privacy@kefli.app` from another account.
 
 ## Not yet on the box
 
-Backups to a Storage Box (which needs the box and its credentials), monitoring and an outside uptime probe, NIP-11's operator pubkey and NIP-05's `_` name (both wait for the operator's key), the 90-day trim of unrelated public kinds (only registered keys can write, so none arrive yet), and the Ansible playbook.
+The playbook's first run against the box. Backups to a Storage Box: the `backup` role installs restic and a nightly timer, which does nothing until `/etc/kefli/restic.env` holds the repository, its password and the healthchecks address. Monitoring and an outside uptime probe, NIP-11's operator pubkey, and the 90-day trim of unrelated public kinds (only registered keys can write, so none arrive yet). NIP-05's `_` name went live by hand on 10 October 2026, the same file the playbook writes.

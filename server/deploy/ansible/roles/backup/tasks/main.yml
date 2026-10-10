@@ -1,0 +1,33 @@
+# Nightly restic backups (backend spec 3.8; README, "Backups"). Everything is installed, and the timer runs, but the
+# service does nothing until /etc/kefli/restic.env is written by hand with the repository and its password.
+- name: restic
+  ansible.builtin.apt:
+    name: [restic, sqlite3]
+
+- name: Scripts
+  ansible.builtin.copy:
+    src: "{{ item.name }}"
+    dest: "{{ item.dest }}/{{ item.name }}"
+    mode: "0755"
+  loop:
+    - { name: kefli-backup, dest: /usr/local/lib/kefli }
+    - { name: kefli-restic, dest: /usr/local/bin }
+
+- name: Units
+  ansible.builtin.template:
+    src: kefli-backup.service.j2
+    dest: /etc/systemd/system/kefli-backup.service
+    mode: "0644"
+
+- name: Timer
+  ansible.builtin.copy:
+    src: kefli-backup.timer
+    dest: /etc/systemd/system/kefli-backup.timer
+    mode: "0644"
+
+- name: The backup runs nightly
+  ansible.builtin.systemd_service:
+    name: kefli-backup.timer
+    enabled: true
+    state: started
+    daemon_reload: true

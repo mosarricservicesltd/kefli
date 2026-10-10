@@ -1,0 +1,89 @@
+# keflid (API and Blossom), keflictl and the mail forwarder (README, "keflid" and "Mail"). The binaries come from
+# make -C server/api build, which deploy.sh runs first.
+- name: The binaries are built
+  delegate_to: localhost
+  become: false
+  vars:
+    # run.sh's container has no home directory to write to; the image keeps Ansible's other paths under /tmp too.
+    ansible_remote_tmp: /tmp/ansible/remote
+  ansible.builtin.stat:
+    path: "{{ kefli_bin }}/{{ item }}"
+  loop: [keflid, keflictl, kefli-mailfwd]
+  register: kefli_built
+  failed_when: not kefli_built.stat.exists
+
+- name: The kefli user
+  ansible.builtin.user:
+    name: kefli
+    system: true
+    home: /var/lib/kefli
+    create_home: false
+    shell: /usr/sbin/nologin
+
+- name: Directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: [/usr/local/lib/kefli, /etc/kefli]
+
+- name: keflid and the mail forwarder
+  ansible.builtin.copy:
+    src: "{{ kefli_bin }}/{{ item.name }}"
+    dest: "/usr/local/bin/{{ item.name }}"
+    mode: "0755"
+  loop:
+    - { name: keflid, restarts: keflid }
+    - { name: kefli-mailfwd, restarts: kefli-mailfwd }
+  notify: "Restart {{ item.restarts }}"
+
+- name: keflictl
+  ansible.builtin.copy:
+    src: "{{ kefli_bin }}/keflictl"
+    dest: /usr/local/lib/kefli/keflictl
+    mode: "0755"
+
+- name: The keflictl wrapper
+  ansible.builtin.copy:
+    src: keflictl.sh
+    dest: /usr/local/bin/keflictl
+    mode: "0755"
+
+- name: Configuration
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    mode: "0644"
+  loop:
+    - { src: keflid.env.j2, dest: /etc/kefli/keflid.env, restarts: keflid }
+    - { src: defaults.json.j2, dest: /etc/kefli/defaults.json, restarts: keflid }
+    - { src: nip05.json.j2, dest: /etc/kefli/nip05.json, restarts: keflid }
+    - { src: kefli-mailfwd.env.j2, dest: /etc/kefli/kefli-mailfwd.env, restarts: kefli-mailfwd }
+  notify: "Restart {{ item.restarts }}"
+
+- name: Units
+  ansible.builtin.copy:
+    src: "{{ item.name }}"
+    dest: /etc/systemd/system/{{ item.name }}
+    mode: "0644"
+  loop:
+    - { name: keflid.service, restarts: keflid }
+    - { name: kefli-mailfwd.service, restarts: kefli-mailfwd }
+  notify: "Restart {{ item.restarts }}"
+
+- name: keflid runs
+  ansible.builtin.systemd_service:
+    name: keflid
+    enabled: true
+    state: started
+    daemon_reload: true
+
+# Off until its secrets are written by hand; the unit's ConditionPathExists keeps it from starting before then.
+- name: The mail forwarder starts at boot
+  ansible.builtin.systemd_service:
+    name: kefli-mailfwd
+    enabled: true
+
+# keflid makes its database on first start, and the write policy opens it, so keflid restarts before strfry does.
+- name: Restart keflid before the relay
+  ansible.builtin.meta: flush_handlers

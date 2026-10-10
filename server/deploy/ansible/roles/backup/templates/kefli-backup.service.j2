@@ -1,0 +1,14 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Kefli's nightly backup (backend spec 3.8)
+After=strfry.service keflid.service
+# The repository, its password and the healthchecks address are written by hand (server/deploy/README.md, "Backups").
+ConditionPathExists=/etc/kefli/restic.env
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/kefli/restic.env
+Environment=KEEP_DAILY={{ kefli_backup_keep_daily }} KEEP_WEEKLY={{ kefli_backup_keep_weekly }}
+ExecStart=/usr/local/lib/kefli/kefli-backup
+Nice=10
+IOSchedulingClass=idle

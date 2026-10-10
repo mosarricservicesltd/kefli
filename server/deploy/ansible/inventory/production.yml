@@ -1,0 +1,8 @@
+# The production host. The address and the SSH allowlist are placeholders until they are filled in from the Hetzner
+# console (server/deploy/README.md lists the live box); 203.0.113.0/24 and 198.51.100.0/24 are documentation ranges.
+operator:
+  hosts:
+    kefli-1:
+      ansible_host: 203.0.113.10
+      ansible_user: richard
+      kefli_ssh_allow4: [198.51.100.7]
