@@ -1,0 +1,11 @@
+# A throwaway Debian 13 container with systemd, which test.sh starts, runs the playbook against twice and removes.
+operator:
+  hosts:
+    kefli-test:
+      ansible_connection: community.docker.docker_api
+      ansible_host: kefli-ansible-test
+      kefli_admin_keys: []
+      kefli_ssh_allow4: [198.51.100.7]
+      kefli_swap_mb: 0
+      strfry_make_jobs: 8  # the test runs on a workstation; the 2 GB VPS keeps group_vars' one job
+      kefli_tls_internal: true

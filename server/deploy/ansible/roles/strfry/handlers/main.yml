@@ -1,0 +1,5 @@
+- name: Restart strfry
+  ansible.builtin.systemd_service:
+    name: strfry
+    state: restarted
+    daemon_reload: true

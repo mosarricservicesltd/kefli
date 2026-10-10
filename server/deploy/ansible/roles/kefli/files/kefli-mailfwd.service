@@ -1,0 +1,30 @@
+[Unit]
+Description=kefli-mailfwd: forwards mail to privacy@kefli.app from Resend to the operator's inbox
+After=network-online.target
+Wants=network-online.target
+# The Resend key and webhook secret are written by hand (server/deploy/README.md, "Mail"); until then it stays off.
+ConditionPathExists=/etc/kefli/kefli-mailfwd.secret.env
+
+[Service]
+DynamicUser=true
+EnvironmentFile=/etc/kefli/kefli-mailfwd.env
+EnvironmentFile=/etc/kefli/kefli-mailfwd.secret.env
+ExecStart=/usr/local/bin/kefli-mailfwd
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_INET AF_INET6
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target

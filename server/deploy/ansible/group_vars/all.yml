@@ -1,0 +1,58 @@
+# What every operator host shares. A host or inventory overrides any of it.
+kefli_domain: kefli.app
+
+# The admin account: SSH by key only, passwordless sudo. Keys listed here are written to its authorized_keys; an empty
+# list leaves the file as it is, so a run never locks out the key it logged in with.
+kefli_admin_user: richard
+kefli_admin_keys: []
+# Addresses (or, for IPv6, prefixes) allowed to reach SSH. Everything else gets 80 and 443 only.
+kefli_ssh_allow4: []
+kefli_ssh_allow6: []
+kefli_swap_mb: 2048
+# Only for a test host with no public name: Caddy signs its own certificates instead of asking Let's Encrypt.
+kefli_tls_internal: false
+
+# Caddy from its GitHub release (README, "Caddy"): the packaged one is too old, and its apt repository was down.
+caddy_version: 2.11.4
+caddy_deb_sha512:
+  amd64: 1c6f5404f3622e46d401d81f4af59677d46b886229c6694d60fd936b87c72d3bb5d1fcf42b55c8d555769fa75acf434ab618fc7e0df2c79cf8512ee580d38d06
+  arm64: c43c62b7b583b31c682b3c3e1a31cf03759fbab01dcb0fc7d7fc3a5ce1bef43403583e26133920634a730a9fe31dae1386af4d3f9f3fc19fcc2c29ebf19de235
+
+# strfry from source: master has the NIP-42 settings contract 3.2 relies on, the 1.1.3 release doesn't (README).
+strfry_commit: 4cd3cf64850caf47dda46c2a2abbbf3525a64d10
+# strfry's build needs about 1.5 GB a compiler; one job at a time fits a 2 GB box.
+strfry_make_jobs: 1
+
+# Contract 3.1's defaults.json, served at https://api.<domain>/defaults.json. A default relay or mirror that refuses
+# saves is retired from here within a day (flow decision 93).
+kefli_defaults:
+  v: 1
+  operator:
+    relay: "wss://relay.{{ kefli_domain }}"
+    blossom: "https://blossom.{{ kefli_domain }}"
+    api: "https://api.{{ kefli_domain }}"
+  relays: [wss://relay.primal.net, wss://nos.lol, wss://relay.damus.io]
+  indexer: [wss://purplepag.es, wss://user.kindpag.es]
+  mirrors: [https://nostr.download, https://cdn.hzrd149.com, https://files.sovbit.host]
+
+# NIP-05 for the operator's own identity (contract section 6; user names are v2), served by keflid at
+# https://<domain>/.well-known/nostr.json. The Kefli account's key lives in Richard's signer, never on the box.
+kefli_nip05:
+  names:
+    _: 47d7b470fb54566252061f50e466de732b0bb1069e444a89d1987053c119245b
+    kefli: 47d7b470fb54566252061f50e466de732b0bb1069e444a89d1987053c119245b
+  relays: ["wss://relay.{{ kefli_domain }}", wss://relay.primal.net, wss://nos.lol, wss://relay.damus.io]
+
+# kefli-mailfwd (README, "Mail"). Its Resend key and webhook secret are never here: they are written by hand to
+# /etc/kefli/kefli-mailfwd.secret.env, and the service stays off until they are.
+kefli_mail_accept: ["privacy@{{ kefli_domain }}"]
+kefli_mail_from: "Kefli privacy <privacy@{{ kefli_domain }}>"
+kefli_mail_to: mosarricservicesltd@gmail.com
+
+# Nightly restic backups (backend spec 3.8). The repository, its password and the healthchecks address live only on the
+# box, in /etc/kefli/restic.env; the timer does nothing until that file exists.
+kefli_backup_keep_daily: 14
+kefli_backup_keep_weekly: 8
+
+# Where deploy.sh's build leaves the Go binaries, on the machine running the playbook.
+kefli_bin: "{{ playbook_dir }}/../../api/bin"

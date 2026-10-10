@@ -1,0 +1,62 @@
+# The host itself (README, "Host"): packages, UTC, swap, the admin account, SSH by key only and unattended upgrades.
+- name: Base packages
+  ansible.builtin.apt:
+    name: [ca-certificates, curl, jq, sqlite3, rsync, sudo, openssh-server, unattended-upgrades, apt-listchanges]
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: UTC
+  community.general.timezone:
+    name: Etc/UTC
+
+- name: Swap file
+  when: kefli_swap_mb | int > 0
+  block:
+    - name: Make it and turn it on
+      ansible.builtin.shell: fallocate -l {{ kefli_swap_mb }}M /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+      args:
+        creates: /swapfile
+    - name: Mount it at boot
+      ansible.posix.mount:
+        src: /swapfile
+        path: none
+        fstype: swap
+        opts: sw
+        state: present
+
+- name: The admin account
+  ansible.builtin.user:
+    name: "{{ kefli_admin_user }}"
+    shell: /bin/bash
+    groups: [sudo]
+    append: true
+
+- name: Its keys
+  when: kefli_admin_keys | length > 0
+  ansible.posix.authorized_key:
+    user: "{{ kefli_admin_user }}"
+    key: "{{ kefli_admin_keys | join('\n') }}"
+    exclusive: true
+
+- name: Passwordless sudo
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/90-{{ kefli_admin_user }}
+    content: "{{ kefli_admin_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    mode: "0440"
+    validate: visudo -cf %s
+
+- name: SSH by key only, for the admin account only
+  ansible.builtin.template:
+    src: sshd-10-kefli.conf.j2
+    dest: /etc/ssh/sshd_config.d/10-kefli.conf
+    mode: "0644"
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Reload ssh
+
+- name: Unattended security upgrades
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+    mode: "0644"

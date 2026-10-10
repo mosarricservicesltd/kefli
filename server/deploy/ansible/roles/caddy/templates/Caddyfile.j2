@@ -1,0 +1,103 @@
+# {{ ansible_managed }}
+# Kefli operator VPS (backend spec 3.6). The apex serves apps/web from /var/www/kefli (apps/web/deploy.sh puts it there).
+{% if kefli_tls_internal %}
+# A test host has no public name, so Caddy signs its own certificates.
+{
+	local_certs
+}
+
+{% endif %}
+(common) {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+}
+
+# Backend spec 5's log policy: time, method, the path's first segment, status, bytes and latency. No address, query,
+# header, body or referrer is written, and the file keeps seven days.
+(log) {
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 50MiB
+			roll_keep_for 168h
+		}
+		format filter {
+			wrap json
+			fields {
+				request>remote_ip delete
+				request>remote_port delete
+				request>client_ip delete
+				request>headers delete
+				request>tls delete
+				request>uri regexp ^(/[^/?]*).*$ ${1}
+				resp_headers delete
+				user_id delete
+			}
+		}
+	}
+}
+
+# keflid reads the client's address from the first X-Forwarded-For entry, so Caddy sets it outright.
+(keflid) {
+	reverse_proxy {args[0]} {
+		header_up X-Forwarded-For {remote_host}
+	}
+}
+
+{{ kefli_domain }} {
+	import common
+	import log
+	handle /.well-known/nostr.json {
+		import keflid 127.0.0.1:8447
+	}
+	# Resend's email.received webhook, for mail to privacy@kefli.app (kefli-mailfwd)
+	handle /hooks/resend {
+		request_body {
+			max_size 1MB
+		}
+		reverse_proxy 127.0.0.1:8449
+	}
+	handle {
+		root * /var/www/kefli
+		# Hashed assets, and media and fonts that change only with their names (apps/web/README.md)
+		@lasting path /assets/* /media/* /fonts/*
+		header @lasting Cache-Control "public, max-age=31536000, immutable"
+		encode zstd gzip
+		file_server
+	}
+}
+
+www.{{ kefli_domain }} {
+	import common
+	redir https://{{ kefli_domain }}{uri} permanent
+}
+
+relay.{{ kefli_domain }} {
+	import common
+	import log
+	reverse_proxy 127.0.0.1:7777 {
+		header_up X-Real-IP {remote_host}
+	}
+}
+
+api.{{ kefli_domain }} {
+	import common
+	import log
+	request_body {
+		max_size 1MB
+	}
+	import keflid 127.0.0.1:8447
+}
+
+# Blobs are ciphertext of at most 8 MB (contract 5).
+blossom.{{ kefli_domain }} {
+	import common
+	import log
+	request_body {
+		max_size 9MB
+	}
+	import keflid 127.0.0.1:3447
+}

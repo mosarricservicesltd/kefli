@@ -1,0 +1,19 @@
+#!/bin/bash
+# The nightly backup (backend spec 3.8), run as root by kefli-backup.timer once /etc/kefli/restic.env exists: the
+# relay's events through strfry export, keflid's database and the write policy's record through SQLite's backup, and
+# the blobs, to the restic repository named there, then 14 daily and 8 weekly snapshots kept. Every byte backed up is
+# already ciphertext or keys and hashes. A healthchecks address, when set, hears the start, the end and any failure.
+set -euo pipefail
+ping() { [ -z "${HEALTHCHECK_URL:-}" ] || curl -fsS -m 10 --retry 3 -o /dev/null "$HEALTHCHECK_URL$1" || true; }
+trap 'ping /fail' ERR
+ping /start
+
+stage=/var/backups/kefli
+install -d -m 700 "$stage"
+runuser -u strfry -- /usr/local/bin/strfry --config=/etc/strfry.conf export 2>/dev/null | gzip > "$stage/strfry.jsonl.gz"
+sqlite3 /var/lib/kefli/keflid.db ".backup '$stage/keflid.db'"
+sqlite3 /var/lib/strfry/wraps.db ".backup '$stage/wraps.db'"
+
+restic backup --quiet --tag nightly "$stage" /var/lib/kefli/blobs
+restic forget --quiet --tag nightly --keep-daily "$KEEP_DAILY" --keep-weekly "$KEEP_WEEKLY" --prune
+ping ""

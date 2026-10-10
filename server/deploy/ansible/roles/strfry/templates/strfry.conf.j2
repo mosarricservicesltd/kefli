@@ -1,0 +1,49 @@
+##
+## strfry on the operator VPS (contract 3.2, backend spec 3.1). Keys left out take strfry's defaults.
+##
+
+db = "/var/lib/strfry/db/"
+
+events {
+    # Contract 3.2: 64 KB here, and the write policy holds kinds 30078 and 1059 to 16 KB.
+    maxEventSize = 65536
+}
+
+relay {
+    bind = "127.0.0.1"
+    port = 7777
+
+    # systemd sets LimitNOFILE instead
+    nofiles = 0
+
+    # Caddy sets X-Real-IP to the client address
+    realIpHeader = "x-real-ip"
+
+    auth {
+        enabled = true
+        serviceUrl = "wss://relay.{{ kefli_domain }}"
+
+        # Contract 3.2: only kind 1059 reads need NIP-42, and only for the wrap's p-tagged pubkey
+        restrictedReadKinds = "1059"
+        restrictReadToInvolvedPubkey = true
+    }
+
+    info {
+        name = "Kefli"
+        description = "Kefli's own relay. Writes are accepted from registered keys only."
+        pubkey = ""
+        contact = ""
+    }
+
+    writePolicy {
+        plugin = "/usr/local/lib/kefli/relay-write-policy"
+        timeoutSeconds = 10
+    }
+
+    numThreads {
+        ingester = 2
+        reqWorker = 2
+        reqMonitor = 2
+        negentropy = 1
+    }
+}

@@ -1,0 +1,8 @@
+# {{ ansible_managed }}
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+AllowUsers {{ kefli_admin_user }}
+X11Forwarding no
+MaxAuthTries 3

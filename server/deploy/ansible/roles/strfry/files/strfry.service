@@ -1,0 +1,29 @@
+[Unit]
+Description=strfry nostr relay (Kefli operator relay)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=strfry
+Group=strfry
+# The write policy reads keflid's database in /var/lib/kefli, which the kefli group may read.
+SupplementaryGroups=kefli
+WorkingDirectory=/var/lib/strfry
+ExecStart=/usr/local/bin/strfry --config=/etc/strfry.conf relay
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=524288
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/var/lib/strfry
+
+[Install]
+WantedBy=multi-user.target

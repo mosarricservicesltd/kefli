@@ -1,0 +1,7 @@
+[Unit]
+Description=The relay's retention sweep (backend spec 6)
+After=strfry.service keflid.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/kefli/relay-sweep

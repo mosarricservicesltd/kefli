@@ -1,0 +1,3 @@
+# Task names start with the program they're about, which is lower case (keflid, strfry, restic).
+skip_list:
+  - name[casing]
