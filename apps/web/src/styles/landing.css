@@ -149,7 +149,7 @@ section.block { padding-block: clamp(84px, 11vw, 168px); position: relative; }
 .say { display: grid; gap: 22px; justify-items: start; }
 .big {
   font-family: var(--font-reader); font-style: italic; font-weight: 300;
-  font-size: clamp(5rem, 13vw, 11rem); line-height: .9; letter-spacing: -0.03em;
+  font-size: clamp(5rem, 13vw, 11rem); line-height: 1; letter-spacing: 0.02em;
   font-variation-settings: "opsz" 72;
 }
 .mark { display: flex; align-items: center; gap: 16px; }
