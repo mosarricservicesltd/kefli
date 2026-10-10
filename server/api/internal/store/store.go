@@ -141,7 +141,17 @@ func (s *Store) DeviceUser(ctx context.Context, device string) (string, bool, er
 
 // Gone lists the keys removed since a time, for the relay's sweep.
 func (s *Store) Gone(ctx context.Context, since int64) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT pubkey FROM gone WHERE at >= ?`, since)
+	return s.gone(ctx, `SELECT pubkey FROM gone WHERE at >= ?`, since)
+}
+
+// GoneFor lists the keys removed at least a while ago: the relay's sweep drops their own events after 30 days (contract
+// 3.2) and the wraps addressed to them at once.
+func (s *Store) GoneFor(ctx context.Context, age time.Duration) ([]string, error) {
+	return s.gone(ctx, `SELECT pubkey FROM gone WHERE at <= ? ORDER BY pubkey`, s.Now().Add(-age).Unix())
+}
+
+func (s *Store) gone(ctx context.Context, query string, arg int64) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, query, arg)
 	if err != nil {
 		return nil, err
 	}

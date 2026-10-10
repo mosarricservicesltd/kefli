@@ -1,0 +1,23 @@
+#!/bin/bash
+# The relay's nightly retention (backend spec 6, contract 3.2), run as root by relay-sweep.timer. It drops gift wraps
+# older than 30 days, wraps addressed to keys that DELETE /account removed, and every event by a removed key once it
+# has been gone 30 days. strfry delete prints counts only, so the journal holds no content.
+set -euo pipefail
+
+keys() { runuser -u kefli -- /usr/local/lib/kefli/keflictl -db /var/lib/kefli/keflid.db gone "$1"; }
+
+drop() {
+    runuser -u strfry -- /usr/local/bin/strfry --config=/etc/strfry.conf delete --filter="$1"
+}
+
+# A filter as JSON, with keys spliced into one of its fields, fifty at a time.
+drop_for() {
+    local field=$1 extra=$2
+    xargs -r -n 50 | while read -r batch; do
+        drop "$(jq -cn --arg k "$batch" --arg f "$field" --argjson x "$extra" '$x + {($f): ($k | split(" "))}')"
+    done
+}
+
+drop "$(jq -cn --argjson until "$(( $(date +%s) - 30 * 86400 ))" '{kinds: [1059], until: $until}')"
+keys 0 | drop_for '#p' '{"kinds": [1059]}'
+keys 30 | drop_for authors '{}'

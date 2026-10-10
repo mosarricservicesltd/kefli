@@ -1,28 +1,5 @@
-#!/bin/bash
-# Stand-in write policy for the operator relay until keflid ships its plugin (backend spec 3.1).
-# Accepts an event when its author is on the allowlist, or when it is a kind 1059 whose one p tag
-# names an allowlisted key (contract 3.2). Rejects everything else, kind 5 from unlisted authors
-# included. The allowlist holds one lowercase hex pubkey per line and is read on every event,
-# so edits take effect at once. An empty or missing file closes the relay to writes.
-ALLOW=${KEFLI_RELAY_ALLOWLIST:-/etc/kefli/relay-allowlist}
-
-listed() { [ -n "$1" ] && grep -qxF "$1" "$ALLOW" 2>/dev/null; }
-
-reply() { printf '{"id":"%s","action":"%s","msg":"%s"}\n' "$1" "$2" "$3"; }
-
-while IFS= read -r line; do
-    IFS=$'\t' read -r id pubkey kind ptags < <(jq -r '[.event.id, .event.pubkey, (.event.kind|tostring),
-        ([.event.tags[] | select(.[0] == "p") | .[1]] | join(","))] | @tsv' <<<"$line")
-    decision=reject
-    if listed "$pubkey"; then
-        decision=accept
-    elif [ "$kind" = 1059 ]; then
-        IFS=, read -ra recipients <<<"$ptags"
-        [ "${#recipients[@]}" -eq 1 ] && listed "${recipients[0]}" && decision=accept
-    fi
-    if [ "$decision" = accept ]; then
-        reply "$id" accept ""
-    else
-        reply "$id" reject "blocked: this relay accepts writes from registered keys only"
-    fi
-done
+#!/bin/sh
+# strfry runs this as relay.writePolicy.plugin (contract 3.2). The plugin reads keflid's database read-only and keeps
+# its own record of the wraps the relay holds next to strfry's database.
+exec /usr/local/lib/kefli/kefli-writepolicy -db /var/lib/kefli/keflid.db -wraps /var/lib/strfry/wraps.db \
+    -strfry /usr/local/bin/strfry -config /etc/strfry.conf

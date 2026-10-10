@@ -1,6 +1,4 @@
-# Kefli operator VPS (backend spec 3.6). api and blossom stay placeholders until keflid is
-# deployed; the apex serves a holding page until apps/web is deployed. No access log yet: the
-# trimmed format from the spec's log policy comes with keflid.
+# Kefli operator VPS (backend spec 3.6). The apex serves a holding page until apps/web is deployed.
 (common) {
 	header {
 		Strict-Transport-Security "max-age=31536000"
@@ -10,9 +8,46 @@
 	}
 }
 
+# Backend spec 5's log policy: time, method, the path's first segment, status, bytes and latency. No address, query,
+# header, body or referrer is written, and the file keeps seven days.
+(log) {
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 50MiB
+			roll_keep_for 168h
+		}
+		format filter {
+			wrap json
+			fields {
+				request>remote_ip delete
+				request>remote_port delete
+				request>client_ip delete
+				request>headers delete
+				request>tls delete
+				request>uri regexp ^(/[^/?]*).*$ ${1}
+				resp_headers delete
+				user_id delete
+			}
+		}
+	}
+}
+
+# keflid reads the client's address from the first X-Forwarded-For entry, so Caddy sets it outright.
+(keflid) {
+	reverse_proxy {args[0]} {
+		header_up X-Forwarded-For {remote_host}
+	}
+}
+
 kefli.app {
 	import common
-	respond "Kefli is coming soon." 200
+	import log
+	handle /.well-known/nostr.json {
+		import keflid 127.0.0.1:8447
+	}
+	handle {
+		respond "Kefli is coming soon." 200
+	}
 }
 
 www.kefli.app {
@@ -22,12 +57,27 @@ www.kefli.app {
 
 relay.kefli.app {
 	import common
+	import log
 	reverse_proxy 127.0.0.1:7777 {
 		header_up X-Real-IP {remote_host}
 	}
 }
 
-api.kefli.app, blossom.kefli.app {
+api.kefli.app {
 	import common
-	respond "Not yet running." 503
+	import log
+	request_body {
+		max_size 1MB
+	}
+	import keflid 127.0.0.1:8447
+}
+
+# Blobs are ciphertext of at most 8 MB (contract 5).
+blossom.kefli.app {
+	import common
+	import log
+	request_body {
+		max_size 9MB
+	}
+	import keflid 127.0.0.1:3447
 }

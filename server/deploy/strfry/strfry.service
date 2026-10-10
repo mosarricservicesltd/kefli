@@ -6,6 +6,8 @@ Wants=network-online.target
 [Service]
 User=strfry
 Group=strfry
+# The write policy reads keflid's database in /var/lib/kefli, which the kefli group may read.
+SupplementaryGroups=kefli
 WorkingDirectory=/var/lib/strfry
 ExecStart=/usr/local/bin/strfry --config=/etc/strfry.conf relay
 Restart=on-failure

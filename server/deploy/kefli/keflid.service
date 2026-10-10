@@ -1,0 +1,32 @@
+[Unit]
+Description=keflid: Kefli's API and Blossom store (backend spec 3.2, 3.3)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=kefli
+Group=kefli
+EnvironmentFile=/etc/kefli/keflid.env
+ExecStart=/usr/local/bin/keflid
+Restart=on-failure
+RestartSec=5
+# The relay's write policy runs as strfry in the kefli group and reads keflid.db, so new files are group-readable.
+UMask=0027
+StateDirectory=kefli
+StateDirectoryMode=0750
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target
