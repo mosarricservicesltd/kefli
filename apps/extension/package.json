@@ -11,6 +11,8 @@
     "typecheck": "tsc --noEmit",
     "fixtures": "node build.mjs dev && node scripts/fixtures.mjs",
     "normalise": "node scripts/normalise.mjs",
+    "firefox": "node build.mjs dev && web-ext run --source-dir dist/dev-firefox --firefox=firefox",
+    "lint:firefox": "node build.mjs dev && web-ext lint --source-dir dist/dev-firefox",
     "shot": "node build.mjs dev && node scripts/chrome.mjs"
   },
   "dependencies": {
@@ -22,6 +24,7 @@
   "devDependencies": {
     "@types/chrome": "^0.3.5",
     "esbuild": "^0.28.2",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "web-ext": "^8.10.0"
   }
 }

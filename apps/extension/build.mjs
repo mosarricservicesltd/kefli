@@ -50,7 +50,10 @@ function manifest(browser) {
     icons: { ...m.icons, ...svg },
     action: { ...m.action, default_icon: svg, default_area: 'navbar' },
     background: { scripts: ['bg.js'] },
-    browser_specific_settings: { gecko: { id: GECKO_ID[flavour], strict_min_version: '121', data_collection_permissions: { required: ['none'] } } },
+    // Firefox's default policy for extension pages adds upgrade-insecure-requests, which would turn the dev build's
+    // ws://localhost and http://localhost into wss and https; the dev build states the policy without it
+    ...(flavour === 'dev' ? { content_security_policy: { extension_pages: "script-src 'self'" } } : {}),
+    browser_specific_settings: { gecko: { id: GECKO_ID[flavour], strict_min_version: '121.0', data_collection_permissions: { required: ['none'] } } },
   };
 }
 
