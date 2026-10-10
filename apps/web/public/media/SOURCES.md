@@ -20,3 +20,9 @@ Generated on 9 October 2026 with Higgsfield, on Richard's account. No real place
 The visual system every asset follows: granite peaks breaking a sea of cloud, seen from a summit at first light; low dawn sun behind thin haze; a long telephoto feel with fine grain; graded towards ink, paper and cold silver with only a whisper of warmth at the sun. Quiet, vast, enduring.
 
 The crest profile in the page (`CREST`) is measured from the ridge cut and must be regenerated with it.
+
+## The app beside How it works
+
+| File | Made from |
+|---|---|
+| `app-save-*.webp`, `app-read-*.webp`, `app-speed-*.webp`, `app-listen-*.webp` | The store screenshots in `apps/mobile/store/screenshots/` (`3-library`, `4-reader`, `5-speedread`, `6-listening`): release 0.0.1 on a Pixel 10a in Android's demo mode, with three notification icons painted out of the status bar. Scaled to 360 and 720 pixels wide as WebP. |
