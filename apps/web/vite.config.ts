@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { parseEnv } from 'node:util';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 
 // A static site: one HTML file per page, served by the operator's Caddy on the apex domain
-// (backend spec section 5). Links and downloads come from .env (see README).
+// (backend spec section 5). Links and downloads come from site.env, committed because nothing in it is secret;
+// .env, .env.local and the shell override it (see README).
 const here = import.meta.dirname;
 const page = (p: string) => resolve(here, p);
 
@@ -36,6 +38,15 @@ function site(env: Record<string, string>): Plugin {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, here, 'VITE_');
+  // The repository ignores every .env file, so the public settings live in site.env, beneath all of them. A value
+  // set nowhere else goes into process.env, where Vite's own loader (and its %VITE_…% replacement) finds it.
+  const defaults = parseEnv(readFileSync(resolve(here, 'site.env'), 'utf8'));
+  for (const [key, value] of Object.entries(defaults)) {
+    if (key.startsWith('VITE_') && value !== undefined && !(key in env)) {
+      process.env[key] = value;
+      env[key] = value;
+    }
+  }
   return {
     plugins: [site(env)],
     build: {

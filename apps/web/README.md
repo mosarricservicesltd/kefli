@@ -19,12 +19,13 @@ npm run preview -w apps/web    # serve dist locally
 npm test -- --selectProjects web   # the scene geometry, from the repository root
 npm run typecheck -w apps/web
 npm run fonts -w apps/web      # re-cut the web fonts (only when the sources or the subset change)
+apps/web/deploy.sh             # test, build and put it live on kefli.app (--dry-run lists the changes first)
 npm run tokens                 # from the root: regenerates src/styles/tokens.css with everything else
 ```
 
 ## Links and downloads
 
-Every download, store and contact link comes from `.env` (override locally in `.env.local`). A link still set to `#` builds as a plain element marked Soon, never a button that goes nowhere, so the site can ship before Zapstore, the APK, the stores or the source repository are public. Set the real addresses and rebuild.
+Every download, store and contact link, and the site's own address, comes from `site.env`, committed because nothing in it is secret. The repository ignores `.env` files, so override it on one machine in `.env.local` (or `.env`, or the shell). A link still set to `#` builds as a plain element marked Soon, never a button that goes nowhere, so the site can ship before Zapstore, the APK, the stores or the source repository are public. Set the real addresses, commit, and run `deploy.sh`.
 
 ## What it's made of
 
@@ -36,4 +37,4 @@ Every download, store and contact link comes from `.env` (override locally in `.
 
 ## Serving it
 
-Caddy on the operator's host serves `dist/` on the apex, beside `relay.`, `api.` and `blossom.` (backend spec section 5). Keep the apex's rewrite of `/.well-known/nostr.json` to `keflid` (backend spec, NIP-05) ahead of the file server, and give `/media/` and `/fonts/` and `/assets/` long cache lifetimes: the assets are content-hashed, and the media and fonts change only with their file names.
+`deploy.sh` runs the tests and the typecheck, builds, refuses a page that still holds a `%VITE_…%` placeholder, copies `dist/` to `/var/www/kefli` over SSH (the `kefli` host alias, or `KEFLI_SSH_HOST`), and checks that kefli.app then serves the new `index.html`. It refuses uncommitted changes unless given `--allow-dirty`, and deletes nothing on the host, so a page cached before a deploy still finds its hashed scripts. Caddy on the operator's host serves that directory on the apex, beside `relay.`, `api.` and `blossom.` (backend spec section 5). Keep the apex's rewrite of `/.well-known/nostr.json` to `keflid` (backend spec, NIP-05) ahead of the file server, and give `/media/` and `/fonts/` and `/assets/` long cache lifetimes: the assets are content-hashed, and the media and fonts change only with their file names.
