@@ -670,6 +670,9 @@ const TOASTS = {
   unqueued: c => ({ tile: 'undo', title: 'Removed from Kefli', sub: c.link ? c.host : TITLE, timer: CD, say: 'Removed from Kefli' }),
   full:     c => ({ tile: 'alert', tone: 'bad', title: `Not saved: ${CAP} are already waiting`, sub: 'They’ll send when you’re online. Save this again then.', wrap: true, timer: CD, say: `Not saved: ${CAP} are already waiting. They’ll send when you’re online. Save this again then.` }),
   failed:   c => ({ cover: c.hash, mark: 'bad', title: 'Couldn’t send this save', sub: 'It’s kept here, and Kefli will keep trying.', wrap: true, action: 'Options', timer: CD, say: 'Couldn’t send this save. It’s kept here, and Kefli will keep trying.' }),
+  // Undo after the phone had already collected the save: it is an item in the library now, which only the phone can
+  // remove (contract 4.4, decision 101).
+  onphone:  c => ({ cover: c.hash, mark: 'ok', title: 'Already on your phone', sub: 'Remove it from your phone’s Saves.', wrap: true, timer: CD, say: 'Already on your phone. Remove it from your phone’s Saves.' }),
   // A browser's own page (chrome://, about:) has no web address to save, so nothing is saved (decision 100). Pages with a
   // web address where no toast can run (a PDF, the Web Store, Firefox's reader view) still save, through the popup.
   browserpage: c => ({ tile: 'alert', tone: 'bad', title: 'Can’t save this page', sub: 'Kefli saves web pages, and this one belongs to the browser.', wrap: true, timer: CD, say: 'Can’t save this page. Kefli saves web pages, and this one belongs to the browser.' }),

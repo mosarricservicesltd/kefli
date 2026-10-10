@@ -16,6 +16,7 @@ import { ATTEMPTS_MAX, BLOB_KEEP_MAX, dequeue, enqueue, failed, flush, QUEUE_MAX
 import { deliver, prepare, retract, type Net, type Pending } from '../src/save';
 import { KEYS, memoryStore, type Pairing } from '../src/store';
 import { applyMove, followMoves } from '../src/move';
+import { SECOND_LOOK_MS, settleUndo } from '../src/undo';
 import { markDelay, toastCopy } from '../src/toastCopy';
 
 const DEFAULTS: Defaults = { v: 1, operator: { relay: 'wss://relay.example', blossom: 'https://blossom.example', api: 'https://api.example' }, relays: ['wss://a.example'], mirrors: ['https://m.example'] };
@@ -267,6 +268,8 @@ describe('the toast', () => {
     expect(toastCopy({ ...s, kind: 'unqueued' }).sub).toBe('A page');
     expect(toastCopy({ ...s, kind: 'browserpage' })).toMatchObject({ title: 'Can’t save this page', tile: 'alert', tone: 'bad', timed: true });
     expect(toastCopy({ ...s, kind: 'browserpage' }).action).toBeUndefined();
+    expect(toastCopy({ ...s, kind: 'onphone' })).toMatchObject({ title: 'Already on your phone', sub: 'Remove it from your phone’s Saves.', cover: 'h', mark: 'ok', timed: true });
+    expect(toastCopy({ ...s, kind: 'onphone' }).action).toBeUndefined();
   });
   test('the mark lands with the last leaf, never after a second', () => {
     expect(markDelay(1)).toBe(520);
@@ -312,5 +315,26 @@ describe('following a move (contract 4.4 and 4.8)', () => {
     expect(rumor.tags).toEqual((await unwrap(user, pending.wrap)).rumor.tags);
     await expect(unwrap(user, moved.wrap)).rejects.toThrow();
     expect(await store.get(KEYS.pairing)).toEqual(p);
+  });
+});
+
+describe('Undo (contract 4.4, decision 101)', () => {
+  const run = async (answers: boolean[]) => {
+    const calls: string[] = [];
+    const out = await settleUndo(
+      async () => void calls.push('retract'),
+      async () => (calls.push('look'), answers.shift() ?? false),
+      async (ms) => void calls.push(`wait ${ms}`),
+    );
+    return { out, calls };
+  };
+  test('a save the phone already collected is on the phone', async () => {
+    expect(await run([true])).toEqual({ out: 'onphone', calls: ['retract', 'look'] });
+  });
+  test('one the phone was collecting as Undo was pressed is caught on the second look', async () => {
+    expect(await run([false, true])).toEqual({ out: 'onphone', calls: ['retract', 'look', `wait ${SECOND_LOOK_MS}`, 'look'] });
+  });
+  test('otherwise it is removed', async () => {
+    expect((await run([false, false])).out).toBe('undone');
   });
 });

@@ -3,7 +3,7 @@
 // sentence sub-lines do. `say` is what the live region announces, text only.
 import { QUEUE_MAX } from './queue';
 
-export type ToastKind = 'saving' | 'saved' | 'notext' | 'offline' | 'undone' | 'unqueued' | 'full' | 'failed' | 'browserpage';
+export type ToastKind = 'saving' | 'saved' | 'notext' | 'offline' | 'undone' | 'unqueued' | 'full' | 'failed' | 'browserpage' | 'onphone';
 
 export interface ToastState {
   kind: ToastKind;
@@ -43,6 +43,8 @@ const COPY: Record<ToastKind, Make> = {
   unqueued: (_s, line) => ({ tile: 'undo', title: 'Removed from Kefli', sub: line, timed: true, say: 'Removed from Kefli' }),
   full: () => ({ tile: 'alert', tone: 'bad', title: `Not saved: ${QUEUE_MAX} are already waiting`, sub: 'They’ll send when you’re online. Save this again then.', wrap: true, timed: true, say: `Not saved: ${QUEUE_MAX} are already waiting. They’ll send when you’re online. Save this again then.` }),
   failed: (s) => ({ cover: s.hash, mark: 'bad', title: 'Couldn’t send this save', sub: 'It’s kept here, and Kefli will keep trying.', wrap: true, action: 'Options', timed: true, say: 'Couldn’t send this save. It’s kept here, and Kefli will keep trying.' }),
+  // contract 4.4, decision 101: Undo found the phone had already collected the save, so it is in the library
+  onphone: (s) => ({ cover: s.hash, mark: 'ok', title: 'Already on your phone', sub: 'Remove it from your phone’s Saves.', wrap: true, timed: true, say: 'Already on your phone. Remove it from your phone’s Saves.' }),
   // decision 100: a browser's own page has no web address to save
   browserpage: () => ({ tile: 'alert', tone: 'bad', title: 'Can’t save this page', sub: 'Kefli saves web pages, and this one belongs to the browser.', wrap: true, timed: true, say: 'Can’t save this page. Kefli saves web pages, and this one belongs to the browser.' }),
 };

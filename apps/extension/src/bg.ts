@@ -8,10 +8,11 @@ import { loadDefaults } from './defaults';
 import { deviceSigner } from './device';
 import { applyMove, followMoves } from './move';
 import { dequeue, enqueue, flush, queued, waiting, whyNot } from './queue';
-import { fetchWraps, publish } from './relay';
+import { collected, fetchWraps, publish } from './relay';
 import { deliver, fetchNet, prepare, retract, type SaveContext } from './save';
 import { chromeStore, KEYS, type Pairing } from './store';
 import type { ToastKind, ToastState } from './toastCopy';
+import { settleUndo } from './undo';
 
 const store = chromeStore(chrome.storage.local);
 const session = chromeStore(chrome.storage.session);
@@ -152,7 +153,7 @@ async function save(c: Captured, tabId: Where, link: boolean): Promise<void> {
   const { pending, wrapKey } = await prepare(c, ctx);
   const base = { id: pending.id, hash: pending.hash, title: pending.title, host: pending.host, link };
   await toast(tabId, { ...base, kind: 'saving' });
-  await session.set(`undo:${pending.id}`, { key: bytesToHex(wrapKey), sha256: pending.sha256, until: now() + UNDO_WINDOW });
+  await session.set(`undo:${pending.id}`, { key: bytesToHex(wrapKey), sha256: pending.sha256, hash: pending.hash, until: now() + UNDO_WINDOW });
   const d = navigator.onLine ? await deliver(pending, ctx.defaults.operator.blossom, ctx.defaults.operator.relay, ctx.device, net) : 'unreachable';
   if (d === 'sent') {
     await toast(tabId, { ...base, kind: sentKind(c) });
@@ -190,11 +191,16 @@ async function undo(id: string, where: Where): Promise<void> {
     await toast(where, { kind: 'unqueued', title: waitingSave.title, host: waitingSave.host, link: false });
     return;
   }
-  const kept = await session.get<{ key: string; sha256: string | null; until: number }>(`undo:${id}`);
+  const kept = await session.get<{ key: string; sha256: string | null; hash: string; until: number }>(`undo:${id}`);
   if (!kept || kept.until < now()) return;
-  await retract({ id, sha256: kept.sha256 }, hexToBytes(kept.key), ctx.defaults.operator.blossom, ctx.defaults.operator.relay, ctx.device, net, now());
+  const { relay, blossom } = ctx.defaults.operator;
+  const outcome = await settleUndo(
+    () => retract({ id, sha256: kept.sha256 }, hexToBytes(kept.key), blossom, relay, ctx.device, net, now()),
+    () => collected(relay, id, ctx.pairing.user_pubkey),
+    (ms) => new Promise((r) => setTimeout(r, ms)),
+  );
   await session.remove(`undo:${id}`);
-  await toast(where, { kind: 'undone', title: '', host: '', link: false });
+  await toast(where, { kind: outcome, hash: kept.hash, title: '', host: '', link: false });
 }
 
 async function flushQueue(all = false, only?: string): Promise<void> {
