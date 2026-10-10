@@ -22,6 +22,15 @@ description: |
 license: AGPL-3.0-or-later
 website: https://kefli.app
 icon: ./apps/mobile/assets/brand/icon.png
+# From the release build on a Pixel 10a (apps/mobile/store/screenshots), in Android's demo mode.
+images:
+  - ./apps/mobile/store/screenshots/1-welcome.png
+  - ./apps/mobile/store/screenshots/2-empty.png
+  - ./apps/mobile/store/screenshots/3-library.png
+  - ./apps/mobile/store/screenshots/4-reader.png
+  - ./apps/mobile/store/screenshots/5-speedread.png
+  - ./apps/mobile/store/screenshots/6-listening.png
+  - ./apps/mobile/store/screenshots/7-listen.png
 tags:
   - reading
   - productivity
