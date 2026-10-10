@@ -1,7 +1,9 @@
-// Publishing one event to one relay (extension spec 4): OK true resolves, a refusal or ten seconds without an answer
-// rejects. A connection per publish for now; the spec's reuse for 60 seconds is a later refinement.
+// Talking to the operator relay (extension spec 4): publishing an event, where OK true resolves and a refusal or ten
+// seconds without an answer rejects, and fetching the wraps addressed to the device. Both use connections held between
+// saves (relayPool.ts).
 import { Relay } from 'nostr-tools/relay';
 import type { LocalSigner, NostrEvent } from '../../../packages/protocol/src/signer';
+import { RelayPool } from './relayPool';
 
 export const PUBLISH_TIMEOUT_MS = 10_000;
 
@@ -12,12 +14,16 @@ function within<T>(p: Promise<T>, ms: number): Promise<T> {
   });
 }
 
+const pool = new RelayPool((url) => within(Relay.connect(url), PUBLISH_TIMEOUT_MS));
+
+/** A relay that doesn't answer in time is closed, so the next save connects afresh rather than waiting on it. */
 export async function publish(url: string, event: NostrEvent): Promise<void> {
-  const relay = await within(Relay.connect(url), PUBLISH_TIMEOUT_MS);
+  const relay = await pool.get(url);
   try {
     await within(relay.publish(event), PUBLISH_TIMEOUT_MS);
-  } finally {
-    relay.close();
+  } catch (e) {
+    if (String(e).includes('timeout')) pool.close(url);
+    throw e;
   }
 }
 
@@ -27,25 +33,27 @@ export async function publish(url: string, event: NostrEvent): Promise<void> {
  * events, or with what has come after ten seconds.
  */
 export async function fetchWraps(url: string, device: LocalSigner, since: number): Promise<NostrEvent[]> {
-  const relay = await within(Relay.connect(url), PUBLISH_TIMEOUT_MS);
+  const relay = await pool.get(url);
   const sign = (evt: Parameters<LocalSigner['signEvent']>[0]) => device.signEvent(evt) as never;
   relay.onauth = sign;
   const got: NostrEvent[] = [];
+  let sub: { close(): void } | null = null;
   try {
     await within(
       new Promise<void>((done) => {
-        const ask = () =>
-          relay.subscribe([{ kinds: [1059], '#p': [device.pubkey()], since }], {
+        const ask = () => {
+          sub = relay.subscribe([{ kinds: [1059], '#p': [device.pubkey()], since }], {
             onevent: (e) => void got.push(e as NostrEvent),
             oneose: done,
             onclose: (reason) => (reason.includes('auth-required') ? relay.auth(sign).then(ask, () => done()) : done()),
           });
+        };
         ask();
       }),
       PUBLISH_TIMEOUT_MS,
     ).catch(() => undefined);
   } finally {
-    relay.close();
+    (sub as { close(): void } | null)?.close();
   }
   return got;
 }
