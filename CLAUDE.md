@@ -11,6 +11,7 @@ The product is named **Kefli** (Richard, 9 October 2026; see `docs/research/nami
 
 ## Current decisions
 
+- **Licence:** AGPL-3.0-or-later with an added permission for Google Play services and other proprietary system libraries (mobile spec O-10), copyright Mosarric Services Ltd; the text is `LICENSE` at the root, confirmed by Richard on 10 October 2026. `apps/mobile/LICENSE` is Expo's template and is not committed.
 - **First build:** Android app plus the browser extension (Chrome and Firefox). iOS is deferred until there is an iPhone to test on.
 - **Mobile stack:** Expo (React Native, TypeScript), confirmed by the Android test build on 5 October 2026 (`docs/specs/07-android-test-build.md`). The mobile spec adds six local native modules (voice and media session, parser WebView, keystore and Block Store, NIP-55, share activity, system) and uses react-native-quick-crypto for scrypt and AES-GCM. Use development builds and EAS, not Expo Go.
 - **Extension:** Manifest V3 WebExtension in TypeScript, one codebase, Chrome and Firefox builds. Test in developer mode (unpacked on Chromium, `web-ext run` and signed unlisted `.xpi` on Firefox) until launch; see extension spec section 11.
@@ -56,4 +57,3 @@ If all three work, Expo is confirmed and the Android spec is rewritten as an Exp
 ## Open items for Richard
 
 - **Name** (mobile spec O-9): **Kefli**, decided on 9 October 2026 (`docs/research/naming.md`, flow decision 95). The rename is done (flow decision 96), with the Play app ID `app.kefli`, permanent from the first upload and owner of the Block Store data, and the repository and the local folder are both Kefli (the plan's R7, `github.com/richardminton-glitch/Kefli`). Still open: registering kefli.app before that upload, the other domains and the UK trade mark filing.
-- **Licence text:** the licence was decided by Richard on 5 October 2026 (mobile spec O-10): AGPL-3.0-or-later, with an added permission for Google Play services and other proprietary system libraries (open-sourcing the clients supports the "outlives the service" story; AGPL stops a closed fork). The LICENSE file is added once Richard confirms its exact text. `apps/mobile/LICENSE` is Expo's template and is not committed.
