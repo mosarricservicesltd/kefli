@@ -53,7 +53,10 @@ function manifest(browser) {
     // Firefox's default policy for extension pages adds upgrade-insecure-requests, which would turn the dev build's
     // ws://localhost and http://localhost into wss and https; the dev build states the policy without it
     ...(flavour === 'dev' ? { content_security_policy: { extension_pages: "script-src 'self'" } } : {}),
-    browser_specific_settings: { gecko: { id: GECKO_ID[flavour], strict_min_version: '121.0', data_collection_permissions: { required: ['none'] } } },
+    // The beta .xpi is signed unlisted and served from kefli.app, so it updates itself from the manifest
+    // apps/web/publish-downloads.sh writes beside it.
+    browser_specific_settings: { gecko: { id: GECKO_ID[flavour], strict_min_version: '121.0', data_collection_permissions: { required: ['none'] },
+      ...(flavour === 'beta' ? { update_url: 'https://kefli.app/downloads/firefox-updates.json' } : {}) } },
   };
 }
 

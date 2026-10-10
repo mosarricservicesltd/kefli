@@ -33,6 +33,8 @@ second=$(run ansible-playbook -i inventory/test.yml site.yml | tee /dev/stderr |
 grep -q 'changed=0 ' <<<"$second" || { echo "the second run changed something" >&2; exit 1; }
 
 failures=0
+# Each check searches a command's captured output: grep stops at its first match, and in a pipe under pipefail
+# the writer it leaves behind dies of SIGPIPE, which failed checks at random.
 check() {
   if eval "$2" >/dev/null 2>&1; then echo "✓ $1"; else echo "✗ $1"; failures=$((failures + 1)); fi
 }
@@ -48,7 +50,10 @@ check "the relay's NIP-11 through Caddy" \
   'via relay.kefli.app -H "Accept: application/nostr+json" https://relay.kefli.app/ | jq -e ".name == \"Kefli\""'
 check 'Blossom answers 404 for a blob it lacks' \
   '[ "$(box curl -sk -o /dev/null -w %{http_code} --resolve blossom.kefli.app:443:127.0.0.1 https://blossom.kefli.app/$(printf %064d 0))" = 404 ]'
-check 'HSTS is set' 'via api.kefli.app -I https://api.kefli.app/defaults.json | grep -qi strict-transport-security'
+box sh -c 'echo x > /var/www/kefli/downloads/t.xpi && echo x > /var/www/kefli/downloads/t.apk'
+check 'downloads are served as an add-on and an Android package' \
+  'grep -qi "content-type: application/x-xpinstall" <<<"$(via kefli.app -I https://kefli.app/downloads/t.xpi)" && grep -qi "content-type: application/vnd.android.package-archive" <<<"$(via kefli.app -I https://kefli.app/downloads/t.apk)"'
+check 'HSTS is set' 'grep -qi strict-transport-security <<<"$(via api.kefli.app -I https://api.kefli.app/defaults.json)"'
 key=$(printf 'a%.0s' {1..64})
 check 'keflictl registers a key' "box keflictl register $key"
 line='{"type":"new","event":{"id":"'$(printf 'b%.0s' {1..64})'","pubkey":"%s","kind":30078,"tags":[],"content":"x","created_at":1,"sig":""},"receivedAt":1,"sourceType":"IP4","sourceInfo":"192.0.2.1"}'
@@ -57,8 +62,8 @@ check 'the write policy, as strfry, accepts the registered key' '[ "$(policy $ke
 check 'and refuses another' '[ "$(policy $(printf "c%.0s" {1..64}))" = reject ]'
 check 'the sweep runs' 'box systemctl start relay-sweep'
 check 'the access log holds no address' '! box grep -q 127.0.0.1 /var/log/caddy/access.log'
-check 'SSH takes keys only' 'box sshd -T | grep -qx "passwordauthentication no"'
-check 'the firewall is loaded' 'box nft list set inet filter ssh_allow4 | grep -q 198.51.100.7'
+check 'SSH takes keys only' 'grep -qx "passwordauthentication no" <<<"$(box sshd -T)"'
+check 'the firewall is loaded' 'grep -qF 198.51.100.7 <<<"$(box nft list set inet filter ssh_allow4)"'
 
 echo "${failures} failed"
 exit $((failures > 0))

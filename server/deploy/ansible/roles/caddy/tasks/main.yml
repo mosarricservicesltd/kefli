@@ -29,13 +29,14 @@
     group: caddy
     mode: "0750"
 
-- name: The website's directory
+- name: The website's directory, and its downloads (apps/web/publish-downloads.sh)
   ansible.builtin.file:
-    path: /var/www/kefli
+    path: "{{ item }}"
     state: directory
     owner: "{{ kefli_admin_user }}"
     group: "{{ kefli_admin_user }}"
     mode: "0755"
+  loop: [/var/www/kefli, /var/www/kefli/downloads]
 
 # Validated as caddy, so the access log it opens stays Caddy's. Ansible's copy sits in root's own temp directory, which
 # caddy can't open, so root reads it in.
