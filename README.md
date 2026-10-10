@@ -15,3 +15,7 @@ Status: design signed off, protocol contract at v1.4, mobile spec written, and t
 - `apps/mobile/`: the Android test build's harness (Expo).
 - `tools/design-qa/`: scripts that check the prototypes in headless Chrome.
 - `docs/research/`: market research and the adversarial review of the plan.
+
+## Licence
+
+The code is free software under the GNU AGPL 3.0 or later, with an added permission for Google Play services (`LICENSE`). The Kefli name, logo and icons are reserved: see `TRADEMARKS.md`.
