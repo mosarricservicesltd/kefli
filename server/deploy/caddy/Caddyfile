@@ -1,0 +1,33 @@
+# Kefli operator VPS (backend spec 3.6). api and blossom stay placeholders until keflid is
+# deployed; the apex serves a holding page until apps/web is deployed. No access log yet: the
+# trimmed format from the spec's log policy comes with keflid.
+(common) {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+}
+
+kefli.app {
+	import common
+	respond "Kefli is coming soon." 200
+}
+
+www.kefli.app {
+	import common
+	redir https://kefli.app{uri} permanent
+}
+
+relay.kefli.app {
+	import common
+	reverse_proxy 127.0.0.1:7777 {
+		header_up X-Real-IP {remote_host}
+	}
+}
+
+api.kefli.app, blossom.kefli.app {
+	import common
+	respond "Not yet running." 503
+}
