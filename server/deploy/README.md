@@ -91,6 +91,7 @@ Nightly at about 04:15 UTC (backend spec 3.8), `kefli-backup` exports the relay'
 |---|---|
 | Storage Box | `u688582`, `u688582.your-storagebox.de`, reached over SFTP on port 23 as `kefli-backup-box` (root's `~/.ssh/config`, written by the playbook from `kefli_backup_box` in the inventory) with a key used for nothing else, `/root/.ssh/kefli-backup`. Its host key is pinned to the fingerprint Hetzner publishes |
 | Repository | `sftp:kefli-backup-box:kefli` |
+| Alerts | healthchecks.io's "Kefli backup" check (cron `15 4 * * *` UTC, an hour's grace) hears each run's start, end and any failure, and emails the company inbox when a night is missed or fails. Its ping URL is `HEALTHCHECK_URL` in `restic.env` |
 | Commands | `sudo kefli-restic snapshots`, `sudo kefli-restic restore latest --target /tmp/restore`, and any other restic command; `sudo systemctl start kefli-backup` runs one now |
 
 Setting it up on a new box, once the playbook has run:
@@ -103,4 +104,4 @@ The first backup on 10 October 2026 was restored to a scratch directory and matc
 
 ## Not yet on the box
 
-The healthchecks address for the backup, so that a night without one alerts. Monitoring and an outside uptime probe, NIP-11's operator pubkey, and the 90-day trim of unrelated public kinds (only registered keys can write, so none arrive yet). NIP-05's `_` name went live by hand on 10 October 2026, the same file the playbook writes.
+Monitoring and an outside uptime probe, NIP-11's operator pubkey, and the 90-day trim of unrelated public kinds (only registered keys can write, so none arrive yet). NIP-05's `_` name went live by hand on 10 October 2026, the same file the playbook writes.
