@@ -7,7 +7,7 @@ import { KefliVoice, type PhoneVoice, type VoiceState } from '../../modules/kefl
 import { reconcileWords, rowByHash, setPosition, type LibRow } from '../data/library';
 import { playFrom, recordPlayed } from '../data/listen';
 import { getSetting, setSetting } from '../data/settings';
-import { readRate, readWps, nextRate } from '../voice/clock';
+import { readRate, readWps, nextRate, snapRate } from '../voice/clock';
 import { VOICE_ID, sessionVoice } from '../voice/choice';
 import { appState } from './app';
 import { runSync } from './runner';
@@ -67,7 +67,7 @@ function wire() {
   KefliVoice.addListener('state', (e: VoiceState) => {
     if (!session || e.hash !== session.hash) return;
     const paused = session.playing && !e.playing;
-    set({ ...session, playing: e.playing, word: e.word, rate: e.rate, wordTiming: e.wordTiming, wps: e.wps });
+    set({ ...session, playing: e.playing, word: e.word, rate: snapRate(e.rate), wordTiming: e.wordTiming, wps: e.wps });
     if (Math.abs(e.wps - readWps(getSetting(store(), wpsKey))) > 0.05) setSetting(store(), wpsKey, e.wps.toFixed(3));
     if (paused) keep(e.word, true);
   });
@@ -145,6 +145,14 @@ export function toggleRow(row: LibRow): void {
   if (session?.hash === row.hash && !session.ended) return toggle();
   queue = [];
   listen(row, playFrom(row)).catch(() => undefined);
+}
+
+/** Double-tap a word in the Reader (FD 107): the voice moves to it and plays, or the article starts there. */
+export function listenFrom(row: Pick<LibRow, 'hash' | 'title' | 'site' | 'url'>, word: number): Promise<void> {
+  if (session?.hash !== row.hash || session.ended) return startListening(row, word);
+  KefliVoice.jumpToWord(word);
+  if (!session.playing) KefliVoice.play();
+  return Promise.resolve();
 }
 
 export function toggle(): void {

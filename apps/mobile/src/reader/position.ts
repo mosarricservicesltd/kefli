@@ -33,3 +33,23 @@ export function wordAtScroll(blocks: Block[], places: (Place | undefined)[], pro
   const b = blocks[i];
   return Math.min(view.words - 1, b.firstWord + Math.floor(Math.max(0, Math.min(1, (y - p.y) / Math.max(1, p.h))) * b.words));
 }
+
+/**
+ * The word a character falls in, as an index of the block's whitespace-separated words (as the highlight counts
+ * them), kept inside the block's own count. A character between words belongs to the word before it.
+ */
+export function wordAtOffset(text: string, offset: number, words: number): number {
+  let k = -1;
+  for (const m of text.matchAll(/\S+/g)) {
+    if (m.index! > offset) break;
+    k++;
+  }
+  return Math.max(0, Math.min(Math.max(0, words - 1), k));
+}
+
+export type Tap = { block: number; x: number; y: number; at: number };
+
+/** A second tap on the same block within 300 ms and 24 points of the first (FD 107). */
+export function isDoubleTap(first: Tap | null, second: Tap): boolean {
+  return !!first && first.block === second.block && 300 >= second.at - first.at && 24 >= Math.hypot(second.x - first.x, second.y - first.y);
+}

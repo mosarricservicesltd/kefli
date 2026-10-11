@@ -18,7 +18,8 @@ class KefliVoiceModule : Module() {
     when (e) {
       is VoiceEngine.Event.Word -> sendEvent("word", mapOf("hash" to e.hash, "word" to e.word))
       is VoiceEngine.Event.SentenceStart -> sendEvent("sentence", mapOf("hash" to e.hash, "index" to e.index))
-      is VoiceEngine.Event.State -> sendEvent("state", mapOf("hash" to e.hash, "playing" to e.playing, "word" to e.word, "rate" to e.rate, "wordTiming" to e.wordTiming, "wps" to e.wps))
+      // the rate to two places: as a Float widened to a double, 1.2 reached JS as 1.2000000476837158 (FD 107)
+      is VoiceEngine.Event.State -> sendEvent("state", mapOf("hash" to e.hash, "playing" to e.playing, "word" to e.word, "rate" to Math.round(e.rate * 100) / 100.0, "wordTiming" to e.wordTiming, "wps" to e.wps))
       is VoiceEngine.Event.Ended -> sendEvent("ended", mapOf("hash" to e.hash))
       is VoiceEngine.Event.Error -> sendEvent("error", mapOf("hash" to e.hash, "code" to e.code))
     }
