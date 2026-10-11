@@ -719,7 +719,7 @@ function optionsHTML(){
         <div class="seg" data-k="pairmain" data-keep>
         <div class="pair" data-k="pair" data-keep>
           <div class="qr ${dim ? 'faded' : ''}" data-theme="light" data-k="qr" data-keep>${qrSVG(168, dim ? 'Connection code, not available' : 'Connection code', 'data-k="qrimg" data-op="enter"')}${dim ? `<div class="code" aria-hidden="true" data-k="qrcode">––––-––––</div>` : `<div class="code" id="paircode" tabindex="-1" data-k="qrcode">K7QM-4XPD</div>`}</div>
-          <ol class="steps"><li>Open Kefli on your phone.</li><li>Go to <strong>You</strong>, then <strong>Connected browsers</strong>, then <strong>Connect a browser</strong>.</li><li>Scan the code, or type the code under it.</li><li>Check that your phone names this browser <strong>Chrome on a Windows laptop</strong>, then tap <strong>Connect</strong>.</li></ol>
+          <ol class="steps"><li>Open Kefli on your phone.</li><li>Go to <strong>You</strong>, then <strong>Connected browsers</strong>, then <strong>Connect a browser</strong>.</li><li>Scan the code, or type the code under it.</li><li>Check that your phone names this browser <strong>Chrome on a Windows PC</strong>, then tap <strong>Connect</strong>.</li></ol>
         </div>
         ${expired ? `<div class="status plain" data-k="status"><div class="errline" style="margin:0;flex:1">${ic('alert', 16)}<span>This code has expired.</span></div><button class="btn primary" id="newcode" data-act="newcode">${ic('refresh', 18)}Show a new one</button></div>`
           : offline ? '' : `<div class="status" data-k="status"><span class="pdot" aria-hidden="true" data-loop="pairwait"></span>Waiting for your phone<span class="cd">Code expires in <span id="cd">${mmss(S.countdown)}</span></span></div>`}
@@ -746,7 +746,7 @@ function optionsHTML(){
   return `<div class="opts"><div class="in" data-k="root" data-keep>${head}
     <div class="titlerow" data-k="title"><span class="ok">${ic('check', 20, 'stroke-width="2.5"')}</span><h1 id="connhead" tabindex="-1">Connected to your phone</h1></div>
     ${notice}
-    <p class="lead" data-k="lead">Since ${S.connectedOn} · your phone shows this browser as “Chrome on a Windows laptop”</p>
+    <p class="lead" data-k="lead">Since ${S.connectedOn} · your phone shows this browser as “Chrome on a Windows PC”</p>
     ${failed}
     <section class="sect" aria-labelledby="wayshead" data-k="ways" data-keep><h2 id="wayshead" tabindex="-1">Ways to save</h2><div class="list" data-k="wayslist" data-keep>
       ${S.pinned ? '' : `<div class="li" data-k="pinrow" data-gap>${PIN}</div>`}
