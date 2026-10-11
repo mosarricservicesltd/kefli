@@ -3,8 +3,15 @@
 # the two ARM ABIs real phones use (x86 is emulators only), signed with Kefli's key from ~/.gradle/gradle.properties
 # (plugins/with-release-signing.js). Refuses to finish unless the APK carries that key.
 #   apps/mobile/scripts/build-release.sh            → apps/mobile/dist/kefli-<version>.apk
-# Afterwards `KEFLI_VARIANT=local npx expo prebuild` puts android/ back for the local stack.
+# Afterwards `KEFLI_VARIANT=local npx expo prebuild` puts android/ back for the local stack. The laptop is kept
+# awake while it runs; closing the lid may still suspend it.
 set -euo pipefail
+# The build takes 30 to 45 minutes; a suspend in the middle stalls it (it lost a night that way on 11 October 2026).
+# So it runs again under systemd-inhibit, which holds off sleep and idle suspend until it ends.
+if [ -z "${KEFLI_AWAKE:-}" ] && command -v systemd-inhibit >/dev/null; then
+  KEFLI_AWAKE=1 exec systemd-inhibit --what=sleep:idle --mode=block --who="Kefli release build" \
+    --why="Building the release APK" "$(readlink -f "$0")" "$@"
+fi
 here=$(cd "$(dirname "$0")/.." && pwd)
 export KEFLI_DEFAULTS_URL=${KEFLI_DEFAULTS_URL:-https://api.kefli.app/defaults.json}
 expected=94:13:53:66:09:47:D6:BC:88:80:24:52:56:A9:C4:37:09:4E:FC:DA:3E:B0:83:EE:04:45:58:E9:D3:EB:C9:79
