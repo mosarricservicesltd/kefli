@@ -10,7 +10,7 @@ import { phoneCrypto } from '../crypto/port';
 import { answerDeleted, useApp } from '../services/app';
 import { loadDefaults, type Defaults } from '../services/config';
 import { deleteEverything, deleteTargets, signDeletion, type DelPorts, type Progress, type Result, type Target } from '../services/deleteAccount';
-import { currentSigner, wipeEverything } from '../services/identity';
+import { currentSigner, wipeEverything, withScreen } from '../services/identity';
 import { pool } from '../services/runner';
 import { closeVoice } from '../services/voice';
 import { store } from '../services/store';
@@ -79,7 +79,9 @@ export default function Delete() {
   };
   const attempt = useRef(0);
   const go = async () => {
-    const signer = await currentSigner();
+    // a nostr user approves the deletion in their app (FD 41), so its screen may open (FD 104)
+    const current = await currentSigner();
+    const signer = current && withScreen(current);
     if (!signer || !defaults) return;
     const mine = ++attempt.current;
     const ports: DelPorts = {

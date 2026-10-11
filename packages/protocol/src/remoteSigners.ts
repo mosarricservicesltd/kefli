@@ -72,11 +72,14 @@ export function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([p, new Promise<never>((_, fail) => (t = setTimeout(() => fail(new TimeoutError()), ms)))]).finally(() => clearTimeout(t));
 }
 
-/** What a NIP-55 signer app does, through the kefli-nip55 module (mobile spec 8.4). */
+/**
+ * What a NIP-55 signer app does, through the kefli-nip55 module (mobile spec 8.4). screen: whether a request its
+ * resolver declines may open the signer's own screen, or is refused as 'background' to wait (FD 104).
+ */
 export interface Nip55Port {
-  signEvent(pkg: string, eventJson: string, pubkey: string): Promise<string>;
-  nip44Encrypt(pkg: string, plaintext: string, peer: string, pubkey: string): Promise<string>;
-  nip44Decrypt(pkg: string, ciphertext: string, peer: string, pubkey: string): Promise<string>;
+  signEvent(pkg: string, eventJson: string, pubkey: string, screen: boolean): Promise<string>;
+  nip44Encrypt(pkg: string, plaintext: string, peer: string, pubkey: string, screen: boolean): Promise<string>;
+  nip44Decrypt(pkg: string, ciphertext: string, peer: string, pubkey: string, screen: boolean): Promise<string>;
   canActInBackground(pkg: string, pubkey: string): Promise<boolean>;
   /** Whether the signer signs this event through its resolver alone, never its screen (decision 104). */
   signInBackground(pkg: string, eventJson: string, pubkey: string): Promise<boolean>;
@@ -101,11 +104,26 @@ export function probeEvent(kind: number): EventTemplate {
 
 /**
  * A NIP-55 signer. A request its screen never answers (the app closed, or killed underneath) fails after the same two
- * minutes a NIP-46 request gets, so the outbox retries it rather than waiting on it for ever.
+ * minutes a NIP-46 request gets, so the outbox retries it rather than waiting on it for ever. With screen false, a
+ * request the signer won't answer out of sight is refused instead of opening its screen (FD 104): what the phone does
+ * on its own never puts the signer in front of the person. withScreen() is the same signer for what they started.
  */
 export class Nip55Signer implements SignerProvider {
   readonly kind = 'nip55' as const;
-  constructor(private readonly port: Nip55Port, private readonly pkg: string, private readonly pk: string, private readonly timeoutMs = NIP46_TIMEOUT_MS) {}
+  constructor(
+    private readonly port: Nip55Port, private readonly pkg: string, private readonly pk: string,
+    private readonly timeoutMs = NIP46_TIMEOUT_MS, readonly screen = true,
+  ) {}
+
+  /** This signer, allowed to open the signer app's screen: for what the person started and is watching. */
+  withScreen(): Nip55Signer {
+    return this.screen ? this : new Nip55Signer(this.port, this.pkg, this.pk, this.timeoutMs, true);
+  }
+
+  /** This signer, never opening the signer app's screen: for what the phone does on its own. */
+  outOfSight(): Nip55Signer {
+    return this.screen ? new Nip55Signer(this.port, this.pkg, this.pk, this.timeoutMs, false) : this;
+  }
 
   pubkey(): string {
     return this.pk;
@@ -124,17 +142,17 @@ export class Nip55Signer implements SignerProvider {
   }
 
   async signEvent(e: EventTemplate): Promise<NostrEvent> {
-    const signed = JSON.parse(await withTimeout(this.port.signEvent(this.pkg, JSON.stringify({ ...e, pubkey: this.pk }), this.pk), this.timeoutMs)) as NostrEvent;
+    const signed = JSON.parse(await withTimeout(this.port.signEvent(this.pkg, JSON.stringify({ ...e, pubkey: this.pk }), this.pk, this.screen), this.timeoutMs)) as NostrEvent;
     if (signed.pubkey !== this.pk) throw new Error('the signer signed with another key');
     return signed;
   }
 
   nip44Encrypt(peer: string, plaintext: string): Promise<string> {
-    return withTimeout(this.port.nip44Encrypt(this.pkg, plaintext, peer, this.pk), this.timeoutMs);
+    return withTimeout(this.port.nip44Encrypt(this.pkg, plaintext, peer, this.pk, this.screen), this.timeoutMs);
   }
 
   nip44Decrypt(peer: string, ciphertext: string): Promise<string> {
-    return withTimeout(this.port.nip44Decrypt(this.pkg, ciphertext, peer, this.pk), this.timeoutMs);
+    return withTimeout(this.port.nip44Decrypt(this.pkg, ciphertext, peer, this.pk, this.screen), this.timeoutMs);
   }
 
   /** What the signer won't do without asking (decision 104), checked through its resolver alone, in order. */
@@ -153,10 +171,11 @@ export class Nip55Signer implements SignerProvider {
    * each and remember it (decision 104). step(n) before the nth request; a refusal stops and throws.
    */
   async approve(missing: BackgroundNeed[], step: (n: number) => void): Promise<void> {
+    const asking = this.withScreen();
     for (const [n, need] of missing.entries()) {
       step(n + 1);
-      if (need === 'nip44') await this.nip44Encrypt(this.pk, PROBE_TEXT);
-      else await this.signEvent(probeEvent(need));
+      if (need === 'nip44') await asking.nip44Encrypt(this.pk, PROBE_TEXT);
+      else await asking.signEvent(probeEvent(need));
     }
   }
 }

@@ -1,6 +1,6 @@
 // The identity the app signs with (mobile spec 3.1–3.3), carrying out the resolver's plans (src/data/resolver.ts).
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
-import { LocalSigner, Nip55Signer, newMnemonic, secretKeyFromMnemonic, type SignerProvider } from '@kefli/protocol';
+import { LocalSigner, NIP46_TIMEOUT_MS, Nip55Signer, newMnemonic, secretKeyFromMnemonic, type SignerProvider } from '@kefli/protocol';
 import { nip55Port } from '../../modules/kefli-nip55/src';
 import { nip46Signer } from './nip46';
 import { KefliKeystore, type KeyIdentity } from '../../modules/kefli-keystore/src';
@@ -22,9 +22,13 @@ async function activeIdentity(): Promise<KeyIdentity | null> {
 }
 
 /** The signer for an identity in the key file (3.4): its own key, the signer app's, or the bunker's. */
+/**
+ * The phone's signer for an identity in the key file. A signer app is reached out of sight only (FD 104): sync, the
+ * outbox, shares and the inbox never put its screen in front of the person; withScreen() is for what they start.
+ */
 function signerFor(id: KeyIdentity): SignerProvider | null {
   if (id.provider === 'local') return id.sk ? new LocalSigner(hexToBytes(id.sk), nativeSecp) : null;
-  if (id.provider === 'nip55') return id.package ? new Nip55Signer(nip55Port, id.package, id.pubkey) : null;
+  if (id.provider === 'nip55') return id.package ? new Nip55Signer(nip55Port, id.package, id.pubkey, NIP46_TIMEOUT_MS, false) : null;
   return id.bunker && id.client ? nip46Signer(id.bunker, id.client, id.pubkey) : null;
 }
 
@@ -35,6 +39,11 @@ async function readBlockStore(): Promise<string | null | undefined> {
   } catch {
     return undefined;
   }
+}
+
+/** A signer that may open the signer app's screen, for what the person started and is watching: Delete my data, a move. */
+export function withScreen(s: SignerProvider): SignerProvider {
+  return s instanceof Nip55Signer ? s.withScreen() : s;
 }
 
 export async function currentSigner(): Promise<SignerProvider | null> {
@@ -226,6 +235,7 @@ export async function adoptNostr(s: SignerProvider, how: Pick<KeyIdentity, 'prov
     queueRestore(db, now(), s.pubkey());
   });
   if (!keepEarly) await KefliKeystore.blockStoreRemove().catch(() => undefined);
-  signer = s;
+  // the sign-in's signer could open the app's screen; from here the phone's own work reaches it out of sight (FD 104)
+  signer = s instanceof Nip55Signer ? s.outOfSight() : s;
   return s.pubkey();
 }
