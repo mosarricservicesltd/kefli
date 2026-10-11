@@ -71,7 +71,10 @@
 		header @xpi Content-Type application/x-xpinstall
 		@apk path /downloads/*.apk
 		header @apk Content-Type application/vnd.android.package-archive
-		header /downloads/* Cache-Control "no-cache"
+		# Everything else, the pages with the release files, is checked each time (a 304 when unchanged): with no
+		# header, a browser kept showing the old homepage after a deploy (11 October 2026).
+		@fresh not path /assets/* /media/* /fonts/*
+		header @fresh Cache-Control "no-cache"
 		encode zstd gzip
 		file_server
 	}
