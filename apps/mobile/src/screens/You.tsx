@@ -26,6 +26,7 @@ import { Press, pressLayer } from '../ui/Press';
 import { closeSheet, openSheet } from '../ui/sheet';
 import { S } from '../ui/strings';
 import { getSetting } from '../data/settings';
+import { asksBeforeSaving } from '../data/nostrCheck';
 import { VOICE_ID, chosen } from '../voice/choice';
 import { usePhoneVoices } from './Voice';
 import { T, display28, ui } from '../ui/text';
@@ -92,7 +93,7 @@ function RecoverySheet({ owner, close }: { owner: string; close: () => void }) {
   );
 }
 
-function Row({ icon, label, sub, warn, value, danger, disabled, onPress, first }: {
+export function Row({ icon, label, sub, warn, value, danger, disabled, onPress, first }: {
   icon: IconName; label: string; sub?: string; warn?: boolean; value?: string; danger?: boolean; disabled?: boolean; onPress?: () => void; first?: boolean;
 }) {
   const { c } = useTheme();
@@ -142,6 +143,7 @@ export default function You() {
   const stats = useLive(() => youStats(store(), owner), ['items', 'listen_history', 'devices'], [owner]);
   const card = useLive(() => showBackupCard(store(), owner, stats.saves), ['settings', 'items'], [owner, stats.saves]);
   const done = useLive(() => backupDone(store()), ['settings'], []);
+  const asks = useLive(() => asksBeforeSaving(store()), ['settings'], []);
   // a nostr user has no recovery code and adds a phone by signing in there (FD 90)
   const local = useLive(() => (store().get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local') === 'local', ['identities'], [owner]);
   useFocusEffect(useCallback(() => setToastFloor(TAB_BAR_HEIGHT), []));
@@ -206,7 +208,10 @@ export default function You() {
           </Animated.View>
         )}
         <Group>
-          {!local && <Row first icon="login" label={S.you.nostrApp} value={S.you.signedIn} />}
+          {/* the row opens Your nostr app, stamped while the app asks before saves (FD 104, FD 105) */}
+          {!local && (asks
+            ? <Row first icon="login" label={S.you.nostrApp} sub={S.nostrApp.asks} warn onPress={() => router.push('/nostr-app')} />
+            : <Row first icon="login" label={S.you.nostrApp} value={S.you.signedIn} onPress={() => router.push('/nostr-app')} />)}
           {local && <Row first icon="keyboard" label={S.you.recovery} sub={done ? S.you.written : S.you.notWritten} warn={!done} onPress={recovery} />}
           {local && <Row icon="phone" label={S.you.addDevice} disabled={!online} sub={online ? undefined : S.you.needsConnection} onPress={() => router.push('/add-device')} />}
           <Row icon="laptop" label={S.you.browsers} value={String(stats.browsers)} onPress={() => router.push('/browsers')} />

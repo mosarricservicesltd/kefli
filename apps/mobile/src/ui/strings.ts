@@ -61,6 +61,40 @@ export const S = {
     archiveEmptyBody: 'Swipe an article left, or tap Archive when you finish it, and it moves here.',
   },
   // you, you-done, you-offline, you-nostr, you-voices, rec-hidden, rec-shown, rec-copied
+  // FD 105: Your nostr app on You, and signing out (prototype nostrapp, nostrapp-asks, nostrapp-disc, nostrapp-disc-unsent)
+  nostrApp: {
+    title: 'Your nostr app',
+    lead: 'Your library lives under your key, in your nostr app. Kefli asks the app to sign your saves and keep them private.',
+    signedInWith: 'Signed in with',
+    link: 'A sign-in link',
+    saving: 'Saving',
+    withoutAsking: 'Without asking',
+    asks: 'Asks before each save',
+    signOut: 'Sign out',
+    sheetTitle: 'Sign out?',
+    sheetBody: 'Kefli removes your library from this phone. Your saves stay under your key, and signing in with your nostr app again brings them back. You can remove Kefli in your nostr app too.',
+    unsent: (n: number) => (n === 1
+      ? 'One save hasn’t been sent yet and will be lost.'
+      : `${say(n).replace(/^./, (ch) => ch.toUpperCase())} saves haven’t been sent yet and will be lost.`),
+    cancel: 'Cancel',
+    done: 'You’re signed out',
+    // RULED: the design's one error, worded as the screens' other retries
+    failed: 'Kefli couldn’t sign out. Try again.',
+  },
+  // FD 104: saving without asking (prototype nostr-bg, nostr-bg-waiting, nostr-bg-partial, nostr-bg-declined)
+  bg: {
+    title: 'Save without asking',
+    lead: 'Your nostr app asks you to approve each save before Kefli can back it up. Approve once now and choose to remember it, and saving from any app needs nothing more from you.',
+    open: 'Open my nostr app',
+    retry: 'Try again',
+    each: 'Ask me each time',
+    waiting: 'Waiting for your nostr app',
+    waitingLead: (n: number, of: number) => `Approve the request there and choose to remember it, then come back to Kefli. Request ${n} of ${of}.`,
+    cancel: 'Cancel',
+    partial: 'Your nostr app still asks before some saves. In your nostr app, let Kefli sign without asking, then try again.',
+    declined: 'The request was declined in your nostr app. Kefli will ask each time you save.',
+    approved: 'Saving no longer asks your nostr app',
+  },
   you: {
     signedInWith: 'Signed in with your nostr app',
     nostrApp: 'Your nostr app',

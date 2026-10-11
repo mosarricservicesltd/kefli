@@ -78,6 +78,25 @@ export interface Nip55Port {
   nip44Encrypt(pkg: string, plaintext: string, peer: string, pubkey: string): Promise<string>;
   nip44Decrypt(pkg: string, ciphertext: string, peer: string, pubkey: string): Promise<string>;
   canActInBackground(pkg: string, pubkey: string): Promise<boolean>;
+  /** Whether the signer signs this event through its resolver alone, never its screen (decision 104). */
+  signInBackground(pkg: string, eventJson: string, pubkey: string): Promise<boolean>;
+}
+
+/**
+ * What saving signs out of sight (decision 104): the save, deletions, a browser's seal, the relay and server lists,
+ * relay and API sign-in, and the backup uploads. Kind 39701 is reserved for v2 and left out.
+ */
+export const BACKGROUND_KINDS = [30078, 5, 13, 10002, 10063, 22242, 27235, 24242] as const;
+
+/** A permission the signer may lack: a kind to sign, or NIP-44 encryption. */
+export type BackgroundNeed = (typeof BACKGROUND_KINDS)[number] | 'nip44';
+
+/**
+ * A throwaway event of a kind, for asking whether the signer signs it without asking. Never sent: dated 1970 and empty,
+ * so even a leaked list could never replace a real one.
+ */
+export function probeEvent(kind: number): EventTemplate {
+  return { kind, created_at: 1, tags: kind === 30078 ? [['d', 'kefli/probe']] : [], content: '' };
 }
 
 /**
@@ -116,6 +135,29 @@ export class Nip55Signer implements SignerProvider {
 
   nip44Decrypt(peer: string, ciphertext: string): Promise<string> {
     return withTimeout(this.port.nip44Decrypt(this.pkg, ciphertext, peer, this.pk), this.timeoutMs);
+  }
+
+  /** What the signer won't do without asking (decision 104), checked through its resolver alone, in order. */
+  async missingInBackground(): Promise<BackgroundNeed[]> {
+    const missing: BackgroundNeed[] = [];
+    if (!(await this.port.canActInBackground(this.pkg, this.pk).catch(() => false))) missing.push('nip44');
+    for (const kind of BACKGROUND_KINDS) {
+      const json = JSON.stringify({ ...probeEvent(kind), pubkey: this.pk });
+      if (!(await this.port.signInBackground(this.pkg, json, this.pk).catch(() => false))) missing.push(kind);
+    }
+    return missing;
+  }
+
+  /**
+   * Asks the signer, through its screen, for each permission missing, one after another, so the person can approve
+   * each and remember it (decision 104). step(n) before the nth request; a refusal stops and throws.
+   */
+  async approve(missing: BackgroundNeed[], step: (n: number) => void): Promise<void> {
+    for (const [n, need] of missing.entries()) {
+      step(n + 1);
+      if (need === 'nip44') await this.nip44Encrypt(this.pk, PROBE_TEXT);
+      else await this.signEvent(probeEvent(need));
+    }
   }
 }
 

@@ -10,6 +10,7 @@ const native = requireNativeModule<{
   nip44Encrypt(pkg: string, plaintext: string, peer: string, hex: string, npub: string): Promise<string>;
   nip44Decrypt(pkg: string, ciphertext: string, peer: string, hex: string, npub: string): Promise<string>;
   canActInBackground(pkg: string, peer: string, hex: string): Promise<boolean>;
+  signInBackground(pkg: string, eventJson: string, hex: string): Promise<boolean>;
 }>('KefliNip55');
 
 const npub = (hex: string) => nip19.npubEncode(hex);
@@ -30,4 +31,5 @@ export const nip55Port: Nip55Port = {
   nip44Encrypt: (pkg, text, peer, pk) => native.nip44Encrypt(pkg, text, peer, pk, npub(pk)),
   nip44Decrypt: (pkg, text, peer, pk) => native.nip44Decrypt(pkg, text, peer, pk, npub(pk)),
   canActInBackground: (pkg, pk) => native.canActInBackground(pkg, pk, pk),
+  signInBackground: (pkg, json, pk) => native.signInBackground(pkg, json, pk),
 };
