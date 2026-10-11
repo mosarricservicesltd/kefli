@@ -109,6 +109,8 @@ async function build(browser) {
   const ctx = await context({
     entryPoints: Object.fromEntries(ENTRIES.map((e) => [e, join(here, 'src', `${e}.ts`)])),
     outdir: out,
+    // the bundle's path comments are relative to this, so a build is the same from any directory (AMO's source review)
+    absWorkingDir: here,
     bundle: true,
     format: 'iife',
     target: browser === 'chrome' ? 'chrome116' : 'firefox121',
