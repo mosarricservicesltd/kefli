@@ -3,8 +3,9 @@
 // runs here while the page is open; the logic is in pair.ts and queue.ts, this file only draws.
 import { toQR } from 'toqr';
 import LOGO from '../../../shared/brand/out/extension/options-logo-28.svg';
-import { BROWSER, DEFAULTS_URL } from './config';
+import { BROWSER, COMMIT, DEFAULTS_URL, FLAVOUR } from './config';
 import { webCrypto } from './crypto';
+import { debugText, history } from './debug';
 import { loadDefaults } from './defaults';
 import { deviceSigner } from './device';
 import { icon } from './icons';
@@ -29,6 +30,8 @@ let ticker: ReturnType<typeof setInterval> | undefined;
 let retry: ReturnType<typeof setTimeout> | undefined;
 let queue: Queued[] = [];
 let pinned = true;
+/** Copy debug info reads Copied for 1.5 s after a copy. */
+let copied = false;
 /** Retry in flight (busy shows its dots once the wait passes 150 ms), and rows holding Sent before they leave. */
 const sending = new Map<string, { dots: boolean }>();
 const sent = new Map<string, Queued>();
@@ -117,7 +120,11 @@ function waysHTML(shortcut: string | null): string {
 function advancedHTML(p: Pairing, open: boolean): string {
   const blocked = queue.some((e) => e.why === 'blocked');
   const relays = p.write_relays.map((r, i) => `<div class="li"><span class="ic">${icon('server')}</span><span class="t">${i === 0 ? 'Kefli' : `Backup ${i}`}<small>${esc(r.replace(/^wss?:\/\//, ''))}</small></span>${i === 0 && blocked ? '<span class="sdot bad">Blocked in this browser</span>' : ''}</div>`);
-  const body = open ? `<section class="sect" style="margin-top:var(--space-8)"><h2>Relays</h2>${list(relays)}<p class="fine">Set by your phone when you connected this browser.</p></section>` : '';
+  const build = `<div class="li"><span class="ic">${icon('info')}</span><span class="t">Kefli ${esc(chrome.runtime.getManifest().version)}<small>${FLAVOUR} · ${esc(COMMIT)}</small></span><button class="chip" data-act="debug">${copied ? 'Copied' : 'Copy debug info'}</button></div>`;
+  const body = open
+    ? `<section class="sect" style="margin-top:var(--space-8)"><h2>Relays</h2>${list(relays)}<p class="fine">Set by your phone when you connected this browser.</p></section>
+      <section class="sect"><h2>This browser</h2>${list([build])}<p class="fine">For a bug report. It lists what became of your last twenty saves, without their addresses or titles, and nothing that could open them.</p></section>`
+    : '';
   return `<details class="adv" ${open ? 'open' : ''}><summary data-act="adv"><span class="ic">${icon('settings')}</span><span class="t">Advanced</span><span class="chev"><span class="chevr">${icon('chev', 18)}</span></span></summary>${body}</details>`;
 }
 
@@ -226,6 +233,26 @@ async function retryOne(id: string) {
   void render();
 }
 
+/** Copy debug info (decision 108): the build, the connection and the last twenty outcomes, as plain text. */
+async function copyDebug() {
+  const pairing = await store.get<Pairing>(KEYS.pairing);
+  const text = debugText({
+    version: chrome.runtime.getManifest().version, flavour: FLAVOUR, commit: COMMIT, browser: label(), userAgent: navigator.userAgent,
+    online: navigator.onLine, defaultsUrl: DEFAULTS_URL, devicePubkey: (await deviceSigner(store, webCrypto)).pubkey(), pairing: pairing ?? null,
+    queue: await queued(store), movesChecked: (await store.get<number>(KEYS.movesChecked)) ?? null, history: await history(store), now: now(),
+  });
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    say('Couldn’t copy. Click the page, then try again.');
+    return;
+  }
+  copied = true;
+  void render();
+  say('Debug info copied');
+  setTimeout(() => { copied = false; void render(); }, SENT_HOLD_MS);
+}
+
 function setConnected(change: Partial<Extract<View, { kind: 'connected' }>>) {
   if (view.kind !== 'connected') return;
   Object.assign(view, change);
@@ -238,7 +265,9 @@ const ACTIONS: Record<string, (id?: string) => void | Promise<void>> = {
   unpair: () => setConnected({ confirm: true }),
   'unpair-cancel': () => setConnected({ confirm: false }),
   // Disconnecting deletes what hadn't reached the phone, as the confirm said
-  'unpair-yes': async () => { await store.remove(KEYS.queue); await store.remove(KEYS.pairing); },
+  // and the save history with them
+  'unpair-yes': async () => { await store.remove(KEYS.queue); await store.remove(KEYS.history); await store.remove(KEYS.pairing); },
+  debug: copyDebug,
   retry: (id) => (id ? retryOne(id) : undefined),
   setkey: () => { void chrome.tabs.create({ url: BROWSER === 'firefox' ? 'about:addons' : 'chrome://extensions/shortcuts' }); },
 };

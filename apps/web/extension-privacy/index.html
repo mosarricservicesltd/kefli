@@ -22,7 +22,7 @@
       <span class="label">Extension privacy</span>
       <h1>The browser extension's privacy note.</h1>
       <p class="lead">The Kefli browser extension saves web pages to the Kefli app on your phone. It reads a page only when you save it, encrypts what it captures before it leaves your browser, and collects nothing else.</p>
-      <span class="updated">Last updated 9 October 2026</span>
+      <span class="updated">Last updated 11 October 2026</span>
     </header>
 
     <nav class="toc" aria-label="On this page">
@@ -51,7 +51,7 @@
       <p>When you pair the extension with your phone, the two exchange keys through Kefli's server, the same way. The extension never holds your library's key: it has a key of its own, which your phone can remove under Connected browsers.</p>
 
       <h2 id="keeps">What it keeps</h2>
-      <p>In your browser's storage for the extension, it keeps the pairing (your library's public identifier, the servers to send to, and the date you paired) and any saves waiting to be sent while you're offline, already encrypted. Unpairing deletes them.</p>
+      <p>In your browser's storage for the extension, it keeps the pairing (your library's public identifier, the servers to send to, and the date you paired) and any saves waiting to be sent while you're offline, already encrypted. It also keeps a note of what became of your last twenty saves, such as sent or waiting, with the time but without their addresses or titles. That note never leaves your browser unless you press Copy debug info under Advanced and paste it somewhere yourself. Unpairing deletes all of it.</p>
 
       <h2 id="never">What it never does</h2>
       <ul>

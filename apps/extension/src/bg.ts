@@ -5,6 +5,7 @@ import { isWebAddress, linkOnly, type Captured } from './captured';
 import { BROWSER, DEFAULTS_URL, FLAVOUR } from './config';
 import { webCrypto } from './crypto';
 import { loadDefaults } from './defaults';
+import { record, type Outcome } from './debug';
 import { deviceSigner } from './device';
 import { applyMove, followMoves } from './move';
 import { dequeue, enqueue, flush, queued, waiting, whyNot } from './queue';
@@ -145,6 +146,8 @@ function sentKind(c: Captured): ToastKind {
   return c.html === null ? 'notext' : 'saved';
 }
 
+const WAITING: Record<ReturnType<typeof whyNot>, Outcome> = { offline: 'waiting, offline', reach: 'waiting, couldn’t reach', blocked: 'waiting, blocked' };
+
 async function save(c: Captured, tabId: Where, link: boolean): Promise<void> {
   // a move found now means this save is wrapped for the new key from the start
   await checkMovesSoon();
@@ -156,15 +159,18 @@ async function save(c: Captured, tabId: Where, link: boolean): Promise<void> {
   await session.set(`undo:${pending.id}`, { key: bytesToHex(wrapKey), sha256: pending.sha256, hash: pending.hash, until: now() + UNDO_WINDOW });
   const d = navigator.onLine ? await deliver(pending, ctx.defaults.operator.blossom, ctx.defaults.operator.relay, ctx.device, net) : 'unreachable';
   if (d === 'sent') {
+    await record(store, now(), pending.id, c.html === null ? 'sent, no text' : 'sent', link);
     await toast(tabId, { ...base, kind: sentKind(c) });
     if (tabId === 'popup') await tick();
     return;
   }
   const why = whyNot(d, navigator.onLine);
   if ((await enqueue(store, pending, why)) === 'full') {
+    await record(store, now(), pending.id, 'queue full', link);
     await toast(tabId, { ...base, kind: 'full' });
     return;
   }
+  await record(store, now(), pending.id, WAITING[why], link);
   await chrome.alarms.create('flush', { periodInMinutes: 1 });
   await badge();
   await toast(tabId, { ...base, kind: why === 'offline' ? 'offline' : 'failed' });
@@ -187,6 +193,7 @@ async function undo(id: string, where: Where): Promise<void> {
   if (!ctx) return;
   const waitingSave = (await queued(store)).find((e) => e.id === id);
   if (waitingSave && (await dequeue(store, id))) {
+    await record(store, now(), id, 'undo: off the queue');
     await badge();
     await toast(where, { kind: 'unqueued', title: waitingSave.title, host: waitingSave.host, link: false });
     return;
@@ -200,6 +207,7 @@ async function undo(id: string, where: Where): Promise<void> {
     (ms) => new Promise((r) => setTimeout(r, ms)),
   );
   await session.remove(`undo:${id}`);
+  await record(store, now(), id, outcome === 'onphone' ? 'undo: on the phone' : 'undo: retracted');
   await toast(where, { kind: outcome, hash: kept.hash, title: '', host: '', link: false });
 }
 
@@ -208,7 +216,10 @@ async function flushQueue(all = false, only?: string): Promise<void> {
   await checkMovesSoon();
   const ctx = await context();
   if (!ctx) return;
-  await flush(store, (p) => deliver(p, ctx.defaults.operator.blossom, ctx.defaults.operator.relay, ctx.device, net), navigator.onLine, all, only);
+  const stoppedBefore = new Set((await queued(store)).filter((e) => e.stopped).map((e) => e.id));
+  const sent = await flush(store, (p) => deliver(p, ctx.defaults.operator.blossom, ctx.defaults.operator.relay, ctx.device, net), navigator.onLine, all, only);
+  for (const id of sent) await record(store, now(), id, 'sent from queue');
+  for (const e of await queued(store)) if (e.stopped && !stoppedBefore.has(e.id)) await record(store, now(), e.id, 'stopped');
   if (!(await queued(store)).length) await chrome.alarms.clear('flush');
   await badge();
 }
