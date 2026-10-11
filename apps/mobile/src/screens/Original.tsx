@@ -28,6 +28,7 @@ import { archive, remove } from './actions';
 import { ArchiveDock, DOCK_LIFTED } from './ArchiveDock';
 import { stopIfPlaying, useVoice } from '../services/voice';
 import { IconButton } from './Onb';
+import { failNotice } from './failNotice';
 import { hostOf } from './SaveRow';
 import { Skeleton } from './Skeleton';
 
@@ -73,7 +74,7 @@ export function OriginalView({ row, failedSave }: { row: LibRow; failedSave: boo
         : failedSave && (
           <View style={{ margin: 12, marginHorizontal: 16, flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 12, paddingHorizontal: 16, borderRadius: radius.container, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line }}>
             <Icon name="info" size={16} color={c.muted} />
-            <T style={[ui(13, 'meta', 1.4), { flex: 1 }]}>{S.reader.errorNotice}</T>
+            <T style={[ui(13, 'meta', 1.4), { flex: 1 }]}>{failNotice(row.fail_reason)}</T>
           </View>
         )}
       {online && st !== 'failed' && (

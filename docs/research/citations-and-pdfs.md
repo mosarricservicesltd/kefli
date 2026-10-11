@@ -1,6 +1,6 @@
 # Citation markers in speech, and text from linked PDFs
 
-Exploration, 11 October 2026. Two features Richard asked to look at: stop the voice reading Wikipedia's `[1]` markers, and give a saved PDF link its text. Nothing here is built yet; each feature needs a flow-map entry and a contract change before code (CLAUDE.md, Process).
+Exploration, 11 October 2026. Two features Richard asked to look at: stop the voice reading Wikipedia's `[1]` markers, and give a saved PDF link its text. Both were then built the same day as recommended here (flow decisions 102 and 103, contract 1.6); the PDF layout grew rules beyond this note's (maths, chart labels, section numbers), which `packages/protocol/src/pdf.ts` and its fixtures record.
 
 ## 1. Citation markers and reference lists
 

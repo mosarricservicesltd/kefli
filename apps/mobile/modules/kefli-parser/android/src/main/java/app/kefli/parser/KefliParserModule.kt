@@ -21,6 +21,11 @@ class KefliParserModule : Module() {
       Renderer.render(context, url, promise)
     }
 
+    // kefliPdf: a PDF's bytes (base64) to its text runs, which packages/protocol lays out. Resolves with JSON.
+    AsyncFunction("pdf") { body: String, promise: Promise ->
+      Parser.submit(context, JSONObject().put("kind", "pdf").put("body", body), promise)
+    }
+
     // kefliMarkdown: Readability's content HTML from an extension save.
     AsyncFunction("markdown") { html: String, url: String, promise: Promise ->
       Parser.submit(context, JSONObject().put("kind", "markdown").put("html", html).put("url", url), promise)

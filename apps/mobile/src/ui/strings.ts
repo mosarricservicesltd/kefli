@@ -396,6 +396,9 @@ export const S = {
     savedYesterday: 'Saved yesterday',
     offlineWait: 'This page will be fetched when you’re online. Then it’s here to read, offline too.',
     errorNotice: 'We couldn’t get a clean copy of this page, so here’s the original. It won’t be available offline.',
+    // flow decision 103: a PDF Kefli can't take text from says why
+    pdfNoText: 'This PDF is pictures of pages, with no text to read or listen to, so here’s the original. It won’t be available offline.',
+    pdfLocked: 'This PDF is locked with a password, so here’s the original. It won’t be available offline.',
     originalOffline: 'Opening the original needs a connection',
     pageFailed: 'This page won’t load here. Your browser may still open it.',
     openInBrowser: 'Open in browser',
