@@ -71,7 +71,7 @@ Used with activeTab, only in the tab the user is saving and only after their cli
 
 `storage`
 ```
-chrome.storage.local holds the pairing with the user's phone (the phone's public identifier, the server addresses to send to and the date of pairing), the extension's own device key, the server settings it fetched, and any saves waiting to be sent while the browser is offline, which are stored already encrypted. chrome.storage.session holds the state of the confirmation popup for the current session. Unpairing or removing the extension deletes all of it.
+chrome.storage.local holds the pairing with the user's phone (the phone's public identifier, the server addresses to send to and the date of pairing), the extension's own device key, the server settings it fetched, any saves waiting to be sent while the browser is offline, which are stored already encrypted, and a record of what became of the last twenty saves (time, outcome and a short id, with no addresses or titles) that the user can copy into a bug report from the options page. chrome.storage.session holds the state of the confirmation popup for the current session. Unpairing or removing the extension deletes all of it.
 ```
 
 `alarms`

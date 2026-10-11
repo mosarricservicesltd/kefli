@@ -18,6 +18,7 @@ import { KEYS, memoryStore, type Pairing } from '../src/store';
 import { applyMove, followMoves } from '../src/move';
 import { SECOND_LOOK_MS, settleUndo } from '../src/undo';
 import { markDelay, toastCopy } from '../src/toastCopy';
+import { debugText, history, HISTORY_MAX, record } from '../src/debug';
 
 const DEFAULTS: Defaults = { v: 1, operator: { relay: 'wss://relay.example', blossom: 'https://blossom.example', api: 'https://api.example' }, relays: ['wss://a.example'], mirrors: ['https://m.example'] };
 const NOW = 1_791_600_000;
@@ -341,5 +342,53 @@ describe('Undo (contract 4.4, decision 101)', () => {
     const refusing = async () => { throw new Error('blocked: deletes only a gift wrap of its own that this relay holds'); };
     expect(await settleUndo(refusing, async () => true, async () => undefined)).toBe('onphone');
     await expect(settleUndo(refusing, async () => false, async () => undefined)).rejects.toThrow('blocked');
+  });
+});
+
+describe('Copy debug info (extension spec 11, decision 108)', () => {
+  const at = (i: number) => NOW + i * 60;
+
+  test('keeps the last twenty outcomes, newest first, with the id cut to eight characters', async () => {
+    const store = memoryStore();
+    for (let i = 0; i < HISTORY_MAX + 5; i++) await record(store, at(i), `${String(i).padStart(2, '0')}${'f'.repeat(62)}`, 'sent', i % 2 === 1);
+    const h = await history(store);
+    expect(h).toHaveLength(HISTORY_MAX);
+    expect(h[0]).toEqual({ at: at(24), link: false, outcome: 'sent', id: `24${'f'.repeat(6)}` });
+    expect(h.at(-1)!.id).toBe(`05${'f'.repeat(6)}`);
+  });
+
+  test('a later outcome takes link from the save’s earlier entry', async () => {
+    const store = memoryStore();
+    await record(store, at(0), 'ab'.repeat(32), 'waiting, offline', true);
+    await record(store, at(1), 'ab'.repeat(32), 'sent from queue');
+    await record(store, at(2), 'cd'.repeat(32), 'undo: retracted');
+    expect((await history(store)).map((e) => [e.outcome, e.link])).toEqual([['undo: retracted', false], ['sent from queue', true], ['waiting, offline', true]]);
+  });
+
+  test('the text names the build, the connection and the outcomes, and never an address, a title or a private key', async () => {
+    const store = memoryStore();
+    const dev = await deviceSigner(store, webCrypto);
+    const captured: Captured = { url: 'https://example.com/a-private-page', canonical: null, hero: null, title: 'A private title', site: null, byline: null, lang: null, html: null };
+    const { pending } = await prepare(captured, { device: dev, defaults: DEFAULTS, pairing: PAIRING, crypto: webCrypto, now: NOW });
+    await enqueue(store, pending, 'reach');
+    await record(store, at(1), pending.id, 'waiting, couldn’t reach', false);
+    const text = debugText({
+      version: '0.1.0', flavour: 'beta', commit: 'abc1234', browser: 'Chrome on a Mac', userAgent: 'UA', online: true, defaultsUrl: 'https://api.example/defaults.json',
+      devicePubkey: dev.pubkey(), pairing: PAIRING, queue: await queued(store), movesChecked: null, history: await history(store), now: at(2),
+    });
+    expect(text).toContain('Kefli extension 0.1.0 (beta, abc1234)');
+    expect(text).toContain(`Library key: ${PAIRING.user_pubkey.slice(0, 8)}…`);
+    expect(text).toContain('Waiting: 1 (offline 0, couldn’t reach 1, blocked 0, stopped 0; most attempts 0)');
+    expect(text).toContain(`page  ${pending.id.slice(0, 8)}  waiting, couldn’t reach`);
+    expect(text).toContain('Last look for a move: never');
+    for (const secret of ['example.com', 'A private title', (await store.get<string>(KEYS.device))!, dev.pubkey(), PAIRING.user_pubkey, PAIRING.token]) expect(text).not.toContain(secret);
+  });
+
+  test('before pairing, and with nothing saved yet', () => {
+    const text = debugText({ version: '0.1.0', flavour: 'dev', commit: 'unknown', browser: 'b', userAgent: 'u', online: false, defaultsUrl: 'd', devicePubkey: '00'.repeat(32), pairing: null, queue: [], movesChecked: NOW, history: [], now: NOW });
+    expect(text).toContain('Connected: no');
+    expect(text).toContain('Waiting: none');
+    expect(text).toContain('  none yet');
+    expect(text).toContain('Browser: b, offline');
   });
 });

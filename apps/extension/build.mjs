@@ -69,6 +69,17 @@ function manifest(browser) {
 
 const ENTRIES = ['bg', 'options', 'capture', 'toast', 'saved'];
 
+/** The commit for Copy debug info (decision 108); a build whose sources had changes says so. */
+function commit() {
+  const git = (...args) => execFileSync('git', args, { cwd: here, encoding: 'utf8' }).trim();
+  try {
+    const dirty = git('status', '--porcelain', '--', '.', '../../shared', '../../packages/protocol');
+    return git('rev-parse', '--short', 'HEAD') + (dirty ? '-dirty' : '');
+  } catch {
+    return 'unknown';
+  }
+}
+
 /**
  * The shared normaliser takes its URL record from whatwg-url, for Hermes; in a browser the platform's URL is the same
  * Standard, so the extension gets src/urlRecord.ts in its place and leaves out whatwg-url, tr46 and @exodus/bytes (about
@@ -95,7 +106,7 @@ async function build(browser) {
     target: browser === 'chrome' ? 'chrome116' : 'firefox121',
     minify: false,
     legalComments: 'inline',
-    define: { KEFLI_DEFAULTS_URL: JSON.stringify(defaultsUrl), KEFLI_FLAVOUR: JSON.stringify(flavour), KEFLI_BROWSER: JSON.stringify(browser) },
+    define: { KEFLI_DEFAULTS_URL: JSON.stringify(defaultsUrl), KEFLI_FLAVOUR: JSON.stringify(flavour), KEFLI_BROWSER: JSON.stringify(browser), KEFLI_COMMIT: JSON.stringify(commit()) },
     loader: { '.svg': 'text' },
     plugins: [platformUrl],
     logLevel: 'warning',
