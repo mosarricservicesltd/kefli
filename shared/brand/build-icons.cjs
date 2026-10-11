@@ -143,6 +143,13 @@ const feature = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 500">
   <text x="506" y="265" font-family="${NAME_FONT}" font-size="120" letter-spacing="-3" fill="${INK}">Kefli</text>
   ${strip(512, 297, 28, 4, 3)}
 </svg>`;
+// Chrome Web Store small promo tile, 440 x 280, opaque: the feature graphic's layout at 0.7, centred.
+const promo = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 280">
+  <rect width="440" height="280" fill="${PAPER}"/>
+  ${iconTile(44, 70, 140, 31.5)}
+  <text x="214.8" y="150.5" font-family="${NAME_FONT}" font-size="84" letter-spacing="-2.1" fill="${INK}">Kefli</text>
+  ${strip(219, 173, 20, 3, 2)}
+</svg>`;
 
 // Minimal PNG writer: resvg's own encoder always writes RGBA, and we need RGB for Play and our own
 // downsampled pixels for the small sizes.
@@ -253,6 +260,7 @@ png(tile(128, 16, 22), 128, 'extension/icon-128.png');
 copy(toolbar16, 'extension/icon-16.svg');
 copy(toolbar32, 'extension/icon-32.svg');
 copy(inlineLogo, 'extension/options-logo-28.svg');
+pngRgb(promo, 440, 'extension/cws-promo-tile.png');
 
 // Website. favicon.svg stays the 16 px drawing because tabs show it at 16 CSS px; the ICO carries the 16, 32 and 48 cuts.
 copy(small, 'web/favicon.svg');
@@ -283,6 +291,7 @@ const SIZES = {
   'android/notification-icon.png': [96, 96],
   'android/play-store-icon.png': [512, 512], 'android/play-feature-graphic.png': [1024, 500],
   'extension/icon-16.png': [16, 16], 'extension/icon-32.png': [32, 32], 'extension/icon-48.png': [48, 48], 'extension/icon-128.png': [128, 128],
+  'extension/cws-promo-tile.png': [440, 280],
   'web/apple-touch-icon.png': [180, 180], 'web/icon-192.png': [192, 192], 'web/icon-512.png': [512, 512], 'web/maskable-512.png': [512, 512], 'web/og-card.png': [1200, 630],
 };
 for (const [file, [w, h]] of Object.entries(SIZES)) {

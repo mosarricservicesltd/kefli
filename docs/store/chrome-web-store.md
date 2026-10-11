@@ -48,7 +48,7 @@ Kefli is open source under the AGPL. More at https://kefli.app
 3. `3-connect.png`: the options page's QR code for connecting the phone.
 4. `4-connected.png`: Connected, with the ways to save.
 
-They're drawn from the signed-off mockup (`docs/design/mockups/extension.html`), since headless Chrome draws no toolbar, by `node apps/extension/scripts/store-screenshots.mjs` after a dev build. The script swaps the mockup's real publication for an example address and draws a real QR code in place of the mockup's placeholder; run it again after any change to the mockup. A 440×280 small promo tile is optional.
+They're drawn from the signed-off mockup (`docs/design/mockups/extension.html`), since headless Chrome draws no toolbar, by `node apps/extension/scripts/store-screenshots.mjs` after a dev build. The script swaps the mockup's real publication for an example address and draws a real QR code in place of the mockup's placeholder; run it again after any change to the mockup. The small promo tile, 440×280, is `shared/brand/out/extension/cws-promo-tile.png`, made by the brand build (`shared/brand/build-icons.cjs`) with the Play feature graphic's layout.
 
 **Official URL:** none (kefli.app needs verifying in Search Console first; optional).
 
