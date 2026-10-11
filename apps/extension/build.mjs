@@ -2,7 +2,8 @@
 //
 //   node build.mjs dev              dist/dev-chrome and dist/dev-firefox, against the local stack
 //   node build.mjs beta             dist/beta-chrome and dist/beta-firefox, against KEFLI_DEFAULTS_URL (https)
-//   node build.mjs store            dist/store-chrome and dist/kefli-chrome-store-<version>.zip, for the Chrome Web Store
+//   node build.mjs store            dist/store-{chrome,firefox} and dist/kefli-{chrome,firefox}-store-<version>.zip, for
+//                                   the Chrome Web Store and addons.mozilla.org (docs/store)
 //   node build.mjs dev --watch      rebuild on change (then press reload on the extension's card)
 //
 // Never minified (spec 12). The parser is the phone's own bundle (shared/vendor), so a page reads the same here as
@@ -25,9 +26,14 @@ const CHROME_KEY = {
   dev: 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmfq0dwlbWTe7qdD+KoNlJrojk8RMNc5Eb5UgHvSY/Yp6qEw0ZjDRNVjyw7Xcy/5XngoSlxo8i2dScA22Sb0Fn0xfbseDrv9xZ9T3/f+GcijwBVuELFrHSewjcNEhJySdn/B7kGsBajZqmENgDuxZG9pxvpxEU/PFd0b+tLk4O7lNQTuQYUHLTxHX6lIJue0d6OxtnIYbabu/PbuiYhJPqX1Z2Yuz/k8+Xs+/B15H+GLG8Y5GbIfa6/sZBMS+FN45FJYAG16PLoymMc2LGmGkScnvjLcp0qhsATLD9z1JnIV/S/+DlOZ7GDjSl7opH9I/Bj4kZdxQ/CwQeHjEXrLAtQIDAQAB',
   beta: 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsdwVO/fq9qNZnpjkJCMXNE6+pL/cGESshCJ+fSVJO/w4H/rMkT4IrhmL97scMU0H6zeFmJRr7MBfpm+nRJhbCyuYEGgtilYQQSZjfqKPnNJgr854ZxQxdMuDIR5+nHuOllH/CeIumaHitXQxVZHx4L17kUUqunzrlXNQOsOjkeig8YM8uA7eRYI9ZpLdsPMqIgLiVfU24LByMO5sw7YuoXIp2w4j7luqHljZp+HyfLI59DzWdCO+0pTfw6hXDL/vYILmOmZu1VHtz+pbgQ0CRg4Bfmw6BV2P0dbkTMl22vJzL1TR4Xbq4whHhMaDiWYDjKRrd9EyOwSE/K24fTlJIwIDAQAB',
 };
-const GECKO_ID = { dev: 'dev@extension.kefli.app', beta: 'beta@extension.kefli.app' };
-// The store flavour is the beta build, against production, for Chrome's store only; AMO's listed build is still to come.
-const BROWSERS = { dev: ['chrome', 'firefox'], beta: ['chrome', 'firefox'], store: ['chrome'] };
+// The listed add-on on AMO is its own ID, apart from the self-hosted beta's, so the beta's update_url never meets AMO's
+// own updates.
+const GECKO_ID = { dev: 'dev@extension.kefli.app', beta: 'beta@extension.kefli.app', store: 'kefli@extension.kefli.app' };
+// The store flavour is the beta build, against production, for the Chrome Web Store and AMO.
+const BROWSERS = { dev: ['chrome', 'firefox'], beta: ['chrome', 'firefox'], store: ['chrome', 'firefox'] };
+// Firefox's data consent (extensionworkshop.com, firefox-builtin-data-consent): anything handled outside the add-on
+// counts, encrypted or not, and a save sends the page's text, title and address to Kefli's server for the user's phone.
+const DATA_COLLECTION = { required: ['websiteContent', 'browsingActivity'] };
 
 const direct = process.argv[1] === fileURLToPath(import.meta.url);
 const flavour = direct ? (process.argv[2] ?? 'dev') : 'dev';
@@ -62,7 +68,7 @@ function manifest(browser) {
     ...(flavour === 'dev' ? { content_security_policy: { extension_pages: "script-src 'self'" } } : {}),
     // The beta .xpi is signed unlisted and served from kefli.app, so it updates itself from the manifest
     // apps/web/publish-downloads.sh writes beside it.
-    browser_specific_settings: { gecko: { id: GECKO_ID[flavour], strict_min_version: '121.0', data_collection_permissions: { required: ['none'] },
+    browser_specific_settings: { gecko: { id: GECKO_ID[flavour], strict_min_version: '121.0', data_collection_permissions: DATA_COLLECTION,
       ...(flavour === 'beta' ? { update_url: 'https://kefli.app/downloads/firefox-updates.json' } : {}) } },
   };
 }
@@ -71,6 +77,8 @@ const ENTRIES = ['bg', 'options', 'capture', 'toast', 'saved'];
 
 /** The commit for Copy debug info (decision 108); a build whose sources had changes says so. */
 function commit() {
+  // A build from a source archive has no git: AMO's reviewers set KEFLI_COMMIT so their bundle matches (docs/store)
+  if (process.env.KEFLI_COMMIT) return process.env.KEFLI_COMMIT;
   const git = (...args) => execFileSync('git', args, { cwd: here, encoding: 'utf8' }).trim();
   try {
     const dirty = git('status', '--porcelain', '--', '.', '../../shared', '../../packages/protocol');
@@ -101,6 +109,8 @@ async function build(browser) {
   const ctx = await context({
     entryPoints: Object.fromEntries(ENTRIES.map((e) => [e, join(here, 'src', `${e}.ts`)])),
     outdir: out,
+    // the bundle's path comments are relative to this, so a build is the same from any directory (AMO's source review)
+    absWorkingDir: here,
     bundle: true,
     format: 'iife',
     target: browser === 'chrome' ? 'chrome116' : 'firefox121',
@@ -135,10 +145,12 @@ if (direct) {
     console.log('watching');
   } else await Promise.all(contexts.map((c) => c.dispose()));
   if (flavour === 'store') {
-    // the upload for the store's dashboard: the folder's contents at the zip's root, no extra fields (-X)
-    const zip = join(here, 'dist', `kefli-chrome-store-${pkg.version}.zip`);
-    rmSync(zip, { force: true });
-    execFileSync('zip', ['-qrX', zip, '.'], { cwd: join(here, 'dist', 'store-chrome') });
-    console.log(`zipped ${zip}`);
+    // each store's upload: the folder's contents at the zip's root, no extra fields (-X)
+    for (const browser of BROWSERS.store) {
+      const zip = join(here, 'dist', `kefli-${browser}-store-${pkg.version}.zip`);
+      rmSync(zip, { force: true });
+      execFileSync('zip', ['-qrX', zip, '.'], { cwd: join(here, 'dist', `store-${browser}`) });
+      console.log(`zipped ${zip}`);
+    }
   }
 }
