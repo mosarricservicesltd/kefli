@@ -4,7 +4,8 @@
 //      the user's 10002; every blob on the operator Blossom server; then DELETE /account. Unreachable after a
 //      minute of retries, or DELETE /account refused, and nothing else runs: the key stays, to try again.
 //   2. every other server: each other write relay gets kind 5s for every save, the connected-browsers record
-//      included, and the generated identity's lists (also sent to the indexer); each other Blossom server named in
+//      included, and the generated identity's lists, deleted and then replaced by empty ones (C§4.7: the indexer,
+//      which refuses kind 5, gets the empty lists alone); each other Blossom server named in
 //      a save's text.servers, the mirror among them, gets a delete for every blob. A relay is confirmed when it
 //      answered OK to every kind 5, a server when it answered 2xx or 404 to every delete; each gets a minute.
 //   3. the phone: the key file, Block Store, the database and the files.
@@ -137,18 +138,29 @@ async function listRewrites(p: DelPorts): Promise<NostrEvent[]> {
   return out;
 }
 
-/** Everything the deletion publishes, signed before anything is sent: for a nostr user, the approval in their app. */
-export type Signed = { wraps: NostrEvent[]; items: NostrEvent[]; lists: NostrEvent[]; nostr: boolean };
+/**
+ * The generated identity's lists emptied (C§4.7, v1.8): a newer kind 10002 and 10063 with no entries, a second after the
+ * kind 5, take the old lists' place on a relay that refuses or ignores the kind 5, the indexer among them.
+ */
+async function emptyLists(p: DelPorts, deletion: NostrEvent): Promise<NostrEvent[]> {
+  const at = deletion.created_at + 1;
+  return [await buildRelayList(p.signer, [], at), await buildServerList(p.signer, [], at)];
+}
+
+/**
+ * Everything the deletion publishes, signed before anything is sent: for a nostr user, the approval in their app.
+ * empties: a generated identity's emptied lists, sent after the kind 5s and not counted towards a relay's confirmation.
+ */
+export type Signed = { wraps: NostrEvent[]; items: NostrEvent[]; lists: NostrEvent[]; empties?: NostrEvent[]; nostr: boolean };
 
 export async function signDeletion(p: DelPorts): Promise<Signed> {
   const owner = p.signer.pubkey();
   const nostr = (p.db.get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local') !== 'local';
-  return {
-    wraps: await wrapDeletions(p, owner),
-    items: await buildDeletions(p.signer, allDs(p.db, owner), p.now()),
-    lists: nostr ? await listRewrites(p) : [await listDeletion(p)],
-    nostr,
-  };
+  const wraps = await wrapDeletions(p, owner);
+  const items = await buildDeletions(p.signer, allDs(p.db, owner), p.now());
+  if (nostr) return { wraps, items, lists: await listRewrites(p), nostr };
+  const deletion = await listDeletion(p);
+  return { wraps, items, lists: [deletion], empties: await emptyLists(p, deletion), nostr };
 }
 
 /** Sends every event to a relay; true when it answered OK to each (a relay that refuses one hasn't confirmed). */
@@ -169,7 +181,7 @@ async function stepOperator(p: DelPorts, owner: string, signed: Signed): Promise
   const op = p.defaults.operator;
   const inList = !!p.db.get("SELECT 1 FROM relays WHERE owner = ? AND url = ? AND source != 'indexer'", owner, op.relay);
   // in the 10002, it gets everything step 2 sends the other relays: the saves' deletions and the lists'
-  const events = [...signed.wraps, ...(inList ? [...signed.items, ...signed.lists] : [])];
+  const events = [...signed.wraps, ...(inList ? [...signed.items, ...signed.lists, ...(signed.empties ?? [])] : [])];
   // the relay answering at all is what this step needs; a kind 5 it refuses doesn't stop the account's deletion
   const reached = await withinMinute(p, async () => {
     for (const e of events) await p.publish(op.relay, e);
@@ -187,7 +199,9 @@ async function stepOperator(p: DelPorts, owner: string, signed: Signed): Promise
 
 async function stepOther(p: DelPorts, owner: string, t: Target, signed: Signed): Promise<boolean> {
   if (t.kind === 'server') return withinMinute(p, () => deleteBlobs(p, t.url, blobs(p.db, owner)));
-  return withinMinute(p, () => sendAll(p, t.url, [...signed.items, ...signed.lists]));
+  const confirmed = await withinMinute(p, () => sendAll(p, t.url, [...signed.items, ...signed.lists]));
+  await Promise.all((signed.empties ?? []).map((e) => p.publish(t.url, e).catch(() => undefined)));
+  return confirmed;
 }
 
 /**
@@ -209,8 +223,10 @@ export async function deleteEverything(p: DelPorts, report: (prog: Progress) => 
     }
     save(p, prog);
   }
-  // the lists go to the indexer as well, unreported: it holds nothing else of this identity
-  await Promise.all(p.defaults.indexer.flatMap((r) => signed.lists.map((e) => p.publish(r, e).catch(() => undefined))));
+  // the lists go to the indexer as well, unreported: it holds nothing else of this identity. It refuses kind 5, so a
+  // generated identity's lists are emptied there rather than deleted (C§4.7)
+  const forIndexer = signed.nostr ? signed.lists : signed.empties ?? [];
+  await Promise.all(p.defaults.indexer.flatMap((r) => forIndexer.map((e) => p.publish(r, e).catch(() => undefined))));
   await Promise.all(targets.filter((t) => prog.others[t.url] === 'wait').map(async (t) => {
     prog.others[t.url] = (await stepOther(p, owner, t, signed)) ? 'done' : 'fail';
     save(p, prog);

@@ -70,8 +70,12 @@ describe('Delete my data (mobile spec 7.2, contract 4.7)', () => {
     expect(op.flat().filter((x) => x[0] === 'a').map((x) => x[1].split(':')[2])).toEqual(expect.arrayContaining([`kefli/item/${h(1)}`, 'kefli/devices']));
     // the generated identity's lists go from every relay in the 10002, the operator's included, and the indexer
     expect(w.sent.some((s) => s.relay === 'ws://op' && s.event.tags.some((t) => t[1] === `10063:${w.pk}:`))).toBe(true);
-    // and the indexer
-    expect(w.sent.some((s) => s.relay === 'ws://idx' && s.event.tags.some((t) => t[1] === `10002:${w.pk}:`))).toBe(true);
+    // then emptied a second later on each of them; the indexer, which refuses kind 5, gets the empty lists alone
+    for (const relay of ['ws://op', 'ws://a', 'ws://b', 'ws://idx']) {
+      const empties = w.sent.filter((s) => s.relay === relay && s.event.kind !== 5).map((s) => s.event);
+      expect(empties.map((e) => [e.kind, e.tags.length, e.created_at]).sort()).toEqual([[10002, 0, 101], [10063, 0, 101]]);
+    }
+    expect(w.sent.some((s) => s.relay === 'ws://idx' && s.event.kind === 5)).toBe(false);
     expect(seen.at(-1)).toEqual({ operator: 'done', others: { 'ws://a': 'done', 'ws://b': 'done', 'http://m1': 'done' }, phone: 'done' });
   });
 
@@ -122,7 +126,7 @@ describe('the lists’ deletion', () => {
     const w = world();
     w.db.run("INSERT INTO lists (owner, kind, d, event_id, created_at, raw) VALUES (?, 10002, '', ?, 1, NULL)", w.pk, 'ee'.repeat(32));
     await deleteEverything(w.p, () => undefined);
-    const ev = w.sent.find((s) => s.relay === 'ws://idx')!.event;
+    const ev = w.sent.find((s) => s.relay === 'ws://a' && s.event.tags.some((t) => t[1] === `10002:${w.pk}:`))!.event;
     expect(ev.tags).toContainEqual(['e', 'ee'.repeat(32)]);
     expect(ev.tags).toContainEqual(['a', `10002:${w.pk}:`]);
   });
