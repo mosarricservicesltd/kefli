@@ -2,10 +2,12 @@
 //
 //   node build.mjs dev              dist/dev-chrome and dist/dev-firefox, against the local stack
 //   node build.mjs beta             dist/beta-chrome and dist/beta-firefox, against KEFLI_DEFAULTS_URL (https)
+//   node build.mjs store            dist/store-chrome and dist/kefli-chrome-store-<version>.zip, for the Chrome Web Store
 //   node build.mjs dev --watch      rebuild on change (then press reload on the extension's card)
 //
 // Never minified (spec 12). The parser is the phone's own bundle (shared/vendor), so a page reads the same here as
 // in the app's WebView; the cover is cover-v1.js, unmodified.
+import { execFileSync } from 'node:child_process';
 import { context } from 'esbuild';
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -17,16 +19,19 @@ const repo = join(here, '..', '..');
 const pkg = JSON.parse(readFileSync(join(here, 'package.json'), 'utf8'));
 
 // Fixed public keys, so an unpacked build has the same ID on every machine (spec 11); the private halves were
-// never kept, since nothing is ever signed with them for Chrome's store.
+// never kept, since nothing is ever signed with them for Chrome's store. The store build carries no key: the store
+// assigns the ID, and refuses a manifest with one.
 const CHROME_KEY = {
   dev: 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmfq0dwlbWTe7qdD+KoNlJrojk8RMNc5Eb5UgHvSY/Yp6qEw0ZjDRNVjyw7Xcy/5XngoSlxo8i2dScA22Sb0Fn0xfbseDrv9xZ9T3/f+GcijwBVuELFrHSewjcNEhJySdn/B7kGsBajZqmENgDuxZG9pxvpxEU/PFd0b+tLk4O7lNQTuQYUHLTxHX6lIJue0d6OxtnIYbabu/PbuiYhJPqX1Z2Yuz/k8+Xs+/B15H+GLG8Y5GbIfa6/sZBMS+FN45FJYAG16PLoymMc2LGmGkScnvjLcp0qhsATLD9z1JnIV/S/+DlOZ7GDjSl7opH9I/Bj4kZdxQ/CwQeHjEXrLAtQIDAQAB',
   beta: 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsdwVO/fq9qNZnpjkJCMXNE6+pL/cGESshCJ+fSVJO/w4H/rMkT4IrhmL97scMU0H6zeFmJRr7MBfpm+nRJhbCyuYEGgtilYQQSZjfqKPnNJgr854ZxQxdMuDIR5+nHuOllH/CeIumaHitXQxVZHx4L17kUUqunzrlXNQOsOjkeig8YM8uA7eRYI9ZpLdsPMqIgLiVfU24LByMO5sw7YuoXIp2w4j7luqHljZp+HyfLI59DzWdCO+0pTfw6hXDL/vYILmOmZu1VHtz+pbgQ0CRg4Bfmw6BV2P0dbkTMl22vJzL1TR4Xbq4whHhMaDiWYDjKRrd9EyOwSE/K24fTlJIwIDAQAB',
 };
 const GECKO_ID = { dev: 'dev@extension.kefli.app', beta: 'beta@extension.kefli.app' };
+// The store flavour is the beta build, against production, for Chrome's store only; AMO's listed build is still to come.
+const BROWSERS = { dev: ['chrome', 'firefox'], beta: ['chrome', 'firefox'], store: ['chrome'] };
 
 const direct = process.argv[1] === fileURLToPath(import.meta.url);
 const flavour = direct ? (process.argv[2] ?? 'dev') : 'dev';
-if (!(flavour in CHROME_KEY)) throw new Error(`unknown flavour ${flavour}: dev or beta`);
+if (!(flavour in BROWSERS)) throw new Error(`unknown flavour ${flavour}: dev, beta or store`);
 const defaultsUrl = flavour === 'dev' ? 'http://localhost:8447/defaults.json' : process.env.KEFLI_DEFAULTS_URL;
 if (!defaultsUrl || (flavour !== 'dev' && !defaultsUrl.startsWith('https://'))) throw new Error('set KEFLI_DEFAULTS_URL to the operator\'s https defaults.json');
 
@@ -42,7 +47,9 @@ function manifest(browser) {
     permissions: ['activeTab', 'scripting', 'storage', 'alarms', 'contextMenus'],
     options_ui: { page: 'options.html', open_in_tab: true },
   };
-  if (browser === 'chrome') return { ...m, key: CHROME_KEY[flavour], minimum_chrome_version: '116', background: { service_worker: 'bg.js' } };
+  if (browser === 'chrome') {
+    return { ...m, ...(CHROME_KEY[flavour] ? { key: CHROME_KEY[flavour] } : {}), minimum_chrome_version: '116', background: { service_worker: 'bg.js' } };
+  }
   // Firefox takes the toolbar button's SVGs at 16 and 32, and puts the button in the navbar (mockup build notes)
   const svg = { 16: 'icons/icon-16.svg', 32: 'icons/icon-32.svg' };
   return {
@@ -110,9 +117,17 @@ async function build(browser) {
 }
 
 if (direct) {
-  const contexts = [await build('chrome'), await build('firefox')];
+  const contexts = [];
+  for (const browser of BROWSERS[flavour]) contexts.push(await build(browser));
   if (process.argv.includes('--watch')) {
     await Promise.all(contexts.map((c) => c.watch()));
     console.log('watching');
   } else await Promise.all(contexts.map((c) => c.dispose()));
+  if (flavour === 'store') {
+    // the upload for the store's dashboard: the folder's contents at the zip's root, no extra fields (-X)
+    const zip = join(here, 'dist', `kefli-chrome-store-${pkg.version}.zip`);
+    rmSync(zip, { force: true });
+    execFileSync('zip', ['-qrX', zip, '.'], { cwd: join(here, 'dist', 'store-chrome') });
+    console.log(`zipped ${zip}`);
+  }
 }

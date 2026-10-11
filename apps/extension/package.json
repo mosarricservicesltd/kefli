@@ -7,6 +7,7 @@
     "build": "node build.mjs dev",
     "build:dev": "node build.mjs dev",
     "build:beta": "node build.mjs beta",
+    "build:store": "node build.mjs store",
     "watch": "node build.mjs dev --watch",
     "typecheck": "tsc --noEmit",
     "fixtures": "node build.mjs dev && node scripts/fixtures.mjs",
