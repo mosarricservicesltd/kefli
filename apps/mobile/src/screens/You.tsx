@@ -55,7 +55,7 @@ function RecoverySheet({ owner, close }: { owner: string; close: () => void }) {
     markBackupDone(store());
   };
   const cell = (i: number) => (
-    <View key={i} style={{ width: '48.5%', height: 40, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, borderRadius: radius.control, backgroundColor: c.background }}>
+    <View key={i} style={{ height: 40, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, borderRadius: radius.control, backgroundColor: c.background }}>
       <T muted style={[ui(13, 'body', 1), { width: 18, textAlign: 'right' }]}>{i + 1}</T>
       {words ? <T style={ui(15, 'meta', 1.2)}>{words[i]}</T> : <View style={{ width: BARS[i], height: 8, borderRadius: 999, backgroundColor: c.lineStrong, opacity: 0.28 }} />}
     </View>
@@ -65,8 +65,11 @@ function RecoverySheet({ owner, close }: { owner: string; close: () => void }) {
       <T accessibilityRole="header" style={[ui(20, 'emptyHeading', 1.3, -0.01), { marginBottom: 4 }]}>{S.you.sheetTitle}</T>
       <T muted style={[ui(13, 'body', 1.45), { marginBottom: 16 }]}>{S.you.sheetBody}</T>
       <View style={{ marginBottom: 16 }}>
-        <View importantForAccessibility={words ? 'auto' : 'no-hide-descendants'} style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 8 }}>
-          {Array.from({ length: 12 }, (_, i) => cell(i))}
+        {/* numbered down the columns, 1 to 6 then 7 to 12, as the words are written down (FD 106) */}
+        <View importantForAccessibility={words ? 'auto' : 'no-hide-descendants'} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          {[0, 6].map((from) => (
+            <View key={from} style={{ width: '48.5%', gap: 8 }}>{Array.from({ length: 6 }, (_, k) => cell(from + k))}</View>
+          ))}
         </View>
         {!words && (
           <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', gap: 8 }}>

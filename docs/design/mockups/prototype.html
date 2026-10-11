@@ -1978,7 +1978,7 @@ function bindCode(){
       const v = parts[0], was = C.words[i] || '';
       C.words[i] = v;
       // decision 106: once the letters fit only one word, it fills in and the next field takes over; never on a deletion
-      const only = v && v.length > was.length && !WORDSET.has(v) ? WORDLIST.filter(w => w.startsWith(v)) : [];
+      const only = v && v.length > was.length ? WORDLIST.filter(w => w.startsWith(v)) : [];
       if (only.length === 1) {
         C.words[i] = only[0];
         if (i < 11) { C.spill = { i: i + 1, rest: only[0].slice(v.length), typed: '' }; C.focus = i + 1; }
