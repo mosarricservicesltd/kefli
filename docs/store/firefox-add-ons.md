@@ -82,7 +82,7 @@ The menu item reads "Save Link to Kefli" in Firefox, in title case as Firefox's 
 
 **Privacy policy:** AMO wants the text itself. Paste the extension privacy note, kefli.app/extension-privacy, from "What it reads" to the end, with the contact line as "Write to privacy@kefli.app."
 
-**Screenshots** (AMO shows them at 1280×800): `docs/store/screenshots/1-saved.png`, `3-connect.png` and `4-connected.png`. Leave out `2-save-link.png`, whose menu is Chrome's ("Open link in incognito window", "Save link to Kefli"); the other three show `chrome-extension://` in the address bar and "Chrome on a Windows PC", so Firefox versions of all four are a small change to `apps/extension/scripts/store-screenshots.mjs` when wanted.
+**Screenshots** (AMO shows them at 1280×800): the four in `docs/store/screenshots/firefox/`, in order: `1-saved.png` (the Saved notice with Undo), `2-save-link.png` (Save Link to Kefli in the right-click menu), `3-connect.png` (the QR code for connecting the phone) and `4-connected.png` (Connected, with the ways to save). They're the Chrome set with Firefox's details: the `moz-extension://` address, "Firefox on a Windows PC", and Firefox's wording in the link menu, as the Firefox build uses. Make them again with `node apps/extension/scripts/store-screenshots.mjs --firefox` after a dev build.
 
 **Icon:** AMO takes it from the manifest (`icons/icon-128.png`).
 
