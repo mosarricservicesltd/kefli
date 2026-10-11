@@ -14,7 +14,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 // NIP-55 signer apps (mobile spec 8.4): Amber and compatible. Each call tries the signer's content resolver first,
 // which answers without showing anything once the user has allowed the permission, and falls back to the
-// nostrsigner: intent, which shows the signer's own screen. Errors: rejected, not_installed, timeout, unavailable.
+// nostrsigner: intent, which shows the signer's own screen. Errors: rejected, not_installed, timeout, unavailable, and
+// background for a request declined out of sight that may not open the screen (FD 104).
 // Payloads (events, plaintext, ciphertext) are never logged.
 class KefliNip55Module : Module() {
   private val context get() = requireNotNull(appContext.reactContext) { "no React context" }
@@ -49,6 +50,12 @@ class KefliNip55Module : Module() {
       Log.i("KefliNip55", "$type resolver: ${e.javaClass.simpleName}")
       null
     }
+  }
+
+  /** Declined out of sight, and not ours to put the signer's screen in front of the person (FD 104): the work waits. */
+  private fun background(promise: Promise, what: String) {
+    Log.i("KefliNip55", "$what declined in the background; the signer's screen stays closed")
+    promise.reject(Nip55Error("background"))
   }
 
   private fun launch(promise: Promise, want: String, intent: Intent) {
@@ -88,8 +95,9 @@ class KefliNip55Module : Module() {
       launch(promise, "login", intent)
     }
 
-    // the resolver takes the user's key as hex, the signer's screen as an npub (NIP-55)
-    AsyncFunction("signEvent") { pkg: String, eventJson: String, hex: String, npub: String, promise: Promise ->
+    // the resolver takes the user's key as hex, the signer's screen as an npub (NIP-55). screen: whether a request the
+    // resolver declines may open the signer's screen; work out of sight passes false, and waits instead (FD 104)
+    AsyncFunction("signEvent") { pkg: String, eventJson: String, hex: String, npub: String, screen: Boolean, promise: Promise ->
       val kind = try { JSONObject(eventJson).optInt("kind", -1) } catch (e: Exception) { -1 }
       Log.i("KefliNip55", "sign_event kind $kind")
       try {
@@ -98,6 +106,7 @@ class KefliNip55Module : Module() {
       } catch (e: Nip55Error) {
         return@AsyncFunction promise.reject(e)
       }
+      if (!screen) return@AsyncFunction background(promise, "sign_event kind $kind")
       launch(promise, "event", signerIntent(pkg, eventJson, "sign_event").putExtra("id", "kefli").putExtra("current_user", npub))
     }
 
@@ -111,12 +120,12 @@ class KefliNip55Module : Module() {
       }
     }
 
-    AsyncFunction("nip44Encrypt") { pkg: String, plaintext: String, peer: String, hex: String, npub: String, promise: Promise ->
-      crypt(pkg, "NIP44_ENCRYPT", "nip44_encrypt", plaintext, peer, hex, npub, promise)
+    AsyncFunction("nip44Encrypt") { pkg: String, plaintext: String, peer: String, hex: String, npub: String, screen: Boolean, promise: Promise ->
+      crypt(pkg, "NIP44_ENCRYPT", "nip44_encrypt", plaintext, peer, hex, npub, screen, promise)
     }
 
-    AsyncFunction("nip44Decrypt") { pkg: String, ciphertext: String, peer: String, hex: String, npub: String, promise: Promise ->
-      crypt(pkg, "NIP44_DECRYPT", "nip44_decrypt", ciphertext, peer, hex, npub, promise)
+    AsyncFunction("nip44Decrypt") { pkg: String, ciphertext: String, peer: String, hex: String, npub: String, screen: Boolean, promise: Promise ->
+      crypt(pkg, "NIP44_DECRYPT", "nip44_decrypt", ciphertext, peer, hex, npub, screen, promise)
     }
 
     // Whether the signer answers through its resolver, without its screen: then background drains can run (4.7).
@@ -146,13 +155,14 @@ class KefliNip55Module : Module() {
     }
   }
 
-  private fun crypt(pkg: String, type: String, intentType: String, text: String, peer: String, hex: String, npub: String, promise: Promise) {
+  private fun crypt(pkg: String, type: String, intentType: String, text: String, peer: String, hex: String, npub: String, screen: Boolean, promise: Promise) {
     try {
       val r = resolve(pkg, type, arrayOf(text, peer, hex))
       if (r?.first != null) return promise.resolve(r.first)
     } catch (e: Nip55Error) {
       return promise.reject(e)
     }
+    if (!screen) return background(promise, intentType)
     launch(promise, "result", signerIntent(pkg, text, intentType).putExtra("pubkey", peer).putExtra("id", "kefli").putExtra("current_user", npub))
   }
 }

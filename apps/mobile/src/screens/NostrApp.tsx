@@ -5,7 +5,7 @@
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { radius } from '@kefli/tokens';
-import type { BackgroundNeed, SignerProvider } from '@kefli/protocol';
+import { Nip55Signer, type BackgroundNeed, type SignerProvider } from '@kefli/protocol';
 import { KefliNip55 } from '../../modules/kefli-nip55/src';
 import { unsentSaves } from '../data/backup';
 import { asksBeforeSaving } from '../data/nostrCheck';
@@ -50,15 +50,16 @@ function SignOutSheet({ unsent, close }: { unsent: number; close: () => void }) 
   );
 }
 
-/** The signer app's name from its package, or the sign-in link; null until known. */
+/** The signer app's name, from the package the signer reaches (the key file has it), or the sign-in link; null until known. */
 function useSignedInWith(): string | null {
   const [name, setName] = useState<string | null>(null);
   useEffect(() => {
     (async () => {
-      const id = store().get<{ provider: string; signer_package: string | null }>("SELECT provider, signer_package FROM identities WHERE role = 'active'");
-      if (id?.provider === 'nip46') return setName(S.nostrApp.link);
+      const signer = await currentSigner();
+      if (signer?.kind === 'nip46') return setName(S.nostrApp.link);
+      if (!(signer instanceof Nip55Signer)) return;
       const apps = await KefliNip55.listSigners().catch(() => []);
-      setName(apps.find((a) => a.package === id?.signer_package)?.label ?? null);
+      setName(apps.find((a) => a.package === signer.package)?.label ?? signer.package);
     })();
   }, []);
   return name;

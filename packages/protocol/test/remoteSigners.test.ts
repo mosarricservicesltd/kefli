@@ -104,6 +104,26 @@ describe('the user’s own nostr app (contract 2)', () => {
       expect(asked).toEqual(['encrypt']);
     });
 
+    test('a signer out of sight never asks for the screen; withScreen does, and approving always does', async () => {
+      const real = new LocalSigner(nodeCrypto.randomBytes(32));
+      const screens: string[] = [];
+      const port: Nip55Port = {
+        signEvent: async (_pkg, json, _pk, screen) => (screens.push(`sign ${screen}`), JSON.stringify(await real.signEvent(JSON.parse(json)))),
+        nip44Encrypt: async (_pkg, text, peer, _pk, screen) => (screens.push(`encrypt ${screen}`), real.nip44Encrypt(peer, text)),
+        nip44Decrypt: async (_pkg, text, peer, _pk, screen) => (screens.push(`decrypt ${screen}`), real.nip44Decrypt(peer, text)),
+        canActInBackground: async () => true,
+        signInBackground: async () => false,
+      };
+      const quiet = new Nip55Signer(port, 'pkg', real.pubkey(), 20, false);
+      await quiet.signEvent({ kind: 30078, created_at: 1, tags: [], content: '' });
+      await quiet.nip44Decrypt(real.pubkey(), await quiet.nip44Encrypt(real.pubkey(), 'x'));
+      await quiet.withScreen().signEvent({ kind: 5, created_at: 1, tags: [], content: '' });
+      await quiet.approve([24242], () => undefined);
+      await quiet.withScreen().outOfSight().signEvent({ kind: 5, created_at: 1, tags: [], content: '' });
+      expect(screens).toEqual(['sign false', 'encrypt false', 'decrypt false', 'sign true', 'sign true', 'sign false']);
+      expect(new Nip55Signer(port, 'pkg', real.pubkey()).screen).toBe(true); // a fresh signer, as at sign-in, may ask
+    });
+
     test('the probe events are throwaways that never replace a real one', () => {
       for (const kind of BACKGROUND_KINDS) {
         const e = probeEvent(kind);

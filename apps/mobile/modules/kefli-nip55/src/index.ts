@@ -6,9 +6,9 @@ import { nip55Permissions, type Nip55Port } from '@kefli/protocol';
 const native = requireNativeModule<{
   listSigners(): Promise<{ package: string; label: string }[]>;
   getPublicKey(pkg: string | null, permissions: string): Promise<{ pubkey: string; package: string }>;
-  signEvent(pkg: string, eventJson: string, hex: string, npub: string): Promise<string>;
-  nip44Encrypt(pkg: string, plaintext: string, peer: string, hex: string, npub: string): Promise<string>;
-  nip44Decrypt(pkg: string, ciphertext: string, peer: string, hex: string, npub: string): Promise<string>;
+  signEvent(pkg: string, eventJson: string, hex: string, npub: string, screen: boolean): Promise<string>;
+  nip44Encrypt(pkg: string, plaintext: string, peer: string, hex: string, npub: string, screen: boolean): Promise<string>;
+  nip44Decrypt(pkg: string, ciphertext: string, peer: string, hex: string, npub: string, screen: boolean): Promise<string>;
   canActInBackground(pkg: string, peer: string, hex: string): Promise<boolean>;
   signInBackground(pkg: string, eventJson: string, hex: string): Promise<boolean>;
 }>('KefliNip55');
@@ -27,9 +27,9 @@ export const KefliNip55 = {
 
 /** The port Nip55Signer calls (packages/protocol). */
 export const nip55Port: Nip55Port = {
-  signEvent: (pkg, json, pk) => native.signEvent(pkg, json, pk, npub(pk)),
-  nip44Encrypt: (pkg, text, peer, pk) => native.nip44Encrypt(pkg, text, peer, pk, npub(pk)),
-  nip44Decrypt: (pkg, text, peer, pk) => native.nip44Decrypt(pkg, text, peer, pk, npub(pk)),
+  signEvent: (pkg, json, pk, screen) => native.signEvent(pkg, json, pk, npub(pk), screen),
+  nip44Encrypt: (pkg, text, peer, pk, screen) => native.nip44Encrypt(pkg, text, peer, pk, npub(pk), screen),
+  nip44Decrypt: (pkg, text, peer, pk, screen) => native.nip44Decrypt(pkg, text, peer, pk, npub(pk), screen),
   canActInBackground: (pkg, pk) => native.canActInBackground(pkg, pk, pk),
   signInBackground: (pkg, json, pk) => native.signInBackground(pkg, json, pk),
 };

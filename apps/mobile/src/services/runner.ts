@@ -7,7 +7,7 @@ import { phoneCrypto } from '../crypto/port';
 import { nativeSecp } from '../crypto/secp';
 import { RelayPool } from '../net/pool';
 import { LOCAL_STACK, loadDefaults, type Defaults } from './config';
-import { currentSigner, retireSourceKeys, setCurrentSigner, signerOf } from './identity';
+import { currentSigner, retireSourceKeys, setCurrentSigner, signerOf, withScreen } from './identity';
 import { launchPlan } from './launchState';
 import { drain } from './send';
 import { syncInbound, syncOwner, type SyncPorts, type SyncResult } from './sync';
@@ -169,7 +169,8 @@ export function runMoveJob(): Promise<MoveOutcome> {
         if (ids.length > 1) console.log(`[kefli-move] ${JSON.stringify({ outcome: 'no job', ids, jobs })}`);
         return 'done';
       }
-      const [source, target] = await Promise.all([signerOf(job.from), signerOf(job.to)]);
+      // the person watches a move run, so the new nostr app may ask on its screen (FD 104)
+      const [source, target] = await Promise.all([signerOf(job.from), signerOf(job.to)].map((p) => p.then((s) => s && withScreen(s))));
       if (!source || !target) {
         console.log(`[kefli-move] ${JSON.stringify({ outcome: 'waiting', missing: !source ? 'source key' : 'target key' })}`);
         return 'waiting';
