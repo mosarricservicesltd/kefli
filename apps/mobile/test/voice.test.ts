@@ -40,9 +40,10 @@ describe('the listening clock (mobile spec 5.7)', () => {
     // a rate measured is its own; one not yet heard is 1×'s scaled by the seed; with nothing learned, the seed of 3.9
     expect(wpsFor(get, 'v', 1)).toBe(3.2);
     expect(wpsFor(get, 'v', 1.5)).toBe(3.3);
-    expect(wpsFor(get, 'v', 2)).toBeCloseTo(3.2 * 0.82);
+    expect(wpsFor(get, 'v', 2)).toBe(3.2);
     expect(wpsFor(get, 'v', 0.5)).toBeCloseTo(3.2 * 1.3);
-    expect(wpsFor(get, 'w', 2)).toBeCloseTo(WPS_SEED * 0.82);
+    expect(wpsFor(get, 'w', 2)).toBe(WPS_SEED);
+    expect(wpsFor(get, 'w', 0.5)).toBeCloseTo(WPS_SEED * 1.3);
     expect(wpsFor(get, 'none', 1)).toBe(WPS_SEED);
   });
 

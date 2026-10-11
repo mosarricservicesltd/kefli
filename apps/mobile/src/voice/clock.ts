@@ -61,9 +61,10 @@ export function wpsKey(voice: string, rate: number): string {
 
 /**
  * How a rate's words a second stand to 1×'s before it has been heard, from Google's en-GB voice on the Pixel
- * (11 October 2026: 2× read at 1.65×, 0.5× at 0.65×). RULED: a seed only; the engine learns the real value.
+ * (11 October 2026: 0.5× reads at about 0.65×, as the voice goes no slower; 2× is tuned in the engine to a true
+ * 2×). RULED: a seed only; the engine learns the real value.
  */
-const RATE_SEED: Record<number, number> = { 0.5: 1.3, 1: 1, 1.5: 1, 2: 0.82 };
+const RATE_SEED: Record<number, number> = { 0.5: 1.3, 1: 1, 1.5: 1, 2: 1 };
 
 /** A voice's words a second at a rate: its own once measured, else 1×'s scaled by the seed. */
 export function wpsFor(get: (key: string) => string | null, voice: string, rate: number): number {
