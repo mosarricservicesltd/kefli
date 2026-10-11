@@ -41,7 +41,14 @@ You need the Kefli app on an Android phone. Install the extension, click its but
 Kefli is open source under the AGPL. More at https://kefli.app
 ```
 
-**Graphics:** the 128-pixel icon is in the package (`icons/icon-128.png`). At least one 1280×800 screenshot is required; the useful three are the toolbar button with the Saved popup over an article, the pairing QR code on the options page, and the same article in the phone's reader. A 440×280 small promo tile is optional.
+**Graphics:** the 128-pixel icon is in the package (`icons/icon-128.png`). The screenshots are in `docs/store/screenshots/`, 1280×800 PNGs to upload in this order:
+
+1. `1-saved.png`: the Saved toast, with Undo, over an article.
+2. `2-save-link.png`: Save link to Kefli in the right-click menu.
+3. `3-connect.png`: the options page's QR code for connecting the phone.
+4. `4-connected.png`: Connected, with the ways to save.
+
+They're drawn from the signed-off mockup (`docs/design/mockups/extension.html`), since headless Chrome draws no toolbar, by `node apps/extension/scripts/store-screenshots.mjs` after a dev build. The script swaps the mockup's real publication for an example address, takes the build's browser label ("Chrome on a Windows PC"), and draws a real QR code in place of the mockup's placeholder; run it again after any change to the mockup. A 440×280 small promo tile is optional.
 
 **Official URL:** none (kefli.app needs verifying in Search Console first; optional).
 
