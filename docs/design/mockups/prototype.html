@@ -2115,7 +2115,7 @@ function startRestore(opts = {}){
 /* ---------------- You (batch 4) ---------------- */
 const freshYou = () => ({
   backupDone: false, backupHidden: false, nostrUser: false, voices: 1, voiceSel: 0, speed: 1, sampling: null,
-  codeShown: false, copied: false, browsers: [{ name: 'Chrome on a Windows laptop', when: 'Connected 27 September' }], disconnect: null,
+  codeShown: false, copied: false, browsers: [{ name: 'Chrome on a Windows PC', when: 'Connected 27 September' }], disconnect: null,
   conn: 'scan', connectFrom: 'browsers', camOK: true, typed: '', dev: 'show', countdown: 298, relayDown: false, sw: 'explain', swDone: 0,
   del: 'explain', delTyped: '', steps: [], notBacked: 0, exportFail: false,
 });
@@ -2274,7 +2274,7 @@ function connectScreen(){
   if (st === 'confirm' || st === 'busy') {
     // Kefli's own network step shows in the pressed button; the card stays and Cancel is unavailable (fix 21)
     const busy = st === 'busy';
-    return onbShell(`<h1>Connect this browser?</h1><div class="confirmcard"><span class="ico">${ic('laptop', 26)}</span><b>Chrome on a Windows laptop</b><span>Pages you save there will come to this library.</span></div>`,
+    return onbShell(`<h1>Connect this browser?</h1><div class="confirmcard"><span class="ico">${ic('laptop', 26)}</span><b>Chrome on a Windows PC</b><span>Pages you save there will come to this library.</span></div>`,
       `<button class="btn primary full ${busy ? 'busy' : ''}" data-you-act="conn-go" ${busy ? 'aria-busy="true"' : ''}>${busyLabel('conngo', busy, 'Connecting', 'Connect')}</button><button class="btn secondary full" data-onb-go="${from}" ${busy ? 'disabled' : ''}>Cancel</button>`, busy ? null : from);
   }
   if (st === 'ask' || st === 'prompt') {
@@ -2520,7 +2520,7 @@ vp.addEventListener('click', e => {
       // busy in the pressed button, then back to the launcher with the toast (fix 21)
       if (Y.conn === 'busy') return;
       Y.conn = 'busy';
-      later(() => { Y.browsers.push({ name: 'Chrome on a Windows laptop', when: 'Connected just now' }); Y.conn = 'scan'; leaveConnect(); showToast('Connected to Chrome on a Windows laptop', null, null, { delay: MT.exit.duration }); render(); }, 1600);
+      later(() => { Y.browsers.push({ name: 'Chrome on a Windows PC', when: 'Connected just now' }); Y.conn = 'scan'; leaveConnect(); showToast('Connected to Chrome on a Windows PC', null, null, { delay: MT.exit.duration }); render(); }, 1600);
       break;
     case 'voice': Y.voiceSel = i; break;
     case 'sample': Y.sampling = i; later(() => { if (Y.sampling === i) { Y.sampling = null; render(); } }, 1800); break;
@@ -2573,7 +2573,7 @@ function youJump(j){
     Y.conn = { 'conn-ask': 'ask', 'conn-scan': 'scan', 'conn-type': 'type', 'conn-typewrong': 'typewrong', 'conn-confirm': 'confirm', 'conn-busy': 'busy', 'conn-refused': 'refused', 'conn-expired': 'expired', 'conn-failed': 'failed' }[j];
     Y.camOK = j !== 'conn-ask';
     if (j === 'conn-typewrong') Y.typed = 'K7QM-4XPB';
-    if (j === 'conn-busy') later(() => { Y.browsers.push({ name: 'Chrome on a Windows laptop', when: 'Connected just now' }); Y.conn = 'scan'; leaveConnect(); showToast('Connected to Chrome on a Windows laptop', null, null, { delay: MT.exit.duration }); render(); }, 1600);
+    if (j === 'conn-busy') later(() => { Y.browsers.push({ name: 'Chrome on a Windows PC', when: 'Connected just now' }); Y.conn = 'scan'; leaveConnect(); showToast('Connected to Chrome on a Windows PC', null, null, { delay: MT.exit.duration }); render(); }, 1600);
   }
   else if (j === 'voice') { at('voice'); Y.voices = 3; }
   else if (j === 'adv') at('advanced');

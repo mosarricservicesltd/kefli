@@ -6,9 +6,9 @@
 // It runs in the same headless Chrome as chrome.mjs, which loads the dev build, so build that first
 // (npm run build -w @kefli/extension).
 //
-// Before each capture the address bar loses the mockup's real publication for an example address, the browser label
-// takes the build's wording (src/pair.ts browserLabel), and the placeholder QR becomes a real one, drawn as
-// src/options.ts draws it, carrying an offer of the real shape with throwaway values. Each shot gets a fresh browser.
+// Before each capture the address bar loses the mockup's real publication for an example address, and the placeholder
+// QR becomes a real one, drawn as src/options.ts draws it, carrying an offer of the real shape with throwaway values.
+// Each shot gets a fresh browser.
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -38,7 +38,7 @@ const FILL = `
   .wrap{padding:0!important;margin:0!important;max-width:none!important;display:block!important}
   .win{width:${W}px!important;max-width:none!important;height:${H}px!important;margin:0!important;border-radius:0!important;box-shadow:none!important;border:0!important}
   .page{height:${H - 84}px!important}`;
-const SWAPS = [['theatlantic.com/ideas/archive/2026/09/reading-long-things', 'example.com/essays/reading-long-things'], ['theatlantic.com', 'example.com'], ['Windows laptop', 'Windows PC']];
+const SWAPS = [['theatlantic.com/ideas/archive/2026/09/reading-long-things', 'example.com/essays/reading-long-things'], ['theatlantic.com', 'example.com']];
 
 mkdirSync(outdir, { recursive: true });
 for (const [jump, name] of SHOTS) {
@@ -59,7 +59,7 @@ for (const [jump, name] of SHOTS) {
     // the options page at this scale overflows a little: no scrollbar, and its end in view rather than a line cut in half
     const o = document.querySelector('#win .opts');
     if (o) { o.style.scrollbarWidth = 'none'; o.scrollTop = o.scrollHeight; }
-    return document.getElementById('win').innerText.match(/atlantic|laptop/gi);
+    return document.getElementById('win').innerText.match(/atlantic/gi);
   })()`);
   if (left) throw new Error(`${jump}: ${left.join(', ')} still on the page`);
   if (p.errors.length) throw new Error(`${jump}: ${p.errors.join('; ')}`);
@@ -68,5 +68,9 @@ for (const [jump, name] of SHOTS) {
   const file = path.join(outdir, `${name}.png`);
   writeFileSync(file, Buffer.from(shot.data, 'base64'));
   console.log(file);
-  await x.close();
+  // close() kills Chrome without waiting for it to exit; a moment's pause keeps the next shot's Chrome from meeting it
+  p.ws.close();
+  x.close();
+  await sleep(1500);
 }
+process.exit(0);
