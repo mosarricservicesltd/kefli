@@ -3,7 +3,7 @@
 # offline: zsp builds the events for the Kefli account unsigned, the files go to Zapstore's Blossom server, and Amber
 # signs through the repo's bunker connection. apps/mobile/scripts/build-release.sh builds the APK.
 pubkey: npub1gltmgu8m23txy5sxragwgek7wv4shvgxnezy4zw3npc98sgey3dsfwgf2r
-release_source: ./apps/mobile/dist/kefli-0.0.3.apk
+release_source: ./apps/mobile/dist/kefli-0.0.4.apk
 repository: https://github.com/mosarricservicesltd/kefli
 name: Kefli
 summary: Save anything, read it clean and offline, listen to it.

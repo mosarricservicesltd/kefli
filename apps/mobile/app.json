@@ -3,7 +3,7 @@
     "name": "Kefli",
     "slug": "kefli",
     "scheme": "kefli",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "orientation": "portrait",
     "icon": "./assets/brand/icon.png",
     "userInterfaceStyle": "automatic",
@@ -12,7 +12,7 @@
     },
     "android": {
       "package": "app.kefli",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "foregroundImage": "./assets/brand/adaptive-foreground.png",
         "backgroundImage": "./assets/brand/adaptive-background.png",
