@@ -28,7 +28,7 @@ MS still says draft although FD 73 signed it off. Files that C§3.1, §4.2, §4.
 
 | File | Writer | By |
 |---|---|---|
-| `shared/normalise.ts` and its fixtures | Mobile engineer drafts; project engineer owns. Written 6 October 2026; the choices the contract left open were settled in contract v1.4 (C§11.2) and are listed in the fixtures' `rulings` | End of week 0 |
+| `shared/normalise.ts` and its fixtures | Mobile engineer drafts; project engineer owns. Written 6 October 2026; the choices the contract left open were settled in contract v1.4 (C§11.3) and are listed in the fixtures' `rulings` | End of week 0 |
 | `shared/turndown-rules.json` (C§4.2) | Project engineer, from `shared/vendor/parser-runner.js`. Written 6 October 2026, its sha256 in `shared/vendor/VERSIONS.md` | End of week 0 |
 | `shared/fixtures/` (C§9, covers included) | Project engineer; page fixtures from a pinned headless Chromium run of the vendored bundle, outside every client's CI, its version in `shared/vendor/VERSIONS.md` | Weeks 1–2 |
 | `shared/defaults.json` (schema in C§3.1) | Backend engineer, after the week-1 relay and mirror tests (C§3.1, C§5) | Week 1 |
@@ -39,7 +39,7 @@ MS still says draft although FD 73 signed it off. Files that C§3.1, §4.2, §4.
 |---|---|---|
 | Stack | Kotlin, Compose, Room, WorkManager, rust-nostr | Expo SDK 57, TypeScript, expo-sqlite, nostr-tools, six local native modules |
 | Protocol code | Kotlin modules | `packages/protocol`, shared with the extension and later iOS |
-| Kinds | 30979, 979, 978 | 30078 under `kefli/` d tags (C§11.5; the namespace from C§11.1) |
+| Kinds | 30979, 979, 978 | 30078 under `kefli/` d tags (C§11.6; the namespace from C§11.2) |
 | Listening | SystemVoice and CachedVoice | On-device voice in Kefli's own media session (FD 22, T§3) |
 | Screens | Library, Material 3 | Fingerprint and the signed-off prototype (FD 65, FD 75) |
 
@@ -49,7 +49,7 @@ The app is the reference client for what the contract leaves to a client: parsin
 
 **In scope:** FM's seven journeys (first launch, returning to a library, saving from the phone and from the browser, reading, listening, You), with Search (FD 51), Speed read (FD 21), typed-code pairing (C§4.4), Keep backup copies (FD 76), moving saves (C§4.8), shared X posts (FD 78), covers (FD 65) and Export (`adv`).
 
-**Out of scope:** server audio and `CachedVoice` (C§6.1, FD 22); "Open in app" and any public deep link (FD 9); Recommend (C§4.5); NIP-05 names (C§6); private relays (C§11.4); notifications (FD 15); seeking (FD 48); tags, folders, highlights, widgets, Wear, discovery; tablets beyond "doesn't break". Pasting an nsec isn't on the flow map and isn't built; v1.3 dropped it from C§2 (FD 90).
+**Out of scope:** server audio and `CachedVoice` (C§6.1, FD 22); "Open in app" and any public deep link (FD 9); Recommend (C§4.5); NIP-05 names (C§6); private relays (C§11.5); notifications (FD 15); seeking (FD 48); tags, folders, highlights, widgets, Wear, discovery; tablets beyond "doesn't break". Pasting an nsec isn't on the flow map and isn't built; v1.3 dropped it from C§2 (FD 90).
 
 **Platform floor:** `minSdkVersion` 26, because word positions come from `onRangeStart` (T§2); compile and target SDK 36; portrait phones; arm64-v8a releases, plus x86_64 for the CI emulator.
 
@@ -798,7 +798,7 @@ Devices: the Pixel 10a (Android 17), a Samsung with its own speech engine and ba
 
 ### 13.2 Contract v1.3: the requests as landed
 
-Contract v1.3 took in all eighteen requests, approved with section 14 on 5 October 2026 (C§11.3, whose item 19 also puts FD 86's rule for "nostr" into C§1). Each row records what landed.
+Contract v1.3 took in all eighteen requests, approved with section 14 on 5 October 2026 (C§11.4, whose item 19 also puts FD 86's rule for "nostr" into C§1). Each row records what landed.
 
 | CR | Request, as settled | Status |
 |---|---|---|

@@ -16,12 +16,14 @@ import java.util.concurrent.ConcurrentHashMap
 
 // The canonical parse in a WebView attached to no window (mobile spec 8.2), so it works the same from
 // MainActivity, the share activity and a headless task. One job at a time; the WebView goes after 30 s idle.
+// A PDF job (contract 4.2, PDFs) asks for pdf.js through KefliHost.asset, so it loads only when a PDF comes.
 object Parser {
   private const val BASE_URL = "https://parser.kefli.invalid/"
   private const val IDLE_MS = 30_000L
   private const val JOB_MS = 30_000L
+  private const val PDF_JOB_MS = 90_000L
 
-  private class Job(val id: String, val input: String, val promise: Promise)
+  private class Job(val id: String, val input: String, val promise: Promise, val timeoutMs: Long)
 
   private val main = Handler(Looper.getMainLooper())
   private val queue = ArrayDeque<Job>()
@@ -30,9 +32,13 @@ object Parser {
   private var web: WebView? = null
   private var ready = false
   private val teardown = Runnable { destroy() }
+  private var assets: android.content.res.AssetManager? = null
+  private val pdfAssets = ConcurrentHashMap<String, String>()
 
   fun submit(context: Context, input: JSONObject, promise: Promise) {
-    val job = Job(UUID.randomUUID().toString(), input.toString(), promise)
+    assets = context.applicationContext.assets
+    val timeout = if (input.optString("kind") == "pdf") PDF_JOB_MS else JOB_MS
+    val job = Job(UUID.randomUUID().toString(), input.toString(), promise, timeout)
     main.post {
       queue.add(job)
       main.removeCallbacks(teardown)
@@ -91,7 +97,7 @@ object Parser {
     current = job
     inputs[job.id] = job.input
     view.evaluateJavascript("kefliRun(${JSONObject.quote(job.id)})", null)
-    main.postDelayed({ if (current === job) finish(job.id, null) }, JOB_MS)
+    main.postDelayed({ if (current === job) finish(job.id, null) }, job.timeoutMs)
   }
 
   private fun finish(id: String, output: String?) {
@@ -107,6 +113,7 @@ object Parser {
     web?.destroy()
     web = null
     ready = false
+    pdfAssets.clear()
   }
 
   private fun sha256(s: String): String =
@@ -116,6 +123,17 @@ object Parser {
   private object Host {
     @JavascriptInterface
     fun input(id: String): String = inputs[id] ?: "{}"
+
+    /** One of the PDF modules, read once and checked against its sha256; "" for any other name or a mismatch. */
+    @JavascriptInterface
+    fun asset(name: String): String {
+      val want = ParserBundle.PDF_ASSETS[name] ?: return ""
+      pdfAssets[name]?.let { return it }
+      val body = assets?.open(name)?.bufferedReader()?.use { it.readText() } ?: return ""
+      if (sha256(body) != want) return ""
+      pdfAssets[name] = body
+      return body
+    }
 
     @JavascriptInterface
     fun output(id: String, json: String) {

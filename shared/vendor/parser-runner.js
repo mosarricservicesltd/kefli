@@ -8,6 +8,7 @@
 //   kefliRun(jobId)                                   the kefli-parser entry: reads the job from, and writes the
 //                                                     result to, the KefliHost object, so megabyte strings never
 //                                                     pass through evaluateJavascript
+//   a job of kind 'pdf' goes to kefliPdf, which parser-pdf.js adds in the phone's bundle only
 //
 // A result is {ok: true, title, byline, site, lang, hero, canonical, readerable, markdown}, with null for
 // anything absent, or {ok: false, reason: 'not_readable' | 'error', message?}. The markdown is normalised
@@ -170,20 +171,28 @@
     };
   }
 
+  function failure(e) {
+    return { ok: false, reason: 'error', message: String(e && e.message ? e.message : e) };
+  }
+
   function kefliRun(jobId) {
-    var result;
+    var send = function (result) {
+      window.KefliHost.output(jobId, JSON.stringify(result));
+    };
     try {
       var job = JSON.parse(window.KefliHost.input(jobId));
-      result = job.kind === 'markdown' ? kefliMarkdown(job.html, job.url) : kefliParse(job.body, job.contentType, job.url);
+      // parser-pdf.js, in the phone's bundle only, adds kefliPdf (contract 4.2, PDFs)
+      if (job.kind === 'pdf' && window.kefliPdf) return void window.kefliPdf(job.body).then(send, function (e) { send(failure(e)); });
+      send(job.kind === 'markdown' ? kefliMarkdown(job.html, job.url) : kefliParse(job.body, job.contentType, job.url));
     } catch (e) {
-      result = { ok: false, reason: 'error', message: String(e && e.message ? e.message : e) };
+      send(failure(e));
     }
-    window.KefliHost.output(jobId, JSON.stringify(result));
   }
 
   window.kefliParse = kefliParse;
   window.kefliMarkdown = kefliMarkdown;
   window.kefliArticle = kefliArticle;
+  window.kefliBase64Bytes = base64Bytes;
   window.kefliRun = kefliRun;
   window.kefliNormaliseMarkdown = normaliseMarkdown;
 })();

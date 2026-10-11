@@ -1,7 +1,7 @@
 // The spoken projection (contract 4.2): what a voice reads and what words counts, with each spoken
 // character mapped to its offset in the normalised Markdown for word highlighting (contract 7).
 // Runs on Hermes from the normalised string (mobile spec 2.6). Where this and the page fixtures
-// disagree, the fixtures win; choices the contract leaves open are marked RULED (contract 1.4, section 11.2).
+// disagree, the fixtures win; choices the contract leaves open are marked RULED (contract 1.4, section 11.3).
 
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { decodeNamedCharacterReference } from 'decode-named-character-reference';
@@ -138,6 +138,96 @@ class Builder {
   }
 }
 
+/** A link target's fragment, percent-decoded where it can be; '' when there is none. */
+function fragment(url: string): string {
+  const at = url.indexOf('#');
+  if (at === -1) return '';
+  const f = url.slice(at + 1);
+  try {
+    return decodeURIComponent(f);
+  } catch {
+    return f;
+  }
+}
+
+function textOf(node: Nodes): string {
+  if ('value' in node && typeof node.value === 'string') return node.value;
+  return 'children' in node ? (node.children as Nodes[]).map(textOf).join('') : '';
+}
+
+/**
+ * Citation and footnote markers, which the voice skips (contract 4.2, flow decision 102); the Reader still shows
+ * them. MediaWiki's markers link to the page's own #cite_note-… whatever their text ([1], [a], [原 1]), so the rule
+ * reads the target: a bracket in the text alone could be IPA, as in the Greek fixture's [eliniˈka].
+ */
+function unspoken(node: Nodes): boolean {
+  if (node.type === 'link') {
+    const f = fragment(node.url);
+    const t = textOf(node).trim();
+    if (/^cite_note-/.test(f)) return true;
+    // Other sites' footnotes (Substack, Ghost, Markdown generators): a bare number to #footnote-1, #fn1, #note-1.
+    if (/^(?:fn|footnote|note)[-_:.]?\w/i.test(f) && /^\[?\d{1,3}\]?$/.test(t)) return true;
+    // Their back-links: an arrow or caret to #fnref1, #footnote-anchor-1, #cite_ref-1.
+    return /^(?:fnref|footnote-anchor|cite_ref)/i.test(f) && /^[\s^↑↩︎️]+$/.test(t);
+  }
+  if (node.type === 'emphasis' || node.type === 'strong' || node.type === 'delete') {
+    return node.children.length > 0 && node.children.every(unspoken);
+  }
+  return false;
+}
+
+/** Wikipedia's own project namespace, in the languages that localise its name; most keep "Wikipedia". */
+const PROJECT_PAGE = /\/wiki\/(?:Wikipedia|Wikipédia|Project|Википедия|Вікіпедія|Βικιπαίδεια|ويكيبيديا|ویکی‌پدیا|ויקיפדיה|위키백과|विकिपीडिया|วิกิพีเดีย):/i;
+
+function decodedPath(url: string): string {
+  try {
+    return decodeURI(url.split('#')[0]);
+  } catch {
+    return url;
+  }
+}
+
+/** A link into the project namespace, alone or in emphasis: a maintenance tag such as citation needed or dead link. */
+function projectLink(node: Nodes): boolean {
+  if (node.type === 'link') return PROJECT_PAGE.test(decodedPath(node.url));
+  if (node.type === 'emphasis' || node.type === 'strong') return node.children.length === 1 && projectLink(node.children[0]);
+  return false;
+}
+
+const opens = (n: Nodes | undefined) => n?.type === 'text' && n.value.endsWith('[');
+const closes = (n: Nodes | undefined) => n?.type === 'text' && n.value.startsWith(']');
+
+/**
+ * A MediaWiki reference list entry: its first paragraph opens, after any caret or arrow, with a back-link to
+ * #cite_ref-…. The voice skips the whole entry, notes nested in it included.
+ */
+function isReferenceEntry(item: Extract<Nodes, { type: 'listItem' }>): boolean {
+  const first = item.children[0];
+  if (!first || first.type !== 'paragraph') return false;
+  for (const c of first.children) {
+    if (c.type === 'text' && /^[\s^↑]*$/.test(c.value)) continue;
+    return c.type === 'link' && /^cite_ref-/.test(fragment(c.url));
+  }
+  return false;
+}
+
+/**
+ * A run of inline siblings, without the unspoken ones. Maintenance tags ("[citation needed]", "[dead link]") keep
+ * their brackets outside the link, in the text either side, so a tag counts only when bracketed, and its '[' and ']'
+ * go with it; a project link in running prose is read.
+ */
+function inlines(b: Builder, kids: Nodes[]): void {
+  const skip = kids.map((c, k) => unspoken(c) || (projectLink(c) && opens(kids[k - 1]) && closes(kids[k + 1])));
+  kids.forEach((c, k) => {
+    if (skip[k]) return;
+    if (c.type !== 'text' || !c.position) return inline(b, c);
+    let value = c.value;
+    if (skip[k + 1] && value.endsWith('[')) value = value.slice(0, -1);
+    if (skip[k - 1] && value.startsWith(']')) value = value.slice(1);
+    b.push(value, align(value, b.src, c.position.start.offset!, c.position.end.offset!));
+  });
+}
+
 function inline(b: Builder, node: Nodes): void {
   const pos = node.position;
   switch (node.type) {
@@ -159,7 +249,7 @@ function inline(b: Builder, node: Nodes): void {
       // Images go with their alt text; definitions are syntax.
       return;
     default:
-      if ('children' in node) for (const c of node.children) inline(b, c);
+      if ('children' in node) inlines(b, node.children as Nodes[]);
   }
 }
 
@@ -167,11 +257,11 @@ function block(b: Builder, node: Nodes, inListItem: boolean): void {
   const pos = node.position;
   switch (node.type) {
     case 'heading':
-      for (const c of node.children) inline(b, c);
+      inlines(b, node.children);
       b.end(true);
       return;
     case 'paragraph':
-      for (const c of node.children) inline(b, c);
+      inlines(b, node.children);
       // RULED: the full stop goes on each paragraph directly inside a list item.
       b.end(inListItem);
       return;
@@ -204,6 +294,7 @@ function block(b: Builder, node: Nodes, inListItem: boolean): void {
     case 'definition':
       return;
     case 'listItem':
+      if (isReferenceEntry(node)) return;
       for (const c of node.children) block(b, c, true);
       return;
     default:

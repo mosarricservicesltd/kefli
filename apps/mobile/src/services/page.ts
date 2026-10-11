@@ -4,8 +4,10 @@
 // fewer than 120 spoken words is a failed parse. A network failure is "offline": the save waits and tries again.
 // A page still turned away with 403 by both is loaded once in a browser engine (the render port, 8.2), since bot
 // checks such as Cloudflare's tell Android's HTTP client from a browser; its rendered HTML takes the same parse. So is a
-// page whose answer arrives as a bare 1xx.
+// page whose answer arrives as a bare 1xx. A PDF (contract 4.2, PDFs; flow decision 103), known by its type or its
+// first bytes, has a larger cap; the parser WebView reads its text runs with pdf.js and pdfMarkdown lays them out here.
 import { base64 } from '@scure/base';
+import { normaliseMarkdown, pdfMarkdown, type PdfRuns } from '@kefli/protocol';
 import { deriveArticle, type Derived } from '../reader/blocks';
 
 export const PAGE_MAX_BYTES = 5 * 1024 * 1024;
@@ -16,6 +18,10 @@ export const PAGE_MAX_BYTES = 5 * 1024 * 1024;
 export const RENDER_MAX_BYTES = 16 * 1024 * 1024;
 export const PAGE_TIMEOUT_MS = 20_000;
 export const GUARD_WORDS = 120;
+/** RULED: reports and papers run larger than pages; 20 MB keeps the parse inside the phone's WebView memory. */
+export const PDF_MAX_BYTES = 20 * 1024 * 1024;
+/** A PDF with fewer spoken words than this has no text layer worth the name: a scan, or slides of pictures. */
+export const PDF_MIN_WORDS = 20;
 export const DESKTOP_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0 Safari/537.36';
 export const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 17; Pixel 10a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0 Mobile Safari/537.36';
 
@@ -28,18 +34,28 @@ export type PagePorts = {
   parse: (bodyBase64: string, contentType: string, url: string) => Promise<ParserResult>;
   /** The page loaded in a browser engine: its rendered HTML and final address, or null. */
   render?: (url: string) => Promise<{ url: string; html: string } | null>;
+  /** A PDF's text runs, read by pdf.js in the parser WebView. */
+  pdf?: (bodyBase64: string) => Promise<({ ok: true } & PdfRuns) | { ok: false; reason: string }>;
 };
 
-export type FailReason = 'http' | 'not_html' | 'too_large' | 'not_readable';
+export type FailReason = 'http' | 'not_html' | 'too_large' | 'not_readable' | 'pdf_no_text' | 'pdf_locked';
 
 export type PageOutcome =
   | { kind: 'offline' }
   | { kind: 'failed'; reason: FailReason; finalUrl: string }
   | { kind: 'parsed'; finalUrl: string; result: Extract<ParserResult, { ok: true }>; words: number; spoken: string; derived: Derived };
 
+const PDF_TYPE = /^\s*application\/(?:x-)?pdf\b/i;
+
+/** A PDF by its declared type or, since servers often say application/octet-stream, by its first bytes. */
+export function isPdf(contentType: string, bytes: Uint8Array): boolean {
+  return PDF_TYPE.test(contentType) || (bytes.length > 4 && String.fromCharCode(...bytes.subarray(0, 5)) === '%PDF-');
+}
+
 /** Why a response can't be parsed, or null when it can. */
-export function refusal(status: number, contentType: string, bytes: number): FailReason | null {
+export function refusal(status: number, contentType: string, bytes: number, pdf = false): FailReason | null {
   if (status < 200 || status > 299) return 'http';
+  if (pdf) return bytes > PDF_MAX_BYTES ? 'too_large' : null;
   if (!/^\s*(text\/html|application\/xhtml\+xml)\b/i.test(contentType)) return 'not_html';
   if (bytes > PAGE_MAX_BYTES) return 'too_large';
   return null;
@@ -49,7 +65,7 @@ async function get(p: PagePorts, url: string, ua: string): Promise<Response> {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), PAGE_TIMEOUT_MS);
   try {
-    return await p.fetch(url, { signal: ctl.signal, headers: { 'User-Agent': ua, Accept: 'text/html,application/xhtml+xml', 'Accept-Language': 'en-GB,en;q=0.9' } });
+    return await p.fetch(url, { signal: ctl.signal, headers: { 'User-Agent': ua, Accept: 'text/html,application/xhtml+xml,application/pdf;q=0.9', 'Accept-Language': 'en-GB,en;q=0.9' } });
   } finally {
     clearTimeout(timer);
   }
@@ -63,7 +79,7 @@ async function answer(p: PagePorts, url: string): Promise<Answer> {
     let res = await get(p, url, DESKTOP_UA);
     if (res.status === 403) res = await get(p, url, MOBILE_UA);
     const declared = Number(res.headers.get('content-length') ?? 0);
-    if (declared > PAGE_MAX_BYTES) return { tooLarge: res.url || url };
+    if (declared > (PDF_TYPE.test(res.headers.get('content-type') ?? '') ? PDF_MAX_BYTES : PAGE_MAX_BYTES)) return { tooLarge: res.url || url };
     return { res, bytes: new Uint8Array(await res.arrayBuffer()) };
   } catch {
     return null;
@@ -83,13 +99,28 @@ export async function fetchPage(p: PagePorts, url: string): Promise<PageOutcome>
     if (rendered) return rendered;
   }
   const contentType = res.headers.get('content-type') ?? '';
-  const refused = refusal(res.status, contentType, bytes.length);
+  const pdf = !!p.pdf && isPdf(contentType, bytes);
+  const refused = refusal(res.status, contentType, bytes.length, pdf);
   if (refused) {
     // the status alone, never the address (7.1); release builds strip it
     console.log(`[kefli-page] ${JSON.stringify({ refused, status: res.status, type: contentType.split(';')[0], bytes: bytes.length })}`);
     return { kind: 'failed', reason: refused, finalUrl };
   }
-  return parseHtml(p, bytes, contentType, finalUrl);
+  return pdf ? parsePdf(p, bytes, finalUrl) : parseHtml(p, bytes, contentType, finalUrl);
+}
+
+const PDF_FAILURES: Record<string, FailReason> = { pdf_locked: 'pdf_locked', pdf_too_long: 'too_large' };
+
+/** A PDF's runs laid out as Markdown (contract 4.2, PDFs): the same text, derivation and blob as a page's after this. */
+export async function parsePdf(p: Pick<PagePorts, 'pdf'>, bytes: Uint8Array, finalUrl: string): Promise<Exclude<PageOutcome, { kind: 'offline' }>> {
+  const read = await p.pdf!(base64.encode(bytes)).catch(() => ({ ok: false as const, reason: 'error' }));
+  if (!read.ok) return { kind: 'failed', reason: PDF_FAILURES[read.reason] ?? 'not_readable', finalUrl };
+  const article = pdfMarkdown(read);
+  const markdown = normaliseMarkdown(article.markdown);
+  const derived = deriveArticle(markdown);
+  if (derived.words < PDF_MIN_WORDS) return { kind: 'failed', reason: 'pdf_no_text', finalUrl };
+  const result = { ok: true as const, title: article.title, byline: article.byline, site: null, lang: null, hero: null, canonical: null, readerable: true, markdown };
+  return { kind: 'parsed', finalUrl, result, words: derived.words, spoken: derived.spoken, derived };
 }
 
 /** A page turned away from the fetch, loaded in a browser engine and parsed as fetched HTML; null when that failed too. */

@@ -7,7 +7,7 @@ import { seedGeneratedLists } from '../src/data/lists';
 import { release } from '../src/data/outbox';
 import {
   activeOwner, commitDelete, commitOrphanDeletes, counts, deleteItem, listRows, minutes, minutesLeft, nextUnread, progressOf,
-  rowByHash, rowStatus, setArchived, setPosition,
+  reconcileWords, rowByHash, rowStatus, setArchived, setPosition,
 } from '../src/data/library';
 import { sendOne, type SendPorts } from '../src/services/send';
 import { memoryDb } from './sqlite';
@@ -79,6 +79,32 @@ describe('the library (mobile spec 5.6)', () => {
     c.revert();
     expect(w.outbox()).toEqual([{ op: 'publish_item', subject: h(1), state: 'queued', was_queued: 0 }]);
     expect(setArchived(w.db, 1, w.pk, h(99), true).held).toEqual([]);
+  });
+
+  test('a count from a newer projection is stored with its progress and published with the next position', () => {
+    const w = world();
+    w.add(1, { words: 1289, position_word: 600 });
+    w.add(2, { words: 1289, position_word: 1288 });
+    reconcileWords(w.db, 1500, w.pk, h(1), 948);
+    reconcileWords(w.db, 1500, w.pk, h(2), 948);
+    const row = (n: number) => w.db.get<{ words: number; position_word: number; progress: number; dirty: number }>('SELECT words, position_word, progress, dirty FROM items WHERE hash = ?', h(n))!;
+    expect(row(1)).toMatchObject({ words: 948, position_word: 600, dirty: 1 });
+    expect(row(1).progress).toBeCloseTo(600 / 948);
+    expect(row(2)).toMatchObject({ words: 948, position_word: 947 }); // read through stays read through
+    expect(progressOf(rowByHash(w.db, w.pk, h(2))!)).toBe(1);
+    expect(w.outbox()).toEqual([]);
+    setPosition(w.db, 1600, w.pk, h(1), 600, true);
+    expect(w.outbox()).toEqual([{ op: 'publish_item', subject: h(1), state: 'queued', was_queued: 0 }]);
+  });
+
+  test('a count that agrees, or a row without one, is left alone', () => {
+    const w = world();
+    w.add(1, { words: 948 });
+    w.add(2, { words: null });
+    reconcileWords(w.db, 1500, w.pk, h(1), 948);
+    reconcileWords(w.db, 1500, w.pk, h(2), 948);
+    reconcileWords(w.db, 1500, w.pk, h(9), 948);
+    expect(w.db.all('SELECT words, dirty FROM items ORDER BY hash')).toEqual([{ words: 948, dirty: 0 }, { words: null, dirty: 0 }]);
   });
 
   test('delete hides the row at once, Undo shows it again, and the toast closing removes it', () => {

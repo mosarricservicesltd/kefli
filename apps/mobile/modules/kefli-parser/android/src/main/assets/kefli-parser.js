@@ -3729,6 +3729,7 @@ if (typeof module === "object") {
 //   kefliRun(jobId)                                   the kefli-parser entry: reads the job from, and writes the
 //                                                     result to, the KefliHost object, so megabyte strings never
 //                                                     pass through evaluateJavascript
+//   a job of kind 'pdf' goes to kefliPdf, which parser-pdf.js adds in the phone's bundle only
 //
 // A result is {ok: true, title, byline, site, lang, hero, canonical, readerable, markdown}, with null for
 // anything absent, or {ok: false, reason: 'not_readable' | 'error', message?}. The markdown is normalised
@@ -3891,22 +3892,69 @@ if (typeof module === "object") {
     };
   }
 
+  function failure(e) {
+    return { ok: false, reason: 'error', message: String(e && e.message ? e.message : e) };
+  }
+
   function kefliRun(jobId) {
-    var result;
+    var send = function (result) {
+      window.KefliHost.output(jobId, JSON.stringify(result));
+    };
     try {
       var job = JSON.parse(window.KefliHost.input(jobId));
-      result = job.kind === 'markdown' ? kefliMarkdown(job.html, job.url) : kefliParse(job.body, job.contentType, job.url);
+      // parser-pdf.js, in the phone's bundle only, adds kefliPdf (contract 4.2, PDFs)
+      if (job.kind === 'pdf' && window.kefliPdf) return void window.kefliPdf(job.body).then(send, function (e) { send(failure(e)); });
+      send(job.kind === 'markdown' ? kefliMarkdown(job.html, job.url) : kefliParse(job.body, job.contentType, job.url));
     } catch (e) {
-      result = { ok: false, reason: 'error', message: String(e && e.message ? e.message : e) };
+      send(failure(e));
     }
-    window.KefliHost.output(jobId, JSON.stringify(result));
   }
 
   window.kefliParse = kefliParse;
   window.kefliMarkdown = kefliMarkdown;
   window.kefliArticle = kefliArticle;
+  window.kefliBase64Bytes = base64Bytes;
   window.kefliRun = kefliRun;
   window.kefliNormaliseMarkdown = normaliseMarkdown;
+})();
+
+;
+// The phone's PDF read (contract 4.2, PDFs; flow decision 103), added to the parser bundle for the kefli-parser
+// WebView only, so the extension never carries a module loader:
+//
+//   kefliPdf(bodyBase64)  a PDF's text runs (shared/vendor/pdf-runner.mjs), or why there are none. pdf.js comes from
+//                         KefliHost.asset on the first PDF, so a page parse never pays for it, and is kept for the
+//                         WebView's life; packages/protocol's pdfMarkdown lays the runs out on Hermes.
+(function () {
+  'use strict';
+
+  // pdf.js is ES modules, so each comes in as a blob URL; the worker's module, set as pdfjsWorker, lets pdf.js
+  // parse on this thread.
+  var modules = null;
+
+  function fromAsset(name) {
+    var url = URL.createObjectURL(new Blob([window.KefliHost.asset(name)], { type: 'text/javascript' }));
+    return import(url);
+  }
+
+  function load() {
+    if (!modules) {
+      modules = fromAsset('pdf.worker.min.mjs').then(function (worker) {
+        window.pdfjsWorker = worker;
+        return Promise.all([fromAsset('pdf.min.mjs'), fromAsset('pdf-runner.mjs')]);
+      });
+      modules.catch(function () {
+        modules = null;
+      });
+    }
+    return modules;
+  }
+
+  window.kefliPdf = function (bodyBase64) {
+    return load().then(function (m) {
+      return m[1].pdfRuns(m[0], window.kefliBase64Bytes(bodyBase64));
+    });
+  };
 })();
 
 ;

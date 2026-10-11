@@ -12,7 +12,7 @@ import { SlidingLine } from '../ui/Line';
 import * as Clipboard from 'expo-clipboard';
 import { fontFamily, radius, reader as RT } from '@kefli/tokens';
 import { quickIn, quickOut } from '@kefli/tokens/reanimated';
-import { minutes, nextUnread, rowByHash, setPosition, textLost, type LibRow } from '../data/library';
+import { minutes, nextUnread, reconcileWords, rowByHash, setPosition, textLost, type LibRow } from '../data/library';
 import { blockOfWord, type Article } from '../reader/blocks';
 import { scrollYForWord, wordAtScroll, type Place } from '../reader/position';
 import { readerColors, type PaletteId, type ReaderColors } from '../reader/palette';
@@ -384,6 +384,10 @@ export default function Reader() {
   const cached = row?.text_state === 'cached';
   // blocks and sentences were derived once when the text arrived (6.7); opening only reads them
   const article = useMemo(() => (cached ? textFiles.readArticle(hash) : null), [cached, hash, row?.text_sha256]); // eslint-disable-line react-hooks/exhaustive-deps
+  // an article derived again under a newer projection may count differently; the item takes the new count
+  useEffect(() => {
+    if (article && owner && row && row.words !== article.words) reconcileWords(store(), Math.floor(Date.now() / 1000), owner, hash, article.words);
+  }, [article, owner, hash, row?.words]); // eslint-disable-line react-hooks/exhaustive-deps
   const voice = useVoice();
   const urls = useMemo(() => (article ? article.blocks.flatMap((b) => (b.kind === 'img' ? [b.src] : [])) : []), [article]);
   const imgs = useLive(() => {
