@@ -1,6 +1,6 @@
 # Your nostr app: save without asking (decision 104) and disconnect (draft 105)
 
-Drafted on 11 October 2026 at Richard's request, after the first test of Kefli 0.0.2 on the Pixel. **Decision 104 was signed off the same day**, with the copy as below, Amber's shortcut in the help, the You row alone for earlier sign-ins and the check's trace in the signer's log accepted; it is in the decision log and on the flow map. **Decision 105, disconnecting the nostr app, is a draft for sign-off** (at the end). Neither is built yet. The prototype carries both: the groups "Saving without asking (decision 104)" and "Your nostr app (draft, decision 105)".
+Drafted on 11 October 2026 at Richard's request, after the first test of Kefli 0.0.2 on the Pixel. **Decision 104 was signed off the same day**, with the copy as below, Amber's shortcut in the help, the You row alone for earlier sign-ins and the check's trace in the signer's log accepted; it is in the decision log and on the flow map. **Decision 105, signing out of the nostr app, was signed off the same day too**, as "Sign out" (at the end). Neither is built yet. The prototype carries both: the groups "Saving without asking (decision 104)" and "Your nostr app (draft, decision 105)".
 
 ## What happened
 
@@ -86,7 +86,7 @@ In code: a `canSign(pkg, kinds, hex)` on the kefli-nip55 module, resolver only; 
 
 ---
 
-# Draft 105: disconnect your nostr app (for sign-off)
+# 105: sign out of your nostr app (signed off 11 October, as Sign out)
 
 Richard asked on 11 October 2026 for a way, under "Your nostr app" on You, to disconnect the signing app. Today a nostr sign-in has no way off the phone short of Delete my data, which also removes the saves from the relays and servers.
 
@@ -130,12 +130,12 @@ Browsers connected to the library keep their connection; what they save waits fo
 | Error | Clearing the phone's own storage can't fail in a way the person can act on; if it does, Kefli stays signed in and the toast says "Kefli couldn't disconnect. Try again." |
 | Empty, loading | Not reachable: the screen only exists for a signed-in library |
 
-## Questions for Richard
+## Questions for Richard (answered 11 October)
 
-1. **The copy**, and "Disconnect" over "Sign out".
-2. **Reader and voice settings kept** on disconnect (Delete my data clears everything).
-3. **Welcome afterwards**, as after Delete my data, rather than straight to "Bring back your library".
+1. **The copy**, and "Disconnect" over "Sign out". *The copy as written, with Sign out: the row, the sheet's title "Sign out?" and button, and the toast "You're signed out".*
+2. **Reader and voice settings kept.** *Yes.*
+3. **Welcome afterwards.** *Yes.*
 
-## Decision text, ready for the log
+## Decision text (in the log as 105, with Sign out)
 
 105. **Disconnect your nostr app** (Richard, date of sign-off; follows 90 and 104). On You, the Your nostr app row opens a screen showing the app (or "A sign-in link"), whether saving runs without asking, and Disconnect my nostr app, a red row. Disconnect asks first: "Kefli removes your library from this phone. Your saves stay under your key, and signing in with your nostr app again brings them back. You can remove Kefli in your nostr app too.", naming any saves not yet sent. It clears the library and the signer from this phone only, keeps reader and voice settings, and returns to Welcome with "Your nostr app is disconnected". Nothing on the relays, servers or mirror changes.
