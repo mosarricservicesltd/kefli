@@ -7,7 +7,7 @@ import { KefliVoice, type PhoneVoice, type VoiceState } from '../../modules/kefl
 import { reconcileWords, rowByHash, setPosition, type LibRow } from '../data/library';
 import { playFrom, recordPlayed } from '../data/listen';
 import { getSetting, setSetting } from '../data/settings';
-import { readRate, readWps, nextRate, snapRate } from '../voice/clock';
+import { readRate, nextRate, snapRate, wpsFor, wpsKey } from '../voice/clock';
 import { VOICE_ID, sessionVoice } from '../voice/choice';
 import { appState } from './app';
 import { runSync } from './runner';
@@ -29,8 +29,9 @@ const set = (s: Session | null) => {
   listeners.forEach((l) => l());
 };
 const now = () => Math.floor(Date.now() / 1000);
-// words a second are kept per voice (5.7); the phone's own voice for a language is 'default'
-let wpsKey = 'voice.wps.default';
+// words a second are kept per voice and rate (5.7, FD 107); the phone's own voice for a language is 'default'
+let voiceKey = 'default';
+const wpsAt = (rate: number) => wpsFor((k) => getSetting(store(), k), voiceKey, rate);
 
 export function useVoice(): Session | null {
   return useSyncExternalStore((l) => (listeners.add(l), () => listeners.delete(l)), () => session);
@@ -68,7 +69,7 @@ function wire() {
     if (!session || e.hash !== session.hash) return;
     const paused = session.playing && !e.playing;
     set({ ...session, playing: e.playing, word: e.word, rate: snapRate(e.rate), wordTiming: e.wordTiming, wps: e.wps });
-    if (Math.abs(e.wps - readWps(getSetting(store(), wpsKey))) > 0.05) setSetting(store(), wpsKey, e.wps.toFixed(3));
+    if (Math.abs(e.wps - wpsAt(e.rate)) > 0.05) setSetting(store(), wpsKey(voiceKey, e.rate), e.wps.toFixed(3));
     if (paused) keep(e.word, true);
   });
   KefliVoice.addListener('ended', (e) => {
@@ -104,8 +105,8 @@ export async function listen(row: Pick<LibRow, 'hash' | 'title' | 'site' | 'url'
   const lang = store().get<{ lang: string | null }>('SELECT lang FROM items WHERE hash = ? AND lang IS NOT NULL LIMIT 1', row.hash)?.lang ?? null;
   const phone = await listPhoneVoices();
   const voice = sessionVoice(phone.voices, getSetting(store(), VOICE_ID), lang, phone.defaultLocale);
-  wpsKey = `voice.wps.${voice.voiceId ?? 'default'}`;
-  const wps = readWps(getSetting(store(), wpsKey));
+  voiceKey = voice.voiceId ?? 'default';
+  const wps = wpsAt(rate);
   const word = Math.max(0, Math.min(fromWord, totalWords - 1));
   const title = row.title ?? row.url;
   if (owner) recordPlayed(store(), owner, row.hash, Math.floor(Date.now() / 1000));
@@ -179,16 +180,18 @@ export function cycleRate(): void {
   if (!session) return;
   const r = nextRate(session.rate);
   setSetting(store(), 'voice.speed', String(r));
-  set({ ...session, rate: r });
-  KefliVoice.setRate(r);
+  const wps = wpsAt(r);
+  set({ ...session, rate: r, wps });
+  KefliVoice.setRate(r, wps);
 }
 
 /** You → Voice → Default speed: the one speed value (FD 36), applied to a session under way too. */
 export function setDefaultRate(r: number): void {
   setSetting(store(), 'voice.speed', String(r));
   if (!session) return;
-  set({ ...session, rate: r });
-  KefliVoice.setRate(r);
+  const wps = wpsAt(r);
+  set({ ...session, rate: r, wps });
+  KefliVoice.setRate(r, wps);
 }
 
 let voices: Promise<{ voices: PhoneVoice[]; defaultLocale: string | null }> | null = null;

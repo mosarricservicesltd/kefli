@@ -1,4 +1,4 @@
-import { RATES, WPS_SEED, clock, nextRate, rateLabel, readRate, readWps, seconds, snapRate, startWord } from '../src/voice/clock';
+import { RATES, WPS_SEED, clock, nextRate, rateLabel, readRate, readWps, seconds, snapRate, startWord, wpsFor, wpsKey } from '../src/voice/clock';
 
 describe('the listening clock (mobile spec 5.7)', () => {
   test('the speed pill steps 1, 1.5, 2, 0.5 and back to 1 (FD 107)', () => {
@@ -31,6 +31,19 @@ describe('the listening clock (mobile spec 5.7)', () => {
     expect(startWord(999, { first: 100, last: 200 }, 1000)).toBe(100);
     expect(startWord(999, { first: 999, last: 999 }, 1000)).toBe(0);
     expect(startWord(0, { first: 0, last: 0 }, 0)).toBe(0);
+  });
+
+  test('words a second are kept per voice and rate, 1× under the key it always had (FD 107)', () => {
+    expect([wpsKey('en-gb-x', 1), wpsKey('en-gb-x', 2), wpsKey('default', 0.5000000001)]).toEqual(['voice.wps.en-gb-x', 'voice.wps.en-gb-x@2', 'voice.wps.default@0.5']);
+    const kept: Record<string, string> = { 'voice.wps.v': '3.2', 'voice.wps.v@1.5': '3.3', 'voice.wps.w@2': 'x' };
+    const get = (k: string) => kept[k] ?? null;
+    // a rate measured is its own; one not yet heard is 1×'s scaled by the seed; with nothing learned, the seed of 3.9
+    expect(wpsFor(get, 'v', 1)).toBe(3.2);
+    expect(wpsFor(get, 'v', 1.5)).toBe(3.3);
+    expect(wpsFor(get, 'v', 2)).toBeCloseTo(3.2 * 0.82);
+    expect(wpsFor(get, 'v', 0.5)).toBeCloseTo(3.2 * 1.3);
+    expect(wpsFor(get, 'w', 2)).toBeCloseTo(WPS_SEED * 0.82);
+    expect(wpsFor(get, 'none', 1)).toBe(WPS_SEED);
   });
 
   test('stored values are checked', () => {

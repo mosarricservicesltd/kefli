@@ -182,9 +182,14 @@ object VoiceEngine {
     emitState()
   }
 
-  /** A new rate is written fresh from the word reached; the voice keeps its pitch. */
-  fun setRate(r: Float) {
+  /**
+   * A new rate is written fresh from the word reached; the voice keeps its pitch. The words a second come with it,
+   * since a voice's speed doesn't scale with the rate (FD 107: Google's voice reads 2× at about 1.65× and 0.5× at
+   * about 0.65×), so each rate keeps its own measure.
+   */
+  fun setRate(r: Float, wordsPerSecond: Float) {
     rate = r
+    wps = wordsPerSecond
     tts?.setSpeechRate(r)
     if (playing) startFrom(word) else { reset(); stale = true }
     emitState()

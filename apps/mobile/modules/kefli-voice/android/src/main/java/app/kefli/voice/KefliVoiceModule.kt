@@ -84,7 +84,7 @@ class KefliVoiceModule : Module() {
     Function("pause") { main.post { VoiceEngine.pause() } }
     Function("skip") { seconds: Int -> main.post { VoiceEngine.skip(seconds) } }
     Function("jumpToWord") { word: Int -> main.post { VoiceEngine.jumpTo(word) } }
-    Function("setRate") { rate: Double -> main.post { VoiceEngine.setRate(rate.toFloat()) } }
+    Function("setRate") { rate: Double, wps: Double -> main.post { VoiceEngine.setRate(rate.toFloat(), wps.toFloat()) } }
     Function("close") {
       main.post {
         VoiceEngine.close()

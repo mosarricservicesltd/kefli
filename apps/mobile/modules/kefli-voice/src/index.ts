@@ -29,7 +29,8 @@ interface Native {
   sample(voiceId: string, text: string): Promise<void>;
   start(json: string): Promise<void>;
   play(): void; pause(): void; skip(seconds: 15 | -15): void; jumpToWord(word: number): void;
-  setRate(rate: number): void; close(): void;
+  /** A new rate with the voice's words a second at it (5.7, FD 107). */
+  setRate(rate: number, wps: number): void; close(): void;
   readLog(): string; clearLog(): void;
   addListener<K extends keyof Events>(name: K, listener: Events[K]): EventSubscription;
 }

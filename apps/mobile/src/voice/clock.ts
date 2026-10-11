@@ -50,6 +50,28 @@ export function readWps(v: string | null): number {
   return n >= 1 && n <= 8 ? n : WPS_SEED;
 }
 
+/**
+ * Where a voice's words a second at a rate are kept (FD 107). A voice's speed doesn't scale with the rate, so each
+ * rate has its own; 1× keeps the key it always had, so what was learned before stays.
+ */
+export function wpsKey(voice: string, rate: number): string {
+  const r = snapRate(rate);
+  return r === 1 ? `voice.wps.${voice}` : `voice.wps.${voice}@${r}`;
+}
+
+/**
+ * How a rate's words a second stand to 1×'s before it has been heard, from Google's en-GB voice on the Pixel
+ * (11 October 2026: 2× read at 1.65×, 0.5× at 0.65×). RULED: a seed only; the engine learns the real value.
+ */
+const RATE_SEED: Record<number, number> = { 0.5: 1.3, 1: 1, 1.5: 1, 2: 0.82 };
+
+/** A voice's words a second at a rate: its own once measured, else 1×'s scaled by the seed. */
+export function wpsFor(get: (key: string) => string | null, voice: string, rate: number): number {
+  const own = get(wpsKey(voice, rate));
+  if (own !== null && readWps(own) === Number(own)) return Number(own);
+  return readWps(get(wpsKey(voice, 1))) * (RATE_SEED[snapRate(rate)] ?? 1);
+}
+
 export type Ruler = { numbers: { at: number; label: string }[]; ticks: { at: number; major: boolean }[] };
 
 const STEPS = [1, 2, 5, 10, 15, 30, 60, 120];
