@@ -2,7 +2,7 @@
 // the reading size and 1.6 leading, paragraphs a line apart. Links keep the reading colour, underlined in the
 // article's ink, and open in the browser. Each block reports its place, so the Reader can lay out at a word.
 import { memo, useEffect } from 'react';
-import { Linking, ScrollView, Text, View, type LayoutChangeEvent, type TextStyle } from 'react-native';
+import { Linking, ScrollView, Text, View, type GestureResponderEvent, type LayoutChangeEvent, type TextStyle } from 'react-native';
 import { Image } from 'expo-image';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { motion } from '@kefli/tokens';
@@ -95,31 +95,34 @@ function Figure({ alt, P, img }: { alt: string; P: ReaderColors; img?: FigureSta
   return <Waiting P={P} />;
 }
 
-export const BlockView = memo(function BlockView({ b, P, size, onLayout, lit, img }: { b: Block; P: ReaderColors; size: number; onLayout: (e: LayoutChangeEvent) => void; lit?: Lit; img?: FigureState }) {
+/** A tap on a block's text, for the Reader's double-tap on a word (FD 107); links keep their own press. */
+export type OnTextTap = (e: GestureResponderEvent) => void;
+
+export const BlockView = memo(function BlockView({ b, P, size, onLayout, lit, img, onTap }: { b: Block; P: ReaderColors; size: number; onLayout: (e: LayoutChangeEvent) => void; lit?: Lit; img?: FigureState; onTap?: OnTextTap }) {
   const body: TextStyle = { fontFamily: fontFamily.reader.regular, fontSize: size, lineHeight: size * R.lineHeight, color: P.text, includeFontPadding: false };
   const gap = { marginBottom: size };
   switch (b.kind) {
     case 'p':
-      return <View onLayout={onLayout} style={gap}><Text style={body}><Spans spans={b.spans} P={P} size={size} lit={lit} /></Text></View>;
+      return <View onLayout={onLayout} style={gap}><Text style={body} onPress={onTap}><Spans spans={b.spans} P={P} size={size} lit={lit} /></Text></View>;
     case 'h': {
       const s = b.level <= 2 ? size * 1.2 : size;
       return (
         <View onLayout={onLayout} style={{ marginTop: size * 0.5, marginBottom: size * 0.6 }}>
-          <Text accessibilityRole="header" style={[body, { fontSize: s, lineHeight: s * 1.35 }]}><Spans spans={b.spans} P={P} size={s} bold lit={lit} /></Text>
+          <Text accessibilityRole="header" style={[body, { fontSize: s, lineHeight: s * 1.35 }]} onPress={onTap}><Spans spans={b.spans} P={P} size={s} bold lit={lit} /></Text>
         </View>
       );
     }
     case 'quote':
       return (
         <View onLayout={onLayout} style={[gap, { borderLeftWidth: 3, borderLeftColor: alpha(P.muted, 0.35), paddingLeft: 14 }]}>
-          <Text style={body}><Spans spans={b.spans} P={P} size={size} lit={lit} /></Text>
+          <Text style={body} onPress={onTap}><Spans spans={b.spans} P={P} size={size} lit={lit} /></Text>
         </View>
       );
     case 'li':
       return (
         <View onLayout={onLayout} style={{ flexDirection: 'row', marginBottom: size * 0.5, paddingLeft: b.depth * size * 1.2 }}>
           <Text numberOfLines={1} style={[body, { minWidth: size * 1.4, paddingRight: size * 0.4 }]}>{b.marker}</Text>
-          <Text style={[body, { flex: 1 }]}><Spans spans={b.spans} P={P} size={size} lit={lit} /></Text>
+          <Text style={[body, { flex: 1 }]} onPress={onTap}><Spans spans={b.spans} P={P} size={size} lit={lit} /></Text>
         </View>
       );
     case 'code':

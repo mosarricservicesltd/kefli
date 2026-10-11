@@ -91,6 +91,14 @@ object VoiceEngine {
   private fun emit(e: Event) = listeners.toList().forEach { it(e) }
   private fun emitState() = emit(Event.State(hash, playing, word, rate, wordTiming, wps))
 
+  /**
+   * The engine's rate for a speed step (FD 107). Google's voice doesn't scale with its rate: asked for 2 it read at
+   * about 1.65 times its 1x speed, so 2x asks for 2.1, which the Pixel heard at 2x (11 October 2026). Asked for less
+   * than 0.5 it reads no slower than about 0.6x, so 0.5x passes through as it is, with the other steps.
+   */
+  private fun speechRate(r: Float): Float = if (r >= 1.99f) SPEECH_RATE_2X else r
+  private const val SPEECH_RATE_2X = 2.1f
+
   /** Seconds of reading at the current rate, by the app's clock (5.7). */
   fun durationMs(): Long = if (totalWords == 0) 0 else (totalWords / (wps * rate) * 1000).toLong()
   fun positionMs(): Long = (word / (wps * rate) * 1000).toLong()
@@ -119,7 +127,7 @@ object VoiceEngine {
 
   private fun configure() {
     val t = tts ?: return
-    t.setSpeechRate(rate)
+    t.setSpeechRate(speechRate(rate))
     t.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
       override fun onStart(id: String) {}
       override fun onDone(id: String) { main.post { if (id.startsWith(SAMPLE)) sampleEnded(id) else written(id) } }
@@ -135,7 +143,7 @@ object VoiceEngine {
     reset()
     hash = h; title = t; site = s; sentences = list; totalWords = total; rate = r; wps = wordsPerSecond; artwork = art
     useVoice(voiceId, lang)
-    tts?.setSpeechRate(r)
+    tts?.setSpeechRate(speechRate(r))
     word = startWord.coerceIn(0, maxOf(0, total - 1))
     ended = false
     playing = false
@@ -182,10 +190,15 @@ object VoiceEngine {
     emitState()
   }
 
-  /** A new rate is written fresh from the word reached; the voice keeps its pitch. */
-  fun setRate(r: Float) {
+  /**
+   * A new rate is written fresh from the word reached; the voice keeps its pitch. The words a second come with it,
+   * since a voice's speed doesn't scale with the rate (FD 107: Google's voice reads 2× at about 1.65× and 0.5× at
+   * about 0.65×), so each rate keeps its own measure.
+   */
+  fun setRate(r: Float, wordsPerSecond: Float) {
     rate = r
-    tts?.setSpeechRate(r)
+    wps = wordsPerSecond
+    tts?.setSpeechRate(speechRate(r))
     if (playing) startFrom(word) else { reset(); stale = true }
     emitState()
   }
@@ -249,7 +262,7 @@ object VoiceEngine {
     val t = tts
     sessionVoice?.let { t?.voice = it }
     sessionVoice = null
-    t?.setSpeechRate(rate)
+    t?.setSpeechRate(speechRate(rate))
     val d = sampleDone
     sampleDone = null
     d?.invoke()

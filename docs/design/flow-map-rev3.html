@@ -234,6 +234,7 @@ code{font-size:13px;background:var(--accent-soft);padding:1px 5px;border-radius:
 <ol class="flow">
   <li><span class="tag t-action">Action</span><div>▶ in the Reader.</div></li>
   <li><span class="tag t-screen">Screen</span><div>The phone's voice starts at once; words highlight as they're spoken; the mini player docks (play/pause, skip ±15 s, speed). The article joins the Listen tab.</div></li>
+  <li><span class="tag t-action">Action</span><div><strong>Double-tap a word</strong> in the Reader: the voice plays from it, moving there if the article is playing, or starting there if not. Speed steps 1×, 1.5×, 2×, 0.5× <span class="changed">new · 107</span>.</div></li>
   <li><span class="tag t-bg">Unhappy</span><div>A voice that reports no word positions: the whole sentence is marked instead, the progress line moves across each sentence’s estimated time, and Now playing’s word meter stays unlit (<code>play-sentence</code>) <span class="changed">new · 91 (h)</span>. Speed read is unaffected.</div></li>
   <li><span class="tag t-bg">Silent</span><div>Citation markers (<code>[1]</code>, “[citation needed]”), numbered footnote links and a Wikipedia article’s reference list are skipped by the voice; the Reader still shows them <span class="changed">new · 102</span>.</div></li>
   <li><span class="tag t-bg">Silent</span><div>Ask the server for the better voice. It's cached per article and used from the next play; it never swaps voices mid-article.</div></li>

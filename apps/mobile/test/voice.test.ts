@@ -1,10 +1,22 @@
-import { RATES, WPS_SEED, clock, nextRate, rateLabel, readRate, readWps, seconds, startWord } from '../src/voice/clock';
+import { RATES, WPS_SEED, clock, nextRate, rateLabel, readRate, readWps, seconds, snapRate, startWord, wpsFor, wpsKey } from '../src/voice/clock';
 
 describe('the listening clock (mobile spec 5.7)', () => {
-  test('the speed pill steps and wraps', () => {
-    expect(RATES.map(nextRate)).toEqual([1, 1.2, 1.5, 2, 0.8]);
-    expect(nextRate(1.1)).toBe(0.8);
+  test('the speed pill steps 1, 1.5, 2, 0.5 and back to 1 (FD 107)', () => {
+    expect(RATES.map(nextRate)).toEqual([1, 1.5, 2, 0.5]);
+    let r = 1;
+    const seen = [r];
+    for (let k = 0; 4 > k; k++) seen.push((r = nextRate(r)));
+    expect(seen).toEqual([1, 1.5, 2, 0.5, 1]);
     expect(rateLabel(1.5)).toBe('1.5×');
+  });
+
+  test('a rate widened from the engine\'s float is snapped to its step, in the pill and its label', () => {
+    expect(snapRate(1.2000000476837158)).toBe(1);
+    expect(snapRate(0.800000011920929)).toBe(1);
+    expect(snapRate(0.5000000001)).toBe(0.5);
+    expect(nextRate(1.5000000001)).toBe(2);
+    expect(nextRate(2.0000000476837158)).toBe(0.5);
+    expect(rateLabel(1.5000000476837158)).toBe('1.5×');
   });
 
   test('time is words over words a second at the rate', () => {
@@ -21,8 +33,24 @@ describe('the listening clock (mobile spec 5.7)', () => {
     expect(startWord(0, { first: 0, last: 0 }, 0)).toBe(0);
   });
 
+  test('words a second are kept per voice and rate, 1× under the key it always had (FD 107)', () => {
+    expect([wpsKey('en-gb-x', 1), wpsKey('en-gb-x', 2), wpsKey('default', 0.5000000001)]).toEqual(['voice.wps.en-gb-x', 'voice.wps.en-gb-x@2', 'voice.wps.default@0.5']);
+    const kept: Record<string, string> = { 'voice.wps.v': '3.2', 'voice.wps.v@1.5': '3.3', 'voice.wps.w@2': 'x' };
+    const get = (k: string) => kept[k] ?? null;
+    // a rate measured is its own; one not yet heard is 1×'s scaled by the seed; with nothing learned, the seed of 3.9
+    expect(wpsFor(get, 'v', 1)).toBe(3.2);
+    expect(wpsFor(get, 'v', 1.5)).toBe(3.3);
+    expect(wpsFor(get, 'v', 2)).toBe(3.2);
+    expect(wpsFor(get, 'v', 0.5)).toBeCloseTo(3.2 * 1.3);
+    expect(wpsFor(get, 'w', 2)).toBe(WPS_SEED);
+    expect(wpsFor(get, 'w', 0.5)).toBeCloseTo(WPS_SEED * 1.3);
+    expect(wpsFor(get, 'none', 1)).toBe(WPS_SEED);
+  });
+
   test('stored values are checked', () => {
-    expect([readRate('1.5'), readRate('3'), readRate(null)]).toEqual([1.5, 1, 1]);
+    expect([readRate('1.5'), readRate('0.5'), readRate('3'), readRate(null)]).toEqual([1.5, 0.5, 1, 1]);
+    // the old steps read as 1
+    expect([readRate('0.8'), readRate('1.2')]).toEqual([1, 1]);
     expect([readWps('3.03'), readWps('0'), readWps(null)]).toEqual([3.03, WPS_SEED, WPS_SEED]);
   });
 });

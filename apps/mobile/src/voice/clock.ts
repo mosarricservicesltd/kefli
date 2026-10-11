@@ -1,12 +1,20 @@
 // The listening clock and choices (mobile spec 5.7), platform-free: on-device speech has no duration, so time is
-// the word reached over words a second at the rate. The speed pill steps 0.8, 1, 1.2, 1.5, 2 and wraps. Where a
-// session starts: the saved word if it is on screen, otherwise the first word in view (FD 19).
-export const RATES = [0.8, 1, 1.2, 1.5, 2] as const;
+// the word reached over words a second at the rate. The speed pill steps 1, 1.5, 2, 0.5 and back to 1 (FD 107).
+// Where a session starts: the saved word if it is on screen, otherwise the first word in view (FD 19).
+export const RATES = [0.5, 1, 1.5, 2] as const;
 /** Words a second at rate 1, before a voice is measured (T§2). */
 export const WPS_SEED = 3.9;
 
+/**
+ * The step nearest a rate. The engine keeps the rate as a 32-bit float, so a step can come back as
+ * 1.2000000476837158; a rate is snapped wherever it enters, or the pill would print it whole and lose its place.
+ */
+export function snapRate(rate: number): number {
+  return RATES.reduce((best, r) => (Math.abs(rate - best) > Math.abs(rate - r) ? r : best), 1 as number);
+}
+
 export function nextRate(rate: number): number {
-  const i = RATES.indexOf(rate as (typeof RATES)[number]);
+  const i = (RATES as readonly number[]).indexOf(snapRate(rate));
   return RATES[(i + 1) % RATES.length];
 }
 
@@ -22,7 +30,7 @@ export function clock(s: number): string {
 }
 
 export function rateLabel(rate: number): string {
-  return `${rate}×`;
+  return `${snapRate(rate)}×`;
 }
 
 /** The start word: the saved word when it lies in view, else the first word in view; a finished article from 0. */
@@ -31,7 +39,7 @@ export function startWord(saved: number, inView: { first: number; last: number }
   return saved >= inView.first && saved <= inView.last ? saved : inView.first;
 }
 
-/** A stored speed or words-a-second value, checked. */
+/** A stored speed or words-a-second value, checked; a speed from the old steps (0.8, 1.2) reads as 1. */
 export function readRate(v: string | null): number {
   const n = Number(v);
   return (RATES as readonly number[]).includes(n) ? n : 1;
@@ -40,6 +48,29 @@ export function readRate(v: string | null): number {
 export function readWps(v: string | null): number {
   const n = Number(v);
   return n >= 1 && n <= 8 ? n : WPS_SEED;
+}
+
+/**
+ * Where a voice's words a second at a rate are kept (FD 107). A voice's speed doesn't scale with the rate, so each
+ * rate has its own; 1× keeps the key it always had, so what was learned before stays.
+ */
+export function wpsKey(voice: string, rate: number): string {
+  const r = snapRate(rate);
+  return r === 1 ? `voice.wps.${voice}` : `voice.wps.${voice}@${r}`;
+}
+
+/**
+ * How a rate's words a second stand to 1×'s before it has been heard, from Google's en-GB voice on the Pixel
+ * (11 October 2026: 0.5× reads at about 0.65×, as the voice goes no slower; 2× is tuned in the engine to a true
+ * 2×). RULED: a seed only; the engine learns the real value.
+ */
+const RATE_SEED: Record<number, number> = { 0.5: 1.3, 1: 1, 1.5: 1, 2: 1 };
+
+/** A voice's words a second at a rate: its own once measured, else 1×'s scaled by the seed. */
+export function wpsFor(get: (key: string) => string | null, voice: string, rate: number): number {
+  const own = get(wpsKey(voice, rate));
+  if (own !== null && readWps(own) === Number(own)) return Number(own);
+  return readWps(get(wpsKey(voice, 1))) * (RATE_SEED[snapRate(rate)] ?? 1);
 }
 
 export type Ruler = { numbers: { at: number; label: string }[]; ticks: { at: number; major: boolean }[] };

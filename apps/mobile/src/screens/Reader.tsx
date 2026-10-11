@@ -3,7 +3,7 @@
 // the text laid out at the saved word before it shows, with no animated scroll; the end card; the floating Archive.
 // The position is kept as the page moves and published on leaving and at most once a minute while reading (4.5).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, View, useWindowDimensions, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { AccessibilityInfo, ScrollView, View, useWindowDimensions, type GestureResponderEvent, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,7 +14,7 @@ import { fontFamily, radius, reader as RT } from '@kefli/tokens';
 import { quickIn, quickOut } from '@kefli/tokens/reanimated';
 import { minutes, nextUnread, reconcileWords, rowByHash, setPosition, textLost, type LibRow } from '../data/library';
 import { blockOfWord, type Article } from '../reader/blocks';
-import { scrollYForWord, wordAtScroll, type Place } from '../reader/position';
+import { isDoubleTap, scrollYForWord, wordAtOffset, wordAtScroll, type Place, type Tap } from '../reader/position';
 import { readerColors, type PaletteId, type ReaderColors } from '../reader/palette';
 import { setReaderPalette, setReaderSize, useReaderPrefs } from '../reader/prefs';
 import { BlockView, type FigureState, type Lit } from '../reader/Prose';
@@ -39,7 +39,8 @@ import { setToastFloor, showToast } from '../ui/toast';
 import { alpha, mix, useTheme } from '../ui/theme';
 import { archive, remove } from './actions';
 import { ReaderTier } from './Player';
-import { jumpTo, pauseVoice, startListening, stopIfPlaying, useVoice, warmVoice, type Session } from '../services/voice';
+import { KefliSystem } from '../../modules/kefli-system/src';
+import { jumpTo, listenFrom, pauseVoice, startListening, stopIfPlaying, useVoice, warmVoice, type Session } from '../services/voice';
 import { startWord } from '../voice/clock';
 import { ArchiveDock, DOCK, DOCK_LIFTED } from './ArchiveDock';
 import { OriginalView } from './Original';
@@ -209,6 +210,31 @@ function Article({ row, P, owner, article, voice, viewRange, jump, imgs }: {
     layouts.current[i] = { y: e.nativeEvent.layout.y, h: e.nativeEvent.layout.height };
   }), [blocks]);
 
+  // Double-tap a word to play from it (FD 107): the phone is asked which character was under the second tap, and
+  // the voice moves there, or starts there. A screen reader keeps its own double-tap, so the text takes no taps
+  // while one runs; Listen and the skips serve there.
+  const [screenReader, setScreenReader] = useState(false);
+  useEffect(() => {
+    AccessibilityInfo.isScreenReaderEnabled().then(setScreenReader).catch(() => undefined);
+    const sub = AccessibilityInfo.addEventListener('screenReaderChanged', setScreenReader);
+    return () => sub.remove();
+  }, []);
+  const lastTap = useRef<Tap | null>(null);
+  const rowRef = useRef(row);
+  rowRef.current = row;
+  const onTaps = useMemo(() => blocks.map((b, i) => (e: GestureResponderEvent) => {
+    const { pageX, pageY } = e.nativeEvent;
+    const tap = { block: i, x: pageX, y: pageY, at: Date.now() };
+    const first = lastTap.current;
+    lastTap.current = tap;
+    if (!isDoubleTap(first, tap)) return;
+    lastTap.current = null;
+    KefliSystem.textOffsetAt(pageX, pageY)
+      .catch(() => null)
+      .then((hit) => listenFrom(rowRef.current, b.firstWord + (hit ? wordAtOffset(hit.text, hit.offset, b.words) : 0)))
+      .catch(() => undefined);
+  }), [blocks]);
+
   const place = useCallback(() => {
     const t = target.current;
     if (!t) return setShown(true);
@@ -354,7 +380,7 @@ function Article({ row, P, owner, article, voice, viewRange, jump, imgs }: {
           )}
           {blocks.slice(win.lo, win.hi).map((b, k) => {
             const i = win.lo + k;
-            return <BlockView key={i} b={b} P={P} size={prefs.size} onLayout={onLayouts[i]} lit={litFor.get(i)} img={b.kind === 'img' ? imgs.get(b.src) : undefined} />;
+            return <BlockView key={i} b={b} P={P} size={prefs.size} onLayout={onLayouts[i]} lit={litFor.get(i)} img={b.kind === 'img' ? imgs.get(b.src) : undefined} onTap={screenReader || !b.words ? undefined : onTaps[i]} />;
           })}
           {win.hi === n && (
             <EndCard

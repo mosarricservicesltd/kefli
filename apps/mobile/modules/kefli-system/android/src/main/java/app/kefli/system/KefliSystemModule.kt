@@ -11,11 +11,16 @@ import android.net.Uri
 import android.os.Build
 import android.os.PersistableBundle
 import android.provider.MediaStore
+import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
+import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import com.facebook.react.ReactActivity
+import com.facebook.react.uimanager.RootView
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
+import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
@@ -90,6 +95,39 @@ class KefliSystemModule : Module() {
       (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(clip)
       true
     }
+
+    // The character under a point in the Reader (FD 107: double-tap a word to play from it). React Native reports
+    // where a Text was pressed but not which character, so the text view under the point, in React Native's
+    // page coordinates, is asked for its offset there; the text comes back with it, for the word to be counted.
+    // Null where no text lies under the point.
+    AsyncFunction("textOffsetAt") { pageX: Double, pageY: Double ->
+      val activity = appContext.currentActivity ?: return@AsyncFunction null
+      val root = findRoot(activity.window.decorView) ?: return@AsyncFunction null
+      val at = IntArray(2).also { root.getLocationInWindow(it) }
+      val density = activity.resources.displayMetrics.density
+      val x = at[0] + (pageX * density).toFloat()
+      val y = at[1] + (pageY * density).toFloat()
+      val text = textViewAt(root, x, y) ?: return@AsyncFunction null
+      val own = IntArray(2).also { text.getLocationInWindow(it) }
+      val offset = text.getOffsetForPosition(x - own[0], y - own[1])
+      if (offset < 0) null else mapOf("offset" to offset, "text" to text.text.toString())
+    }.runOnQueue(Queues.MAIN)
+  }
+
+  private fun findRoot(v: View): View? {
+    if (v is RootView) return v
+    if (v !is ViewGroup) return null
+    for (i in 0 until v.childCount) findRoot(v.getChildAt(i))?.let { return it }
+    return null
+  }
+
+  /** The topmost shown text view whose box holds the point, in window coordinates. */
+  private fun textViewAt(v: View, x: Float, y: Float): TextView? {
+    if (!v.isShown) return null
+    val at = IntArray(2).also { v.getLocationInWindow(it) }
+    if (x < at[0] || x >= at[0] + v.width || y < at[1] || y >= at[1] + v.height) return null
+    if (v is ViewGroup) for (i in v.childCount - 1 downTo 0) textViewAt(v.getChildAt(i), x, y)?.let { return it }
+    return v as? TextView
   }
 
   private class PendingExport(val bytes: ByteArray, val promise: Promise)

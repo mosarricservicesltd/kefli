@@ -1,7 +1,7 @@
 import { normaliseMarkdown } from '@kefli/protocol';
 import { articleBlocks } from '../src/reader/blocks';
 import { readPrefs, readerColors } from '../src/reader/palette';
-import { scrollYForWord, wordAtScroll, type Place } from '../src/reader/position';
+import { isDoubleTap, scrollYForWord, wordAtOffset, wordAtScroll, type Place } from '../src/reader/position';
 import { alpha, mix } from '../src/ui/colour';
 import { S, say, savedWhen } from '../src/ui/strings';
 
@@ -59,5 +59,24 @@ describe('the Reader (mobile spec 5.6, 6.7)', () => {
     expect(savedWhen(now - 60, now)).toBe('Saved today');
     expect(savedWhen(now - 86_400, now)).toBe('Saved yesterday');
     expect(savedWhen(now - 5 * 86_400, now)).toBe('Saved on 2 October');
+  });
+
+  test('a tapped character is its word, as the highlight counts words (FD 107)', () => {
+    const t = 'Five six  seven, eight';
+    expect([0, 3, 4, 5, 7, 8, 9, 10, 17, 21].map((o) => wordAtOffset(t, o, 4))).toEqual([0, 0, 0, 1, 1, 1, 1, 2, 3, 3]);
+    // past the end, or a block counting fewer words, stays inside the block
+    expect(wordAtOffset(t, 99, 4)).toBe(3);
+    expect(wordAtOffset(t, 21, 2)).toBe(1);
+    expect(wordAtOffset('  lead', 0, 1)).toBe(0);
+    expect(wordAtOffset('', 0, 0)).toBe(0);
+  });
+
+  test('a double tap is two taps on one block, close in time and place', () => {
+    const a = { block: 2, x: 100, y: 200, at: 1000 };
+    expect(isDoubleTap(null, a)).toBe(false);
+    expect(isDoubleTap(a, { ...a, at: 1250 })).toBe(true);
+    expect(isDoubleTap(a, { ...a, at: 1350 })).toBe(false);
+    expect(isDoubleTap(a, { ...a, block: 3, at: 1100 })).toBe(false);
+    expect(isDoubleTap(a, { ...a, x: 130, at: 1100 })).toBe(false);
   });
 });
