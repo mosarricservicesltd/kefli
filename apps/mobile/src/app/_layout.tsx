@@ -95,6 +95,7 @@ function Main({ app }: { app: NonNullable<ReturnType<typeof useApp>> }) {
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="search" />
             <Stack.Screen name="browsers" />
+            <Stack.Screen name="nostr-app" />
             <Stack.Screen name="connect" />
             <Stack.Screen name="add-device" />
             <Stack.Screen name="delete" />

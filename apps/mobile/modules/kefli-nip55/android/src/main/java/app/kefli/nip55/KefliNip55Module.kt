@@ -101,6 +101,16 @@ class KefliNip55Module : Module() {
       launch(promise, "event", signerIntent(pkg, eventJson, "sign_event").putExtra("id", "kefli").putExtra("current_user", npub))
     }
 
+    // Decision 104: whether the signer signs this event through its resolver alone, never its screen. The event is a
+    // throwaway the caller never sends; only the answer matters.
+    AsyncFunction("signInBackground") { pkg: String, eventJson: String, hex: String ->
+      try {
+        resolve(pkg, "SIGN_EVENT", arrayOf(eventJson, "", hex))?.second != null
+      } catch (e: Exception) {
+        false
+      }
+    }
+
     AsyncFunction("nip44Encrypt") { pkg: String, plaintext: String, peer: String, hex: String, npub: String, promise: Promise ->
       crypt(pkg, "NIP44_ENCRYPT", "nip44_encrypt", plaintext, peer, hex, npub, promise)
     }

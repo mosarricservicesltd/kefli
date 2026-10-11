@@ -56,8 +56,16 @@ describe('PDF layout (C§4.2)', () => {
 
   test('a larger line is a heading, ranked by size, and the largest on page one is the title', () => {
     const out = md([page(run('A Big Title', 72, 60, 22), run('A section', 72, 100, 15), run(prose(1), 72, 130), run('Another section', 72, 170, 15), run(prose(2), 72, 200))]);
-    expect(out.markdown).toBe(`# A Big Title\n\n## A section\n\n${prose(1)}\n\n## Another section\n\n${prose(2)}\n`);
+    // the Reader shows the title above the text, so the heading it came from leaves the body
+    expect(out.markdown).toBe(`## A section\n\n${prose(1)}\n\n## Another section\n\n${prose(2)}\n`);
     expect(out.title).toBe('A Big Title');
+  });
+
+  test("the title heading goes when the file's title says the same, and stays when it doesn't", () => {
+    const body = [page(run('Annual Report', 72, 60, 20), run(prose(1), 72, 100))];
+    expect(md(body, 'ANNUAL REPORT').markdown).toBe(`${prose(1)}\n`);
+    expect(md(body, 'Annual report: the year in numbers').markdown).toBe(`${prose(1)}\n`);
+    expect(md(body, 'Minutes of the board').markdown).toBe(`# Annual Report\n\n${prose(1)}\n`);
   });
 
   test("the file's title wins unless it is an address or a placeholder", () => {

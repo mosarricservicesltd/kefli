@@ -30,6 +30,17 @@ export function hasData(db: SqlDb): boolean {
 const TABLES = ['outbox_targets', 'outbox', 'listen_history', 'items_future', 'blobs', 'images', 'cover_drawn', 'relays', 'servers', 'lists',
   'sync_cursors', 'inbox_seen', 'devices', 'job_items', 'jobs', 'settings', 'items', 'identities'];
 
+/** Settings that belong to the phone, not the library: the reader's and the voice's. Sign out keeps them (FD 105). */
+const DEVICE_PREFS = /^(reader|voice)\./;
+
+export function devicePrefs(db: SqlDb): [string, string][] {
+  return db.all<{ key: string; value: string }>('SELECT key, value FROM settings').filter((r) => DEVICE_PREFS.test(r.key)).map((r) => [r.key, r.value]);
+}
+
+export function restorePrefs(db: SqlDb, prefs: [string, string][]): void {
+  for (const [k, v] of prefs) setSetting(db, k, v);
+}
+
 /** A database with no readable key file is wiped (7.1): every row, the search index included. */
 export function wipe(db: SqlDb): void {
   db.tx(() => {

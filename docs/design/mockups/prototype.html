@@ -533,7 +533,7 @@ svg .arc{transform-box:view-box;transform-origin:center}
    extension's options page uses the same notice) */
 .errline{display:flex;align-items:flex-start;gap:var(--space-8);padding:var(--space-12) var(--space-16);border-radius:var(--radius);background:color-mix(in srgb, var(--error) 10%, var(--surface));color:var(--text);font-size:var(--text-13);font-weight:var(--weight-meta);line-height:1.4;margin-bottom:var(--space-16)}
 .errline svg{color:var(--error);margin-top:1px}
-.words{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-8)}
+.words{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(6,auto);grid-auto-flow:column;gap:var(--space-8)}
 .wf{display:flex;align-items:center;gap:var(--space-8);min-width:0;height:48px;padding:0 var(--space-12);border-radius:var(--radius-button);background:var(--surface);border:1px solid var(--line-strong);position:relative}
 .wf > .ering{inset:-1px}
 .wf span{width:18px;font-size:var(--text-13);color:var(--muted);font-variant-numeric:tabular-nums;text-align:right}
@@ -607,7 +607,7 @@ svg .arc{transform-box:view-box;transform-origin:center}
 .status.off::before{background:var(--muted)}
 .gnote{margin:calc(-1 * var(--space-12)) var(--gutter) var(--space-20);font-size:var(--text-13);color:var(--muted)}
 .onbbody .gnote{margin-left:0;margin-right:0}
-.codegrid{position:relative;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-8);margin-bottom:var(--space-16)}
+.codegrid{position:relative;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(6,auto);grid-auto-flow:column;gap:var(--space-8);margin-bottom:var(--space-16)}
 .codegrid .cw{display:flex;align-items:center;gap:var(--space-8);height:40px;padding:0 var(--space-12);border-radius:var(--radius-control);background:var(--background);font-weight:var(--weight-meta)}
 .codegrid .cw span{width:18px;text-align:right;font-size:var(--text-13);color:var(--muted);font-weight:var(--weight-body)}
 /* until Show the words, each slot holds a neutral word-shaped bar, so the words aren't on screen, in a screenshot or in the
@@ -880,6 +880,21 @@ svg .arc{transform-box:view-box;transform-origin:center}
       <button data-jump="nostr-probe">The app can’t keep saves private</button>
       <button data-jump="nostr-import">Import bookmarks</button>
     </div>
+    <h2>Saving without asking (decision 104)</h2>
+    <div class="btns">
+      <button data-jump="nostr-bg">The app asks before each save</button>
+      <button data-jump="nostr-bg-waiting">Approving in the app</button>
+      <button data-jump="nostr-bg-partial">Still asks for some</button>
+      <button data-jump="nostr-bg-declined">Declined</button>
+      <button data-jump="you-nostr-asks">You: asks before each save</button>
+    </div>
+    <h2>Your nostr app (decision 105)</h2>
+    <div class="btns">
+      <button data-jump="nostrapp">Your nostr app</button>
+      <button data-jump="nostrapp-asks">Asks before each save</button>
+      <button data-jump="nostrapp-disc">Sign out</button>
+      <button data-jump="nostrapp-disc-unsent">Sign out, with saves not sent</button>
+    </div>
     <h2>Restoring</h2>
     <div class="btns">
       <button data-jump="restoring">Watch it restore</button>
@@ -999,6 +1014,7 @@ const I = {
   scan:'<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect width="7" height="7" x="8.5" y="8.5" rx="1"/>',
   keyboard:'<path d="M10 8h.01M12 12h.01M14 8h.01M16 12h.01M18 8h.01M6 8h.01M7 16h10M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/>',
   login:'<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/>',
+  logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>',
   chev:'<path d="m9 18 6-6-6-6"/>',
   camera:'<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>',
   clipboard:'<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>',
@@ -1578,8 +1594,136 @@ setInterval(() => {
 
 /* ---------------- first launch and return (batch 3) ---------------- */
 // A slice of the BIP-39 English list, enough to demonstrate autocomplete. The app ships all 2048.
-const WORDLIST = ('abandon ability able about above absent absorb abstract absurd abuse access accident account accuse achieve acid acoustic acquire across act action actor actress actual adapt add addict address adjust admit adult advance advice afford afraid again age agent agree ahead aim air airport aisle alarm album alert alien all alley allow almost alone alpha already also alter always amateur amazing among amount anchor ancient anger angle angry animal ankle announce annual another answer antenna antique anxiety apart apology appear apple approve april arch arctic area arena argue arm armed armor army around arrange arrest arrive arrow art artist ask aspect asset assist assume athlete atom attack attend auction audit august aunt author auto autumn average avocado avoid awake aware away awesome awful axis '
-  + 'canal cancel candle candy cannon garden garlic garment harbor hard harvest lemon lend lens leopard museum mushroom music noble noise nominee orange orbit orchard order rescue research resemble shadow shaft shallow tiger tilt timber velvet vendor venue').split(' ');
+// the full BIP-39 English list, so autofill (decision 106) settles words as the app does
+const WORDLIST = ('abandon ability able about above absent absorb abstract absurd abuse access accident account accuse achieve acid '
+  + 'acoustic acquire across act action actor actress actual adapt add addict address adjust admit adult advance '
+  + 'advice aerobic affair afford afraid again age agent agree ahead aim air airport aisle alarm album '
+  + 'alcohol alert alien all alley allow almost alone alpha already also alter always amateur amazing among '
+  + 'amount amused analyst anchor ancient anger angle angry animal ankle announce annual another answer antenna antique '
+  + 'anxiety any apart apology appear apple approve april arch arctic area arena argue arm armed armor '
+  + 'army around arrange arrest arrive arrow art artefact artist artwork ask aspect assault asset assist assume '
+  + 'asthma athlete atom attack attend attitude attract auction audit august aunt author auto autumn average avocado '
+  + 'avoid awake aware away awesome awful awkward axis baby bachelor bacon badge bag balance balcony ball '
+  + 'bamboo banana banner bar barely bargain barrel base basic basket battle beach bean beauty because become '
+  + 'beef before begin behave behind believe below belt bench benefit best betray better between beyond bicycle '
+  + 'bid bike bind biology bird birth bitter black blade blame blanket blast bleak bless blind blood '
+  + 'blossom blouse blue blur blush board boat body boil bomb bone bonus book boost border boring '
+  + 'borrow boss bottom bounce box boy bracket brain brand brass brave bread breeze brick bridge brief '
+  + 'bright bring brisk broccoli broken bronze broom brother brown brush bubble buddy budget buffalo build bulb '
+  + 'bulk bullet bundle bunker burden burger burst bus business busy butter buyer buzz cabbage cabin cable '
+  + 'cactus cage cake call calm camera camp can canal cancel candy cannon canoe canvas canyon capable '
+  + 'capital captain car carbon card cargo carpet carry cart case cash casino castle casual cat catalog '
+  + 'catch category cattle caught cause caution cave ceiling celery cement census century cereal certain chair chalk '
+  + 'champion change chaos chapter charge chase chat cheap check cheese chef cherry chest chicken chief child '
+  + 'chimney choice choose chronic chuckle chunk churn cigar cinnamon circle citizen city civil claim clap clarify '
+  + 'claw clay clean clerk clever click client cliff climb clinic clip clock clog close cloth cloud '
+  + 'clown club clump cluster clutch coach coast coconut code coffee coil coin collect color column combine '
+  + 'come comfort comic common company concert conduct confirm congress connect consider control convince cook cool copper '
+  + 'copy coral core corn correct cost cotton couch country couple course cousin cover coyote crack cradle '
+  + 'craft cram crane crash crater crawl crazy cream credit creek crew cricket crime crisp critic crop '
+  + 'cross crouch crowd crucial cruel cruise crumble crunch crush cry crystal cube culture cup cupboard curious '
+  + 'current curtain curve cushion custom cute cycle dad damage damp dance danger daring dash daughter dawn '
+  + 'day deal debate debris decade december decide decline decorate decrease deer defense define defy degree delay '
+  + 'deliver demand demise denial dentist deny depart depend deposit depth deputy derive describe desert design desk '
+  + 'despair destroy detail detect develop device devote diagram dial diamond diary dice diesel diet differ digital '
+  + 'dignity dilemma dinner dinosaur direct dirt disagree discover disease dish dismiss disorder display distance divert divide '
+  + 'divorce dizzy doctor document dog doll dolphin domain donate donkey donor door dose double dove draft '
+  + 'dragon drama drastic draw dream dress drift drill drink drip drive drop drum dry duck dumb '
+  + 'dune during dust dutch duty dwarf dynamic eager eagle early earn earth easily east easy echo '
+  + 'ecology economy edge edit educate effort egg eight either elbow elder electric elegant element elephant elevator '
+  + 'elite else embark embody embrace emerge emotion employ empower empty enable enact end endless endorse enemy '
+  + 'energy enforce engage engine enhance enjoy enlist enough enrich enroll ensure enter entire entry envelope episode '
+  + 'equal equip era erase erode erosion error erupt escape essay essence estate eternal ethics evidence evil '
+  + 'evoke evolve exact example excess exchange excite exclude excuse execute exercise exhaust exhibit exile exist exit '
+  + 'exotic expand expect expire explain expose express extend extra eye eyebrow fabric face faculty fade faint '
+  + 'faith fall false fame family famous fan fancy fantasy farm fashion fat fatal father fatigue fault '
+  + 'favorite feature february federal fee feed feel female fence festival fetch fever few fiber fiction field '
+  + 'figure file film filter final find fine finger finish fire firm first fiscal fish fit fitness '
+  + 'fix flag flame flash flat flavor flee flight flip float flock floor flower fluid flush fly '
+  + 'foam focus fog foil fold follow food foot force forest forget fork fortune forum forward fossil '
+  + 'foster found fox fragile frame frequent fresh friend fringe frog front frost frown frozen fruit fuel '
+  + 'fun funny furnace fury future gadget gain galaxy gallery game gap garage garbage garden garlic garment '
+  + 'gas gasp gate gather gauge gaze general genius genre gentle genuine gesture ghost giant gift giggle '
+  + 'ginger giraffe girl give glad glance glare glass glide glimpse globe gloom glory glove glow glue '
+  + 'goat goddess gold good goose gorilla gospel gossip govern gown grab grace grain grant grape grass '
+  + 'gravity great green grid grief grit grocery group grow grunt guard guess guide guilt guitar gun '
+  + 'gym habit hair half hammer hamster hand happy harbor hard harsh harvest hat have hawk hazard '
+  + 'head health heart heavy hedgehog height hello helmet help hen hero hidden high hill hint hip '
+  + 'hire history hobby hockey hold hole holiday hollow home honey hood hope horn horror horse hospital '
+  + 'host hotel hour hover hub huge human humble humor hundred hungry hunt hurdle hurry hurt husband '
+  + 'hybrid ice icon idea identify idle ignore ill illegal illness image imitate immense immune impact impose '
+  + 'improve impulse inch include income increase index indicate indoor industry infant inflict inform inhale inherit initial '
+  + 'inject injury inmate inner innocent input inquiry insane insect inside inspire install intact interest into invest '
+  + 'invite involve iron island isolate issue item ivory jacket jaguar jar jazz jealous jeans jelly jewel '
+  + 'job join joke journey joy judge juice jump jungle junior junk just kangaroo keen keep ketchup '
+  + 'key kick kid kidney kind kingdom kiss kit kitchen kite kitten kiwi knee knife knock know '
+  + 'lab label labor ladder lady lake lamp language laptop large later latin laugh laundry lava law '
+  + 'lawn lawsuit layer lazy leader leaf learn leave lecture left leg legal legend leisure lemon lend '
+  + 'length lens leopard lesson letter level liar liberty library license life lift light like limb limit '
+  + 'link lion liquid list little live lizard load loan lobster local lock logic lonely long loop '
+  + 'lottery loud lounge love loyal lucky luggage lumber lunar lunch luxury lyrics machine mad magic magnet '
+  + 'maid mail main major make mammal man manage mandate mango mansion manual maple marble march margin '
+  + 'marine market marriage mask mass master match material math matrix matter maximum maze meadow mean measure '
+  + 'meat mechanic medal media melody melt member memory mention menu mercy merge merit merry mesh message '
+  + 'metal method middle midnight milk million mimic mind minimum minor minute miracle mirror misery miss mistake '
+  + 'mix mixed mixture mobile model modify mom moment monitor monkey monster month moon moral more morning '
+  + 'mosquito mother motion motor mountain mouse move movie much muffin mule multiply muscle museum mushroom music '
+  + 'must mutual myself mystery myth naive name napkin narrow nasty nation nature near neck need negative '
+  + 'neglect neither nephew nerve nest net network neutral never news next nice night noble noise nominee '
+  + 'noodle normal north nose notable note nothing notice novel now nuclear number nurse nut oak obey '
+  + 'object oblige obscure observe obtain obvious occur ocean october odor off offer office often oil okay '
+  + 'old olive olympic omit once one onion online only open opera opinion oppose option orange orbit '
+  + 'orchard order ordinary organ orient original orphan ostrich other outdoor outer output outside oval oven over '
+  + 'own owner oxygen oyster ozone pact paddle page pair palace palm panda panel panic panther paper '
+  + 'parade parent park parrot party pass patch path patient patrol pattern pause pave payment peace peanut '
+  + 'pear peasant pelican pen penalty pencil people pepper perfect permit person pet phone photo phrase physical '
+  + 'piano picnic picture piece pig pigeon pill pilot pink pioneer pipe pistol pitch pizza place planet '
+  + 'plastic plate play please pledge pluck plug plunge poem poet point polar pole police pond pony '
+  + 'pool popular portion position possible post potato pottery poverty powder power practice praise predict prefer prepare '
+  + 'present pretty prevent price pride primary print priority prison private prize problem process produce profit program '
+  + 'project promote proof property prosper protect proud provide public pudding pull pulp pulse pumpkin punch pupil '
+  + 'puppy purchase purity purpose purse push put puzzle pyramid quality quantum quarter question quick quit quiz '
+  + 'quote rabbit raccoon race rack radar radio rail rain raise rally ramp ranch random range rapid '
+  + 'rare rate rather raven raw razor ready real reason rebel rebuild recall receive recipe record recycle '
+  + 'reduce reflect reform refuse region regret regular reject relax release relief rely remain remember remind remove '
+  + 'render renew rent reopen repair repeat replace report require rescue resemble resist resource response result retire '
+  + 'retreat return reunion reveal review reward rhythm rib ribbon rice rich ride ridge rifle right rigid '
+  + 'ring riot ripple risk ritual rival river road roast robot robust rocket romance roof rookie room '
+  + 'rose rotate rough round route royal rubber rude rug rule run runway rural sad saddle sadness '
+  + 'safe sail salad salmon salon salt salute same sample sand satisfy satoshi sauce sausage save say '
+  + 'scale scan scare scatter scene scheme school science scissors scorpion scout scrap screen script scrub sea '
+  + 'search season seat second secret section security seed seek segment select sell seminar senior sense sentence '
+  + 'series service session settle setup seven shadow shaft shallow share shed shell sheriff shield shift shine '
+  + 'ship shiver shock shoe shoot shop short shoulder shove shrimp shrug shuffle shy sibling sick side '
+  + 'siege sight sign silent silk silly silver similar simple since sing siren sister situate six size '
+  + 'skate sketch ski skill skin skirt skull slab slam sleep slender slice slide slight slim slogan '
+  + 'slot slow slush small smart smile smoke smooth snack snake snap sniff snow soap soccer social '
+  + 'sock soda soft solar soldier solid solution solve someone song soon sorry sort soul sound soup '
+  + 'source south space spare spatial spawn speak special speed spell spend sphere spice spider spike spin '
+  + 'spirit split spoil sponsor spoon sport spot spray spread spring spy square squeeze squirrel stable stadium '
+  + 'staff stage stairs stamp stand start state stay steak steel stem step stereo stick still sting '
+  + 'stock stomach stone stool story stove strategy street strike strong struggle student stuff stumble style subject '
+  + 'submit subway success such sudden suffer sugar suggest suit summer sun sunny sunset super supply supreme '
+  + 'sure surface surge surprise surround survey suspect sustain swallow swamp swap swarm swear sweet swift swim '
+  + 'swing switch sword symbol symptom syrup system table tackle tag tail talent talk tank tape target '
+  + 'task taste tattoo taxi teach team tell ten tenant tennis tent term test text thank that '
+  + 'theme then theory there they thing this thought three thrive throw thumb thunder ticket tide tiger '
+  + 'tilt timber time tiny tip tired tissue title toast tobacco today toddler toe together toilet token '
+  + 'tomato tomorrow tone tongue tonight tool tooth top topic topple torch tornado tortoise toss total tourist '
+  + 'toward tower town toy track trade traffic tragic train transfer trap trash travel tray treat tree '
+  + 'trend trial tribe trick trigger trim trip trophy trouble truck true truly trumpet trust truth try '
+  + 'tube tuition tumble tuna tunnel turkey turn turtle twelve twenty twice twin twist two type typical '
+  + 'ugly umbrella unable unaware uncle uncover under undo unfair unfold unhappy uniform unique unit universe unknown '
+  + 'unlock until unusual unveil update upgrade uphold upon upper upset urban urge usage use used useful '
+  + 'useless usual utility vacant vacuum vague valid valley valve van vanish vapor various vast vault vehicle '
+  + 'velvet vendor venture venue verb verify version very vessel veteran viable vibrant vicious victory video view '
+  + 'village vintage violin virtual virus visa visit visual vital vivid vocal voice void volcano volume vote '
+  + 'voyage wage wagon wait walk wall walnut want warfare warm warrior wash wasp waste water wave '
+  + 'way wealth weapon wear weasel weather web wedding weekend weird welcome west wet whale what wheat '
+  + 'wheel when where whip whisper wide width wife wild will win window wine wing wink winner '
+  + 'winter wire wisdom wise wish witness wolf woman wonder wood wool word work world worry worth '
+  + 'wrap wreck wrestle wrist write wrong yard year yellow you young youth zebra zero zone zoo')
+  .split(' ');
 const WORDSET = new Set(WORDLIST);
 const SAMPLE_CODE = 'harbor lemon candle rescue orbit velvet noble garden shadow tiger across museum'.split(' ');
 const freshCode = () => ({ words: Array(12).fill(''), focus: 0, checking: false, notFound: false });
@@ -1811,9 +1955,36 @@ function bindCode(){
     const i = +inp.dataset.word;
     inp.onfocus = () => { S.code.focus = i; codeRefresh(); };
     inp.oninput = () => {
-      const parts = inp.value.trim().toLowerCase().split(/\s+/);
-      if (parts.length > 1) { parts.slice(0, 12 - i).forEach((p, k) => S.code.words[i + k] = p); render(); return; }
-      S.code.words[i] = parts[0]; codeRefresh();
+      const C = S.code, raw = inp.value.toLowerCase();
+      // decision 106: the rest of the word before, typed on after it filled itself in, is swallowed once: hidden while
+      // it matches, dropped at the space; a letter that departs from it starts this field's word, without the rest
+      const sp = C.spill && C.spill.i === i ? C.spill : null;
+      if (sp) {
+        const typed = sp.typed + raw;
+        if (sp.rest.startsWith(typed.trimEnd()) && (!typed.endsWith(' ') || typed.trim() === sp.rest)) {
+          if (typed.endsWith(' ')) C.spill = null; else sp.typed = typed;
+          inp.value = ''; C.words[i] = ''; codeRefresh(); return;
+        }
+        C.spill = null; inp.value = typed.slice(sp.typed.length).trimStart();
+      }
+      const parts = inp.value.toLowerCase().split(/\s+/);
+      // a space moves on, and pasting fills on from here (decision 23)
+      if (parts.length > 1) {
+        const got = parts.filter(Boolean);
+        got.slice(0, 12 - i).forEach((p, k) => C.words[i + k] = p);
+        C.focus = Math.min(11, i + Math.max(1, got.length - (inp.value.endsWith(' ') ? 0 : 1)));
+        render(); return;
+      }
+      const v = parts[0], was = C.words[i] || '';
+      C.words[i] = v;
+      // decision 106: once the letters fit only one word, it fills in and the next field takes over; never on a deletion
+      const only = v && v.length > was.length ? WORDLIST.filter(w => w.startsWith(v)) : [];
+      if (only.length === 1) {
+        C.words[i] = only[0];
+        if (i < 11) { C.spill = { i: i + 1, rest: only[0].slice(v.length), typed: '' }; C.focus = i + 1; }
+        render(); return;
+      }
+      codeRefresh();
     };
     inp.onblur = () => setTimeout(() => { if (S.code.focus === i && document.activeElement !== inp) { S.code.focus = null; codeRefresh(); } }, 120);
   });
@@ -1856,8 +2027,34 @@ const noAppBody = bad => `<h1>No nostr app on this phone</h1><p class="lead">Ins
 const linkOK = v => !v.trim() || /^bunker:\/\/[0-9a-f]{64}\?(.*&)?relay=wss(:|%3A)/i.test(v.trim());
 // contract 3.1: with it on, Kefli's server and one default backup join the user's own server list (decision 76)
 const keepCopiesRow = () => `<button class="swrow" role="switch" aria-checked="${S.keepCopies}" data-keep-copies><span class="yl"><b>Keep backup copies</b><small>Adds Kefli’s server and one independent backup to the list your nostr apps share, so your saves survive any one server closing.</small></span><span class="sw" aria-hidden="true"></span></button>`;
+// Decision 104: after sign-in, Kefli checks in the background that the nostr app will sign what saving needs
+// (the save, its backup uploads, the server list, a browser's seal) without asking. If it won't, this asks once. From
+// You, the same steps start at 'bg' and return to You.
+function bgDone(asks){
+  S.you.asks = asks;
+  if (S.bgFrom === 'you') { S.screen = 'nostrapp'; S.tab = 'you'; S.nostr = null; if (!asks) showToast('Saving no longer asks your nostr app'); render(); return; }
+  S.nostr = 'waiting'; S.sheet = 'import'; render();
+}
+
+function nostrBgScreen(st){
+  // Back means the same as Ask me each time: saving works either way
+  const back = { attr: 'data-nostr-skip' };
+  if (st === 'bg-waiting') {
+    return onbShell(`<h1>Save without asking</h1><div class="waiting"><div class="dots" data-mk="dots"><i></i><i></i><i></i></div>
+      <b>Waiting for your nostr app</b><p class="lead" style="margin-top:var(--space-8)">Approve the request there and choose to remember it, then come back to Kefli. Request 1 of 3.</p></div>`,
+      `<button class="btn secondary full" data-nostr="bg">Cancel</button>`, { attr: 'data-nostr="bg"' });
+  }
+  const err = { 'bg-partial': 'Your nostr app still asks before some saves. In your nostr app, let Kefli sign without asking, then try again.',
+    'bg-declined': 'The request was declined in your nostr app. Kefli will ask each time you save.' }[st];
+  const line = err ? `<div class="errline">${ic('alert', 16)}<span>${err}</span></div>` : '';
+  return onbShell(`<h1>Save without asking</h1>${line}
+    <p class="lead">Your nostr app asks you to approve each save before Kefli can back it up. Approve once now and choose to remember it, and saving from any app needs nothing more from you.</p>`,
+    `<button class="btn primary full" data-nostr="bg-waiting">${ic('login', 18)}${st === 'bg-partial' ? 'Try again' : 'Open my nostr app'}</button><button class="btn quiet full" data-nostr-skip>Ask me each time</button>`, back);
+}
+
 function nostrScreen(){
   const st = S.nostr;
+  if (st && st.startsWith('bg')) return nostrBgScreen(st);
   if (st === 'waiting') {
     // ← does what Cancel does: back to the step that started the wait (fix 20)
     return onbShell(`<h1>Sign in with your nostr app</h1><div class="waiting"><div class="dots" data-mk="dots"><i></i><i></i><i></i></div>
@@ -1960,7 +2157,7 @@ function youScreen(){
         <p>Your saves are yours alone. A recovery code brings them back on any phone, even if this one is lost.</p>
         <div class="row"><button class="btn secondary" data-you-act="later">Later</button><button class="btn primary" data-you-act="show-code">Show recovery code</button></div></div>` : '';
   const first = Y.nostrUser
-    ? yrow(null, 'login', 'Your nostr app', 'Signed in')
+    ? (Y.asks ? yrow('nostrapp', 'login', 'Your nostr app', '', { warn: true, sub: 'Asks before each save' }) : yrow('nostrapp', 'login', 'Your nostr app', 'Signed in'))
     : yrow('recovery', 'keyboard', 'Recovery code', '', { warn: !done, sub: done ? 'Written down' : 'Not written down', xf: 'sub-recovery', xfDelay: after });
   // offline: no banner on You; the rows carry the reason (fix 27). A nostr user has no Add another device: their nostr app
   // holds the identity, so there are no twelve words to pass on, and a second phone signs in with it (decision 90)
@@ -2022,6 +2219,37 @@ function browsersScreen(){
     ${!S.online ? offlineNotice('Connecting a browser needs a connection') : ''}
     <p class="lead">Pages you save in a connected browser arrive here the next time you open Kefli.</p>${list}`,
     `<button class="btn primary full" data-you-go="connect" ${S.online ? '' : 'disabled'}>${ic('laptop', 18)}Connect a browser</button>`, 'you');
+}
+
+// Decision 105: the nostr app row on You opens this. It says whether saving runs without asking (decision 104)
+// and offers Sign out, which forgets the library on this phone; the saves stay under the person's key.
+function nostrAppScreen(){
+  const Y = S.you;
+  const status = Y.asks
+    ? yrow(null, 'shield', 'Saving', '', { warn: true, sub: 'Asks before each save' })
+    : yrow(null, 'shield', 'Saving', 'Without asking');
+  const fix = Y.asks ? `<button class="btn primary full" data-you-go="nostrbg">${ic('login', 18)}Save without asking</button>` : '';
+  return onbShell(`<h1>Your nostr app</h1>
+    <p class="lead">Your library lives under your key, in your nostr app. Kefli asks the app to sign your saves and keep them private.</p>
+    <div class="ygroup">${yrow(null, 'login', 'Signed in with', 'Amber')}${status}</div>
+    <div class="ygroup"><button class="yrow danger" data-you-act="nostr-disc"><span class="yi">${ic('logout', 20)}</span><span class="yl">Sign out</span></button></div>`,
+    fix, 'you');
+}
+
+function nostrDisconnectSheet(){
+  const n = S.you.unsent || 0;
+  const unsent = n ? `<p class="sub"><b>${n === 1 ? 'One save hasn’t' : `${say(n)[0].toUpperCase() + say(n).slice(1)} saves haven’t`} been sent yet and will be lost.</b></p>` : '';
+  return `<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" data-stop><div class="grab"></div><h3>Sign out?</h3>
+    <p class="sub">Kefli removes your library from this phone. Your saves stay under your key, and signing in with your nostr app again brings them back. You can remove Kefli in your nostr app too.</p>${unsent}
+    <div class="row"><button class="btn secondary" data-close>Cancel</button><button class="btn danger" data-you-act="nostr-disc-yes">Sign out</button></div></div></div>`;
+}
+
+function finishNostrDisconnect(){
+  clearOnb(); clearRestore();
+  S.items = []; S.played = []; S.audio = null; S.early = 0; S.you = freshYou(); S.readerBack = null; S.sheet = null;
+  S.screen = 'welcome'; S.tab = 'saves'; S.navHint = 'root'; S.firstLaunch = true; S.welcomeT0 = null; S.welcomeLine = false;
+  showToast('You’re signed out');
+  render();
 }
 
 function disconnectSheet(){
@@ -2258,6 +2486,8 @@ vp.addEventListener('click', e => {
       if (Y.camOK) scanThenConfirm();
     }
     if (go === 'switchnostr') Y.sw = 'explain';
+    if (go === 'nostrbg') { S.bgFrom = 'you'; S.nostr = 'bg'; S.sheet = null; S.screen = 'nostr'; render(); return; }
+    if (go === 'nostrapp') { S.sheet = null; S.screen = 'nostrapp'; render(); return; }
     if (go === 'delete') { Y.del = 'explain'; Y.delTyped = ''; }
     S.sheet = null; S.screen = go; render(); return;
   }
@@ -2277,6 +2507,8 @@ vp.addEventListener('click', e => {
       return;
     }
     case 'new-code': Y.dev = 'show'; Y.countdown = 298; break;
+    case 'nostr-disc': S.sheet = 'nostrdisc'; S.sheetOpener = '[data-you-act="nostr-disc"]'; break;
+    case 'nostr-disc-yes': finishNostrDisconnect(); return;
     case 'disconnect': Y.disconnect = i; S.sheet = 'disconnect'; S.sheetOpener = `[data-you-act="disconnect"][data-i="${i}"]`; break;
     case 'disconnect-yes': { const b = Y.browsers.splice(Y.disconnect, 1)[0]; S.sheet = null; S.sheetOpener = null; showToast(`Disconnected from ${b.name}`); break; }
     case 'cam': Y.conn = 'prompt'; break;
@@ -2321,6 +2553,9 @@ function youJump(j){
   if (j === 'you') at('you');
   else if (j === 'you-done') { at('you'); Y.backupDone = true; }
   else if (j === 'you-nostr') { at('you'); Y.nostrUser = true; }
+  else if (j === 'you-nostr-asks') { at('you'); Y.nostrUser = true; Y.asks = true; }
+  else if (j.startsWith('nostrapp')) { at('nostrapp'); S.tab = 'you'; Y.nostrUser = true; Y.asks = j === 'nostrapp-asks';
+    if (j.startsWith('nostrapp-disc')) { S.sheet = 'nostrdisc'; Y.unsent = j === 'nostrapp-disc-unsent' ? 2 : 0; } }
   else if (j === 'you-voices') { at('you'); Y.voices = 3; }
   else if (j === 'you-offline') { at('you'); S.online = false; }
   else if (j === 'rec-hidden' || j === 'rec-shown' || j === 'rec-copied') { at('you'); S.sheet = 'recovery'; Y.codeShown = j !== 'rec-hidden'; Y.copied = j === 'rec-copied'; if (Y.codeShown) Y.backupDone = true; }
@@ -2687,6 +2922,7 @@ function sheetHTML(){
   }
   if (S.sheet === 'recovery') return recoverySheet();
   if (S.sheet === 'disconnect') return disconnectSheet();
+  if (S.sheet === 'nostrdisc') return nostrDisconnectSheet();
   if (S.sheet === 'import') {
     return `<div class="scrim"><div class="sheet" role="dialog" aria-modal="true" aria-label="Bring in your bookmarks?" data-stop><div class="grab"></div><h3>Bring in your bookmarks?</h3><p class="sub">${importLine(S.importCount)}</p><div class="row"><button class="btn secondary" data-import="no">Not now</button><button class="btn primary" data-import="yes">Bring them in</button></div></div></div>`;
   }
@@ -3761,6 +3997,7 @@ function render(){
   else if (S.screen === 'voice') html = voiceScreen();
   else if (S.screen === 'advanced') html = advancedScreen();
   else if (S.screen === 'switchnostr') html = switchScreen();
+  else if (S.screen === 'nostrapp') html = nostrAppScreen();
   else if (S.screen === 'delete') html = deleteScreen();
   let sheet = sheetHTML();
   if (S.sheet) sheet = sheet.replace('class="scrim"', `class="scrim" data-mk="scrim-${S.sheet}"`);
@@ -3982,7 +4219,7 @@ function openItem(id, back){
 vp.addEventListener('click', e => {
   // the launch screen takes every tap while it holds, and a tap ends the hold (decision 97)
   if (e.target.closest('[data-launch-lift]')) { S.launchLift?.(); return; }
-  const t = e.target.closest('[data-keep-copies],[data-tab],[data-list],[data-go],[data-back],[data-clear],[data-sheet],[data-close],[data-rtheme],[data-size],[data-delete],[data-undo],[data-undo-share],[data-readnow],[data-archive-open],[data-next],[data-stop],[data-play],[data-skip],[data-rate],[data-listen],[data-playall],[data-playitem],[data-open-audio],[data-stop-audio],[data-rsvp],[data-rsvp-exit],[data-rsvp-toggle],[data-rsvp-sent],[data-wpm],[data-rsvp-archive],[data-rsvp-unarchive],[data-new],[data-onb-go],[data-allow-camera],[data-perm],[data-open-settings],[data-paste],[data-sugg],[data-code-continue],[data-code-retry],[data-nostr],[data-link-go],[data-import],[data-open],[data-rowmenu],[data-row-restore],[data-row-delete],[data-unarchive-open],[data-orig],[data-orig-close],[data-copylink],[data-openbrowser]');
+  const t = e.target.closest('[data-keep-copies],[data-tab],[data-list],[data-go],[data-back],[data-clear],[data-sheet],[data-close],[data-rtheme],[data-size],[data-delete],[data-undo],[data-undo-share],[data-readnow],[data-archive-open],[data-next],[data-stop],[data-play],[data-skip],[data-rate],[data-listen],[data-playall],[data-playitem],[data-open-audio],[data-stop-audio],[data-rsvp],[data-rsvp-exit],[data-rsvp-toggle],[data-rsvp-sent],[data-wpm],[data-rsvp-archive],[data-rsvp-unarchive],[data-new],[data-onb-go],[data-allow-camera],[data-perm],[data-open-settings],[data-paste],[data-sugg],[data-code-continue],[data-code-retry],[data-nostr],[data-nostr-skip],[data-link-go],[data-import],[data-open],[data-rowmenu],[data-row-restore],[data-row-delete],[data-unarchive-open],[data-orig],[data-orig-close],[data-copylink],[data-openbrowser]');
   if (!t || t.closest('.ghost')) return;
   const d = t.dataset;
   if (d.stop !== undefined) return;
@@ -4094,6 +4331,10 @@ vp.addEventListener('click', e => {
   if (d.codeRetry !== undefined) S.code = freshCode();
   if (d.keepCopies !== undefined) S.keepCopies = !S.keepCopies;
   if (d.nostr) { clearOnb(); S.nostr = d.nostr; if (d.nostr === 'waiting') later(() => { if (S.screen === 'nostr' && S.nostr === 'waiting') { S.sheet = 'import'; render(); } }, 2200); }
+  // decision 104: approved and remembered, the check passes and the flow goes on (to the bookmarks question, or
+  // back to You); 'Ask me each time' goes on too, and You keeps the row's warning
+  if (d.nostr === 'bg-waiting') later(() => { if (S.screen === 'nostr' && S.nostr === 'bg-waiting') bgDone(false); }, 2200);
+  if (d.nostrSkip !== undefined) { bgDone(true); return; }
   if (d.import) { S.you.nostrUser = true; startRestore(); return; }
   if (d.linkGo) {
     // Connect with the link: a link that doesn't work stays in the field, marked, with the error under it (decision 91 (b))
@@ -4236,9 +4477,11 @@ function jumpTo(b){
     if (j === 'code-ready' || j === 'code-checking') { S.code.words = [...SAMPLE_CODE]; S.code.focus = null; S.code.checking = j === 'code-checking'; }
     if (j === 'code-notfound') S.code.notFound = true;
   }
-  if (j.startsWith('nostr')) {
+  if (j.startsWith('nostr') && !j.startsWith('nostrapp')) {
     S.screen = 'nostr';
-    S.nostr = { nostr: 'intro', 'nostr-waiting': 'waiting', 'nostr-none': 'none', 'nostr-declined': 'declined', 'nostr-import': 'waiting', 'nostr-timeout': 'timeout', 'nostr-badlink': 'badlink', 'nostr-probe': 'probe' }[j];
+    S.nostr = { nostr: 'intro', 'nostr-waiting': 'waiting', 'nostr-none': 'none', 'nostr-declined': 'declined', 'nostr-import': 'waiting', 'nostr-timeout': 'timeout', 'nostr-badlink': 'badlink', 'nostr-probe': 'probe',
+      'nostr-bg': 'bg', 'nostr-bg-waiting': 'bg-waiting', 'nostr-bg-partial': 'bg-partial', 'nostr-bg-declined': 'bg-declined' }[j];
+    S.bgFrom = 'signin';
     if (j === 'nostr-import') S.sheet = 'import';
     if (j === 'nostr-badlink') S.nostrLink = 'bunker://8635d45d2f8d6d4ef88446ebe103327d';   // cut short when copied: no full key, no relay
   }

@@ -2,19 +2,21 @@
 // nostr-none, nostr-badlink, nostr-waiting, nostr-declined, nostr-timeout, nostr-probe, nostr-import). Always starts
 // at the explanation with the Keep backup copies switch; the primary opens the phone's signer app (Android's chooser
 // when there are several), or the link field when there is none; the quiet link goes to the field. Waiting, ← does
-// what Cancel does. Declined, unanswered and refused by the probe return to the start with their line. With
-// bookmarks to bring in, the import sheet asks once, and either answer signs in.
+// what Cancel does. Declined, unanswered and refused by the probe return to the start with their line. A signer app
+// that won't sign everything saving needs without asking gets Save without asking first (FD 104). With bookmarks to
+// bring in, the import sheet asks once, and either answer signs in.
 import { useEffect, useRef, useState } from 'react';
 import { BackHandler, Pressable, TextInput, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { radius } from '@kefli/tokens';
 import { quickIn } from '@kefli/tokens/reanimated';
-import { readBunkerLink, type SignerProvider } from '@kefli/protocol';
+import { readBunkerLink, type BackgroundNeed, type SignerProvider } from '@kefli/protocol';
 import { KEEP_COPIES, setSetting } from '../data/settings';
 import { answerNewHere, answerSignedIn } from '../services/app';
 import { loadDefaults } from '../services/config';
 import { adoptNostr } from '../services/identity';
 import { askApp, askLink, whyFailed, type How } from '../services/nostrAsk';
+import { checkSigner } from '../services/nostrCheck';
 import { checkSignIn, queueImport, settleUserLists, type UserLists } from '../services/nostrSignIn';
 import { pool } from '../services/runner';
 import { store } from '../services/store';
@@ -27,6 +29,7 @@ import { S } from '../ui/strings';
 import { T, ui } from '../ui/text';
 import { useTheme } from '../ui/theme';
 import { Lead, OnbShell } from './Onb';
+import { SaveWithoutAsking } from './SaveWithoutAsking';
 
 type Step = 'intro' | 'none' | 'waiting';
 type Problem = 'declined' | 'timeout' | 'probe' | null;
@@ -59,6 +62,7 @@ export default function Nostr() {
   const [keep, setKeep] = useState(true);
   const [link, setLink] = useState('');
   const [badLink, setBadLink] = useState(false);
+  const [bg, setBg] = useState<{ signer: SignerProvider; missing: BackgroundNeed[]; goOn: () => void } | null>(null);
   const attempt = useRef(0);
 
   // ← and Back while waiting do what Cancel does (fix 20); from the link field, back to the start
@@ -81,7 +85,7 @@ export default function Nostr() {
     setStep('intro');
   };
 
-  /** The signer's checks, then the import sheet if there are bookmarks, then the root swap. */
+  /** The signer's checks, Save without asking if it asks (FD 104), the import sheet if there are bookmarks, the root swap. */
   const finish = async (signer: SignerProvider, how: How, mine: number) => {
     const d = await loadDefaults();
     const checked = await checkSignIn({ db: store(), now: () => Math.floor(Date.now() / 1000), defaults: d, query: (u, f) => pool.query(u, f as never) }, signer);
@@ -90,6 +94,14 @@ export default function Nostr() {
       setProblem('probe');
       return setStep('intro');
     }
+    const missing = await checkSigner(signer).catch(() => null);
+    if (mine !== attempt.current) return;
+    const goOn = () => importOrSignIn(signer, how, d, checked);
+    if (missing?.length) return setBg({ signer, missing, goOn });
+    goOn();
+  };
+
+  const importOrSignIn = (signer: SignerProvider, how: How, d: Awaited<ReturnType<typeof loadDefaults>>, checked: Extract<Awaited<ReturnType<typeof checkSignIn>>, { ok: true }>) => {
     const done = async (bringIn: boolean) => {
       const owner = await adoptNostr(signer, how);
       const now = Math.floor(Date.now() / 1000);
@@ -139,6 +151,7 @@ export default function Nostr() {
     }
   };
 
+  if (bg) return <SaveWithoutAsking signer={bg.signer} missing={bg.missing} done={() => (setBg(null), bg.goOn())} />;
   if (step === 'waiting') {
     return (
       <OnbShell title={S.nostr.title} back={cancel} actions={<Button label={S.nostr.cancel} kind="secondary" full onPress={cancel} />}>

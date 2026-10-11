@@ -7,7 +7,7 @@ import { KefliKeystore, type KeyIdentity } from '../../modules/kefli-keystore/sr
 import { phoneCrypto } from '../crypto/port';
 import { nativeSecp } from '../crypto/secp';
 import { resolveLaunch, resolveShare, type LaunchPlan, type Origin } from '../data/resolver';
-import { WELCOME_ANSWERED, getSetting, hasData, queueRestore, restoreRunning, setSetting, wipe } from '../data/settings';
+import { WELCOME_ANSWERED, devicePrefs, getSetting, hasData, queueRestore, restorePrefs, restoreRunning, setSetting, wipe } from '../data/settings';
 import { ensureIdentityRow } from '../data/saves';
 import { store } from './store';
 import { Directory, Paths } from 'expo-file-system';
@@ -187,6 +187,17 @@ export async function wipeEverything(): Promise<void> {
   wipe(store());
   for (const d of [new Directory(Paths.document, 'kefli'), new Directory(Paths.cache, 'artwork')]) if (d.exists) d.delete();
   signer = null;
+}
+
+/**
+ * Sign out (FD 105): the library and its signer leave this phone, and nothing is deleted anywhere else. The key file's
+ * entries, the database and the files go as for Delete my data, but the reader and voice settings stay, since they
+ * belong to the phone. Kefli starts at Welcome.
+ */
+export async function signOut(): Promise<void> {
+  const kept = devicePrefs(store());
+  await wipeEverything();
+  restorePrefs(store(), kept);
 }
 
 /**

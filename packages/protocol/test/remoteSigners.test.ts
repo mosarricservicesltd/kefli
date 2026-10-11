@@ -1,6 +1,7 @@
 import {
   LocalSigner, Nip46Signer, Nip55Signer, TimeoutError, bookmarkLinks, failureOf, nip46Perms, nip55Permissions, probeSigner, readBunkerLink,
   type BunkerLike, type Nip55Port, type NostrEvent,
+  BACKGROUND_KINDS, probeEvent,
 } from '../src';
 import { nodeCrypto } from '../src/node';
 
@@ -41,6 +42,7 @@ describe('the user’s own nostr app (contract 2)', () => {
       nip44Encrypt: async (_pkg, text, peer) => real.nip44Encrypt(peer, text),
       nip44Decrypt: async (_pkg, text, peer) => real.nip44Decrypt(peer, text),
       canActInBackground: async () => false,
+      signInBackground: async () => false,
     };
     const s = new Nip55Signer(port, 'com.example.signer', real.pubkey());
     expect((await s.signEvent({ kind: 1, created_at: 1, tags: [], content: 'hi' })).pubkey).toBe(real.pubkey());
@@ -51,10 +53,64 @@ describe('the user’s own nostr app (contract 2)', () => {
   });
 
   test('an unanswered NIP-55 request fails after its wait, so the outbox can retry', async () => {
-    const never: Nip55Port = { signEvent: () => new Promise(() => undefined), nip44Encrypt: () => new Promise(() => undefined), nip44Decrypt: () => new Promise(() => undefined), canActInBackground: async () => false };
+    const never: Nip55Port = { signEvent: () => new Promise(() => undefined), nip44Encrypt: () => new Promise(() => undefined), nip44Decrypt: () => new Promise(() => undefined), canActInBackground: async () => false, signInBackground: async () => false };
     const s = new Nip55Signer(never, 'com.example.signer', PK, 20);
     await expect(s.signEvent({ kind: 24242, created_at: 1, tags: [], content: '' })).rejects.toBeInstanceOf(TimeoutError);
     await expect(s.nip44Encrypt(PK, 'x')).rejects.toBeInstanceOf(TimeoutError);
+  });
+
+  describe('saving without asking (decision 104)', () => {
+    // Amber's 'Approve basic actions': its own list, which has the save, deletions, the relay list and both sign-ins,
+    // but not the backup uploads, the server list or the seal
+    const BASIC = new Set([30078, 5, 10002, 22242, 27235]);
+    const amberBasic = (approved: Set<number>, real: LocalSigner, asked: string[]): Nip55Port => ({
+      signEvent: async (_pkg, json) => {
+        const e = JSON.parse(json);
+        asked.push(`sign ${e.kind}`);
+        approved.add(e.kind);
+        return JSON.stringify(await real.signEvent(e));
+      },
+      nip44Encrypt: async (_pkg, text, peer) => (asked.push('encrypt'), real.nip44Encrypt(peer, text)),
+      nip44Decrypt: async (_pkg, text, peer) => real.nip44Decrypt(peer, text),
+      canActInBackground: async () => true,
+      signInBackground: async (_pkg, json) => approved.has(JSON.parse(json).kind),
+    });
+
+    test('the check finds what a basic policy leaves out, in order', async () => {
+      const real = new LocalSigner(nodeCrypto.randomBytes(32));
+      const s = new Nip55Signer(amberBasic(new Set(BASIC), real, []), 'com.greenart7c3.nostrsigner', real.pubkey());
+      expect(await s.missingInBackground()).toEqual([13, 10063, 24242]);
+    });
+
+    test('approving asks for each, one after another, and the check then passes', async () => {
+      const real = new LocalSigner(nodeCrypto.randomBytes(32));
+      const asked: string[] = [];
+      const steps: number[] = [];
+      const s = new Nip55Signer(amberBasic(new Set(BASIC), real, asked), 'com.greenart7c3.nostrsigner', real.pubkey());
+      await s.approve(await s.missingInBackground(), (n) => steps.push(n));
+      expect({ asked, steps }).toEqual({ asked: ['sign 13', 'sign 10063', 'sign 24242'], steps: [1, 2, 3] });
+      expect(await s.missingInBackground()).toEqual([]);
+    });
+
+    test('encryption missing is asked for too, and a refusal stops the asking', async () => {
+      const real = new LocalSigner(nodeCrypto.randomBytes(32));
+      const asked: string[] = [];
+      const port = { ...amberBasic(new Set(BASIC), real, asked), canActInBackground: async () => false };
+      port.signEvent = async () => { throw new Error('rejected'); };
+      const s = new Nip55Signer(port, 'pkg', real.pubkey());
+      const missing = await s.missingInBackground();
+      expect(missing).toEqual(['nip44', 13, 10063, 24242]);
+      await expect(s.approve(missing, () => undefined)).rejects.toThrow('rejected');
+      expect(asked).toEqual(['encrypt']);
+    });
+
+    test('the probe events are throwaways that never replace a real one', () => {
+      for (const kind of BACKGROUND_KINDS) {
+        const e = probeEvent(kind);
+        expect({ created_at: e.created_at, content: e.content }).toEqual({ created_at: 1, content: '' });
+      }
+      expect(probeEvent(30078).tags).toEqual([['d', 'kefli/probe']]);
+    });
   });
 
   test('a failure reads as unanswered for a timeout, NIP-55 or NIP-46, and as declined otherwise', () => {

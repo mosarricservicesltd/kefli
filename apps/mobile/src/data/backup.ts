@@ -8,6 +8,19 @@ export function markBacked(db: SqlDb, eventId: string): void {
   db.run('UPDATE items SET backed_event = ? WHERE event_id = ?', eventId, eventId);
 }
 
+/**
+ * Saves that signing out would lose (FD 105): never sent to a relay, with changes not yet sent, or with text no server
+ * holds yet. A save waiting only for its mirror isn't counted: Kefli's server has it.
+ */
+export function unsentSaves(db: SqlDb, owner: string): number {
+  return db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM items i WHERE i.owner = ? AND i.pending_delete_at IS NULL AND (
+       i.event_id IS NULL OR i.dirty = 1
+       OR EXISTS (SELECT 1 FROM blobs b WHERE b.sha256 = i.text_sha256 AND b.owner = i.owner AND b.operator_at IS NULL AND b.mirror_at IS NULL))`,
+    owner,
+  )?.n ?? 0;
+}
+
 export function notBackedUp(db: SqlDb, owner: string): number {
   return db.get<{ n: number }>(
     `SELECT COUNT(*) AS n FROM items i WHERE i.owner = ? AND i.pending_delete_at IS NULL AND (

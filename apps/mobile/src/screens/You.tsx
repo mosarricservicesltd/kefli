@@ -26,6 +26,7 @@ import { Press, pressLayer } from '../ui/Press';
 import { closeSheet, openSheet } from '../ui/sheet';
 import { S } from '../ui/strings';
 import { getSetting } from '../data/settings';
+import { asksBeforeSaving } from '../data/nostrCheck';
 import { VOICE_ID, chosen } from '../voice/choice';
 import { usePhoneVoices } from './Voice';
 import { T, display28, ui } from '../ui/text';
@@ -55,7 +56,7 @@ function RecoverySheet({ owner, close }: { owner: string; close: () => void }) {
     markBackupDone(store());
   };
   const cell = (i: number) => (
-    <View key={i} style={{ width: '48.5%', height: 40, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, borderRadius: radius.control, backgroundColor: c.background }}>
+    <View key={i} style={{ height: 40, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, borderRadius: radius.control, backgroundColor: c.background }}>
       <T muted style={[ui(13, 'body', 1), { width: 18, textAlign: 'right' }]}>{i + 1}</T>
       {words ? <T style={ui(15, 'meta', 1.2)}>{words[i]}</T> : <View style={{ width: BARS[i], height: 8, borderRadius: 999, backgroundColor: c.lineStrong, opacity: 0.28 }} />}
     </View>
@@ -65,8 +66,11 @@ function RecoverySheet({ owner, close }: { owner: string; close: () => void }) {
       <T accessibilityRole="header" style={[ui(20, 'emptyHeading', 1.3, -0.01), { marginBottom: 4 }]}>{S.you.sheetTitle}</T>
       <T muted style={[ui(13, 'body', 1.45), { marginBottom: 16 }]}>{S.you.sheetBody}</T>
       <View style={{ marginBottom: 16 }}>
-        <View importantForAccessibility={words ? 'auto' : 'no-hide-descendants'} style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 8 }}>
-          {Array.from({ length: 12 }, (_, i) => cell(i))}
+        {/* numbered down the columns, 1 to 6 then 7 to 12, as the words are written down (FD 106) */}
+        <View importantForAccessibility={words ? 'auto' : 'no-hide-descendants'} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          {[0, 6].map((from) => (
+            <View key={from} style={{ width: '48.5%', gap: 8 }}>{Array.from({ length: 6 }, (_, k) => cell(from + k))}</View>
+          ))}
         </View>
         {!words && (
           <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', gap: 8 }}>
@@ -89,7 +93,7 @@ function RecoverySheet({ owner, close }: { owner: string; close: () => void }) {
   );
 }
 
-function Row({ icon, label, sub, warn, value, danger, disabled, onPress, first }: {
+export function Row({ icon, label, sub, warn, value, danger, disabled, onPress, first }: {
   icon: IconName; label: string; sub?: string; warn?: boolean; value?: string; danger?: boolean; disabled?: boolean; onPress?: () => void; first?: boolean;
 }) {
   const { c } = useTheme();
@@ -139,6 +143,7 @@ export default function You() {
   const stats = useLive(() => youStats(store(), owner), ['items', 'listen_history', 'devices'], [owner]);
   const card = useLive(() => showBackupCard(store(), owner, stats.saves), ['settings', 'items'], [owner, stats.saves]);
   const done = useLive(() => backupDone(store()), ['settings'], []);
+  const asks = useLive(() => asksBeforeSaving(store()), ['settings'], []);
   // a nostr user has no recovery code and adds a phone by signing in there (FD 90)
   const local = useLive(() => (store().get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local') === 'local', ['identities'], [owner]);
   useFocusEffect(useCallback(() => setToastFloor(TAB_BAR_HEIGHT), []));
@@ -203,7 +208,10 @@ export default function You() {
           </Animated.View>
         )}
         <Group>
-          {!local && <Row first icon="login" label={S.you.nostrApp} value={S.you.signedIn} />}
+          {/* the row opens Your nostr app, stamped while the app asks before saves (FD 104, FD 105) */}
+          {!local && (asks
+            ? <Row first icon="login" label={S.you.nostrApp} sub={S.nostrApp.asks} warn onPress={() => router.push('/nostr-app')} />
+            : <Row first icon="login" label={S.you.nostrApp} value={S.you.signedIn} onPress={() => router.push('/nostr-app')} />)}
           {local && <Row first icon="keyboard" label={S.you.recovery} sub={done ? S.you.written : S.you.notWritten} warn={!done} onPress={recovery} />}
           {local && <Row icon="phone" label={S.you.addDevice} disabled={!online} sub={online ? undefined : S.you.needsConnection} onPress={() => router.push('/add-device')} />}
           <Row icon="laptop" label={S.you.browsers} value={String(stats.browsers)} onPress={() => router.push('/browsers')} />

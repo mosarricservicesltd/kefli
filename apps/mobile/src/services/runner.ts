@@ -35,6 +35,7 @@ import { takeImport } from './nostrSignIn';
 import { disconnect } from '../data/devices';
 import type { ConnectPorts } from './connect';
 import type { ShowPorts } from './phonePair';
+import { dailyCheck } from './nostrCheck';
 import { KefliKeystore } from '../../modules/kefli-keystore/src';
 
 let running: Promise<number> | null = null;
@@ -226,6 +227,8 @@ export function startSync(): () => void {
       .then(() => pickUpSpools().then((n) => n && log('pickup', { saved: n })).catch((e) => log('pickup', { error: String((e as Error).message) })))
       .then(runSync)
       .then(async (r) => log('sync', { owner: (await currentSigner())?.pubkey().slice(0, 12), ...r }))
+      // an earlier sign-in with a nostr app is checked at most once a day, out of sight (FD 104)
+      .then(() => dailyCheck().catch((e) => log('nostr-check', { error: String((e as Error).message) })))
       .catch((e) => log('sync', { error: String((e as Error).message) }));
   launchPlan()
     .then((p) => log('launch', p))
