@@ -252,7 +252,17 @@ function usableTitle(t: string | null): string | null {
   return s === '' || /^(?:untitled|document\d*|slide \d+)$/i.test(s) || /^[a-z][a-z0-9+.-]*:\S/i.test(s) ? null : s;
 }
 
-/** The PDF's text as Markdown (not yet normalised), with a title from the file or the largest heading on its first page. */
+/** Two titles that say the same, whatever their case, spacing and punctuation. */
+const sameTitle = (a: string, b: string) => {
+  const key = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  return key(a) === key(b) || key(a).startsWith(key(b) + ' ');
+};
+
+/**
+ * The PDF's text as Markdown (not yet normalised), with a title from the file or the largest heading on its first
+ * page. That heading leaves the body when it is the title, or says what the file's title says, since the Reader
+ * shows the title above the text.
+ */
 export function pdfMarkdown(doc: PdfRuns): PdfArticle {
   const lines = bodyLines(doc.pages.map(pageLines));
   const body = bodySize(lines);
@@ -261,13 +271,16 @@ export function pdfMarkdown(doc: PdfRuns): PdfArticle {
   const levels = headingLevels(blocks);
   const repeated = repeatedHeadings(blocks);
   const out: string[] = [];
-  let title: { text: string; size: number } | null = null;
+  let heading: { text: string; size: number; at: number } | null = null;
   for (const b of blocks) {
     const text = joinLines(b.lines);
     if (text === '' || unreadable(b, text, c) || footnote(b, c, doc.pages) || (b.kind === 'h' && repeated.has(text))) continue;
     const md = blockMarkdown(b, text, levels);
-    if (b.page === 0 && md.startsWith('#') && b.size > (title?.size ?? 0)) title = { text, size: b.size };
+    // a heading set larger than the text, not a numbered section (1. Introduction)
+    if (b.page === 0 && b.kind === 'h' && md.startsWith('#') && b.size > (heading?.size ?? 0)) heading = { text, size: b.size, at: out.length };
     out.push(md);
   }
-  return { title: usableTitle(doc.title) ?? title?.text ?? null, byline: doc.author, markdown: out.join('\n\n') + '\n' };
+  const title = usableTitle(doc.title) ?? heading?.text ?? null;
+  if (heading && title && sameTitle(title, heading.text)) out.splice(heading.at, 1);
+  return { title, byline: doc.author, markdown: out.join('\n\n') + '\n' };
 }
