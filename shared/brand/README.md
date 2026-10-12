@@ -63,6 +63,7 @@ It reads `shared/cover/cover-v1.js` only for the strip of covers on the OG card,
 | `out/android/play-feature-graphic.png` (1024 × 500) | Google Play feature graphic, 24-bit PNG with no alpha, as Play asks: paper ground, the icon tile, the name in ink and a strip of eight covers under it |
 | `out/extension/icon-{16,32}.png` | Manifest `icons` and `action.default_icon` at 16 and 32: the toolbar button, the plain bookmark |
 | `out/extension/icon-{48,128}.png` | The same keys at 48 (the tuned cut of D, which Chrome's extensions page shows) and 128 (the 108 dp drawing as a tile with the Chrome Web Store's 16 px of transparent padding) |
+| `out/extension/amo-icon-64.png` (64) | addons.mozilla.org listing icon, uploaded in the Developer Hub: the 108 dp drawing as a tile with no padding, corners 14 px |
 | `out/extension/cws-promo-tile.png` (440 × 280) | Chrome Web Store small promo tile, 24-bit PNG with no alpha: the feature graphic's layout at 0.7, centred |
 | `out/extension/icon-16.svg`, `icon-32.svg` | Firefox manifest `icons` keys "16" and "32": the toolbar button |
 | `out/extension/options-logo-28.svg` | The options page's logo: `small-28.svg` ready to inline in the brand row's 28 px slot, comments stripped and `aria-hidden`, since the name sits beside it |

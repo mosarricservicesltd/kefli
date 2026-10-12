@@ -261,6 +261,9 @@ copy(toolbar16, 'extension/icon-16.svg');
 copy(toolbar32, 'extension/icon-32.svg');
 copy(inlineLogo, 'extension/options-logo-28.svg');
 pngRgb(promo, 440, 'extension/cws-promo-tile.png');
+// addons.mozilla.org's listing icon, uploaded in the Developer Hub: no padding, since AMO shows it at 64 and 32 and
+// would otherwise take icon-128's Chrome padding; the corners in the web icons' proportion (42 in 192).
+png(tile(64, 0, 14), 64, 'extension/amo-icon-64.png');
 
 // Website. favicon.svg stays the 16 px drawing because tabs show it at 16 CSS px; the ICO carries the 16, 32 and 48 cuts.
 copy(small, 'web/favicon.svg');
@@ -291,7 +294,7 @@ const SIZES = {
   'android/notification-icon.png': [96, 96],
   'android/play-store-icon.png': [512, 512], 'android/play-feature-graphic.png': [1024, 500],
   'extension/icon-16.png': [16, 16], 'extension/icon-32.png': [32, 32], 'extension/icon-48.png': [48, 48], 'extension/icon-128.png': [128, 128],
-  'extension/cws-promo-tile.png': [440, 280],
+  'extension/cws-promo-tile.png': [440, 280], 'extension/amo-icon-64.png': [64, 64],
   'web/apple-touch-icon.png': [180, 180], 'web/icon-192.png': [192, 192], 'web/icon-512.png': [512, 512], 'web/maskable-512.png': [512, 512], 'web/og-card.png': [1200, 630],
 };
 for (const [file, [w, h]] of Object.entries(SIZES)) {

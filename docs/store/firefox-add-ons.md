@@ -84,7 +84,7 @@ The menu item reads "Save Link to Kefli" in Firefox, in title case as Firefox's 
 
 **Screenshots** (AMO shows them at 1280×800): the four in `docs/store/screenshots/firefox/`, in order: `1-saved.png` (the Saved notice with Undo), `2-save-link.png` (Save Link to Kefli in the right-click menu), `3-connect.png` (the QR code for connecting the phone) and `4-connected.png` (Connected, with the ways to save). They're the Chrome set with Firefox's details: the `moz-extension://` address, "Firefox on a Windows PC", and Firefox's wording in the link menu, as the Firefox build uses. Make them again with `node apps/extension/scripts/store-screenshots.mjs --firefox` after a dev build.
 
-**Icon:** AMO takes it from the manifest (`icons/icon-128.png`).
+**Icon:** upload `shared/brand/out/extension/amo-icon-64.png` (64×64, from the brand build) in the Developer Hub's icon field. Without it AMO takes the manifest's `icons/icon-128.png`, whose 16 px of transparent padding is the Chrome Web Store's and makes the mark look small at AMO's 64 and 32.
 
 ## Notes to reviewer
 
