@@ -50,7 +50,7 @@ Every answer is the Chrome Web Store's (`chrome-web-store.md`, Privacy tab), wor
 
 **Large promotional tile** (1400 × 560): optional, and none yet.
 
-**Screenshots** (up to six, 1280 × 800): the Chrome set in `docs/store/screenshots/`, in order. They show `chrome-extension://` and "Chrome on a Windows PC", where Edge says `extension://` and its phone label reads "Edge on a Windows PC" (`browserLabel`, `src/pair.ts`); Edge versions would be the Firefox treatment in `apps/extension/scripts/store-screenshots.mjs` with Edge's wording.
+**Screenshots** (up to six, 1280 × 800): the four in `docs/store/screenshots/edge/`, in order: `1-saved.png`, `2-save-link.png`, `3-connect.png` and `4-connected.png`. They're the Chrome set with Edge's details: the `extension://` address, "Edge on a Windows PC" (`browserLabel`, `src/pair.ts`), and Edge's link menu ("Open link in InPrivate window", "Copy link"); Edge runs the Chrome build, so its item reads "Save link to Kefli". Make them again with `node apps/extension/scripts/store-screenshots.mjs --edge` after a dev build.
 
 **YouTube video URL:** none.
 
