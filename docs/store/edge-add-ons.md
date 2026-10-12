@@ -48,7 +48,7 @@ Every answer is the Chrome Web Store's (`chrome-web-store.md`, Privacy tab), wor
 
 **Small promotional tile** (440 × 280): `shared/brand/out/extension/cws-promo-tile.png`, the Chrome Web Store's.
 
-**Large promotional tile** (1400 × 560): optional, and none yet.
+**Large promotional tile** (1400 × 560): `shared/brand/out/extension/edge-large-tile.png`, from the brand build: the icon tile, the name, the tagline "Save anything. Read it clean and offline, or listen to it." and the strip of covers, as on the website's share card.
 
 **Screenshots** (up to six, 1280 × 800): the four in `docs/store/screenshots/edge/`, in order: `1-saved.png`, `2-save-link.png`, `3-connect.png` and `4-connected.png`. They're the Chrome set with Edge's details: the `extension://` address, "Edge on a Windows PC" (`browserLabel`, `src/pair.ts`), and Edge's link menu ("Open link in InPrivate window", "Copy link"); Edge runs the Chrome build, so its item reads "Save link to Kefli". Make them again with `node apps/extension/scripts/store-screenshots.mjs --edge` after a dev build.
 

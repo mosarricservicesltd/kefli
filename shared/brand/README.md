@@ -49,7 +49,7 @@ npm install --prefix ~/.cache/kefli-resvg @resvg/resvg-js@2     # once, anywhere
 NODE_PATH=~/.cache/kefli-resvg/node_modules node shared/brand/build-icons.cjs
 ```
 
-It reads `shared/cover/cover-v1.js` only for the strip of covers on the OG card, the feature graphic and the promo tile, and `shared/fonts/out` for the name and tagline on those cards, which are set in Archivo so they come out the same on any machine. Besides the layer checks above, every run checks that the mark stays inside Android's 66 dp safe circle (it reaches 28.3 dp) and the maskable icon's 40% circle (32.9%), that the two launch screens are one drawing, that the feature graphic and the promo tile are opaque 24-bit RGB, and that every PNG has its expected size. Sizes up to 48 px are rendered at 8× and box-averaged, so the diagonals rasterise evenly.
+It reads `shared/cover/cover-v1.js` only for the strip of covers on the OG card, the feature graphic and the promo tiles, and `shared/fonts/out` for the name and tagline on those cards, which are set in Archivo so they come out the same on any machine. Besides the layer checks above, every run checks that the mark stays inside Android's 66 dp safe circle (it reaches 28.3 dp) and the maskable icon's 40% circle (32.9%), that the two launch screens are one drawing, that the feature graphic and the promo tiles are opaque 24-bit RGB, and that every PNG has its expected size. Sizes up to 48 px are rendered at 8× and box-averaged, so the diagonals rasterise evenly.
 
 | Output | Use |
 |---|---|
@@ -65,6 +65,7 @@ It reads `shared/cover/cover-v1.js` only for the strip of covers on the OG card,
 | `out/extension/icon-{48,128}.png` | The same keys at 48 (the tuned cut of D, which Chrome's extensions page shows) and 128 (the 108 dp drawing as a tile with the Chrome Web Store's 16 px of transparent padding) |
 | `out/extension/amo-icon-64.png` (64) | addons.mozilla.org listing icon, uploaded in the Developer Hub: the 108 dp drawing as a tile with no padding, corners 14 px |
 | `out/extension/edge-logo-300.png` (300) | Microsoft Edge Add-ons extension logo, uploaded in Partner Center: the same tile, no padding, corners 66 px |
+| `out/extension/edge-large-tile.png` (1400 × 560) | Microsoft Edge Add-ons large promotional tile, 24-bit PNG with no alpha: the OG card's layout at 1.1, centred, tagline and all |
 | `out/extension/cws-promo-tile.png` (440 × 280) | Chrome Web Store small promo tile (Edge Add-ons takes it too), 24-bit PNG with no alpha: the feature graphic's layout at 0.7, centred |
 | `out/extension/icon-16.svg`, `icon-32.svg` | Firefox manifest `icons` keys "16" and "32": the toolbar button |
 | `out/extension/options-logo-28.svg` | The options page's logo: `small-28.svg` ready to inline in the brand row's 28 px slot, comments stripped and `aria-hidden`, since the name sits beside it |
