@@ -1,0 +1,296 @@
+{
+  "about": "A restore with the operator absent (C§8): only the recovery code and the baked defaults. The operator's relay and Blossom server are off; the indexer and the two default relays hold the lists and the library (relay-a still holds an older copy of one save), a kind 5 removes one save, the mirror holds two texts and a server named only in the 10063 holds the third. expected is the library afterwards.",
+  "mnemonic": "sentence skirt engage tide produce boss bracket save alter wrap still suspect",
+  "pubkey": "91130ec232142fce6fc0de2591e68b805392e4a07f703d3c71c6d544ffe61412",
+  "library_key": "5686620fd019bc9ae8f815a52b4c17083a2de3c07cc26272e43e2ebde920fc25",
+  "defaults": {
+    "v": 1,
+    "operator": {
+      "relay": "wss://relay.kefli.example",
+      "blossom": "https://blossom.kefli.example",
+      "api": "https://api.kefli.example"
+    },
+    "relays": ["wss://relay-a.example", "wss://relay-b.example"],
+    "indexer": ["wss://indexer.example"],
+    "mirrors": ["https://mirror.example"]
+  },
+  "relays": {
+    "wss://indexer.example": [
+      {
+        "kind": 10002,
+        "created_at": 1791000002,
+        "tags": [
+          ["r", "wss://relay.kefli.example"],
+          ["r", "wss://relay-a.example"],
+          ["r", "wss://relay-b.example"]
+        ],
+        "content": "",
+        "pubkey": "91130ec232142fce6fc0de2591e68b805392e4a07f703d3c71c6d544ffe61412",
+        "id": "66251bcc771cfba33d9484aefc5bb6ffbf69151facbe1d7db5fc0242310c59f7",
+        "sig": "568bab99daf6b4be30e3599c0c5c28fc5c3560b0c7e14a703703b39e139d92612521e445ebf842728997fb26ebff63fc3f72aa3008d3a653e3c65d08a708fe69"
+      }
+    ],
+    "wss://relay-a.example": [
+      {
+        "kind": 30078,
+        "created_at": 1791000001,
+        "tags": [
+          ["d", "kefli/library-key"],
+          ["t", "kefli"]
+        ],
+        "content": "Aq79Ov10iCuzOWYxivKFrkwTvPwaaF+pcukIHCWm7Tch1Z4gTIH19mOvVAJ4USC06Q3Mc0czZwv31u00IGCDR42jVdlrgUmAe8N+lzNgaLZh4fM+q7OhY25Te9m16YGc6u4UTpSy0q3hTa4b/lJWxewzGRsbKHW3xtbVfq0O9Z+RHp0lMB91ZS5C65iJ/Yj7+JADlUXftfX0akpGYk/Gd6uNEA==",
+        "pubkey": "91130ec232142fce6fc0de2591e68b805392e4a07f703d3c71c6d544ffe61412",
+        "id": "d8230aa94bf4f271d0d6d3fdef5f9f6a4f2a80a62d11fbc0c0716f7803cb0ca4",
+        "sig": "d92676b8e5ff5aac4a9c4e31267ad8224a59ca2583f71dba79b5a2ea44fa3649ef1ea23f3e5b7b00d32734780352d55cad1c881f0f085cfb44a6fd75d6a97c82"
+      },
+      {
+        "kind": 10002,
+        "created_at": 1791000002,
+        "tags": [
+          ["r", "wss://relay.kefli.example"],
+          ["r", "wss://relay-a.example"],
+          ["r", "wss://relay-b.example"]
+        ],
+        "content": "",
+        "pubkey": "91130ec232142fce6fc0de2591e68b805392e4a07f703d3c71c6d544ffe61412",
+        "id": "66251bcc771cfba33d9484aefc5bb6ffbf69151facbe1d7db5fc0242310c59f7",
+        "sig": "568bab99daf6b4be30e3599c0c5c28fc5c3560b0c7e14a703703b39e139d92612521e445ebf842728997fb26ebff63fc3f72aa3008d3a653e3c65d08a708fe69"
+      },
+      {
+        "kind": 10063,
+        "created_at": 1791000002,
+        "tags": [
+          ["server", "https://blossom.kefli.example"],
+          ["server", "https://mirror.example"],
+          ["server", "https://blossom.own.example"]
+        ],
+        "content": "",
+        "pubkey": "91130ec232142fce6fc0de2591e68b805392e4a07f703d3c71c6d544ffe61412",
+        "id": "b97a3bf89cb7456574c1af5adca185c8cb51d5d37e8fb4234e3f1b2f96118d72",
+        "sig": "225e42fb4a849f617c277f9a8bb0d642771a37d8884fa03aa354553af0c0490de30794ef0b3e61d1035c65830b5fd861e60e7ea59c1f954b21acdc5de5938b45"
+      },
+      {
+        "kind": 30078,
+        "created_at": 1791000010,
+        "tags": [
+          ["d", "kefli/item/808c67557fbd399cc760a8b60aff236d8d16900df68bb0211137f1696e85b571"],
+          ["t", "kefli"]
+        ],
+        "content": "Atre3qWxsL8R1FsXdEv/ryUVXtm6VSCnX3/dfYMq0uhQSo0mQvTJAd0zUJcE3tayVD/Rt/+f5dlak/qr62xOaJuN1D3NKbejtkZHcCw6ZvoYrIgy+Yv5M+sFrTQvE3zX1zMPM9ApRAgFswvow0QOtJQLteL6NlBgNt1FpqcwdmS24YNwTbLMaZnf29C5XnygXegxwHngpweY4gUlN0oX3HBAIRoa4VmPQVF5t6BbLzvaw5KipD++6YUo7EFAlHmmoLbDTTUPMLV2SKZTM5sw3OQWyp1fgGCBkNsDAScuZTZ1DYmRqNKrgEe8p2AQAzPjUL3Ogdc8mH6wHffoDy5e6p87T2flnXUgPMj6+1AInLYbjlKB1fhE13GHuZU2xY/YVB53beiZfLk0qyywjM9+VxKXmPxtOPibLuorNmbbSZuu1wsoEOe5ZCdybmAGUQgN/SCiY2t/4y2KO3SbR5bak37s/hjnVLKgo59sS1xWeKeptJJj6NU92Y494eC+taZpy6PGw1nwAQn45ig3+nHK1RgNOMENUdiqoyul9f9QT3Q29wOZ3EbjJbABIxOgByL5SjKm44NECevuc1TfTQjaSmU98ajsHPQlGTUODb7C0dFoVwnnmcvzTuFXY3HdAQcBdWuNIY/4AsJubs9nkM8vtjuM+OnmdRwVqWu+QmSaQt7qDg4gU0tgjLYb8jYiVE/R/BNhGdDp2Ma4gAQIKLQKLim5O5Prg+7pgZhwZYXyY2p1iuplP4bRt6Jn4kzj2EuSztBEj0h9y7/fwEpSMU0Q6JYhvjQaKJCMO4k3H1hFz3iI7ScUW5fudGxxeRIcYOlihahEHcS84oX4kMjG3NL7fqGvG35vCzO+UA+AqOpPql7czM9YpwkTpaNeklpz/GaBqlA1RDrGMuSBBvio7bpUnn2IpoX2eGS3slnl7Y/iUuETy1c=",
+        "pubkey": "91130ec232142fce6fc0de2591e68b805392e4a07f703d3c71c6d544ffe61412",
+        "id": "4d30ee331c6a1187b6933149b8186064130ec5d5df46ef2283ff9f7da772bb04",
+        "sig": "00a43d4f39ab7c5759db8d7e460ab70ad316f4f3e2181af911e22b3fea6d0ad3bb18b60e04dfda6ca53f878bd53fd707d47ee9c8b8e02f55a19bd5715d6f25f1"
+      },
+      {
+        "kind": 30078,
+        "created_at": 1791000012,
+        "tags": [
+          ["d", "kefli/item/ac3a0a76d2d44d3b5407b11ba164afbf6c1be48e912a11dd17ccc27b84aa4d0f"],
+          ["t", "kefli"]
+        ],
+        "content": "AuVeYsITp457PRqOYVfU19aeIOcW6lzN/1diD9DjwpUcEZyPw4WURMA9TTij0tw3u8HDRWae9uBJBsuTopHMAI6eL2YaeSkZI0AvsHpTmMRwN7b2G6Ti697joE/8pTLR8LHdbtEzci9FDMF757RTg5azPEHOQ1WSTdcQaTWXGM/WzDQTwx0gZ1KbaBjtYdzh4MmSnn9hWxSV37KebvW5ERmIb/ObiqDMepQcd4pQqegR06JmwcZFu6qwAm8K2yeg+2nfsAWzYzYZTfjku9HualIJatO1dhjiXPzcapB8kqnOkEw9o66dwkT0ojBFbpf7g9ADMdl5QAlTG1qMGqc67q4pxaj/37cijY/rY49z/i2r+WNQiK3ZQMlYf46hFA0RgmjfHot+zKi6BYm7o8zyEwZo+Sws4nJryz84UJHFwezzR9iHMUbc2SzJ0Dx3eSp+3lOhj9Yi1wtsizTqJUz7ji40y4US333gcqWnr0lb2YGYaPk2gCVpWrJakuk3LC69AtRqA2bRd2gMuRgxnAXKy7OfLkc8OvsjiWNxwd9ipgoCFGVHDPeOgkFvjqHlTLuKbtSCL1ImHCqchsJgRr2mGOykbw==",
+        "pubkey": "91130ec232142fce6fc0de2591e68b805392e4a07f703d3c71c6d544ffe61412",
+        "id": "6d0be88d62553d04b056128cff7832da20d3948e23f9f25cbe758692d9b1f135",
+        "sig": "e89491c3d54e21824aa325d627d616d69de58126786f25a884df6aa5810e64c4f25f61fb9f30c88d2d3306bcecd38115b513c3c02bcc90028b6a64aad0b567d6"
+      },
+      {
+        "kind": 30078,
+        "created_at": 1791000013,
+        "tags": [
+          ["d", "kefli/item/d49e90755b339f3a6cf00102465c64c2ed7255f7d52904442a55f9fc583df026"],
+          ["t", "kefli"]
+        ],
+        "content": "AjbwPuOaMt1iplXa++cfpX5PJLdFDg3tI0lGne8qGwfoIGWWOiiucBMoM1XVOYfoISqfsj5nzjH0qL798ojs5wUDmcFP8FVBBWZ/gv0wh4zJGckBBBMSijfiApCWDGKgin2r4CvPxY9lcyIiYK058ogKK5d/u+RnZl/z0Y8ZR7dcZd/r+tR9RitRS0/PMMLSGiPlpxAl8rSxhLgAr0OieieI4eonSKbcgEh5sd5Sf4gA7k8v4doknXe9AA2zZU3ix3rodMTOlG727EePqU1BfbSZhKJ7keVbtRrnq1pHKdfAQccsqVjbZlE/NPvj5mSwWtP4/T5MdIafszojry0TaccHouCg6oE1bMf98DTXkGmmseN8iAAwPooyJxBc94+Dsgt+pfmGRMsA+W0G/SNPlFeC31xY2n15nNrIp83bELwBunOuahYcbibhcwX2/R97YrB5Ue0jvKf/fo5uiduMkc3EUfUQO799oAcMBa2dj+P8/Rxl2ujzQphjXov5tRx+572XtnuWNNu3k6a1PkYKz6Rc+tSPYN8OzAN5usgu3ID4FwETpk6v72EzYTEDUidHifpNjxr8A0oGKXHrk2ZS5KtmRDymG6k7uCOWROt57/W/RX2cPFEeLrcQuwF8HE8uYxR3S7u3CAWyuv9UswVAgXB6Kdtffqwq73KnRpVWBviKreFYr1gvAO6ywlIKdtJgFmO4beIO/TVV9cZDx2FucdbSMVDN1vkm1PR3m1MvtHPaC0SBBe1nogsvuXRKE4UrcwcWewqLqOS6975qWLoxJ2tC6i8PFVqVsNLpaIhHbM0SPtYlPp6eY0AktmJjyeCVP1Nh1/Gzc5jciTvqrLV5XbN1CMhZjJk6CujlHIo3UFjUj0zjHoWM+PLEDFLErB9zvL6TE/Cbwdy5m+M4zzdj2TW5U19LBD1QyZ69nRX0B1rrIIg=",
+        "pubkey": "91130ec232142fce6fc0de2591e68b805392e4a07f703d3c71c6d544ffe61412",
+        "id": "7327d83e906746e9f70e47cf73f7d3e325154be1c0ce035facf093c96062d878",
+        "sig": "ff4c37c83af4fa944cd3d6dd285d792b18ea128cc0e13dbc1f5be425c67c2cbc136d26f2ee406a64c143da2389bc2b012477772fdcee660b208f8dae55719dfa"
+      },
+      {
+        "kind": 30078,
+        "created_at": 1790999000,
+        "tags": [
+          ["d", "kefli/item/e784eddcc056e4ff5cc34f1a0d4eb99651f69b6dec38c8a0bbdeb82aed21ad0c"],
+          ["t", "kefli"]
+        ],
+        "content": "AjKPwptVs/jDSJ8hY7D8P4YhCyDFwQZEW5pqRvGEeGOWXShqnF9OxXZZ+lrrmm7ot2CUO6W7vSqI7tQNiBjcIT1uVrYI2BomN9TEI5+vGBn9EZErVDJshjA7GEPT1fJTwqOqdUUIbCJZSJX3JAefa6uEV9F2eLnMdAUjGmTI5Mp5ONOA+YUQJXXNFK1iTwB5gPbePzWrpISzxQqYbsNDawUr0y4YsHe/5JudYh1cNKuygkMKkc0CEWRyNWxaGKxT8yqxRVkAPqofRWPtRT+nAVgPewswoyGNXdWbRwWtHaKJYrxtZkG4Uaz4XhV78orSSjy/dHSJyhRG5k37MbB49hOLLHzvNQcI4Q/X6mTvXgB5mQ4rA/vAKLL6okgZh98+ilVTko4gCadxP5nRTXhNT1vOjB9WuZveLHzLsMDn945VGh2OFh5DWgX9+sanUiCEfkY196gizwGinHTxu/NYlBEw8mYq1pg3jfVkrF/wPZsz/BbEjLUPQi4MnYQFRgnem7m9",
+        "pubkey": "91130ec232142fce6fc0de2591e68b805392e4a07f703d3c71c6d544ffe61412",
+        "id": "18ae6645ff6bd188499a9b5ad9742a49d4e34740c2ecc6d75c4b506a27237c14",
+        "sig": "32061ecc2dba89c4f9a42d752f06f509f33ea84f1bd69c7465a0f53783b8fdbaae64d0f803727da160e59211007c1266df27eff103e82262cc68c13ece5488e6"
+      },
+      {
+        "kind": 5,
+        "created_at": 1791000600,
+        "tags": [
+          ["a", "30078:91130ec232142fce6fc0de2591e68b805392e4a07f703d3c71c6d544ffe61412:kefli/item/ac3a0a76d2d44d3b5407b11ba164afbf6c1be48e912a11dd17ccc27b84aa4d0f"],
+          ["k", "30078"]
+        ],
+        "content": "",
+        "pubkey": "91130ec232142fce6fc0de2591e68b805392e4a07f703d3c71c6d544ffe61412",
+        "id": "7a1bdb36295d41d0310fe46894433652b72c2507717ff199acc5dff09b3020e2",
+        "sig": "b288ceab3ea8dfa3aa183489941915f0c9e9e1a0ed01d8860d199ae12a18a7d150b6913b5f336fd540578303b3ff749031220cea37caf7caff0aa23add642daa"
+      },
+      {
+        "kind": 30078,
+        "created_at": 1791000011,
+        "tags": [
+          ["d", "kefli/item/f5423a02064ce55ab79b5f392fb94a339e2ede5e66d6c692aa88fd2e369cc4c3"],
+          ["t", "kefli"]
+        ],
+        "content": "Ajr7jFcuGNYw1lK7hal+u6fNO6WBPouZJeOMe34iAPwSWba1qo+pnoV9I0x8mH2VNx7UJIe2oy659TjZAx314w6je6jtqHPPYINHca2f75xmKph/fw2oyqzyIvTDqENqcMAJhCLReJO0LrEeqmzsA5xHjZfFlJ4ElheLBZvrFSDhAFEQboTqDL3vhr1/uqTE+Nn2LPAhbu6Up7heY3ko03KzI4ZNtbHNaquVvwhWI6jiWEca/8IOlrER2HxJ8RhwhUiEtGdqvKerkc4HocAnoS979CC2e2oMVUTdwqh2P2XHC/100L5odcVcV3P/IdeoOXj9Hia5Vqm75TrI9LAIvXGIAVpQa6DyJxy/f4vMWJTHc0SVWdsOTlPGIQ9WJI7K4nWPk1pAtcgMa2ykO+7H+6uH50xkbxZKw+lGQeOZTVNrvz3wQ10c9yfsaCJ72BwKXrQnnQsrS/kYG2rP8Hv9GTP0PE9cJG/UhTi0shn49ytHgv1LWBJUR0/ZlOrnhu81zufkqSNXwL9aBShtHLmAlNubFSvcLG7Y9/WrSbeBW7Ig4DARN3R0+iJGC9at1mcKtnJRh/ZHkk62zqBlYyDfW8GWbdwYM8vdnl7/mMA6o3k0fS+NmtHHeGU3PcZbSqUHD+vzDk1Fnk7kj570Wrd6RC/rCkzKSFuNFEVUK6fEfvOQoPpcS4kBgDUQIdcbwQD8Vjiod87JRsiMabVZJKZC5gOt7/m0vacABJvXqqOisxvP5QZ8NCbImFMVoz2d7WuqWq/cpWaMUtWyTGa68UM3I+ZZTLlzs11kO5ePJkpaZEjiM29Ll77G2McsnyjPc15eyM9vYse0hrTCbm4c60f405TgQi4SATN442gApTl+pdA+X85IleRdbQ9AWB7Dg6UzSqHqEaEnEeQOEhmu1CwCGhwtLdPpdz0e29ZQqfv9+CLMVkg=",
+        "pubkey": "91130ec232142fce6fc0de2591e68b805392e4a07f703d3c71c6d544ffe61412",
+        "id": "c8de3427693113ebcc3e505c78a00b09a62e2cd89f110a6c0568cf2c7f8ae2ee",
+        "sig": "b7d7ba14c600dff0b1f84d7ff99e501b98e7179bc8387eb7895521102b1dd9f90c8e2932de0d40c7a609eaff81166f8308f8bb6abce89708dbeb0526664ee4b9"
+      }
+    ],
+    "wss://relay-b.example": [
+      {
+        "kind": 30078,
+        "created_at": 1791000001,
+        "tags": [
+          ["d", "kefli/library-key"],
+          ["t", "kefli"]
+        ],
+        "content": "Aq79Ov10iCuzOWYxivKFrkwTvPwaaF+pcukIHCWm7Tch1Z4gTIH19mOvVAJ4USC06Q3Mc0czZwv31u00IGCDR42jVdlrgUmAe8N+lzNgaLZh4fM+q7OhY25Te9m16YGc6u4UTpSy0q3hTa4b/lJWxewzGRsbKHW3xtbVfq0O9Z+RHp0lMB91ZS5C65iJ/Yj7+JADlUXftfX0akpGYk/Gd6uNEA==",
+        "pubkey": "91130ec232142fce6fc0de2591e68b805392e4a07f703d3c71c6d544ffe61412",
+        "id": "d8230aa94bf4f271d0d6d3fdef5f9f6a4f2a80a62d11fbc0c0716f7803cb0ca4",
+        "sig": "d92676b8e5ff5aac4a9c4e31267ad8224a59ca2583f71dba79b5a2ea44fa3649ef1ea23f3e5b7b00d32734780352d55cad1c881f0f085cfb44a6fd75d6a97c82"
+      },
+      {
+        "kind": 10002,
+        "created_at": 1791000002,
+        "tags": [
+          ["r", "wss://relay.kefli.example"],
+          ["r", "wss://relay-a.example"],
+          ["r", "wss://relay-b.example"]
+        ],
+        "content": "",
+        "pubkey": "91130ec232142fce6fc0de2591e68b805392e4a07f703d3c71c6d544ffe61412",
+        "id": "66251bcc771cfba33d9484aefc5bb6ffbf69151facbe1d7db5fc0242310c59f7",
+        "sig": "568bab99daf6b4be30e3599c0c5c28fc5c3560b0c7e14a703703b39e139d92612521e445ebf842728997fb26ebff63fc3f72aa3008d3a653e3c65d08a708fe69"
+      },
+      {
+        "kind": 10063,
+        "created_at": 1791000002,
+        "tags": [
+          ["server", "https://blossom.kefli.example"],
+          ["server", "https://mirror.example"],
+          ["server", "https://blossom.own.example"]
+        ],
+        "content": "",
+        "pubkey": "91130ec232142fce6fc0de2591e68b805392e4a07f703d3c71c6d544ffe61412",
+        "id": "b97a3bf89cb7456574c1af5adca185c8cb51d5d37e8fb4234e3f1b2f96118d72",
+        "sig": "225e42fb4a849f617c277f9a8bb0d642771a37d8884fa03aa354553af0c0490de30794ef0b3e61d1035c65830b5fd861e60e7ea59c1f954b21acdc5de5938b45"
+      },
+      {
+        "kind": 30078,
+        "created_at": 1791000010,
+        "tags": [
+          ["d", "kefli/item/808c67557fbd399cc760a8b60aff236d8d16900df68bb0211137f1696e85b571"],
+          ["t", "kefli"]
+        ],
+        "content": "Atre3qWxsL8R1FsXdEv/ryUVXtm6VSCnX3/dfYMq0uhQSo0mQvTJAd0zUJcE3tayVD/Rt/+f5dlak/qr62xOaJuN1D3NKbejtkZHcCw6ZvoYrIgy+Yv5M+sFrTQvE3zX1zMPM9ApRAgFswvow0QOtJQLteL6NlBgNt1FpqcwdmS24YNwTbLMaZnf29C5XnygXegxwHngpweY4gUlN0oX3HBAIRoa4VmPQVF5t6BbLzvaw5KipD++6YUo7EFAlHmmoLbDTTUPMLV2SKZTM5sw3OQWyp1fgGCBkNsDAScuZTZ1DYmRqNKrgEe8p2AQAzPjUL3Ogdc8mH6wHffoDy5e6p87T2flnXUgPMj6+1AInLYbjlKB1fhE13GHuZU2xY/YVB53beiZfLk0qyywjM9+VxKXmPxtOPibLuorNmbbSZuu1wsoEOe5ZCdybmAGUQgN/SCiY2t/4y2KO3SbR5bak37s/hjnVLKgo59sS1xWeKeptJJj6NU92Y494eC+taZpy6PGw1nwAQn45ig3+nHK1RgNOMENUdiqoyul9f9QT3Q29wOZ3EbjJbABIxOgByL5SjKm44NECevuc1TfTQjaSmU98ajsHPQlGTUODb7C0dFoVwnnmcvzTuFXY3HdAQcBdWuNIY/4AsJubs9nkM8vtjuM+OnmdRwVqWu+QmSaQt7qDg4gU0tgjLYb8jYiVE/R/BNhGdDp2Ma4gAQIKLQKLim5O5Prg+7pgZhwZYXyY2p1iuplP4bRt6Jn4kzj2EuSztBEj0h9y7/fwEpSMU0Q6JYhvjQaKJCMO4k3H1hFz3iI7ScUW5fudGxxeRIcYOlihahEHcS84oX4kMjG3NL7fqGvG35vCzO+UA+AqOpPql7czM9YpwkTpaNeklpz/GaBqlA1RDrGMuSBBvio7bpUnn2IpoX2eGS3slnl7Y/iUuETy1c=",
+        "pubkey": "91130ec232142fce6fc0de2591e68b805392e4a07f703d3c71c6d544ffe61412",
+        "id": "4d30ee331c6a1187b6933149b8186064130ec5d5df46ef2283ff9f7da772bb04",
+        "sig": "00a43d4f39ab7c5759db8d7e460ab70ad316f4f3e2181af911e22b3fea6d0ad3bb18b60e04dfda6ca53f878bd53fd707d47ee9c8b8e02f55a19bd5715d6f25f1"
+      },
+      {
+        "kind": 30078,
+        "created_at": 1791000500,
+        "tags": [
+          ["d", "kefli/item/f5423a02064ce55ab79b5f392fb94a339e2ede5e66d6c692aa88fd2e369cc4c3"],
+          ["t", "kefli"]
+        ],
+        "content": "Au0RdclNt/EyX6k/kYO2KewC7gz3V7YGGcFgpT+nSPdyDrM524E96vq88JK0tITpV57023qu04/qdzYcJ+DSOeczqgV6WY9xISAMew+Nk7SAwssW8RJmlAOvxPsuYoxUmy9kUMnz/UgMsyAtxLzjagRIZk03+stTOIw2Je0jot7L6anoNuQZcYYOdsGZgdvJgQhGvmZdXORxRE67z7Nzs6acQA5kDyfPSXToAqiIzm/2am22vwflMqV4w7BbJwzVc4ccGsTd5aooSKp2PXwjp7nbOeWayBNG7VFGD9Vm2fCKCvTu56WdPzaiFWUHjgz8xM+D4GfPXEfqA2tFodQWMQfx1psvel4k5hBIbleC9kJ7f82iuyDmJpNsPC8TYnorJ6XZiEhCiX1aPAnXIwPAm4R7SlOoxcdf+TDf7lMMgWv5Yp+c1SPHJ5+qWox0rr4f2+pZKPXmeZM4KbzPhHxTKnECM+1A5fjZFKkq1kzJut/5Ba2XNpDbDmz2GjFKzKOhnlf1NNtJvbW5Ohf4MA7HvDmxTy6Mvai3jMN7H4tT46xRBGn+7e2+lrZKDa2cbzBnPHvxwPLSkOVfWK8Tt+Nn+9pUH1i6oqkJO9Ef1WBwXtEPK1/mxOk8G7xfK+m3m5lDYl5Y+EnD++ufym+rwQ9pyOj/mdcqr0kM8wuIdYz8S7OPElqzPH82kM8m8cTDfpnTuXFFK0r5u0flmgep+6aPCU1TltLrKuhQlC/IAgTipXYHMiG3wihPPGG1X6IZ1oojSXN9mEpk3q7m479zd2P8QIE6sNANXky3fip58GKXB8ZrvZT2O0DmnrjvktLLUaMJdQOem3x1bK9DjxmWQ5g4ETvjlGGw+VC9PufoOl33R3UOh9jJ44ny/8y6ve6wIaDYKfV5dgTEictukHbTM1jK233GvMEkSuSlsL746o9E4WejcZg=",
+        "pubkey": "91130ec232142fce6fc0de2591e68b805392e4a07f703d3c71c6d544ffe61412",
+        "id": "043a82390b253f752d139eff000b243f39ee8a2b2b2c9a26873ddefe15af8baf",
+        "sig": "5473bb4c2bb6985e924ef52f89c93f681d3c7960aa008076f777f5707a15d68482c68ec3f083482243a650320fdb6a22740d38ddabc5900f7e38fbff6803c39b"
+      },
+      {
+        "kind": 30078,
+        "created_at": 1791000012,
+        "tags": [
+          ["d", "kefli/item/ac3a0a76d2d44d3b5407b11ba164afbf6c1be48e912a11dd17ccc27b84aa4d0f"],
+          ["t", "kefli"]
+        ],
+        "content": "AuVeYsITp457PRqOYVfU19aeIOcW6lzN/1diD9DjwpUcEZyPw4WURMA9TTij0tw3u8HDRWae9uBJBsuTopHMAI6eL2YaeSkZI0AvsHpTmMRwN7b2G6Ti697joE/8pTLR8LHdbtEzci9FDMF757RTg5azPEHOQ1WSTdcQaTWXGM/WzDQTwx0gZ1KbaBjtYdzh4MmSnn9hWxSV37KebvW5ERmIb/ObiqDMepQcd4pQqegR06JmwcZFu6qwAm8K2yeg+2nfsAWzYzYZTfjku9HualIJatO1dhjiXPzcapB8kqnOkEw9o66dwkT0ojBFbpf7g9ADMdl5QAlTG1qMGqc67q4pxaj/37cijY/rY49z/i2r+WNQiK3ZQMlYf46hFA0RgmjfHot+zKi6BYm7o8zyEwZo+Sws4nJryz84UJHFwezzR9iHMUbc2SzJ0Dx3eSp+3lOhj9Yi1wtsizTqJUz7ji40y4US333gcqWnr0lb2YGYaPk2gCVpWrJakuk3LC69AtRqA2bRd2gMuRgxnAXKy7OfLkc8OvsjiWNxwd9ipgoCFGVHDPeOgkFvjqHlTLuKbtSCL1ImHCqchsJgRr2mGOykbw==",
+        "pubkey": "91130ec232142fce6fc0de2591e68b805392e4a07f703d3c71c6d544ffe61412",
+        "id": "6d0be88d62553d04b056128cff7832da20d3948e23f9f25cbe758692d9b1f135",
+        "sig": "e89491c3d54e21824aa325d627d616d69de58126786f25a884df6aa5810e64c4f25f61fb9f30c88d2d3306bcecd38115b513c3c02bcc90028b6a64aad0b567d6"
+      },
+      {
+        "kind": 30078,
+        "created_at": 1791000013,
+        "tags": [
+          ["d", "kefli/item/d49e90755b339f3a6cf00102465c64c2ed7255f7d52904442a55f9fc583df026"],
+          ["t", "kefli"]
+        ],
+        "content": "AjbwPuOaMt1iplXa++cfpX5PJLdFDg3tI0lGne8qGwfoIGWWOiiucBMoM1XVOYfoISqfsj5nzjH0qL798ojs5wUDmcFP8FVBBWZ/gv0wh4zJGckBBBMSijfiApCWDGKgin2r4CvPxY9lcyIiYK058ogKK5d/u+RnZl/z0Y8ZR7dcZd/r+tR9RitRS0/PMMLSGiPlpxAl8rSxhLgAr0OieieI4eonSKbcgEh5sd5Sf4gA7k8v4doknXe9AA2zZU3ix3rodMTOlG727EePqU1BfbSZhKJ7keVbtRrnq1pHKdfAQccsqVjbZlE/NPvj5mSwWtP4/T5MdIafszojry0TaccHouCg6oE1bMf98DTXkGmmseN8iAAwPooyJxBc94+Dsgt+pfmGRMsA+W0G/SNPlFeC31xY2n15nNrIp83bELwBunOuahYcbibhcwX2/R97YrB5Ue0jvKf/fo5uiduMkc3EUfUQO799oAcMBa2dj+P8/Rxl2ujzQphjXov5tRx+572XtnuWNNu3k6a1PkYKz6Rc+tSPYN8OzAN5usgu3ID4FwETpk6v72EzYTEDUidHifpNjxr8A0oGKXHrk2ZS5KtmRDymG6k7uCOWROt57/W/RX2cPFEeLrcQuwF8HE8uYxR3S7u3CAWyuv9UswVAgXB6Kdtffqwq73KnRpVWBviKreFYr1gvAO6ywlIKdtJgFmO4beIO/TVV9cZDx2FucdbSMVDN1vkm1PR3m1MvtHPaC0SBBe1nogsvuXRKE4UrcwcWewqLqOS6975qWLoxJ2tC6i8PFVqVsNLpaIhHbM0SPtYlPp6eY0AktmJjyeCVP1Nh1/Gzc5jciTvqrLV5XbN1CMhZjJk6CujlHIo3UFjUj0zjHoWM+PLEDFLErB9zvL6TE/Cbwdy5m+M4zzdj2TW5U19LBD1QyZ69nRX0B1rrIIg=",
+        "pubkey": "91130ec232142fce6fc0de2591e68b805392e4a07f703d3c71c6d544ffe61412",
+        "id": "7327d83e906746e9f70e47cf73f7d3e325154be1c0ce035facf093c96062d878",
+        "sig": "ff4c37c83af4fa944cd3d6dd285d792b18ea128cc0e13dbc1f5be425c67c2cbc136d26f2ee406a64c143da2389bc2b012477772fdcee660b208f8dae55719dfa"
+      },
+      {
+        "kind": 30078,
+        "created_at": 1790999000,
+        "tags": [
+          ["d", "kefli/item/e784eddcc056e4ff5cc34f1a0d4eb99651f69b6dec38c8a0bbdeb82aed21ad0c"],
+          ["t", "kefli"]
+        ],
+        "content": "AjKPwptVs/jDSJ8hY7D8P4YhCyDFwQZEW5pqRvGEeGOWXShqnF9OxXZZ+lrrmm7ot2CUO6W7vSqI7tQNiBjcIT1uVrYI2BomN9TEI5+vGBn9EZErVDJshjA7GEPT1fJTwqOqdUUIbCJZSJX3JAefa6uEV9F2eLnMdAUjGmTI5Mp5ONOA+YUQJXXNFK1iTwB5gPbePzWrpISzxQqYbsNDawUr0y4YsHe/5JudYh1cNKuygkMKkc0CEWRyNWxaGKxT8yqxRVkAPqofRWPtRT+nAVgPewswoyGNXdWbRwWtHaKJYrxtZkG4Uaz4XhV78orSSjy/dHSJyhRG5k37MbB49hOLLHzvNQcI4Q/X6mTvXgB5mQ4rA/vAKLL6okgZh98+ilVTko4gCadxP5nRTXhNT1vOjB9WuZveLHzLsMDn945VGh2OFh5DWgX9+sanUiCEfkY196gizwGinHTxu/NYlBEw8mYq1pg3jfVkrF/wPZsz/BbEjLUPQi4MnYQFRgnem7m9",
+        "pubkey": "91130ec232142fce6fc0de2591e68b805392e4a07f703d3c71c6d544ffe61412",
+        "id": "18ae6645ff6bd188499a9b5ad9742a49d4e34740c2ecc6d75c4b506a27237c14",
+        "sig": "32061ecc2dba89c4f9a42d752f06f509f33ea84f1bd69c7465a0f53783b8fdbaae64d0f803727da160e59211007c1266df27eff103e82262cc68c13ece5488e6"
+      },
+      {
+        "kind": 5,
+        "created_at": 1791000600,
+        "tags": [
+          ["a", "30078:91130ec232142fce6fc0de2591e68b805392e4a07f703d3c71c6d544ffe61412:kefli/item/ac3a0a76d2d44d3b5407b11ba164afbf6c1be48e912a11dd17ccc27b84aa4d0f"],
+          ["k", "30078"]
+        ],
+        "content": "",
+        "pubkey": "91130ec232142fce6fc0de2591e68b805392e4a07f703d3c71c6d544ffe61412",
+        "id": "7a1bdb36295d41d0310fe46894433652b72c2507717ff199acc5dff09b3020e2",
+        "sig": "b288ceab3ea8dfa3aa183489941915f0c9e9e1a0ed01d8860d199ae12a18a7d150b6913b5f336fd540578303b3ff749031220cea37caf7caff0aa23add642daa"
+      }
+    ]
+  },
+  "servers": {
+    "https://mirror.example": {
+      "ead140834c2c65740c1a30014c8d094085845d95cac40b570354e9d33ceacb57": "QVkGwETsRhPr50c5k1vZGILeeUckcuSmmQQI+4285uQvbImqfibj6vhCRCvnW1pgGVW7QXoxVXmQ4SLXy29cB4hjP5UIfzL+DWkdR1vQ",
+      "fdd328a3213764a4dd0b11b669b2c9e6a1257c0090eb73a026f1ee7362796de2": "9lYr9bg5Zt2H2rWX+WBplTY4MzX/onRkoKaffXCnFuM4BjZtSGb/D76j8eqszXZtg3ZohIeacvWBLNTqAV5YjvAy3CCf5VpKArrY"
+    },
+    "https://blossom.own.example": {
+      "211d27d2ea05ce484d356b89ef73c4d2230a11601e2493c3180f4bbbebb844cf": "1AsOmlrByka/yJTMf9j16R7HWW6h0bLVk58n6e6hveOZrPXmjgkMp6n0BQKSU9kWECooW+xLNipIs1etesMHWL+FvONAL8XFfypoVA=="
+    }
+  },
+  "expected": {
+    "saves": [
+      {
+        "hash": "73301c8e4147ca63f4a948a40513385ba3eab81389b12822a1ca699f35f2ee9a",
+        "title": "Kept",
+        "state": "unread",
+        "markdown": "# Kept\n\nA save that comes back with its text from the mirror.\n"
+      },
+      {
+        "hash": "f6f8e611eb9e07d835714cc3a76fc58febd8d1897b8aaebbc1c917c367be274c",
+        "title": "Finished",
+        "state": "archived",
+        "markdown": "# Finished\n\nRead to the end and archived on another phone.\n"
+      },
+      {
+        "hash": "7f8c73bb9e83f4c85b6c5d47a81b1ef815525ed1307445d796c95822200e13c3",
+        "title": "Elsewhere",
+        "state": "unread",
+        "markdown": "# Elsewhere\n\nA text only a server in the 10063 still holds.\n"
+      },
+      {
+        "hash": "e784eddcc056e4ff5cc34f1a0d4eb99651f69b6dec38c8a0bbdeb82aed21ad0c",
+        "title": "Saved before v1.10",
+        "state": "unread",
+        "markdown": null
+      }
+    ],
+    "deleted": ["9f05c9452c25619163e17ecc9c44d6d13ccafd9e6f08eb437d0585f67e2e8b7d"]
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "about": "A NIP-98 signed request (C§6): header is 'Nostr ' and the base64 of event, a kind 27235 for url, method and the sha256 of body. The event verifies.",
+  "secret_key": "4706e92b823e07d20ba93c04198c7681692debe0bfe9ba6e2a077c01445694aa",
+  "pubkey": "2110b3fc3d760024ce006df1d5fb1666000cd97692fb170fa34bb12da542cc87",
+  "url": "https://api.kefli.example/devices",
+  "method": "POST",
+  "body": "{\"device_pubkey\":\"1e908de99cf59c9aee754763792c3e23bdea1ff7482ecd07fdf9fc26e78b4f38\"}",
+  "header": "Nostr eyJraW5kIjoyNzIzNSwiY3JlYXRlZF9hdCI6MTc5MTAwMDA5MCwidGFncyI6W1sidSIsImh0dHBzOi8vYXBpLmtlZmxpLmV4YW1wbGUvZGV2aWNlcyJdLFsibWV0aG9kIiwiUE9TVCJdLFsicGF5bG9hZCIsIjFhNjIzMzY0OTcwZjQ2ODJkOWQxMzliZGE3YTc3NWU0MzBmMGUzNjRjNmJjMzVlNjViMjdhNGI2MzE1YThhNWYiXV0sImNvbnRlbnQiOiIiLCJwdWJrZXkiOiIyMTEwYjNmYzNkNzYwMDI0Y2UwMDZkZjFkNWZiMTY2NjAwMGNkOTc2OTJmYjE3MGZhMzRiYjEyZGE1NDJjYzg3IiwiaWQiOiI2NDY3NDc3MmI1MDM0NGM0NjVhZTQ5ZmM5YzRiMjM0YzQ5NTBlN2IwNDg0MGZjMWZjNzVkYWM2YzIwMzEzNzU1Iiwic2lnIjoiYTVhNGFkYWM0ODU4YmZkNmU2MzQ3ZmU2MzkwYzE0ODQ4NzVjYzRjZDg1MTRkYmVjOTY2ZmZiMTM1NjA5OGFkODUzMTk1YTI2NDNkN2Y2NzhjN2E5M2UzMzhkNTdjMWFjMzVhOTE0ODIxZWIzYTA1YjBmMGJmNWM0YmE2MWRlNjgifQ==",
+  "event": {
+    "kind": 27235,
+    "created_at": 1791000090,
+    "tags": [
+      ["u", "https://api.kefli.example/devices"],
+      ["method", "POST"],
+      ["payload", "1a623364970f4682d9d139bda7a775e430f0e364c6bc35e65b27a4b6315a8a5f"]
+    ],
+    "content": "",
+    "pubkey": "2110b3fc3d760024ce006df1d5fb1666000cd97692fb170fa34bb12da542cc87",
+    "id": "64674772b50344c465ae49fc9c4b234c4950e7b04840fc1fc75dac6c20313755",
+    "sig": "a5a4adac4858bfd6e6347fe6390c1484875cc4cd8514dbec966ffb1356098ad853195a2643d7f678c7a93e338d57c1ac35a914821eb3a05b0f0bf5c4ba61de68"
+  }
+}

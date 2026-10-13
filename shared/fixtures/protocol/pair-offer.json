@@ -1,0 +1,16 @@
+{
+  "about": "One typed-code pair offer (C§4.4): typed is read leniently to code; scrypt gives lookup and key; sealed is base64(IV ‖ ciphertext ‖ tag) and opens to offer. Exact.",
+  "typed": "7k3m-zq2d",
+  "code": "7K3MZQ2D",
+  "lookup": "492575d4a44f8e7156b5747c40891785a117ccfddc1c2bda465bf5ac28fb95c9",
+  "key": "0ec0c6d5cee3eb8f15ee9697f3e65ed588063d059b4496f60ed7a3f781e9b55c",
+  "sealed": "qcGZa/jQDnC18XxjRQ3RWngZY+EvyIiixe8SRuk9AWobWy03ls2UYfpysHnqCGw1C45PNXcR483oZNq74fyfTkqcdiTOpv/d3eCwoCVKYFWYOPRt6izpGcDFrkWwrjEfGwJZjgup0rMhRjX3gyKkcBw1HgR+knfERk3OKmxc9xgyizCuVKVLuIc1IElSp1JebxuqH7TKJ968fxkE5T9EFY6Gsb1Sc7qDrIHd5HXvfbeJ2ecQQfy2qVEktT+Q7vvgfQipaG3yqLN9IV+fN+SLnY4q6Thuz5/6PSZ8pNU80GWanw538rrPZkKfXFOX1/6CVF+4wZYhmPMo4Y7C0Wn4",
+  "offer": {
+    "v": 1,
+    "device_pubkey": "1e908de99cf59c9aee754763792c3e23bdea1ff7482ecd07fdf9fc26e78b4f38",
+    "relay": "wss://relay.kefli.example",
+    "nonce": "42068b5a45dc4a3d5bd6447bb6f9949c",
+    "expires": 1791000300,
+    "label": "Chrome on a Windows laptop"
+  }
+}

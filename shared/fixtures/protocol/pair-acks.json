@@ -1,0 +1,75 @@
+{
+  "about": "A pair-ack and a move pair-ack (C§4.4, C§4.8), both sealed by the user's key S to the device. Each wrap opens with the device key; the first is accepted with offer_nonce while unpaired, the second while paired to S.",
+  "device": {
+    "secret_key": "90b89c0fad9df0d612f6db2af068064b42d144ea1d46990f8498bfde5121b38c",
+    "pubkey": "1e908de99cf59c9aee754763792c3e23bdea1ff7482ecd07fdf9fc26e78b4f38"
+  },
+  "user": {
+    "secret_key": "4706e92b823e07d20ba93c04198c7681692debe0bfe9ba6e2a077c01445694aa",
+    "pubkey": "2110b3fc3d760024ce006df1d5fb1666000cd97692fb170fa34bb12da542cc87"
+  },
+  "pair": {
+    "offer_nonce": "52a0441dafc1d1fda850a2c653885200",
+    "wrap": {
+      "kind": 1059,
+      "created_at": 1790951043,
+      "tags": [
+        ["p", "1e908de99cf59c9aee754763792c3e23bdea1ff7482ecd07fdf9fc26e78b4f38"]
+      ],
+      "content": "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",
+      "pubkey": "6944f27d695b71dfffad30c6413e21773d11a2339faedfb44fc59125b268d2b5",
+      "id": "c64b41ce829ea98834269ef3e3edc70b72280abc880cfdccecc3bb1ac213f33a",
+      "sig": "95aa9c652dac75028f4632ad185d011cf2b45ca5c6a4cc4160298c49b21f7392c151dc5f024757ec5c4b9b3648a03ee651b43467ca78d863041a080ac8f9c007"
+    },
+    "rumor": {
+      "pubkey": "2110b3fc3d760024ce006df1d5fb1666000cd97692fb170fa34bb12da542cc87",
+      "created_at": 1791000070,
+      "kind": 30078,
+      "tags": [
+        ["d", "kefli/pair-ack"]
+      ],
+      "content": "{\"v\":1,\"user_pubkey\":\"2110b3fc3d760024ce006df1d5fb1666000cd97692fb170fa34bb12da542cc87\",\"write_relays\":[\"wss://relay.kefli.example\",\"wss://relay-a.example\",\"wss://relay-b.example\"],\"blossom_servers\":[\"https://blossom.kefli.example\",\"https://mirror.example\"],\"token\":\"8b9b9b0ce9f92eee6c533c5abe77862fdcb691b490ac1dbfcf4a899b64614c88\",\"nonce\":\"52a0441dafc1d1fda850a2c653885200\"}",
+      "id": "dc959049b6a1f8cd5d13a8c30001b589c8d202248b92d82798ec7cef47787a64"
+    },
+    "ack": {
+      "v": 1,
+      "user_pubkey": "2110b3fc3d760024ce006df1d5fb1666000cd97692fb170fa34bb12da542cc87",
+      "write_relays": ["wss://relay.kefli.example", "wss://relay-a.example", "wss://relay-b.example"],
+      "blossom_servers": ["https://blossom.kefli.example", "https://mirror.example"],
+      "token": "8b9b9b0ce9f92eee6c533c5abe77862fdcb691b490ac1dbfcf4a899b64614c88",
+      "nonce": "52a0441dafc1d1fda850a2c653885200"
+    }
+  },
+  "move": {
+    "target_pubkey": "f2858fb5675361d0338595e67738a562b7b61d93dc25b2a8dffa8ec8644ad2dc",
+    "wrap": {
+      "kind": 1059,
+      "created_at": 1790989969,
+      "tags": [
+        ["p", "1e908de99cf59c9aee754763792c3e23bdea1ff7482ecd07fdf9fc26e78b4f38"]
+      ],
+      "content": "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",
+      "pubkey": "076fb8c5111cde2343f7ad388eef71ab8d95cf6493733545ab1d2b1b48ad590a",
+      "id": "971580b410094913c768cedc5577a678ab5a4a37a7b72893acbcfcb8ed872903",
+      "sig": "da18a6680955dca6f43d710c9633a3e0a93c8631e3520f89b2d286368e922257047e596a0dff110c07f7183cf2f1f048620febac2cdd60d66621ef5bad39f3aa"
+    },
+    "rumor": {
+      "pubkey": "2110b3fc3d760024ce006df1d5fb1666000cd97692fb170fa34bb12da542cc87",
+      "created_at": 1791000080,
+      "kind": 30078,
+      "tags": [
+        ["d", "kefli/pair-ack"]
+      ],
+      "content": "{\"v\":1,\"user_pubkey\":\"f2858fb5675361d0338595e67738a562b7b61d93dc25b2a8dffa8ec8644ad2dc\",\"write_relays\":[\"wss://relay.kefli.example\",\"wss://relay-a.example\",\"wss://relay-b.example\"],\"blossom_servers\":[\"https://blossom.kefli.example\",\"https://mirror.example\"],\"token\":\"867c465cb823c4abc6e419a6bca9b91400c24f6978282138d075c312b6cab840\",\"moved_from\":\"2110b3fc3d760024ce006df1d5fb1666000cd97692fb170fa34bb12da542cc87\"}",
+      "id": "28aa74a83bdf4b908e93e82594c7ee29c332573abe3d68f979f3be5d3e392512"
+    },
+    "ack": {
+      "v": 1,
+      "user_pubkey": "f2858fb5675361d0338595e67738a562b7b61d93dc25b2a8dffa8ec8644ad2dc",
+      "write_relays": ["wss://relay.kefli.example", "wss://relay-a.example", "wss://relay-b.example"],
+      "blossom_servers": ["https://blossom.kefli.example", "https://mirror.example"],
+      "token": "867c465cb823c4abc6e419a6bca9b91400c24f6978282138d075c312b6cab840",
+      "moved_from": "2110b3fc3d760024ce006df1d5fb1666000cd97692fb170fa34bb12da542cc87"
+    }
+  }
+}
