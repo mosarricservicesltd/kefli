@@ -4,8 +4,8 @@
 import { useSyncExternalStore } from 'react';
 import type { Sentence } from '@kefli/protocol';
 import { KefliVoice, type PhoneVoice, type VoiceState } from '../../modules/kefli-voice/src';
-import { reconcileWords, rowByHash, setPosition, type LibRow } from '../data/library';
-import { playFrom, recordPlayed } from '../data/listen';
+import { reconcileWords, rowByHash, setPosition, textLost, type LibRow } from '../data/library';
+import { LISTEN_CUED, clearCued, playFrom, readyRow, recordPlayed, setCued } from '../data/listen';
 import { getSetting, setSetting } from '../data/settings';
 import { readRate, nextRate, snapRate, wpsFor, wpsKey } from '../voice/clock';
 import { sessionVoice } from '../voice/choice';
@@ -100,6 +100,8 @@ export async function listen(row: Pick<LibRow, 'hash' | 'title' | 'site' | 'url'
   if (!totalWords) return;
   const owner = appState()?.owner;
   if (owner) reconcileWords(store(), now(), owner, row.hash, totalWords);
+  // anything starting ends the card's choice from a row's body (FD 115)
+  clearCued(store());
   if (session && session.hash !== row.hash) keep(session.word, true);
   const rate = readRate(getSetting(store(), 'voice.speed'));
   const lang = store().get<{ lang: string | null }>('SELECT lang FROM items WHERE hash = ? AND lang IS NOT NULL LIMIT 1', row.hash)?.lang ?? null;
@@ -223,6 +225,65 @@ export function readySession(row: LibRow): Session | null {
     hash: row.hash, title: row.title ?? row.url, playing: false, word: Math.min(playFrom(row), article.words - 1), rate, wordTiming: true,
     wps: wpsAt(rate), ended: false, totalWords: article.words, sentences: list, sentence: 0, firstWords: list.map((x) => x.firstWord),
   };
+}
+
+/**
+ * The card's ruler with a session (FD 115): the voice moves to the word, playing on if it plays; paused or heard to
+ * its end it stays paused, and the place is stored at once, since no word events follow to keep it. The word moved to.
+ */
+export function seekTo(word: number): number | null {
+  if (!session) return null;
+  const w = Math.max(0, Math.min(word, session.totalWords - 1));
+  KefliVoice.jumpToWord(w);
+  if (!session.playing) {
+    set({ ...session, word: w, ended: false });
+    keep(w, true);
+  }
+  return w;
+}
+
+/**
+ * The ready card's ruler (FD 115): the stored position moves and nothing starts, as its ±15 do. RULED: it stops short
+ * of the last word, which would read as heard through and play from the top. The word stored.
+ */
+export function seekStored(row: LibRow, word: number, words: number): number | null {
+  const owner = appState()?.owner;
+  if (!owner) return null;
+  const w = Math.max(0, Math.min(word, words - 2));
+  setPosition(store(), now(), owner, row.hash, w, false);
+  return w;
+}
+
+/**
+ * A Listen row's body (FD 115): the card takes the article, ready at its stored position. A session under way stops
+ * where it is, its place kept and published as ✕ leaves it, and Play all stops with it. False, changing nothing, when
+ * the card already holds the article, or when the article's text can't be read (unplayable heals that row).
+ */
+export function putInPlayer(row: Pick<LibRow, 'hash'>): boolean {
+  const owner = appState()?.owner;
+  if (!owner) return false;
+  const held = session ? session.hash : readyRow(store(), owner)?.row.hash;
+  if (held === row.hash) return false;
+  if (!textFiles.readArticle(row.hash)?.words) {
+    unplayable(row.hash);
+    return false;
+  }
+  queue = [];
+  // chosen first, so the card drawn once the session closes is already the new article
+  setCued(store(), row.hash);
+  closeVoice();
+  return true;
+}
+
+/**
+ * An article Listen can't play, its text gone or with no spoken words: it is no longer the card's choice, and text
+ * marked on the phone but missing goes back to be fetched, as the Reader does (textLost), so the card moves on.
+ */
+export function unplayable(hash: string): void {
+  const owner = appState()?.owner;
+  if (!owner) return;
+  if (getSetting(store(), LISTEN_CUED) === hash) clearCued(store());
+  if (textFiles.readArticle(hash) === null) textLost(store(), owner, hash);
 }
 
 /** ±15 on the ready card: the stored position moves by the words 15 s would speak, and nothing starts (FD 111). */

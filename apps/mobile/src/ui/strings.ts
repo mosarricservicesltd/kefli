@@ -377,7 +377,7 @@ export const S = {
     cancel: 'Cancel',
     connected: (name: string) => `Connected to ${name}`,
   },
-  // listen, listen-ready, listen-first, listen-empty, listen-scrolled
+  // listen, listen-ready, listen-first, listen-empty, listen-scrolled, listen-cued, listen-scrub
   listen: {
     title: 'Listen',
     unread: (n: number) => `${n} unread`,
@@ -392,6 +392,12 @@ export const S = {
     goToSaves: 'Go to your saves',
     play: (t: string) => `Play ${t}`,
     pause: (t: string) => `Pause ${t}`,
+    // listen-cued (FD 115): a row's body puts its article in the card
+    cueHint: 'Puts it in the player',
+    cued: (t: string) => `Up next: ${t}`,
+    // listen-scrub (FD 115): the card's ruler, an adjustable control
+    position: 'Position',
+    positionValue: (elapsed: string, total: string) => `${elapsed} of ${total}`,
   },
   // search, search-none, search-reader
   search: {

@@ -19,6 +19,7 @@ export function nextRate(rate: number): number {
 }
 
 export function seconds(word: number, wps: number, rate: number): number {
+  'worklet'; // also run by the card's ruler on the UI thread (FD 115)
   return Math.max(0, Math.round(word / (wps * rate)));
 }
 
@@ -117,8 +118,35 @@ export function meter(first: number, words: number, word: number, wordTiming: bo
  */
 export function cardOnScreen(was: boolean, card: { y: number; h: number }, scrollY: number, viewH: number): boolean {
   if (!card.h) return was;
-  const inView = Math.max(0, Math.min(card.y + card.h, scrollY + viewH) - Math.max(card.y, scrollY)) / card.h;
+  const inView = cardInView(card, scrollY, viewH);
   if (was && 0.4 > inView) return false;
   if (!was && inView > 0.6) return true;
   return was;
+}
+
+/** The share of the card in view (FD 52's measure); a card not yet laid out counts as in view. */
+export function cardInView(card: { y: number; h: number }, scrollY: number, viewH: number): number {
+  if (!card.h) return 1;
+  return Math.max(0, Math.min(card.y + card.h, scrollY + viewH) - Math.max(card.y, scrollY)) / card.h;
+}
+
+/**
+ * The word at a point on the card's ruler (FD 115): the share of the article's words the point is across, to the
+ * word, as a double-tap in the Reader lands (FD 107), within the article.
+ */
+export function wordAt(share: number, words: number): number {
+  'worklet'; // also run by the card's ruler on the UI thread (FD 115)
+  if (!(words > 0) || !Number.isFinite(share)) return 0;
+  return Math.max(0, Math.min(words - 1, Math.round(share * words)));
+}
+
+/** A screen reader's step on the ruler (FD 115): a twentieth of the article, at least a word, within it. */
+export function stepWord(word: number, words: number, dir: 1 | -1): number {
+  if (!(words > 0)) return 0;
+  return Math.max(0, Math.min(words - 1, word + dir * Math.max(1, Math.round(words / 20))));
+}
+
+/** The ruler's value for a screen reader (FD 115): the card's two clocks, elapsed and total. */
+export function positionClocks(word: number, words: number, wps: number, rate: number): [string, string] {
+  return [clock(seconds(word, wps, rate)), clock(seconds(words, wps, rate))];
 }

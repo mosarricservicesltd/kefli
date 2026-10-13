@@ -1,8 +1,24 @@
 // Listen (mobile spec 5.7, FD 49, FD 111): its list is Unread in Saves' order, the saves with their text; with no
-// session its card holds the most recently played article still there, else the top of the list. Every article
-// started in the voice is kept in listen_history; deleting an article takes it off (FD 34, by cascade).
+// session its card holds the article a row's body put there (FD 115), else the most recently played article still
+// there, else the top of the list. Every article started in the voice is kept in listen_history; deleting an article
+// takes it off (FD 34, by cascade).
 import type { SqlDb } from './db';
 import { LIB_COLS, type LibRow } from './library';
+import { getSetting, setSetting } from './settings';
+
+/** The article a Listen row's body put in the card (FD 115), until anything plays; on this phone only, like history. */
+export const LISTEN_CUED = 'listen.cued';
+
+export function setCued(db: SqlDb, hash: string): void {
+  setSetting(db, LISTEN_CUED, hash);
+}
+
+export function clearCued(db: SqlDb): void {
+  if (getSetting(db, LISTEN_CUED) !== null) db.run('DELETE FROM settings WHERE key = ?', LISTEN_CUED);
+}
+
+const LISTENABLE = "i.state = 'unread' AND i.text_state = 'cached' AND i.pending_delete_at IS NULL";
+const I_COLS = LIB_COLS.split(', ').map((c) => `i.${c}`).join(', ');
 
 export function recordPlayed(db: SqlDb, owner: string, hash: string, now: number): void {
   db.run(
@@ -24,14 +40,17 @@ export function listenRows(db: SqlDb, owner: string): LibRow[] {
 export type Ready = { row: LibRow; last: boolean };
 
 /**
- * What Listen's card holds with no session (FD 111): the most recently played article still in the list ("Last
- * played"), else the top of the list ("Up next"), else nothing. RULED: an archived article isn't held, so the card and
- * the list agree.
+ * What Listen's card holds with no session: the article a row's body put there while it can still play ("Up next",
+ * FD 115), else the most recently played article still in the list ("Last played"), else the top of the list ("Up
+ * next"), else nothing (FD 111). RULED: an archived article isn't held, so the card and the list agree.
  */
 export function readyRow(db: SqlDb, owner: string): Ready | null {
+  const cued = getSetting(db, LISTEN_CUED);
+  const chosen = cued ? db.get<LibRow>(`SELECT ${I_COLS} FROM items i WHERE i.owner = ? AND i.hash = ? AND ${LISTENABLE}`, owner, cued) : undefined;
+  if (chosen) return { row: chosen, last: false };
   const last = db.get<LibRow>(
-    `SELECT ${LIB_COLS.split(', ').map((c) => `i.${c}`).join(', ')} FROM listen_history h JOIN items i ON i.id = h.item
-     WHERE i.owner = ? AND i.state = 'unread' AND i.text_state = 'cached' AND i.pending_delete_at IS NULL
+    `SELECT ${I_COLS} FROM listen_history h JOIN items i ON i.id = h.item
+     WHERE i.owner = ? AND ${LISTENABLE}
      ORDER BY h.last_played_at DESC, i.id DESC LIMIT 1`,
     owner,
   );
