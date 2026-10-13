@@ -1,4 +1,4 @@
-import { resolveLaunch, resolveShare, type LaunchFacts } from '../src/data/resolver';
+import { blockStoreRewrite, resolveLaunch, resolveShare, type LaunchFacts } from '../src/data/resolver';
 
 const base: LaunchFacts = { identity: null, dbHasData: false, welcomeAnswered: false, blockStore: null, restoreRunning: false };
 const id = (origin: LaunchFacts['identity'] extends infer T ? T extends { origin: infer O } ? O : never : never) => ({ pubkey: 'p', origin });
@@ -37,5 +37,26 @@ describe('share (mobile spec 3.1)', () => {
   test('a minted key goes to Block Store only when the entry was read empty', () => {
     expect(resolveShare({ identity: null, blockStore: null })).toEqual({ use: 'mint', writeBlockStore: true });
     expect(resolveShare({ identity: null, blockStore: undefined })).toEqual({ use: 'mint', writeBlockStore: false });
+  });
+});
+
+describe('Block Store at each launch (mobile spec 3.3, contract 2, F22)', () => {
+  test('a missing entry is written again: a write that failed is retried', () => {
+    expect(blockStoreRewrite({ entry: 'empty', e2ee: true, written: null })).toBe(true);
+    expect(blockStoreRewrite({ entry: 'empty', e2ee: null, written: true })).toBe(true);
+  });
+  test('an entry written before end-to-end encryption came, or after it went, is written again', () => {
+    expect(blockStoreRewrite({ entry: 'same', e2ee: true, written: false })).toBe(true);
+    expect(blockStoreRewrite({ entry: 'same', e2ee: false, written: true })).toBe(true);
+    expect(blockStoreRewrite({ entry: 'same', e2ee: true, written: null })).toBe(true);
+  });
+  test('an entry that still matches stays', () => {
+    expect(blockStoreRewrite({ entry: 'same', e2ee: true, written: true })).toBe(false);
+    expect(blockStoreRewrite({ entry: 'same', e2ee: false, written: false })).toBe(false);
+    expect(blockStoreRewrite({ entry: 'same', e2ee: null, written: false })).toBe(false);
+  });
+  test('never over another key’s entry, nor after a failed read', () => {
+    expect(blockStoreRewrite({ entry: 'other', e2ee: true, written: null })).toBe(false);
+    expect(blockStoreRewrite({ entry: null, e2ee: true, written: null })).toBe(false);
   });
 });
