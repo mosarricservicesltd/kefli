@@ -16,9 +16,8 @@ import {
   type CryptoPort, type NostrEvent, type Signer,
 } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
-import { itemAddresses } from '../data/libraryKey';
+import { deletesOwed, itemAddresses } from '../data/libraryKey';
 import { relayEntries } from '../data/lists';
-import { deletesOwed } from '../data/move';
 import type { RelayAnswer } from './send';
 import { pageStream, type Filter } from './sync';
 
@@ -101,12 +100,12 @@ async function withinMinute(p: DelPorts, attempt: () => Promise<boolean>): Promi
 
 /**
  * Every d this identity holds: each save at every address it is at (itemAddresses, which names an unkeyed address
- * only where a save was published there, F5), saves from a newer Kefli, saves deleted here whose kind 5s haven't
- * all gone out (F32), the connected-browsers record and the library key's record.
+ * only where a save was published there, F5, and saves deleted here whose kind 5s haven't all gone out, F32), saves
+ * from a newer Kefli, the connected-browsers record and the library key's record.
  */
 function allDs(db: SqlDb, owner: string): string[] {
   const future = db.all<{ d: string }>('SELECT d FROM items_future WHERE owner = ?', owner).map((r) => r.d);
-  return [...new Set([...itemAddresses(db, owner), ...future, ...deletesOwed(db, owner).ds, DEVICES_D, LIBRARY_KEY_D])];
+  return [...new Set([...itemAddresses(db, owner), ...future, DEVICES_D, LIBRARY_KEY_D])];
 }
 
 /** The texts' blobs: the phone's saves', and those of saves deleted here whose blob deletes are still to go. */

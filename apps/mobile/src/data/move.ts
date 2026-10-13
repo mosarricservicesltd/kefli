@@ -142,27 +142,6 @@ function carryOne(db: SqlDb, now: number, job: MoveJob, hash: string): boolean {
   return true;
 }
 
-/**
- * What deletes still queued, or given up on, owe (F20, F32): the addresses of saves already gone from the phone, at
- * every address each was at, their blobs, and the newest version's time, which a kind 5 must be dated past (F36).
- * Delete my data and a move's retirement send these with the rest, since both then clear the outbox.
- */
-export function deletesOwed(db: SqlDb, owner: string): { ds: string[]; blobs: string[]; after: number } {
-  const key = libraryKey(db, owner);
-  const ds = new Set<string>();
-  let after = 0;
-  for (const r of db.all<{ payload: string | null }>("SELECT payload FROM outbox WHERE signer = ? AND op = 'delete_item'", owner)) {
-    const p = JSON.parse(r.payload ?? '{}') as { ds?: string[]; hash?: string; after?: number };
-    for (const d of p.ds ?? []) ds.add(d);
-    if (p.hash && key) ds.add(savedD(key, p.hash));
-    after = Math.max(after, p.after ?? 0);
-  }
-  const blobs = db.all<{ payload: string | null }>("SELECT payload FROM outbox WHERE signer = ? AND op = 'delete_blob'", owner)
-    .map((r) => (JSON.parse(r.payload ?? '{}') as { sha256?: string }).sha256)
-    .filter((s): s is string => !!s);
-  return { ds: [...ds], blobs: [...new Set(blobs)], after };
-}
-
 /** Step 5's last act on the phone: S's rows, lists and identity go; T's stay, and T is the phone's identity. */
 export function retireLocal(db: SqlDb, from: string, to: string | null): void {
   db.tx(() => {

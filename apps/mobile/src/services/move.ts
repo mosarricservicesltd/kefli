@@ -13,10 +13,10 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import { DEVICES_D, KIND, LIBRARY_KEY_D, T_TAG, buildDeletions, httpAuth, readItemEvent, type CryptoPort, type NostrEvent, type Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { enqueue } from '../data/outbox';
-import { itemAddresses } from '../data/libraryKey';
+import { deletesOwed, itemAddresses } from '../data/libraryKey';
 import { listServers, writeRelays } from '../data/lists';
 import { indexText } from '../data/sync';
-import { carryChanges, copySave, deletesOwed, moveJob, newerInEither, retireLocal, saveMove, sourceMark, sourceSaves, type MoveJob } from '../data/move';
+import { carryChanges, copySave, moveJob, newerInEither, retireLocal, saveMove, sourceMark, sourceSaves, type MoveJob } from '../data/move';
 import type { SaveTargets, StagedBlob } from '../data/saves';
 import { registered } from './connect';
 import type { RelayAnswer } from './send';
@@ -206,7 +206,7 @@ async function retireRemote(p: MovePorts, job: MoveJob): Promise<boolean> {
   // the move ran whose kind 5s are still to go out (F20), and S's records
   const owed = deletesOwed(p.db, job.from);
   const ds = [
-    ...itemAddresses(p.db, job.from), ...owed.ds,
+    ...itemAddresses(p.db, job.from),
     ...p.db.all<{ d: string }>('SELECT d FROM items_future WHERE owner = ?', job.from).map((r) => r.d),
     DEVICES_D, LIBRARY_KEY_D,
   ];
