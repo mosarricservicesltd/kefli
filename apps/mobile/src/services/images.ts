@@ -1,6 +1,7 @@
 // Fetching article images (mobile spec 4.5 phase 6, 5.6): one at a time, http(s) only, at most 5 MB, kept only if
 // the bytes are an image the Reader can draw. The store stays within 200 MB by evicting archived articles' images
 // first. Ports, like sync, so this runs in tests.
+import { isPublicWebUrl } from '@kefli/protocol';
 import { articleBlocks } from '../reader/blocks';
 import { imageKind, imageSize } from '../reader/imageSize';
 import type { SqlDb } from '../data/db';
@@ -32,7 +33,8 @@ export const IMAGE_UA = 'Mozilla/5.0 (Linux; Android 17; Pixel 10a) AppleWebKit/
 export type Fetched = 'ok' | 'failed' | 'offline' | 'skipped';
 
 export async function fetchImage(p: ImagePorts, owner: string, url: string, hash: string): Promise<Fetched> {
-  if (!/^https?:\/\//i.test(url)) return 'skipped';
+  // a page's image may name any address: only public web ones are fetched, never this phone's network (F26)
+  if (!/^https?:\/\//i.test(url) || !isPublicWebUrl(url)) return 'skipped';
   let res: Response;
   try {
     res = await p.fetch(url, { headers: { 'User-Agent': IMAGE_UA, Accept: 'image/avif,image/webp,image/png,image/jpeg,image/gif;q=0.9,*/*;q=0.5' } });

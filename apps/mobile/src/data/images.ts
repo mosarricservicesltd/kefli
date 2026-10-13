@@ -42,10 +42,16 @@ export function markUsed(db: SqlDb, url: string, now: number): void {
   db.run('UPDATE images SET last_used_at = ? WHERE url = ?', now, url);
 }
 
-/** The newest unread articles whose text is on the phone, newest first: the ones whose images are kept. */
+/**
+ * The newest unread articles whose text is on the phone and that have been opened, newest first: the ones whose
+ * images are kept. An article opened is one the Reader has asked images for, or read in. Images go to their sites only
+ * when an article is read (privacy page, mobile spec 7.3, F26), so the sync only fetches again what reading asked for.
+ */
 export function keptArticles(db: SqlDb, owner: string, n = ARTICLES): string[] {
   return db.all<{ hash: string }>(
-    "SELECT hash FROM items WHERE owner = ? AND state = 'unread' AND text_state = 'cached' AND pending_delete_at IS NULL ORDER BY saved_at DESC, id DESC LIMIT ?",
+    `SELECT hash FROM items i WHERE owner = ? AND state = 'unread' AND text_state = 'cached' AND pending_delete_at IS NULL
+       AND (last_opened_at IS NOT NULL OR EXISTS (SELECT 1 FROM images m WHERE m.hash = i.hash))
+     ORDER BY saved_at DESC, id DESC LIMIT ?`,
     owner, n,
   ).map((r) => r.hash);
 }
