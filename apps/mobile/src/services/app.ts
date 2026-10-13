@@ -2,6 +2,8 @@
 // resolver decides at launch; New here and the end of a restore move it on. Screens read it with useApp().
 import { useSyncExternalStore } from 'react';
 import { activeOwner } from '../data/library';
+import { resolveFailedLaunch, type Origin } from '../data/resolver';
+import { WELCOME_ANSWERED, getSetting } from '../data/settings';
 import { launchPlan } from './launchState';
 import { adoptRecovery, newHere } from './identity';
 import { store } from './store';
@@ -24,13 +26,27 @@ export function appState(): AppState | null {
   return state;
 }
 
-/** Reads the resolver's plan once, at launch. A failed resolver opens Welcome, which can make a key. */
+/**
+ * Reads the resolver's plan once, at launch. A launch that failed (the Keystore not ready, F21) routes on the
+ * database's identity row instead, so a library on the phone opens rather than Welcome offering to make a key over
+ * it; with no row, Welcome.
+ */
 export async function boot(): Promise<void> {
   try {
     const p = await launchPlan();
     set({ route: p.route, owner: activeOwner(store()), restoreCard: p.restoreCard });
   } catch {
-    set({ route: 'welcome', owner: null, restoreCard: false });
+    let owner: string | null = null;
+    let route: AppState['route'] = 'welcome';
+    try {
+      const db = store();
+      const id = db.get<{ pubkey: string; origin: string | null }>("SELECT pubkey, origin FROM identities WHERE role = 'active'");
+      route = resolveFailedLaunch({ identity: id ? { origin: (id.origin ?? 'new') as Origin } : null, welcomeAnswered: getSetting(db, WELCOME_ANSWERED) === '1' });
+      owner = route === 'welcome' ? null : (id?.pubkey ?? null);
+    } catch {
+      // no database either: Welcome, as on a new phone
+    }
+    set({ route, owner, restoreCard: false });
   }
 }
 

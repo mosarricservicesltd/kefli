@@ -1,4 +1,4 @@
-import { blockStoreRewrite, resolveLaunch, resolveShare, type LaunchFacts } from '../src/data/resolver';
+import { blockStoreRewrite, resolveFailedLaunch, resolveLaunch, resolveShare, type LaunchFacts } from '../src/data/resolver';
 
 const base: LaunchFacts = { identity: null, dbHasData: false, welcomeAnswered: false, blockStore: null, restoreRunning: false };
 const id = (origin: LaunchFacts['identity'] extends infer T ? T extends { origin: infer O } ? O : never : never) => ({ pubkey: 'p', origin });
@@ -24,6 +24,13 @@ describe('launch (mobile spec 3.1)', () => {
   });
   test('a failed Block Store read is not a key', () => {
     expect(resolveLaunch({ ...base, blockStore: undefined })).toMatchObject({ route: 'welcome', adoptBlockStore: false });
+  });
+  test("a key file that can't be read for now routes on the database's identity, never as no identity (F21)", () => {
+    expect(resolveFailedLaunch({ identity: { origin: 'new' }, welcomeAnswered: true })).toBe('saves');
+    expect(resolveFailedLaunch({ identity: { origin: 'nostr_signin' }, welcomeAnswered: false })).toBe('saves');
+    expect(resolveFailedLaunch({ identity: { origin: 'early_share' }, welcomeAnswered: false })).toBe('welcome-early');
+    expect(resolveFailedLaunch({ identity: { origin: 'early_share' }, welcomeAnswered: true })).toBe('saves');
+    expect(resolveFailedLaunch({ identity: null, welcomeAnswered: false })).toBe('welcome');
   });
 });
 

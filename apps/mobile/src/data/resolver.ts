@@ -36,6 +36,17 @@ export function resolveLaunch(f: LaunchFacts): LaunchPlan {
   return { wipeDb, route: 'welcome', restoreCard: false, adoptBlockStore: false };
 }
 
+/**
+ * Where a launch goes when the key file couldn't be read for now (F21: the Keystore not ready, retried and still
+ * failing). Never treated as no identity: the database's own identity row decides, as resolveLaunch would with the
+ * key, and nothing is wiped or adopted. The library opens on what the phone holds, and what needs the key waits
+ * for a later launch to read it.
+ */
+export function resolveFailedLaunch(f: { identity: { origin: Origin } | null; welcomeAnswered: boolean }): LaunchPlan['route'] {
+  if (!f.identity) return 'welcome';
+  return f.identity.origin === 'early_share' && !f.welcomeAnswered ? 'welcome-early' : 'saves';
+}
+
 export type ShareFacts = { identity: { pubkey: string } | null; blockStore: string | null | undefined };
 
 /**
