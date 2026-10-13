@@ -20,6 +20,7 @@ import { absorbRecord, queueRecord } from '../data/devices';
 import { KEEP_COPIES, getSetting } from '../data/settings';
 import { readUserLists, settleUserLists } from './nostrSignIn';
 import { markBacked } from '../data/backup';
+import { TooLarge, open } from '../net/http';
 import {
   heldServerList, indexerRelays, keepListedServers, listServers, recordList, relayEntries, seedGeneratedLists, writeRelays, type DefaultsLike,
 } from '../data/lists';
@@ -177,58 +178,22 @@ export const TEXT_TIMEOUT_MS = 60_000;
 
 type Got = { status: number; bytes: Uint8Array | null };
 
-/** The body, read as it streams in: past max, reading stops and the download is aborted (null). */
-async function readCapped(res: Response, max: number, abort: () => void): Promise<Uint8Array | null> {
-  if (Number(res.headers.get('content-length') ?? 0) > max) return (abort(), null);
-  if (!res.body) {
-    const all = new Uint8Array(await res.arrayBuffer());
-    return all.length > max ? null : all;
-  }
-  const reader = res.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let n = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    n += value.length;
-    if (n > max) {
-      abort();
-      reader.cancel().catch(() => undefined);
-      return null;
-    }
-    chunks.push(value);
-  }
-  const out = new Uint8Array(n);
-  let at = 0;
-  for (const c of chunks) {
-    out.set(c, at);
-    at += c.length;
-  }
-  return out;
-}
-
 /**
- * One blob from one server, with the abort armed until the whole body is in (F12): the status, and a 2xx's bytes
- * (null past TEXT_MAX_BYTES). Throws when the server can't be reached or doesn't finish within TEXT_TIMEOUT_MS. The
- * deadline races the read too, so a fetch that ignores the signal can't hold sync either.
+ * One blob from one server, the deadline running until the whole body is in (F12, through net/http's open, as pages
+ * and images are read): the status, and a 2xx's bytes (null past TEXT_MAX_BYTES, declared or streamed). Throws when
+ * the server can't be reached or doesn't finish within TEXT_TIMEOUT_MS.
  */
 async function getBlob(p: SyncPorts, url: string): Promise<Got> {
-  const ctl = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const late = new Promise<never>((_, fail) => {
-    timer = setTimeout(() => {
-      ctl.abort();
-      fail(new Error('timeout'));
-    }, TEXT_TIMEOUT_MS);
-  });
-  const read = async (): Promise<Got> => {
-    const res = await p.fetch(url, { method: 'GET', signal: ctl.signal });
-    return { status: res.status, bytes: res.ok ? await readCapped(res, TEXT_MAX_BYTES, () => ctl.abort()) : null };
-  };
+  const o = await open(p.fetch, url, { method: 'GET' }, TEXT_TIMEOUT_MS);
+  if (!o.res.ok) {
+    o.done();
+    return { status: o.res.status, bytes: null };
+  }
   try {
-    return await Promise.race([read(), late]);
-  } finally {
-    clearTimeout(timer);
+    return { status: o.res.status, bytes: await o.read(TEXT_MAX_BYTES) };
+  } catch (e) {
+    if (e instanceof TooLarge) return { status: o.res.status, bytes: null };
+    throw e;
   }
 }
 

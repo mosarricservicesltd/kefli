@@ -6,7 +6,7 @@ import { seedGeneratedLists } from '../src/data/lists';
 import { absorbRecord } from '../src/data/devices';
 import { browserName, INBOX_BLOB_LIFE } from '../src/data/inbox';
 import { pendingParses } from '../src/data/pending';
-import { drainInbox, judge, type InboxPorts } from '../src/services/inbox';
+import { INBOX_MAX_BYTES, INBOX_TIMEOUT_MS, drainInbox, judge, readBlob, type InboxPorts } from '../src/services/inbox';
 import { GUARD_WORDS, type ParserResult } from '../src/services/page';
 import { memoryDb } from './sqlite';
 
@@ -173,6 +173,28 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     w2.tick(INBOX_BLOB_LIFE);
     expect(await drainInbox(w2.ports, w2.owner)).toEqual({ created: 1 });
     expect(w2.item(hash)?.text_state).toBe('queued');
+  });
+
+  test('a blob server that trickles, or never ends, lets go at the deadline or the cap (F12)', async () => {
+    const MB = 1_048_576;
+    const w = world();
+    const blob = await w.withHtml('<h1>Slow</h1>', false);
+    const pulled = { n: 0 };
+    const endless = () => new ReadableStream<Uint8Array>({ pull: (c) => void (pulled.n++, c.enqueue(new Uint8Array(MB))) }, { highWaterMark: 0 });
+    w.ports.fetch = (async () => new Response(endless(), { status: 200 })) as never;
+    await w.send(w.request({ html: blob.html }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_blob: 1 });
+    expect(pulled.n).toBeLessThanOrEqual(INBOX_MAX_BYTES / MB + 2);
+
+    jest.useFakeTimers();
+    try {
+      w.ports.fetch = (async () => new Response(new ReadableStream({ pull: () => new Promise(() => undefined) }), { status: 200 })) as never;
+      const got = readBlob(w.ports, blob.html);
+      await jest.advanceTimersByTimeAsync(INBOX_TIMEOUT_MS * 2);
+      expect(await Promise.race([got, Promise.resolve('still waiting')])).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test('a request naming another server is taken without its HTML', async () => {
