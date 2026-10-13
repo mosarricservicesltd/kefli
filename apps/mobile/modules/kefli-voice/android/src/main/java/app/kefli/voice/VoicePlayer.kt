@@ -15,6 +15,8 @@ import com.google.common.util.concurrent.ListenableFuture
 @UnstableApi
 class VoicePlayer : SimpleBasePlayer(Looper.getMainLooper()) {
   private val listener: (VoiceEngine.Event) -> Unit = { e -> if (e !is VoiceEngine.Event.Word) invalidateState() }
+  private var loadedHash = ""
+  private var loads = 0
 
   init {
     VoiceEngine.addListener(listener)
@@ -36,8 +38,14 @@ class VoicePlayer : SimpleBasePlayer(Looper.getMainLooper()) {
     val meta = MediaMetadata.Builder().setTitle(e.title).setArtist(e.site)
       .apply { e.artwork?.let { setArtworkData(it, MediaMetadata.PICTURE_TYPE_FRONT_COVER) } }
       .build()
-    val item = MediaItemData.Builder(e.hash)
-      .setMediaItem(MediaItem.Builder().setMediaId(e.hash).setMediaMetadata(meta).build())
+    // the item's id is a number for this load, never the save's hash, which would name the article to any controller (F29)
+    if (e.hash != loadedHash) {
+      loadedHash = e.hash
+      loads++
+    }
+    val id = "kefli-$loads"
+    val item = MediaItemData.Builder(id)
+      .setMediaItem(MediaItem.Builder().setMediaId(id).setMediaMetadata(meta).build())
       .setMediaMetadata(meta)
       .setDurationUs(e.durationMs() * 1000)
       .setIsSeekable(true)

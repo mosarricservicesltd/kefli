@@ -35,6 +35,7 @@ class VoiceService : MediaSessionService() {
     session = MediaSession.Builder(this, VoicePlayer())
       .setMediaButtonPreferences(listOf(back, forward))
       .setSessionActivity(readerIntent(VoiceEngine.hash))
+      .setCallback(onlyTrusted)
       .build()
       // Nothing connects a MediaController to this service, so the session is registered here; without it
       // media3 never posts the card, the service never goes to the foreground, and Android freezes the app
@@ -50,6 +51,21 @@ class VoiceService : MediaSessionService() {
   private fun readerIntent(hash: String): PendingIntent {
     val open = Intent(Intent.ACTION_VIEW, Uri.parse("kefli://reader/$hash")).setPackage(packageName)
     return PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+  }
+
+  /**
+   * The service is exported, as media3 needs, so any app could otherwise connect and read the title, site and cover
+   * of what is playing (F29). The session takes its own notification, Kefli itself, and the controllers Android
+   * trusts: those holding the media-control permission, as System UI and Bluetooth do, or notification-listener
+   * access, which can read the card anyway. Any other app is refused.
+   */
+  private val onlyTrusted = object : MediaSession.Callback {
+    override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult =
+      if (session.isMediaNotificationController(controller) || controller.isTrusted || controller.packageName == packageName) {
+        MediaSession.ConnectionResult.AcceptedResultBuilder(session, controller).build()
+      } else {
+        MediaSession.ConnectionResult.reject()
+      }
   }
 
   override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
