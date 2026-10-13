@@ -46,7 +46,7 @@ func (a *API) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	used, _ := a.st.Used(r.Context(), req.pubkey)
-	a.log.Info("registered", "user", short(req.pubkey))
+	a.log.Info("registered", "user", a.short(req.pubkey))
 	reply(w, http.StatusOK, map[string]any{"v": 1, "quota": store.DefaultQuota, "used": used})
 }
 
@@ -62,7 +62,7 @@ func (a *API) deleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.unlink(orphaned)
-	a.log.Info("account deleted", "user", short(req.pubkey), "blobs", len(orphaned))
+	a.log.Info("account deleted", "user", a.short(req.pubkey), "blobs", len(orphaned))
 	reply(w, http.StatusOK, map[string]any{"v": 1, "deleted": map[string]any{"blobs": len(orphaned)}})
 }
 
@@ -81,17 +81,17 @@ func (a *API) addDevice(w http.ResponseWriter, r *http.Request) {
 	if !ok || !a.registered(w, r, req.pubkey) {
 		return
 	}
+	// a label older phones still send is ignored, never stored: the privacy page lists nothing about browsers (F30)
 	device, _ := req.body["device_pubkey"].(string)
-	label, _ := req.body["label"].(string)
-	if !auth.IsHex64(device) || device == req.pubkey || label == "" || len(label) > 64 {
+	if !auth.IsHex64(device) || device == req.pubkey {
 		fail(w, http.StatusBadRequest, "device")
 		return
 	}
-	if err := a.st.AddDevice(r.Context(), req.pubkey, device, label); err != nil {
+	if err := a.st.AddDevice(r.Context(), req.pubkey, device); err != nil {
 		a.serverError(w, err)
 		return
 	}
-	a.log.Info("device added", "user", short(req.pubkey), "device", short(device))
+	a.log.Info("device added", "user", a.short(req.pubkey), "device", a.short(device))
 	reply(w, http.StatusOK, map[string]any{"v": 1})
 }
 

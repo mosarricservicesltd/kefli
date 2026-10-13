@@ -70,6 +70,8 @@ CREATE TABLE IF NOT EXISTS gone (
   pubkey TEXT PRIMARY KEY,
   at     INTEGER NOT NULL
 );
+-- Browser labels are no longer kept (F30): any stored before go. The column stays, empty, so no migration is needed.
+UPDATE devices SET label = '' WHERE label != '';
 `
 
 type Store struct {
@@ -120,9 +122,10 @@ func (s *Store) Account(ctx context.Context, pubkey string) (quota int64, ok boo
 }
 
 // AddDevice authorises a device key for the user; a key already authorised for another user moves (a move, contract 4.8).
-func (s *Store) AddDevice(ctx context.Context, user, device, label string) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO devices(device_pubkey, user_pubkey, label, created_at) VALUES(?, ?, ?, ?)
-		ON CONFLICT(device_pubkey) DO UPDATE SET user_pubkey = excluded.user_pubkey, label = excluded.label`, device, user, label, s.unix())
+// The browser's label isn't kept (F30).
+func (s *Store) AddDevice(ctx context.Context, user, device string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO devices(device_pubkey, user_pubkey, label, created_at) VALUES(?, ?, '', ?)
+		ON CONFLICT(device_pubkey) DO UPDATE SET user_pubkey = excluded.user_pubkey`, device, user, s.unix())
 	if err == nil {
 		_, err = s.db.ExecContext(ctx, `DELETE FROM gone WHERE pubkey = ?`, device)
 	}

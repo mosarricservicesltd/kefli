@@ -67,8 +67,9 @@ async function sendRegister(p: SendPorts, row: OutboxRow, signer: Signer, t: Out
 
 /** POST /devices: the browser's key may upload against this identity's quota (C§4.4, 6). */
 async function sendPostDevice(p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
-  const { device_pubkey, label } = JSON.parse(row.payload ?? '{}') as { device_pubkey: string; label: string };
-  return [await apiCall(p, signer, t.target, 'POST', JSON.stringify({ v: 1, device_pubkey, label }))];
+  // the browser's label stays in the self-encrypted connected-browsers record, never with the operator (F30)
+  const { device_pubkey } = JSON.parse(row.payload ?? '{}') as { device_pubkey: string };
+  return [await apiCall(p, signer, t.target, 'POST', JSON.stringify({ v: 1, device_pubkey }))];
 }
 
 /** DELETE /devices/<pk>; a 404 means the API no longer holds it, which is the point. */
