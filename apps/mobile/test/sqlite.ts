@@ -2,8 +2,9 @@
 import { DatabaseSync } from 'node:sqlite';
 import { transaction, type Param, type SqlDb } from '../src/data/db';
 
-export function memoryDb(): SqlDb {
-  const raw = new DatabaseSync(':memory:');
+/** In memory, or in the file at path, for a test that reads what the file holds. */
+export function memoryDb(path = ':memory:'): SqlDb {
+  const raw = new DatabaseSync(path);
   const db: SqlDb = {
     exec: (sql) => raw.exec(sql),
     run: (sql, ...params: Param[]) => {

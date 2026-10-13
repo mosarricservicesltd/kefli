@@ -10,6 +10,8 @@ interface KefliSystemModule {
   copySensitive(label: string, text: string): boolean;
   /** Writes the file to Downloads (8.6): MediaStore on 29 and later, the system's save dialog on 26 to 28. */
   exportToDownloads(fileName: string, contents: string): Promise<{ uri: string }>;
+  /** Delete my data and Sign out (7.2): the WebViews' cookies, site storage and cache. */
+  clearWebData(): Promise<void>;
   /** The character under a point in page coordinates, with its text view's text; null where no text lies there. */
   textOffsetAt(pageX: number, pageY: number): Promise<{ offset: number; text: string } | null>;
 }
