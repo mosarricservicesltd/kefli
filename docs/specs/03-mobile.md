@@ -461,9 +461,9 @@ The critical path is five taps, no inputs, one decision and no permissions (FM w
 | Offline (`saves-offline`) | Notice after a 1 s hold; pending rows show the hourglass |
 | Error (FM) | Row-level only |
 
-**Archive** (FD 7, FD 37, FD 63): "N archived" as drawn; a visible ⋯ on each row; swipe right for Back to Unread (`archive`); the row menu sheet raises its toast after its exit (`archive-menu`); empty (`archive-empty`); offline shows Unread's notice (the prototype, over FM's "Identical").
+**Archive** (FD 7, FD 37, FD 63, FD 112): "N archived" as drawn; a visible ⋯ on each row; swipe right for Back to Unread and left for Delete, on the error fill with its content in on-fill, the same 96 px arm and 800 px/s flick, committing at once with Undo (`archive`, `archive-delete`); the row menu sheet raises its toast after its exit (`archive-menu`); empty (`archive-empty`); offline shows Unread's notice (the prototype, over FM's "Identical").
 
-**Search** (FD 50, FD 51): full screen, no tab bar, field focused on arrival. Before typing, the caption (`search`); results per keystroke with archived rows tagged; no results only after 250 ms idle (`search-none`); swiping a result archives or restores it in place; Back from a Reader opened here keeps everything and plays Catch-up (`search-reader`). The query resets only when entered from Saves; offline is identical.
+**Search** (FD 50, FD 51): full screen, no tab bar, field focused on arrival. Before typing, the caption (`search`); results per keystroke with archived rows tagged; no results only after 250 ms idle (`search-none`); swiping a result archives or restores it in place, and swiping an archived result left deletes it, when it leaves the results (FD 112); Back from a Reader opened here keeps everything and plays Catch-up (`search-reader`). The query resets only when entered from Saves; offline is identical.
 
 | Reader | Build notes |
 |---|---|
@@ -472,7 +472,8 @@ The critical path is five taps, no inputs, one decision and no permissions (FM w
 | Images arriving (`reader-images`) | Placeholder at the stored size (`images.w`, `h`), 3:2 on first load, the anchored word kept still |
 | Couldn't get the text (`reader-error`, FD 69) | The original view |
 | Not fetched, offline (`reader-offline`, FD 40) | The fetch runs when online |
-| ⋯ menu (`reader-menu`, FD 62) | Speed read, Back to Unread (archived only), Open original, Copy link, Delete |
+| Bar (`reader`, FD 110) | Back, the source, the Listen chip, Speed read (Kefli's speed-read icon, "Speed read"), Aa, ⋯; Speed read only while the text is shown, as the chip |
+| ⋯ menu (`reader-menu`, FD 62, FD 110) | Back to Unread (archived only), Open original, Copy link, Delete |
 | End card (`reader-end`, FD 54, FD 37, FD 42) | Archive and next only with a next unread: the first Unread row in list order whose text is cached, other than this one; archived: Back to Unread |
 | Playing; paused (`play`, `play-paused`, FD 45, FD 20) | The mini expands into the Reader tier; reading line hidden; chip faded in its slot; highlight and follow-scroll; paused shows ✕ |
 | Another article playing (`mini-reader`) | Mini at the bottom; Archive above it |
@@ -488,21 +489,22 @@ The critical path is five taps, no inputs, one decision and no permissions (FM w
 
 **The session** (`kefli-voice`, 8.1): starting builds the article's sentences from the spoken projection, each with its word starts, and hands them over with the start word, rate, voice and the 512 px cover. The engine is warmed when a Reader mounts, since the first word took about 2 s cold (T§2). Word events set the position directly (MS Signature 2). Engines without word timing report sentence starts only; the highlight then marks the sentence (`play-sentence`, FD 91 (h); `archive/03-android-v1.0.md` fell back to paragraphs, but utterances are now sentences), the line glides across each sentence's estimated duration (MS Signature 2), the word meter stays unlit (FD 68, FD 69), and Speed read is unaffected.
 
-**Where it starts** (FD 19, FD 36, FD 107): at the saved word if on screen, otherwise the first paragraph in view, with no scroll; a double-tapped word in the Reader, moving a session of that article there and playing it, or starting one there; a Listen row's play button starts from the stored position, or from 0 if finished. Each article has one position, a word index, written by reading, listening and Speed read; reading writes it only while the article isn't playing.
+**Where it starts** (FD 19, FD 36, FD 107): at the saved word if on screen, otherwise the first paragraph in view, with no scroll; a double-tapped word in the Reader, moving a session of that article there and playing it, or starting one there; a Listen row's play button, and Play on Listen's ready card, start from the stored position, or from 0 if finished. Each article has one position, a word index, written by reading, listening and Speed read; reading writes it only while the article isn't playing.
 
 **Clock.** On-device speech has no duration, so time is estimated. Words per second are measured per voice and per speed (FD 107: a voice's speed doesn't scale with the rate; `voice.wps.<voice>` for 1×, `voice.wps.<voice>@<rate>` for the others, a speed not yet heard starting from 1×'s figure, times 1.3 at 0.5×; the engine asks Google's voice for 2.1 at 2×, heard as a true 2×, while 0.5× is heard at about 0.65× since the voice goes no slower) from `onRangeStart` as a moving average, seeded at 3.9 at rate 1 (T§2: about 255 ms a word on Google's en-GB voice), or learned from sentence starts on an engine without word events; elapsed = word ÷ (wps × rate). ±15 s moves round(15 × wps × rate) words and restarts speech at that word, re-queuing the rest of its sentence from the word's offset, so the highlight moves to it at once (MS Player); taps accumulate and clamp at both ends (FD 48).
 
 **Tiers** (FD 45, FD 46, FD 20, CS Player): the mini (`mini`) on every screen with a session except Listen while its card is in view, Speed read, first-launch screens and the playing article's Reader, its title opening the Reader at the spoken word; the Reader tier there; the full tier on Now playing and as Speed read's transport, drawn inside its host (6.1). ✕ shows only while paused and ends the session everywhere. The speed pill steps 1, 1.5, 2, 0.5 and back to 1 (FD 107); the engine's rate is snapped to its step wherever it enters, since it comes back as a widened 32-bit float.
 
-| Listen (FD 3, FD 49) | Build notes |
+| Listen (FD 111, FD 49) | Build notes |
 |---|---|
-| Empty (`listen-empty`) | Medal and a way to Saves |
-| Populated (`listen`, FD 68) | Now playing with the word meter; Played, most recent first; a row's cover plays, its body opens the Reader |
+| Empty (`listen-empty`) | Only with no session and nothing in Unread to play: medal, "Nothing to listen to" and a way to Saves |
+| Populated (`listen`, FD 68) | Now playing with the word meter; Unread, newest first, the rows with text; a row's cover plays, its body opens the Reader |
+| Ready (`listen-ready`, FD 111) | No session: the card holds the most recently played article still in Unread ("Last played"), else the top of Unread ("Up next"), at its stored position; Play starts there, ±15 move the stored position without a session, the speed pill sets the one speed; no ✕. Closing a session returns the card to this state |
 | Card scrolled away (`listen-scrolled`, FD 52) | Mini appears below 40 % in view, leaves above 60 % |
 | Reader from Listen (`listen-reader`, FD 50) | Back returns to Listen |
 | Loading, partial, error, offline | FM's rows are obsolete under FD 22; offline is identical |
 
-Play all plays a snapshot of the Listen list from the top to the end, then stops; a finished article rewinds to its start, paused; reading another article doesn't pull you along; only starting a different article ends it (FD 35, C§7). When Play all moves on, the playing article's open Reader moves with it to the next article at its word, with no glide, as the prototype does (FD 75; MS Signature 2).
+Play all plays a snapshot of the Listen list (Unread with text, FD 111) from the top to the end, then stops; a finished article rewinds to its start, paused; reading another article doesn't pull you along; only starting a different article ends it (FD 35, C§7). When Play all moves on, the playing article's open Reader moves with it to the next article at its word, with no glide, as the prototype does (FD 75; MS Signature 2).
 
 **Lock screen** (`lock`, FD 10, FD 15, FD 72): Android's media layout with play, pause, ±15 and a display-only bar (FD 48); the cover as artwork, the one-colour glyph as the small icon; a tap opens the playing article's Reader at the spoken word with the tier in place. Headset and car controls use the same session (8.1); no notification permission is requested.
 
@@ -522,11 +524,11 @@ Leaving moves the audio to the same word, and the Reader lights it for 1.6 s; wp
 | Backup not done (`you`, FD 17, FD 25, FD 68) | Big counts beside the quilt; Later hides the card for ten more saves |
 | Backed up (`you-done`, FD 27) | No card; the row reads "Written down" |
 | Nostr user (`you-nostr`, FD 12, FD 26) | Picture and name from kind 0 (G12 without either); no recovery rows, and no Add another device (FD 90) |
-| Several voices (`you-voices`, FD 24) | Voice row, rechecked each time You opens |
+| Several voices (`you-voices`, FD 24, FD 109) | Voice row naming the phone language's voice, shown when any language among the phone's own and the saves' has two or more; rechecked each time You opens |
 | Offline (`you-offline`, FD 25) | No banner; Add another device disabled |
 | Recovery code sheet (`rec-hidden`, `rec-shown`, `rec-copied`, FD 27, FD 74) | Copy confirms inside the sheet; after Done, focus on the Recovery code row |
 | Add another device (`dev`, `dev-expired`) | 3.6; expired fades the QR to 12 %; offline notice; generating shows a skeleton QR (FM) |
-| Voice (`voice`, FD 24, FD 36) | Offline voices for the last played article's language (FD 89), samples played outside the session, Default speed; loading is a momentary read; no engine, no row; offline identical |
+| Voice (`voice`, `voice-langs`, FD 24, FD 36, FD 109) | Chips for the phone's language and each language among the saves (by count of saves), not drawn with one; the chosen chip's offline voices, samples played outside the session, Default speed; one choice per language, `voice.id.<lang>`, the old `voice.id` counting for its own voice's language until a choice is made there, so it moves without a write; a session uses its article's language's choice, else its first voice; loading is a momentary read; no engine, no row; offline identical |
 | Advanced (`adv`, `adv-down`, `adv-offline`) | The relay group with each relay's status (FD 76); the count of saves not backed up (`adv-notbacked`, 4.3, FD 93), and while there are any, the note under the relays speaks of "your other saves"; offline disables the row for switching to a nostr app |
 | Export my saves (`adv`) | Works offline; one HTML bookmark file with each save's text, `kefli-export.html` to Downloads, then the toast (FD 89); failure `adv-exportfail` (G9) |
 

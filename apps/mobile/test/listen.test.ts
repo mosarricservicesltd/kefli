@@ -1,7 +1,7 @@
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
-import { playFrom, playedRows, recordPlayed } from '../src/data/listen';
-import { commitDelete, deleteItem } from '../src/data/library';
+import { listenRows, playFrom, readyRow, recordPlayed } from '../src/data/listen';
+import { commitDelete, deleteItem, setArchived } from '../src/data/library';
 import { cardOnScreen, meter, ruler, sentenceOf } from '../src/voice/clock';
 import { memoryDb } from './sqlite';
 
@@ -9,17 +9,34 @@ const PK = 'ab'.repeat(32);
 const h = (n: number) => n.toString(16).padStart(64, '0');
 
 describe('Listen (mobile spec 5.7)', () => {
-  test('Played: most recently started first, without deleted articles', () => {
+  test('the list: Unread with text, newest first, without deleted or archived articles (FD 111)', () => {
     const db = memoryDb();
     migrate(db);
     ensureIdentityRow(db, 1, PK, 'new', true);
-    for (const n of [1, 2, 3]) db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin) VALUES (?, ?, 'u', 1, 'unread', 'cached', 's')", PK, h(n));
+    for (const [n, text] of [[1, 'cached'], [2, 'cached'], [3, 'remote'], [4, 'failed'], [5, 'cached']] as const) {
+      db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin) VALUES (?, ?, 'u', ?, 'unread', ?, 's')", PK, h(n), n, text);
+    }
+    expect(listenRows(db, PK).map((r) => r.hash)).toEqual([h(5), h(2), h(1)]);
+    setArchived(db, 10, PK, h(2), true);
+    deleteItem(db, 11, PK, h(5));
+    expect(listenRows(db, PK).map((r) => r.hash)).toEqual([h(1)]);
+  });
+
+  test('the ready card: the last played still in Unread, else the top of Unread (FD 111)', () => {
+    const db = memoryDb();
+    migrate(db);
+    ensureIdentityRow(db, 1, PK, 'new', true);
+    expect(readyRow(db, PK)).toBeNull();
+    for (const n of [1, 2, 3]) db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin) VALUES (?, ?, 'u', ?, 'unread', 'cached', 's')", PK, h(n), n);
+    expect(readyRow(db, PK)).toMatchObject({ row: { hash: h(3) }, last: false });
     recordPlayed(db, PK, h(1), 10);
     recordPlayed(db, PK, h(2), 20);
-    recordPlayed(db, PK, h(1), 30);
-    expect(playedRows(db, PK).map((r) => r.hash)).toEqual([h(1), h(2)]);
+    expect(readyRow(db, PK)).toMatchObject({ row: { hash: h(2) }, last: true });
+    // archived: skipped for the next most recent still in Unread
+    setArchived(db, 30, PK, h(2), true);
+    expect(readyRow(db, PK)).toMatchObject({ row: { hash: h(1) }, last: true });
     const d = deleteItem(db, 40, PK, h(1));
-    expect(playedRows(db, PK).map((r) => r.hash)).toEqual([h(2)]);
+    expect(readyRow(db, PK)).toMatchObject({ row: { hash: h(3) }, last: false });
     commitDelete(db, PK, h(1), d.held);
     expect(db.get('SELECT COUNT(*) AS n FROM listen_history')).toEqual({ n: 1 });
   });

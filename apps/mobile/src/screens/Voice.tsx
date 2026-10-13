@@ -1,7 +1,9 @@
-// Voice (mobile spec 5.8, FD 24, FD 36, FD 89; prototype voice): the phone's offline voices for the language of the
-// last article played, as radios, each with a sample played outside the session; Default speed, the one speed value;
-// the note on adding voices. The sample's play glyph becomes the equaliser while it plays. Loading is a momentary
-// read, so it shows nothing; the screen is the same offline. With fewer than two voices You has no row to open it.
+// Voice (mobile spec 5.8, FD 24, FD 36, FD 89, FD 109; prototype voice, voice-langs): a chip per language, the phone's
+// own first and then those among the saves, drawn with two or more; the chosen language's offline voices as radios,
+// each with a sample played outside the session, picking one for that language only; Default speed, the one speed
+// value; the note on adding voices. The sample's play glyph becomes the equaliser while it plays. Loading is a
+// momentary read, so it shows nothing; the screen is the same offline. You has no row to open it while no language
+// has two voices.
 import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
@@ -20,8 +22,9 @@ import { Press, pressLayer } from '../ui/Press';
 import { S } from '../ui/strings';
 import { T, ui } from '../ui/text';
 import { useTheme } from '../ui/theme';
-import { VOICE_ID, chosen, lastPlayedLang, languageOf, named, voicesFor, type Named } from '../voice/choice';
+import { choiceFor, chosen, langName, lastPlayedIn, libraryLangs, named, voiceKeyFor, voiceLangs, voicesFor, type Named } from '../voice/choice';
 import { RATES, rateLabel, readRate } from '../voice/clock';
+import { Segment } from '../ui/Segment';
 import { OnbShell } from './Onb';
 
 /** One equaliser bar on scaleY from the bottom (motion.ambient.eq); still under reduced motion. */
@@ -100,8 +103,10 @@ function Stepper({ rate, step }: { rate: number; step: (d: -1 | 1) => void }) {
   );
 }
 
-/** The voices the screen and You's row show, rechecked whenever either comes into view. */
-export function usePhoneVoices(owner: string): { voices: Named[]; lang: string | null } {
+export type VoiceLang = { lang: string; name: string; voices: Named[]; chosen: Named | null };
+
+/** The languages and their voices that the screen and You's row show, rechecked whenever either comes into view. */
+export function useVoiceLangs(owner: string): VoiceLang[] {
   const [all, setAll] = useState<{ voices: PhoneVoice[]; defaultLocale: string | null }>({ voices: [], defaultLocale: null });
   useFocusEffect(useCallback(() => {
     let live = true;
@@ -110,31 +115,35 @@ export function usePhoneVoices(owner: string): { voices: Named[]; lang: string |
       live = false;
     };
   }, []));
-  const played = useLive(() => (owner ? lastPlayedLang(store(), owner) : null), ['listen_history', 'items'], [owner]);
-  const lang = played ?? all.defaultLocale;
-  return { voices: named(voicesFor(all.voices, lang, all.defaultLocale), S.voice.short), lang };
+  const library = useLive(() => (owner ? libraryLangs(store(), owner) : []), ['items'], [owner]);
+  // a string, so useLive sees the same value while nothing changed
+  const picks = useLive(() => JSON.stringify(store().all<{ key: string; value: string }>("SELECT key, value FROM settings WHERE key LIKE 'voice.id%'")), ['settings'], []);
+  const get = (k: string) => (JSON.parse(picks) as { key: string; value: string }[]).find((r) => r.key === k)?.value ?? null;
+  return voiceLangs(all.voices, all.defaultLocale, library).map((lang) => {
+    const voices = named(voicesFor(all.voices, lang, all.defaultLocale), S.voice.short);
+    return { lang, name: langName(all.voices, lang), voices, chosen: chosen(voices, choiceFor(get, all.voices, lang)) };
+  });
 }
 
-/** The opening of the last article played, for samples in its language. */
-function sampleText(owner: string, lang: string | null, voice: Named): string {
-  const hash = owner ? store().get<{ hash: string }>(
-    'SELECT i.hash FROM listen_history h JOIN items i ON i.id = h.item WHERE i.owner = ? ORDER BY h.last_played_at DESC LIMIT 1', owner)?.hash : undefined;
-  const first = hash && languageOf(lang) === languageOf(voice.locale) ? textFiles.readArticle(hash)?.sentences[0]?.text : undefined;
+/** The opening of the last article played in this voice's language, for its sample, else the sample line. */
+function sampleText(owner: string, lang: string): string {
+  const hash = owner ? lastPlayedIn(store(), owner, lang) : null;
+  const first = hash ? textFiles.readArticle(hash)?.sentences[0]?.text : undefined;
   return first && first.length > 12 ? first.slice(0, 200) : S.voice.sampleLine;
 }
 
 export default function Voice() {
   const { c } = useTheme();
   const owner = useApp()?.owner ?? '';
-  const { voices, lang } = usePhoneVoices(owner);
-  const id = useLive(() => getSetting(store(), VOICE_ID), ['settings'], []);
+  const langs = useVoiceLangs(owner);
   const rate = useLive(() => readRate(getSetting(store(), 'voice.speed')), ['settings'], []);
   const [sampling, setSampling] = useState<string | null>(null);
-  const current = chosen(voices, id);
+  const [langPick, setLangPick] = useState<string | null>(null);
+  const shown = langs.find((l) => l.lang === langPick) ?? langs[0];
 
   const sample = (v: Named) => {
     setSampling(v.id);
-    playSample(v.id, sampleText(owner, lang, v)).finally(() => setSampling((s) => (s === v.id ? null : s)));
+    playSample(v.id, sampleText(owner, v.locale)).finally(() => setSampling((s) => (s === v.id ? null : s)));
   };
   const step = (d: -1 | 1) => {
     const i = (RATES as readonly number[]).indexOf(rate);
@@ -144,13 +153,20 @@ export default function Voice() {
   return (
     <OnbShell title={S.voice.title}>
       <T muted style={[ui(15, 'body', 1.45), { marginBottom: 24 }]}>{S.voice.lead}</T>
-      <View accessibilityRole="radiogroup" accessibilityLabel={S.voice.title}
-        style={{ marginBottom: 20, borderRadius: radius.container, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line, overflow: 'hidden' }}>
-        {voices.map((v, i) => (
-          <VoiceRow key={v.id} v={v} first={i === 0} on={current?.id === v.id} sampling={sampling === v.id}
-            pick={() => setSetting(store(), VOICE_ID, v.id)} sample={() => sample(v)} />
-        ))}
-      </View>
+      {langs.length > 1 && (
+        <View accessibilityRole="tablist" accessibilityLabel={S.voice.language} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+          {langs.map((l) => <Segment key={l.lang} label={l.name} on={l.lang === shown?.lang} onPress={() => setLangPick(l.lang)} />)}
+        </View>
+      )}
+      {shown && (
+        <View accessibilityRole="radiogroup" accessibilityLabel={S.voice.voiceFor(shown.name)}
+          style={{ marginBottom: 20, borderRadius: radius.container, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line, overflow: 'hidden' }}>
+          {shown.voices.map((v, i) => (
+            <VoiceRow key={v.id} v={v} first={i === 0} on={shown.chosen?.id === v.id} sampling={sampling === v.id}
+              pick={() => setSetting(store(), voiceKeyFor(shown.lang), v.id)} sample={() => sample(v)} />
+          ))}
+        </View>
+      )}
       <View style={{ marginBottom: 8, borderRadius: radius.container, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line, overflow: 'hidden' }}>
         <Stepper rate={rate} step={step} />
       </View>

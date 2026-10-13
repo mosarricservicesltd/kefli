@@ -8,7 +8,7 @@ import { reconcileWords, rowByHash, setPosition, type LibRow } from '../data/lib
 import { playFrom, recordPlayed } from '../data/listen';
 import { getSetting, setSetting } from '../data/settings';
 import { readRate, nextRate, snapRate, wpsFor, wpsKey } from '../voice/clock';
-import { VOICE_ID, sessionVoice } from '../voice/choice';
+import { sessionVoice } from '../voice/choice';
 import { appState } from './app';
 import { runSync } from './runner';
 import { store } from './store';
@@ -104,7 +104,7 @@ export async function listen(row: Pick<LibRow, 'hash' | 'title' | 'site' | 'url'
   const rate = readRate(getSetting(store(), 'voice.speed'));
   const lang = store().get<{ lang: string | null }>('SELECT lang FROM items WHERE hash = ? AND lang IS NOT NULL LIMIT 1', row.hash)?.lang ?? null;
   const phone = await listPhoneVoices();
-  const voice = sessionVoice(phone.voices, getSetting(store(), VOICE_ID), lang, phone.defaultLocale);
+  const voice = sessionVoice(phone.voices, (k) => getSetting(store(), k), lang, phone.defaultLocale);
   voiceKey = voice.voiceId ?? 'default';
   const wps = wpsAt(rate);
   const word = Math.max(0, Math.min(fromWord, totalWords - 1));
@@ -120,7 +120,7 @@ export async function listen(row: Pick<LibRow, 'hash' | 'title' | 'site' | 'url'
   await KefliVoice.start({ hash: row.hash, title, site: row.site ?? '', sentences: list, startWord: word, totalWords, rate, wps, artworkPath: art, ...voice });
 }
 
-// Play all's snapshot of the Played list, the articles still to come (FD 35).
+// Play all's snapshot of Listen's list, the articles still to come (FD 35).
 let queue: string[] = [];
 
 async function playHash(hash: string): Promise<void> {
@@ -129,7 +129,7 @@ async function playHash(hash: string): Promise<void> {
   if (row) await listen(row, playFrom(row));
 }
 
-/** Play all: the Played list as it stands, from the top to the end, then stop (FD 35). */
+/** Play all: Listen's list as it stands, Unread with text (FD 111), from the top to the end, then stop (FD 35). */
 export function playAll(hashes: string[]): void {
   queue = hashes.slice(1);
   if (hashes[0]) playHash(hashes[0]).catch(() => undefined);
@@ -141,7 +141,7 @@ export function startListening(row: Pick<LibRow, 'hash' | 'title' | 'site' | 'ur
   return listen(row, fromWord);
 }
 
-/** A Played row's cover: plays or pauses its article; starting a different article ends Play all (FD 35). */
+/** A Listen row's cover, or Play on the ready card: plays or pauses its article; starting a different article ends Play all (FD 35). */
 export function toggleRow(row: LibRow): void {
   if (session?.hash === row.hash && !session.ended) return toggle();
   queue = [];
@@ -175,11 +175,11 @@ export function jumpTo(word: number): void {
   KefliVoice.jumpToWord(word);
 }
 
-/** The speed pill: the next rate, kept for every article (O-13). */
+/** The speed pill: the next rate, kept for every article (O-13); on Listen's ready card, with no session (FD 111). */
 export function cycleRate(): void {
-  if (!session) return;
-  const r = nextRate(session.rate);
+  const r = nextRate(session?.rate ?? readRate(getSetting(store(), 'voice.speed')));
   setSetting(store(), 'voice.speed', String(r));
+  if (!session) return;
   const wps = wpsAt(r);
   set({ ...session, rate: r, wps });
   KefliVoice.setRate(r, wps);
@@ -208,6 +208,29 @@ export function listPhoneVoices(fresh = false): Promise<{ voices: PhoneVoice[]; 
 /** A voice's sample (5.8), resolved when it has been spoken. */
 export function playSample(voiceId: string, text: string): Promise<void> {
   return KefliVoice.sample(voiceId, text);
+}
+
+/**
+ * Listen's ready card (FD 111): the article as a paused session would show it, at the place it would play from, so
+ * the card draws its clock, ruler and word meter the same way. Null when its text can't be read.
+ */
+export function readySession(row: LibRow): Session | null {
+  const article = textFiles.readArticle(row.hash);
+  if (!article?.words) return null;
+  const rate = readRate(getSetting(store(), 'voice.speed'));
+  const list = article.sentences;
+  return {
+    hash: row.hash, title: row.title ?? row.url, playing: false, word: Math.min(playFrom(row), article.words - 1), rate, wordTiming: true,
+    wps: wpsAt(rate), ended: false, totalWords: article.words, sentences: list, sentence: 0, firstWords: list.map((x) => x.firstWord),
+  };
+}
+
+/** ±15 on the ready card: the stored position moves by the words 15 s would speak, and nothing starts (FD 111). */
+export function skipStored(row: LibRow, seconds: 15 | -15): void {
+  const owner = appState()?.owner;
+  if (!owner) return;
+  const rate = readRate(getSetting(store(), 'voice.speed'));
+  setPosition(store(), now(), owner, row.hash, playFrom(row) + Math.sign(seconds) * Math.round(15 * wpsAt(rate) * rate), false);
 }
 
 /** ✕: ends the session everywhere (5.7). */

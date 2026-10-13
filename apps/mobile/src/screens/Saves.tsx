@@ -9,7 +9,7 @@ import Animated, { FadeIn, LinearTransition, useAnimatedStyle, useSharedValue, w
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SvgXml } from 'react-native-svg';
 import { motion, radius } from '@kefli/tokens';
-import { ambient, quickIn, quickOut } from '@kefli/tokens/reanimated';
+import { ambient } from '@kefli/tokens/reanimated';
 import { coverDraws, markDrawn } from '../data/covers';
 import { counts, listRows, type LibRow, type ListName } from '../data/library';
 import { useApp } from '../services/app';
@@ -32,6 +32,7 @@ import { setToastFloor } from '../ui/toast';
 import { TAB_BAR_HEIGHT } from '../ui/TabBar';
 import { useTheme } from '../ui/theme';
 import { archive, remove } from './actions';
+import { Segment } from '../ui/Segment';
 import { SaveRow } from './SaveRow';
 import { Head } from './TabHead';
 
@@ -51,19 +52,6 @@ function SyncLine() {
     <Animated.View entering={FadeIn.delay(motion.ambient.delay).duration(motion.quickIn.duration)} style={{ marginTop: 12, height: 3, marginHorizontal: 16, borderRadius: 999, backgroundColor: c.line, overflow: 'hidden' }} onLayout={(e) => setW(e.nativeEvent.layout.width)}>
       <Animated.View style={[{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${motion.ambient.sweep.segment * 100}%`, backgroundColor: c.text, borderRadius: 999 }, seg]} />
     </Animated.View>
-  );
-}
-
-function Segment({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
-  const { c } = useTheme();
-  const st = useAnimatedStyle(() => ({ opacity: withTiming(on ? 1 : 0, on ? quickIn : quickOut) }), [on]);
-  return (
-    <Press accessibilityRole="tab" accessibilityState={{ selected: on }} onPress={onPress} layer={pressLayer(c.text)} style={{ height: 36, paddingHorizontal: 16, borderRadius: radius.control, borderWidth: 1, borderColor: c.line, justifyContent: 'center' }}>
-      <T style={ui(13, 'label', 1)}>{label}</T>
-      <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: -1, left: -1, right: -1, bottom: -1, borderRadius: radius.control, backgroundColor: c.fill, alignItems: 'center', justifyContent: 'center' }, st]}>
-        <T style={[ui(13, 'label', 1), { color: c.onFill }]}>{label}</T>
-      </Animated.View>
-    </Press>
   );
 }
 
@@ -146,6 +134,7 @@ export default function Saves() {
 
   const open = useCallback((r: LibRow) => router.push(`/reader/${r.hash}`), []);
   const swipe = useCallback((r: LibRow) => archive(r.hash, r.state !== 'archived'), []);
+  const drop = useCallback((r: LibRow) => remove(r.hash), []);
   const more = useCallback((r: LibRow) => {
     openSheet(r.title ?? r.url, () => (
       <View>
@@ -202,7 +191,7 @@ export default function Saves() {
         ListEmptyComponent={empty}
         renderItem={({ item }) => (
           <View style={{ paddingHorizontal: 16 }}>
-            <SaveRow r={item} online={online} onOpen={open} onSwipe={swipe} onMore={item.state === 'archived' ? more : undefined} drawFrom={draws.get(item.hash) ?? 0} />
+            <SaveRow r={item} online={online} onOpen={open} onSwipe={swipe} onMore={item.state === 'archived' ? more : undefined} onDelete={drop} drawFrom={draws.get(item.hash) ?? 0} />
           </View>
         )}
         itemLayoutAnimation={LinearTransition.duration(motion.reflow.duration)}

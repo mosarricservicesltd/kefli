@@ -25,10 +25,8 @@ import { useOnline } from '../ui/online';
 import { Press, pressLayer } from '../ui/Press';
 import { closeSheet, openSheet } from '../ui/sheet';
 import { S } from '../ui/strings';
-import { getSetting } from '../data/settings';
 import { asksBeforeSaving } from '../data/nostrCheck';
-import { VOICE_ID, chosen } from '../voice/choice';
-import { usePhoneVoices } from './Voice';
+import { useVoiceLangs } from './Voice';
 import { T, display28, ui } from '../ui/text';
 import { setToastFloor, showToast } from '../ui/toast';
 import { TAB_BAR_HEIGHT } from '../ui/TabBar';
@@ -150,9 +148,9 @@ export default function You() {
   const profile = useLive(() => (local ? null : readProfile(store(), owner)), ['lists', 'identities'], [owner, local]);
   const named = profile?.name ? profile : null;
   const { width } = useWindowDimensions();
-  // the Voice row only when the phone has a choice for the last article's language, rechecked each time You opens (FD 24)
-  const { voices } = usePhoneVoices(owner);
-  const voiceId = useLive(() => getSetting(store(), VOICE_ID), ['settings'], []);
+  // the Voice row while any language offered has a choice of voices, naming the phone language's voice, rechecked each
+  // time You opens (FD 24, FD 109)
+  const langs = useVoiceLangs(owner);
 
   const recovery = () => openSheet(S.you.sheetTitle, (close) => <RecoverySheet owner={owner} close={close} />);
   const tiles = Array.from({ length: 8 }, (_, i) => stats.quilt[i]);
@@ -215,7 +213,7 @@ export default function You() {
           {local && <Row first icon="keyboard" label={S.you.recovery} sub={done ? S.you.written : S.you.notWritten} warn={!done} onPress={recovery} />}
           {local && <Row icon="phone" label={S.you.addDevice} disabled={!online} sub={online ? undefined : S.you.needsConnection} onPress={() => router.push('/add-device')} />}
           <Row icon="laptop" label={S.you.browsers} value={String(stats.browsers)} onPress={() => router.push('/browsers')} />
-          {voices.length > 1 && <Row icon="headphones" label={S.you.voice} value={chosen(voices, voiceId)?.place} onPress={() => router.push('/voice')} />}
+          {langs.some((l) => l.voices.length > 1) && <Row icon="headphones" label={S.you.voice} value={langs[0]?.chosen?.place} onPress={() => router.push('/voice')} />}
         </Group>
         <Group><Row first icon="settings" label={S.you.advanced} onPress={() => router.push('/advanced')} /></Group>
         <Group><Row first icon="trash" label={S.you.deleteData} danger onPress={() => router.push('/delete')} /></Group>

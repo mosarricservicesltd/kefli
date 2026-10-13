@@ -115,6 +115,7 @@ svg .arc{transform-box:view-box;transform-origin:center}
 .head h1,.onb h1{margin:0;font-family:var(--font-display);font-stretch:var(--font-display-stretch);font-weight:var(--font-display-weight);letter-spacing:var(--font-display-tracking);font-size:var(--text-28);line-height:var(--leading-display)}
 .head .count{font-size:var(--text-13);color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
 .searchbar{margin:var(--space-4) var(--gutter) 0;height:48px;border-radius:var(--radius-button);background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;gap:10px;padding:0 var(--space-16);color:var(--muted);width:calc(100% - 2 * var(--gutter));text-align:left}
+.vlangs{display:flex;gap:var(--space-8);margin-bottom:var(--space-16)}
 .segs{display:flex;gap:var(--space-8);padding:var(--space-12) var(--gutter) var(--space-8)}
 .seg{height:36px;padding:0 var(--space-16);border-radius:var(--radius-control);display:inline-flex;align-items:center;font-size:var(--text-13);font-weight:var(--weight-label);border:1px solid var(--line);color:var(--text);line-height:1;position:relative}
 /* the selected chip is a layer (the fill with its label in the page colour) that crossfades between the chips */
@@ -137,6 +138,7 @@ svg .arc{transform-box:view-box;transform-origin:center}
 .cardwrap.exiting{pointer-events:none}
 .cardwrap .under{position:absolute;inset:0;border-radius:var(--radius);background:var(--fill);color:var(--on-fill);display:flex;align-items:center;gap:var(--space-8);padding:0 var(--space-20);font-size:var(--text-13);font-weight:var(--weight-title);opacity:0}
 .cardwrap .under.left{justify-content:flex-end}
+.cardwrap .under.del{background:var(--error);color:var(--on-fill)}
 /* arming at 96 px: the icon and label go from 70% to full, and the icon grows from 0.9 (motion.quick) */
 .cardwrap .under > *{opacity:.7;transition:opacity var(--motion-quick-out),transform var(--motion-quick-out)}
 .cardwrap .under > svg{transform:scale(.9)}
@@ -837,6 +839,8 @@ svg .arc{transform-box:view-box;transform-origin:center}
       <button data-jump="listen">Listen tab</button>
       <button data-jump="listen-scrolled">Listen, card scrolled away</button>
       <button data-jump="listen-reader">Reader opened from Listen</button>
+      <button data-jump="listen-ready">Listen, nothing playing</button>
+      <button data-jump="listen-first">Listen, nothing played yet</button>
       <button data-jump="listen-empty">Listen, empty</button>
       <button data-jump="lock">Lock screen</button>
     </div>
@@ -937,6 +941,7 @@ svg .arc{transform-box:view-box;transform-origin:center}
     <h2>Voice, Advanced, Delete</h2>
     <div class="btns">
       <button data-jump="voice">Voice</button>
+      <button data-jump="voice-langs">Voice, saves in two languages</button>
       <button data-jump="adv">Advanced</button>
       <button data-jump="adv-down">…a relay not responding</button>
       <button data-jump="adv-offline">…offline</button>
@@ -1241,8 +1246,9 @@ function cardHTML(it, o = {}){
   const grey = it.status === 'failed';
   const cover = coverHTML(it, { size: 64, draw: drawIn(it), attrs: ` data-xf="cv-${it.id}" data-xv="${grey ? 'g' : 'c'}"` });
   const archived = o.view ? o.view === 'archive' : it.archived;
+  // archived rows swipe right to Unread and left to Delete, on the error fill (decision 112)
   const under = archived
-    ? `<div class="under">${ic('restore',18)}<span>Back to Unread</span></div>`
+    ? `<div class="under">${ic('restore',18)}<span>Back to Unread</span></div><div class="under left del"><span>Delete</span>${ic('trash',18)}</div>`
     : `<div class="under left">${ic('archive',18)}<span>Archive</span></div>`;
   const more = archived ? `<button class="rowmore" data-rowmenu="${it.id}" aria-label="More for ${esc(it.title)}">${ic('more', 20)}</button>` : '';
   const metaV = it.status + (S.screen === 'search' && it.archived ? '-tag' : '');
@@ -1405,12 +1411,12 @@ function startAudio(id){
 // The word meter (decision 68): a ruler in minutes over the bar, and one mark per word of the sentence being spoken, lit
 // as the voice reaches it. Display only (decision 48). The build drives it from expo-speech's onBoundary word positions;
 // if the Android spike shows none, the marks stay unlit rather than faked.
-function rulerHTML(){
+function rulerHTML(a = S.audio){
   let tk = '', nums = '';
   for (let s = 0; s <= DUR; s += 15) tk += `<i class="${s % 60 === 0 ? 'mj' : ''}" style="left:${(s / DUR * 100).toFixed(2)}%"></i>`;
   for (let m = 0; m * 60 <= DUR; m++) nums += `<span style="left:${(m * 60 / DUR * 100).toFixed(2)}%">${m}</span>`;
   return `<div class="ruler" aria-hidden="true"><div class="nums">${nums}</div><div class="tk">${tk}</div>
-    <div class="pline"><i class="js-bar" data-mk="pl-now" data-line data-lid="${S.audio.id}" style="--p:${S.audio.t / DUR}"></i></div></div>`;
+    <div class="pline"><i class="js-bar" data-mk="pl-now" data-line data-lid="${a.id}" style="--p:${a.t / DUR}"></i></div></div>`;
 }
 // without word timing the marks are drawn for the sentence's words and stay unlit (decisions 68 and 91 (h))
 const meterLit = (s0, k, w) => !S.noWordTiming && s0 + k <= w;
@@ -1424,9 +1430,9 @@ function updateMeter(t){
   if (+m.dataset.s0 !== s0) { const M = meterMarks(t); m.dataset.s0 = M.s0; m.innerHTML = M.html; return; }
   [...m.children].forEach((e, k) => e.classList.toggle('on', meterLit(s0, k, w)));
 }
-function controlsHTML(){
-  const a = S.audio, M = meterMarks(a.t);
-  return `${rulerHTML()}
+function controlsHTML(a = S.audio){
+  const M = meterMarks(a.t);
+  return `${rulerHTML(a)}
     <div class="times"><span class="js-t">${fmt(a.t)}</span><span class="wmeter js-meter" aria-hidden="true" data-s0="${M.s0}">${M.html}</span><span>${fmt(DUR)}</span></div>
     <div class="controls">
       <button class="ctl" data-skip="-15" aria-label="Back 15 seconds">${ic('back15', 24)}</button>
@@ -1474,34 +1480,48 @@ const glyphHTML = (key, playing, size, fill = true) => `<span class="g" data-xf=
 // a stepped value in its clipped box: it rolls 6 px in the direction of the change
 const rollHTML = (key, v, label) => `<span class="rv"><span data-xf="${key}" data-xv="${v}" data-xf-roll="1">${label}</span></span>`;
 
+// Listen's list (decision 111): Unread in Saves' order, the saves that have their text
+const listenRows = () => S.items.filter(i => !i.archived && i.status === 'ok');
+// With no session the card holds an article ready to play: the last played still in Unread, else the top of Unread
+function readyItem(){
+  const rows = listenRows();
+  const last = S.played.map(id => rows.find(i => i.id === id)).find(Boolean);
+  return last ? { it: last, label: 'Last played' } : rows[0] ? { it: rows[0], label: 'Up next' } : null;
+}
+const readyAt = it => (partRead(it) && it.progress < .99 ? it.progress : 0) * DUR;
+
 function listenScreen(){
-  const played = S.played.map(id => S.items.find(i => i.id === id)).filter(Boolean);
+  const rows = listenRows();
+  const a = S.audio, playing = a && S.items.find(i => i.id === a.id), ready = playing ? null : readyItem();
   let body;
-  if (!played.length) {
+  if (!playing && !ready) {
     body = `<div class="empty"><span class="medal">${ic('headphones', 26)}</span>
-      <h2>Nothing played yet</h2><p>Tap Listen on any article to hear it here. It keeps playing when your screen is off.</p>
+      <h2>Nothing to listen to</h2><p>Save an article and it’s ready to play here. It keeps playing when your screen is off.</p>
       <button class="btn secondary" data-tab="saves">Go to your saves</button></div>`;
   } else {
-    const a = S.audio, cur = a && S.items.find(i => i.id === a.id);
-    // Now playing leads with the 3:1 band of the playing article's cover, like a record sleeve; ✕ sits by the label
-    // the card joins by row in when a session starts here; moving to another article crossfades its band, title and source
-    const now = cur ? `<div class="nowcard" data-fk="nowcard" style="${inkStyle(cur, 'surface')}"><div class="art" data-xf="now-art" data-xv="${cur.id}">${coverHTML(cur, { cols: 3 })}</div><div class="in"><div class="lbl"><span data-xf="now-lbl" data-xv="${a.playing ? 'p' : 'z'}">${a.playing ? 'Now playing' : 'Paused'}</span></div>
-        ${a.playing ? '' : `<button class="pclose" data-stop-audio data-pk="now-x" aria-label="Close player">${ic('x', 20)}</button>`}
-        <div class="ts" data-xf="now-ts" data-xv="${cur.id}"><button class="t" data-open-audio>${esc(cur.title)}</button><div class="s">${esc(cur.src)}</div></div>
-        ${controlsHTML()}</div></div>` : '';
+    // Now playing leads with the 3:1 band of the article's cover, like a record sleeve; ✕ sits by the label while paused.
+    // With no session the card stays, holding the next article at its stored position (decision 111): Play starts it,
+    // ±15 move its position, the pill sets the one speed; ✕ ends a session and the card returns to this.
+    const cur = playing || ready.it;
+    const st = playing ? a : { id: cur.id, t: readyAt(cur), playing: false, rate: S.rate };
+    const lbl = playing ? (a.playing ? 'Now playing' : 'Paused') : ready.label;
+    const now = `<div class="nowcard" data-fk="nowcard" style="${inkStyle(cur, 'surface')}"><div class="art" data-xf="now-art" data-xv="${cur.id}">${coverHTML(cur, { cols: 3 })}</div><div class="in"><div class="lbl"><span data-xf="now-lbl" data-xv="${lbl}">${lbl}</span></div>
+        ${playing && !a.playing ? `<button class="pclose" data-stop-audio data-pk="now-x" aria-label="Close player">${ic('x', 20)}</button>` : ''}
+        <div class="ts" data-xf="now-ts" data-xv="${cur.id}"><button class="t" ${playing ? 'data-open-audio' : `data-open="${cur.id}"`}>${esc(cur.title)}</button><div class="s">${esc(cur.src)}</div></div>
+        ${controlsHTML(st)}</div></div>`;
     // rows follow the card anatomy: the body opens the Reader, the leading play button (the article's cover) plays or pauses (Q2)
-    const rows = played.map(it => {
+    const list = rows.map(it => {
       const on = isPlaying(it) && S.audio.playing;
       return `<div class="lrow" data-lid="${it.id}" data-fk="lrow-${it.id}" data-mk="lrow-${it.id}" style="${inkStyle(it, 'background')}">
         <button class="rp ppc" data-playitem="${it.id}" aria-label="${on ? 'Pause' : 'Play'} ${esc(it.title)}">${coverHTML(it, { size: 48 })}<span class="disc">${glyphHTML('l' + it.id, on, 14)}</span></button>
         <button class="lbody" data-open="${it.id}"><span class="body"><span class="src">${esc(it.src)}</span><span class="title">${esc(it.title)}</span>
           <span class="meta">${leftMetaHTML(it)}</span></span></button>${progressHTML(it, 'lrow')}</div>`;
     }).join('');
-    body = `${now}<div class="sectionhead" data-fk="playedhead"><h2>Played</h2><button class="pbtn" data-playall>${solid('play', 14)}Play all</button></div>
-      <div class="list" data-fk="list-played">${rows}</div>`;
+    body = `${now}${rows.length ? `<div class="sectionhead" data-fk="playedhead"><h2>Unread</h2><button class="pbtn" data-playall>${solid('play', 14)}Play all</button></div>
+      <div class="list" data-fk="list-played">${list}</div>` : ''}`;
   }
   return `<div class="screen" data-mk="screen-listen"><div class="scroll">
-      <div class="head"><h1>Listen</h1><span class="count">${played.length ? played.length + ' played' : ''}</span></div>
+      <div class="head"><h1>Listen</h1><span class="count">${rows.length ? rows.length + ' unread' : ''}</span></div>
       ${body}</div>${tabbar()}</div>`;
 }
 
@@ -2114,13 +2134,17 @@ function startRestore(opts = {}){
 
 /* ---------------- You (batch 4) ---------------- */
 const freshYou = () => ({
-  backupDone: false, backupHidden: false, nostrUser: false, voices: 1, voiceSel: 0, speed: 1, sampling: null,
+  backupDone: false, backupHidden: false, nostrUser: false, voices: 1, langs: 1, voiceLang: 0, voiceSel: [0, 0], speed: 1, sampling: null,
   codeShown: false, copied: false, browsers: [{ name: 'Chrome on a Windows PC', when: 'Connected 27 September' }], disconnect: null,
   conn: 'scan', connectFrom: 'browsers', camOK: true, typed: '', dev: 'show', countdown: 298, relayDown: false, sw: 'explain', swDone: 0,
   del: 'explain', delTyped: '', steps: [], notBacked: 0, exportFail: false,
 });
 S.you = freshYou();
-const VOICES = ['UK English · voice 1', 'UK English · voice 2', 'US English · voice 1'];
+// one voice per language (decision 109): the phone's own language first, then each other language among the saves
+const VOICE_LANGS = [
+  { name: 'English', voices: ['UK English · voice 1', 'UK English · voice 2', 'US English · voice 1'] },
+  { name: 'Arabic', voices: ['Arabic · voice 1', 'Arabic · voice 2'] },
+];
 const RELAYS = [['Kefli', 'relay.kefli.app'], ['Backup 1', 'nos.lol'], ['Backup 2', 'relay.damus.io']];
 const RECOVERY = SAMPLE_CODE;
 
@@ -2170,7 +2194,7 @@ function youScreen(){
         ${first}
         ${Y.nostrUser ? '' : yrow('adddevice', 'phone', 'Add another device', '', { disabled: off, sub: off ? 'Needs a connection' : '' })}
         ${yrow('browsers', 'laptop', 'Connected browsers', String(Y.browsers.length))}
-        ${Y.voices > 1 ? yrow('voice', 'headphones', 'Voice', VOICES[Y.voiceSel].split(' · ')[0]) : ''}
+        ${Y.voices > 1 ? yrow('voice', 'headphones', 'Voice', VOICE_LANGS[0].voices[Y.voiceSel[0]].split(' · ')[0]) : ''}
       </div>
       <div class="ygroup" data-fk="yg-2">${yrow('advanced', 'settings', 'Advanced', '')}</div>
       <div class="ygroup" data-fk="yg-3">${yrow('delete', 'trash', 'Delete my data', '', { danger: true })}</div>
@@ -2300,10 +2324,14 @@ function voiceScreen(){
   const Y = S.you;
   // the chosen radio's selected layer crossfades in as the old one goes; a sample's play glyph crossfades to the equaliser,
   // which moves while the sample plays, then back
-  const rows = VOICES.map((v, i) => `<div class="vrow"><button class="vpick" role="radio" aria-checked="${Y.voiceSel === i}" data-you-act="voice" data-i="${i}"><span class="radio ${Y.voiceSel === i ? 'on' : ''}" aria-hidden="true"><span class="sl" data-op="radio-${i}"></span></span><span class="yl">${v}</span></button>
+  const L = Y.voiceLang, sel = Y.voiceSel[L];
+  // a chip per language, drawn only with two or more; each keeps its own choice
+  const chip = (l, k) => `<button class="seg ${L === k ? 'on' : ''}" role="tab" aria-selected="${L === k}" data-you-act="vlang" data-i="${k}"><span class="sl" aria-hidden="true" data-op="vlang-${k}">${l.name}</span>${l.name}</button>`;
+  const chips = Y.langs > 1 ? `<div class="vlangs" role="tablist" aria-label="Language">${VOICE_LANGS.slice(0, Y.langs).map(chip).join('')}</div>` : '';
+  const rows = VOICE_LANGS[L].voices.map((v, i) => `<div class="vrow"><button class="vpick" role="radio" aria-checked="${sel === i}" data-you-act="voice" data-i="${i}"><span class="radio ${sel === i ? 'on' : ''}" aria-hidden="true"><span class="sl" data-op="radio-${L}-${i}"></span></span><span class="yl">${v}</span></button>
     <button class="sample" data-you-act="sample" data-i="${i}" aria-label="Play a sample of ${v}"><span class="g" data-xf="sample-${i}" data-xv="${Y.sampling === i ? 'eq' : 'play'}">${Y.sampling === i ? `<span class="eq" data-mk="eq-${i}"><i></i><i></i><i></i></span>` : ic('play', 16, 'fill="currentColor"')}</span></button></div>`).join('');
   return onbShell(`<h1>Voice</h1><p class="lead">These voices come from your phone and work offline.</p>
-    <div class="ygroup" role="radiogroup" aria-label="Voice">${rows}</div>
+    ${chips}<div class="ygroup" role="radiogroup" aria-label="${VOICE_LANGS[L].name} voice">${rows}</div>
     <div class="ygroup"><div class="stepper"><span style="font-weight:var(--weight-meta)">Default speed</span><div class="ctrl"><button data-you-act="speed" data-i="-1" aria-label="Slower">−</button>${rollHTML('dspeed', Y.speed, `${Y.speed}×`)}<button data-you-act="speed" data-i="1" aria-label="Faster">+</button></div></div></div>
     <p class="gnote" style="margin-top:0">To add more voices, open Android settings, then Text-to-speech output.</p>`, '', 'you');
 }
@@ -2522,7 +2550,8 @@ vp.addEventListener('click', e => {
       Y.conn = 'busy';
       later(() => { Y.browsers.push({ name: 'Chrome on a Windows PC', when: 'Connected just now' }); Y.conn = 'scan'; leaveConnect(); showToast('Connected to Chrome on a Windows PC', null, null, { delay: MT.exit.duration }); render(); }, 1600);
       break;
-    case 'voice': Y.voiceSel = i; break;
+    case 'voice': Y.voiceSel[Y.voiceLang] = i; break;
+    case 'vlang': Y.voiceLang = i; Y.sampling = null; break;
     case 'sample': Y.sampling = i; later(() => { if (Y.sampling === i) { Y.sampling = null; render(); } }, 1800); break;
     // one speed list; the stepper clamps within it (fix 7)
     case 'speed': { const k = RATES.indexOf(Y.speed) + i; Y.speed = RATES[Math.max(0, Math.min(RATES.length - 1, k))]; S.rate = Y.speed; if (S.audio) S.audio.rate = S.rate; break; }
@@ -2576,6 +2605,7 @@ function youJump(j){
     if (j === 'conn-busy') later(() => { Y.browsers.push({ name: 'Chrome on a Windows PC', when: 'Connected just now' }); Y.conn = 'scan'; leaveConnect(); showToast('Connected to Chrome on a Windows PC', null, null, { delay: MT.exit.duration }); render(); }, 1600);
   }
   else if (j === 'voice') { at('voice'); Y.voices = 3; }
+  else if (j === 'voice-langs') { at('voice'); Y.voices = 3; Y.langs = 2; }
   else if (j === 'adv') at('advanced');
   else if (j === 'adv-down') { at('advanced'); Y.relayDown = true; }
   else if (j === 'adv-offline') { at('advanced'); S.online = false; }
@@ -2865,11 +2895,13 @@ function readerScreen(){
   // the Listen chip keeps its slot while its article plays, faded, so the bar never reflows
   const chip = S.readerMode === 'loading' || S.readerMode === 'offlinewait' ? ''
     : `<button class="listenbtn ${isPlaying(it) ? 'gone' : ''}" data-listen data-op="chip" ${isPlaying(it) ? 'inert aria-hidden="true" tabindex="-1"' : ''}>${solid('play',14)}Listen</button>`;
+  // Speed read sits in the bar before Aa while the text is shown, as the chip does (decision 110)
+  const rsvpBtn = S.readerMode === 'ok' || S.readerMode === 'images' ? `<button class="iconbtn" data-rsvp aria-label="Speed read">${ic('speedread',22)}</button>` : '';
   const rpl = platesHTML('reader');
   // the reading palette, with this article's ink and highlight (and, in Dark, its own tinted Night paper)
   return `<div class="screen reader ${rpl ? 'plating' : ''}" data-mk="screen-reader" data-reader="${theme}" style="${readingStyle(it, theme)}">${rpl}
     <div class="rtop"><button class="iconbtn" data-back aria-label="Back">${ic('back',22)}</button><div class="host">${esc(it.host)}</div>
-      ${chip}<button class="iconbtn aa" data-sheet="aa" aria-label="Text and theme">Aa</button><button class="iconbtn" data-sheet="menu" aria-label="More">${ic('more',22)}</button></div>
+      ${chip}${rsvpBtn}<button class="iconbtn aa" data-sheet="aa" aria-label="Text and theme">Aa</button><button class="iconbtn" data-sheet="menu" aria-label="More">${ic('more',22)}</button></div>
     <div class="rprog ${docked ? 'off' : ''}" data-op="rprog"><i id="rp" data-mk="pl-rprog" data-line data-lid="${it.id}" style="--p:${it.progress}"></i></div>
     <div class="scroll" id="rs"><div class="article ${playerMode() ? 'playing' : ''}">${content}</div></div>
     ${S.readerMode === 'loading' || S.readerMode === 'offlinewait' ? '' : dock}
@@ -2898,7 +2930,6 @@ function sheetHTML(){
   }
   if (S.sheet === 'menu') {
     return `<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" aria-label="More" data-stop><div class="grab"></div>
-      <button class="menuitem" data-rsvp>${ic('speedread',20)}Speed read</button>
       ${it.archived ? `<button class="menuitem" data-unarchive-open>${ic('restore',20)}Back to Unread</button>` : ''}
       <button class="menuitem" data-orig>${ic('ext',20)}Open original</button>
       <button class="menuitem" data-copylink>${ic('link',20)}Copy link</button>
@@ -3739,7 +3770,9 @@ function fkDiff(sn, sheetClosing){
     const g = rowGhost(o, sc, base); if (!g) return;
     if (ex && ex.kind === 'thrown' && k === 'row-' + ex.id && !rm) {
       // thrown: it carries on off the edge at the finger's speed
-      const card = g.querySelector('.card'), under = g.querySelector('.under'), to = (ex.dx < 0 ? -1 : 1) * (o.rect.width + 32);
+      const card = g.querySelector('.card'), to = (ex.dx < 0 ? -1 : 1) * (o.rect.width + 32);
+      // the reveal on the side it was thrown towards fades; an archived row has one on each side (decision 112)
+      const under = g.querySelector(ex.dx < 0 ? '.under.left' : '.under:not(.left)') || g.querySelector('.under');
       if (card) play(card, [{ transform: `translateX(${ex.dx}px)` }, { transform: `translateX(${to}px)` }], { duration: speedDur(to - ex.dx, ex.v), easing: MT.release.easing }, { fill: 'forwards' });
       if (under) play(under, [{ opacity: +under.style.opacity || 1 }, { opacity: 0 }], MT.quickOut, { delay: 100, fill: 'both' });
     } else play(g, [{ opacity: 1 }, { opacity: 0 }], rm ? { duration: 200, easing: MT.exit.easing } : MT.quickOut, { delay: base, fill: 'both' });
@@ -4077,17 +4110,24 @@ function render(){
 // flies off at the finger's speed; otherwise it returns home on motion.release. A finger can catch a returning row.
 function bindSwipes(){
   live(':scope > .screen .cardwrap:not(.exiting)').forEach(w => {
-    const card = w.querySelector('.card'), under = w.querySelector('.under');
+    const card = w.querySelector('.card');
     const it = S.items.find(i => i.id === +w.dataset.id); if (!it) return;
-    const dir = it.archived ? 1 : -1;
+    // Unread rows swipe left to Archive; archived rows swipe right to Unread and left to Delete (decision 112)
+    const rightU = w.querySelector('.under:not(.left)'), leftU = w.querySelector('.under.left');
+    const both = !!rightU && !!leftU, dir = rightU ? 1 : -1;
+    const underFor = d => d < 0 || !rightU ? leftU : rightU;
     let g = null;
-    const reveal = d => { under.style.opacity = Math.min(1, Math.abs(d) / 80); under.classList.toggle('armed', Math.abs(d) >= 96); };
+    const reveal = d => {
+      const u = underFor(d), o = u === leftU ? rightU : leftU;
+      if (o) { o.style.opacity = 0; o.classList.remove('armed'); }
+      u.style.opacity = Math.min(1, Math.abs(d) / 80); u.classList.toggle('armed', Math.abs(d) >= 96);
+    };
     w.onpointerdown = e => {
       if (e.button > 0 || e.target.closest('.rowmore')) return;
-      const cur = matrixX(getComputedStyle(card).transform), uo = +getComputedStyle(under).opacity;
-      card.getAnimations().forEach(a => a.cancel()); under.getAnimations().forEach(a => a.cancel());
+      const cur = matrixX(getComputedStyle(card).transform), cu = underFor(cur), uo = +getComputedStyle(cu).opacity;
+      card.getAnimations().forEach(a => a.cancel()); w.querySelectorAll('.under').forEach(u => u.getAnimations().forEach(a => a.cancel()));
       g = { x0: e.clientX - cur, y0: e.clientY, dx: cur, claimed: Math.abs(cur) > .5, s: [[performance.now(), e.clientX]] };
-      if (g.claimed) { card.style.transform = `translateX(${cur}px)`; under.style.opacity = uo; w.setPointerCapture(e.pointerId); Press.drop(); }
+      if (g.claimed) { card.style.transform = `translateX(${cur}px)`; cu.style.opacity = uo; w.setPointerCapture(e.pointerId); Press.drop(); }
     };
     w.onpointermove = e => {
       if (!g) return;
@@ -4096,24 +4136,30 @@ function bindSwipes(){
         if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) { g.claimed = true; w.setPointerCapture(e.pointerId); Press.drop(); }
         else { if (Math.abs(dy) > 10) g = null; return; }
       }
-      g.dx = dir < 0 ? Math.min(0, dx) : Math.max(0, dx);
+      g.dx = both ? dx : dir < 0 ? Math.min(0, dx) : Math.max(0, dx);
       card.style.transform = `translateX(${g.dx}px)`; reveal(g.dx);
       g.s.push([performance.now(), e.clientX]); while (g.s.length > 2 && g.s[g.s.length - 1][0] - g.s[0][0] > 100) g.s.shift();
     };
     w.onpointerup = () => {
       const G = g; g = null; if (!G || !G.claimed) return;
       const a = G.s[0], b = G.s[G.s.length - 1], v = b[0] > a[0] ? (b[1] - a[1]) / (b[0] - a[0]) * 1000 : 0;
-      const d = G.dx, fling = Math.abs(d) >= 32 && v * dir > 800;
+      const d = G.dx, fling = Math.abs(d) >= 32 && v * Math.sign(d) > 800;
       if (Math.abs(d) >= 96 || fling) {
+        if (both && d < 0) {
+          // Delete: the row leaves wherever it is, Saves or Search, and the toast rises with Undo
+          S.rowExit = { id: it.id, kind: 'thrown', dx: d, v };
+          deleteItem(it);
+          render(); return;
+        }
         // the state changes on release and the toast rises at once; on Saves the row leaves (thrown), on Search it stays
         const leaves = S.screen === 'saves';
         it.archived = !it.archived;
         if (leaves) S.rowExit = { id: it.id, kind: 'thrown', dx: d, v }; else S.searchReturn = { id: it.id, dx: d, v };
         showToast(it.archived ? 'Archived' : 'Moved back to Unread', () => { it.archived = !it.archived; }, it);
         render();
-      } else homeRow(card, under, d, v);
+      } else homeRow(card, underFor(d), d, v);
     };
-    w.onpointercancel = () => { const G = g; g = null; if (G && G.claimed) homeRow(card, under, G.dx, 0); };
+    w.onpointercancel = () => { const G = g; g = null; if (G && G.claimed) homeRow(card, underFor(G.dx), G.dx, 0); };
   });
 }
 function homeRow(card, under, d, v){
@@ -4368,7 +4414,13 @@ vp.addEventListener('click', e => {
     startAudio(S.readerId);
     S.playerEnter = true;   // the bottom player slides in (Q1)
   }
-  if (d.play !== undefined && S.audio) S.audio.playing = !S.audio.playing;   // pausing never ends Play all
+  // Listen's ready card (decision 111): Play starts its article where it stands
+  const rd = !S.audio && S.screen === 'listen' ? readyItem() : null;
+  if (d.play !== undefined && rd) startAudio(rd.it.id);
+  if (d.play !== undefined && S.audio && !rd) S.audio.playing = !S.audio.playing;   // pausing never ends Play all
+  // ±15 on the ready card move its stored position without starting it
+  if (d.skip && rd) rd.it.progress = Math.max(0, Math.min(DUR - 1, readyAt(rd.it) + (+d.skip))) / DUR;
+  if (d.rate !== undefined && rd) { const k = RATES.indexOf(S.rate); S.rate = RATES[(k + 1) % RATES.length]; }
   if (d.skip && S.audio) {
     // the position jumps on the tap and repeated taps add up; the line glides and the arrow nudges (skipNudge)
     const p0 = S.audio.t / DUR;
@@ -4377,9 +4429,9 @@ vp.addEventListener('click', e => {
     S.skipFx = { dir: +d.skip > 0 ? 1 : -1, key: ctlSel(t), rect: t.getBoundingClientRect(), id: S.audio.id, p0, p1: S.audio.t / DUR };
   }
   if (d.rate !== undefined && S.audio) { const k = RATES.indexOf(S.audio.rate); S.rate = RATES[(k + 1) % RATES.length]; S.audio.rate = S.rate; }
-  if (d.playall !== undefined && S.played.length) {
+  if (d.playall !== undefined && listenRows().length) {
     const had = !!S.audio;
-    S.queue = [...S.played];
+    S.queue = listenRows().map(i => i.id);
     if (!S.audio || S.audio.id !== S.queue[0]) { S.audio = null; startAudio(S.queue[0]); if (had) S.playerEnter = false; }
     else S.audio.playing = true;
     S.playAll = true;
@@ -4510,7 +4562,10 @@ function jumpTo(b){
     return;
   }
   if (j === 'listen-reader') { render(); openItem(1, backHere()); return; }   // ← returns to Listen (Q7)
-  if (j === 'listen-empty') { S.tab = S.screen = 'listen'; }
+  if (j === 'listen-empty') { S.tab = S.screen = 'listen'; S.items.forEach(i => { i.archived = true; }); }
+  // no session: the card holds the last played article still in Unread, or the top of Unread (decision 111)
+  if (j === 'listen-ready') { S.tab = S.screen = 'listen'; S.played = [8, 2, 1]; }
+  if (j === 'listen-first') { S.tab = S.screen = 'listen'; }
   if (j === 'lock') { S.screen = 'reader'; listenSeed(2, .34); S.lock = true; }
   if (j.startsWith('rsvp')) { S.screen = 'reader'; S.items[1].progress = j.startsWith('rsvp-done') ? .99 : 58 / TOK.length; if (j === 'rsvp-done-archived') S.items[1].archived = true; }
   if (j === 'saves-empty') { S.items = []; S.savesMode = 'first'; S.you.browsers = []; }

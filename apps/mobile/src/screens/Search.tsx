@@ -61,6 +61,7 @@ export default function Search() {
 
   const open = useCallback((r: LibRow) => router.push(`/reader/${r.hash}`), []);
   const swipe = useCallback((r: LibRow) => archive(r.hash, r.state !== 'archived'), []);
+  const drop = useCallback((r: LibRow) => remove(r.hash), []);
   const more = useCallback((r: LibRow) => {
     openSheet(r.title ?? r.url, () => (
       <View>
@@ -102,7 +103,7 @@ export default function Search() {
           ListHeaderComponent={shown.length ? caption(S.search.results(shown.length)) : null}
           renderItem={({ item }) => (
             <View style={{ paddingHorizontal: 16 }}>
-              <SaveRow r={item} online={online} onOpen={open} onSwipe={swipe} onMore={item.state === 'archived' ? more : undefined} inPlace />
+              <SaveRow r={item} online={online} onOpen={open} onSwipe={swipe} onMore={item.state === 'archived' ? more : undefined} onDelete={drop} inPlace />
             </View>
           )}
           contentContainerStyle={{ paddingBottom: 160 }}
