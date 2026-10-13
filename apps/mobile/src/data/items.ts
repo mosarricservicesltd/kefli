@@ -10,6 +10,8 @@ export type ItemRow = {
   text_servers: string | null; text_hash: string | null; hero: string | null; source_kind: string; source_ref: string | null;
   audio_pref: string | null; extra: string | null; event_id: string | null; event_created_at: number | null;
   published: number; text_state: string; origin: string;
+  /** The address the save was last published or seen at (F5). */
+  remote_d: string | null;
 };
 
 export type NewItem = {

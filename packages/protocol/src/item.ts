@@ -40,11 +40,16 @@ export interface Item {
   source_ref?: string;
   /** Reserved for server voices; always null in v1. */
   audio_pref: null;
+  /**
+   * The save's hash (C§4.1, v1.10): sha256 of its normalised URL when first saved, which draws its cover and, keyed,
+   * makes its address. Absent from saves before v1.10, whose unkeyed d is their hash.
+   */
+  hash?: string;
 }
 
 const KNOWN = new Set([
   'v', 'url', 'canonical', 'title', 'site', 'byline', 'saved_at', 'state', 'progress', 'words', 'lang',
-  'text', 'text_hash', 'hero', 'source_kind', 'source_ref', 'audio_pref',
+  'text', 'text_hash', 'hero', 'source_kind', 'source_ref', 'audio_pref', 'hash',
 ]);
 
 export class ItemVersionError extends Error {

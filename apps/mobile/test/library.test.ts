@@ -1,4 +1,4 @@
-import { LocalSigner } from '@kefli/protocol';
+import { LocalSigner, savedD } from '@kefli/protocol';
 import type { NostrEvent } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
@@ -152,9 +152,13 @@ describe('the library (mobile spec 5.6)', () => {
     setPosition(w.db, 1502, w.pk, h(99), 1, true);
   });
 
-  test('a delete sends a kind 5 naming the save to every write relay', async () => {
+  test('a delete sends a kind 5 naming the save, at every address it was published at, to every write relay', async () => {
     const w = world();
     w.add(1);
+    // published before v1.10, unkeyed; the library key has come since (F5)
+    w.db.run("UPDATE items SET remote_d = 'kefli/item/' || hash WHERE hash = ?", h(1));
+    const key = new Uint8Array(32).fill(7);
+    w.db.run('UPDATE identities SET library_key = ? WHERE pubkey = ?', '07'.repeat(32), w.pk);
     const d = deleteItem(w.db, 2000, w.pk, h(1));
     commitDelete(w.db, w.pk, h(1), d.held);
     const sent: { relay: string; event: NostrEvent }[] = [];
@@ -167,6 +171,21 @@ describe('the library (mobile spec 5.6)', () => {
     expect(sent.map((s) => s.relay).sort()).toEqual(['ws://a', 'ws://b', 'ws://op']);
     expect(sent[0].event.kind).toBe(5);
     expect(sent[0].event.tags).toContainEqual(['a', `30078:${w.pk}:kefli/item/${h(1)}`]);
+    expect(sent[0].event.tags).toContainEqual(['a', `30078:${w.pk}:${savedD(key, h(1))}`]);
     expect(w.db.get<{ state: string }>("SELECT state FROM outbox_targets WHERE target = 'ws://b'")).toEqual({ state: 'pending' });
+  });
+
+  test('a save never published names nothing in public when deleted (F5, F33)', async () => {
+    const w = world();
+    w.add(1);
+    const d = deleteItem(w.db, 2000, w.pk, h(1));
+    commitDelete(w.db, w.pk, h(1), d.held);
+    const sent: NostrEvent[] = [];
+    const ports: SendPorts = {
+      db: w.db, now: () => 2100, signer: async () => w.signer, fetch: (async () => new Response('{}')) as never, crypto: nodeCrypto,
+      defaults: () => D as never, publish: async (_r, event) => (sent.push(event), { ok: true }), readBlob: async () => null,
+    };
+    await sendOne(ports);
+    expect(sent).toEqual([]);
   });
 });

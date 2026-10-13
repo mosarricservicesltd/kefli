@@ -60,3 +60,21 @@
       APT::Periodic::Update-Package-Lists "1";
       APT::Periodic::Unattended-Upgrade "1";
     mode: "0644"
+
+# The privacy page says logs are deleted after seven days (F6): the journal, where every service but Caddy's access
+# log writes, keeps no more than that, and no more than 500 MB.
+- name: The journal's drop-in folder
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    mode: "0755"
+
+- name: The journal keeps seven days
+  ansible.builtin.copy:
+    dest: /etc/systemd/journald.conf.d/10-kefli.conf
+    content: |
+      [Journal]
+      MaxRetentionSec=7day
+      SystemMaxUse=500M
+    mode: "0644"
+  notify: Restart journald

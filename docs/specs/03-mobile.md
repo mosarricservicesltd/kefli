@@ -28,7 +28,7 @@ MS still says draft although FD 73 signed it off. Files that C§3.1, §4.2, §4.
 
 | File | Writer | By |
 |---|---|---|
-| `shared/normalise.ts` and its fixtures | Mobile engineer drafts; project engineer owns. Written 6 October 2026; the choices the contract left open were settled in contract v1.4 (C§11.6) and are listed in the fixtures' `rulings` | End of week 0 |
+| `shared/normalise.ts` and its fixtures | Mobile engineer drafts; project engineer owns. Written 6 October 2026; the choices the contract left open were settled in contract v1.4 (C§11.7) and are listed in the fixtures' `rulings` | End of week 0 |
 | `shared/turndown-rules.json` (C§4.2) | Project engineer, from `shared/vendor/parser-runner.js`. Written 6 October 2026, its sha256 in `shared/vendor/VERSIONS.md` | End of week 0 |
 | `shared/fixtures/` (C§9, covers included) | Project engineer; page fixtures from a pinned headless Chromium run of the vendored bundle, outside every client's CI, its version in `shared/vendor/VERSIONS.md` | Weeks 1–2 |
 | `shared/defaults.json` (schema in C§3.1) | Backend engineer, after the week-1 relay and mirror tests (C§3.1, C§5) | Week 1 |
@@ -39,7 +39,7 @@ MS still says draft although FD 73 signed it off. Files that C§3.1, §4.2, §4.
 |---|---|---|
 | Stack | Kotlin, Compose, Room, WorkManager, rust-nostr | Expo SDK 57, TypeScript, expo-sqlite, nostr-tools, six local native modules |
 | Protocol code | Kotlin modules | `packages/protocol`, shared with the extension and later iOS |
-| Kinds | 30979, 979, 978 | 30078 under `kefli/` d tags (C§11.9; the namespace from C§11.5) |
+| Kinds | 30979, 979, 978 | 30078 under `kefli/` d tags (C§11.10; the namespace from C§11.6) |
 | Listening | SystemVoice and CachedVoice | On-device voice in Kefli's own media session (FD 22, T§3) |
 | Screens | Library, Material 3 | Fingerprint and the signed-off prototype (FD 65, FD 75) |
 
@@ -49,7 +49,7 @@ The app is the reference client for what the contract leaves to a client: parsin
 
 **In scope:** FM's seven journeys (first launch, returning to a library, saving from the phone and from the browser, reading, listening, You), with Search (FD 51), Speed read (FD 21), typed-code pairing (C§4.4), Keep backup copies (FD 76), moving saves (C§4.8), shared X posts (FD 78), covers (FD 65) and Export (`adv`).
 
-**Out of scope:** server audio and `CachedVoice` (C§6.1, FD 22); "Open in app" and any public deep link (FD 9); Recommend (C§4.5); NIP-05 names (C§6); private relays (C§11.8); notifications (FD 15); seeking (FD 48); tags, folders, highlights, widgets, Wear, discovery; tablets beyond "doesn't break". Pasting an nsec isn't on the flow map and isn't built; v1.3 dropped it from C§2 (FD 90).
+**Out of scope:** server audio and `CachedVoice` (C§6.1, FD 22); "Open in app" and any public deep link (FD 9); Recommend (C§4.5); NIP-05 names (C§6); private relays (C§11.9); notifications (FD 15); seeking (FD 48); tags, folders, highlights, widgets, Wear, discovery; tablets beyond "doesn't break". Pasting an nsec isn't on the flow map and isn't built; v1.3 dropped it from C§2 (FD 90).
 
 **Platform floor:** `minSdkVersion` 26, because word positions come from `onRangeStart` (T§2); compile and target SDK 36; portrait phones; arm64-v8a releases, plus x86_64 for the CI emulator.
 
@@ -289,12 +289,12 @@ Kefli's own `RelayPool` on nostr-tools `AbstractRelay`, for per-target retry sta
 
 Triggers: start, foreground, reconnection, a finished share, the end of a voice session and the background task. Each phase is restartable and idempotent.
 
-1. **Prerequisites:** `defaults.json` (baked-in fallback, C§3.1); `register` if needed; the owner's 10002 and 10063 from the indexer and write relays.
+1. **Prerequisites:** `defaults.json` (baked-in fallback, C§3.1); `register` if needed; the owner's 10002 and 10063 from the indexer and write relays; then the library key (C§4.3, v1.10): the newest `kefli/library-key` record on the write relays is taken, a key not yet published giving way to it and the saves it addressed moving to their new addresses; with none on any relay once all have answered, a key is made. An identity made on this phone makes its key at its first publish, which sends the record first. A save's hash comes from its decrypted item, falling back to its unkeyed `d`, and `items.remote_d` keeps the address each save was last at, for deletions and for retiring an old address.
 2. **Outbound:** the outbox.
 3. **Items and deletions** from every read relay: `{"kinds":[30078],"authors":[pk],"#t":["kefli"],"since":cursor−300,"limit":500}` and `{"kinds":[5],"authors":[pk],"#k":["30078"],"since":cursor−300,"limit":500}`, each `a` checked to name `kefli/item/`. Each next page's `until` is the oldest `created_at` seen, inclusive and deduplicated by id, until a page brings nothing new, since relays may return fewer than the limit (NIP-01); completion is recorded per relay and stream in `sync_cursors.backfilled`, then the subscription stays live. Restore counts M the same way.
 4. **Inbox** (4.7).
 5. **Text:** the item being opened first, then unread newest first, then archived; each server in `text.servers`, then the 10063 servers; check the sha256, decrypt, write `.md`, derive blocks, index FTS. Failure everywhere sets `blob_missing`, which shows "Couldn't get the text".
-6. **Images:** on unmetered networks, the newest 50 unread articles' images (5 MB each, 200 MB in all, evicting archived first); on metered networks, when an article opens.
+6. **Images:** an article's images are fetched when it opens, public web addresses only; on unmetered networks the sync also fetches again any missing for the newest 50 unread articles already opened (5 MB each, 200 MB in all, evicting archived first), so an image site hears of an article only when it is read (7.3, F26).
 7. **Pending parses**, one at a time.
 
 Merge rules are a pure function in `packages/protocol` with property tests. Only a verified kind 30078 by an identity on the phone, with `d` = `kefli/item/<64 hex>` and `t` = `kefli`, is accepted, into that owner's rows, and a NIP-44 failure drops it. The connected-browsers record (`d` = `kefli/devices`) merges into `devices` by token, keeping every entry and the earlier `revoked_at` (C§4.9). With no local row it is inserted as `remote`; a clean row takes it if it is newer than `event_created_at` (ties to the lower id); a dirty row yields only if it is newer than `modified_at`, and otherwise republishes above it. A remote `progress` for the article open in the Reader waits until the Reader closes. A different `text.sha256` fetches the new text and, when the losing blob was this phone's upload and nothing references it, queues `delete_blob`. A kind 5 naming this `d` at or after the row's `created_at` removes the row, files, FTS entry, Listen history and images, unless the row was edited after it. `progress` is republished on leaving the Reader or Speed read, at the end of a voice session, and at most once a minute while reading.
@@ -801,7 +801,7 @@ Devices: the Pixel 10a (Android 17), a Samsung with its own speech engine and ba
 
 ### 13.2 Contract v1.3: the requests as landed
 
-Contract v1.3 took in all eighteen requests, approved with section 14 on 5 October 2026 (C§11.7, whose item 19 also puts FD 86's rule for "nostr" into C§1). Each row records what landed.
+Contract v1.3 took in all eighteen requests, approved with section 14 on 5 October 2026 (C§11.8, whose item 19 also puts FD 86's rule for "nostr" into C§1). Each row records what landed.
 
 | CR | Request, as settled | Status |
 |---|---|---|

@@ -89,14 +89,20 @@ describe('article images (mobile spec 4.5 phase 6, 5.6)', () => {
     expect(await fetchImage(w.ports, PK, 'https://e.com/down.png', h(1))).toBe('offline');
     expect(imageState(w.db, 'https://e.com/down.png', w.now())).toBe('waiting');
     expect(await fetchImage(w.ports, PK, 'data:image/png;base64,AAAA', h(1))).toBe('skipped');
+    // nothing on this phone's network, whatever a page names (F26)
+    expect(await fetchImage(w.ports, PK, 'http://192.168.1.1/router.png', h(1))).toBe('skipped');
+    expect(await fetchImage(w.ports, PK, 'http://localhost/x.png', h(1))).toBe('skipped');
   });
 
-  test('phase 6 fetches the newest unread articles, stopping when the network goes', async () => {
+  test('phase 6 fetches the newest unread articles that have been opened, stopping when the network goes', async () => {
     const w = world();
     w.add(1);
     w.add(2);
     w.add(3, 'archived');
-    for (const n of [1, 2, 3]) w.texts.set(h(n), `![p](https://e.com/${n}.png)\n`);
+    w.add(4);
+    for (const n of [1, 2, 3, 4]) w.texts.set(h(n), `![p](https://e.com/${n}.png)\n`);
+    // read in, so their images were asked for once; 4 was never opened, so its image sites never hear of it (F26)
+    w.db.run('UPDATE items SET last_opened_at = 1 WHERE hash IN (?, ?)', h(1), h(2));
     w.served.set('https://e.com/1.png', new Response(png(10, 10) as never));
     w.served.set('https://e.com/2.png', 'down');
     expect(keptArticles(w.db, PK)).toEqual([h(2), h(1)]);
@@ -104,6 +110,7 @@ describe('article images (mobile spec 4.5 phase 6, 5.6)', () => {
     expect(await syncImages(w.ports, PK)).toBe(0);
     w.served.set('https://e.com/2.png', new Response(png(10, 10) as never));
     expect(await syncImages(w.ports, PK)).toBe(2);
+    expect(w.db.get('SELECT 1 FROM images WHERE url = ?', 'https://e.com/4.png')).toBeUndefined();
     // an archived article's images come only when it opens
     w.served.set('https://e.com/3.png', new Response(gif(5, 5) as never));
     expect(await fetchArticleImages(w.ports, PK, h(3))).toBe(1);

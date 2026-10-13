@@ -6,7 +6,7 @@ import { ensureIdentityRow } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
 import { getCursor, itemColumns, type TextJob } from '../src/data/sync';
 import { fetchText, pageStream, streamFilter, syncInbound, type Filter, type SyncPorts } from '../src/services/sync';
-import { sendOne, type SendPorts } from '../src/services/send';
+import { drain, sendOne, type SendPorts } from '../src/services/send';
 import { memoryDb } from './sqlite';
 
 const D = {
@@ -231,7 +231,8 @@ describe('inbound sync (mobile spec 4.5)', () => {
       db: w.db, now: () => 20_000, signer: w.ports.signer, fetch: w.fetch, crypto: nodeCrypto, defaults: () => D as never,
       publish: async () => ({ ok: true }), readBlob: async () => null,
     };
-    expect(await sendOne(send)).toBe(true);
+    // everything due goes, the library key's record (made at this sync, F5) among it
+    await drain(send);
     expect(w.blobs.get('http://blossom')!.has(oldSha)).toBe(false);
     expect(w.db.get("SELECT 1 FROM outbox WHERE op = 'delete_blob'")).toBeUndefined();
   });

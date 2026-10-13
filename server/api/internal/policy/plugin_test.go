@@ -70,7 +70,7 @@ func TestServeAgainstTheDatabase(t *testing.T) {
 	if err := st.Register(ctx, user); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.AddDevice(ctx, user, device, "browser"); err != nil {
+	if err := st.AddDevice(ctx, user, device); err != nil {
 		t.Fatal(err)
 	}
 	out, removed := serve(t, p, wraps,

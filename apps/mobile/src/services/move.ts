@@ -9,9 +9,10 @@
 //      connected-browsers record to its write relays, DELETE /account as S, then S off the phone.
 // S stays whole until step 5, so a save is never deleted before its copy exists under T.
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { DEVICES_D, ITEM_D_PREFIX, KIND, T_TAG, buildDeletions, httpAuth, readItemEvent, type CryptoPort, type NostrEvent, type Signer } from '@kefli/protocol';
+import { DEVICES_D, KIND, LIBRARY_KEY_D, T_TAG, buildDeletions, httpAuth, readItemEvent, type CryptoPort, type NostrEvent, type Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { enqueue } from '../data/outbox';
+import { itemAddresses } from '../data/libraryKey';
 import { listServers, writeRelays } from '../data/lists';
 import { indexText } from '../data/sync';
 import { copySave, moveJob, newerInEither, retireLocal, saveMove, sourceSaves, type MoveJob } from '../data/move';
@@ -93,7 +94,8 @@ export async function stagedBlob(p: MovePorts, from: string, hash: string): Prom
 async function copyAll(p: MovePorts, job: MoveJob): Promise<boolean> {
   const t = targetsOf(await p.defaults());
   // RULED: S's unsent rows go now that the newer check has passed: every save goes out under T instead
-  p.db.run("DELETE FROM outbox WHERE signer = ? AND state IN ('held','queued','dead')", job.from);
+  // except old addresses still to retire (F5), which step 5 names with S's saves
+  p.db.run("DELETE FROM outbox WHERE signer = ? AND state IN ('held','queued','dead') AND NOT (op = 'delete_item' AND subject LIKE 'retire:%')", job.from);
   const todo = sourceSaves(p.db, job.from, job.moved);
   const total = job.moved.length + todo.length;
   for (const hash of todo) {
@@ -187,10 +189,11 @@ async function holdsAll(p: MovePorts, relay: string, owner: string, want: string
 
 /** Step 5's servers: kind 5s for S's saves and record (unconfirmed, RULED), then DELETE /account as S, which must succeed. */
 async function retireRemote(p: MovePorts, job: MoveJob): Promise<boolean> {
+  // each save at every address it is at, never a plain hash it wasn't published under (F5), and S's records
   const ds = [
-    ...p.db.all<{ hash: string }>('SELECT hash FROM items WHERE owner = ?', job.from).map((r) => ITEM_D_PREFIX + r.hash),
+    ...itemAddresses(p.db, job.from),
     ...p.db.all<{ d: string }>('SELECT d FROM items_future WHERE owner = ?', job.from).map((r) => r.d),
-    DEVICES_D,
+    DEVICES_D, LIBRARY_KEY_D,
   ];
   const deletions = await buildDeletions(p.source, [...new Set(ds)], p.now());
   await Promise.all(writeRelays(p.db, job.from).map(async (relay) => {

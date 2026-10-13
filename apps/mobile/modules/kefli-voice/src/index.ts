@@ -32,6 +32,8 @@ interface Native {
   /** A new rate with the voice's words a second at it (5.7, FD 107). */
   setRate(rate: number, wps: number): void; close(): void;
   readLog(): string; clearLog(): void;
+  /** The gates screen's test log, off unless it turns it on, in the local build only (F7). */
+  setLogging(on: boolean): void;
   addListener<K extends keyof Events>(name: K, listener: Events[K]): EventSubscription;
 }
 

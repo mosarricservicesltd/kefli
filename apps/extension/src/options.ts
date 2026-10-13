@@ -10,7 +10,7 @@ import { loadDefaults } from './defaults';
 import { deviceSigner } from './device';
 import { icon } from './icons';
 import { browserLabel, formatCode, listenForAck, OFFER_LIFE, pairingFrom, postOffer, type Listening, type Offer } from './pair';
-import { failed, queued, waiting, type Queued } from './queue';
+import { failed, queued, shown, waiting, type Queued, type Shown } from './queue';
 import { chromeStore, KEYS, type Pairing } from './store';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -28,13 +28,16 @@ let view: View = { kind: 'loading' };
 let listening: Listening | null = null;
 let ticker: ReturnType<typeof setInterval> | undefined;
 let retry: ReturnType<typeof setTimeout> | undefined;
-let queue: Queued[] = [];
+let queue: Shown[] = [];
 let pinned = true;
 /** Copy debug info reads Copied for 1.5 s after a copy. */
 let copied = false;
 /** Retry in flight (busy shows its dots once the wait passes 150 ms), and rows holding Sent before they leave. */
 const sending = new Map<string, { dots: boolean }>();
-const sent = new Map<string, Queued>();
+const sent = new Map<string, Shown>();
+
+/** The queue with each save's title, host and hash read from its sealed request, held in this page only (F31). */
+const reveal = async (q: Queued[]) => shown(q, await deviceSigner(store, webCrypto));
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const say = (msg: string) => { live.textContent = ''; setTimeout(() => (live.textContent = msg), 80); };
@@ -81,12 +84,12 @@ function pairHTML(): string {
     </div>${status}</div></div></div>`;
 }
 
-function retryChip(e: Queued): string {
+function retryChip(e: Shown): string {
   const s = sending.get(e.id);
   return `<button class="chip stack${s?.dots ? ' showbusy' : ''}" data-act="retry" data-id="${e.id}"${s ? ' aria-busy="true"' : ''} aria-label="${s ? 'Sending' : 'Retry'} ${esc(e.title)}"><span class="lbl-idle">Retry</span><span class="lbl-busy" aria-hidden="true"><span class="dots inbtn"><i></i><i></i><i></i></span>Sending</span></button>`;
 }
 
-function failRow(e: Queued): string {
+function failRow(e: Shown): string {
   const done = sent.has(e.id);
   const end = done ? `<span class="sent">${icon('check')}</span>` : retryChip(e);
   return `<div class="li"><span class="cv" aria-hidden="true">${ShelfCover.svg(e.hash)}</span><span class="t">${esc(e.title)}<small>${esc(e.host)} · ${done ? 'Sent' : WHY[e.stopped ? 'stopped' : e.why === 'blocked' ? 'blocked' : 'reach']}</small></span>${end}</div>`;
@@ -172,7 +175,7 @@ function stopPairing() {
 
 async function connected(pairing: Pairing) {
   stopPairing();
-  queue = await queued(store);
+  queue = await reveal(await queued(store));
   view = { kind: 'connected', pairing, confirm: false, advanced: false };
   await render();
   say('Connected to your phone');
@@ -224,7 +227,7 @@ async function retryOne(id: string) {
   await chrome.runtime.sendMessage({ type: 'retry', id }).catch(() => undefined);
   clearTimeout(dots);
   sending.delete(id);
-  queue = await queued(store);
+  queue = await reveal(await queued(store));
   if (entry && !queue.some((e) => e.id === id)) {
     sent.set(id, entry);
     say(`Sent ${entry.title}`);
@@ -266,7 +269,13 @@ const ACTIONS: Record<string, (id?: string) => void | Promise<void>> = {
   'unpair-cancel': () => setConnected({ confirm: false }),
   // Disconnecting deletes what hadn't reached the phone, as the confirm said
   // and the save history with them
-  'unpair-yes': async () => { await store.remove(KEYS.queue); await store.remove(KEYS.history); await store.remove(KEYS.pairing); },
+  // and the session's Undo keys and last popup save, which would otherwise last until the browser closes (F31)
+  'unpair-yes': async () => {
+    await store.remove(KEYS.queue);
+    await store.remove(KEYS.history);
+    await chrome.storage.session.clear().catch(() => undefined);
+    await store.remove(KEYS.pairing);
+  },
   debug: copyDebug,
   retry: (id) => (id ? retryOne(id) : undefined),
   setkey: () => { void chrome.tabs.create({ url: BROWSER === 'firefox' ? 'about:addons' : 'chrome://extensions/shortcuts' }); },
@@ -284,8 +293,10 @@ root.addEventListener('click', (e) => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   if (KEYS.queue in changes) {
-    queue = (changes[KEYS.queue].newValue as Queued[] | undefined) ?? [];
-    if (view.kind === 'connected') void render();
+    void reveal((changes[KEYS.queue].newValue as Queued[] | undefined) ?? []).then((q) => {
+      queue = q;
+      if (view.kind === 'connected') void render();
+    });
   }
   if (!(KEYS.pairing in changes)) return;
   const p = changes[KEYS.pairing].newValue as Pairing | undefined;

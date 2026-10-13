@@ -41,7 +41,7 @@ export interface Pending {
   /** The inbox blob as base64 until it is uploaded; null once uploaded, or when there was no HTML. */
   blob: string | null;
   sha256: string | null;
-  /** The save's d-tag hash (contract 4.3), for its cover. */
+  /** The save's hash (contract 4.1, 4.3), for its cover; since v1.10 its address is keyed, the hash isn't. */
   hash: string;
   title: string;
   host: string;
@@ -63,7 +63,7 @@ export interface SaveContext {
   now: number;
 }
 
-function hostOf(url: string): string {
+export function hostOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, '');
   } catch {
@@ -96,7 +96,7 @@ export type Delivery = 'sent' | 'unreachable' | 'blocked';
  * when the request arrives; a blob the server refuses for good is dropped, and the phone fetches the page itself
  * (contract 4.4). 'blocked' is a relay that answered and refused, which the options page names.
  */
-export async function deliver(p: Pending, server: string, relay: string, device: LocalSigner, net: Net): Promise<Delivery> {
+export async function deliver(p: Pick<Pending, 'id' | 'wrap' | 'blob' | 'sha256'>, server: string, relay: string, device: LocalSigner, net: Net): Promise<Delivery> {
   if (p.blob !== null && p.sha256 !== null) {
     const up = await net.upload(server, base64.decode(p.blob), p.sha256, device).catch(() => null);
     if (!up || (!up.ok && !up.permanent)) return 'unreachable';

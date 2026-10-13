@@ -94,7 +94,8 @@ describe('connected browsers (mobile spec 5.5, contract 4.4 and 4.9)', () => {
     expect(await lookupCode(w.ports, 'ABCD-EFGH')).toEqual({ problem: 'wrong' });
     w.tick(400);
     expect(await lookupCode(w.ports, typed)).toEqual({ problem: 'expired' });
-  });
+    // each lookup runs scrypt at N = 16384 (contract 4.4), which outlasts Jest's five seconds when the whole suite runs
+  }, 20_000);
 
   test('an unregistered identity registers first; the API down is offline', async () => {
     const w = world({ registered: false, status: (m, u) => (u.includes('/pair-offers/') ? 503 : 0) });

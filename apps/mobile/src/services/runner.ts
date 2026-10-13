@@ -38,6 +38,7 @@ import type { ShowPorts } from './phonePair';
 import type { AddRelayPorts } from './addRelay';
 import { dailyCheck } from './nostrCheck';
 import { KefliKeystore } from '../../modules/kefli-keystore/src';
+import { KefliVoice } from '../../modules/kefli-voice/src';
 
 let running: Promise<number> | null = null;
 let defaults: Defaults | null = null;
@@ -223,6 +224,8 @@ export function runMoveJob(): Promise<MoveOutcome> {
  */
 export function startSync(): () => void {
   const log = (tag: string, v: unknown) => console.log(`[kefli-${tag}] ${JSON.stringify(v)}`);
+  // a voice test log an earlier build wrote goes; a release build never writes one (F7)
+  if (!LOCAL_STACK) KefliVoice.clearLog();
   const sync = () =>
     launchPlan()
       .catch(() => null)

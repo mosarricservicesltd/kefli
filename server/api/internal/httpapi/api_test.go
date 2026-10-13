@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"bytes"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -202,6 +203,13 @@ func TestRegisterAndDevices(t *testing.T) {
 	if u, ok, _ := e.st.DeviceUser(t.Context(), device.pk); !ok || u != user.pk {
 		t.Fatal("device not authorised")
 	}
+	// the label an older phone sends is never stored (F30)
+	db, _ := sql.Open("sqlite", "file:"+filepath.Join(e.dir, "k.db")+"?mode=ro")
+	var label string
+	if err := db.QueryRow(`SELECT label FROM devices WHERE device_pubkey = ?`, device.pk).Scan(&label); err != nil || label != "" {
+		t.Fatalf("label %q %v", label, err)
+	}
+	db.Close()
 	s, b = e.call(other, "POST", "/register", map[string]any{"v": 1})
 	expect(t, s, 200, b)
 	s, b = e.call(other, "DELETE", "/devices/"+device.pk, nil)

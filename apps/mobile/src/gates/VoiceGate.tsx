@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { normaliseMarkdown, project, sentences } from '@kefli/protocol';
 import { KefliVoice } from '../../modules/kefli-voice/src';
+import { LOCAL_STACK } from '../services/config';
 
 const PARTS = [
   'A saved article waits quietly until there is time for it.',
@@ -47,6 +48,8 @@ export function VoiceGate() {
   // 0.8× stretches the reading to about 56 minutes: the stage 2 gate's locked hour (FD 87)
   const start = async (rate = 1) => {
     KefliVoice.clearLog();
+    // the test log is written only for this gate, and only in the local build (F7)
+    KefliVoice.setLogging(LOCAL_STACK);
     await KefliVoice.start({
       hash: 'gate'.padEnd(64, '0'), title: 'Thirty minutes locked', site: 'Week 0 gate',
       sentences: reading.sentences, startWord: 0, totalWords: reading.totalWords, rate, wps: 3.9,

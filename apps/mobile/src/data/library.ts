@@ -1,7 +1,7 @@
 // The library as the screens read and change it (mobile spec 5.6): the two lists, archive and Back to Unread,
 // delete, the next unread, and the reading position. Every change writes the row first and the network through
 // held outbox rows, so Undo reverts the row and deletes them before anything leaves the phone (4.3, FD 7, FD 38).
-import { ITEM_D_PREFIX, progressAt } from '@kefli/protocol';
+import { progressAt } from '@kefli/protocol';
 import type { SqlDb } from './db';
 import { enqueue, release, undo } from './outbox';
 import { writeRelays } from './lists';
@@ -96,12 +96,17 @@ export function setArchived(db: SqlDb, now: number, owner: string, hash: string,
  */
 export function deleteItem(db: SqlDb, now: number, owner: string, hash: string): Change {
   return db.tx(() => {
-    const row = db.get<{ text_sha256: string | null; text_servers: string | null; event_created_at: number | null }>(
-      'SELECT text_sha256, text_servers, event_created_at FROM items WHERE owner = ? AND hash = ?', owner, hash);
+    const row = db.get<{ text_sha256: string | null; text_servers: string | null; event_created_at: number | null; remote_d: string | null }>(
+      'SELECT text_sha256, text_servers, event_created_at, remote_d FROM items WHERE owner = ? AND hash = ?', owner, hash);
     if (!row) return { held: [], revert: () => {} };
     db.run('UPDATE items SET pending_delete_at = ? WHERE owner = ? AND hash = ?', now, owner, hash);
-    // after: the newest version's time, which the kind 5 must be dated past (F36); the row is gone by the time it's sent
-    const del = enqueue(db, now, { op: 'delete_item', signer: owner, subject: hash, payload: { ds: [ITEM_D_PREFIX + hash], after: row.event_created_at ?? 0 }, targets: writeRelays(db, owner), held: true });
+    // after: the newest version's time, which the kind 5 must be dated past (F36); the row is gone by the time it's sent.
+    // ds: the address it was published at, if any; the sender adds its keyed one (F5), so a save never published
+    // anywhere names nothing in public
+    const del = enqueue(db, now, {
+      op: 'delete_item', signer: owner, subject: hash, payload: { ds: row.remote_d ? [row.remote_d] : [], hash, after: row.event_created_at ?? 0 },
+      targets: writeRelays(db, owner), held: true,
+    });
     const held = [del];
     const servers = row.text_servers ? (JSON.parse(row.text_servers) as string[]) : [];
     const mine = row.text_sha256 && db.get('SELECT 1 FROM blobs WHERE sha256 = ? AND owner = ?', row.text_sha256, owner);

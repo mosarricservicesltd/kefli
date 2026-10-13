@@ -8,6 +8,7 @@ export * from './text';
 export * from './events';
 export * from './wrap';
 export * from './devices';
+export * from './libraryKey';
 export * from './pairing';
 export * from './projection';
 export * from './sentences';

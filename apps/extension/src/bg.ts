@@ -8,7 +8,7 @@ import { loadDefaults } from './defaults';
 import { record, type Outcome } from './debug';
 import { deviceSigner } from './device';
 import { applyMove, followMoves } from './move';
-import { dequeue, enqueue, flush, queued, waiting, whyNot } from './queue';
+import { dequeue, enqueue, flush, queued, shown, waiting, whyNot } from './queue';
 import { collected, fetchWraps, publish } from './relay';
 import { deliver, fetchNet, prepare, retract, type SaveContext } from './save';
 import { chromeStore, KEYS, type Pairing } from './store';
@@ -195,7 +195,9 @@ async function undo(id: string, where: Where): Promise<void> {
   if (waitingSave && (await dequeue(store, id))) {
     await record(store, now(), id, 'undo: off the queue');
     await badge();
-    await toast(where, { kind: 'unqueued', title: waitingSave.title, host: waitingSave.host, link: false });
+    // the title and host come from the sealed request; the queue doesn't keep them in the clear (F31)
+    const [s] = await shown([waitingSave], ctx.device);
+    await toast(where, { kind: 'unqueued', title: s.title, host: s.host, link: false });
     return;
   }
   const kept = await session.get<{ key: string; sha256: string | null; hash: string; until: number }>(`undo:${id}`);

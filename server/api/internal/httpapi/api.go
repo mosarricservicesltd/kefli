@@ -5,6 +5,10 @@ package httpapi
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -46,12 +50,18 @@ type API struct {
 	calls *Limiter // per pubkey, 60 a minute (backend spec 3.3)
 	pairs *Limiter // offers, 30 an hour per key and per address (contract 6)
 	regIP *Limiter // registrations, 5 a day per address (backend spec 5)
+	// logKey keys the fingerprints the logs show for pubkeys (short)
+	logKey []byte
 }
 
 func New(cfg Config, st *store.Store, log *slog.Logger) *API {
 	now := st.Now
+	logKey := make([]byte, 32)
+	if _, err := rand.Read(logKey); err != nil {
+		panic(err) // crypto/rand never fails on Linux
+	}
 	return &API{
-		cfg: cfg, st: st, log: log, now: now,
+		cfg: cfg, st: st, log: log, now: now, logKey: logKey,
 		calls: NewLimiter(60, time.Minute, now),
 		pairs: NewLimiter(30, time.Hour, now),
 		regIP: NewLimiter(5, 24*time.Hour, now),
@@ -189,10 +199,11 @@ func (a *API) serverError(w http.ResponseWriter, err error) {
 	fail(w, http.StatusInternalServerError, "server")
 }
 
-// short is a pubkey as the logs show it: 12 hex characters, never the whole key (backend spec 5).
-func short(pubkey string) string {
-	if len(pubkey) < 12 {
-		return pubkey
-	}
-	return pubkey[:12]
+// short is a pubkey as the logs show it (backend spec 5, F30): 12 hex characters of an HMAC under a key made at
+// each start and never written, so a log line can be followed within a run but never leads back to the key, which
+// the privacy page promises ("a short, one-way fingerprint ... never the identifier itself").
+func (a *API) short(pubkey string) string {
+	m := hmac.New(sha256.New, a.logKey)
+	m.Write([]byte(pubkey))
+	return hex.EncodeToString(m.Sum(nil))[:12]
 }

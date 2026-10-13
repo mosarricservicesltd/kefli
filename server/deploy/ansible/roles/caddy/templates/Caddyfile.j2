@@ -1,12 +1,28 @@
 # {{ ansible_managed }}
 # Kefli operator VPS (backend spec 3.6). The apex serves apps/web from /var/www/kefli (apps/web/deploy.sh puts it there).
-{% if kefli_tls_internal %}
-# A test host has no public name, so Caddy signs its own certificates.
 {
+{% if kefli_tls_internal %}
+	# A test host has no public name, so Caddy signs its own certificates.
 	local_certs
+{% endif %}
+	# Everything but the access log (below) goes to the journal through the default logger, including the error log
+	# each failed upstream writes: no address, query, header or certificate in it either (F6, backend spec 5).
+	log default {
+		output stderr
+		format filter {
+			wrap json
+			fields {
+				request>remote_ip delete
+				request>remote_port delete
+				request>client_ip delete
+				request>headers delete
+				request>tls delete
+				request>uri regexp ^(/[^/?]*).*$ ${1}
+			}
+		}
+	}
 }
 
-{% endif %}
 (common) {
 	header {
 		Strict-Transport-Security "max-age=31536000"
