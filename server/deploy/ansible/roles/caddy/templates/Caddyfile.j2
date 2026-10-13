@@ -1,6 +1,10 @@
 # {{ ansible_managed }}
 # Kefli operator VPS (backend spec 3.6). The apex serves apps/web from /var/www/kefli (apps/web/deploy.sh puts it there).
 {
+	# The admin API on a socket only root and caddy can open, where it would otherwise listen on localhost:2019 for
+	# every local account, keflid's, strfry's and the mail forwarder's included, to load a new config (F49).
+	# systemctl reload's caddy reload reads this line and goes through the socket too.
+	admin unix//run/caddy/admin.sock|0660
 {% if kefli_tls_internal %}
 	# A test host has no public name, so Caddy signs its own certificates.
 	local_certs

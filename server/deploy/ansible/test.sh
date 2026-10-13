@@ -54,6 +54,12 @@ box sh -c 'echo x > /var/www/kefli/downloads/t.xpi && echo x > /var/www/kefli/do
 check 'downloads are served as an add-on and an Android package' \
   'grep -qi "content-type: application/x-xpinstall" <<<"$(via kefli.app -I https://kefli.app/downloads/t.xpi)" && grep -qi "content-type: application/vnd.android.package-archive" <<<"$(via kefli.app -I https://kefli.app/downloads/t.apk)"'
 check 'HSTS is set' 'grep -qi strict-transport-security <<<"$(via api.kefli.app -I https://api.kefli.app/defaults.json)"'
+# F49: Caddy's admin API is on a socket only caddy (and root) can open, never on localhost:2019, and reloads use it.
+admin() { box runuser -u "$1" -- curl -s -m 2 -o /dev/null -w '%{http_code}' --unix-socket /run/caddy/admin.sock http://localhost/config/; }
+check "Caddy's admin API isn't on localhost:2019" '! box curl -s -m 2 -o /dev/null http://localhost:2019/config/'
+check 'its socket answers caddy and nobody else' \
+  '[ "$(admin caddy)" = 200 ] && ! admin strfry && ! admin kefli && [ "$(box stat -c %U:%a /run/caddy/admin.sock)" = caddy:660 ]'
+check 'a reload goes through the socket' 'box systemctl reload caddy'
 key=$(printf 'a%.0s' {1..64})
 check 'keflictl registers a key' "box keflictl register $key"
 line='{"type":"new","event":{"id":"'$(printf 'b%.0s' {1..64})'","pubkey":"%s","kind":30078,"tags":[],"content":"x","created_at":1,"sig":""},"receivedAt":1,"sourceType":"IP4","sourceInfo":"192.0.2.1"}'
@@ -64,8 +70,8 @@ check 'the sweep runs' 'box systemctl start relay-sweep'
 check 'the access log holds no address' '! box grep -q 127.0.0.1 /var/log/caddy/access.log'
 # F6: a WebSocket connection to the relay, and a request with a query to a stopped upstream (Caddy's error log), leave
 # no address, query or key in the journal, which keeps seven days
-# (HTTP/1.1: a WebSocket upgrade can't ride HTTP/2). The journal's own listen addresses and Caddy's admin reloads on
-# localhost aren't clients, so the checks look for what a client leaves: strfry's connection lines, and an address or
+# (HTTP/1.1: a WebSocket upgrade can't ride HTTP/2). The journal's own listen addresses and Caddy's admin reloads
+# aren't clients, so the checks look for what a client leaves: strfry's connection lines, and an address or
 # query in Caddy's request logs.
 via relay.kefli.app --http1.1 --max-time 2 -o /dev/null -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' \
   -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' https://relay.kefli.app/ || true
