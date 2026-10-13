@@ -1,0 +1,36 @@
+{
+  "about": "One connected-browsers record (C§4.9): the event verifies and decrypts to record.",
+  "secret_key": "4706e92b823e07d20ba93c04198c7681692debe0bfe9ba6e2a077c01445694aa",
+  "pubkey": "2110b3fc3d760024ce006df1d5fb1666000cd97692fb170fa34bb12da542cc87",
+  "event": {
+    "kind": 30078,
+    "created_at": 1791000050,
+    "tags": [
+      ["d", "kefli/devices"],
+      ["t", "kefli"]
+    ],
+    "content": "An+ivznpAEVLqbnyIg8+V8M8OO6lGr+U60disSxGon42UMcPuT/CaUGT6n1VgBMi21EEDi1LR1PNxJjupQPKgnD+NZoCL/FKDFgXw9nubyDLUBqLEH4CIV1DBJBKf/WLxIyPx57E08hs5wm3z0M3ZnfyVAYZBRCDeSP7iMkJzmiDgPPuKQrCJZuJl6Wg9EPsiYyHKEGRFkUq0lbr/tRPaZTbYrNA3yYIN+i8p3LAgjcv3wQ5pSu58gOlJLybW+p8LxWvYbvGh2Uca95wRPYlI9cyesjqD3TlM8u/P8Ltw2qk1zewSWrjQvOFlwQ39r0W4J4tllsBEKCS6FveyLKac5n33BrWBkHTVJtVz+e4YJUY75BKS09kZyr1iQUGFWwOnah2mGKFgWQ+3gMXlxbuOemjRv4GwW2+5pjDqzak7U449Gk0wKXIiysvEsn17xq7ZDA0UZVsLwMPWY4/Vvqtc1HRI5MPdRZeHFPV5i7Nl0fx2cptIzUzgYrQu19IFnWmjRVlf5kNI5H377jXFda+sDx5ptodibG5ewOrPs5Za2P2CJS9jJ8bl0/N5nxsLasOqRNKTVgd9GjNxlnKrIUcg4T05nD4U5RzC5V54M1RQg2gPhxciZnAaB5MakPhc3DUC0whPKu1AZSwaMPs9ekhzReDO+6Ay2ny8IcWdF5PcIN+hd49eyWqrkqfWu/nHnkEb4fryyXO2VpOUti4pGi91dBu+JQXY97oqxzMpDQqA/Mn7GgzooLaA+k2xSlGLMkJ2tG5",
+    "pubkey": "2110b3fc3d760024ce006df1d5fb1666000cd97692fb170fa34bb12da542cc87",
+    "id": "5a921066fcfb5bbe52594c2e1c3d9daac8f122fb2747d14ee3cef17362c4dae4",
+    "sig": "6ec585e09cbe0d67fe04301eac6491b7a3d266b23af51294a4b4555a74a8ba8e6950162bef5e874a7363ccc001f1c3536eacbddb6aaf244a0ecaca0b35385f37"
+  },
+  "record": {
+    "v": 1,
+    "devices": [
+      {
+        "device_pubkey": "1e908de99cf59c9aee754763792c3e23bdea1ff7482ecd07fdf9fc26e78b4f38",
+        "label": "Chrome on a Windows laptop",
+        "token": "77e4a82ff517f54c73029fa63fc48e983783557408e1b88f989a175c80a70ed8",
+        "connected_at": 1791000000,
+        "revoked_at": null
+      },
+      {
+        "device_pubkey": "c54e75a4ac1366c1615ecca995d6c99c85dfb895e0d664d89e2b1302f9ab0e78",
+        "label": "Firefox on a Mac",
+        "token": "621d1ca43a10145256544af7c7aabef055b3d395c88e81b037d24784c83dd1cf",
+        "connected_at": 1790996400,
+        "revoked_at": 1790999940
+      }
+    ]
+  }
+}

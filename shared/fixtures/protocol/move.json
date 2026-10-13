@@ -1,0 +1,279 @@
+{
+  "about": "A move (C§4.8): three saves under S, one of whose hashes T already holds (archived on T, unread on S), and T's items expected after it: S's two others with text.servers listing T's servers, and T's own copy kept and only un-archived. Every event verifies and decrypts; a platform's move is checked by decrypting what it published under T.",
+  "defaults": {
+    "v": 1,
+    "operator": {
+      "relay": "wss://relay.kefli.example",
+      "blossom": "https://blossom.kefli.example",
+      "api": "https://api.kefli.example"
+    },
+    "relays": ["wss://relay-a.example", "wss://relay-b.example"],
+    "indexer": ["wss://indexer.example"],
+    "mirrors": ["https://mirror.example"]
+  },
+  "source": {
+    "secret_key": "3a626e76f786cf8d7f374dd657952dadb87e313f04f69abc52353b1188d97fe6",
+    "pubkey": "cb24f53a3cf834aee80f3c26fb74d31c251287783c1fdee6fbc7a86bc9575325",
+    "library_key": "2e50c5732ff72d5afe6ba36b0bcdde7f06d2826937589209c8adb87b9cf37394",
+    "library_key_record": {
+      "kind": 30078,
+      "created_at": 1791000099,
+      "tags": [
+        ["d", "kefli/library-key"],
+        ["t", "kefli"]
+      ],
+      "content": "AqoVn/aETiyYjyJXBoCn0jQXJ64rCk679ngrgMFSmdVBS4WFNuml/qMlh9H6qvg9uw2qR0J/0Oo/b2+HtnXA5n0hNdEfzrqJFac0XR4Z0fNnSao3C7m5VEyUQU5CcmaqhRRlJiFRuaAV8d2f55YgHgHjL6/A65QkPPXrXbkuxPyx12SvYJ04Km1q9X9RtwDSsSj05F+rLM9LxcXmxISZehMeuw==",
+      "pubkey": "cb24f53a3cf834aee80f3c26fb74d31c251287783c1fdee6fbc7a86bc9575325",
+      "id": "e38a4cf9c00ad1401706c83d788ce8d2c75178982f345686f61798f9157a22d9",
+      "sig": "58b9d753671b7320fe7ae813d3907888e22f1bfb90c74ac53f327e81f08b535edddf86fdd31084b231c4d9468164de8348550c5ff2fd62a54f3295c62d17e345"
+    },
+    "items": [
+      {
+        "hash": "f7f1d9a8680a796587390b067e36b64d751357c8edb949dc2844d2ec6b84442f",
+        "d": "kefli/item/da328ee92c9bed7e44ec843527d16d75281c6edf49164edcf739b3adfedd6ec3",
+        "event": {
+          "kind": 30078,
+          "created_at": 1791000100,
+          "tags": [
+            ["d", "kefli/item/da328ee92c9bed7e44ec843527d16d75281c6edf49164edcf739b3adfedd6ec3"],
+            ["t", "kefli"]
+          ],
+          "content": "AmMvJ3cE0U0q+dXpyiXQTSPOTR0FkqvEmqtfyGm852PdaIy7yoUlsHGh669h7smRHqtUmPqs0cHb7v4VF5BddU6MlB4PMTfmsUv15FowgdppNUuHOabeIpYaNgDxMslg2cplqHk6yXSFmpPUccTVBdbQy+c7eh8eP3N9Fi7jTLI2j+wZuD5N5dAFuA5y3lOoKdPxV/3WljzWmy3ZguKy4RpzZx9JJrMvuBOJoBsTHobO2ak8QqFjL3APXhUBKrtl6zguwxTrPVjEACFA/cOAB9zawRN0rwe3yCe+fYxZ4ApzcvGsrOuMyvdDvWy9FRoTx17JBD4CYV0B1RGkj7KPplC3MEm2F1fRmthxCpgm2aNI7BeCvc6EAmmnESJActfInUAizD4q246UUeAY+F2FR1Yo4s9mP4xLiexA196PcuHasZ8u40v/pixfGx1nZwKzu5PNjVhHV9aC5UWLPp/Lq2EMKUTDQR8XHbBlfOU+4Ko3JO+iNGRcgB3V8XHuyCVL1hfSH1sPeAkQtK8sGDxqoh+rcY7KK9iJe+I8PqLLJq9CEHloHHSUrh8uU9q6FaujwwNKScSKQ8/C7zcl8tnxnp+OBZ+6rMCkbQZL1h1HtxhsdQC9CmpDbAV9rG2ROCFSFsrmE39icsdXpslvOJEwO1htA6/bvLcs9EWbo3Ki0fEY7Ty4QW9VYsFzjhLovczS/2NpNDcQ5v0yIR137jPI1BhMkVSxqMPuAGpOoBLHqwOP1P31bT99flMep75yuQhhfHEs8oSASyq+eoI2GTcZ5y7Mnd0+x1+5iPOJM5hSLIjk4tSpQ1RXm5t3F2Fi8qHCVdq2686xfd7wN9Lr5EYA5vmdLUqq5fy0Fn7UtOJ0hOzQSIFGaJtJfhpKjEOzPJAZhTK6et3zoMuVu7tdFKbJlTKxoBqw9LEN8948uDdhexQy0DM=",
+          "pubkey": "cb24f53a3cf834aee80f3c26fb74d31c251287783c1fdee6fbc7a86bc9575325",
+          "id": "467847711bdcb92e1278425c7d5db850bdd66838a08c1f65e0055adaf2ae627c",
+          "sig": "0527fa7391b920312b857eecc97901daa4d9e11c2504894fab5bd9de55e6ab511a38d2135701d4a209d28d8daf084f629b082b62240d7b971d568733c51f31d6"
+        },
+        "item": {
+          "v": 1,
+          "url": "https://example.com/first",
+          "canonical": null,
+          "title": "First",
+          "site": "example.com",
+          "byline": null,
+          "saved_at": 1791000001,
+          "state": "unread",
+          "progress": 0,
+          "words": 8,
+          "lang": "en",
+          "text": {
+            "sha256": "c53f0bb03a89bd98cece7bc3db798f082dfcfbc2c2078435f7d314954e905736",
+            "key": "Z9uZG8pXYi4y6jnuRs+m6/esSTiYQVJl2tXAQdHTgU4=",
+            "nonce": "xROqhXiWW/2MxEd0",
+            "servers": ["https://blossom.kefli.example", "https://mirror.example"]
+          },
+          "text_hash": "068da020759ed8379ee0c01c30f437d0de365268d59ba783567b69408aafb7a6",
+          "hero": null,
+          "source_kind": "web",
+          "audio_pref": null,
+          "hash": "f7f1d9a8680a796587390b067e36b64d751357c8edb949dc2844d2ec6b84442f"
+        }
+      },
+      {
+        "hash": "2597dbe99118d4d0cd6098dc4fdfe6ca1f9bd7765c2e1195f70966af8af73a1f",
+        "d": "kefli/item/afd939f93e4e2cb07994bc97870e311f4d360d374e393283cb798bff3ef628cd",
+        "event": {
+          "kind": 30078,
+          "created_at": 1791000101,
+          "tags": [
+            ["d", "kefli/item/afd939f93e4e2cb07994bc97870e311f4d360d374e393283cb798bff3ef628cd"],
+            ["t", "kefli"]
+          ],
+          "content": "AnWWdRBVC+7e3waOLhN6m2MbnGBViPceD8WLY6kcePjcDTx7eq2iYAuYA6AhteQlQo6RVziDmvjaL3FYniDo1tjjsnzQYn04pGCQW4+kcJoMq5ZPjKr32eOVl0JlInnyfPRY0Av9c7ZIRG37CjHu8raMToeOucZAVJI3T6sKU/JIsdWr+UPw5CGMSdjJilStxGKHMoQVMuOwc3ErFgV8ifoQxEpWnVc50GauD8RfYPxYz3sJw8cI9wLecyWKnBAVeNWk8HfiM0cx4xDFe5BteJQi7xR88dp7WtX/AzQQpNZHONSfTH81lp8Y6cviflxhX6P2txKwbWXdjPwfnLTT+h+7GjB7wtBfn6tUpmgmg42r0eonwk9BjxQjqw52p1RT/bUR/15zq4fhWQWdk3MNmiFvT9vfcbvY/fI+1efLm1kT/qBUgiWwThXyRpR65LzYAeNAYU5fJOJ+myplXETzxwH4mrHz8uMZiFEq+7GhFFCxOttlrO1yI5vp0aOKYHZq6dbIrNVscC8/c8WIDgOZceUZNOKzwZ0oEwBri9RFAQCkwpUitK7xRC7es2DrVAajuBkW/Hf+U0qXlMqfX63Lue7MRNT7t9dXQnbnqMREJ8/hsXAKO2R9d99euk5QI7sNgk7I0DNtCIF5FeVEQ4eoA0KYr5xZ881M6nMokRAgz3QYew9VBQ48LrBOVpZ/IMRXb4U/BZTjpGqQBNlnQMoI+dAWvtkcKrLOXg6/ZMDjqV5VNZsGg8TjXrllPwR3HfKsd1pccai7CAq0QxZwLqbP4ACDOT5R5QTyh5gWVxJ/MFAMBuaWEdZ0gmoWMThMHiK3jKfvTmlQh3qICbHdiVvFtkErTFgdnlSSreKzsGQML9LFS3onN4WPoFqAl37+xtppii+5CsDG804+q7rVmYa06YnmEOUdo5qSNou8UrEt9XeCDE0=",
+          "pubkey": "cb24f53a3cf834aee80f3c26fb74d31c251287783c1fdee6fbc7a86bc9575325",
+          "id": "916be24bbb14099057d40b154ee68e2d8f40e9e6e2c668d50dc6cf54d8aa770c",
+          "sig": "bcb38989c444b86e5da8c427d8cc0fa01fb81bf09006cc52432b93a659c1b6483c58e0d25dd57456cf8042676386364593fbe6e02190717a6c2ae6016afd3170"
+        },
+        "item": {
+          "v": 1,
+          "url": "https://shared.example/both",
+          "canonical": null,
+          "title": "Both, as S saved it",
+          "site": "shared.example",
+          "byline": null,
+          "saved_at": 1791000002,
+          "state": "unread",
+          "progress": 0,
+          "words": 12,
+          "lang": "en",
+          "text": {
+            "sha256": "687e24cac6c094c918d0420318fd77d8824a039026316be7eba26e979576e380",
+            "key": "MaGJ4np+ypd07pl/hIdhaSiGSAS+B0ptHXQRRHohyW0=",
+            "nonce": "4DqBP3QgV+EfMVL0",
+            "servers": ["https://blossom.kefli.example", "https://mirror.example"]
+          },
+          "text_hash": "c8f00f3cd77b50448bd34834c697b37c5339df406006acabc886fcb33fcec0c4",
+          "hero": null,
+          "source_kind": "web",
+          "audio_pref": null,
+          "hash": "2597dbe99118d4d0cd6098dc4fdfe6ca1f9bd7765c2e1195f70966af8af73a1f"
+        }
+      },
+      {
+        "hash": "e65a9357ce69f17d775d4b0ba14c366400971fa691879d1232a396b57e4f9fca",
+        "d": "kefli/item/1845a409a1602c4e1b73ff2991af387597bcc0dd7d708032bc03ecc46f0425f8",
+        "event": {
+          "kind": 30078,
+          "created_at": 1791000102,
+          "tags": [
+            ["d", "kefli/item/1845a409a1602c4e1b73ff2991af387597bcc0dd7d708032bc03ecc46f0425f8"],
+            ["t", "kefli"]
+          ],
+          "content": "Aj57l6wr0pRAvmnUEjvtJLeVtOBBfxVvu96zW5gjXL9YGQp447Qc4TFkEaCM3curqAeTOLIYe9RnqBcKj9nRsZH17WNSkhxM09cxZl5+SnHF8oA9OqOBXwHS5FeWe2fBjgMVdyup1zXd34RtecLF7x2PiK38wIj9Pim8xISbPxwMcA4DLIsz2e391CeGBUHX4C5zJ00xoCZr4hJ0rpoQlwYz522d1noNbXfvxTKTWPrMocEEs57njvhwTjeQTpz4zSsR/YSy22FctN0ErH0HFi6uzNqtsVr5e7n5o3PxxrP6iSy32SeDXAhPxfyzc5Tt2Ut8SoO8bh+iJ3TMIRZPmcgEEqVe5hpSG/wERs/q2t4apxFQmIzEC1ArmORYDzR15efXyGX/GyoXlDAqvGY2Aq69BBQaoY0YjlciPl1Iu8G/m/DVysnn4sb5d7cfqORok2Fu6YLVTcUQkJHkvzB0dWSX+4yNXcJu6x5B8HKxsgOqjvPNkPbr+IKJlwL+yR/tH6Om4D2KtipL3wKc47r5+Au0/GoEl9d9OdoCB8oiEm892IGSAW2YI45MBQcquy31e4PgFdm61QBWjSnmBxt0R/qAWQ==",
+          "pubkey": "cb24f53a3cf834aee80f3c26fb74d31c251287783c1fdee6fbc7a86bc9575325",
+          "id": "fc3ec9028dd1f3f52da3df695473e9f496728f2adeb2d3bcdf7826bce7142545",
+          "sig": "2f41f355aefbc1e9b915474e24be6d225575d1ea590e116f2101a922d7fe7fd5de42efa0da7ac5787d69505e44fd085d515f88532cdedac68d4c4c16418de221"
+        },
+        "item": {
+          "v": 1,
+          "url": "https://example.com/no-text",
+          "canonical": null,
+          "title": "No text",
+          "site": "example.com",
+          "byline": null,
+          "saved_at": 1791000003,
+          "state": "unread",
+          "progress": 0,
+          "words": null,
+          "lang": "en",
+          "text": null,
+          "text_hash": null,
+          "hero": null,
+          "source_kind": "web",
+          "audio_pref": null,
+          "hash": "e65a9357ce69f17d775d4b0ba14c366400971fa691879d1232a396b57e4f9fca"
+        }
+      }
+    ]
+  },
+  "target": {
+    "secret_key": "19853f3153f728f2936e5034579a04a3fdf15fe345844a4891a72afb74dce27b",
+    "pubkey": "f2858fb5675361d0338595e67738a562b7b61d93dc25b2a8dffa8ec8644ad2dc",
+    "library_key": "da69ca8277dfe222d387ce556784ef02b5576877e9640f8d6f1f8e2a94842442",
+    "library_key_record": {
+      "kind": 30078,
+      "created_at": 1790913900,
+      "tags": [
+        ["d", "kefli/library-key"],
+        ["t", "kefli"]
+      ],
+      "content": "Alu/MOcOVlXR+eQh0BhPfkt6W79dhYC9NR4Cj8CMDFC6GhMHUkiBmMff6IqM4V/yDsubVLEzRUWuw7+U5RC2rgO/d9F9Ez7E1SWnALtjevwZTg6LGkx1Dr0RZZWi0PXjjSMCnuZ8hxi8+HtWOBhoZly5EaopzLBcDPWKofWvrX2zNq0yUEyRIQmYwu0rTqbC1ziL2FPitycLhQNu44yFKKUEHA==",
+      "pubkey": "f2858fb5675361d0338595e67738a562b7b61d93dc25b2a8dffa8ec8644ad2dc",
+      "id": "fb0e8cc0d31387efd41df91503823f9b065a6fed125201fabdafe8bc08aa0a7b",
+      "sig": "de6b1de8d2566b9c22c616c40b90d3f6ddcd85f15affa39aed910dfcc002c56b78c106e62aec0a3d245166be305663f120b989abc9ede01b9b561722b13cb07e"
+    },
+    "items": [
+      {
+        "hash": "2597dbe99118d4d0cd6098dc4fdfe6ca1f9bd7765c2e1195f70966af8af73a1f",
+        "d": "kefli/item/2e6f5a062abe33f06e891992035a3643bd47711c663133fd116be4d7b3442563",
+        "event": {
+          "kind": 30078,
+          "created_at": 1790914000,
+          "tags": [
+            ["d", "kefli/item/2e6f5a062abe33f06e891992035a3643bd47711c663133fd116be4d7b3442563"],
+            ["t", "kefli"]
+          ],
+          "content": "Aitu1Rn+gNINrw7tC2E9IJWkxVxvSRBr07Vh9FKPfMACddqEOasVkMQowXahdNydmPjSTPAsyeasz4p+MrRaTPpSCZZe5GIvFaEvTl792HA12+r+cWl5bmk3NTyZZ7g3GeTntvrpeQUDo0bm8rORh1c172eGYnAxlpSo22i1cuEv9OQxNHnvNsVRHnKMIxP6haMVPPxuhbvFk1gzFuqGvVzsQmIxgsRuvZHcKP9WLHaA9dlrZIKdLQUC2ScCn/OUr9XMr66PsVg9fE1z++ZJ4jegjkj2SGHR9gqK/1q97J7BgUlvj4SmAnQog35R43wktTeTwfxtqsGLg+ORuo0Uda7JXgO8isW8KKqgr0RBUDzkGArtlzKhQgtoH/LNhVIuMoJ3odcxfEnDmpxIptYoQWHQ12yNXW4m2p+PXPaWPaxU3Zx2NC3HH8KeRqC+2+MMYh4IaO8wWaIlfRsdy9SoeZpjU93Jm+RJNYY7NXqKQ1MdKjsfxJUr1RN49nZpSGgfy/59HTTySMljhkZeseoVMf9O36oRabitwwqpqwyS16cNzVi/9MVetX/VEZqBqm+YSP7jGWzxsPCU6ev7hCS5ocO0BQ==",
+          "pubkey": "f2858fb5675361d0338595e67738a562b7b61d93dc25b2a8dffa8ec8644ad2dc",
+          "id": "ddaf0de647ae6801977a244f98c28d5e80bdd1671614afc6cd0a70c9ecb5fba4",
+          "sig": "a205ba038abe0cf371d353033c56300d8ad5c76ed81cb41e727ac18255c07fff069741cc62f2040c2cebddc8f0971a047582d11da6cc73cb8668744a38581067"
+        },
+        "item": {
+          "v": 1,
+          "url": "https://shared.example/both",
+          "canonical": null,
+          "title": "Both, as T has it",
+          "site": "shared.example",
+          "byline": null,
+          "saved_at": 1790913600,
+          "state": "archived",
+          "progress": 0,
+          "words": null,
+          "lang": "en",
+          "text": null,
+          "text_hash": null,
+          "hero": null,
+          "source_kind": "web",
+          "audio_pref": null,
+          "hash": "2597dbe99118d4d0cd6098dc4fdfe6ca1f9bd7765c2e1195f70966af8af73a1f"
+        }
+      }
+    ]
+  },
+  "blobs": {
+    "c53f0bb03a89bd98cece7bc3db798f082dfcfbc2c2078435f7d314954e905736": "d/72wLSIUIoYQ1Qo7KAsRG+e83usnbWlrWzmVuT1q1NE/l5zvDwntpgjH9kTm87dO2On4650IA/EY4mrEzfH",
+    "687e24cac6c094c918d0420318fd77d8824a039026316be7eba26e979576e380": "aPwjKsRS8cd9uSeqceK9it0FpfpSP/I+N12ZtN63QCRz8GDs9GaCi7fl3fyFBnPuc5Nih6syJ6T8q06WqVBj9QxCc1EqLy3hPjOq7o6pgWR1vzw="
+  },
+  "expected": [
+    {
+      "hash": "f7f1d9a8680a796587390b067e36b64d751357c8edb949dc2844d2ec6b84442f",
+      "item": {
+        "v": 1,
+        "url": "https://example.com/first",
+        "canonical": null,
+        "title": "First",
+        "site": "example.com",
+        "byline": null,
+        "saved_at": 1791000001,
+        "state": "unread",
+        "progress": 0,
+        "words": 8,
+        "lang": "en",
+        "text": {
+          "sha256": "c53f0bb03a89bd98cece7bc3db798f082dfcfbc2c2078435f7d314954e905736",
+          "key": "Z9uZG8pXYi4y6jnuRs+m6/esSTiYQVJl2tXAQdHTgU4=",
+          "nonce": "xROqhXiWW/2MxEd0",
+          "servers": ["https://blossom.kefli.example", "https://mirror.example"]
+        },
+        "text_hash": "068da020759ed8379ee0c01c30f437d0de365268d59ba783567b69408aafb7a6",
+        "hero": null,
+        "source_kind": "web",
+        "audio_pref": null,
+        "hash": "f7f1d9a8680a796587390b067e36b64d751357c8edb949dc2844d2ec6b84442f"
+      }
+    },
+    {
+      "hash": "2597dbe99118d4d0cd6098dc4fdfe6ca1f9bd7765c2e1195f70966af8af73a1f",
+      "item": {
+        "v": 1,
+        "url": "https://shared.example/both",
+        "canonical": null,
+        "title": "Both, as T has it",
+        "site": "shared.example",
+        "byline": null,
+        "saved_at": 1790913600,
+        "state": "unread",
+        "progress": 0,
+        "words": null,
+        "lang": "en",
+        "text": null,
+        "text_hash": null,
+        "hero": null,
+        "source_kind": "web",
+        "audio_pref": null,
+        "hash": "2597dbe99118d4d0cd6098dc4fdfe6ca1f9bd7765c2e1195f70966af8af73a1f"
+      }
+    },
+    {
+      "hash": "e65a9357ce69f17d775d4b0ba14c366400971fa691879d1232a396b57e4f9fca",
+      "item": {
+        "v": 1,
+        "url": "https://example.com/no-text",
+        "canonical": null,
+        "title": "No text",
+        "site": "example.com",
+        "byline": null,
+        "saved_at": 1791000003,
+        "state": "unread",
+        "progress": 0,
+        "words": null,
+        "lang": "en",
+        "text": null,
+        "text_hash": null,
+        "hero": null,
+        "source_kind": "web",
+        "audio_pref": null,
+        "hash": "e65a9357ce69f17d775d4b0ba14c366400971fa691879d1232a396b57e4f9fca"
+      }
+    }
+  ]
+}
