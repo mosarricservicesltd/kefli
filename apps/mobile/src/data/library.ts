@@ -108,9 +108,8 @@ export function deleteItem(db: SqlDb, now: number, owner: string, hash: string):
       targets: writeRelays(db, owner), held: true,
     });
     const held = [del];
-    const servers = row.text_servers ? (JSON.parse(row.text_servers) as string[]) : [];
-    const mine = row.text_sha256 && db.get('SELECT 1 FROM blobs WHERE sha256 = ? AND owner = ?', row.text_sha256, owner);
-    if (row.text_sha256 && servers.length && mine) {
+    const servers = row.text_sha256 ? blobServers(db, owner, hash, row.text_sha256, row.text_servers) : [];
+    if (row.text_sha256 && servers.length) {
       held.push(enqueue(db, now, { op: 'delete_blob', signer: owner, subject: row.text_sha256, payload: { sha256: row.text_sha256 }, targets: servers, dependsOn: del, lane: 'bulk', held: true }));
     }
     return {
@@ -121,6 +120,16 @@ export function deleteItem(db: SqlDb, now: number, owner: string, hash: string):
       }),
     };
   });
+}
+
+/**
+ * Where a deleted save's blob goes from (C§4.1): every server its text.servers names, whichever phone uploaded it
+ * (F33), and the mirror this phone's upload reached. None while another save of the owner's still names the blob.
+ */
+function blobServers(db: SqlDb, owner: string, hash: string, sha256: string, named: string | null): string[] {
+  if (db.get('SELECT 1 FROM items WHERE owner = ? AND text_sha256 = ? AND hash != ?', owner, sha256, hash)) return [];
+  const mirror = db.get<{ mirror_url: string }>('SELECT mirror_url FROM blobs WHERE sha256 = ? AND owner = ? AND mirror_at IS NOT NULL', sha256, owner)?.mirror_url;
+  return [...new Set([...(named ? (JSON.parse(named) as string[]) : []), ...(mirror ? [mirror] : [])])];
 }
 
 /** The delete's toast closed without Undo: the row goes, with its search entry and any unsent publish. */
@@ -140,6 +149,16 @@ export function commitOrphanDeletes(db: SqlDb, owner: string): string[] {
   const rows = db.all<{ hash: string }>('SELECT hash FROM items WHERE owner = ? AND pending_delete_at IS NOT NULL', owner);
   for (const r of rows) commitDelete(db, owner, r.hash, []);
   return rows.map((r) => r.hash);
+}
+
+/**
+ * At start, after releaseOrphans (F38): every identity's orphaned deletes are carried out, so no hidden row stays and
+ * no publish queued before the delete goes out after it. Returns the hashes whose files go, no row holding them.
+ */
+export function commitOrphans(db: SqlDb): string[] {
+  const owners = db.all<{ pubkey: string }>('SELECT pubkey FROM identities').map((r) => r.pubkey);
+  const hashes = [...new Set(owners.flatMap((o) => commitOrphanDeletes(db, o)))];
+  return hashes.filter((h) => !hashInUseAfterDelete(db, h));
 }
 
 /** Archive and next's next: the first Unread row in list order whose text is here, other than this one (5.6). */

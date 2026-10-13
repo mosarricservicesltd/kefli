@@ -4,12 +4,12 @@ import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
-import { release } from '../src/data/outbox';
+import { release, releaseOrphans } from '../src/data/outbox';
 import {
-  activeOwner, commitDelete, commitOrphanDeletes, counts, deleteItem, listRows, minutes, minutesLeft, nextUnread, progressOf,
+  activeOwner, commitDelete, commitOrphanDeletes, commitOrphans, counts, deleteItem, listRows, minutes, minutesLeft, nextUnread, progressOf,
   reconcileWords, rowByHash, rowStatus, setArchived, setPosition,
 } from '../src/data/library';
-import { sendOne, type SendPorts } from '../src/services/send';
+import { drain, sendOne, type SendPorts } from '../src/services/send';
 import { memoryDb } from './sqlite';
 
 const D = { v: 1, operator: { relay: 'ws://op', blossom: 'http://blossom', api: 'http://api' }, relays: ['ws://a', 'ws://b'], indexer: ['ws://idx'], mirrors: ['http://m1'] };
@@ -130,6 +130,80 @@ describe('the library (mobile spec 5.6)', () => {
     deleteItem(w.db, 2000, w.pk, h(1));
     expect(commitOrphanDeletes(w.db, w.pk)).toEqual([h(1)]);
     expect(rowByHash(w.db, w.pk, h(1))).toBeUndefined();
+  });
+
+  test('at start, a delete cut short goes through, and a publish queued before it never brings the save back (F38)', async () => {
+    const w = world();
+    w.add(1);
+    w.db.run("UPDATE items SET published = 1, event_id = 'e1', event_created_at = 1000, remote_d = 'kefli/item/' || hash WHERE hash = ?", h(1));
+    w.add(2);
+    // the Reader closed (a position publish queued), then the save was deleted and the process died during the toast
+    setPosition(w.db, 1500, w.pk, h(1), 50, true);
+    deleteItem(w.db, 1600, w.pk, h(1));
+    releaseOrphans(w.db);
+    expect(commitOrphans(w.db)).toEqual([h(1)]);
+    expect(rowByHash(w.db, w.pk, h(1))).toBeUndefined();
+    expect(w.outbox().map((o) => o.op)).toEqual(['delete_item']);
+    let t = 2000;
+    let failA = true;
+    const sent: { relay: string; kind: number }[] = [];
+    const ports: SendPorts = {
+      db: w.db, now: () => t, signer: async () => w.signer, fetch: (async () => new Response('{}')) as never, crypto: nodeCrypto,
+      defaults: () => D as never,
+      publish: async (relay, event) => {
+        if (relay === 'ws://a' && failA) {
+          failA = false;
+          throw new Error('timeout');
+        }
+        sent.push({ relay, kind: event.kind });
+        return { ok: true };
+      },
+      readBlob: async () => null,
+    };
+    await drain(ports);
+    t += 60;
+    await drain(ports);
+    expect(sent.filter((s) => s.kind === 30078)).toEqual([]);
+    expect(sent.filter((s) => s.kind === 5).map((s) => s.relay).sort()).toEqual(['ws://a', 'ws://b', 'ws://op']);
+    expect(commitOrphans(w.db)).toEqual([]);
+  });
+
+  test('a save waiting on its delete’s Undo is not published; Undo lets it go (F38)', async () => {
+    const w = world();
+    w.add(1);
+    setPosition(w.db, 1500, w.pk, h(1), 50, true);
+    const c = deleteItem(w.db, 1600, w.pk, h(1));
+    const sent: NostrEvent[] = [];
+    let t = 1601;
+    const ports: SendPorts = {
+      db: w.db, now: () => t, signer: async () => w.signer, fetch: (async () => new Response('{}')) as never, crypto: nodeCrypto,
+      defaults: () => D as never, publish: async (_r, event) => (sent.push(event), { ok: true }), readBlob: async () => null,
+    };
+    expect(await sendOne(ports)).toBe(true);
+    expect(sent).toEqual([]);
+    c.revert();
+    t += 15;
+    await sendOne(ports);
+    expect(sent.filter((e) => e.tags.some((x) => x[0] === 'd' && x[1].startsWith('kefli/item/')))).toHaveLength(3);
+  });
+
+  test('deleting a save that came by sync deletes its blob from every server it names (F33)', () => {
+    const w = world();
+    // no blobs row: another phone uploaded it
+    w.add(1, { text_sha256: 'ab'.repeat(32), text_servers: JSON.stringify(['http://blossom', 'http://m2']) });
+    const d = deleteItem(w.db, 2000, w.pk, h(1));
+    commitDelete(w.db, w.pk, h(1), d.held);
+    expect(w.outbox().map((o) => [o.op, o.state])).toEqual([['delete_item', 'queued'], ['delete_blob', 'queued']]);
+    const targets = w.db.all<{ target: string }>("SELECT target FROM outbox_targets t JOIN outbox o ON o.id = t.outbox_id WHERE o.op = 'delete_blob' ORDER BY target");
+    expect(targets.map((t) => t.target)).toEqual(['http://blossom', 'http://m2']);
+  });
+
+  test('a blob another save of the owner’s still names stays', () => {
+    const w = world();
+    w.add(1, { text_sha256: 'ab'.repeat(32), text_servers: JSON.stringify(['http://blossom']) });
+    w.add(2, { text_sha256: 'ab'.repeat(32), text_servers: JSON.stringify(['http://blossom']) });
+    deleteItem(w.db, 2000, w.pk, h(1));
+    expect(w.outbox().map((o) => o.op)).toEqual(['delete_item']);
   });
 
   test('the next unread skips this one and saves without their text', () => {
