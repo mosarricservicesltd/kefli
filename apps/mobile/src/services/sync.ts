@@ -76,11 +76,16 @@ export function streamFilter(stream: Stream, owner: string, since: number | null
 type Collected = { relay: string; stream: Stream; events: NostrEvent[] };
 
 async function collect(p: SyncPorts, owner: string, startedAt: number): Promise<Collected[]> {
-  const jobs = readRelays(p.db, owner).flatMap((relay) => (['items', 'deletions'] as Stream[]).map((stream) => ({ relay, stream })));
+  const relays = readRelays(p.db, owner);
+  const jobs = relays.flatMap((relay) => (['items', 'deletions'] as Stream[]).map((stream) => ({ relay, stream })));
+  // while any relay's saves are read from the start (one just added, say), every relay's deletions are too, so a
+  // save it still holds can't come back past a deletion the others got long ago (F35)
+  const backfilling = relays.some((r) => !getCursor(p.db, r, 'items', owner));
   const results = await Promise.all(
     jobs.map(async ({ relay, stream }) => {
       try {
-        const events = await pageStream(p.query, relay, streamFilter(stream, owner, getCursor(p.db, relay, stream, owner)?.since ?? null));
+        const since = stream === 'deletions' && backfilling ? null : getCursor(p.db, relay, stream, owner)?.since ?? null;
+        const events = await pageStream(p.query, relay, streamFilter(stream, owner, since));
         return { relay, stream, events };
       } catch {
         return null; // unreachable: its cursor stays, and the next trigger asks again

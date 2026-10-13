@@ -65,6 +65,7 @@ export function runOutbox(): Promise<number> {
         defaults: () => d,
         publish: (url, event) => pool.publish(url, event),
         readBlob: readStaged,
+        query: (url, filters) => pool.query(url, filters),
       });
     } finally {
       running = null;

@@ -85,18 +85,6 @@ export function enqueue(db: SqlDb, now: number, e: Enqueue): number {
   });
 }
 
-/** Adds targets to the pending row for the same op, signer and subject, keeping its own; with none, enqueues one. */
-export function addTargets(db: SqlDb, now: number, e: Enqueue): number {
-  return db.tx(() => {
-    const existing = pendingRow(db, e.op, e.signer, e.subject);
-    if (!existing) return enqueue(db, now, e);
-    for (const t of new Set(e.targets)) {
-      db.run("INSERT OR IGNORE INTO outbox_targets (outbox_id, target, state, attempts, next_at) VALUES (?, ?, 'pending', 0, ?)", existing.id, t, now);
-    }
-    return existing.id;
-  });
-}
-
 /** The Undo window closed without Undo: held rows go to the queue. */
 export function release(db: SqlDb, ids: number[]): void {
   db.tx(() => {
@@ -191,8 +179,12 @@ export function finish(db: SqlDb, now: number, id: number, results: TargetResult
     const row = db.get<OutboxRow>('SELECT * FROM outbox WHERE id = ?', id);
     if (!row) return 'done';
     for (const r of results) applyResult(db, now, id, r);
-    // A change made during the attempt waits in its own row, which carries the latest state to every target.
-    if (pendingRow(db, row.op, row.signer, row.subject)) {
+    // A change made during the attempt waits in its own row, which carries the latest state to every target,
+    // including any this attempt hadn't reached yet
+    const next = pendingRow(db, row.op, row.signer, row.subject);
+    if (next) {
+      db.run(`INSERT OR IGNORE INTO outbox_targets (outbox_id, target, state, attempts, next_at)
+        SELECT ?, target, 'pending', 0, ? FROM outbox_targets WHERE outbox_id = ? AND state = 'pending'`, next.id, now, id);
       db.run('DELETE FROM outbox WHERE id = ?', id);
       return 'superseded';
     }
