@@ -25,16 +25,20 @@ export type PendingPorts = {
 /** waiting: left for want of a network; xWaiting: X posts whose check X didn't answer (retried, G3). */
 export type PendingResult = { parsed: number; failed: number; waiting: number; xWaiting: number };
 
+/** Pages in a row that time out before the rest of the queue waits too, the network being slow rather than one site. */
+export const SLOW_RUN = 3;
+
 export async function runPendingParses(p: PendingPorts, owner: string): Promise<PendingResult> {
   const out: PendingResult = { parsed: 0, failed: 0, waiting: 0, xWaiting: 0 };
   const queue = pendingParses(p.db, owner);
+  let slow = 0;
   for (let i = 0; queue.length > i; i++) {
     let item: Pending = queue[i];
     // A shared X post is checked first: its article, if it has one, is what gets parsed (5.4).
     if (item.x_state === 'pending') {
       const x = await checkXPost(p.x, item.url);
       if (x.kind === 'offline') {
-        out.waiting = queue.length - i;
+        out.waiting += queue.length - i;
         break;
       }
       if (x.kind === 'xfail') {
@@ -54,9 +58,15 @@ export async function runPendingParses(p: PendingPorts, owner: string): Promise<
       ? { kind: 'failed' as const, reason: 'http' as const, finalUrl: item.url }
       : await fetchPage(p.page, item.url);
     if (outcome.kind === 'offline') {
-      out.waiting = queue.length - i;
+      // one page too slow waits for the next sync without holding up the rest; a run of them is the network (F12)
+      if (outcome.timedOut && ++slow < SLOW_RUN) {
+        out.waiting++;
+        continue;
+      }
+      out.waiting += queue.length - i;
       break;
     }
+    slow = 0;
     if ((await settle(p, owner, item, outcome)) === 'failed') {
       out.failed++;
       continue;

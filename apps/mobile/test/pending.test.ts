@@ -6,6 +6,7 @@ import { seedGeneratedLists } from '../src/data/lists';
 import { pendingParses } from '../src/data/pending';
 import { DESKTOP_UA, MOBILE_UA, PAGE_MAX_BYTES, RENDER_MAX_BYTES, fetchPage, refusal, type ParserResult } from '../src/services/page';
 import { runPendingParses, type PendingPorts } from '../src/services/pending';
+import { TimedOut } from '../src/net/http';
 import { memoryDb } from './sqlite';
 
 const PK = 'ab'.repeat(32);
@@ -153,6 +154,26 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     expect(w.db.get('SELECT text_state, fail_reason FROM items WHERE hash = ?', itemHash('https://a.com/gone'))).toEqual({ text_state: 'failed', fail_reason: 'http' });
     expect(w.outbox().filter((o) => o.op === 'publish_item').map((o) => o.subject)).toEqual([itemHash('https://a.com/gone')]);
     expect(pendingParses(w.db, PK).map((x) => x.url)).toEqual(['https://b.com/later']);
+  });
+
+  test('one page that always times out waits without holding up the shares after it; a run of them stops the queue (F12)', async () => {
+    const w = world({ 'https://b.com/ok': {}, 'https://d.com/ok': {} });
+    const page = w.ports.page.fetch;
+    const slow = new Set(['https://a.com/slow', 'https://c.com/slow', 'https://e.com/slow', 'https://f.com/slow']);
+    w.ports.page.fetch = (async (url: string, init: RequestInit) => {
+      if (slow.has(url)) throw new TimedOut();
+      return page(url, init);
+    }) as never;
+    for (const u of ['https://a.com/slow', 'https://b.com/ok', 'https://c.com/slow', 'https://d.com/ok']) w.share(u);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 2, failed: 0, waiting: 2, xWaiting: 0 });
+    expect(pendingParses(w.db, PK).map((x) => x.url)).toEqual(['https://a.com/slow', 'https://c.com/slow']);
+    // three slow pages in a row read as the network: the rest wait for the next sync, unasked
+    for (const u of ['https://e.com/slow', 'https://f.com/slow', 'https://g.com/never']) w.share(u);
+    const asked: string[] = [];
+    const before = w.ports.page.fetch;
+    w.ports.page.fetch = (async (url: string, init: RequestInit) => (asked.push(url), before(url, init))) as never;
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 0, waiting: 5, xWaiting: 0 });
+    expect(asked).not.toContain('https://g.com/never');
   });
 
   test("another phone's save without text keeps its address when parsed here", async () => {
