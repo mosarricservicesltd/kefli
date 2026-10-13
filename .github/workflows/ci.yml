@@ -1,0 +1,81 @@
+# Every push and pull request (CLAUDE.md, Rules: every platform's CI passes the shared fixtures before merge; mobile
+# spec 11.1; extension spec 11). Needs no secrets: the fixtures, the local stack's images and the Go modules are public.
+#   node         Jest across the protocol package, the app's platform-free code, the website and the extension, with
+#                the contract's fixtures (C§9); the typechecks; the parser bundle and fixture staleness checks
+#   go           go vet and the race-checked tests of server/api
+#   local-stack  the suites that run against server/dev's relays and Blossom server (KEFLI_LOCAL_STACK=1)
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      # no install scripts: the tests need neither Skia's native libraries nor esbuild's binary check
+      - run: npm ci --ignore-scripts
+      - name: Tokens are current
+        run: npm run tokens:check
+      - name: Jest, every project
+        run: npx jest --ci
+      - name: Typecheck the app and its tests, the extension, the website and the protocol package
+        run: npm run typecheck
+      - name: Parser bundle and the vendored files' sha256s
+        run: node shared/vendor/build-parser-bundle.mjs --check
+      - name: Protocol fixtures are what their generator makes (C§9)
+        run: npx tsx shared/fixtures/build-protocol.ts --check
+      - name: PDF fixtures read as stored (C§4.2)
+        run: npx tsx shared/fixtures/build-pdfs.ts --check
+
+  go:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: server/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/api/go.mod
+          cache-dependency-path: server/api/go.sum
+      - run: go vet ./...
+      - run: go test -race ./...
+
+  local-stack:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Start the local stack (three relays, the operator Blossom server and a mirror)
+        run: docker compose -p kefli-ci -f server/dev/compose.yml up -d
+      - name: Wait for the operator relay, a public relay and the operator Blossom server
+        run: |
+          for url in http://localhost:7447 http://localhost:7448 http://localhost:3447; do
+            timeout 120 bash -c "until curl -s -o /dev/null $url; do sleep 2; done"
+          done
+      - name: The pool and the inbox against it (NIP-42 AUTH and the 1059 read gating, contract 3.2)
+        run: KEFLI_LOCAL_STACK=1 npx jest --ci apps/mobile/test/pool.test.ts apps/mobile/test/inbox.test.ts
+      - name: The stack's logs, on failure
+        if: failure()
+        run: docker compose -p kefli-ci -f server/dev/compose.yml logs --no-color
