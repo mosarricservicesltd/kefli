@@ -26,6 +26,18 @@ describe('outbox (mobile spec 4.3)', () => {
     expect(db.all("SELECT * FROM outbox_targets WHERE outbox_id = ? AND state = 'pending'", a)).toHaveLength(2);
   });
 
+  test('a target with no address is refused, and nothing of the change is written (F19)', () => {
+    const db = setup();
+    for (const t of [null, undefined, ''])
+      expect(() => enqueue(db, 0, { op: 'pair_ack', signer: ME, subject: 'd', targets: ['r1', t as unknown as string] })).toThrow('needs an address');
+    expect(db.all('SELECT * FROM outbox')).toEqual([]);
+    expect(db.all('SELECT * FROM outbox_targets')).toEqual([]);
+    // a pending row keeps its targets when a change to it is refused
+    const id = enqueue(db, 0, { op: 'publish_item', signer: ME, subject: 'h', targets: ['r1'] });
+    expect(() => enqueue(db, 1, { op: 'publish_item', signer: ME, subject: 'h', targets: [null as unknown as string] })).toThrow();
+    expect(db.all('SELECT target FROM outbox_targets WHERE outbox_id = ?', id)).toEqual([{ target: 'r1' }]);
+  });
+
   test('a held change merged into a queued row turns it held with was_queued; Undo returns it to the queue', () => {
     const db = setup();
     const id = enqueue(db, 0, { op: 'publish_item', signer: ME, subject: 'h', targets: ['r1'] });

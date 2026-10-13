@@ -87,15 +87,18 @@ export default function Delete() {
     const ports: DelPorts = {
       db: store(), now: () => Math.floor(Date.now() / 1000), signer, defaults, crypto: phoneCrypto, fetch,
       publish: (url, e) => pool.publish(url, e), sleep: (ms) => new Promise<void>((ok) => setTimeout(ok, ms)), wipePhone: wipeEverything,
+      // every save on the user's relays is named, not only those on the phone (C§4.7, F32)
+      query: (url, filters) => pool.query(url, filters as never),
     };
     // a nostr user approves in their app first: every deletion is signed before anything is sent, and declining
-    // deletes nothing (FD 41, prototype del-nostr, del-declined)
-    if (nostr) setPhase('approve');
+    // deletes nothing (FD 41, prototype del-nostr, del-declined). A generated identity's signing reads the relays
+    // first, some seconds, so the rows show waiting from the press (del-running)
+    setPhase(nostr ? 'approve' : 'running');
     let signed;
     try {
       signed = await signDeletion(ports);
     } catch {
-      if (mine === attempt.current) setPhase('declined');
+      if (mine === attempt.current) setPhase(nostr ? 'declined' : 'failed');
       return;
     }
     if (mine !== attempt.current) return;

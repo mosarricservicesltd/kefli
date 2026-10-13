@@ -6,6 +6,18 @@ import { seedGeneratedLists } from '../src/data/lists';
 import { deleteEverything, deleteTargets, progressOf, type DelPorts, type Progress } from '../src/services/deleteAccount';
 import type { RelayAnswer } from '../src/services/send';
 import { memoryDb } from './sqlite';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+describe('the Delete my data screen’s ports', () => {
+  test('the screen passes the relay read, so saves only the relays hold are named (F32)', () => {
+    const src = readFileSync(join(__dirname, '..', 'src', 'screens', 'Delete.tsx'), 'utf8');
+    const at = src.indexOf('const ports: DelPorts = {');
+    expect(src.slice(at, src.indexOf('};', at))).toContain('query: (url, filters) => pool.query(url, filters as never)');
+    // signing reads the relays first: the rows show waiting from the press, for a generated identity too
+    expect(src).toContain("setPhase(nostr ? 'approve' : 'running');");
+  });
+});
 
 const D = { operator: { relay: 'ws://op', blossom: 'http://blossom', api: 'http://api' }, relays: ['ws://a', 'ws://b'], indexer: ['ws://idx'], mirrors: ['http://m1'] };
 const h = (n: number) => n.toString(16).padStart(64, '0');
