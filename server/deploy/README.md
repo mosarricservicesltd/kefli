@@ -85,7 +85,7 @@ Then send a test message to `privacy@kefli.app` from another account.
 
 ## Backups
 
-Nightly at about 04:15 UTC (backend spec 3.8), `kefli-backup` exports the relay's events, copies keflid's database and the write policy's record through SQLite's backup, and sends them with the blobs to a Hetzner Storage Box with restic, keeping 14 daily and 8 weekly snapshots. restic encrypts everything on the box before it leaves, under a password kept in `/etc/kefli/restic.env` (root only) and in the operator's password manager; without it the backups can't be read.
+Nightly at about 04:15 UTC (backend spec 3.8), `kefli-backup` exports the relay's events, copies keflid's database through SQLite's backup, and sends them with the blobs to a Hetzner Storage Box with restic, leaving out the gift wraps, the write policy's record of them and the inbox blobs, which the extension's privacy note promises are gone within 14 days (F31; not in backups from 13 October 2026, and a restore starts without them), keeping 14 daily and 8 weekly snapshots. restic encrypts everything on the box before it leaves, under a password kept in `/etc/kefli/restic.env` (root only) and in the operator's password manager; without it the backups can't be read.
 
 | | |
 |---|---|
