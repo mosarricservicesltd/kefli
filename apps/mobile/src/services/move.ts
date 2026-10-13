@@ -94,7 +94,8 @@ export async function stagedBlob(p: MovePorts, from: string, hash: string): Prom
 async function copyAll(p: MovePorts, job: MoveJob): Promise<boolean> {
   const t = targetsOf(await p.defaults());
   // RULED: S's unsent rows go now that the newer check has passed: every save goes out under T instead
-  p.db.run("DELETE FROM outbox WHERE signer = ? AND state IN ('held','queued','dead')", job.from);
+  // except old addresses still to retire (F5), which step 5 names with S's saves
+  p.db.run("DELETE FROM outbox WHERE signer = ? AND state IN ('held','queued','dead') AND NOT (op = 'delete_item' AND subject LIKE 'retire:%')", job.from);
   const todo = sourceSaves(p.db, job.from, job.moved);
   const total = job.moved.length + todo.length;
   for (const hash of todo) {

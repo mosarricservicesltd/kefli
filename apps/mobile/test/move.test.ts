@@ -5,6 +5,7 @@ import { migrate } from '../src/data/schema';
 import { ensureIdentityRow, queueSave } from '../src/data/saves';
 import { moveJob, queueSwitch } from '../src/data/move';
 import { seedGeneratedLists } from '../src/data/lists';
+import { enqueue } from '../src/data/outbox';
 import { drain } from '../src/services/send';
 import { syncOwner, type Filter } from '../src/services/sync';
 import { runMove, type MovePorts } from '../src/services/move';
@@ -195,6 +196,18 @@ describe('The move (contract 4.8, mobile spec 4.10)', () => {
     expect(await runMove(w.p)).toBe('done');
     expect(rowsOf(w, w.T.pubkey()).length).toBe(1);
     expect(w.relays.get('ws://op')!.filter((e) => e.kind === 30078 && e.pubkey === w.T.pubkey() && e.tags.some((t) => t[1]?.startsWith('kefli/item/'))).length).toBe(1);
+  });
+
+  test('an old address S never managed to retire is deleted with S’s saves (F5)', async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    // S moved this save to its keyed address, but every relay refused the kind 5 for its address before v1.10
+    const old = `kefli/item/${h(1)}`;
+    enqueue(w.db, 1, { op: 'delete_item', signer: w.S.pubkey(), subject: `retire:${old}`, payload: { ds: [old], after: 1 }, targets: ['ws://op'] });
+    w.db.run("UPDATE outbox SET state = 'dead' WHERE subject = ?", `retire:${old}`);
+    expect(await runMove(w.p)).toBe('done');
+    const named = w.relays.get('ws://op')!.filter((e) => e.kind === 5 && e.pubkey === w.S.pubkey()).flatMap((e) => e.tags).map((t) => t[1]);
+    expect(named).toContain(`30078:${w.S.pubkey()}:${old}`);
   });
 
   test('one write relay down still confirms on the other two', async () => {
