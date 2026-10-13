@@ -93,5 +93,6 @@ class KefliVoiceModule : Module() {
     }
     Function("readLog") { VoiceLog.read(context) }
     Function("clearLog") { VoiceLog.clear(context) }
+    Function("setLogging") { on: Boolean -> VoiceLog.enabled = on }
   }
 }

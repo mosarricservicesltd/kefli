@@ -15,7 +15,11 @@ import java.util.Locale
 // For the week-0 locked-on-battery gate: every 30 s while the service runs, one line with the word reached,
 // whether it is speaking, the screen, Doze and the battery. Written to the app's external files, so it can be
 // read after the phone has been unplugged.
+//
+// Off unless the gates screen turns it on, which it does only in the local build (F7): a release build never writes
+// it. Events are logged by type alone, never their contents, which carry the save's hash (mobile spec 7.1).
 object VoiceLog {
+  @Volatile var enabled = false
   private val main = Handler(Looper.getMainLooper())
   private var file: File? = null
   private lateinit var app: Context
@@ -26,9 +30,10 @@ object VoiceLog {
       main.postDelayed(this, 30_000)
     }
   }
-  private val onEvent: (VoiceEngine.Event) -> Unit = { e -> if (e !is VoiceEngine.Event.Word && e !is VoiceEngine.Event.SentenceStart) line(e.toString()) }
+  private val onEvent: (VoiceEngine.Event) -> Unit = { e -> if (e !is VoiceEngine.Event.Word && e !is VoiceEngine.Event.SentenceStart) line(e::class.simpleName ?: "event") }
 
   fun start(context: Context) {
+    if (!enabled) return
     app = context.applicationContext
     file = File(app.getExternalFilesDir(null), "kefli-voice.log")
     VoiceEngine.addListener(onEvent)
@@ -38,7 +43,9 @@ object VoiceLog {
   }
 
   fun stop() {
+    if (file == null) return
     line("service stopped")
+    file = null
     VoiceEngine.removeListener(onEvent)
     main.removeCallbacks(tick)
   }

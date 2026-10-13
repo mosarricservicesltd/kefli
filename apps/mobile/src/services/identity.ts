@@ -4,6 +4,7 @@ import { LocalSigner, NIP46_TIMEOUT_MS, Nip55Signer, newMnemonic, secretKeyFromM
 import { nip55Port } from '../../modules/kefli-nip55/src';
 import { nip46Signer } from './nip46';
 import { KefliKeystore, type KeyIdentity } from '../../modules/kefli-keystore/src';
+import { KefliVoice } from '../../modules/kefli-voice/src';
 import { phoneCrypto } from '../crypto/port';
 import { nativeSecp } from '../crypto/secp';
 import { resolveLaunch, resolveShare, type LaunchPlan, type Origin } from '../data/resolver';
@@ -195,6 +196,8 @@ export async function wipeEverything(): Promise<void> {
   await KefliKeystore.blockStoreRemove().catch(() => undefined);
   wipe(store());
   for (const d of [new Directory(Paths.document, 'kefli'), new Directory(Paths.cache, 'artwork')]) if (d.exists) d.delete();
+  // the voice test log lives in external files, outside the folders above (F7)
+  KefliVoice.clearLog();
   signer = null;
 }
 
