@@ -12,7 +12,7 @@
 //
 // RULED: a request naming another server for its HTML is taken without it, and the page is fetched instead, so a
 // save from a connected browser is never lost to a bad field.
-import { KIND, acceptSaveRequest, decryptText, unwrap, type CryptoPort, type NostrEvent, type Rumor, type SaveRequest, type Signer } from '@kefli/protocol';
+import { KIND, UnwrapError, acceptSaveRequest, decryptText, unwrap, type CryptoPort, type NostrEvent, type Rumor, type SaveRequest, type Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { localRecord } from '../data/devices';
 import {
@@ -29,6 +29,10 @@ import type { Filter } from './sync';
 /** The extension's 2 MB of HTML plus the GCM tag. */
 export const INBOX_MAX_BYTES = 2 * 1_048_576 + 16;
 export const WRAP_LOOKBACK = 172_800 + 300;
+/** How long a wrap the signer can't open, or that can't be taken, keeps the inbox's cursor waiting for it (F3). */
+export const WRAP_PATIENCE = 7 * 86_400;
+// a wrap's created_at is up to two days early (NIP-59), so a week past it is at least five days of trying
+const stale = (p: InboxPorts, w: NostrEvent) => p.now() - w.created_at > WRAP_PATIENCE;
 
 export type InboxPorts = Pick<PendingPorts, 'db' | 'now' | 'crypto' | 'stage' | 'unstage' | 'writeText' | 'targets'> & {
   signer: Signer;
@@ -157,19 +161,38 @@ export async function drainInbox(p: InboxPorts, owner: string): Promise<InboxRes
   } catch {
     return out; // unreachable: the cursor stays
   }
+  let held = false;
   for (const w of wraps.sort((a, b) => a.created_at - b.created_at)) {
     if (w.kind !== KIND.giftWrap || seenOutcome(p.db, w.id)) continue;
+    let opened: Awaited<ReturnType<typeof unwrap>>;
+    try {
+      opened = await unwrap(p.signer, w);
+    } catch (e) {
+      // the signer couldn't answer (out of sight, timed out, declined): the wrap waits for the next drain, unrecorded,
+      // and the cursor stays so it is fetched again (F3); one still failing after a week is filed as not ours
+      if (!(e instanceof UnwrapError) && !stale(p, w)) {
+        held = true;
+        continue;
+      }
+      // not a wrap this key opens: someone else's message sharing the p tag
+      recordSeen(p.db, p.now(), w.id, { owner, outcome: 'ignored_foreign' });
+      out.ignored_foreign = (out.ignored_foreign ?? 0) + 1;
+      continue;
+    }
     let o: Outcome;
     try {
-      const { rumor, seal } = await unwrap(p.signer, w);
-      o = await handle(p, owner, w.id, rumor, seal, d.operator.blossom);
+      o = await handle(p, owner, w.id, opened.rumor, opened.seal, d.operator.blossom);
     } catch {
-      // not a wrap this key opens: someone else's message sharing the p tag
+      // ours, but taking it failed part way (a signer, the network, the database): tried again next drain (F3)
+      if (!stale(p, w)) {
+        held = true;
+        continue;
+      }
       o = 'ignored_foreign';
       recordSeen(p.db, p.now(), w.id, { owner, outcome: o });
     }
     out[o] = (out[o] ?? 0) + 1;
   }
-  setCursor(p.db, startedAt, relay, 'inbox', owner, startedAt);
+  if (!held) setCursor(p.db, startedAt, relay, 'inbox', owner, startedAt);
   return out;
 }

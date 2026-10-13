@@ -54,7 +54,8 @@ function world() {
     captured_at: T0 - 60, token: TOKEN, html: null, ...over,
   });
   const send = async (r: SaveRequest | Record<string, unknown>, from: LocalSigner = device) => {
-    const { wrap } = await wrapSaveRequest(from, owner, String(wraps.length), r as SaveRequest, clock);
+    // the wrap dated by the test's clock too, not the real one (its created_at decides how long it is waited for, F3)
+    const { wrap } = await wrapSaveRequest(from, owner, String(wraps.length), r as SaveRequest, clock, { now: clock });
     wraps.push(wrap);
     return wrap.id;
   };
@@ -97,6 +98,35 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
       ['https://x.com/someone/status/123', 'pending'],
     ]);
     expect(w.parses()).toBe(0);
+  });
+
+  test('a save the signer can’t open out of sight waits for it, then arrives once it answers (F3)', async () => {
+    const w = world();
+    let refusing = true;
+    const user = w.user;
+    w.ports.signer = new Proxy(user, {
+      get: (t, k) => (k === 'nip44Decrypt'
+        ? (peer: string, c: string) => (refusing ? Promise.reject(Object.assign(new Error('background'), { code: 'background' })) : user.nip44Decrypt(peer, c))
+        : Reflect.get(t, k)),
+    });
+    await w.send(w.request());
+    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+    expect(w.db.get('SELECT 1 FROM inbox_seen')).toBeUndefined();
+    expect(w.db.get("SELECT 1 FROM sync_cursors WHERE stream = 'inbox'")).toBeUndefined();
+    refusing = false;
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+  });
+
+  test('a wrap the signer still can’t open after a week is filed as not ours, so the cursor moves on (F3)', async () => {
+    const w = world();
+    w.ports.signer = new Proxy(w.user, {
+      get: (t, k) => (k === 'nip44Decrypt' ? () => Promise.reject(Object.assign(new Error('timeout'), { code: 'timeout' })) : Reflect.get(t, k)),
+    });
+    await w.send(w.request());
+    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+    w.tick(8 * 86_400);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ ignored_foreign: 1 });
+    expect(w.db.get("SELECT 1 AS n FROM sync_cursors WHERE stream = 'inbox'")).toEqual({ n: 1 });
   });
 
   test("other apps' messages, unknown tokens, other keys and other versions are left alone", async () => {

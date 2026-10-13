@@ -5,6 +5,7 @@ import { generateSecretKey, getEventHash } from 'nostr-tools/pure';
 import { v2 as nip44 } from 'nostr-tools/nip44';
 import { KIND, MAX_EVENT_BYTES } from './constants';
 import { EventTooLargeError, signedSize } from './events';
+import { isSignerFailure } from './remoteSigners';
 import { conversationKey, nobleSecp, signEventWith, verifyEventWith } from './secp';
 import type { SecpPort } from './secp';
 import type { EventTemplate, NostrEvent, Signer } from './signer';
@@ -85,15 +86,19 @@ export async function unwrap(recipient: Signer, wrap: NostrEvent, secp: SecpPort
   if (!verifyEventWith(secp, wrap)) throw new UnwrapError('wrap signature');
   let seal: NostrEvent;
   let rumor: Rumor;
+  // a signer that couldn't answer (out of sight, timed out, declined) says nothing about the wrap: its error goes
+  // through as it is, so the caller can wait and ask again rather than file the wrap as not ours (F3)
   try {
     seal = JSON.parse(await recipient.nip44Decrypt(wrap.pubkey, wrap.content));
-  } catch {
+  } catch (e) {
+    if (isSignerFailure(e)) throw e;
     throw new UnwrapError('wrap does not decrypt');
   }
   if (seal.kind !== KIND.seal || !verifyEventWith(secp, seal)) throw new UnwrapError('seal');
   try {
     rumor = JSON.parse(await recipient.nip44Decrypt(seal.pubkey, seal.content));
-  } catch {
+  } catch (e) {
+    if (isSignerFailure(e)) throw e;
     throw new UnwrapError('seal does not decrypt');
   }
   if (rumor.pubkey !== seal.pubkey) throw new UnwrapError('rumor author is not the seal signer');
