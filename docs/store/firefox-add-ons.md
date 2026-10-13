@@ -74,7 +74,7 @@ The menu item reads "Save Link to Kefli" in Firefox, in title case as Firefox's 
 
 **Homepage:** https://kefli.app
 
-**Support site:** https://kefli.app/extension
+**Support site:** https://kefli.app/extension/
 
 **Support email:** privacy@kefli.app (the address the extension privacy note gives; a general support address can replace it when there is one)
 

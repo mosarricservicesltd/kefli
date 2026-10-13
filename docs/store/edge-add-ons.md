@@ -24,7 +24,7 @@ on a clean checkout of the release commit: the same package as the Chrome Web St
 
 **Website:** https://kefli.app
 
-**Support contact detail:** https://kefli.app/extension
+**Support contact detail:** https://kefli.app/extension/
 
 **Mature content:** no.
 
@@ -36,7 +36,7 @@ Every answer is the Chrome Web Store's (`chrome-web-store.md`, Privacy tab), wor
 - **Permission justification:** the five justifications, `activeTab`, `scripting`, `storage`, `alarms` and `contextMenus`.
 - **Are you using remote code?** No, I am not using remote code.
 - **Data usage:** Website content, and nothing else, with all three certifications ticked. A save sends the page's text, title and address, encrypted, to Kefli's server for the user's phone, so Website content is the accurate answer, as on Chrome; Firefox's declaration says the same in its own terms.
-- **Privacy Policy URL:** https://kefli.app/extension-privacy
+- **Privacy Policy URL:** https://kefli.app/extension-privacy/
 
 ## Store listing (English)
 

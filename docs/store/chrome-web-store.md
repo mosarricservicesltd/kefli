@@ -48,13 +48,15 @@ Kefli is open source under the AGPL. More at https://kefli.app
 3. `3-connect.png`: the options page's QR code for connecting the phone.
 4. `4-connected.png`: Connected, with the ways to save.
 
-They're drawn from the signed-off mockup (`docs/design/mockups/extension.html`), since headless Chrome draws no toolbar, by `node apps/extension/scripts/store-screenshots.mjs` after a dev build. The script swaps the mockup's real publication for an example address and draws a real QR code in place of the mockup's placeholder; run it again after any change to the mockup. The small promo tile, 440×280, is `shared/brand/out/extension/cws-promo-tile.png`, made by the brand build (`shared/brand/build-icons.cjs`) with the Play feature graphic's layout.
+They're drawn from the signed-off mockup (`docs/design/mockups/extension.html`), since headless Chrome draws no toolbar, by `node apps/extension/scripts/store-screenshots.mjs` after a dev build. The script swaps the mockup's real publication for an example address and draws a real QR code in place of the mockup's placeholder; run it again after any change to the mockup. The small promo tile, 440×280, is `shared/brand/out/extension/cws-promo-tile.png`, made by the brand build (`shared/brand/build-icons.cjs`) with the Play feature graphic's layout. The store icon, 128×128, is the package's own `shared/brand/out/extension/icon-128.png`, and the marquee promo tile, 1400×560 opaque 24-bit, is the Edge large tile, `shared/brand/out/extension/edge-large-tile.png`.
 
 **Official URL:** none (kefli.app needs verifying in Search Console first; optional).
 
 **Homepage URL:** https://kefli.app
 
-**Support URL:** https://kefli.app/extension
+**Support URL:** https://kefli.app/extension/
+
+Give the dashboard's URLs with the trailing slash. Without it the site answers with a redirect, and on 13 October 2026 the dashboard rejected `https://kefli.app/extension` as "not reachable, timeout while connecting" and took `https://kefli.app/extension/`.
 
 ## Privacy tab
 
@@ -101,7 +103,11 @@ All JavaScript is in the package. The extension fetches a JSON settings file (th
 
 Section 12 of the extension spec says "does not collect or use any user data". The store counts any user data that leaves the browser as collected, encrypted or not, and the article text, title and address of a saved page do leave it, encrypted, on their way to the user's phone. Ticking Website content is the accurate answer, and the privacy note at kefli.app/extension-privacy already describes exactly that. None of the other categories apply: the extension sends no identity, no browsing history beyond the page saved, no location and no activity data. Then tick all three certifications: data isn't sold to third parties, isn't used or transferred for purposes unrelated to the single purpose, and isn't used to determine creditworthiness or for lending.
 
-**Privacy policy URL:** https://kefli.app/extension-privacy
+**Privacy policy URL:** https://kefli.app/extension-privacy/
+
+## Account settings
+
+**Publisher contact email:** privacy@kefli.app, verified on 13 October 2026. The store won't publish any item until it is set and verified; the verification mail reaches the company inbox through the kefli.app forwarder (`server/deploy/README.md`, Mail).
 
 ## Distribution tab
 
