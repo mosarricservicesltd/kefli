@@ -99,9 +99,9 @@ describe('restore with the operator switched off (contract 8, 9)', () => {
     }
   });
 
-  // Fails until F37 is fixed: sync records the 10063 but fetches texts only from the servers table, so a server the
-  // 10063 names that the defaults don't is never asked. When it passes, make it a plain test.
-  test.failing("a text held only by a server the user's 10063 lists comes back too, and the restore finishes", async () => {
+  // F37: a newer 10063 adds the servers it names to the servers table, and the text fetch also asks the servers of
+  // the newest 10063 held, so a server the defaults don't name is still asked.
+  test("a text held only by a server the user's 10063 lists comes back too, and the restore finishes", async () => {
     const r = await restore();
     expect(r.texts.get(ELSEWHERE.hash)).toBe(ELSEWHERE.markdown);
     expect(r.state).toBe('done');
