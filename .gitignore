@@ -2,7 +2,7 @@
 shelf-handover.zip
 
 # Node / Expo
-node_modules/
+node_modules
 .expo/
 dist/
 web-build/
