@@ -14,6 +14,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { motion } from '@kefli/tokens';
 import { KefliSystem } from '../../modules/kefli-system/src';
 import { boot, useApp } from '../services/app';
+import { LOCAL_STACK } from '../services/config';
 import { startSync } from '../services/runner';
 import { FONTS } from '../ui/fonts';
 import { PlayerHost } from '../screens/Player';
@@ -115,8 +116,11 @@ function Main({ app }: { app: NonNullable<ReturnType<typeof useApp>> }) {
             <Stack.Screen name="reader/[hash]/index" />
             <Stack.Screen name="reader/[hash]/original" />
           </Stack.Protected>
-          <Stack.Screen name="gates" />
-          <Stack.Screen name="back-test" />
+          {/* the development gates and their back test: the local stack's build only (gates.tsx) */}
+          <Stack.Protected guard={LOCAL_STACK}>
+            <Stack.Screen name="gates" />
+            <Stack.Screen name="back-test" />
+          </Stack.Protected>
         </Stack>
         <PlayerHost />
         <ToastHost />
