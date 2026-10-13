@@ -35,7 +35,10 @@ export type SendPorts = {
 };
 
 const DAY = 86_400;
-/** Longer than a delete's Undo window, after which the save is gone or shown again. */
+/**
+ * How often a publish held by a delete's Undo looks again. The window itself may run longer (the toast follows
+ * Android's accessibility timeout and pauses while touched); the hold repeats until the save is gone or shown again.
+ */
 const UNDO_WAIT = 15;
 const err = (e: unknown) => String((e as Error)?.message ?? e);
 
