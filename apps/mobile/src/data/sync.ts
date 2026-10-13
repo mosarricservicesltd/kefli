@@ -132,6 +132,9 @@ export function applyItem(db: SqlDb, now: number, owner: string, hash: string, e
     const row = db.get<Row>('SELECT * FROM items WHERE owner = ? AND hash = ?', owner, hash);
     if (parsed.item.v !== 1) return future(db, owner, hash, event, row, parsed.item.v);
     const outcome = mergeItem(version(row), event);
+    // a save deleted here stays deleted while its kind 5 waits to go out, which a read reaching back a day (F36) would
+    // otherwise undo from a relay the kind 5 hasn't reached; once it is out, whatever the relays still hold is read again
+    if (outcome === 'insert' && deletionWaiting(db, owner, hash)) return { outcome: 'ignored' };
     const c = itemColumns(parsed, event);
     if (outcome === 'insert') insertRemote(db, now, owner, hash, c, event);
     if (outcome === 'take') return takeRemote(db, now, owner, row!, c, event, hash === openHash);
@@ -143,6 +146,9 @@ export function applyItem(db: SqlDb, now: number, owner: string, hash: string, e
     return { outcome };
   });
 }
+
+const deletionWaiting = (db: SqlDb, owner: string, hash: string) =>
+  !!db.get("SELECT 1 FROM outbox WHERE op = 'delete_item' AND signer = ? AND subject = ? AND state IN ('held', 'queued', 'sending')", owner, hash);
 
 function future(db: SqlDb, owner: string, hash: string, event: NostrEvent, row: Row | undefined, v: unknown): Applied {
   if (!(typeof v === 'number' && v > 1)) return { outcome: 'ignored' };

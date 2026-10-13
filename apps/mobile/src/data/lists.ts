@@ -1,6 +1,6 @@
 // The identity's relays and servers (mobile spec 4.1, 4.6): seeded from defaults.json for a generated identity,
 // read when building its 10002 and 10063 and choosing where saves go. The indexer relays carry the 10002 only.
-import { KIND, type RelayEntry } from '@kefli/protocol';
+import { KIND, readServerList, sameUrl, type RelayEntry } from '@kefli/protocol';
 import type { SqlDb } from './db';
 import { enqueue } from './outbox';
 
@@ -39,6 +39,35 @@ export function indexerRelays(db: SqlDb, owner: string): string[] {
 
 export function listServers(db: SqlDb, owner: string): string[] {
   return db.all<{ url: string }>('SELECT url FROM servers WHERE owner = ? AND in_10063 = 1 ORDER BY rowid', owner).map((r) => r.url);
+}
+
+/** The servers in the newest 10063 held, sent or seen (C§8): the text fetch asks them too (F37). */
+export function heldServerList(db: SqlDb, owner: string): string[] {
+  const raw = db.get<{ raw: string | null }>("SELECT raw FROM lists WHERE owner = ? AND kind = ? AND d = ''", owner, KIND.serverList)?.raw;
+  try {
+    return raw ? readServerList(JSON.parse(raw) as { tags: string[][] }) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * A newer 10063 seen on a relay (C§8, F37): each server it names that this phone doesn't list joins, so restore and
+ * the text fetch ask it and the next 10063 sent from here keeps it; a server of the person's own that it no longer
+ * names was removed elsewhere. Kefli's own entries stay whatever a list says, as in the 10002.
+ */
+export function keepListedServers(db: SqlDb, owner: string, servers: string[]): void {
+  db.tx(() => {
+    const held = db.all<{ url: string; role: string }>('SELECT url, role FROM servers WHERE owner = ?', owner);
+    for (const url of servers) {
+      if (!held.some((h) => sameUrl(h.url, url))) {
+        db.run("INSERT OR IGNORE INTO servers (url, owner, role, in_10063, added_by_app) VALUES (?, ?, 'user', 1, 0)", url, owner);
+      }
+    }
+    for (const h of held) {
+      if (h.role === 'user' && !servers.some((url) => sameUrl(h.url, url))) db.run('DELETE FROM servers WHERE owner = ? AND url = ?', owner, h.url);
+    }
+  });
 }
 
 /** Whether this identity's lists have been published (the lists table holds the newest copy sent or seen). */
