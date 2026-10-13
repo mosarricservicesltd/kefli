@@ -100,6 +100,7 @@ function Main({ app }: { app: NonNullable<ReturnType<typeof useApp>> }) {
             <Stack.Screen name="add-device" />
             <Stack.Screen name="delete" />
             <Stack.Screen name="advanced" />
+            <Stack.Screen name="add-relay" />
             <Stack.Screen name="switch" />
             <Stack.Screen name="voice" />
           </Stack.Protected>

@@ -947,6 +947,14 @@ svg .arc{transform-box:view-box;transform-origin:center}
       <button data-jump="adv-offline">…offline</button>
       <button data-jump="adv-notbacked">…saves not backed up yet</button>
       <button data-jump="adv-exportfail">…the export failed</button>
+      <button data-jump="adv-mine">…with a relay of your own</button>
+      <button data-jump="adv-remove">…removing it</button>
+      <button data-jump="adv-add">Add a relay</button>
+      <button data-jump="adv-add-bad">…not a relay address</button>
+      <button data-jump="adv-add-checking">…checking</button>
+      <button data-jump="adv-add-unreachable">…it didn’t answer</button>
+      <button data-jump="adv-add-refused">…it won’t take saves</button>
+      <button data-jump="adv-add-offline">…offline</button>
       <button data-jump="sw">Use my nostr app instead</button>
       <button data-jump="sw-none">…no nostr app</button>
       <button data-jump="sw-waiting">…waiting for the nostr app</button>
@@ -1028,6 +1036,7 @@ const I = {
   refresh:'<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
   laptop:'<path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>',
   info:'<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+  plus:'<path d="M5 12h14"/><path d="M12 5v14"/>',
 };
 // Lucide at the token stroke (--icon-stroke 1.75, also set by CSS on svg.i); paths with their own stroke-width keep it
 const ic = (n, s=20, extra='') => `<svg class="i" width="${s}" height="${s}" viewBox="0 0 24 24" ${/fill=/.test(extra) ? '' : 'fill="none"'} stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" ${extra}>${I[n]}</svg>`;
@@ -2136,7 +2145,7 @@ function startRestore(opts = {}){
 const freshYou = () => ({
   backupDone: false, backupHidden: false, nostrUser: false, voices: 1, langs: 1, voiceLang: 0, voiceSel: [0, 0], speed: 1, sampling: null,
   codeShown: false, copied: false, browsers: [{ name: 'Chrome on a Windows PC', when: 'Connected 27 September' }], disconnect: null,
-  conn: 'scan', connectFrom: 'browsers', camOK: true, typed: '', dev: 'show', countdown: 298, relayDown: false, sw: 'explain', swDone: 0,
+  conn: 'scan', connectFrom: 'browsers', camOK: true, typed: '', dev: 'show', countdown: 298, relayDown: false, mine: [], add: 'type', addTyped: '', relayRm: null, sw: 'explain', swDone: 0,
   del: 'explain', delTyped: '', steps: [], notBacked: 0, exportFail: false,
 });
 S.you = freshYou();
@@ -2342,6 +2351,11 @@ function advancedScreen(){
     const st = off ? '<span class="status off">Unreachable</span>' : (Y.relayDown && i === 2 ? '<span class="status down">Not responding</span>' : '<span class="status">Connected</span>');
     return `<div class="yrow"><span class="yi">${ic('server', 20)}</span><span class="yl">${label}<small>${host}</small></span>${st}</div>`;
   }).join('');
+  // the person's own relays after Kefli's (decision 113): each row asks whether to remove it; Kefli's and the backups'
+  // rows don't, since the library outliving the service rests on them. Add a relay ends the group, needing a connection
+  const mine = Y.mine.map((host, i) => `<button class="yrow" data-you-act="relay-rm" data-i="${i}" aria-describedby="rmhint"><span class="yi">${ic('server', 20)}</span><span class="yl">Your relay<small>${esc(host)}</small></span>${off ? '<span class="status off">Unreachable</span>' : '<span class="status">Connected</span>'}</button>`).join('')
+    + `<button class="yrow" data-you-go="addrelay" ${off ? 'disabled' : ''}><span class="yi">${ic('plus', 20)}</span><span class="yl">Add a relay<small>${off ? 'Needs a connection' : 'Copy your saves to a relay you choose'}</small></span><span class="chev">${ic('chev', 18)}</span></button>`;
+  const n = RELAYS.length + Y.mine.length;
   // the notice slot, error first: an export that failed, with Try again in the action bar (G9), then the count of saves no
   // backup server holds yet (decision 93; a save is backed up once a relay Kefli doesn't run has accepted its newest change
   // and, for a save with text, a mirror holds its text). While any aren't, the note under the relays speaks of the other
@@ -2351,12 +2365,55 @@ function advancedScreen(){
     + (nb ? `<div class="notice info" data-fk="notice-backup">${ic('info', 16)}<span>${Say(nb)} ${nb === 1 ? 'save isn’t' : 'saves aren’t'} backed up yet. Kefli keeps trying until a backup server accepts ${nb === 1 ? 'it' : 'them'}.</span></div>` : '');
   return onbShell(`<h1>Advanced</h1>${slot}
     <div class="gtitle">Relays</div>
-    <div class="ygroup">${relays}</div>
-    <p class="gnote">Your ${nb ? 'other ' : ''}saves are copied to all three. Any one of them is enough to bring your library back.${Y.relayDown && !off ? ' Saves will reach relay.damus.io when it answers again.' : ''}</p>
+    <div class="ygroup">${relays}${mine}</div><span id="rmhint" hidden>Asks whether to remove it</span>
+    <p class="gnote">Your ${nb ? 'other ' : ''}saves are copied to all ${say(n)}. Any one of them is enough to bring your library back.${Y.relayDown && !off ? ' Saves will reach relay.damus.io when it answers again.' : ''}</p>
     <div class="ygroup">
       <button class="yrow" data-you-act="export"><span class="yi">${ic('download', 20)}</span><span class="yl">Export my saves<small>One file with every link and its text</small></span></button>
       ${Y.nostrUser ? '' : `<button class="yrow" data-you-go="switchnostr" ${off ? 'disabled' : ''}><span class="yi">${ic('login', 20)}</span><span class="yl">Use my nostr app instead<small>${off ? 'Needs a connection' : 'Move your saves to your nostr account'}</small></span><span class="chev">${ic('chev', 18)}</span></button>`}
     </div>`, Y.exportFail ? `<button class="btn primary full" data-you-act="export">Try again</button>` : '', 'you');
+}
+
+// Add a relay (decision 113): one field, built like the sign-in link's. Add relay checks the address, then that the relay
+// answers and takes the person's newest relay list, already signed, so nothing asks to sign; the check shows in the
+// pressed button. A problem is a field error with the address kept and selected, and typing clears it. Added, Advanced
+// returns with the toast and the saves are copied in the background. A nostr user is told the relay joins the list
+// their other apps share. In the prototype an address with "paid" in it refuses, and one with "down" doesn't answer.
+const ADD_ERR = {
+  bad: 'That isn’t a relay address. It looks like wss://relay.example.com.',
+  listed: 'Kefli already copies your saves to that relay.',
+  unreachable: 'That relay didn’t answer. Check the address, or try again later.',
+  refused: 'That relay won’t take your saves. It may need an account or a payment.',
+};
+const relayAddr = v => { const m = /^(?:wss:\/\/)?((?:[a-z0-9-]+\.)+[a-z0-9-]+)(:\d{1,5})?(\/[^\s?#@]*)?$/i.exec(v.trim()); return m ? m[1].toLowerCase() + (m[2] || '') + (m[3] === '/' ? '' : m[3] || '') : null; };
+function addRelayScreen(){
+  const Y = S.you, off = !S.online, busy = Y.add === 'checking', err = ADD_ERR[Y.add] || '';
+  return onbShell(`<h1>Add a relay</h1>${off ? offlineNotice('You’re offline. Adding a relay needs a connection.') : ''}
+    <p class="lead">Kefli copies your saves to it as well as to the relays it already uses. They stay encrypted, so only you can read them.${Y.nostrUser ? ' It joins the relay list your other apps share too.' : ''}</p>
+    <div class="field1 ${err ? 'bad' : ''}"><input id="rlink" placeholder="wss://relay.example.com" aria-label="Relay address" inputmode="url" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="rlinkerr" ${err ? 'aria-invalid="true"' : ''} ${busy ? 'readonly' : ''} value="${esc(Y.addTyped)}"><i class="ering" data-op="ering-rlink" aria-hidden="true"></i></div>
+    <div class="fielderr" id="rlinkerr" data-xf="ferr-rlink">${err}</div>`,
+    `<button class="btn primary full ${busy ? 'busy' : ''}" data-you-act="relay-add" ${busy ? 'aria-busy="true"' : ''} ${off || !Y.addTyped.trim() ? 'disabled' : ''}>${busyLabel('addrelay', busy, 'Checking the relay', 'Add relay')}</button>`, busy ? null : 'advanced');
+}
+
+function relayRemoveSheet(){
+  const host = S.you.mine[S.you.relayRm];
+  return `<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" data-stop><div class="grab"></div><h3>Remove this relay?</h3>
+    <p class="sub">Kefli stops copying your saves to ${esc(host)}. What it already holds stays there, encrypted.</p>
+    <div class="row"><button class="btn secondary" data-close>Cancel</button><button class="btn danger" data-you-act="relay-rm-yes">Remove</button></div></div></div>`;
+}
+
+function relayCheck(){
+  const Y = S.you, host = relayAddr(Y.addTyped);
+  clearOnb();
+  if (!host) { Y.add = 'bad'; return; }
+  if (Y.mine.includes(host) || RELAYS.some(r => r[1] === host)) { Y.add = 'listed'; return; }
+  Y.add = 'checking';
+  later(() => {
+    if (S.screen !== 'addrelay' || Y.add !== 'checking') return;
+    if (/paid/.test(host)) Y.add = 'refused';
+    else if (/down/.test(host)) Y.add = 'unreachable';
+    else { Y.mine.push(host); Y.add = 'type'; Y.addTyped = ''; S.screen = 'advanced'; showToast(`Copying your saves to ${host}`, null, null, { delay: MT.exit.duration }); }
+    render();
+  }, 1400);
 }
 
 function switchScreen(){
@@ -2473,6 +2530,19 @@ function bindYou(){
       if (v.length === 9) { Y.conn = v === 'K7QM-4XPD' ? 'confirm' : 'typewrong'; render(); }
     };
   }
+  const rl = document.getElementById('rlink');
+  if (rl) {
+    // an address with a problem keeps its value, selected, so pasting again replaces it; typing clears the error
+    const bad = () => !!ADD_ERR[Y.add];
+    if (bad()) { rl.focus(); rl.select(); }
+    rl.oninput = () => {
+      Y.addTyped = rl.value;
+      const go = vp.querySelector('[data-you-act="relay-add"]'); if (go) go.disabled = !S.online || !rl.value.trim();
+      if (!bad()) return;
+      Y.add = 'type'; rl.parentElement.classList.remove('bad'); rl.removeAttribute('aria-invalid'); const er = document.getElementById('rlinkerr'); if (er) swapText(er, '');
+    };
+    rl.onkeydown = e => { if (e.key === 'Enter' && S.online && rl.value.trim()) { relayCheck(); render(); } };
+  }
   const dt = document.getElementById('deltype');
   if (dt) dt.oninput = () => {
     dt.value = dt.value.toUpperCase(); Y.delTyped = dt.value;
@@ -2514,6 +2584,7 @@ vp.addEventListener('click', e => {
       if (Y.camOK) scanThenConfirm();
     }
     if (go === 'switchnostr') Y.sw = 'explain';
+    if (go === 'addrelay') { Y.add = 'type'; Y.addTyped = ''; }
     if (go === 'nostrbg') { S.bgFrom = 'you'; S.nostr = 'bg'; S.sheet = null; S.screen = 'nostr'; render(); return; }
     if (go === 'nostrapp') { S.sheet = null; S.screen = 'nostrapp'; render(); return; }
     if (go === 'delete') { Y.del = 'explain'; Y.delTyped = ''; }
@@ -2556,6 +2627,9 @@ vp.addEventListener('click', e => {
     // one speed list; the stepper clamps within it (fix 7)
     case 'speed': { const k = RATES.indexOf(Y.speed) + i; Y.speed = RATES[Math.max(0, Math.min(RATES.length - 1, k))]; S.rate = Y.speed; if (S.audio) S.audio.rate = S.rate; break; }
     case 'export': Y.exportFail = false; showToast('Saved kefli-export.html to Downloads'); break;
+    case 'relay-add': if (Y.add === 'checking') return; relayCheck(); break;
+    case 'relay-rm': Y.relayRm = i; S.sheet = 'relayremove'; S.sheetOpener = `[data-you-act="relay-rm"][data-i="${i}"]`; break;
+    case 'relay-rm-yes': { const host = Y.mine.splice(Y.relayRm, 1)[0]; S.sheet = null; S.sheetOpener = '[data-you-go="addrelay"]'; showToast(`Removed ${host}`); break; }
     case 'sw-start':
       if (!S.online) return;
       Y.sw = 'waiting';
@@ -2611,6 +2685,15 @@ function youJump(j){
   else if (j === 'adv-offline') { at('advanced'); S.online = false; }
   else if (j === 'adv-notbacked') { at('advanced'); Y.notBacked = 2; }
   else if (j === 'adv-exportfail') { at('advanced'); Y.exportFail = true; }
+  else if (j === 'adv-mine') { at('advanced'); Y.mine = ['relay.example.org']; }
+  else if (j === 'adv-remove') { at('advanced'); Y.mine = ['relay.example.org']; Y.relayRm = 0; S.sheet = 'relayremove'; }
+  else if (j.startsWith('adv-add')) {
+    at('addrelay');
+    const k = j.slice(8) || 'type';
+    Y.add = k === 'offline' ? 'type' : k; if (k === 'offline') S.online = false;
+    Y.addTyped = { bad: 'https://relay.example.org', unreachable: 'relay.down.example', refused: 'relay.paid.example', checking: 'relay.example.org' }[k] || '';
+    if (k === 'checking') { Y.add = 'type'; relayCheck(); }
+  }
   else if (j === 'sw') { at('switchnostr'); Y.sw = 'explain'; }
   else if (j === 'sw-waiting') { at('switchnostr'); Y.sw = 'waiting'; }
   else if (j === 'sw-declined') { at('switchnostr'); Y.sw = 'declined'; }
@@ -2953,6 +3036,7 @@ function sheetHTML(){
   }
   if (S.sheet === 'recovery') return recoverySheet();
   if (S.sheet === 'disconnect') return disconnectSheet();
+  if (S.sheet === 'relayremove') return relayRemoveSheet();
   if (S.sheet === 'nostrdisc') return nostrDisconnectSheet();
   if (S.sheet === 'import') {
     return `<div class="scrim"><div class="sheet" role="dialog" aria-modal="true" aria-label="Bring in your bookmarks?" data-stop><div class="grab"></div><h3>Bring in your bookmarks?</h3><p class="sub">${importLine(S.importCount)}</p><div class="row"><button class="btn secondary" data-import="no">Not now</button><button class="btn primary" data-import="yes">Bring them in</button></div></div></div>`;
@@ -4029,6 +4113,7 @@ function render(){
   else if (S.screen === 'connect') html = connectScreen();
   else if (S.screen === 'voice') html = voiceScreen();
   else if (S.screen === 'advanced') html = advancedScreen();
+  else if (S.screen === 'addrelay') html = addRelayScreen();
   else if (S.screen === 'switchnostr') html = switchScreen();
   else if (S.screen === 'nostrapp') html = nostrAppScreen();
   else if (S.screen === 'delete') html = deleteScreen();

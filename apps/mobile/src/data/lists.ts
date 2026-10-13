@@ -1,7 +1,8 @@
 // The identity's relays and servers (mobile spec 4.1, 4.6): seeded from defaults.json for a generated identity,
 // read when building its 10002 and 10063 and choosing where saves go. The indexer relays carry the 10002 only.
-import type { RelayEntry } from '@kefli/protocol';
+import { KIND, type RelayEntry } from '@kefli/protocol';
 import type { SqlDb } from './db';
+import { enqueue } from './outbox';
 
 export type DefaultsLike = { operator: { relay: string; blossom: string }; relays: string[]; indexer: string[]; mirrors: string[] };
 
@@ -45,8 +46,17 @@ export function hasList(db: SqlDb, owner: string, kind: number): boolean {
   return !!db.get('SELECT 1 FROM lists WHERE owner = ? AND kind = ?', owner, kind);
 }
 
+/** Keeps the newest copy: an older one, sent or seen, never replaces it (F36). */
 export function recordList(db: SqlDb, owner: string, kind: number, eventId: string, createdAt: number, raw: string): void {
-  db.run("INSERT OR REPLACE INTO lists (owner, kind, d, event_id, created_at, raw) VALUES (?, ?, '', ?, ?, ?)", owner, kind, eventId, createdAt, raw);
+  db.run(`INSERT INTO lists (owner, kind, d, event_id, created_at, raw) VALUES (?, ?, '', ?, ?, ?)
+    ON CONFLICT (owner, kind, d) DO UPDATE SET event_id = excluded.event_id, created_at = excluded.created_at, raw = excluded.raw
+    WHERE excluded.created_at >= lists.created_at`, owner, kind, eventId, createdAt, raw);
+}
+
+/** A new list's created_at: after both of the identity's lists already held, whatever this phone's clock says (F36). */
+export function nextListTime(db: SqlDb, owner: string, now: number): number {
+  const held = db.get<{ t: number | null }>("SELECT MAX(created_at) AS t FROM lists WHERE owner = ? AND kind IN (?, ?) AND d = ''", owner, KIND.relayList, KIND.serverList)?.t;
+  return Math.max(now, (held ?? 0) + 1);
 }
 
 /**
@@ -96,4 +106,102 @@ function keepUserServers(db: SqlDb, owner: string, d: DefaultsLike, servers: str
  */
 export function confirmedAbsent(d: DefaultsLike, answered: Set<string>): boolean {
   return d.indexer.every((r) => answered.has(r)) && d.relays.filter((r) => answered.has(r)).length >= 2;
+}
+
+/**
+ * A typed relay address as the 10002 holds it (FD 113): wss:// added when no scheme is given, the host lowercased,
+ * a bare trailing / dropped. Any other scheme, credentials, a query or a fragment is refused (null). Written
+ * without URL, whose parsing Hermes doesn't fully have.
+ */
+export function relayAddress(typed: string): string | null {
+  const s = typed.trim();
+  const rest = /^[a-z][a-z0-9+.-]*:\/\//i.test(s) ? (/^wss:\/\//i.test(s) ? s.slice(6) : null) : s;
+  const m = rest === null ? null : /^((?:[a-z0-9-]+\.)+[a-z0-9-]+|localhost|\[[0-9a-f:]+\])(:\d{1,5})?(\/[^\s?#@]*)?$/i.exec(rest);
+  if (!m) return null;
+  const path = m[3] === '/' ? '' : m[3] ?? '';
+  return `wss://${m[1].toLowerCase()}${m[2] ?? ''}${path}`;
+}
+
+export type RelayRow = { url: string; source: 'operator' | 'default' | 'user'; removable: boolean };
+
+const isLocal = (db: SqlDb, owner: string) =>
+  (db.get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local') === 'local';
+
+/**
+ * Advanced's write relays (5.8, FD 113), in the 10002's order. A relay of the person's own is removable there on a
+ * generated identity, where only Advanced adds one; for a nostr user only when this phone added it, since the rest
+ * are the list their other nostr apps share.
+ */
+export function relayRows(db: SqlDb, owner: string): RelayRow[] {
+  const local = isLocal(db, owner);
+  return db
+    .all<{ url: string; source: RelayRow['source']; added_at: number | null }>(
+      "SELECT url, source, added_at FROM relays WHERE owner = ? AND source != 'indexer' AND write = 1 ORDER BY rowid", owner)
+    .map((r) => ({ url: r.url, source: r.source, removable: r.source === 'user' && (local || r.added_at !== null) }));
+}
+
+/**
+ * A relay the person adds in Advanced (FD 113, C§3.1): it joins the 10002 for reading and writing, and the lists go
+ * out again. The library reaches it as already signed: copy_relay copies the newest event of each save and every
+ * deletion the other write relays hold, unchanged, so nothing is re-signed from this phone's state, which may be
+ * behind another phone's (F16, F35). Changes still waiting or sending here gain it as a target (F17). A row it
+ * replaces (an indexer, a nostr user's read-only entry) is kept in prior, for removal to restore (F34). A generated
+ * identity that hasn't saved yet gets its default lists first, so its first save still writes to Kefli's relays.
+ * Returns false when the relay is already one Kefli writes to.
+ */
+export function addRelay(db: SqlDb, now: number, owner: string, url: string, d: DefaultsLike): boolean {
+  return db.tx(() => {
+    if (isLocal(db, owner)) seedGeneratedLists(db, owner, d);
+    const held = db.get<{ read: number; write: number; source: string; added_by_app: number }>(
+      'SELECT read, write, source, added_by_app FROM relays WHERE owner = ? AND url = ?', owner, url);
+    if (held?.write && held.source !== 'indexer') return false;
+    if (held) {
+      db.run("UPDATE relays SET read = 1, write = 1, source = 'user', added_by_app = 0, added_at = ?, prior = ? WHERE owner = ? AND url = ?",
+        now, JSON.stringify(held), owner, url);
+    } else {
+      db.run("INSERT INTO relays (url, owner, read, write, source, added_by_app, added_at) VALUES (?, ?, 1, 1, 'user', 0, ?)", url, owner, now);
+    }
+    if (hasList(db, owner, KIND.relayList)) publishLists(db, now, owner, []);
+    db.run(`INSERT OR IGNORE INTO outbox_targets (outbox_id, target, state, attempts, next_at)
+      SELECT id, ?, 'pending', 0, ? FROM outbox WHERE signer = ? AND op IN ('publish_item', 'delete_item') AND state IN ('held', 'queued', 'sending')`,
+      url, now, owner);
+    if (db.get('SELECT 1 FROM items WHERE owner = ? AND published = 1', owner)) {
+      enqueue(db, now, { op: 'copy_relay', signer: owner, subject: url, targets: [url], lane: 'bulk' });
+    }
+    return true;
+  });
+}
+
+/**
+ * A relay the person added, removed in Advanced (FD 113): Kefli stops writing to it and sends the lists without it,
+ * to it as well, so its copy of the 10002 can't bring it back. A row it replaced comes back as it was. What the
+ * relay holds stays there. Kefli's relay and the backups aren't removable, since the library outliving the service
+ * rests on them (C§1).
+ */
+export function removeRelay(db: SqlDb, now: number, owner: string, url: string): boolean {
+  return db.tx(() => {
+    if (!relayRows(db, owner).some((r) => r.url === url && r.removable)) return false;
+    const prior = db.get<{ prior: string | null }>('SELECT prior FROM relays WHERE owner = ? AND url = ?', owner, url)?.prior;
+    if (prior) {
+      const p = JSON.parse(prior) as { read: number; write: number; source: string; added_by_app: number };
+      db.run('UPDATE relays SET read = ?, write = ?, source = ?, added_by_app = ?, added_at = NULL, prior = NULL WHERE owner = ? AND url = ?',
+        p.read, p.write, p.source, p.added_by_app, owner, url);
+    } else {
+      db.run('DELETE FROM relays WHERE owner = ? AND url = ?', owner, url);
+    }
+    // a copy still waiting stops, and so do waiting changes' sends to it; a row left with no target goes
+    db.run("DELETE FROM outbox WHERE signer = ? AND op = 'copy_relay' AND subject = ? AND state IN ('held', 'queued')", owner, url);
+    db.run(`DELETE FROM outbox_targets WHERE target = ? AND state = 'pending'
+      AND outbox_id IN (SELECT id FROM outbox WHERE signer = ? AND op IN ('publish_item', 'delete_item') AND state IN ('held', 'queued'))`, url, owner);
+    db.run(`DELETE FROM outbox WHERE signer = ? AND op IN ('publish_item', 'delete_item') AND state IN ('held', 'queued')
+      AND NOT EXISTS (SELECT 1 FROM outbox_targets t WHERE t.outbox_id = outbox.id)`, owner);
+    if (hasList(db, owner, KIND.relayList)) publishLists(db, now, owner, [url]);
+    return true;
+  });
+}
+
+/** The 10002 and 10063 to every write relay and indexer, and to any extra (C§3.1, 4.3). */
+function publishLists(db: SqlDb, now: number, owner: string, extra: string[]): void {
+  const targets = [...new Set([...writeRelays(db, owner), ...indexerRelays(db, owner), ...extra])];
+  enqueue(db, now, { op: 'publish_lists', signer: owner, subject: owner, targets });
 }

@@ -86,7 +86,14 @@ ALTER TABLE items ADD COLUMN backed_event TEXT;
 UPDATE items SET backed_event = event_id WHERE published = 1;
 `;
 
-export const MIGRATIONS: ((db: SqlDb) => void)[] = [(db) => db.exec(V1), (db) => db.exec(V2), (db) => db.exec(V3)];
+// v4: when a relay was added in Advanced (FD 113, C§3.1), which makes it removable there, and the row it replaced
+// (JSON of read, write, source and added_by_app), which removing it restores; both null for every other row.
+const V4 = `
+ALTER TABLE relays ADD COLUMN added_at INTEGER;
+ALTER TABLE relays ADD COLUMN prior TEXT;
+`;
+
+export const MIGRATIONS: ((db: SqlDb) => void)[] = [(db) => db.exec(V1), (db) => db.exec(V2), (db) => db.exec(V3), (db) => db.exec(V4)];
 export const SCHEMA_VERSION = MIGRATIONS.length;
 
 /** Opens the schema: WAL, foreign keys, then every migration past the stored version, each in a transaction. */

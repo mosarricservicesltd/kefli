@@ -76,11 +76,16 @@ export function streamFilter(stream: Stream, owner: string, since: number | null
 type Collected = { relay: string; stream: Stream; events: NostrEvent[] };
 
 async function collect(p: SyncPorts, owner: string, startedAt: number): Promise<Collected[]> {
-  const jobs = readRelays(p.db, owner).flatMap((relay) => (['items', 'deletions'] as Stream[]).map((stream) => ({ relay, stream })));
+  const relays = readRelays(p.db, owner);
+  const jobs = relays.flatMap((relay) => (['items', 'deletions'] as Stream[]).map((stream) => ({ relay, stream })));
+  // while any relay's saves are read from the start (one just added, say), every relay's deletions are too, so a
+  // save it still holds can't come back past a deletion the others got long ago (F35)
+  const backfilling = relays.some((r) => !getCursor(p.db, r, 'items', owner));
   const results = await Promise.all(
     jobs.map(async ({ relay, stream }) => {
       try {
-        const events = await pageStream(p.query, relay, streamFilter(stream, owner, getCursor(p.db, relay, stream, owner)?.since ?? null));
+        const since = stream === 'deletions' && backfilling ? null : getCursor(p.db, relay, stream, owner)?.since ?? null;
+        const events = await pageStream(p.query, relay, streamFilter(stream, owner, since));
         return { relay, stream, events };
       } catch {
         return null; // unreachable: its cursor stays, and the next trigger asks again
@@ -196,8 +201,15 @@ export async function syncLists(p: SyncPorts, owner: string): Promise<void> {
     if (!latest || (held && held.created_at >= latest.created_at)) continue;
     recordList(p.db, owner, kind, latest.id, latest.created_at, JSON.stringify(latest));
     if (kind !== KIND.relayList) continue;
-    for (const e of readRelayList(latest)) {
+    const entries = readRelayList(latest);
+    for (const e of entries) {
       p.db.run("INSERT OR IGNORE INTO relays (url, owner, read, write, source, added_by_app) VALUES (?, ?, ?, ?, 'user', 0)", e.url, owner, e.read ? 1 : 0, e.write ? 1 : 0);
+    }
+    // a relay of the person's own that the newer list dropped was removed elsewhere (FD 113), unless this phone
+    // added it after that list was made
+    const listed = new Set(entries.map((e) => e.url));
+    for (const r of p.db.all<{ url: string; added_at: number | null }>("SELECT url, added_at FROM relays WHERE owner = ? AND source = 'user'", owner)) {
+      if (!listed.has(r.url) && (r.added_at ?? 0) <= latest.created_at) p.db.run('DELETE FROM relays WHERE owner = ? AND url = ?', owner, r.url);
     }
   }
 }

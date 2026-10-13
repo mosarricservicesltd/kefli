@@ -287,6 +287,35 @@ describe('inbound sync (mobile spec 4.5)', () => {
     expect(w.db.get('SELECT event_id FROM lists WHERE kind = 10002')).toEqual({ event_id: list.id });
   });
 
+  test('a relay of the person’s own that a newer list drops was removed on another phone, unless added here since (FD 113)', async () => {
+    const w = world();
+    const base = [{ url: 'ws://op', read: true, write: true }, { url: 'ws://a', read: true, write: true }, { url: 'ws://b', read: true, write: true }];
+    w.db.run("INSERT INTO relays (url, owner, read, write, source, added_by_app) VALUES ('ws://x', ?, 1, 1, 'user', 0)", w.pk);
+    w.db.run("INSERT INTO relays (url, owner, read, write, source, added_by_app, added_at) VALUES ('ws://y', ?, 1, 1, 'user', 0, 2000)", w.pk);
+    w.publish(await buildRelayList(w.signer, base, 1500), ['ws://idx']);
+    await syncInbound(w.ports);
+    expect(w.db.all<{ url: string }>("SELECT url FROM relays WHERE source = 'user' ORDER BY url")).toEqual([{ url: 'ws://y' }]);
+    // Kefli's own entries stay whatever a list says
+    expect(w.db.get("SELECT 1 AS n FROM relays WHERE url = 'ws://op'")).toEqual({ n: 1 });
+  });
+
+  test('a relay read from the start can’t bring back a save the others deleted long ago (F35)', async () => {
+    const w = world();
+    // both well before the cursors' five-minute slack, so only a full read of deletions finds the kind 5 again
+    const old = await remoteSave(w, h(20), 200, null, { title: 'Deleted one', saved_at: 200 });
+    const [del] = await buildDeletions(w.signer, [`kefli/item/${h(20)}`], 300);
+    w.publish(old, ['ws://op', 'ws://a', 'ws://b']);
+    w.publish(del, ['ws://op', 'ws://a', 'ws://b']);
+    await syncInbound(w.ports);
+    expect(row(w, h(20))).toBeUndefined();
+    // much later, a relay that missed the deletion joins the list
+    w.tick(10_000);
+    w.relays.get('ws://x')!.push(old);
+    w.db.run("INSERT INTO relays (url, owner, read, write, source, added_by_app, added_at) VALUES ('ws://x', ?, 1, 1, 'user', 0, ?)", w.pk, w.ports.now());
+    await syncInbound(w.ports);
+    expect(row(w, h(20))).toBeUndefined();
+  });
+
   test("a badly formed item from another client is read safely", () => {
     const bad = { item: { url: 'https://e.com', title: '', site: 7, state: 'weird', words: -3, progress: 'x', saved_at: null,
       text: { sha256: 'aa', key: 'bb', nonce: 3 }, text_hash: 'th', source_kind: null, hero: 'https://e.com/h.jpg' }, extra: { later: 1 } } as never;

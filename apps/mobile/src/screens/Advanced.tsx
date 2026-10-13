@@ -3,17 +3,19 @@
 // are any, after which the note under the relays speaks of "your other saves"; a relay not answering is named in
 // the note. Export my saves writes kefli-export.html to Downloads, offline too, then the toast; a failed export puts
 // its line in the notice slot with Try again (adv-exportfail, G9). Use my nostr app instead opens the switch, and is
-// hidden for a nostr user, who has nothing to switch from. "relay" appears in the copy here only (FD 86).
+// hidden for a nostr user, who has nothing to switch from. Add a relay, last in the group, opens its screen
+// (FD 113), needing a connection; a relay the person added is "Your relay", and its row asks whether to remove it,
+// which stops the copying and sends the lists without it. "relay" appears in the copy here only (FD 86).
 import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { radius } from '@kefli/tokens';
 import { notBackedUp } from '../data/backup';
-import { relayEntries } from '../data/lists';
+import { relayRows, removeRelay, type RelayRow } from '../data/lists';
 import { useApp } from '../services/app';
 import { loadDefaults } from '../services/config';
 import { exportSaves } from '../services/export';
-import { relayStatus } from '../services/runner';
+import { relayStatus, runOutbox } from '../services/runner';
 import { store } from '../services/store';
 import { Icon, type IconName } from '../ui/Icon';
 import { useLive } from '../ui/live';
@@ -21,6 +23,7 @@ import { useOnline } from '../ui/online';
 import { Press, pressLayer } from '../ui/Press';
 import { Button } from '../ui/Button';
 import { ErrLine } from '../ui/Notice';
+import { closeSheet, openSheet } from '../ui/sheet';
 import { S } from '../ui/strings';
 import { showToast } from '../ui/toast';
 import { T, ui } from '../ui/text';
@@ -29,13 +32,8 @@ import { OnbShell } from './Onb';
 
 type Status = 'up' | 'down' | 'off' | 'checking';
 
-const hostOf = (u: string) => {
-  try {
-    return new URL(u).host;
-  } catch {
-    return u;
-  }
-};
+/** The address without its scheme or path, written without URL, whose parsing Hermes doesn't fully have. */
+export const hostOf = (u: string) => u.replace(/^[a-z]+:\/\//i, '').replace(/\/.*$/, '');
 
 function Pill({ status }: { status: Status }) {
   const { c } = useTheme();
@@ -49,8 +47,8 @@ function Pill({ status }: { status: Status }) {
   );
 }
 
-function Row({ icon, label, sub, right, first, onPress, disabled }: {
-  icon: IconName; label: string; sub?: string; right?: React.ReactNode; first?: boolean; onPress?: () => void; disabled?: boolean;
+function Row({ icon, label, sub, right, first, onPress, disabled, hint }: {
+  icon: IconName; label: string; sub?: string; right?: React.ReactNode; first?: boolean; onPress?: () => void; disabled?: boolean; hint?: string;
 }) {
   const { c } = useTheme();
   const body = (
@@ -67,10 +65,28 @@ function Row({ icon, label, sub, right, first, onPress, disabled }: {
   const style = { minHeight: 56, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 12, paddingVertical: 8, paddingHorizontal: 16, opacity: disabled ? 0.45 : 1 };
   if (!onPress && disabled === undefined) return <View accessible style={style}>{body}</View>;
   return (
-    <Press accessibilityRole="button" accessibilityLabel={label} accessibilityHint={sub} accessibilityState={{ disabled: !!disabled }} disabled={disabled}
+    <Press accessibilityRole="button" accessibilityLabel={label} accessibilityHint={hint ? `${sub ?? ''}. ${hint}` : sub} accessibilityState={{ disabled: !!disabled }} disabled={disabled}
       onPress={onPress} layer={pressLayer(c.text)} style={style}>
       {body}
     </Press>
+  );
+}
+
+function RemoveSheet({ owner, url, close }: { owner: string; url: string; close: () => void }) {
+  const yes = () =>
+    closeSheet(() => {
+      if (removeRelay(store(), Math.floor(Date.now() / 1000), owner, url)) runOutbox().catch(() => undefined);
+      showToast({ text: S.adv.removed(hostOf(url)) });
+    });
+  return (
+    <View>
+      <T accessibilityRole="header" style={[ui(20, 'emptyHeading', 1.3, -0.01), { marginBottom: 4 }]}>{S.adv.removeTitle}</T>
+      <T muted style={[ui(13, 'body', 1.45), { marginBottom: 16 }]}>{S.adv.removeBody(hostOf(url))}</T>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <Button label={S.adv.cancel} kind="secondary" style={{ flex: 1 }} onPress={close} />
+        <Button label={S.adv.remove} kind="danger" style={{ flex: 1 }} onPress={yes} />
+      </View>
+    </View>
   );
 }
 
@@ -87,7 +103,8 @@ export default function Advanced() {
   const [status, setStatus] = useState<Record<string, Status>>({});
   const [exportFailed, setExportFailed] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const relays = useLive(() => (owner ? relayEntries(store(), owner).filter((r) => r.write).map((r) => r.url) : []), ['relays'], [owner]);
+  const rows = useLive((): RelayRow[] => (owner ? relayRows(store(), owner) : []), ['relays'], [owner]);
+  const relays = rows.map((r) => r.url);
   const local = useLive(() => (store().get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local') === 'local', ['identities'], [owner]);
   const notBacked = useLive(() => (owner ? notBackedUp(store(), owner) : 0), ['items', 'blobs', 'outbox'], [owner]);
 
@@ -106,12 +123,13 @@ export default function Advanced() {
     };
   }, [relays.join(',')])); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Kefli's relay first, then the backups in the 10002's order
-  const ordered = [...relays].sort((a, b) => (a === operator ? -1 : b === operator ? 1 : 0));
+  // Kefli's relay first, then the backups and the person's own in the 10002's order
+  const ordered = [...rows].sort((a, b) => (a.url === operator ? -1 : b.url === operator ? 1 : 0));
   let k = 0;
-  const label = (u: string) => (u === operator ? S.adv.operator : S.adv.backup(++k));
+  const label = (r: RelayRow) => (r.url === operator ? S.adv.operator : r.source === 'user' ? S.adv.yours : S.adv.backup(++k));
+  const askRemove = (url: string) => openSheet(S.adv.removeTitle, (close) => <RemoveSheet owner={owner} url={url} close={close} />);
   const statusOf = (u: string): Status => (!online ? 'off' : status[u] ?? 'checking');
-  const down = online ? ordered.filter((u) => status[u] === 'down').map(hostOf) : [];
+  const down = online ? relays.filter((u) => status[u] === 'down').map(hostOf) : [];
 
   const doExport = async () => {
     if (exporting) return;
@@ -138,7 +156,12 @@ export default function Advanced() {
       )}
       <T muted style={[ui(13, 'groupLabel', 1.3), { marginBottom: 8 }]}>{S.adv.relays}</T>
       <View style={{ marginBottom: 8, borderRadius: radius.container, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line, overflow: 'hidden' }}>
-        {ordered.map((u, i) => <Row key={u} first={i === 0} icon="server" label={label(u)} sub={hostOf(u)} right={<Pill status={statusOf(u)} />} />)}
+        {ordered.map((r, i) => (
+          <Row key={r.url} first={i === 0} icon="server" label={label(r)} sub={hostOf(r.url)} right={<Pill status={statusOf(r.url)} />}
+            onPress={r.removable ? () => askRemove(r.url) : undefined} hint={r.removable ? S.adv.removeHint : undefined} />
+        ))}
+        <Row first={ordered.length === 0} icon="plus" label={S.adv.add} sub={online ? S.adv.addSub : S.adv.needsConnection} disabled={!online}
+          onPress={() => router.push('/add-relay')} right={<Icon name="chev" size={18} color={c.muted} />} />
       </View>
       <T muted style={[ui(13, 'body', 1.45), { marginBottom: 20 }]}>
         {S.adv.copied(notBacked > 0, ordered.length)}{down.length ? ` ${S.adv.willReach(down)}` : ''}

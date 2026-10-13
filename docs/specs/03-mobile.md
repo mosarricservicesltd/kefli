@@ -28,7 +28,7 @@ MS still says draft although FD 73 signed it off. Files that C§3.1, §4.2, §4.
 
 | File | Writer | By |
 |---|---|---|
-| `shared/normalise.ts` and its fixtures | Mobile engineer drafts; project engineer owns. Written 6 October 2026; the choices the contract left open were settled in contract v1.4 (C§11.5) and are listed in the fixtures' `rulings` | End of week 0 |
+| `shared/normalise.ts` and its fixtures | Mobile engineer drafts; project engineer owns. Written 6 October 2026; the choices the contract left open were settled in contract v1.4 (C§11.6) and are listed in the fixtures' `rulings` | End of week 0 |
 | `shared/turndown-rules.json` (C§4.2) | Project engineer, from `shared/vendor/parser-runner.js`. Written 6 October 2026, its sha256 in `shared/vendor/VERSIONS.md` | End of week 0 |
 | `shared/fixtures/` (C§9, covers included) | Project engineer; page fixtures from a pinned headless Chromium run of the vendored bundle, outside every client's CI, its version in `shared/vendor/VERSIONS.md` | Weeks 1–2 |
 | `shared/defaults.json` (schema in C§3.1) | Backend engineer, after the week-1 relay and mirror tests (C§3.1, C§5) | Week 1 |
@@ -39,7 +39,7 @@ MS still says draft although FD 73 signed it off. Files that C§3.1, §4.2, §4.
 |---|---|---|
 | Stack | Kotlin, Compose, Room, WorkManager, rust-nostr | Expo SDK 57, TypeScript, expo-sqlite, nostr-tools, six local native modules |
 | Protocol code | Kotlin modules | `packages/protocol`, shared with the extension and later iOS |
-| Kinds | 30979, 979, 978 | 30078 under `kefli/` d tags (C§11.8; the namespace from C§11.4) |
+| Kinds | 30979, 979, 978 | 30078 under `kefli/` d tags (C§11.9; the namespace from C§11.5) |
 | Listening | SystemVoice and CachedVoice | On-device voice in Kefli's own media session (FD 22, T§3) |
 | Screens | Library, Material 3 | Fingerprint and the signed-off prototype (FD 65, FD 75) |
 
@@ -49,7 +49,7 @@ The app is the reference client for what the contract leaves to a client: parsin
 
 **In scope:** FM's seven journeys (first launch, returning to a library, saving from the phone and from the browser, reading, listening, You), with Search (FD 51), Speed read (FD 21), typed-code pairing (C§4.4), Keep backup copies (FD 76), moving saves (C§4.8), shared X posts (FD 78), covers (FD 65) and Export (`adv`).
 
-**Out of scope:** server audio and `CachedVoice` (C§6.1, FD 22); "Open in app" and any public deep link (FD 9); Recommend (C§4.5); NIP-05 names (C§6); private relays (C§11.7); notifications (FD 15); seeking (FD 48); tags, folders, highlights, widgets, Wear, discovery; tablets beyond "doesn't break". Pasting an nsec isn't on the flow map and isn't built; v1.3 dropped it from C§2 (FD 90).
+**Out of scope:** server audio and `CachedVoice` (C§6.1, FD 22); "Open in app" and any public deep link (FD 9); Recommend (C§4.5); NIP-05 names (C§6); private relays (C§11.8); notifications (FD 15); seeking (FD 48); tags, folders, highlights, widgets, Wear, discovery; tablets beyond "doesn't break". Pasting an nsec isn't on the flow map and isn't built; v1.3 dropped it from C§2 (FD 90).
 
 **Platform floor:** `minSdkVersion` 26, because word positions come from `onRangeStart` (T§2); compile and target SDK 36; portrait phones; arm64-v8a releases, plus x86_64 for the CI emulator.
 
@@ -529,7 +529,7 @@ Leaving moves the audio to the same word, and the Reader lights it for 1.6 s; wp
 | Recovery code sheet (`rec-hidden`, `rec-shown`, `rec-copied`, FD 27, FD 74) | Copy confirms inside the sheet; after Done, focus on the Recovery code row |
 | Add another device (`dev`, `dev-expired`) | 3.6; expired fades the QR to 12 %; offline notice; generating shows a skeleton QR (FM) |
 | Voice (`voice`, `voice-langs`, FD 24, FD 36, FD 109) | Chips for the phone's language and each language among the saves (by count of saves), not drawn with one; the chosen chip's offline voices, samples played outside the session, Default speed; one choice per language, `voice.id.<lang>`, the old `voice.id` counting for its own voice's language until a choice is made there, so it moves without a write; a session uses its article's language's choice, else its first voice; loading is a momentary read; no engine, no row; offline identical |
-| Advanced (`adv`, `adv-down`, `adv-offline`) | The relay group with each relay's status (FD 76); the count of saves not backed up (`adv-notbacked`, 4.3, FD 93), and while there are any, the note under the relays speaks of "your other saves"; offline disables the row for switching to a nostr app |
+| Advanced (`adv`, `adv-down`, `adv-offline`) | The relay group with each relay's status (FD 76); the count of saves not backed up (`adv-notbacked`, 4.3, FD 93), and while there are any, the note under the relays speaks of "your other saves"; offline disables the row for switching to a nostr app. Add a relay, last in the relay group, opens its own screen (`adv-add`, `adv-add-bad`, `adv-add-checking`, `adv-add-unreachable`, `adv-add-refused`, `adv-add-offline`; FD 113, C§3.1): the address is checked, then the relay must answer and take the newest signed 10002, after which it joins the 10002, the lists go out, and a bulk `copy_relay` row copies the newest signed event of each save and every kind 5 from the other write relays to it unchanged; waiting and sending changes gain it as a target. A relay added there is "Your relay" and its row asks whether to remove it (`adv-mine`, `adv-remove`); Kefli's and the backups' rows don't |
 | Export my saves (`adv`) | Works offline; one HTML bookmark file with each save's text, `kefli-export.html` to Downloads, then the toast (FD 89); failure `adv-exportfail` (G9) |
 
 **Switching to a nostr app** (FD 13, FD 26, FD 76; move job 4.10): explain with the switch (`sw`); waiting (`sw-waiting`); declined (`sw-declined`); offline, primary disabled (`sw-offline`); moving with "N of M", Back swallowed (`sw-moving`); done root-swaps to You with its toast. No signer installed is `sw-none`, a probe refusal `sw-probe` and a save from a newer Kefli `sw-newer` (FD 91 (c), (i)); a bad sign-in link is a field error, as at sign-in. Hidden for nostr users.
@@ -801,7 +801,7 @@ Devices: the Pixel 10a (Android 17), a Samsung with its own speech engine and ba
 
 ### 13.2 Contract v1.3: the requests as landed
 
-Contract v1.3 took in all eighteen requests, approved with section 14 on 5 October 2026 (C§11.6, whose item 19 also puts FD 86's rule for "nostr" into C§1). Each row records what landed.
+Contract v1.3 took in all eighteen requests, approved with section 14 on 5 October 2026 (C§11.7, whose item 19 also puts FD 86's rule for "nostr" into C§1). Each row records what landed.
 
 | CR | Request, as settled | Status |
 |---|---|---|

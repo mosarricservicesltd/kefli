@@ -1,18 +1,19 @@
 // Sends the outbox (mobile spec 4.3): one due row at a time, through ports so the tests can stand in for the
 // network. It sends register, upload_blob, mirror_blob, publish_item, publish_lists, delete_item, delete_blob,
-// post_device, pair_ack, delete_device and delete_wrap.
+// post_device, pair_ack, delete_device, delete_wrap and copy_relay.
 import {
-  buildDeletions, buildDevicesEvent, buildItemEvent, buildRelayList, buildServerList, deleteBlob, httpAuth, mirrorBlob, uploadBlob, wrapPairAck,
+  KIND, buildDeletions, buildDevicesEvent, buildItemEvent, buildRelayList, buildServerList, deleteBlob, httpAuth, mirrorBlob, uploadBlob, wrapPairAck,
 } from '@kefli/protocol';
 import type { CryptoPort, NostrEvent, Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { hasDevices, localRecord, noteRecord, pairAcked, recordCreatedAt, type PairPayload } from '../data/devices';
 import { getItem, itemJson, markPublished } from '../data/items';
 import { markBacked } from '../data/backup';
-import { indexerRelays, listServers, recordList, relayEntries, writeRelays } from '../data/lists';
+import { indexerRelays, listServers, nextListTime, recordList, relayEntries, writeRelays } from '../data/lists';
 import { begin, finish, nextDue } from '../data/outbox';
 import type { OutboxRow, OutboxTarget, TargetResult } from '../data/outbox';
 import type { Defaults } from './config';
+import { pageStream, streamFilter, type SyncPorts } from './sync';
 
 export type RelayAnswer = { ok: true } | { ok: false; reason: string };
 
@@ -27,6 +28,8 @@ export type SendPorts = {
   publish: (relay: string, event: NostrEvent) => Promise<RelayAnswer>;
   /** The staged ciphertext for a blob, or null if it is gone. */
   readBlob: (sha256: string) => Promise<Uint8Array | null>;
+  /** The events matching filters until EOSE, for copying the library to an added relay; throws when unreachable. */
+  query?: SyncPorts['query'];
 };
 
 const DAY = 86_400;
@@ -176,8 +179,9 @@ async function sendPublish(p: SendPorts, row: OutboxRow, signer: Signer, targets
 
 /** Kind 5s for the payload's d tags, up to 50 addresses each, to every write relay (4.3). */
 async function sendDeleteItem(p: SendPorts, row: OutboxRow, signer: Signer, targets: OutboxTarget[]): Promise<TargetResult[]> {
-  const { ds } = JSON.parse(row.payload ?? '{}') as { ds: string[] };
-  const events = await buildDeletions(signer, ds, p.now());
+  const { ds, after } = JSON.parse(row.payload ?? '{}') as { ds: string[]; after?: number };
+  // dated after the newest version of the save it names, whatever this phone's clock says (F36)
+  const events = await buildDeletions(signer, ds, Math.max(p.now(), (after ?? 0) + 1));
   return Promise.all(
     targets.map(async (t) => {
       try {
@@ -199,7 +203,8 @@ async function sendDeleteItem(p: SendPorts, row: OutboxRow, signer: Signer, targ
  * All are built from the tables at send time; the record only once there is a browser in it.
  */
 async function sendLists(p: SendPorts, row: OutboxRow, signer: Signer, targets: OutboxTarget[]): Promise<TargetResult[]> {
-  const now = p.now();
+  // after the lists already held, so a phone whose clock is behind doesn't publish lists older than its own (F36)
+  const now = nextListTime(p.db, row.signer, p.now());
   const relayList = await buildRelayList(signer, relayEntries(p.db, row.signer), now);
   const serverList = await buildServerList(signer, listServers(p.db, row.signer), now);
   const record = hasDevices(p.db, row.signer)
@@ -225,6 +230,44 @@ async function sendLists(p: SendPorts, row: OutboxRow, signer: Signer, targets: 
     if (record) noteRecord(p.db, row.signer, record.id, record.created_at);
   }
   return results;
+}
+
+/**
+ * A relay added in Advanced gets the library as already signed (FD 113, C§3.1): the newest event of each save and
+ * every deletion that the other write relays hold, paged in full and published to it unchanged, so nothing is
+ * re-signed from this phone's state (F16) and a deleted save's old event can't come back through it (F35). Retried
+ * until at least one other relay answers; done once the relay has answered every event, whatever it refused.
+ */
+async function sendCopyRelay(p: SendPorts, row: OutboxRow, t: OutboxTarget): Promise<TargetResult[]> {
+  if (!p.query) return [{ target: t.target, kind: 'retry', error: 'no relay reads' }];
+  const sources = writeRelays(p.db, row.signer).filter((u) => u !== t.target);
+  const read = await Promise.all(sources.map(async (u) => {
+    try {
+      const [items, deletions] = await Promise.all((['items', 'deletions'] as const).map((s) => pageStream(p.query!, u, streamFilter(s, row.signer, null))));
+      return [...items, ...deletions];
+    } catch {
+      return null;
+    }
+  }));
+  if (!read.some((r) => r !== null)) return [{ target: t.target, kind: 'retry', error: 'no other relay answered' }];
+  const mine = read.flat().filter((e): e is NostrEvent => !!e && e.pubkey === row.signer);
+  const saves = mine.filter((e) => e.kind !== KIND.deletion);
+  const byD = new Map<string, NostrEvent>();
+  for (const e of saves) {
+    const d = e.tags.find((x) => x[0] === 'd')?.[1] ?? '';
+    const held = byD.get(d);
+    if (!held || e.created_at > held.created_at) byD.set(d, e);
+  }
+  const deletions = [...new Map(mine.filter((e) => e.kind === KIND.deletion).map((e) => [e.id, e])).values()];
+  try {
+    for (const e of [...byD.values(), ...deletions]) {
+      const a = relayResult(t.target, await p.publish(t.target, e), e.id);
+      if (a.kind === 'retry') return [a];
+    }
+  } catch (e) {
+    return [{ target: t.target, kind: 'retry', error: err(e) }];
+  }
+  return [{ target: t.target, kind: 'ok' }];
 }
 
 /** A consumed inbox wrap, deleted with a kind 5 naming it (["e", id], ["k", "1059"]) on the operator relay (C§4.4). */
@@ -254,6 +297,8 @@ export async function sendOne(p: SendPorts): Promise<boolean> {
     results = await sendLists(p, row, signer, targets);
   } else if (row.op === 'delete_item') {
     results = await sendDeleteItem(p, row, signer, targets);
+  } else if (row.op === 'copy_relay') {
+    results = (await Promise.all(targets.map((t) => sendCopyRelay(p, row, t)))).flat();
   } else {
     const one = {
       register: sendRegister, upload_blob: sendUpload, mirror_blob: sendMirror, delete_blob: sendDeleteBlob,

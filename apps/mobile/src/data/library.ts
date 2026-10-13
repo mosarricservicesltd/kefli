@@ -96,10 +96,12 @@ export function setArchived(db: SqlDb, now: number, owner: string, hash: string,
  */
 export function deleteItem(db: SqlDb, now: number, owner: string, hash: string): Change {
   return db.tx(() => {
-    const row = db.get<{ text_sha256: string | null; text_servers: string | null }>('SELECT text_sha256, text_servers FROM items WHERE owner = ? AND hash = ?', owner, hash);
+    const row = db.get<{ text_sha256: string | null; text_servers: string | null; event_created_at: number | null }>(
+      'SELECT text_sha256, text_servers, event_created_at FROM items WHERE owner = ? AND hash = ?', owner, hash);
     if (!row) return { held: [], revert: () => {} };
     db.run('UPDATE items SET pending_delete_at = ? WHERE owner = ? AND hash = ?', now, owner, hash);
-    const del = enqueue(db, now, { op: 'delete_item', signer: owner, subject: hash, payload: { ds: [ITEM_D_PREFIX + hash] }, targets: writeRelays(db, owner), held: true });
+    // after: the newest version's time, which the kind 5 must be dated past (F36); the row is gone by the time it's sent
+    const del = enqueue(db, now, { op: 'delete_item', signer: owner, subject: hash, payload: { ds: [ITEM_D_PREFIX + hash], after: row.event_created_at ?? 0 }, targets: writeRelays(db, owner), held: true });
     const held = [del];
     const servers = row.text_servers ? (JSON.parse(row.text_servers) as string[]) : [];
     const mine = row.text_sha256 && db.get('SELECT 1 FROM blobs WHERE sha256 = ? AND owner = ?', row.text_sha256, owner);

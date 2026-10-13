@@ -35,6 +35,7 @@ import { takeImport } from './nostrSignIn';
 import { disconnect } from '../data/devices';
 import type { ConnectPorts } from './connect';
 import type { ShowPorts } from './phonePair';
+import type { AddRelayPorts } from './addRelay';
 import { dailyCheck } from './nostrCheck';
 import { KefliKeystore } from '../../modules/kefli-keystore/src';
 
@@ -64,6 +65,7 @@ export function runOutbox(): Promise<number> {
         defaults: () => d,
         publish: (url, event) => pool.publish(url, event),
         readBlob: readStaged,
+        query: (url, filters) => pool.query(url, filters),
       });
     } finally {
       running = null;
@@ -417,4 +419,12 @@ export function phonePorts(owner: string): ShowPorts {
 /** Advanced's relay rows (5.8, FD 76): each relay in the identity's 10002, answering or not. */
 export async function relayStatus(url: string): Promise<boolean> {
   return pool.relay(url).then(() => true, () => false);
+}
+
+/** Add a relay's ports (FD 113): the pool connects and publishes the check. */
+export function addRelayPorts(): AddRelayPorts {
+  return {
+    db: store(), now: () => Math.floor(Date.now() / 1000), defaults: loadDefaults,
+    connect: (url) => pool.relay(url), publish: (url, event) => pool.publish(url, event),
+  };
 }
