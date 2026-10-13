@@ -24,6 +24,15 @@ describe('the Original view stays on the web and opens no other app (F25)', () =
     expect(src).toMatch(/\n\s+incognito\n/);
     expect(src).toContain('useEffect(() => () => void clearCookies(), [])');
   });
+
+  test("the render WebView's cookies and storage go when each render ends (F27)", () => {
+    const kt = readFileSync(join(__dirname, '..', 'modules', 'kefli-parser', 'android', 'src', 'main', 'java', 'app', 'kefli', 'parser', 'Renderer.kt'), 'utf8');
+    const finish = kt.slice(kt.indexOf('private fun finish('));
+    expect(finish).toContain('WebStorage.getInstance().deleteAllData()');
+    expect(finish).toContain('removeAllCookies { flush() }');
+    // before the promise answers, so the next render starts with an empty jar
+    expect(finish.indexOf('removeAllCookies')).toBeLessThan(finish.indexOf('load.promise.resolve'));
+  });
 });
 
 describe("release builds strip the libraries' warns as well (mobile spec 7.1, F25)", () => {

@@ -9,6 +9,7 @@ import android.view.View
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
+import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import expo.modules.kotlin.Promise
@@ -18,7 +19,7 @@ import org.json.JSONTokener
 // A page that turns Kefli's own fetch away (a bot check answering 403) is loaded once in a browser engine, as a person's
 // browser would load it (mobile spec 8.2, 7.1), and its rendered HTML handed back for the usual parse. The WebView is
 // attached to no window, holds no bridge, has no file or content access and opens no windows; it follows only http(s)
-// navigations, loads no images, and goes as soon as it answers. RULED: the HTML handed back has no scripts, styles,
+// navigations, loads no images, and goes as soon as it answers, its cookies and storage cleared after it. RULED: the HTML handed back has no scripts, styles,
 // SVG, frames or embeds, and no style, data-, aria-, event, srcset or sizes attributes, none of which the parse reads
 // (class and id stay, which Readability scores by); a page's own scripts can build it past the 5 MB cap otherwise. A challenge page is waited out until the page itself
 // arrives or the time runs out. One page at a time; others queue behind it.
@@ -138,6 +139,10 @@ object Renderer {
       destroy()
     }
     load.view = null
+    // what the page set (a bot check's clearance, a site's storage) goes with it, so no later render or fetch carries
+    // it and no site can follow one person from page to page (F27)
+    WebStorage.getInstance().deleteAllData()
+    CookieManager.getInstance().run { removeAllCookies { flush() } }
     if (current === load) current = null
     load.promise.resolve(result.toString())
     next()
