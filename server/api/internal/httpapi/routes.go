@@ -4,8 +4,10 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/richardminton-glitch/Kefli/server/api/internal/auth"
+	"github.com/richardminton-glitch/Kefli/server/api/internal/limit"
 	"github.com/richardminton-glitch/Kefli/server/api/internal/store"
 )
 
@@ -28,18 +30,15 @@ func (a *API) nip05(w http.ResponseWriter, r *http.Request) {
 	reply(w, http.StatusOK, map[string]any{"names": names, "relays": relays})
 }
 
-// register adds the caller to the allowlist with the default quota; idempotent (contract 6). Five a day per address.
+// register adds the caller to the allowlist with the default quota; idempotent (contract 6). Five a day per address,
+// and cfg.MaxRegistrations an hour from everyone.
 func (a *API) register(w http.ResponseWriter, r *http.Request) {
 	req, ok := a.authed(w, r)
 	if !ok {
 		return
 	}
-	if _, known, _ := a.st.Account(r.Context(), req.pubkey); !known {
-		if ok, retry := a.regIP.Allow(ClientIP(r, a.cfg.TrustProxy)); !ok {
-			w.Header().Set("Retry-After", retryAfter(retry))
-			fail(w, http.StatusTooManyRequests, "rate")
-			return
-		}
+	if _, known, _ := a.st.Account(r.Context(), req.pubkey); !known && !a.newAccountAllowed(w, r) {
+		return
 	}
 	if err := a.st.Register(r.Context(), req.pubkey); err != nil {
 		a.serverError(w, err)
@@ -64,6 +63,32 @@ func (a *API) deleteAccount(w http.ResponseWriter, r *http.Request) {
 	a.unlink(orphaned)
 	a.log.Info("account deleted", "user", a.short(req.pubkey), "blobs", len(orphaned))
 	reply(w, http.StatusOK, map[string]any{"v": 1, "deleted": map[string]any{"blobs": len(orphaned)}})
+}
+
+// newAccountAllowed holds new accounts to five a day per address, a home line's whole /56 counting as one, and to
+// cfg.MaxRegistrations an hour from everyone together. The hourly count is the accounts table's, so a restart
+// doesn't reset it (F8).
+func (a *API) newAccountAllowed(w http.ResponseWriter, r *http.Request) bool {
+	recent, err := a.st.Registrations(r.Context(), a.now().Add(-time.Hour))
+	if err != nil {
+		a.serverError(w, err)
+		return false
+	}
+	if recent >= a.cfg.MaxRegistrations {
+		w.Header().Set("Retry-After", retryAfter(5*time.Minute))
+		fail(w, http.StatusTooManyRequests, "rate")
+		return false
+	}
+	if ok, retry := a.regIP.Allow(limit.Addr(ClientIP(r, a.cfg.TrustProxy), 56)); !ok {
+		w.Header().Set("Retry-After", retryAfter(retry))
+		fail(w, http.StatusTooManyRequests, "rate")
+		return false
+	}
+	// the backend spec's alert, in the journal until monitoring reads it
+	if recent+1 == a.cfg.MaxRegistrations {
+		a.log.Error("registrations held: the hourly limit is reached", "limit", a.cfg.MaxRegistrations)
+	}
+	return true
 }
 
 func (a *API) unlink(shas []string) {
@@ -142,8 +167,10 @@ func (a *API) postOffer(kind string) http.HandlerFunc {
 	}
 }
 
+// offerAllowed counts an offer request against its address and then its key: the address first, so a request the
+// address limit refuses leaves no window behind for a throwaway key (F45).
 func (a *API) offerAllowed(w http.ResponseWriter, r *http.Request, pubkey string) bool {
-	for _, key := range []string{"key:" + pubkey, "ip:" + ClientIP(r, a.cfg.TrustProxy)} {
+	for _, key := range []string{"ip:" + a.clientAddr(r), "key:" + pubkey} {
 		if ok, retry := a.pairs.Allow(key); !ok {
 			w.Header().Set("Retry-After", retryAfter(retry))
 			fail(w, http.StatusTooManyRequests, "rate")
@@ -154,7 +181,8 @@ func (a *API) offerAllowed(w http.ResponseWriter, r *http.Request, pubkey string
 }
 
 // getOffer returns an unexpired offer. A pair offer is read by a registered user, the phone; a phone offer by any key,
-// since the phone fetching it has no identity yet, and only once, limited to 30 an hour per address (contract 6).
+// since the phone fetching it has no identity yet, and only once, limited to 30 an hour per address (contract 6) and
+// refused for the rest of an offer's life once MaxMisses lookups from anyone have found nothing in it (F8).
 func (a *API) getOffer(kind string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		req, ok := a.authed(w, r)
@@ -164,7 +192,7 @@ func (a *API) getOffer(kind string) http.HandlerFunc {
 		if kind == "pair" && !a.registered(w, r, req.pubkey) {
 			return
 		}
-		if kind == "phone" && !a.offerAllowed(w, r, req.pubkey) {
+		if kind == "phone" && (!a.offerAllowed(w, r, req.pubkey) || !a.guessesLeft(w)) {
 			return
 		}
 		lookup := r.PathValue("lookup")
@@ -174,9 +202,31 @@ func (a *API) getOffer(kind string) http.HandlerFunc {
 			return
 		}
 		if !found {
+			if kind == "phone" {
+				a.missed()
+			}
 			fail(w, http.StatusNotFound, "not_found")
 			return
 		}
 		reply(w, http.StatusOK, map[string]any{"v": 1, "offer": offer})
+	}
+}
+
+// guessesLeft refuses a phone-offer lookup while the last five minutes' misses are at MaxMisses: past that, a
+// right code waits too, since nothing tells a right guess from a wrong one before the lookup.
+func (a *API) guessesLeft(w http.ResponseWriter) bool {
+	spent, retry := a.misses.Spent("phone")
+	if spent {
+		w.Header().Set("Retry-After", retryAfter(retry))
+		fail(w, http.StatusTooManyRequests, "rate")
+	}
+	return !spent
+}
+
+// missed counts a phone-offer lookup that found nothing, and says so in the log once the misses reach the limit.
+func (a *API) missed() {
+	a.misses.Allow("phone")
+	if spent, retry := a.misses.Spent("phone"); spent {
+		a.log.Error("phone-offer lookups held: too many found nothing", "limit", MaxMisses, "for", retry.Round(time.Second))
 	}
 }

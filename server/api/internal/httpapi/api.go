@@ -21,6 +21,7 @@ import (
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/richardminton-glitch/Kefli/server/api/internal/auth"
+	"github.com/richardminton-glitch/Kefli/server/api/internal/limit"
 	"github.com/richardminton-glitch/Kefli/server/api/internal/store"
 )
 
@@ -38,18 +39,31 @@ type Config struct {
 	TrustProxy bool
 	// Blobs forgets files no owner holds any longer (the Blossom side unlinks them).
 	Unlink func(sha string)
+	// MaxRegistrations is how many new accounts an hour the API takes from everyone together (DefaultMaxRegistrations
+	// when 0), so a caller with many addresses still can't make accounts without end (F8).
+	MaxRegistrations int
 }
+
+// DefaultMaxRegistrations is backend spec 5's alert level, 200 new accounts an hour, held as a limit.
+const DefaultMaxRegistrations = 200
+
+// MaxMisses is how many phone-offer lookups may find nothing in five minutes, an offer's life, from every caller
+// together. Each address is held to 30 an hour, but someone with many addresses could otherwise try a large share of
+// the million codes while an offer waits. An offer's five minutes span at most two windows, so this keeps the share
+// to two in ten thousand (F8, contract 2).
+const MaxMisses = 100
 
 const maxBody = 64 << 10
 
 type API struct {
-	cfg   Config
-	st    *store.Store
-	log   *slog.Logger
-	now   func() time.Time
-	calls *Limiter // per pubkey, 60 a minute (backend spec 3.3)
-	pairs *Limiter // offers, 30 an hour per key and per address (contract 6)
-	regIP *Limiter // registrations, 5 a day per address (backend spec 5)
+	cfg    Config
+	st     *store.Store
+	log    *slog.Logger
+	now    func() time.Time
+	calls  *limit.Limiter // per pubkey, 60 a minute (backend spec 3.3)
+	pairs  *limit.Limiter // offers, 30 an hour per key and per address (contract 6)
+	regIP  *limit.Limiter // registrations, 5 a day per address, an IPv6 line by its /56 (backend spec 5)
+	misses *limit.Limiter // phone-offer lookups that found nothing, MaxMisses an offer's life from everyone
 	// logKey keys the fingerprints the logs show for pubkeys (short)
 	logKey []byte
 }
@@ -60,11 +74,15 @@ func New(cfg Config, st *store.Store, log *slog.Logger) *API {
 	if _, err := rand.Read(logKey); err != nil {
 		panic(err) // crypto/rand never fails on Linux
 	}
+	if cfg.MaxRegistrations == 0 {
+		cfg.MaxRegistrations = DefaultMaxRegistrations
+	}
 	return &API{
 		cfg: cfg, st: st, log: log, now: now, logKey: logKey,
-		calls: NewLimiter(60, time.Minute, now),
-		pairs: NewLimiter(30, time.Hour, now),
-		regIP: NewLimiter(5, 24*time.Hour, now),
+		calls:  limit.New(60, time.Minute, now),
+		pairs:  limit.New(30, time.Hour, now),
+		regIP:  limit.New(5, 24*time.Hour, now),
+		misses: limit.New(MaxMisses, store.OfferLife, now),
 	}
 }
 
@@ -107,6 +125,11 @@ func reply(w http.ResponseWriter, status int, body map[string]any) {
 
 func fail(w http.ResponseWriter, status int, why string) {
 	reply(w, status, map[string]any{"v": 1, "error": why})
+}
+
+// clientAddr is the address the caller is counted as by a limit: an IPv6 caller by its /64 (F8).
+func (a *API) clientAddr(r *http.Request) string {
+	return limit.Addr(ClientIP(r, a.cfg.TrustProxy), 64)
 }
 
 // ClientIP is the caller's address: Caddy's X-Forwarded-For when trusted, else the connection's.

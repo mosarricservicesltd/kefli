@@ -46,8 +46,33 @@ func run(args []string, in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	prune(wraps, keflid)
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	go pruneEvery(ctx, wraps, keflid, time.Hour)
 	p := policy.New(policy.NewDB(keflid, wraps), time.Now)
 	return policy.Serve(in, out, p, wraps, func(ids []string) { deleteWraps(*strfry, *config, ids) })
+}
+
+// prune keeps the wrap record to what the relay holds (F45).
+func prune(wraps, keflid *sql.DB) {
+	if err := policy.PruneWraps(wraps, keflid, time.Now()); err != nil {
+		log.Printf("prune: %v", err)
+	}
+}
+
+// pruneEvery prunes every so often until ctx ends; strfry keeps the plugin running for as long as it runs.
+func pruneEvery(ctx context.Context, wraps, keflid *sql.DB, every time.Duration) {
+	tick := time.NewTicker(every)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			prune(wraps, keflid)
+		}
+	}
 }
 
 // deleteWraps removes wraps from the relay's database with strfry's own command.

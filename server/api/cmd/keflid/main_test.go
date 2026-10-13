@@ -109,6 +109,10 @@ func TestRunServesAndStops(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("run didn't stop")
 	}
+	t.Setenv("KEFLID_MIN_FREE_MB", "lots")
+	if err := run(context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil))); err == nil {
+		t.Fatal("ran with a free-space floor that isn't a number")
+	}
 	t.Setenv("KEFLID_DEFAULTS", filepath.Join(dir, "missing.json"))
 	if err := run(context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil))); err == nil {
 		t.Fatal("ran without defaults.json")

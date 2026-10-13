@@ -11,6 +11,7 @@
 //	KEFLID_DEFAULTS     defaults.json to serve (defaults.json)
 //	KEFLID_NIP05        optional JSON {"names":{"_":"<hex>"},"relays":["wss://…"]}
 //	KEFLID_TRUST_PROXY  "1" behind Caddy, so the client's address is read from X-Forwarded-For
+//	KEFLID_MIN_FREE_MB  space an upload must leave free on the blobs' disk, in MB (4096); 0 sets no floor
 package main
 
 import (
@@ -22,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -105,7 +107,12 @@ func run(ctx context.Context, log *slog.Logger) error {
 	}
 	defer st.Close()
 
+	minFree, err := strconv.ParseInt(env("KEFLID_MIN_FREE_MB", "4096"), 10, 64)
+	if err != nil || minFree < 0 {
+		return fmt.Errorf("KEFLID_MIN_FREE_MB isn't a number of megabytes")
+	}
 	blobs := blossom.New(env("KEFLID_BLOBS", "blobs"), env("KEFLID_BLOSSOM_BASE", "http://localhost:3447"), st, log)
+	blobs.MinFree = minFree << 20
 	api := httpapi.New(httpapi.Config{
 		Base: env("KEFLID_API_BASE", "http://localhost:8447"), Defaults: defaults, Names: names.Names, Relays: names.Relays,
 		TrustProxy: os.Getenv("KEFLID_TRUST_PROXY") == "1", Unlink: blobs.Unlink,

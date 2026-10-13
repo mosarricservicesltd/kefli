@@ -34,9 +34,12 @@ type env struct {
 	clock time.Time
 	dir   string
 	bs    *blossom.Server
+	// from is the client address Caddy would pass in X-Forwarded-For, when set
+	from string
 }
 
-func newEnv(t *testing.T) *env {
+// newEnv is an API and blob store on a fresh database; opts may change the API's configuration.
+func newEnv(t *testing.T, opts ...func(*httpapi.Config)) *env {
 	t.Helper()
 	dir := t.TempDir()
 	st, err := store.Open(filepath.Join(dir, "k.db"))
@@ -52,7 +55,11 @@ func newEnv(t *testing.T) *env {
 	b := blossom.New(filepath.Join(dir, "blobs"), e.blob.URL, st, log)
 	b.Routes(blobMux)
 	e.bs = b
-	httpapi.New(httpapi.Config{Base: e.api.URL, Defaults: []byte(`{"v":1}`), Names: map[string]string{"_": "ab"}, Relays: []string{"wss://r"}, Unlink: b.Unlink}, st, log).Routes(apiMux)
+	cfg := httpapi.Config{Base: e.api.URL, Defaults: []byte(`{"v":1}`), Names: map[string]string{"_": "ab"}, Relays: []string{"wss://r"}, Unlink: b.Unlink}
+	for _, o := range opts {
+		o(&cfg)
+	}
+	httpapi.New(cfg, st, log).Routes(apiMux)
 	t.Cleanup(func() { e.api.Close(); e.blob.Close(); st.Close() })
 	return e
 }
@@ -94,6 +101,9 @@ func (e *env) call(k key, method, path string, body any, tweak ...func(nostr.Tag
 	}
 	req, _ := http.NewRequest(method, e.api.URL+path, bytes.NewReader(raw))
 	req.Header.Set("Authorization", k.sign(e.t, 27235, tags, e.clock))
+	if e.from != "" {
+		req.Header.Set("X-Forwarded-For", e.from)
+	}
 	return send(e.t, req)
 }
 
