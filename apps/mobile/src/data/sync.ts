@@ -4,7 +4,8 @@
 // RULED: an event with v above 1 that is newer than the local row goes to items_future and the local row is
 // removed with its pending sends, since this phone may not write over a version it doesn't understand (C§10);
 // an older one is ignored. A save with no text arrives as text_state 'queued', so this phone tries the parse.
-import { ITEM_D_PREFIX, deletedHashes, deletionRemoves, mergeItem, wordReached } from '@kefli/protocol';
+import { ITEM_D_PREFIX, deletedDs, deletionRemoves, mergeItem, wordReached } from '@kefli/protocol';
+import { savesAt } from './libraryKey';
 import type { LocalVersion, MergeOutcome, NostrEvent, ParsedItem } from '@kefli/protocol';
 import type { SqlDb } from './db';
 import { enqueue } from './outbox';
@@ -68,13 +69,17 @@ function writeColumns(db: SqlDb, id: number, c: ReturnType<typeof itemColumns>, 
   db.run(
     `UPDATE items SET url = ?, canonical = ?, title = ?, site = ?, byline = ?, saved_at = ?, state = ?, progress = ?, words = ?,
       lang = ?, text_sha256 = ?, text_key = ?, text_nonce = ?, text_servers = ?, text_hash = ?, hero = ?, source_kind = ?,
-      source_ref = ?, audio_pref = ?, extra = ?, position_word = ?, event_id = ?, event_created_at = ?, published = 1, dirty = 0
+      source_ref = ?, audio_pref = ?, extra = ?, position_word = ?, event_id = ?, event_created_at = ?, published = 1, dirty = 0,
+      remote_d = ?
      WHERE id = ?`,
     c.url, c.canonical, c.title, c.site, c.byline, c.saved_at, c.state, c.progress, c.words, c.lang, c.text_sha256, c.text_key,
     c.text_nonce, c.text_servers, c.text_hash, c.hero, c.source_kind, c.source_ref, c.audio_pref, c.extra, c.position_word,
-    event.id, event.created_at, id,
+    event.id, event.created_at, dOf(event), id,
   );
 }
+
+/** An event's d tag: the address a save was seen at (F5). */
+const dOf = (event: NostrEvent) => event.tags.find((t) => t[0] === 'd')?.[1] ?? null;
 
 /** Removes a row with its search entry and pending sends (Listen history goes by cascade). */
 export function removeItem(db: SqlDb, id: number, owner: string, hash: string): void {
@@ -141,7 +146,7 @@ export function applyItem(db: SqlDb, now: number, owner: string, hash: string, e
 
 function future(db: SqlDb, owner: string, hash: string, event: NostrEvent, row: Row | undefined, v: unknown): Applied {
   if (!(typeof v === 'number' && v > 1)) return { outcome: 'ignored' };
-  const d = ITEM_D_PREFIX + hash;
+  const d = dOf(event) ?? ITEM_D_PREFIX + hash;
   const held = db.get<{ created_at: number }>('SELECT created_at FROM items_future WHERE owner = ? AND d = ?', owner, d);
   if (held && held.created_at >= event.created_at) return { outcome: 'ignored' };
   if (row && row.event_created_at !== null && row.event_created_at >= event.created_at) return { outcome: 'ignored' };
@@ -154,8 +159,10 @@ function future(db: SqlDb, owner: string, hash: string, event: NostrEvent, row: 
 export function applyDeletion(db: SqlDb, owner: string, event: NostrEvent): string[] {
   return db.tx(() => {
     const removed: string[] = [];
-    for (const hash of deletedHashes(event, owner)) {
-      db.run('DELETE FROM items_future WHERE owner = ? AND d = ? AND created_at <= ?', owner, ITEM_D_PREFIX + hash, event.created_at);
+    // addresses are keyed from v1.10 (F5): each is found through the address a save is known at
+    const ds = deletedDs(event, owner);
+    for (const d of ds) db.run('DELETE FROM items_future WHERE owner = ? AND d = ? AND created_at <= ?', owner, d, event.created_at);
+    for (const hash of new Set(savesAt(db, owner, ds).values())) {
       const row = db.get<Row>('SELECT * FROM items WHERE owner = ? AND hash = ?', owner, hash);
       if (!row || !deletionRemoves(version(row)!, event.created_at)) continue;
       removeItem(db, row.id, owner, hash);

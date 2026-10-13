@@ -41,7 +41,7 @@ export interface Pending {
   /** The inbox blob as base64 until it is uploaded; null once uploaded, or when there was no HTML. */
   blob: string | null;
   sha256: string | null;
-  /** The save's d-tag hash (contract 4.3), for its cover. */
+  /** The save's hash (contract 4.1, 4.3), for its cover; since v1.10 its address is keyed, the hash isn't. */
   hash: string;
   title: string;
   host: string;

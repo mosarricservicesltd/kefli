@@ -22,8 +22,8 @@ function world(provider: 'local' | 'nip55' = 'local') {
 }
 
 function item(db: ReturnType<typeof memoryDb>, owner: string, hash: string, published = true) {
-  db.run(`INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, published, event_id)
-    VALUES (?, ?, 'https://example.com', 1, 'unread', 'cached', 'share', ?, 'e')`, owner, hash, published ? 1 : 0);
+  db.run(`INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, published, event_id, remote_d)
+    VALUES (?, ?, 'https://example.com', 1, 'unread', 'cached', 'share', ?, 'e', ?)`, owner, hash, published ? 1 : 0, published ? `kefli/item/${hash}` : null);
 }
 
 const targets = (db: ReturnType<typeof memoryDb>, op: string, subject: string) =>

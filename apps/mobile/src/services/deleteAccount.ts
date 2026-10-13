@@ -10,8 +10,9 @@
 //      answered OK to every kind 5, a server when it answered 2xx or 404 to every delete; each gets a minute.
 //   3. the phone: the key file, Block Store, the database and the files.
 // Each step's result is kept in a delete_account job, so a deletion cut short resumes where it stopped.
-import { DEVICES_D, ITEM_D_PREFIX, KIND, buildDeletions, buildRelayList, buildServerList, deleteBlob, httpAuth, type CryptoPort, type NostrEvent, type Signer } from '@kefli/protocol';
+import { DEVICES_D, ITEM_D_PREFIX, KIND, LIBRARY_KEY_D, buildDeletions, buildRelayList, buildServerList, deleteBlob, httpAuth, type CryptoPort, type NostrEvent, type Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
+import { itemAddresses } from '../data/libraryKey';
 import type { RelayAnswer } from './send';
 
 export type DelPorts = {
@@ -87,11 +88,14 @@ async function withinMinute(p: DelPorts, attempt: () => Promise<boolean>): Promi
   }
 }
 
-/** Every d this identity holds: saves, saves from a newer Kefli, and the connected-browsers record. */
+/**
+ * Every d this identity holds: each save at every address it may be at (keyed, and unkeyed from before v1.10, F5),
+ * saves from a newer Kefli, the connected-browsers record and the library key's record.
+ */
 function allDs(db: SqlDb, owner: string): string[] {
-  const items = db.all<{ hash: string }>('SELECT hash FROM items WHERE owner = ?', owner).map((r) => ITEM_D_PREFIX + r.hash);
+  const legacy = db.all<{ hash: string }>('SELECT hash FROM items WHERE owner = ?', owner).map((r) => ITEM_D_PREFIX + r.hash);
   const future = db.all<{ d: string }>('SELECT d FROM items_future WHERE owner = ?', owner).map((r) => r.d);
-  return [...new Set([...items, ...future, DEVICES_D])];
+  return [...new Set([...itemAddresses(db, owner), ...legacy, ...future, DEVICES_D, LIBRARY_KEY_D])];
 }
 
 function blobs(db: SqlDb, owner: string): string[] {

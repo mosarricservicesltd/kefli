@@ -50,7 +50,23 @@ export function deletionRemoves(local: LocalVersion, deletedAt: number): boolean
   return deletedAt >= (local.createdAt ?? 0);
 }
 
-/** The save hashes a verified kind 5 by owner deletes: its a tags naming 30078:<owner>:kefli/item/<64 hex>. */
+/**
+ * The save addresses a verified kind 5 by owner deletes, whole: its a tags naming 30078:<owner>:kefli/item/<64 hex>.
+ * From v1.10 an address is keyed (C§4.3), so the client maps it to a save through the addresses it knows.
+ */
+export function deletedDs(event: NostrEvent, owner: string): string[] {
+  if (event.kind !== KIND.deletion || event.pubkey !== owner) return [];
+  const prefix = `${KIND.appData}:${owner}:`;
+  const out = new Set<string>();
+  for (const t of event.tags) {
+    if (t[0] !== 'a' || typeof t[1] !== 'string' || !t[1].startsWith(prefix)) continue;
+    const d = t[1].slice(prefix.length);
+    if (isItemD(d)) out.add(d);
+  }
+  return [...out];
+}
+
+/** The save hashes a verified kind 5 by owner deletes, read as unkeyed addresses (saves before v1.10). */
 export function deletedHashes(event: NostrEvent, owner: string): string[] {
   if (event.kind !== KIND.deletion || event.pubkey !== owner) return [];
   const prefix = `${KIND.appData}:${owner}:`;

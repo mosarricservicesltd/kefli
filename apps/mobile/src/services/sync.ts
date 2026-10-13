@@ -8,7 +8,7 @@
 //
 // Every relay's pages are collected before anything is applied, and saves are applied before deletions, so a
 // save still held by a relay that missed its deletion can't come back in the same run.
-import { DEVICES_D, KIND, T_TAG, decryptText, newest, readDevicesEvent, readItemEvent, readRelayList } from '@kefli/protocol';
+import { DEVICES_D, KIND, LIBRARY_KEY_D, T_TAG, decryptText, newest, readDevicesEvent, readItemEvent, readLibraryKeyEvent, readRelayList } from '@kefli/protocol';
 import { deriveArticle, type Derived } from '../reader/blocks';
 import type { CryptoPort, NostrEvent, Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
@@ -16,13 +16,14 @@ import { absorbRecord, queueRecord } from '../data/devices';
 import { KEEP_COPIES, getSetting } from '../data/settings';
 import { readUserLists, settleUserLists } from './nostrSignIn';
 import { markBacked } from '../data/backup';
-import { indexerRelays, listServers, recordList, relayEntries, seedGeneratedLists, type DefaultsLike } from '../data/lists';
+import { indexerRelays, listServers, recordList, relayEntries, seedGeneratedLists, writeRelays, type DefaultsLike } from '../data/lists';
+import { adoptLibraryKey, libraryKey, makeLibraryKey } from '../data/libraryKey';
 import {
   applyDeletion, applyItem, getCursor, hashInUse, readRelays, setCursor, textCached, textMissing, textQueue,
   type Stream, type TextJob,
 } from '../data/sync';
 
-export type Filter = { kinds: number[]; authors?: string[]; '#t'?: string[]; '#k'?: string[]; '#p'?: string[]; since?: number; until?: number; limit?: number };
+export type Filter = { kinds: number[]; authors?: string[]; '#t'?: string[]; '#d'?: string[]; '#k'?: string[]; '#p'?: string[]; since?: number; until?: number; limit?: number };
 
 export type SyncPorts = {
   db: SqlDb;
@@ -214,6 +215,37 @@ export async function syncLists(p: SyncPorts, owner: string): Promise<void> {
   }
 }
 
+/**
+ * Phase 1, after the lists: the library key (F5, C§4.3). The newest record on the write relays is taken (another phone
+ * may have made it first). With none on any of them, once every one has answered, a key is made here and its record
+ * goes out; an identity made on this phone makes its own at its first publish instead.
+ */
+export async function syncLibraryKey(p: SyncPorts, owner: string): Promise<void> {
+  const relays = writeRelays(p.db, owner);
+  const signer = await p.signer(owner);
+  if (!relays.length || !signer) return;
+  const found: NostrEvent[] = [];
+  let answered = 0;
+  await Promise.all(relays.map(async (r) => {
+    try {
+      found.push(...(await p.query(r, [{ kinds: [KIND.appData], authors: [owner], '#d': [LIBRARY_KEY_D] }])));
+      answered++;
+    } catch {
+      // unreachable: no say in whether a key exists
+    }
+  }));
+  const latest = newest(found.filter((e) => e.pubkey === owner && e.tags.some((t) => t[0] === 'd' && t[1] === LIBRARY_KEY_D)));
+  if (latest) {
+    try {
+      adoptLibraryKey(p.db, p.now(), owner, await readLibraryKeyEvent(signer, latest), latest.created_at);
+    } catch {
+      // a record that doesn't open, or a version this phone doesn't read: as if absent, and nothing is made over it
+    }
+    return;
+  }
+  if (!libraryKey(p.db, owner) && answered === relays.length) makeLibraryKey(p.db, p.now(), owner, p.crypto.randomBytes);
+}
+
 /** Phase 1, phase 3 then phase 5 for the active identity. Restartable: cursors move only after a relay answers in full. */
 export async function syncInbound(p: SyncPorts): Promise<SyncResult> {
   const owner = p.db.get<{ pubkey: string }>("SELECT pubkey FROM identities WHERE role = 'active'")?.pubkey;
@@ -225,6 +257,7 @@ export async function syncInbound(p: SyncPorts): Promise<SyncResult> {
 /** The same for any identity on the phone: a move collects its source's library this way (C§4.8 step 2). */
 export async function syncOwner(p: SyncPorts, owner: string, signer: Signer): Promise<SyncResult> {
   await syncLists(p, owner);
+  await syncLibraryKey(p, owner);
   const collected = await collect(p, owner, p.now());
   const { items, deletions } = await applyAll(p, owner, signer, collected);
   // a save seen on a relay the operator doesn't run is backed up there (FD 93)

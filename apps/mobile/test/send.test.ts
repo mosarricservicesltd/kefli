@@ -25,7 +25,7 @@ function world(answers: Partial<Record<string, Answer | ((n: number) => Answer)>
   const calls: string[] = [];
   const all: { relay: string; event: NostrEvent }[] = [];
   const published = { get length() { return items().length; } } as unknown as { relay: string; event: NostrEvent }[];
-  const items = () => all.filter((p) => p.event.kind === 30078);
+  const items = () => all.filter((p) => p.event.kind === 30078 && p.event.tags.some((t) => t[0] === 'd' && t[1].startsWith('kefli/item/')));
   const blobs = new Map<string, Uint8Array>();
   const counts = new Map<string, number>();
   const fetch = (async (url: string, init: RequestInit) => {

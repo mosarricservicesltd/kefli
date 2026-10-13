@@ -1,16 +1,18 @@
 // Sends the outbox (mobile spec 4.3): one due row at a time, through ports so the tests can stand in for the
 // network. It sends register, upload_blob, mirror_blob, publish_item, publish_lists, delete_item, delete_blob,
-// post_device, pair_ack, delete_device, delete_wrap and copy_relay.
+// post_device, pair_ack, delete_device, delete_wrap, copy_relay and publish_library_key.
 import {
-  KIND, buildDeletions, buildDevicesEvent, buildItemEvent, buildRelayList, buildServerList, deleteBlob, httpAuth, mirrorBlob, uploadBlob, wrapPairAck,
+  KIND, buildDeletions, buildDevicesEvent, buildItemEvent, buildLibraryKeyEvent, buildRelayList, buildServerList, deleteBlob, httpAuth, mirrorBlob,
+  savedD, uploadBlob, wrapPairAck,
 } from '@kefli/protocol';
 import type { CryptoPort, NostrEvent, Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { hasDevices, localRecord, noteRecord, pairAcked, recordCreatedAt, type PairPayload } from '../data/devices';
 import { getItem, itemJson, markPublished } from '../data/items';
 import { markBacked } from '../data/backup';
+import { keyPublished, libraryKey, libraryKeyPublished, madeHere, makeLibraryKey } from '../data/libraryKey';
 import { indexerRelays, listServers, nextListTime, recordList, relayEntries, writeRelays } from '../data/lists';
-import { begin, finish, nextDue } from '../data/outbox';
+import { begin, enqueue, finish, nextDue } from '../data/outbox';
 import type { OutboxRow, OutboxTarget, TargetResult } from '../data/outbox';
 import type { Defaults } from './config';
 import { pageStream, streamFilter, type SyncPorts } from './sync';
@@ -160,9 +162,16 @@ async function sendPublish(p: SendPorts, row: OutboxRow, signer: Signer, targets
   const d = p.defaults();
   // text.servers never lists the operator alone (contract 4.2): the mirror that holds it, else the one being tried.
   const servers = [d.operator.blossom, blob?.mirror_url ?? d.mirrors[0]];
+  // the address is keyed (F5): an identity made here makes its key now; any other waits until sync has learnt it
+  const key = libraryKey(p.db, row.signer) ?? (madeHere(p.db, row.signer) ? makeLibraryKey(p.db, p.now(), row.signer, p.crypto.randomBytes) : null);
+  if (!key) return targets.map((t) => ({ target: t.target, kind: 'retry' as const, error: 'library key not known yet' }));
+  // the key's record reaches a relay before any save it addresses, so another phone finding the saves finds the key
+  if (!keyPublished(p.db, row.signer) && !(await sendLibraryKey(p, row, signer, targets)).some((r) => r.kind === 'ok')) {
+    return targets.map((t) => ({ target: t.target, kind: 'retry' as const, error: 'library key record not sent yet' }));
+  }
   // Built at send time, created_at = max(now, last + 1), so a newer state always replaces the old one.
   const createdAt = Math.max(p.now(), (item.event_created_at ?? 0) + 1);
-  const { event } = await buildItemEvent(signer, item.hash, itemJson(item, servers), createdAt);
+  const { event } = await buildItemEvent(signer, item.hash, itemJson(item, servers), createdAt, key);
   const results = await Promise.all(
     targets.map(async (t) => {
       try {
@@ -172,15 +181,50 @@ async function sendPublish(p: SendPorts, row: OutboxRow, signer: Signer, targets
       }
     }),
   );
-  if (results.some((r) => r.kind === 'ok')) markPublished(p.db, row.signer, item.hash, event.id, createdAt);
+  if (results.some((r) => r.kind === 'ok')) {
+    markPublished(p.db, row.signer, item.hash, event.id, createdAt);
+    retireAddress(p.db, p.now(), row.signer, item.hash, item.remote_d, savedD(key, item.hash), item.event_created_at ?? 0);
+  }
   // backed up once a relay the operator doesn't run holds it (FD 93)
   if (results.some((r) => r.kind === 'ok' && r.target !== d.operator.relay)) markBacked(p.db, event.id);
   return results;
 }
 
-/** Kind 5s for the payload's d tags, up to 50 addresses each, to every write relay (4.3). */
+/**
+ * A save now published at its keyed address (F5): the address it was at before, unkeyed or under another key, is
+ * retired with a kind 5 dated past its last version there, and the new one remembered.
+ */
+function retireAddress(db: SqlDb, now: number, owner: string, hash: string, old: string | null, d: string, oldAt: number): void {
+  db.run('UPDATE items SET remote_d = ? WHERE owner = ? AND hash = ?', d, owner, hash);
+  if (!old || old === d) return;
+  enqueue(db, now, { op: 'delete_item', signer: owner, subject: `retire:${old}`, payload: { ds: [old], after: oldAt }, targets: writeRelays(db, owner), lane: 'bulk' });
+}
+
+/** The library key's record (F5) to every target, ahead of the saves it addresses. */
+async function sendLibraryKey(p: SendPorts, row: OutboxRow, signer: Signer, targets: OutboxTarget[]): Promise<TargetResult[]> {
+  const key = libraryKey(p.db, row.signer);
+  if (!key) return targets.map((t) => ({ target: t.target, kind: 'rejected' as const, error: 'no library key' }));
+  const event = await buildLibraryKeyEvent(signer, key, p.now());
+  const results = await Promise.all(targets.map(async (t) => {
+    try {
+      return relayResult(t.target, await p.publish(t.target, event), event.id);
+    } catch (e) {
+      return { target: t.target, kind: 'retry', error: err(e) } as TargetResult;
+    }
+  }));
+  if (results.some((r) => r.kind === 'ok')) libraryKeyPublished(p.db, row.signer, event.created_at);
+  return results;
+}
+
+/**
+ * Kind 5s for the payload's d tags, up to 50 addresses each, to every write relay (4.3). A save's own deletion names
+ * its address under the library key too, worked out now, since the key may have come after the delete (F5).
+ */
 async function sendDeleteItem(p: SendPorts, row: OutboxRow, signer: Signer, targets: OutboxTarget[]): Promise<TargetResult[]> {
-  const { ds, after } = JSON.parse(row.payload ?? '{}') as { ds: string[]; after?: number };
+  const payload = JSON.parse(row.payload ?? '{}') as { ds: string[]; after?: number; hash?: string };
+  const key = libraryKey(p.db, row.signer);
+  const ds = [...new Set([...payload.ds, ...(payload.hash && key ? [savedD(key, payload.hash)] : [])])];
+  const after = payload.after;
   // dated after the newest version of the save it names, whatever this phone's clock says (F36)
   const events = await buildDeletions(signer, ds, Math.max(p.now(), (after ?? 0) + 1));
   return Promise.all(
@@ -298,6 +342,8 @@ export async function sendOne(p: SendPorts): Promise<boolean> {
     results = await sendLists(p, row, signer, targets);
   } else if (row.op === 'delete_item') {
     results = await sendDeleteItem(p, row, signer, targets);
+  } else if (row.op === 'publish_library_key') {
+    results = await sendLibraryKey(p, row, signer, targets);
   } else if (row.op === 'copy_relay') {
     results = (await Promise.all(targets.map((t) => sendCopyRelay(p, row, t)))).flat();
   } else {

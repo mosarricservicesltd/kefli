@@ -100,7 +100,19 @@ ALTER TABLE identities ADD COLUMN lists_settled INTEGER NOT NULL DEFAULT 0;
 UPDATE identities SET lists_settled = 1 WHERE provider = 'local' OR pubkey IN (SELECT owner FROM relays WHERE source != 'indexer');
 `;
 
-export const MIGRATIONS: ((db: SqlDb) => void)[] = [(db) => db.exec(V1), (db) => db.exec(V2), (db) => db.exec(V3), (db) => db.exec(V4), (db) => db.exec(V5)];
+// v6: the library key (C§4.3, F5), hex, with the created_at of the record it came from (null for one made here and
+// not yet seen published); and the address each save was last published or seen under, so a deletion naming it finds
+// the save and a save moved to a keyed address retires the old one. RULED: published saves were at kefli/item/<hash>.
+const V6 = `
+ALTER TABLE identities ADD COLUMN library_key TEXT;
+ALTER TABLE identities ADD COLUMN library_key_at INTEGER;
+ALTER TABLE items ADD COLUMN remote_d TEXT;
+UPDATE items SET remote_d = 'kefli/item/' || hash WHERE published = 1 OR event_id IS NOT NULL;
+`;
+
+export const MIGRATIONS: ((db: SqlDb) => void)[] = [
+  (db) => db.exec(V1), (db) => db.exec(V2), (db) => db.exec(V3), (db) => db.exec(V4), (db) => db.exec(V5), (db) => db.exec(V6),
+];
 export const SCHEMA_VERSION = MIGRATIONS.length;
 
 /** Opens the schema: WAL, foreign keys, then every migration past the stored version, each in a transaction. */
