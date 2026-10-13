@@ -11,7 +11,7 @@ const expected = (id: string) => (JSON.parse(readFileSync(join(PDFS, 'expected.j
 
 const PDF_BYTES = new TextEncoder().encode('%PDF-1.7\n…');
 
-function ports(body: Uint8Array, headers: Record<string, string>, read: ReturnType<typeof runs>) {
+function ports(body: Uint8Array<ArrayBuffer>, headers: Record<string, string>, read: ReturnType<typeof runs>) {
   const calls = { pdf: 0, parse: 0 };
   const p: PagePorts = {
     fetch: (async () => new Response(body, { status: 200, headers })) as unknown as typeof fetch,
