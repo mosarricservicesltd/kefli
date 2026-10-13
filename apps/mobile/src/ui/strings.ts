@@ -126,7 +126,6 @@ export const S = {
     done: 'Done',
     copyNote: 'Paste it somewhere safe, then clear your clipboard.',
   },
-  // listen, listen-empty, listen-scrolled
   code: {
     title: 'Enter your recovery code',
     lead: 'The twelve words from when you backed up your library, in order.',
@@ -262,6 +261,8 @@ export const S = {
     faster: 'Faster',
     note: 'To add more voices, open Android settings, then Text-to-speech output.',
     sampleOf: (v: string) => `Play a sample of ${v}`,
+    language: 'Language',
+    voiceFor: (lang: string) => `${lang} voice`,
     // the prototype's short names for its locales; any other is the phone's own name for it
     short: { 'en-GB': 'UK English', 'en-US': 'US English' } as Record<string, string>,
     // RULED: a sample reads the opening of the last article played, in its language, or this line before any has been
@@ -354,15 +355,18 @@ export const S = {
     cancel: 'Cancel',
     connected: (name: string) => `Connected to ${name}`,
   },
+  // listen, listen-ready, listen-first, listen-empty, listen-scrolled
   listen: {
     title: 'Listen',
-    played: (n: number) => `${n} played`,
+    unread: (n: number) => `${n} unread`,
     nowPlaying: 'Now playing',
     paused: 'Paused',
-    playedHead: 'Played',
+    lastPlayed: 'Last played',
+    upNext: 'Up next',
+    listHead: 'Unread',
     playAll: 'Play all',
-    emptyTitle: 'Nothing played yet',
-    emptyBody: 'Tap Listen on any article to hear it here. It keeps playing when your screen is off.',
+    emptyTitle: 'Nothing to listen to',
+    emptyBody: 'Save an article and it’s ready to play here. It keeps playing when your screen is off.',
     goToSaves: 'Go to your saves',
     play: (t: string) => `Play ${t}`,
     pause: (t: string) => `Pause ${t}`,
@@ -422,6 +426,7 @@ export const S = {
     back: 'Back',
     listen: 'Listen',
     aa: 'Text and theme',
+    speedRead: 'Speed read',
     more: 'More',
     archive: 'Archive',
     backToUnread: 'Back to Unread',
@@ -439,7 +444,7 @@ export const S = {
     loadingPage: 'Loading the page',
     close: 'Close',
     iabMenu: { openInBrowser: 'Open in browser', copyLink: 'Copy link', delete: 'Delete' },
-    menu: { speedRead: 'Speed read', backToUnread: 'Back to Unread', openOriginal: 'Open original', copyLink: 'Copy link', delete: 'Delete' },
+    menu: { backToUnread: 'Back to Unread', openOriginal: 'Open original', copyLink: 'Copy link', delete: 'Delete' },
     aaSheet: {
       title: 'Text',
       sub: 'Size and colours for reading. The rest of the app follows your phone.',

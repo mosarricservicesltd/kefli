@@ -1,16 +1,18 @@
-// Listen (mobile spec 5.7, FD 3, FD 49, FD 52, FD 68; prototype listen, listen-empty, listen-scrolled, listen-reader): Now playing,
-// led by the playing article's 3:1 cover band, with the word meter's ruler, the spoken sentence's marks and the
-// controls; then Played, most recent first, with Play all. A row's cover plays it and its body opens the Reader, whose Back returns here (listen-reader). The
-// mini takes over once the card has mostly scrolled away.
-import { useCallback, useRef, useState } from 'react';
+// Listen (mobile spec 5.7, FD 49, FD 52, FD 68, FD 111; prototype listen, listen-ready, listen-first, listen-empty,
+// listen-scrolled, listen-reader): Now playing, led by the article's 3:1 cover band, with the word meter's ruler, the
+// spoken sentence's marks and the controls, always there: with no session it holds the last played article still in
+// Unread, or the top of Unread, ready at its stored position. Then Unread, the saves with their text, with Play all. A
+// row's cover plays it and its body opens the Reader, whose Back returns here (listen-reader). The mini takes over once
+// the card has mostly scrolled away.
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { ScrollView, View, useWindowDimensions, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { router, useFocusEffect, useNavigation } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { radius } from '@kefli/tokens';
-import { minutes, minutesLeft, progressOf, type LibRow } from '../data/library';
-import { playedRows } from '../data/listen';
+import { minutes, minutesLeft, progressOf, rowByHash, type LibRow } from '../data/library';
+import { listenRows, readyRow, type Ready } from '../data/listen';
 import { useApp } from '../services/app';
-import { closeVoice, cycleRate, playAll, skip, toggle, toggleRow, useVoice, type Session } from '../services/voice';
+import { closeVoice, cycleRate, playAll, readySession, skip, skipStored, toggle, toggleRow, useVoice, type Session } from '../services/voice';
 import { store } from '../services/store';
 import { Button } from '../ui/Button';
 import { Cover } from '../ui/Cover';
@@ -77,8 +79,11 @@ function Ctl({ icon, label, onPress, size = 48 }: { icon: IconName; label: strin
   );
 }
 
-function NowPlaying({ s, row, onLayout }: { s: Session; row: LibRow | undefined; onLayout: (e: LayoutChangeEvent) => void }) {
+/** The card: a session, or with none (ready) the article it holds, whose controls start it or move its position (FD 111). */
+function NowPlaying({ s, row, ready, onLayout }: { s: Session; row: LibRow | undefined; ready?: Ready; onLayout: (e: LayoutChangeEvent) => void }) {
   const { c } = useTheme();
+  const label = ready ? (ready.last ? S.listen.lastPlayed : S.listen.upNext) : s.playing ? S.listen.nowPlaying : S.listen.paused;
+  const onSkip = (d: 15 | -15) => (ready ? skipStored(ready.row, d) : skip(d));
   const { width } = useWindowDimensions();
   const ink = ShelfCover.lineInk(s.hash, c.surface, c.text);
   const t = seconds(s.word, s.wps, s.rate);
@@ -87,8 +92,8 @@ function NowPlaying({ s, row, onLayout }: { s: Session; row: LibRow | undefined;
     <View onLayout={onLayout} style={{ marginTop: 4, marginHorizontal: 16, marginBottom: 22, borderRadius: radius.container, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line, overflow: 'hidden' }}>
       <Cover hash={s.hash} size={(width - 34) / 3} cols={3} square />
       <View style={{ paddingTop: 14, paddingHorizontal: 16, paddingBottom: 12 }}>
-        <T style={[ui(13, 'groupLabel', 1.45), { color: c.muted, marginBottom: 6, paddingRight: 48 }]}>{s.playing ? S.listen.nowPlaying : S.listen.paused}</T>
-        {!s.playing && (
+        <T style={[ui(13, 'groupLabel', 1.45), { color: c.muted, marginBottom: 6, paddingRight: 48 }]}>{label}</T>
+        {!s.playing && !ready && (
           <Press accessibilityRole="button" accessibilityLabel={S_PLAYER.close} onPress={closeVoice} layer={pressLayer(c.muted)} style={{ position: 'absolute', top: 4, right: 4, width: 48, height: 48, borderRadius: radius.button, alignItems: 'center', justifyContent: 'center' }}>
             <Icon name="x" size={20} color={c.muted} />
           </Press>
@@ -105,12 +110,12 @@ function NowPlaying({ s, row, onLayout }: { s: Session; row: LibRow | undefined;
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <View style={{ flex: 1 }} />
-          <Ctl icon="back15" label={S_PLAYER.back15} onPress={() => skip(-15)} />
-          <Press accessibilityRole="button" accessibilityLabel={s.playing ? S_PLAYER.pause : S_PLAYER.play} onPress={toggle} layer={pressLayer(c.onFill, 'fill')}
+          <Ctl icon="back15" label={S_PLAYER.back15} onPress={() => onSkip(-15)} />
+          <Press accessibilityRole="button" accessibilityLabel={s.playing ? S_PLAYER.pause : S_PLAYER.play} onPress={ready ? () => toggleRow(ready.row) : toggle} layer={pressLayer(c.onFill, 'fill')}
             style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: c.fill, alignItems: 'center', justifyContent: 'center', marginHorizontal: 8 }}>
             <Icon name={s.playing ? 'pause' : 'play'} size={24} color={c.onFill} solid />
           </Press>
-          <Ctl icon="fwd15" label={S_PLAYER.fwd15} onPress={() => skip(15)} />
+          <Ctl icon="fwd15" label={S_PLAYER.fwd15} onPress={() => onSkip(15)} />
           <View style={{ flex: 1, alignItems: 'flex-end' }}>
             <Press accessibilityRole="button" accessibilityLabel={S_PLAYER.speed(rateLabel(s.rate))} onPress={cycleRate} layer={pressLayer(c.text)}
               style={{ height: 36, minWidth: 52, paddingHorizontal: 12, borderRadius: radius.control, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center' }}>
@@ -123,8 +128,8 @@ function NowPlaying({ s, row, onLayout }: { s: Session; row: LibRow | undefined;
   );
 }
 
-/** A Played row (prototype .lrow): the leading play button wears the article's cover; the body opens the Reader. */
-function PlayedRow({ r, on }: { r: LibRow; on: boolean }) {
+/** A Listen row (prototype .lrow): the leading play button wears the article's cover; the body opens the Reader. */
+function ListenRow({ r, on }: { r: LibRow; on: boolean }) {
   const { c } = useTheme();
   const ink = ShelfCover.lineInk(r.hash, c.background, c.text);
   const p = progressOf(r);
@@ -160,7 +165,11 @@ export default function Listen() {
   const owner = useApp()?.owner ?? '';
   const s = useVoice();
   const navigation = useNavigation<{ navigate: (name: string) => void }>();
-  const rows = useLive(() => (owner ? playedRows(store(), owner) : []), ['items', 'listen_history'], [owner]);
+  const rows = useLive(() => (owner ? listenRows(store(), owner) : []), ['items'], [owner]);
+  const ready = useLive(() => (owner && !s ? readyRow(store(), owner) : null), ['items', 'listen_history', 'settings'], [owner, !s]);
+  const rate = useLive(() => store().get<{ value: string }>("SELECT value FROM settings WHERE key = 'voice.speed'")?.value ?? '', ['settings'], []);
+  // the ready article drawn as a paused session would draw it, read again when it, its place or the speed changes
+  const held = useMemo(() => (ready ? readySession(ready.row) : null), [ready?.row.hash, ready?.row.position_word, ready?.row.words, rate]); // eslint-disable-line react-hooks/exhaustive-deps
   const card = useRef({ y: 0, h: 0 });
   const viewH = useRef(0);
   const showing = useRef(true);
@@ -176,8 +185,10 @@ export default function Listen() {
     return () => setListenCardShowing(false);
   }, []));
 
-  const current = s;
-  const row = current ? rows.find((r) => r.hash === current.hash) : undefined;
+  const current = s ?? held;
+  // the playing article's row, which may be archived and so not in the list
+  const playingRow = useLive(() => (owner && s ? rowByHash(store(), owner, s.hash) : undefined), ['items'], [owner, s?.hash]);
+  const row = s ? playingRow : ready?.row;
   return (
     <View style={{ flex: 1, backgroundColor: c.background, paddingTop: insets.top }}>
       <ScrollView
@@ -186,8 +197,8 @@ export default function Listen() {
         scrollEventThrottle={32}
         contentContainerStyle={{ paddingBottom: 160 }}
       >
-        <Head title={S.listen.title} count={rows.length ? S.listen.played(rows.length) : undefined} />
-        {!rows.length ? (
+        <Head title={S.listen.title} count={rows.length ? S.listen.unread(rows.length) : undefined} />
+        {!current ? (
           <View style={{ paddingVertical: 32, paddingHorizontal: 24, alignItems: 'center' }}>
             <View style={{ width: 56, height: 56, borderRadius: radius.button, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line, alignItems: 'center', justifyContent: 'center' }}>
               <Icon name="headphones" size={26} color={c.text} />
@@ -198,26 +209,28 @@ export default function Listen() {
           </View>
         ) : (
           <>
-            {current && (
-              <NowPlaying
-                s={current} row={row}
-                onLayout={(e) => {
-                  card.current = { y: e.nativeEvent.layout.y, h: e.nativeEvent.layout.height };
-                  judge(0);
-                }}
-              />
+            <NowPlaying
+              s={current} row={row} ready={s ? undefined : ready ?? undefined}
+              onLayout={(e) => {
+                card.current = { y: e.nativeEvent.layout.y, h: e.nativeEvent.layout.height };
+                judge(0);
+              }}
+            />
+            {rows.length > 0 && (
+              <>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 4 }}>
+                  <T accessibilityRole="header" style={ui(17, 'heading', 1.3)}>{S.listen.listHead}</T>
+                  <Press accessibilityRole="button" onPress={() => playAll(rows.map((r) => r.hash))} layer={pressLayer(c.text)}
+                    style={{ height: 36, paddingLeft: 10, paddingRight: 12, borderRadius: radius.control, borderWidth: 1, borderColor: c.line, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Icon name="play" size={14} color={c.text} solid />
+                    <T style={ui(13, 'title', 1)}>{S.listen.playAll}</T>
+                  </Press>
+                </View>
+                <View style={{ paddingHorizontal: 16 }}>
+                  {rows.map((r) => <ListenRow key={r.hash} r={r} on={!!s && s.hash === r.hash && s.playing} />)}
+                </View>
+              </>
             )}
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 4 }}>
-              <T accessibilityRole="header" style={ui(17, 'heading', 1.3)}>{S.listen.playedHead}</T>
-              <Press accessibilityRole="button" onPress={() => playAll(rows.map((r) => r.hash))} layer={pressLayer(c.text)}
-                style={{ height: 36, paddingLeft: 10, paddingRight: 12, borderRadius: radius.control, borderWidth: 1, borderColor: c.line, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Icon name="play" size={14} color={c.text} solid />
-                <T style={ui(13, 'title', 1)}>{S.listen.playAll}</T>
-              </Press>
-            </View>
-            <View style={{ paddingHorizontal: 16 }}>
-              {rows.map((r) => <PlayedRow key={r.hash} r={r} on={!!current && current.hash === r.hash && current.playing} />)}
-            </View>
           </>
         )}
       </ScrollView>

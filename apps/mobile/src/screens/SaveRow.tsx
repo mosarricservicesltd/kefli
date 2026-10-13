@@ -4,7 +4,8 @@
 //
 // Swipe (MS Lists): vertical scroll keeps priority until 10 px sideways; the row arms at 96 px with a tick and
 // commits there, or on a flick over 800 px/s after 32 px, flying off on the release spring. Unread rows swipe
-// left to Archive; archived rows swipe right to Back to Unread and carry a visible ⋯.
+// left to Archive; archived rows swipe right to Back to Unread and left to Delete, on the error fill (FD 112), and
+// carry a visible ⋯.
 import { memo } from 'react';
 import { View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -77,11 +78,13 @@ function Meta({ r, online, ink, tag }: { r: LibRow; online: boolean; ink: string
 
 type Props = {
   r: LibRow; online: boolean; onOpen: (r: LibRow) => void; onSwipe: (r: LibRow) => void; onMore?: (r: LibRow) => void; drawFrom?: number;
+  /** An archived row's left swipe (FD 112); the row always flies off, since the save leaves every list. */
+  onDelete?: (r: LibRow) => void;
   /** Search: archived results are tagged, and a swipe changes the save in place, the row returning (5.6). */
   inPlace?: boolean;
 };
 
-export const SaveRow = memo(function SaveRow({ r, online, onOpen, onSwipe, onMore, drawFrom = 0, inPlace = false }: Props) {
+export const SaveRow = memo(function SaveRow({ r, online, onOpen, onSwipe, onMore, onDelete, drawFrom = 0, inPlace = false }: Props) {
   const { c } = useTheme();
   const { width } = useWindowDimensions();
   const archived = r.state === 'archived';
@@ -91,6 +94,8 @@ export const SaveRow = memo(function SaveRow({ r, online, onOpen, onSwipe, onMor
   const tx = useSharedValue(0);
   const armed = useSharedValue(false);
   const dir = archived ? 1 : -1;
+  const both = archived && !!onDelete;
+  const remove = () => onDelete?.(r);
 
   const tick = () => Haptics.selectionAsync().catch(() => undefined);
   useAnimatedReaction(() => Math.abs(tx.value) >= ARM, (now, before) => {
@@ -102,23 +107,29 @@ export const SaveRow = memo(function SaveRow({ r, online, onOpen, onSwipe, onMor
     .activeOffsetX([-10, 10])
     .failOffsetY([-10, 10])
     .onChange((e) => {
-      // only the row's own direction moves it
-      tx.value = dir < 0 ? Math.min(0, tx.value + e.changeX) : Math.max(0, tx.value + e.changeX);
+      // only the row's own directions move it
+      const x = tx.value + e.changeX;
+      tx.value = both ? x : dir < 0 ? Math.min(0, x) : Math.max(0, x);
     })
     .onEnd((e) => {
-      const flick = Math.abs(e.velocityX) > 800 && Math.abs(tx.value) > 32 && Math.sign(e.velocityX) === dir;
-      if ((armed.value || flick) && inPlace) {
+      const side = Math.sign(tx.value);
+      const flick = Math.abs(e.velocityX) > 800 && Math.abs(tx.value) > 32 && Math.sign(e.velocityX) === side;
+      if ((armed.value || flick) && both && side < 0) {
+        tx.value = withSpring(-width, { ...release, velocity: e.velocityX }, (done) => done && runOnJS(remove)());
+      } else if ((armed.value || flick) && inPlace) {
         runOnJS(onSwipe)(r);
         tx.value = withSpring(0, { ...release, velocity: e.velocityX });
       } else if (armed.value || flick) {
-        tx.value = withSpring(dir * width, { ...release, velocity: e.velocityX }, (done) => done && runOnJS(onSwipe)(r));
+        tx.value = withSpring(side * width, { ...release, velocity: e.velocityX }, (done) => done && runOnJS(onSwipe)(r));
       } else {
         tx.value = withSpring(0, { ...release, velocity: e.velocityX });
       }
     });
 
   const cardStyle = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }] }));
-  const underStyle = useAnimatedStyle(() => ({ opacity: tx.value === 0 ? 0 : 1 }));
+  // the reveal on the side the row has moved from: Archive or Back to Unread, or Delete on an archived row's left
+  const underStyle = useAnimatedStyle(() => ({ opacity: (both ? tx.value > 0 : tx.value !== 0) ? 1 : 0 }));
+  const deleteStyle = useAnimatedStyle(() => ({ opacity: tx.value < 0 ? 1 : 0 }));
   const markStyle = useAnimatedStyle(() => ({
     opacity: withTiming(armed.value ? 1 : 0.7, armed.value ? quickIn : quickOut),
     transform: [{ scale: withTiming(armed.value ? 1 : 0.9, armed.value ? quickIn : quickOut) }],
@@ -133,12 +144,18 @@ export const SaveRow = memo(function SaveRow({ r, online, onOpen, onSwipe, onMor
         <Animated.View style={markStyle}><Icon name={archived ? 'restore' : 'archive'} size={18} color={c.onFill} /></Animated.View>
         <Animated.View style={labelStyle}><T style={[ui(13, 'title', 1.3), { color: c.onFill }]}>{archived ? S.row.backToUnread : S.row.archive}</T></Animated.View>
       </Animated.View>
+      {both && (
+        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: radius.container, backgroundColor: c.error, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8, paddingHorizontal: 20 }, deleteStyle]}>
+          <Animated.View style={labelStyle}><T style={[ui(13, 'title', 1.3), { color: c.onFill }]}>{S.row.delete}</T></Animated.View>
+          <Animated.View style={markStyle}><Icon name="trash" size={18} color={c.onFill} /></Animated.View>
+        </Animated.View>
+      )}
       <GestureDetector gesture={pan}>
         <Animated.View style={cardStyle}>
           <Press
             accessibilityRole="button" accessibilityLabel={title}
-            accessibilityActions={[{ name: 'swipe', label: archived ? S.row.backToUnread : S.row.archive }]}
-            onAccessibilityAction={() => onSwipe(r)}
+            accessibilityActions={[{ name: 'swipe', label: archived ? S.row.backToUnread : S.row.archive }, ...(both ? [{ name: 'delete', label: S.row.delete }] : [])]}
+            onAccessibilityAction={(e) => (e.nativeEvent.actionName === 'delete' ? remove() : onSwipe(r))}
             onPress={() => onOpen(r)} layer={pressLayer(c.text)}
             style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start', paddingTop: 14, paddingBottom: 15, paddingRight: onMore ? 44 : 0, backgroundColor: c.background }}
           >

@@ -71,7 +71,8 @@ function ListenChip({ P, gone, onPress }: { P: ReaderColors; gone: boolean; onPr
   );
 }
 
-function Bar({ row, P, onAa, onMore, chip }: { row: LibRow; P: ReaderColors; onAa: () => void; onMore: () => void; chip?: React.ReactNode }) {
+/** The bar: Back, the source, the Listen chip, Speed read while the text is shown (FD 110), Aa and ⋯. */
+function Bar({ row, P, onAa, onMore, onSpeedRead, chip }: { row: LibRow; P: ReaderColors; onAa: () => void; onMore: () => void; onSpeedRead?: () => void; chip?: React.ReactNode }) {
   const btn = (label: string, onPress: () => void, child: React.ReactNode) => (
     <Press accessibilityRole="button" accessibilityLabel={label} onPress={onPress} layer={pressLayer(P.text, 'reader')} style={{ width: 48, height: 48, borderRadius: radius.button, alignItems: 'center', justifyContent: 'center' }}>
       {child}
@@ -82,6 +83,7 @@ function Bar({ row, P, onAa, onMore, chip }: { row: LibRow; P: ReaderColors; onA
       {btn(S.reader.back, () => router.back(), <Icon name="back" size={22} color={P.text} />)}
       <T numberOfLines={1} style={[ui(13, 'body', 1.3), { flex: 1, textAlign: 'center', color: P.muted }]}>{hostOf(row.url)}</T>
       {chip}
+      {onSpeedRead && btn(S.reader.speedRead, onSpeedRead, <Icon name="speedread" size={22} color={P.text} />)}
       {btn(S.reader.aa, onAa, <T style={[ui(15, 'heading', 1, -0.02), { color: P.text }]}>Aa</T>)}
       {btn(S.reader.more, onMore, <Icon name="more" size={22} color={P.text} />)}
     </View>
@@ -451,7 +453,6 @@ export default function Reader() {
   const reopen = () => router.push(`/reader/${row.hash}`);
   const menu = () => openSheet(S.reader.more, () => (
     <View>
-      {article && <MenuItem icon="speedread" label={S.reader.menu.speedRead} onPress={() => closeSheet(openSpeedRead)} />}
       {row.state === 'archived' && <MenuItem icon="restore" label={S.reader.menu.backToUnread} onPress={() => closeSheet(() => { router.back(); archive(row.hash, false, reopen); })} />}
       <MenuItem icon="ext" label={S.reader.menu.openOriginal} onPress={() => closeSheet(() => router.push(`/reader/${row.hash}/original`))} />
       <MenuItem icon="link" label={S.reader.menu.copyLink} onPress={() => closeSheet(() => Clipboard.setStringAsync(row.url).then(() => showToast({ text: S.toast.linkCopied, hash: row.hash })))} />
@@ -486,7 +487,7 @@ export default function Reader() {
     <View style={{ flex: 1, backgroundColor: P.bg, paddingTop: insets.top }}>
       <StatusBar style={P.id === 'dark' ? 'light' : 'dark'} />
       <Bar
-        row={row} P={P} onAa={() => openSheet(S.reader.aaSheet.title, () => <AaSheet hash={row.hash} />)} onMore={menu}
+        row={row} P={P} onAa={() => openSheet(S.reader.aaSheet.title, () => <AaSheet hash={row.hash} />)} onMore={menu} onSpeedRead={waiting ? undefined : openSpeedRead}
         chip={waiting ? undefined : <ListenChip P={P} gone={playingHere} onPress={onListen} />}
       />
       {waiting ? (
