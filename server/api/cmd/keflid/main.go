@@ -165,7 +165,8 @@ func sweep(ctx context.Context, st *store.Store, blobs *blossom.Server, log *slo
 	}
 }
 
-// sweepOnce: inbox blobs past their 14 days go (contract 5), and so do expired offers and used authorisation ids.
+// sweepOnce: inbox blobs past their 14 days go (contract 5), and so do expired offers and used authorisation ids,
+// then blob files no owner holds and stale upload temporaries (F2).
 func sweepOnce(ctx context.Context, st *store.Store, blobs *blossom.Server) error {
 	orphaned, err := st.ExpireInbox(ctx)
 	for _, sha := range orphaned {
@@ -174,5 +175,9 @@ func sweepOnce(ctx context.Context, st *store.Store, blobs *blossom.Server) erro
 	if err != nil {
 		return err
 	}
-	return st.Sweep(ctx)
+	if err := st.Sweep(ctx); err != nil {
+		return err
+	}
+	_, err = blobs.SweepFiles(ctx, st.Now())
+	return err
 }
