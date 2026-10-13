@@ -9,7 +9,7 @@
 //      connected-browsers record to its write relays, DELETE /account as S, then S off the phone.
 // S stays whole until step 5, so a save is never deleted before its copy exists under T.
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { DEVICES_D, ITEM_D_PREFIX, KIND, LIBRARY_KEY_D, T_TAG, buildDeletions, httpAuth, readItemEvent, type CryptoPort, type NostrEvent, type Signer } from '@kefli/protocol';
+import { DEVICES_D, KIND, LIBRARY_KEY_D, T_TAG, buildDeletions, httpAuth, readItemEvent, type CryptoPort, type NostrEvent, type Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { enqueue } from '../data/outbox';
 import { itemAddresses } from '../data/libraryKey';
@@ -188,10 +188,9 @@ async function holdsAll(p: MovePorts, relay: string, owner: string, want: string
 
 /** Step 5's servers: kind 5s for S's saves and record (unconfirmed, RULED), then DELETE /account as S, which must succeed. */
 async function retireRemote(p: MovePorts, job: MoveJob): Promise<boolean> {
-  // each save at every address it may be at, keyed and unkeyed (F5), and S's records
+  // each save at every address it is at, never a plain hash it wasn't published under (F5), and S's records
   const ds = [
     ...itemAddresses(p.db, job.from),
-    ...p.db.all<{ hash: string }>('SELECT hash FROM items WHERE owner = ?', job.from).map((r) => ITEM_D_PREFIX + r.hash),
     ...p.db.all<{ d: string }>('SELECT d FROM items_future WHERE owner = ?', job.from).map((r) => r.d),
     DEVICES_D, LIBRARY_KEY_D,
   ];

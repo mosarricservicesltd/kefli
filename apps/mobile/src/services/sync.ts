@@ -17,7 +17,7 @@ import { KEEP_COPIES, getSetting } from '../data/settings';
 import { readUserLists, settleUserLists } from './nostrSignIn';
 import { markBacked } from '../data/backup';
 import { indexerRelays, listServers, recordList, relayEntries, seedGeneratedLists, writeRelays, type DefaultsLike } from '../data/lists';
-import { adoptLibraryKey, libraryKey, makeLibraryKey } from '../data/libraryKey';
+import { adoptLibraryKey, libraryKey, makeLibraryKey, moveToKeyedAddresses } from '../data/libraryKey';
 import {
   applyDeletion, applyItem, getCursor, hashInUse, readRelays, setCursor, textCached, textMissing, textQueue,
   type Stream, type TextJob,
@@ -241,9 +241,11 @@ export async function syncLibraryKey(p: SyncPorts, owner: string): Promise<void>
     } catch {
       // a record that doesn't open, or a version this phone doesn't read: as if absent, and nothing is made over it
     }
-    return;
+  } else if (!libraryKey(p.db, owner) && answered === relays.length) {
+    makeLibraryKey(p.db, p.now(), owner, p.crypto.randomBytes);
   }
-  if (!libraryKey(p.db, owner) && answered === relays.length) makeLibraryKey(p.db, p.now(), owner, p.crypto.randomBytes);
+  // with the key known, any save still at another address (a library from before v1.10) is queued to move
+  moveToKeyedAddresses(p.db, p.now(), owner);
 }
 
 /** Phase 1, phase 3 then phase 5 for the active identity. Restartable: cursors move only after a relay answers in full. */

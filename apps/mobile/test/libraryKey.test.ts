@@ -132,6 +132,22 @@ describe('the library key (contract 4.3, F5)', () => {
     expect(w.log.find((e) => e.kind === 5)?.tags).toContainEqual(['a', `30078:${w.pk}:${ITEM_D_PREFIX}${h(1)}`]);
   });
 
+  test('a library from before v1.10 moves whole at the first sync that knows its key', async () => {
+    const w = world('recovery_code');
+    w.item(1, ITEM_D_PREFIX + h(1));
+    w.item(2, ITEM_D_PREFIX + h(2));
+    w.db.run("DELETE FROM outbox WHERE op = 'publish_item'");
+    // no record anywhere and every relay answers: the key is made, and both saves are queued to move
+    await syncLibraryKey(w.sync, w.pk);
+    const key = libraryKey(w.db, w.pk)!;
+    expect(w.db.all<{ subject: string }>("SELECT subject FROM outbox WHERE op = 'publish_item' ORDER BY subject").map((r) => r.subject)).toEqual([h(1), h(2)]);
+    await drain(w.send);
+    for (const n of [1, 2]) expect(w.db.get('SELECT remote_d FROM items WHERE hash = ?', h(n))).toEqual({ remote_d: savedD(key, h(n)) });
+    // and nothing more to move at the next sync
+    await syncLibraryKey(w.sync, w.pk);
+    expect(w.db.get("SELECT 1 FROM outbox WHERE op = 'publish_item'")).toBeUndefined();
+  });
+
   test('a deletion finds a save by its keyed address, and one naming an address it has left takes nothing', async () => {
     const w = world('new');
     const key = makeLibraryKey(w.db, 900, w.pk, nodeCrypto.randomBytes);

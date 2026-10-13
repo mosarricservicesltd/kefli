@@ -1,4 +1,4 @@
-import { LocalSigner, type NostrEvent } from '@kefli/protocol';
+import { LocalSigner, savedD, type NostrEvent } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
@@ -17,9 +17,10 @@ function world(o: { down?: Set<string>; refuse?: Set<string>; accountStatus?: nu
   const pk = signer.pubkey();
   ensureIdentityRow(db, 1, pk, 'new', true);
   seedGeneratedLists(db, pk, D);
+  // published before v1.10, at their unkeyed addresses (F5)
   for (const n of [1, 2]) {
-    db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, text_sha256, text_servers) VALUES (?, ?, ?, 1, 'unread', 'cached', 'share', ?, ?)",
-      pk, h(n), `https://e.com/${n}`, h(100 + n), JSON.stringify(['http://blossom', 'http://m1']));
+    db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, text_sha256, text_servers, remote_d) VALUES (?, ?, ?, 1, 'unread', 'cached', 'share', ?, ?, ?)",
+      pk, h(n), `https://e.com/${n}`, h(100 + n), JSON.stringify(['http://blossom', 'http://m1']), `kefli/item/${h(n)}`);
   }
   db.run("INSERT INTO inbox_seen (wrap_id, owner, seen_at, outcome) VALUES (?, ?, 1, 'created')", h(500), pk);
   const log: string[] = [];
@@ -77,6 +78,20 @@ describe('Delete my data (mobile spec 7.2, contract 4.7)', () => {
     }
     expect(w.sent.some((s) => s.relay === 'ws://idx' && s.event.kind === 5)).toBe(false);
     expect(seen.at(-1)).toEqual({ operator: 'done', others: { 'ws://a': 'done', 'ws://b': 'done', 'http://m1': 'done' }, phone: 'done' });
+  });
+
+  test('a save only ever at its keyed address is deleted there, and its plain hash is never published (F5)', async () => {
+    const w = world();
+    const key = new Uint8Array(32).fill(9);
+    w.db.run('UPDATE identities SET library_key = ?, library_key_at = 1 WHERE pubkey = ?', '09'.repeat(32), w.pk);
+    w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, remote_d) VALUES (?, ?, 'https://e.com/3', 1, 'unread', 'failed', 'share', ?)",
+      w.pk, h(3), savedD(key, h(3)));
+    expect(await deleteEverything(w.p, () => undefined)).toBe('done');
+    const named = w.sent.flatMap((s) => s.event.tags).filter((t) => t[0] === 'a').map((t) => t[1].split(':')[2]);
+    expect(named).toContain(savedD(key, h(3)));
+    expect(named).not.toContain(`kefli/item/${h(3)}`);
+    // the saves from before v1.10 are named at the unkeyed addresses they were at, and at their keyed ones
+    expect(named).toEqual(expect.arrayContaining([`kefli/item/${h(1)}`, savedD(key, h(1)), 'kefli/library-key']));
   });
 
   test('the operator unreachable, or refusing DELETE /account: nothing else runs and the key stays', async () => {

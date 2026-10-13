@@ -66,9 +66,7 @@ export function adoptLibraryKey(db: SqlDb, now: number, owner: string, key: Uint
     db.run('UPDATE identities SET library_key = ?, library_key_at = ? WHERE pubkey = ?', hex, at, owner);
     db.run("DELETE FROM outbox WHERE op = 'publish_library_key' AND signer = ? AND state IN ('held', 'queued')", owner);
     if (!r?.library_key) return 'kept';
-    for (const it of db.all<{ hash: string; remote_d: string }>('SELECT hash, remote_d FROM items WHERE owner = ? AND remote_d IS NOT NULL AND pending_delete_at IS NULL', owner)) {
-      if (it.remote_d !== savedD(key, it.hash)) enqueue(db, now, { op: 'publish_item', signer: owner, subject: it.hash, targets: writeRelays(db, owner), lane: 'bulk' });
-    }
+    moveToKeyedAddresses(db, now, owner);
     return 'moved';
   });
 }
@@ -93,7 +91,12 @@ export function savesAt(db: SqlDb, owner: string, ds: string[]): Map<string, str
   return out;
 }
 
-/** Every address a save of this identity may be at: for Delete my data and a move's retirement of the old identity. */
+/**
+ * Every address a save of this identity may be at, for Delete my data and a move's retirement of the old identity:
+ * the address each was last published or seen at, its keyed one, and old addresses still waiting to be retired. A
+ * save's unkeyed kefli/item/<hash> is named only if it was published there, so deleting a library never publishes
+ * the plain hash of a save that was only ever keyed (F5).
+ */
 export function itemAddresses(db: SqlDb, owner: string): string[] {
   const key = libraryKey(db, owner);
   const out = new Set<string>();
@@ -101,5 +104,25 @@ export function itemAddresses(db: SqlDb, owner: string): string[] {
     if (it.remote_d) out.add(it.remote_d);
     if (key) out.add(savedD(key, it.hash));
   }
+  for (const r of db.all<{ payload: string | null }>("SELECT payload FROM outbox WHERE signer = ? AND op = 'delete_item' AND subject LIKE 'retire:%'", owner)) {
+    for (const d of (JSON.parse(r.payload ?? '{}') as { ds?: string[] }).ds ?? []) out.add(d);
+  }
   return [...out];
+}
+
+/**
+ * Saves still at an address other than their keyed one (unkeyed from before v1.10, or under another key) are queued
+ * to be published at it, on the bulk lane; each send retires the old address (F5). Run after the key is known, at
+ * every sync, so a library from before v1.10 moves whole; built at send time, so from rows this sync has updated.
+ */
+export function moveToKeyedAddresses(db: SqlDb, now: number, owner: string): number {
+  const key = libraryKey(db, owner);
+  if (!key) return 0;
+  let n = 0;
+  for (const it of db.all<{ hash: string; remote_d: string }>('SELECT hash, remote_d FROM items WHERE owner = ? AND remote_d IS NOT NULL AND pending_delete_at IS NULL', owner)) {
+    if (it.remote_d === savedD(key, it.hash)) continue;
+    enqueue(db, now, { op: 'publish_item', signer: owner, subject: it.hash, targets: writeRelays(db, owner), lane: 'bulk' });
+    n++;
+  }
+  return n;
 }
