@@ -62,6 +62,21 @@ check 'the write policy, as strfry, accepts the registered key' '[ "$(policy $ke
 check 'and refuses another' '[ "$(policy $(printf "c%.0s" {1..64}))" = reject ]'
 check 'the sweep runs' 'box systemctl start relay-sweep'
 check 'the access log holds no address' '! box grep -q 127.0.0.1 /var/log/caddy/access.log'
+# F6: a WebSocket connection to the relay, and a request with a query to a stopped upstream (Caddy's error log), leave
+# no address, query or key in the journal, which keeps seven days
+# (HTTP/1.1: a WebSocket upgrade can't ride HTTP/2). The journal's own listen addresses and Caddy's admin reloads on
+# localhost aren't clients, so the checks look for what a client leaves: strfry's connection lines, and an address or
+# query in Caddy's request logs.
+via relay.kefli.app --http1.1 --max-time 2 -o /dev/null -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' \
+  -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' https://relay.kefli.app/ || true
+box systemctl stop keflid
+via api.kefli.app -o /dev/null 'https://api.kefli.app/defaults.json?probe=kefli-secret-query' || true
+box systemctl start keflid
+check "the journal holds no relay connection's address or key" \
+  '! grep -qiE "connect from|authed as" <<<"$(box journalctl -u strfry --no-pager)"'
+check "the journal holds no request's address or query" \
+  '! grep -qE "remote_ip|client_ip|kefli-secret-query" <<<"$(grep -E "\"logger\":\"http\.log" <<<"$(box journalctl -u caddy --no-pager)")"'
+check 'the journal keeps seven days' 'grep -qx "MaxRetentionSec=7day" <<<"$(box cat /etc/systemd/journald.conf.d/10-kefli.conf)"'
 check 'SSH takes keys only' 'grep -qx "passwordauthentication no" <<<"$(box sshd -T)"'
 check 'the firewall is loaded' 'grep -qF 198.51.100.7 <<<"$(box nft list set inet filter ssh_allow4)"'
 

@@ -9,7 +9,10 @@ Group=strfry
 # The write policy reads keflid's database in /var/lib/kefli, which the kefli group may read.
 SupplementaryGroups=kefli
 WorkingDirectory=/var/lib/strfry
-ExecStart=/usr/local/bin/strfry --config=/etc/strfry.conf relay
+# Warnings and errors only: at INFO strfry logs each connection's address and the pubkey it AUTHs as, which together
+# would tie a home address to a library in the journal (F6; the privacy page lists no addresses). loguru reads WARNING;
+# the WARN that strfry's usage text names makes it refuse to start.
+ExecStart=/usr/local/bin/strfry --verbosity=WARNING --config=/etc/strfry.conf relay
 Restart=on-failure
 RestartSec=5
 LimitNOFILE=524288
