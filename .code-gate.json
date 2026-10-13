@@ -1,6 +1,7 @@
 {
   "threshold": 15,
   "cc_limit": 10,
+  "coverage_file": "coverage/lcov.info",
   "branches": [
     "main",
     "master"
@@ -46,6 +47,8 @@
     "*/apps/extension/src/saved.ts",
     "*/apps/extension/src/capture.ts",
     "*/apps/extension/src/relay.ts",
-    "*/apps/extension/scripts/*"
+    "*/apps/extension/scripts/*",
+    "*/apps/extension/build.mjs",
+    "*/tools/design-qa/*"
   ]
 }

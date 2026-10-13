@@ -10,7 +10,7 @@
     "tokens:check": "node shared/tokens/build-ts.mjs --check",
     "test": "npm run tokens:check && jest",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "coverage": "(jest --coverage --coverageReporters=lcov --coverageReporters=cobertura --coverageReporters=text-summary || true) && make -s -C server/api cover && node tools/go-lcov.mjs server/api/coverage.out >> coverage/lcov.info"
+    "coverage": "(jest --coverage --coverageReporters=lcov --coverageReporters=text-summary || true) && make -s -C server/api cover && node tools/go-lcov.mjs server/api/coverage.out >> coverage/lcov.info"
   },
   "engines": {
     "node": ">=24"
