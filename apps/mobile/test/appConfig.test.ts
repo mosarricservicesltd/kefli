@@ -21,17 +21,25 @@ describe('app.config.js', () => {
   test('the local variant points at the local stack and adds the localhost-only cleartext plugin', () => {
     withEnv({ KEFLI_VARIANT: 'local' }, () => {
       const c = appConfig({ config: base });
-      expect(c.extra).toEqual({ other: 1, kefli: { variant: 'local', defaultsUrl: 'http://localhost:8447/defaults.json' } });
+      expect(c.extra).toEqual({ other: 1, kefli: { variant: 'local', defaultsUrl: 'http://localhost:8447/defaults.json', baked: expect.objectContaining({ v: 1 }) } });
+      expect((c.extra.kefli as { baked: { operator: { api: string } } }).baked.operator.api).toBe('http://localhost:8447');
       expect(c.plugins).toEqual(['expo-router', './plugins/with-local-cleartext']);
     });
   });
 
-  test('a release build takes an https defaults URL and allows no cleartext', () => {
-    withEnv({ KEFLI_DEFAULTS_URL: 'https://api.example/defaults.json' }, () => {
+  test('a release build takes an https defaults URL, bakes in its copy of defaults.json and allows no cleartext', () => {
+    withEnv({ KEFLI_DEFAULTS_URL: 'https://api.kefli.app/defaults.json' }, () => {
       const c = appConfig({ config: base });
-      expect(c.extra.kefli).toEqual({ variant: 'release', defaultsUrl: 'https://api.example/defaults.json' });
+      expect(c.extra.kefli).toEqual({
+        variant: 'release', defaultsUrl: 'https://api.kefli.app/defaults.json',
+        baked: expect.objectContaining({ operator: { relay: 'wss://relay.kefli.app', blossom: 'https://blossom.kefli.app', api: 'https://api.kefli.app' } }),
+      });
       expect(c.plugins).toEqual(['expo-router']);
     });
+  });
+
+  test('a release build refuses a baked copy that names another API (F1)', () => {
+    withEnv({ KEFLI_DEFAULTS_URL: 'https://api.example/defaults.json' }, () => expect(() => appConfig({ config: base })).toThrow('names the API'));
   });
 
   test('a release build refuses an http URL or none', () => {

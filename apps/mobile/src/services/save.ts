@@ -7,7 +7,7 @@ import { phonePagePorts } from './pagePorts';
 import { phoneCrypto } from '../crypto/port';
 import type { SqlDb } from '../data/db';
 import { getItem } from '../data/items';
-import { priorOf, queueSave, type Prior, type SaveTargets } from '../data/saves';
+import { interimRelays, priorOf, queueSave, type Prior, type SaveTargets } from '../data/saves';
 import type { NewItem } from '../data/items';
 import { indexText } from '../data/sync';
 import { seedGeneratedLists } from '../data/lists';
@@ -74,9 +74,12 @@ export async function saveLink(url: string, report: (s: SaveStep) => void): Prom
   const signer = await ensureSigner();
   const db = store();
   const owner = signer.pubkey();
-  seedGeneratedLists(db, owner, defaults);
+  // only Kefli's own identity gets the default lists; a nostr user's come from their list and Keep backup copies (F4)
+  if ((db.get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local') === 'local') {
+    seedGeneratedLists(db, owner, defaults);
+  }
   const c: Ctx = {
-    db, owner, now: () => Math.floor(Date.now() / 1000), targets: { api: defaults.operator.api, blossom: defaults.operator.blossom, mirror: defaults.mirrors[0] },
+    db, owner, now: () => Math.floor(Date.now() / 1000), targets: { api: defaults.operator.api, blossom: defaults.operator.blossom, mirror: defaults.mirrors[0], interim: interimRelays(defaults) },
     say: (step, detail, ok = true) => report({ step, ok, detail }),
   };
   c.say('identity', `${owner.slice(0, 12)}…`);

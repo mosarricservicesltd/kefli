@@ -4,17 +4,20 @@
 package blossom
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/richardminton-glitch/Kefli/server/api/internal/auth"
@@ -29,6 +32,8 @@ type Server struct {
 	Base string // public address blobs are served from, such as https://blossom.kefli.app
 	st   *store.Store
 	log  *slog.Logger
+	// commitMu makes an upload's quota check, rename and owner row one step (F2)
+	commitMu sync.Mutex
 }
 
 func New(dir, base string, st *store.Store, log *slog.Logger) *Server {
@@ -142,22 +147,26 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusBadRequest, "sha256")
 		return
 	}
+	// a body of unknown length can't be checked against the quota before it is read (F2)
+	if r.ContentLength < 0 {
+		refuse(w, http.StatusLengthRequired, "length")
+		return
+	}
 	up, status, reason := s.allowed(r, sha, r.ContentLength)
 	if status != 0 {
 		refuse(w, status, reason)
 		return
 	}
-	size, err := s.write(r.Body, sha)
+	tmp, size, err := s.receive(r.Body, sha)
+	if tmp != "" {
+		defer os.Remove(tmp) // gone once renamed; otherwise a refused upload leaves nothing behind (F2)
+	}
 	if err != nil {
 		s.refuseWrite(w, err)
 		return
 	}
-	if _, status, reason := s.withinQuota(r, up, sha, size); status != 0 {
+	if status, reason := s.commit(r, up, sha, size, tmp); status != 0 {
 		refuse(w, status, reason)
-		return
-	}
-	if err := s.st.AddOwner(r.Context(), sha, up.signer, up.account, size, up.inbox); err != nil {
-		refuse(w, http.StatusInternalServerError, "server")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -181,18 +190,17 @@ func (s *Server) refuseWrite(w http.ResponseWriter, err error) {
 	}
 }
 
-// write stores the body under its hash, through a temporary file renamed into place, so a reader never sees half a blob.
-// The body's hash must be sha; a blob already stored is kept as it is.
-func (s *Server) write(body io.Reader, sha string) (int64, error) {
+// receive reads the body into a temporary file beside where the blob will live, and returns its path (for the caller
+// to remove) and size. The body's hash must be sha.
+func (s *Server) receive(body io.Reader, sha string) (string, int64, error) {
 	dir := filepath.Dir(s.path(sha))
 	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return 0, err
+		return "", 0, err
 	}
 	tmp, err := os.CreateTemp(dir, ".upload-*")
 	if err != nil {
-		return 0, err
+		return "", 0, err
 	}
-	defer os.Remove(tmp.Name())
 	h := sha256.New()
 	n, err := io.Copy(io.MultiWriter(tmp, h), io.LimitReader(body, MaxBlob+1))
 	if cerr := tmp.Close(); err == nil {
@@ -200,13 +208,63 @@ func (s *Server) write(body io.Reader, sha string) (int64, error) {
 	}
 	switch {
 	case err != nil:
-		return 0, err
+		return tmp.Name(), 0, err
 	case n > MaxBlob:
-		return 0, errTooLarge
+		return tmp.Name(), 0, errTooLarge
 	case hex.EncodeToString(h.Sum(nil)) != sha:
-		return 0, errHash
+		return tmp.Name(), 0, errHash
 	}
-	return n, os.Rename(tmp.Name(), s.path(sha))
+	return tmp.Name(), n, nil
+}
+
+// commit checks the real size against the quota, renames the received file into place, so a reader never sees half
+// a blob, and records the owner. One at a time, so concurrent uploads can't each pass the check and together
+// overshoot the quota (F2); keflid is a single process. A blob already stored is replaced by identical bytes.
+func (s *Server) commit(r *http.Request, up *uploader, sha string, size int64, tmp string) (int, string) {
+	s.commitMu.Lock()
+	defer s.commitMu.Unlock()
+	if _, status, reason := s.withinQuota(r, up, sha, size); status != 0 {
+		return status, reason
+	}
+	if err := os.Rename(tmp, s.path(sha)); err != nil {
+		s.log.Error("store blob", "err", err)
+		return http.StatusInternalServerError, "server"
+	}
+	if err := s.st.AddOwner(r.Context(), sha, up.signer, up.account, size, up.inbox); err != nil {
+		return http.StatusInternalServerError, "server"
+	}
+	return 0, ""
+}
+
+// SweepFiles removes blob files no owner holds and upload temporaries, each once older than an hour so an upload
+// still between its rename and its owner row is left alone: what a refused upload left before F2's fix, or a
+// crash mid-upload. Returns how many it removed.
+func (s *Server) SweepFiles(ctx context.Context, now time.Time) (int, error) {
+	removed := 0
+	err := filepath.WalkDir(s.Dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || ctx.Err() != nil {
+			return ctx.Err()
+		}
+		info, err := d.Info()
+		if err != nil || now.Sub(info.ModTime()) < time.Hour {
+			return nil
+		}
+		name := d.Name()
+		if !strings.HasPrefix(name, ".upload-") {
+			if !auth.IsHex64(name) {
+				return nil
+			}
+			held, err := s.st.Exists(ctx, name)
+			if err != nil || held {
+				return err
+			}
+		}
+		if os.Remove(p) == nil {
+			removed++
+		}
+		return nil
+	})
+	return removed, err
 }
 
 // blobHash reads /<sha256> with any file extension (BUD-01).

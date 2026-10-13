@@ -122,7 +122,35 @@ export function relayAddress(typed: string): string | null {
   return `wss://${m[1].toLowerCase()}${m[2] ?? ''}${path}`;
 }
 
-export type RelayRow = { url: string; source: 'operator' | 'default' | 'user'; removable: boolean };
+/** Whether the identity's lists are known (4.6): always for Kefli's own; for a nostr user once read or confirmed absent. */
+export function listsSettled(db: SqlDb, owner: string): boolean {
+  const r = db.get<{ provider: string; lists_settled: number }>('SELECT provider, lists_settled FROM identities WHERE pubkey = ?', owner);
+  return !r || r.provider === 'local' || r.lists_settled === 1;
+}
+
+/**
+ * A nostr user's lists became known (4.6, F4): the identity is marked settled, and saves and deletions that waited
+ * (no target, with Keep backup copies off) or went to the interim relays only gain every write relay in the list.
+ */
+export function markListsSettled(db: SqlDb, now: number, owner: string): void {
+  db.tx(() => {
+    db.run('UPDATE identities SET lists_settled = 1 WHERE pubkey = ?', owner);
+    const relays = writeRelays(db, owner);
+    for (const r of db.all<{ id: number }>("SELECT id FROM outbox WHERE signer = ? AND op IN ('publish_item', 'delete_item') AND state IN ('held', 'queued', 'sending')", owner)) {
+      for (const url of relays) {
+        db.run("INSERT OR IGNORE INTO outbox_targets (outbox_id, target, state, attempts, next_at) VALUES (?, ?, 'pending', 0, ?)", r.id, url, now);
+      }
+    }
+    // saves already sent went to the interim relays only: their own relays get them as signed, as an added relay does
+    if (db.get('SELECT 1 FROM items WHERE owner = ? AND published = 1', owner)) {
+      for (const r of db.all<{ url: string }>("SELECT url FROM relays WHERE owner = ? AND source = 'user' AND write = 1", owner)) {
+        enqueue(db, now, { op: 'copy_relay', signer: owner, subject: r.url, targets: [r.url], lane: 'bulk' });
+      }
+    }
+  });
+}
+
+export type RelayRow ={ url: string; source: 'operator' | 'default' | 'user'; removable: boolean };
 
 const isLocal = (db: SqlDb, owner: string) =>
   (db.get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local') === 'local';
@@ -151,6 +179,8 @@ export function relayRows(db: SqlDb, owner: string): RelayRow[] {
  */
 export function addRelay(db: SqlDb, now: number, owner: string, url: string, d: DefaultsLike): boolean {
   return db.tx(() => {
+    // a nostr user's list must be known first, or this would start a list that replaces theirs (4.6)
+    if (!listsSettled(db, owner)) return false;
     if (isLocal(db, owner)) seedGeneratedLists(db, owner, d);
     const held = db.get<{ read: number; write: number; source: string; added_by_app: number }>(
       'SELECT read, write, source, added_by_app FROM relays WHERE owner = ? AND url = ?', owner, url);

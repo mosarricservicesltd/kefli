@@ -67,6 +67,15 @@ export function failureOf(e: unknown): 'timeout' | 'declined' {
   return e instanceof TimeoutError || (e as { code?: string } | null)?.code === 'timeout' ? 'timeout' : 'declined';
 }
 
+/**
+ * Whether an error is the signer not answering (no answer in time, refused out of sight, declined, gone) rather than
+ * a result: a request that failed this way may succeed later, so what depends on it waits (FD 104, F3).
+ */
+export function isSignerFailure(e: unknown): boolean {
+  const code = (e as { code?: unknown } | null)?.code;
+  return e instanceof TimeoutError || (typeof code === 'string' && ['timeout', 'background', 'rejected', 'unavailable', 'not_installed'].includes(code));
+}
+
 export function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   let t: ReturnType<typeof setTimeout>;
   return Promise.race([p, new Promise<never>((_, fail) => (t = setTimeout(() => fail(new TimeoutError()), ms)))]).finally(() => clearTimeout(t));

@@ -6,13 +6,16 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -29,6 +32,7 @@ type env struct {
 	blob  *httptest.Server
 	clock time.Time
 	dir   string
+	bs    *blossom.Server
 }
 
 func newEnv(t *testing.T) *env {
@@ -46,6 +50,7 @@ func newEnv(t *testing.T) *env {
 	e.blob = httptest.NewServer(httpapi.CORS(blobMux))
 	b := blossom.New(filepath.Join(dir, "blobs"), e.blob.URL, st, log)
 	b.Routes(blobMux)
+	e.bs = b
 	httpapi.New(httpapi.Config{Base: e.api.URL, Defaults: []byte(`{"v":1}`), Names: map[string]string{"_": "ab"}, Relays: []string{"wss://r"}, Unlink: b.Unlink}, st, log).Routes(apiMux)
 	t.Cleanup(func() { e.api.Close(); e.blob.Close(); st.Close() })
 	return e
@@ -348,6 +353,97 @@ func TestQuotaAndPreflight(t *testing.T) {
 	res, _ := http.DefaultClient.Do(req)
 	if res.StatusCode != 413 || res.Header.Get("X-Reason") != "quota" {
 		t.Fatalf("preflight %d %q", res.StatusCode, res.Header.Get("X-Reason"))
+	}
+}
+
+// files under the blob directory, temporaries included
+func (e *env) files() []string {
+	var out []string
+	_ = filepath.WalkDir(filepath.Join(e.dir, "blobs"), func(p string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			out = append(out, d.Name())
+		}
+		return nil
+	})
+	return out
+}
+
+// F2: a refused upload leaves nothing on disk, a body of unknown length is refused before it is read, and uploads
+// racing for the last of a quota can't together overshoot it.
+func TestRefusedUploadsLeaveNothing(t *testing.T) {
+	e := newEnv(t)
+	user := newKey()
+	e.call(user, "POST", "/register", map[string]any{"v": 1})
+	if err := e.st.AddOwner(t.Context(), hash([]byte("big")), user.pk, user.pk, store.DefaultQuota-10, false); err != nil {
+		t.Fatal(err)
+	}
+	blob := []byte("a chunked body")
+	req, _ := http.NewRequest("PUT", e.blob.URL+"/upload", io.NopCloser(bytes.NewReader(blob)))
+	req.ContentLength = -1
+	req.Header.Set("Authorization", user.sign(t, 24242, nostr.Tags{{"t", "upload"}, {"x", hash(blob)}, {"expiration", strconv.FormatInt(e.clock.Add(time.Hour).Unix(), 10)}}, e.clock))
+	req.Header.Set("X-SHA-256", hash(blob))
+	if s, b := send(t, req); s != 411 {
+		t.Fatalf("chunked upload %d %v", s, b)
+	}
+	if s, _ := e.upload(user, []byte("eleven byte")); s != 413 {
+		t.Fatalf("over quota %d", s)
+	}
+	if f := e.files(); len(f) != 0 {
+		t.Fatalf("refused uploads left %v", f)
+	}
+	var wg sync.WaitGroup
+	accepted := make(chan struct{}, 20)
+	for i := range 20 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if s, _ := e.upload(user, []byte(fmt.Sprintf("blob %03d", i))); s == 200 {
+				accepted <- struct{}{}
+			}
+		}()
+	}
+	wg.Wait()
+	close(accepted)
+	if n := len(accepted); n != 1 || len(e.files()) != 1 {
+		t.Fatalf("%d of 20 eight-byte uploads accepted into ten bytes of quota, %d files", n, len(e.files()))
+	}
+	if used, _ := e.st.Used(t.Context(), user.pk); used > store.DefaultQuota {
+		t.Fatalf("used %d over the quota", used)
+	}
+}
+
+// F2: the hourly sweep removes blob files nobody owns and stale upload temporaries, once an hour old.
+func TestSweepFiles(t *testing.T) {
+	e := newEnv(t)
+	user := newKey()
+	e.call(user, "POST", "/register", map[string]any{"v": 1})
+	owned := []byte("kept")
+	if s, _ := e.upload(user, owned); s != 200 {
+		t.Fatal("upload")
+	}
+	orphan := hash([]byte("nobody's"))
+	dir := filepath.Join(e.dir, "blobs", orphan[:2])
+	_ = os.MkdirAll(dir, 0o750)
+	for _, name := range []string{orphan, ".upload-123", hash([]byte("fresh"))} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o640); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := e.clock.Add(-2 * time.Hour)
+	_ = os.Chtimes(filepath.Join(dir, orphan), old, old)
+	_ = os.Chtimes(filepath.Join(dir, ".upload-123"), old, old)
+	ownedPath := filepath.Join(e.dir, "blobs", hash(owned)[:2], hash(owned))
+	_ = os.Chtimes(ownedPath, old, old)
+	_ = os.Chtimes(filepath.Join(dir, hash([]byte("fresh"))), e.clock, e.clock)
+	n, err := e.bs.SweepFiles(t.Context(), e.clock)
+	if err != nil || n != 2 {
+		t.Fatalf("removed %d %v", n, err)
+	}
+	if _, err := os.Stat(ownedPath); err != nil {
+		t.Fatal("an owned blob was swept")
+	}
+	if _, err := os.Stat(filepath.Join(dir, hash([]byte("fresh")))); err != nil {
+		t.Fatal("a file under an hour old was swept")
 	}
 }
 

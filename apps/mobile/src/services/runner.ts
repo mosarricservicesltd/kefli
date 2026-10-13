@@ -30,7 +30,7 @@ import { readStaged } from './staging';
 import { store } from './store';
 import { activeOwner } from '../data/library';
 import { beginRestore, settleRestore } from '../data/restore';
-import { queueImported } from '../data/saves';
+import { interimRelays, queueImported } from '../data/saves';
 import { takeImport } from './nostrSignIn';
 import { disconnect } from '../data/devices';
 import type { ConnectPorts } from './connect';
@@ -111,7 +111,7 @@ export function runSync(): Promise<SyncResult> {
       const imported = owner ? takeImport(store(), owner) : null;
       if (owner && imported) {
         const d = await loadDefaults();
-        queueImported(store(), owner, imported.links, imported.at, { api: d.operator.api, blossom: d.operator.blossom, mirror: d.mirrors[0] });
+        queueImported(store(), owner, imported.links, imported.at, { api: d.operator.api, blossom: d.operator.blossom, mirror: d.mirrors[0], interim: interimRelays(d) });
       }
       if (owner) await runInbox(owner).catch(() => undefined);
       if (owner) await imagesIfUnmetered(owner).catch(() => undefined);
@@ -292,7 +292,7 @@ async function parsePending(owner: string): Promise<void> {
     writeText: textFiles.writeText,
     targets: async () => {
       const d = await loadDefaults();
-      return { api: d.operator.api, blossom: d.operator.blossom, mirror: d.mirrors[0] };
+      return { api: d.operator.api, blossom: d.operator.blossom, mirror: d.mirrors[0], interim: interimRelays(d) };
     },
   }, owner);
   if (r.parsed + r.failed > 0) await runOutbox().catch(() => 0);
@@ -337,7 +337,7 @@ const parserPorts = () => ({
   writeText: textFiles.writeText,
   targets: async () => {
     const d = await loadDefaults();
-    return { api: d.operator.api, blossom: d.operator.blossom, mirror: d.mirrors[0] };
+    return { api: d.operator.api, blossom: d.operator.blossom, mirror: d.mirrors[0], interim: interimRelays(d) };
   },
 });
 

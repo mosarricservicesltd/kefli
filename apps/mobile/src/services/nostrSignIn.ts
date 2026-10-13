@@ -5,7 +5,7 @@
 // confirmed absent is read again at the next sync, and nothing is published meanwhile. Ports keep it testable.
 import { KIND, bookmarkLinks, itemHash, newest, probeSigner, readRelayList, readServerList, type NostrEvent, type RelayEntry, type Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
-import { adoptUserLists, confirmedAbsent, type DefaultsLike } from '../data/lists';
+import { adoptUserLists, confirmedAbsent, markListsSettled, type DefaultsLike } from '../data/lists';
 import { queueRecord } from '../data/devices';
 import type { Filter } from './sync';
 
@@ -63,6 +63,7 @@ export async function checkSignIn(p: SignInPorts, signer: Signer): Promise<Check
 export function settleUserLists(db: SqlDb, now: number, owner: string, d: DefaultsLike, lists: UserLists, keepCopies: boolean): boolean {
   if (!lists.known) return false;
   if (adoptUserLists(db, owner, d, lists.relays, lists.servers, keepCopies)) queueRecord(db, now, owner);
+  markListsSettled(db, now, owner);
   return true;
 }
 
