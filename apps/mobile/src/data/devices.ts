@@ -1,7 +1,9 @@
 // Connected browsers (mobile spec 5.5, contract 4.4 and 4.9): the devices table holds the connected-browsers
 // record, one row per token. A copy from a relay merges in by token, keeping every entry and the earlier
 // revoked_at; when this phone holds anything the copy lacks, the record is republished. Connect queues
-// post_device then pair_ack; the pair-ack's success writes the row. Disconnect revokes at once.
+// post_device then pair_ack; the pair-ack's success writes the row. Disconnect revokes at once. A row's relay is
+// the one its pair-ack went to, and a row from the record has none, since the record carries no relay: anything
+// sending to the browser later uses the operator relay, where it always listens (C§4.4, F19).
 import { DEVICES_D, KIND, mergeDevices, type DevicesRecord } from '@kefli/protocol';
 import type { SqlDb } from './db';
 import { indexerRelays, writeRelays } from './lists';

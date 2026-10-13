@@ -195,3 +195,92 @@ describe('a nostr user’s deletion (contract 4.7)', () => {
     expect(w.wiped()).toBe(false);
   });
 });
+
+import { buildItemEvent } from '@kefli/protocol';
+import { commitDelete, deleteItem } from '../src/data/library';
+import { enqueue } from '../src/data/outbox';
+
+/** A save another device made, which this phone hasn't synced: only the relays hold it. */
+async function elsewhere(w: ReturnType<typeof world>, n: number, createdAt: number) {
+  const key = new Uint8Array(32).fill(9);
+  const text = { sha256: h(700 + n), key: 'AA==', nonce: 'AA==', servers: ['http://blossom', 'http://m1'] };
+  const item = {
+    v: 1 as const, url: `https://e.com/${n}`, canonical: null, title: 'T', site: 'e.com', byline: null, saved_at: 1, state: 'unread' as const,
+    progress: 0, words: 1, lang: 'en', text, text_hash: h(800 + n), hero: null, source_kind: 'web' as const, audio_pref: null,
+  };
+  return (await buildItemEvent(w.p.signer, h(n), { item, extra: {} }, createdAt, key)).event;
+}
+
+const named = (w: ReturnType<typeof world>, relay: string) =>
+  w.sent.filter((s) => s.relay === relay && s.event.kind === 5).flatMap((s) => s.event.tags).filter((t) => t[0] === 'a').map((t) => t[1].split(':')[2]);
+
+describe('Delete my data covers every save (contract 4.7, F32)', () => {
+  test('a save only the relays hold gets its kind 5, dated past it, and its text goes from the mirror', async () => {
+    const w = world();
+    const theirs = await elsewhere(w, 9, 500);
+    const p: DelPorts = { ...w.p, query: async (relay) => (relay === 'ws://b' ? [theirs] : []) };
+    expect(await deleteEverything(p, () => undefined, await signDeletion(p))).toBe('done');
+    const d = theirs.tags.find((t) => t[0] === 'd')![1];
+    for (const relay of ['ws://op', 'ws://a', 'ws://b']) expect(named(w, relay)).toContain(d);
+    expect(w.sent.filter((s) => s.event.kind === 5 && s.event.tags.some((t) => t[1]?.endsWith(d))).every((s) => s.event.created_at > 500)).toBe(true);
+    expect(w.log).toContain(`DELETE http://m1/${h(709)}`);
+  });
+
+  test('a relay that doesn’t answer the read adds nothing and stops nothing', async () => {
+    const w = world();
+    const p: DelPorts = { ...w.p, query: async () => Promise.reject(new Error('down')) };
+    expect(await deleteEverything(p, () => undefined, await signDeletion(p))).toBe('done');
+    expect(named(w, 'ws://a')).toEqual(expect.arrayContaining([`kefli/item/${h(1)}`, 'kefli/devices']));
+  });
+
+  test('a save deleted here whose kind 5 and blob delete never went out is still deleted', async () => {
+    const w = world();
+    w.db.run('UPDATE identities SET library_key = ?, library_key_at = 1 WHERE pubkey = ?', '09'.repeat(32), w.pk);
+    w.db.run("INSERT INTO blobs (sha256, hash, kind, owner, operator_at) VALUES (?, ?, 'text', ?, 1)", h(102), h(2), w.pk);
+    // the delete's toast closed, then the relays were down, so its kind 5 and blob delete stayed queued
+    const del = deleteItem(w.db, 50, w.pk, h(2));
+    commitDelete(w.db, w.pk, h(2), del.held);
+    expect(w.db.get('SELECT 1 FROM items WHERE hash = ?', h(2))).toBeUndefined();
+    expect(await deleteEverything(w.p, () => undefined)).toBe('done');
+    expect(named(w, 'ws://a')).toEqual(expect.arrayContaining([`kefli/item/${h(2)}`, savedD(new Uint8Array(32).fill(9), h(2))]));
+    expect(w.log).toContain(`DELETE http://m1/${h(102)}`);
+  });
+
+  test('a never-published save deleted here is named nowhere in public with no key (F5)', async () => {
+    const w = world();
+    w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin) VALUES (?, ?, 'https://e.com/4', 1, 'unread', 'queued', 'share')", w.pk, h(4));
+    const del = deleteItem(w.db, 50, w.pk, h(4));
+    commitDelete(w.db, w.pk, h(4), del.held);
+    expect(await deleteEverything(w.p, () => undefined)).toBe('done');
+    expect(w.sent.flatMap((s) => s.event.tags).some((t) => t[1]?.includes(h(4)))).toBe(false);
+  });
+
+  test('the counted servers are those a save’s text names, not a nostr user’s own in their 10063', () => {
+    const w = world();
+    w.db.run("UPDATE identities SET provider = 'nip55'");
+    w.db.run("INSERT INTO servers (url, owner, role, in_10063, added_by_app) VALUES ('https://my.blossom', ?, 'user', 1, 0)", w.pk);
+    expect(deleteTargets(w.db, w.pk, D.operator).map((t) => `${t.kind} ${t.host}`)).toEqual(['relay a', 'relay b', 'server m1']);
+  });
+
+  test('a nostr user who listed Kefli’s relay and server themselves gets lists without them', async () => {
+    const w = world();
+    w.db.run("UPDATE identities SET provider = 'nip55'");
+    // read back from their own 10002 and 10063 at a later sign-in, so marked as theirs
+    w.db.run("UPDATE relays SET source = 'user', added_by_app = 0 WHERE owner = ? AND url = 'ws://op'", w.pk);
+    w.db.run("UPDATE servers SET role = 'user', added_by_app = 0, in_10063 = 1 WHERE owner = ? AND url = 'http://blossom'", w.pk);
+    w.db.run("INSERT INTO relays (url, owner, read, write, source, added_by_app) VALUES ('wss://mine', ?, 1, 1, 'user', 0)", w.pk);
+    w.db.run("INSERT INTO servers (url, owner, role, in_10063, added_by_app) VALUES ('https://my.blossom', ?, 'user', 1, 0)", w.pk);
+    const signed = await signDeletion(w.p);
+    expect(readRelayList(signed.lists.find((e) => e.kind === 10002)!).map((r) => r.url)).toEqual(['wss://mine']);
+    expect(readServerList(signed.lists.find((e) => e.kind === 10063)!)).toEqual(['https://my.blossom']);
+  });
+
+  test('a delete left queued or given up on joins the kind 5s, dated past the save it names', async () => {
+    const w = world();
+    enqueue(w.db, 1, { op: 'delete_item', signer: w.pk, subject: h(6), payload: { ds: [`kefli/item/${h(6)}`], hash: h(6), after: 900 }, targets: ['ws://a'] });
+    w.db.run("UPDATE outbox SET state = 'dead' WHERE subject = ?", h(6));
+    const signed = await signDeletion(w.p);
+    expect(signed.items.flatMap((e) => e.tags).map((t) => t[1])).toContain(`30078:${w.pk}:kefli/item/${h(6)}`);
+    expect(signed.items.every((e) => e.created_at > 900)).toBe(true);
+  });
+});

@@ -2,15 +2,22 @@
 // target T on this phone. A copy is a new row under T, every field kept, sent through the outbox under T: its blob
 // uploaded and mirrored as T's, then the save published, signed by T. A save T already holds keeps T's copy, and is
 // only brought back from Archive when S's copy is unread, as a repeated save is (C§4.1). Listen history follows.
-import type { SqlDb } from './db';
+import { savedD } from '@kefli/protocol';
+import type { Param, SqlDb } from './db';
 import { enqueue } from './outbox';
 import { queueSends, type SaveTargets, type StagedBlob } from './saves';
 import { writeRelays, type DefaultsLike } from './lists';
 import { ensureIdentityRow } from './saves';
+import { commitDelete, deleteItem } from './library';
+import { libraryKey } from './libraryKey';
 import { KEEP_COPIES, setSetting } from './settings';
 import { settleUserLists, type UserLists } from '../services/nostrSignIn';
 
-export type MoveJob = { id: string; from: string; to: string; step: number; moved: string[] };
+/**
+ * since: when the move was queued. marks: for each save copied, the version of S's row its copy was taken from
+ * (sourceMark), so a change S takes afterwards is found at retire (F20).
+ */
+export type MoveJob = { id: string; from: string; to: string; step: number; moved: string[]; since: number; marks: Record<string, string> };
 
 /** Queues a move from S to T; one per source. */
 export function queueMove(db: SqlDb, now: number, from: string, to: string): void {
@@ -31,15 +38,22 @@ export function queueSwitch(db: SqlDb, now: number, from: string, to: string, pr
 }
 
 export function moveJob(db: SqlDb): MoveJob | null {
-  const r = db.get<{ id: string; step: number; data: string }>("SELECT id, step, data FROM jobs WHERE kind = 'move' AND state IN ('queued', 'running') ORDER BY started_at LIMIT 1");
+  const r = db.get<{ id: string; step: number; data: string; started_at: number }>(
+    "SELECT id, step, data, started_at FROM jobs WHERE kind = 'move' AND state IN ('queued', 'running') ORDER BY started_at LIMIT 1");
   if (!r) return null;
-  const d = JSON.parse(r.data) as { from: string; to: string; moved?: string[] };
-  return { id: r.id, from: d.from, to: d.to, step: r.step, moved: d.moved ?? [] };
+  const d = JSON.parse(r.data) as { from: string; to: string; moved?: string[]; marks?: Record<string, string> };
+  return { id: r.id, from: d.from, to: d.to, step: r.step, moved: d.moved ?? [], since: r.started_at, marks: d.marks ?? {} };
 }
 
 export function saveMove(db: SqlDb, now: number, job: MoveJob, state: 'running' | 'done' = 'running'): void {
   db.run('UPDATE jobs SET state = ?, step = ?, data = ?, updated_at = ? WHERE id = ?',
-    state, job.step, JSON.stringify({ from: job.from, to: job.to, moved: job.moved }), now, job.id);
+    state, job.step, JSON.stringify({ from: job.from, to: job.to, moved: job.moved, marks: job.marks }), now, job.id);
+}
+
+/** The version of a save's row: a change on the phone moves modified_at, and a newer event taken moves event_id. */
+export function sourceMark(db: SqlDb, owner: string, hash: string): string {
+  const r = db.get<{ modified_at: number | null; event_id: string | null }>('SELECT modified_at, event_id FROM items WHERE owner = ? AND hash = ?', owner, hash);
+  return `${r?.modified_at ?? ''}:${r?.event_id ?? ''}`;
 }
 
 /** A save from a newer Kefli in either library stops the move before anything is copied (C§10, FD 91 (i)). */
@@ -87,6 +101,66 @@ export function copySave(db: SqlDb, now: number, job: MoveJob, hash: string, blo
     queueSends(db, now, job.to, hash, blob, t, false, null);
     return 'copied';
   });
+}
+
+// What the person changes on a save, carried from S's row to T's (F20).
+const PERSON = ['state', 'saved_at', 'progress', 'position_word', 'words', 'last_opened_at'] as const;
+
+type CarryRow = { id: number; pending_delete_at: number | null } & Record<(typeof PERSON)[number], Param>;
+
+const carryRow = (db: SqlDb, owner: string, hash: string) =>
+  db.get<CarryRow>(`SELECT id, pending_delete_at, ${PERSON.join(', ')} FROM items WHERE owner = ? AND hash = ?`, owner, hash);
+
+/**
+ * Changes made under S after its saves were copied (F20). S stays the library the person sees until step 5, and a
+ * switch cut short resumes out of sight, so an archive, a reading position or a delete made meanwhile, or brought in
+ * by a sync, lands on S's row. Before S goes, each copied save whose S row moved past its mark passes the change to
+ * T's row, published as T's, Listen history with it; one S no longer holds, or holds only for a delete's Undo, is
+ * deleted under T, as a delete is (C§4.1). Run again, it finds nothing more to do. Returns how many of T's saves
+ * changed.
+ */
+export function carryChanges(db: SqlDb, now: number, job: MoveJob): number {
+  return db.tx(() => [...new Set(job.moved)].filter((hash) => carryOne(db, now, job, hash)).length);
+}
+
+function carryOne(db: SqlDb, now: number, job: MoveJob, hash: string): boolean {
+  const t = carryRow(db, job.to, hash);
+  if (!t || t.pending_delete_at !== null) return false;
+  const s = carryRow(db, job.from, hash);
+  if (!s || s.pending_delete_at !== null) {
+    commitDelete(db, job.to, hash, deleteItem(db, now, job.to, hash).held);
+    return true;
+  }
+  if (job.marks[hash] === undefined || job.marks[hash] === sourceMark(db, job.from, hash)) return false;
+  db.run(`INSERT INTO listen_history (item, last_played_at) SELECT ?, last_played_at FROM listen_history WHERE item = ?
+    ON CONFLICT (item) DO UPDATE SET last_played_at = MAX(last_played_at, excluded.last_played_at)`, t.id, s.id);
+  const changed = PERSON.filter((c) => s[c] !== t[c]);
+  if (!changed.length) return false;
+  const set = changed.map((c) => c + ' = ?').join(', ');
+  db.run(`UPDATE items SET ${set}, modified_at = ?, dirty = 1 WHERE id = ?`, ...changed.map((c) => s[c]), now, t.id);
+  enqueue(db, now, { op: 'publish_item', signer: job.to, subject: hash, targets: writeRelays(db, job.to) });
+  return true;
+}
+
+/**
+ * What deletes still queued, or given up on, owe (F20, F32): the addresses of saves already gone from the phone, at
+ * every address each was at, their blobs, and the newest version's time, which a kind 5 must be dated past (F36).
+ * Delete my data and a move's retirement send these with the rest, since both then clear the outbox.
+ */
+export function deletesOwed(db: SqlDb, owner: string): { ds: string[]; blobs: string[]; after: number } {
+  const key = libraryKey(db, owner);
+  const ds = new Set<string>();
+  let after = 0;
+  for (const r of db.all<{ payload: string | null }>("SELECT payload FROM outbox WHERE signer = ? AND op = 'delete_item'", owner)) {
+    const p = JSON.parse(r.payload ?? '{}') as { ds?: string[]; hash?: string; after?: number };
+    for (const d of p.ds ?? []) ds.add(d);
+    if (p.hash && key) ds.add(savedD(key, p.hash));
+    after = Math.max(after, p.after ?? 0);
+  }
+  const blobs = db.all<{ payload: string | null }>("SELECT payload FROM outbox WHERE signer = ? AND op = 'delete_blob'", owner)
+    .map((r) => (JSON.parse(r.payload ?? '{}') as { sha256?: string }).sha256)
+    .filter((s): s is string => !!s);
+  return { ds: [...ds], blobs: [...new Set(blobs)], after };
 }
 
 /** Step 5's last act on the phone: S's rows, lists and identity go; T's stay, and T is the phone's identity. */

@@ -1,11 +1,13 @@
-import { LocalSigner, encryptText, normaliseMarkdown, textHash, unwrap, type NostrEvent, type Signer } from '@kefli/protocol';
+import { LocalSigner, encryptText, normaliseMarkdown, readItemEvent, textHash, unwrap, type NostrEvent, type Signer } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow, queueSave } from '../src/data/saves';
 import { moveJob, queueSwitch } from '../src/data/move';
 import { seedGeneratedLists } from '../src/data/lists';
-import { enqueue } from '../src/data/outbox';
+import { enqueue, release } from '../src/data/outbox';
+import { absorbRecord } from '../src/data/devices';
+import { commitDelete, deleteItem, setArchived, setPosition } from '../src/data/library';
 import { drain } from '../src/services/send';
 import { syncOwner, type Filter } from '../src/services/sync';
 import { runMove, type MovePorts } from '../src/services/move';
@@ -61,7 +63,7 @@ function world(o: { down?: Set<string>; accountStatus?: number } = {}) {
     }
     if (url.endsWith('/mirror')) return new Response(JSON.stringify({ sha256: String(JSON.parse(String(init.body)).url).split('/').pop() }), { status: 200 });
     if (url.endsWith('/account')) return new Response('{}', { status: o.accountStatus ?? 200 });
-    if (method === 'GET' && blossom.has(sha)) return new Response(blossom.get(sha)!.bytes, { status: 200 });
+    if (method === 'GET' && blossom.has(sha)) return new Response(blossom.get(sha)!.bytes as never, { status: 200 });
     if (method === 'GET' || method === 'HEAD') return new Response('', { status: method === 'GET' && /^[0-9a-f]{64}$/.test(sha) ? 404 : 200 });
     return new Response('{}', { status: 200 });
   }) as unknown as typeof globalThis.fetch;
@@ -125,6 +127,23 @@ function world(o: { down?: Set<string>; accountStatus?: number } = {}) {
     return enc.text.sha256;
   }
   return { db, S, T, p, log, relays, blossom, staged, save, tick: (s: number) => (clock += s), keysRetired: () => keysRetired };
+}
+
+/** Runs the move with relays a and b unreachable, so it stops at step 4's read-back with S whole; then time passes. */
+async function waitAtReadBack(w: ReturnType<typeof world>) {
+  const off = (r: string) => r === 'ws://a' || r === 'ws://b';
+  const cut: MovePorts = {
+    ...w.p,
+    publish: (r, e) => (off(r) ? Promise.reject(new Error('down')) : w.p.publish(r, e)),
+    query: (r, f) => (off(r) ? Promise.reject(new Error('down')) : w.p.query(r, f)),
+  };
+  cut.runOutbox = () => drain({
+    db: w.db, now: () => 2_000, signer: async (pk) => (pk === w.S.pubkey() ? w.S : pk === w.T.pubkey() ? w.T : null),
+    fetch: w.p.fetch, crypto: nodeCrypto, defaults: () => D, publish: cut.publish, readBlob: w.p.readStaged,
+  });
+  expect(await runMove(cut)).toBe('waiting');
+  expect(moveJob(w.db)?.step).toBe(4);
+  w.tick(60);
 }
 
 const rowsOf = (w: ReturnType<typeof world>, pk: string) => w.db.all<{ hash: string; state: string }>('SELECT hash, state FROM items WHERE owner = ? ORDER BY hash', pk);
@@ -238,6 +257,86 @@ describe('The move (contract 4.8, mobile spec 4.10)', () => {
     expect(ack.nonce).toBeUndefined();
     expect(w.db.all<{ token: string }>('SELECT token FROM devices WHERE owner = ?', w.T.pubkey()).map((r) => r.token)).toEqual([ack.token]);
     expect(w.log.some((l) => l.startsWith('POST http://api/devices') && l.endsWith(w.T.pubkey().slice(0, 4)))).toBe(true);
+  });
+
+  test('a browser known only from the synced record gets its pair-ack on the operator relay, and the move finishes (F19)', async () => {
+    const w = world();
+    const device = new LocalSigner(nodeCrypto.randomBytes(32));
+    // a reinstall or restore: the browser comes from S's kefli/devices record, which carries no relay
+    absorbRecord(w.db, w.S.pubkey(), { v: 1, devices: [{ device_pubkey: device.pubkey(), label: 'Chrome', token: 'old', connected_at: 1, revoked_at: null }] }, 'ee'.repeat(32), 1);
+    expect(await runMove(w.p)).toBe('done');
+    const wrap = w.relays.get('ws://op')!.find((e) => e.kind === 1059 && e.tags.some((t) => t[0] === 'p' && t[1] === device.pubkey()))!;
+    expect(JSON.parse((await unwrap(device, wrap)).rumor.content)).toMatchObject({ user_pubkey: w.T.pubkey(), moved_from: w.S.pubkey() });
+    expect(w.db.all('SELECT relay FROM devices WHERE owner = ?', w.T.pubkey())).toEqual([{ relay: 'ws://op' }]);
+    expect(w.db.get('SELECT 1 FROM outbox_targets WHERE target IS NULL')).toBeUndefined();
+  });
+
+  test('a move that goes back for a save found at the end pairs each browser once', async () => {
+    const w = world();
+    const device = new LocalSigner(nodeCrypto.randomBytes(32));
+    w.db.run("INSERT INTO devices (token, owner, device_pubkey, label, relay, connected_at) VALUES ('old', ?, ?, 'Firefox', 'ws://op', 1)", w.S.pubkey(), device.pubkey());
+    await w.save(w.S, 1);
+    let drained = false;
+    const p: MovePorts = {
+      ...w.p,
+      drainSourceInbox: async () => {
+        if (drained) return;
+        drained = true;
+        await w.save(w.S, 2);
+      },
+    };
+    expect(await runMove(p)).toBe('done');
+    expect(w.relays.get('ws://op')!.filter((e) => e.kind === 1059 && e.tags.some((t) => t[0] === 'p' && t[1] === device.pubkey())).length).toBe(1);
+    expect(w.db.all('SELECT token FROM devices WHERE owner = ?', w.T.pubkey()).length).toBe(1);
+  });
+
+  test('changes made under S while the move waits reach T at retire, and a save deleted meanwhile stays deleted (F20)', async () => {
+    const w = world();
+    for (const n of [1, 2, 3, 4]) await w.save(w.S, n);
+    await waitAtReadBack(w);
+    // the app restarted on S's Saves: the person archives one, reads into another and deletes the third
+    const S = w.S.pubkey();
+    release(w.db, setArchived(w.db, 1_100, S, h(1), true).held);
+    setPosition(w.db, 1_100, S, h(2), 1, true);
+    const del = deleteItem(w.db, 1_100, S, h(3));
+    commitDelete(w.db, S, h(3), del.held);
+    // and another phone on S archived the fourth, which a sync took as it takes any newer event
+    w.db.run("UPDATE items SET state = 'archived', event_id = ?, event_created_at = 1100, published = 1, dirty = 0 WHERE owner = ? AND hash = ?", 'ff'.repeat(32), S, h(4));
+    w.db.run('UPDATE outbox_targets SET next_at = 0');
+    expect(await runMove(w.p)).toBe('done');
+    // T is the phone's identity now, and its outbox sends what was carried
+    await w.p.runOutbox();
+    const T = w.T.pubkey();
+    expect(w.db.all('SELECT hash, state, position_word FROM items WHERE owner = ? ORDER BY hash', T)).toEqual([
+      { hash: h(1), state: 'archived', position_word: 0 },
+      { hash: h(2), state: 'unread', position_word: 1 },
+      { hash: h(4), state: 'archived', position_word: 0 },
+    ]);
+    // published as T's, and T's copy of the deleted save is deleted on T's relays
+    const op = w.relays.get('ws://op')!;
+    const mine = await Promise.all(op.filter((e) => e.kind === 30078 && e.pubkey === T && e.tags.some((t) => t[1]?.startsWith('kefli/item/')))
+      .map((e) => readItemEvent(w.T, e)));
+    expect(mine.find((m) => m.hash === h(1))!.item.item.state).toBe('archived');
+    const gone = mine.find((m) => m.hash === h(3))!;
+    expect(op.some((e) => e.kind === 5 && e.pubkey === T && e.tags.some((t) => t[0] === 'a' && t[1] === `30078:${T}:${gone.d}`))).toBe(true);
+    expect(w.db.get("SELECT 1 FROM outbox WHERE signer = ? AND op = 'publish_item' AND state != 'dead'", T)).toBeUndefined();
+  });
+
+  test("a save deleted under S while the move waits, its kind 5 not yet out, is named in S's retirement (F20)", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    await w.save(w.S, 2);
+    await waitAtReadBack(w);
+    const S = w.S.pubkey();
+    const d2 = w.db.get<{ remote_d: string }>('SELECT remote_d FROM items WHERE owner = ? AND hash = ?', S, h(2))!.remote_d;
+    // every relay refused the kind 5 until the outbox gave up on it
+    const del = deleteItem(w.db, 1_100, S, h(2));
+    commitDelete(w.db, S, h(2), del.held);
+    w.db.run("UPDATE outbox SET state = 'dead' WHERE op = 'delete_item' AND signer = ?", S);
+    w.db.run('UPDATE outbox_targets SET next_at = 0');
+    expect(await runMove(w.p)).toBe('done');
+    const named = w.relays.get('ws://op')!.filter((e) => e.kind === 5 && e.pubkey === S).flatMap((e) => e.tags).map((t) => t[1]);
+    expect(named).toContain(`30078:${S}:${d2}`);
   });
 
   test('DELETE /account refused: S stays, to try again', async () => {
