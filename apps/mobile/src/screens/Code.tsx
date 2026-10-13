@@ -88,6 +88,9 @@ export default function Code() {
       if (found === 'found') return void (await answerRecovered(mnemonic));
       if (found === 'none') setNotFound(true);
       else setLostConnection(true);
+    } catch {
+      // nothing answered in time, or the restore couldn't start: the lost-connection state, never a silent stop (F1)
+      setLostConnection(true);
     } finally {
       setChecking(false);
     }
