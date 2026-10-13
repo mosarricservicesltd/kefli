@@ -12,7 +12,7 @@ import { webCrypto } from '../src/crypto';
 import { loadDefaults, type Defaults } from '../src/defaults';
 import { deviceSigner } from '../src/device';
 import { ackFor, browserLabel, formatCode, OFFER_LIFE, pairingFrom, postOffer } from '../src/pair';
-import { ATTEMPTS_MAX, BLOB_KEEP_MAX, dequeue, enqueue, failed, flush, QUEUE_MAX, queued, waiting, whyNot } from '../src/queue';
+import { ATTEMPTS_MAX, BLOB_KEEP_MAX, dequeue, enqueue, failed, flush, QUEUE_MAX, queued, shown, waiting, whyNot } from '../src/queue';
 import { deliver, prepare, retract, type Net, type Pending } from '../src/save';
 import { KEYS, memoryStore, type Pairing } from '../src/store';
 import { applyMove, followMoves } from '../src/move';
@@ -184,6 +184,18 @@ describe('delivery', () => {
 
 describe('the queue (extension spec 4, decisions 30, 31 and 60)', () => {
   const p = (id: string, blob: string | null = null): Pending => ({ id, wrap: { id } as NostrEvent, sealed: '', blob, sha256: blob ? 's' : null, hash: 'h', title: 't', host: 'h', created_at: NOW, attempts: 0 });
+
+  test('a waiting save keeps nothing that names its page in the clear, and shows it from the sealed request (F31)', async () => {
+    const store = memoryStore();
+    const { pending } = await prepare(PAGE, { device, defaults: DEFAULTS, pairing: PAIRING, crypto: webCrypto, now: NOW });
+    await enqueue(store, pending, 'reach');
+    const raw = JSON.stringify(await store.get(KEYS.queue));
+    for (const plain of ['A page', 'example.com', pending.hash]) expect(raw).not.toContain(plain);
+    expect(await shown(await queued(store), device)).toMatchObject([{ id: pending.id, title: 'A page', host: 'example.com', hash: pending.hash }]);
+    // an entry stored before, with them in the clear, loses them at the next write
+    await store.set(KEYS.queue, [{ ...pending, why: 'reach', stopped: false }]);
+    expect(Object.keys((await queued(store))[0])).not.toEqual(expect.arrayContaining(['title']));
+  });
 
   test('eight wait; a ninth is refused', async () => {
     const store = memoryStore();
