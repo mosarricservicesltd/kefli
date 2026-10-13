@@ -39,8 +39,11 @@ export type MovePorts = {
   stage: (sha256: string, bytes: Uint8Array) => string;
   /** A save's spoken words, from its text on the phone, for its search entry under T. */
   spoken: (hash: string) => string | null;
-  /** Step 1: an identity's lists, saves and deletions from its read relays, as a sync applies them. */
-  collect: (owner: string, signer: Signer) => Promise<void>;
+  /**
+   * Step 1: an identity's lists, saves and deletions from its read relays, as a sync applies them. False when some
+   * events wait for a signer that didn't answer, so the step waits too rather than moving on without them (F14).
+   */
+  collect: (owner: string, signer: Signer) => Promise<boolean>;
   runOutbox: () => Promise<unknown>;
   /** Step 5: S's inbox, drained one last time into S's rows. */
   drainSourceInbox: () => Promise<void>;
@@ -57,7 +60,7 @@ const targetsOf = (d: MoveDefaults): SaveTargets => ({ api: d.operator.api, blos
 async function prepare(p: MovePorts, job: MoveJob): Promise<boolean> {
   const ok = await registered({ db: p.db, now: p.now, owner: job.to, defaults: p.defaults, runOutbox: p.runOutbox });
   if (!ok) return false;
-  await p.collect(job.to, p.target);
+  if (!(await p.collect(job.to, p.target))) return false;
   return !!p.db.get('SELECT 1 FROM relays WHERE owner = ?', job.to);
 }
 
@@ -239,8 +242,9 @@ export async function runMove(p: MovePorts, job: MoveJob | null = moveJob(p.db))
       if (!(await prepare(p, job))) return 'waiting';
     } else if (job.step === 1) {
       if (newerInEither(p.db, job.from, job.to)) return 'newer';
-      await p.collect(job.from, p.source);
-      await p.collect(job.to, p.target);
+      const fromAll = await p.collect(job.from, p.source);
+      const toAll = await p.collect(job.to, p.target);
+      if (!fromAll || !toAll) return 'waiting';
       if (newerInEither(p.db, job.from, job.to)) return 'newer';
     } else if (job.step === 2) {
       if (!(await copyAll(p, job))) return 'waiting';

@@ -73,7 +73,7 @@ function world() {
     readStaged: async (s) => staged.get(s) ?? null,
     stage: (s, bytes) => (staged.set(s, bytes), `/staged/${s}`),
     spoken: () => 'some words',
-    collect: async (owner, signer) => void (await syncOwner(syncPorts, owner, signer)),
+    collect: async (owner, signer) => (await syncOwner(syncPorts, owner, signer)).waiting === 0,
     runOutbox,
     drainSourceInbox: async () => undefined,
     retireKeys: async () => undefined,

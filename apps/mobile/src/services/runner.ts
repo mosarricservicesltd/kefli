@@ -115,7 +115,7 @@ export function runSync(): Promise<SyncResult> {
       if (restoring) beginRestore(store(), Math.floor(Date.now() / 1000), restoring);
       const r = await syncInbound(syncPorts());
       const owner = store().get<{ pubkey: string }>("SELECT pubkey FROM identities WHERE role = 'active'")?.pubkey;
-      if (owner) settleRestore(store(), Math.floor(Date.now() / 1000), owner);
+      if (owner) settleRestore(store(), Math.floor(Date.now() / 1000), owner, r.waiting);
       // early saves move into the library just brought back, after the restore's first pass (C§4.8, FD 6)
       if (owner) await runMoveJob().catch((e) => console.log(`[kefli-move] ${JSON.stringify({ error: String((e as Error).message) })}`));
       // links a sign-in chose to bring in join after the restore's first pass (FD 82)
@@ -204,7 +204,7 @@ export function runMoveJob(): Promise<MoveOutcome> {
           const md = textFiles.readText(hash);
           return md === null ? null : deriveArticle(md).spoken;
         },
-        collect: async (owner, signer) => void (await syncOwner(syncPorts(), owner, signer)),
+        collect: async (owner, signer) => (await syncOwner(syncPorts(), owner, signer)).waiting === 0,
         runOutbox,
         drainSourceInbox: async () => void (await drainInbox({
           db: store(), now: () => Math.floor(Date.now() / 1000), signer: source,

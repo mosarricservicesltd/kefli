@@ -92,7 +92,7 @@ function world(o: { down?: Set<string>; accountStatus?: number } = {}) {
     readStaged: async (s) => staged.get(s) ?? null,
     stage: (s, bytes) => (staged.set(s, bytes), `/staged/${s}`),
     spoken: () => 'some words',
-    collect: async (owner, signer) => void (await syncOwner(syncPorts, owner, signer)),
+    collect: async (owner, signer) => (await syncOwner(syncPorts, owner, signer)).waiting === 0,
     runOutbox,
     drainSourceInbox: async () => undefined,
     retireKeys: async () => void (keysRetired = true),
@@ -192,6 +192,24 @@ describe('The move (contract 4.8, mobile spec 4.10)', () => {
     expect(rowsOf(w, w.T.pubkey())).toEqual([]);
     expect(moveJob(w.db)?.step).toBe(1);
     expect(w.log.some((l) => l.includes('/account'))).toBe(false);
+  });
+
+  test("a library whose saves wait for its signer holds the move at the collect, then it carries on (F14)", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    let answers = false;
+    const p: MovePorts = { ...w.p, collect: async (owner, signer) => answers && (await w.p.collect(owner, signer)) };
+    expect(await runMove(p)).toBe('waiting');
+    expect(moveJob(w.db)?.step).toBe(0);
+    expect(rowsOf(w, w.T.pubkey())).toEqual([]);
+    // T's collect answers, S's still waits: the move stops before copying anything
+    p.collect = async (owner, signer) => (owner === w.T.pubkey() || answers) && (await w.p.collect(owner, signer));
+    expect(await runMove(p)).toBe('waiting');
+    expect(moveJob(w.db)?.step).toBe(1);
+    expect(rowsOf(w, w.T.pubkey())).toEqual([]);
+    answers = true;
+    expect(await runMove(p)).toBe('done');
+    expect(rowsOf(w, w.T.pubkey())).toEqual([{ hash: h(1), state: 'unread' }]);
   });
 
   test('cut short at the read-back, it waits with S whole, then resumes without copying twice', async () => {
