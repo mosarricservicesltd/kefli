@@ -1,24 +1,21 @@
 // The background (extension spec 2 and 4): the toolbar button, the shortcut and the link menu all save; Undo, the queue's
-// minute-by-minute retry and the badge. Whatever must outlive a service worker or event page restart is in storage.
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+// minute-by-minute retry and the badge. Whatever must outlive a service worker or event page restart is in storage. The
+// work on a save is in worker.ts; this file joins it to the browser.
 import { isWebAddress, linkOnly, type Captured } from './captured';
 import { BROWSER, DEFAULTS_URL, FLAVOUR } from './config';
 import { webCrypto } from './crypto';
 import { loadDefaults } from './defaults';
-import { record, type Outcome } from './debug';
 import { deviceSigner } from './device';
 import { applyMove, followMoves } from './move';
-import { dequeue, enqueue, flush, queued, shown, waiting, whyNot } from './queue';
+import { queued, waiting } from './queue';
 import { collected, fetchWraps, publish } from './relay';
-import { deliver, fetchNet, prepare, retract, type SaveContext } from './save';
+import { fetchNet, type SaveContext } from './save';
 import { chromeStore, KEYS, type Pairing } from './store';
-import type { ToastKind, ToastState } from './toastCopy';
-import { settleUndo } from './undo';
+import type { ToastState } from './toastCopy';
+import { background, type Where } from './worker';
 
 const store = chromeStore(chrome.storage.local);
 const session = chromeStore(chrome.storage.session);
-const net = fetchNet(publish);
-const UNDO_WINDOW = 12; // seconds: the toast's eight, and time to press
 const now = () => Math.floor(Date.now() / 1000);
 const MENU = BROWSER === 'firefox' ? 'Save Link to Kefli' : 'Save link to Kefli';
 
@@ -28,9 +25,10 @@ chrome.contextMenus.removeAll(() => chrome.contextMenus.create({ id: 'save-link'
 chrome.runtime.onInstalled.addListener((d) => {
   if (d.reason === 'install') void chrome.runtime.openOptionsPage();
   void badge();
-  void watchMoves();
+  void watchMoves().then(() => work.flushQueue());
 });
-chrome.runtime.onStartup.addListener(() => void watchMoves());
+// a save the browser closed on mid-send is still in the queue, and Firefox doesn't keep the alarm across a restart (F23)
+chrome.runtime.onStartup.addListener(() => void watchMoves().then(() => work.flushQueue()));
 
 /** How often the background looks for a move while the browser runs, and how soon after one look a send may look again. */
 const MOVES_EVERY_MINUTES = 30;
@@ -65,13 +63,11 @@ async function checkMovesSoon(): Promise<void> {
   if (now() - last > MOVES_AFTER_SEND) await checkMoves();
 }
 
+/** What a save needs, or null before pairing; the caller decides whether that opens the options page (F10). */
 async function context(): Promise<SaveContext | null> {
   const pairing = await store.get<Pairing>(KEYS.pairing);
   const defaults = pairing ? await loadDefaults(store, DEFAULTS_URL) : null;
-  if (!pairing || !defaults) {
-    void chrome.runtime.openOptionsPage();
-    return null;
-  }
+  if (!pairing || !defaults) return null;
   return { pairing, defaults, device: await deviceSigner(store, webCrypto), crypto: webCrypto, now: now() };
 }
 
@@ -94,9 +90,6 @@ async function captureTab(tabId: number): Promise<Captured | null> {
 async function shortcutWords(): Promise<string | null> {
   return (await chrome.commands.getAll()).find((c) => c.name === 'save-page')?.shortcut || null;
 }
-
-/** Where a save's notices go: the tab's toast, the toolbar popup where no toast can run, or nowhere (a link menu). */
-type Where = number | 'popup' | null;
 
 async function toast(where: Where, s: Omit<ToastState, 'shortcut'>): Promise<void> {
   if (where === null) return;
@@ -141,89 +134,28 @@ async function tick(): Promise<void> {
   setTimeout(() => void badge(), 4000);
 }
 
-/** A save with no HTML is fetched by the phone itself, and the toast says so. */
-function sentKind(c: Captured): ToastKind {
-  return c.html === null ? 'notext' : 'saved';
+/** The minute alarm, made only when it isn't already set, so saves made every few seconds don't keep putting it off. */
+async function flushAlarm(on: boolean): Promise<void> {
+  if (!on) return void (await chrome.alarms.clear('flush'));
+  if (!(await chrome.alarms.get('flush'))) await chrome.alarms.create('flush', { periodInMinutes: 1 });
 }
 
-const WAITING: Record<ReturnType<typeof whyNot>, Outcome> = { offline: 'waiting, offline', reach: 'waiting, couldn’t reach', blocked: 'waiting, blocked' };
-
-async function save(c: Captured, tabId: Where, link: boolean): Promise<void> {
-  // a move found now means this save is wrapped for the new key from the start
-  await checkMovesSoon();
-  const ctx = await context();
-  if (!ctx) return;
-  const { pending, wrapKey } = await prepare(c, ctx);
-  const base = { id: pending.id, hash: pending.hash, title: pending.title, host: pending.host, link };
-  await toast(tabId, { ...base, kind: 'saving' });
-  await session.set(`undo:${pending.id}`, { key: bytesToHex(wrapKey), sha256: pending.sha256, hash: pending.hash, until: now() + UNDO_WINDOW });
-  const d = navigator.onLine ? await deliver(pending, ctx.defaults.operator.blossom, ctx.defaults.operator.relay, ctx.device, net) : 'unreachable';
-  if (d === 'sent') {
-    await record(store, now(), pending.id, c.html === null ? 'sent, no text' : 'sent', link);
-    await toast(tabId, { ...base, kind: sentKind(c) });
-    if (tabId === 'popup') await tick();
-    return;
-  }
-  const why = whyNot(d, navigator.onLine);
-  if ((await enqueue(store, pending, why)) === 'full') {
-    await record(store, now(), pending.id, 'queue full', link);
-    await toast(tabId, { ...base, kind: 'full' });
-    return;
-  }
-  await record(store, now(), pending.id, WAITING[why], link);
-  await chrome.alarms.create('flush', { periodInMinutes: 1 });
-  await badge();
-  await toast(tabId, { ...base, kind: why === 'offline' ? 'offline' : 'failed' });
-  if (tabId === 'popup' && why === 'offline') await tick();
-}
+const work = background({
+  store, session, net: fetchNet(publish), now, online: () => navigator.onLine, context,
+  openOptions: () => void chrome.runtime.openOptionsPage(),
+  toast, tick, badge, flushAlarm, checkMovesSoon, collected,
+  wait: (ms) => new Promise((r) => setTimeout(r, ms)),
+});
 
 async function saveTab(tab: chrome.tabs.Tab): Promise<void> {
   if (tab.id === undefined || !tab.url) return;
   const c = await captureTab(tab.id);
-  if (c) return save(c, tab.id, false);
+  if (c) return work.save(c, tab.id, false);
   const url = tabUrl(tab.url);
   await session.set('popup', null);
   void openSavedPopup();
-  if (isWebAddress(url)) return save(linkOnly(url), 'popup', true);
+  if (isWebAddress(url)) return work.save(linkOnly(url), 'popup', true);
   await toast('popup', { kind: 'browserpage', title: '', host: '', link: true });
-}
-
-async function undo(id: string, where: Where): Promise<void> {
-  const ctx = await context();
-  if (!ctx) return;
-  const waitingSave = (await queued(store)).find((e) => e.id === id);
-  if (waitingSave && (await dequeue(store, id))) {
-    await record(store, now(), id, 'undo: off the queue');
-    await badge();
-    // the title and host come from the sealed request; the queue doesn't keep them in the clear (F31)
-    const [s] = await shown([waitingSave], ctx.device);
-    await toast(where, { kind: 'unqueued', title: s.title, host: s.host, link: false });
-    return;
-  }
-  const kept = await session.get<{ key: string; sha256: string | null; hash: string; until: number }>(`undo:${id}`);
-  if (!kept || kept.until < now()) return;
-  const { relay, blossom } = ctx.defaults.operator;
-  const outcome = await settleUndo(
-    () => retract({ id, sha256: kept.sha256 }, hexToBytes(kept.key), blossom, relay, ctx.device, net, now()),
-    () => collected(relay, id, ctx.pairing.user_pubkey),
-    (ms) => new Promise((r) => setTimeout(r, ms)),
-  );
-  await session.remove(`undo:${id}`);
-  await record(store, now(), id, outcome === 'onphone' ? 'undo: on the phone' : 'undo: retracted');
-  await toast(where, { kind: outcome, hash: kept.hash, title: '', host: '', link: false });
-}
-
-async function flushQueue(all = false, only?: string): Promise<void> {
-  // a save queued before a move must go to the new key, so a waiting queue looks for one first
-  await checkMovesSoon();
-  const ctx = await context();
-  if (!ctx) return;
-  const stoppedBefore = new Set((await queued(store)).filter((e) => e.stopped).map((e) => e.id));
-  const sent = await flush(store, (p) => deliver(p, ctx.defaults.operator.blossom, ctx.defaults.operator.relay, ctx.device, net), navigator.onLine, all, only);
-  for (const id of sent) await record(store, now(), id, 'sent from queue');
-  for (const e of await queued(store)) if (e.stopped && !stoppedBefore.has(e.id)) await record(store, now(), e.id, 'stopped');
-  if (!(await queued(store)).length) await chrome.alarms.clear('flush');
-  await badge();
 }
 
 chrome.action.onClicked.addListener((tab) => void saveTab(tab));
@@ -240,21 +172,26 @@ chrome.commands.onCommand.addListener((name, tab) => {
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId === 'save-link' && info.linkUrl) void save(linkOnly(info.linkUrl), tab?.id ?? null, true);
+  if (info.menuItemId === 'save-link' && info.linkUrl) void work.save(linkOnly(info.linkUrl), tab?.id ?? null, true);
 });
 
 chrome.runtime.onMessage.addListener((msg: { type: string; id?: string; all?: boolean }, sender, reply) => {
   const done = () => reply(true);
-  if (msg.type === 'undo' && msg.id) void undo(msg.id, sender.tab?.id ?? 'popup').then(done, done);
+  if (msg.type === 'undo' && msg.id) void work.undo(msg.id, sender.tab?.id ?? 'popup').then(done, done);
   else if (msg.type === 'options') void chrome.runtime.openOptionsPage().then(done, done);
-  else if (msg.type === 'retry') void flushQueue(true, msg.id).then(done, done);
+  else if (msg.type === 'retry') void work.flushQueue(true, msg.id).then(done, done);
   else return false;
   return true;
 });
 
+// Disconnect on the options page removes the pairing; the background lets the alarm go with it (F10)
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && KEYS.pairing in changes && !changes[KEYS.pairing].newValue) void work.disconnected();
+});
+
 chrome.alarms.onAlarm.addListener((a) => {
-  if (a.name === 'flush') void flushQueue();
+  if (a.name === 'flush') void work.flushQueue();
   if (a.name === 'moves') void checkMoves();
 });
-self.addEventListener('online', () => void flushQueue());
+self.addEventListener('online', () => void work.flushQueue());
 void badge();

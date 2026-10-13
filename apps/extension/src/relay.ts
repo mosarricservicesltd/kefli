@@ -60,18 +60,18 @@ export async function fetchWraps(url: string, device: LocalSigner, since: number
 
 /**
  * Whether the phone has collected a save: it publishes a kind 5 for the wrap, signed by the user, once the save is in the
- * library (contract 4.4). Deletions are public, so no AUTH is needed. False when the relay doesn't answer in time.
+ * library (contract 4.4). Deletions are public, so no AUTH is needed. False when the relay can't be reached or doesn't
+ * answer in time (F40).
  */
 export async function collected(url: string, wrapId: string, user: string): Promise<boolean> {
-  const relay = await pool.get(url);
   return within(
-    new Promise<boolean>((done) => {
+    pool.get(url).then((relay) => new Promise<boolean>((done) => {
       let seen = false;
       const sub = relay.subscribe([{ kinds: [5], authors: [user], '#e': [wrapId], limit: 1 }], {
         onevent: () => void (seen = true),
         oneose: () => (sub.close(), done(seen)),
       });
-    }),
+    })),
     PUBLISH_TIMEOUT_MS,
   ).catch(() => false);
 }
