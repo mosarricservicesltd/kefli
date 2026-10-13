@@ -9,7 +9,7 @@
 // whose webidl-conversions reads SharedArrayBuffer at load, which Hermes doesn't have.
 //
 // Where the contract text leaves a choice open, the choice is marked RULED: settled with contract 1.4
-// (section 11.6) and listed in the fixtures' rulings.
+// (section 11.7) and listed in the fixtures' rulings.
 
 /// <reference path="./whatwg-url-state-machine.d.ts" />
 import type { URLRecord } from 'whatwg-url';
