@@ -342,11 +342,13 @@ details.adv[open] summary .chevr{transform:rotate(90deg)}
         <button data-jump="saved">Saved</button>
         <button data-jump="reach">Second press: Undo focused</button>
         <button data-jump="undone">After Undo</button>
+        <button data-jump="undofailed">Undo couldn’t take it back</button>
         <button data-jump="notext">Phone will fetch the text</button>
         <button data-jump="offline">Saved offline</button>
         <button data-jump="unqueued">After Undo, offline</button>
         <button data-jump="full">Ninth offline save</button>
         <button data-jump="failed">Couldn’t send</button>
+        <button data-jump="toolong">Address too long</button>
         <button data-jump="menu">Right-click a link</button>
       </div></div>
       <div><h2>Browser pages</h2><div class="btns">
@@ -677,6 +679,12 @@ const TOASTS = {
   // A browser's own page (chrome://, about:) has no web address to save, so nothing is saved (decision 100). Pages with a
   // web address where no toast can run (a PDF, the Web Store, Firefox's reader view) still save, through the popup.
   browserpage: c => ({ tile: 'alert', tone: 'bad', title: 'Can’t save this page', sub: 'Kefli saves web pages, and this one belongs to the browser.', wrap: true, timer: CD, say: 'Can’t save this page. Kefli saves web pages, and this one belongs to the browser.' }),
+  // Undo that couldn't retract the save (the relay refused or was out of reach) while the phone hasn't collected it, so
+  // it may still arrive (audit F40). Drafted, needs Richard's read.
+  undofailed: c => ({ cover: c.hash, mark: 'bad', tile: 'alert', tone: 'bad', title: 'Couldn’t undo this save', sub: 'If it reaches your phone, remove it there.', wrap: true, timer: CD, say: 'Couldn’t undo this save. If it reaches your phone, remove it there.' }),
+  // An address too long to send even with the page's other details left out, so nothing is saved (audit F39). Drafted,
+  // needs Richard's read.
+  toolong: c => ({ tile: 'alert', tone: 'bad', title: 'Can’t save this page', sub: 'Its address is too long to send to your phone.', wrap: true, timer: CD, say: 'Can’t save this page. Its address is too long to send to your phone.' }),
 };
 /* The corner marks: 12 px glyphs on a 20 px disc, heavier than 1.75 so they hold at that size. */
 const MK = {
@@ -1506,13 +1514,15 @@ setInterval(() => {
 }, 1000);
 
 /* ---------------- panel ---------------- */
-const TOAST_JUMPS = ['saving', 'saved', 'undone', 'notext', 'offline', 'unqueued', 'full', 'failed'];
+const TOAST_JUMPS = ['saving', 'saved', 'undone', 'undofailed', 'notext', 'offline', 'unqueued', 'full', 'failed', 'toolong'];
 const BROWSER_PAGE = 'This is one of the browser’s own pages, with no web address your phone could fetch, so Kefli saves nothing here (decision 100). Pages with a web address where no toast can run, such as a PDF or the Web Store, save their address and your phone fetches the page.';
 const NOTES = {
   saving: 'The address is known before the text, so the cover draws itself while Kefli saves, its leaves landing in hash order over about a second. When the save goes through, Saved crossfades in and its tick lands with the last leaf (never more than a second in), or as soon as the save is confirmed if that comes later. This state is held still: click the jump to replay the drawing, or click Kefli’s button to watch a whole save.',
   reach: 'Pressing the shortcut again while a Saved toast shows moves focus to Undo. Tab past the last button, Shift+Tab before the first, Escape or ✕ take focus back to where it was.',
   menu: 'A link saved from this menu wears the cover of the page it points to, the same face the phone shows in its row while it fetches the text.',
   unqueued: 'The offline save was still in this browser’s queue, so Undo takes it out and the waiting count drops by one. Nothing needs doing on the phone.',
+  undofailed: 'Undo couldn’t take the save back from Kefli’s server, because the server refused or couldn’t be reached, and the phone hasn’t picked it up yet, so it may still arrive. Pressing Undo again on a Saved toast tries again. Drafted from the pre-release audit (F40); not yet on the flow map.',
+  toolong: 'A save has to fit in 8 KB on its way to the phone. A long address loses the page’s picture, details and then its text until it fits; one too long even alone is refused here, and nothing is saved. Drafted from the pre-release audit (F39); not yet on the flow map.',
   popup: `${BROWSER_PAGE} On Chrome 127+ and Firefox a small popup under Kefli’s button says so, with its own status message. It closes after 8 seconds, on Escape, or when you click away.`,
   restricted: `${BROWSER_PAGE} Before Chrome 127 an extension can’t open its popup, so nothing shows here; on a page with a web address the icon tick alone confirms the save, for 4 seconds.`,
   'o-unpinned': 'Installing Kefli opens this page by itself. Until Kefli is pinned, the pin line shows at the top of the pairing card, and first under Ways to save once connected. Here, click the puzzle piece in the toolbar to pin Kefli.',

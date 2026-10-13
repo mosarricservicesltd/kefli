@@ -2,6 +2,7 @@
 // options page puts on the clipboard for a bug report. Neither holds a page's address or title, or any private key: a
 // save is its time, whether it was a page or a link, what became of it and the first eight characters of its wrap's id,
 // which is enough to find it on the operator's relay.
+import { exclusive } from './lock';
 import type { Queued } from './queue';
 import { KEYS, type Pairing, type Store } from './store';
 
@@ -9,9 +10,10 @@ export const HISTORY_MAX = 20;
 
 /**
  * What became of a save: sent at once (with or without its text), queued and why, refused as the ninth, sent later from
- * the queue, stopped after 200 attempts, or undone (taken off the queue, retracted, or already on the phone).
+ * the queue, stopped after 200 attempts, or undone (taken off the queue, retracted, or already on the phone), or an Undo
+ * that couldn't retract it (F40).
  */
-export type Outcome = 'sent' | 'sent, no text' | 'waiting, offline' | 'waiting, couldn’t reach' | 'waiting, blocked' | 'queue full' | 'sent from queue' | 'stopped' | 'undo: off the queue' | 'undo: retracted' | 'undo: on the phone';
+export type Outcome = 'sent' | 'sent, no text' | 'waiting, offline' | 'waiting, couldn’t reach' | 'waiting, blocked' | 'queue full' | 'sent from queue' | 'stopped' | 'undo: off the queue' | 'undo: retracted' | 'undo: on the phone' | 'undo: failed';
 
 export interface HistoryEntry {
   at: number;
@@ -26,13 +28,16 @@ export async function history(store: Store): Promise<HistoryEntry[]> {
 
 /**
  * Adds an outcome, newest first, keeping twenty. A later outcome for the same save (sent from the queue, undone) may leave
- * out whether it was a link, and takes it from the save's earlier entry.
+ * out whether it was a link, and takes it from the save's earlier entry. Under a lock, as the queue is, so two outcomes
+ * recorded at once both stay.
  */
 export async function record(store: Store, at: number, id: string, outcome: Outcome, link?: boolean): Promise<void> {
-  const h = await history(store);
-  const tag = id.slice(0, 8);
-  const entry: HistoryEntry = { at, link: link ?? h.find((e) => e.id === tag)?.link ?? false, outcome, id: tag };
-  await store.set(KEYS.history, [entry, ...h].slice(0, HISTORY_MAX));
+  await exclusive('history', async () => {
+    const h = await history(store);
+    const tag = id.slice(0, 8);
+    const entry: HistoryEntry = { at, link: link ?? h.find((e) => e.id === tag)?.link ?? false, outcome, id: tag };
+    await store.set(KEYS.history, [entry, ...h].slice(0, HISTORY_MAX));
+  });
 }
 
 export interface DebugInfo {
@@ -68,7 +73,7 @@ function queueLine(q: Queued[]): string {
   if (!q.length) return 'Waiting: none';
   const count = (why: Queued['why']) => q.filter((e) => e.why === why).length;
   const stopped = q.filter((e) => e.stopped).length;
-  return `Waiting: ${q.length} (offline ${count('offline')}, couldn’t reach ${count('reach')}, blocked ${count('blocked')}, stopped ${stopped}; most attempts ${Math.max(...q.map((e) => e.attempts))})`;
+  return `Waiting: ${q.length} (sending ${count('sending')}, offline ${count('offline')}, couldn’t reach ${count('reach')}, blocked ${count('blocked')}, stopped ${stopped}; most attempts ${Math.max(...q.map((e) => e.attempts))})`;
 }
 
 /** The plain text Copy debug info puts on the clipboard. */
