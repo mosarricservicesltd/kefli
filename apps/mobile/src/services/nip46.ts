@@ -16,7 +16,7 @@ function bunkerFor(link: BunkerLink, clientHex: string): BunkerSigner {
 /** A signed-in bunker's signer, from the key file. */
 export function nip46Signer(bunkerUrl: string, clientHex: string, userPubkey: string): Nip46Signer | null {
   const link = readBunkerLink(bunkerUrl);
-  return link ? new Nip46Signer(bunkerFor(link, clientHex), userPubkey) : null;
+  return link ? new Nip46Signer(bunkerFor(link, clientHex), userPubkey, NIP46_TIMEOUT_MS, nativeSecp.verify) : null;
 }
 
 /** Sign-in: connect with the perms, then ask whose key it signs with (it may differ from the bunker's own). */
@@ -24,5 +24,5 @@ export async function connectBunker(link: BunkerLink, clientHex: string): Promis
   const b = bunkerFor(link, clientHex);
   await withTimeout(b.sendRequest('connect', [link.pubkey, link.secret ?? '', nip46Perms()]), NIP46_TIMEOUT_MS);
   const pubkey = await withTimeout(b.getPublicKey(), NIP46_TIMEOUT_MS);
-  return { signer: new Nip46Signer(b, pubkey), pubkey };
+  return { signer: new Nip46Signer(b, pubkey, NIP46_TIMEOUT_MS, nativeSecp.verify), pubkey };
 }

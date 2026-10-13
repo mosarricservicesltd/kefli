@@ -1,5 +1,5 @@
 import {
-  LocalSigner, Nip46Signer, Nip55Signer, TimeoutError, bookmarkLinks, failureOf, nip46Perms, nip55Permissions, probeSigner, readBunkerLink,
+  LocalSigner, Nip46Signer, Nip55Signer, TimeoutError, bookmarkLinks, failureOf, isSignerFailure, nip46Perms, nip55Permissions, probeSigner, readBunkerLink,
   type BunkerLike, type Nip55Port, type NostrEvent,
   BACKGROUND_KINDS, probeEvent,
 } from '../src';
@@ -146,6 +146,48 @@ describe('the user’s own nostr app (contract 2)', () => {
     const s = new Nip46Signer(silent, real.pubkey(), 20);
     await expect(s.signEvent({ kind: 1, created_at: 1, tags: [], content: '' })).rejects.toBeInstanceOf(TimeoutError);
     expect(await probeSigner(s)).toBe(true);
+  });
+
+  describe('a bunker’s answers', () => {
+    const real = new LocalSigner(nodeCrypto.randomBytes(32));
+    const bunker = (o: Partial<BunkerLike> = {}): BunkerLike => ({
+      signEvent: (e) => real.signEvent(e), nip44Encrypt: (p, t) => real.nip44Encrypt(p, t), nip44Decrypt: (p, t) => real.nip44Decrypt(p, t),
+      getPublicKey: async () => real.pubkey(), ...o,
+    });
+    const T = { kind: 30078, created_at: 5, tags: [['d', 'kefli/item/x']], content: 'c' };
+
+    test('its refusal waits as the signer declining; its other errors stay answers (F14)', async () => {
+      // BunkerSigner rejects with the NIP-46 answer's error string itself
+      const says = (words: string) => new Nip46Signer(bunker({ nip44Decrypt: () => Promise.reject(words) }), real.pubkey(), 20);
+      for (const words of ['User denied the request', 'rejected', 'Permission denied for nip44_decrypt', 'not authorized', 'Request cancelled'])
+        await expect(says(words).nip44Decrypt(PK, 'x')).rejects.toMatchObject({ code: 'rejected' });
+      const e = await says('invalid MAC').nip44Decrypt(PK, 'x').catch((x: unknown) => x);
+      expect(isSignerFailure(e)).toBe(false);
+      expect((e as Error).message).toBe('invalid MAC');
+      expect(isSignerFailure(await says('user rejected').nip44Decrypt(PK, 'x').catch((x: unknown) => x))).toBe(true);
+    });
+
+    test('every relay of the bunker down, or the session closed, waits as unavailable', async () => {
+      const down = new Nip46Signer(bunker({ signEvent: () => Promise.reject(new AggregateError([new Error('down')])) }), real.pubkey(), 20);
+      await expect(down.signEvent(T)).rejects.toMatchObject({ code: 'unavailable' });
+      const closed = new Nip46Signer(bunker({ nip44Encrypt: () => Promise.reject(new Error('this signer is not open anymore, create a new one')) }), real.pubkey(), 20);
+      await expect(closed.nip44Encrypt(PK, 'x')).rejects.toMatchObject({ code: 'unavailable' });
+    });
+
+    test('a signed event is accepted only as asked, under the key, validly signed (F46)', async () => {
+      const s = new Nip46Signer(bunker(), real.pubkey(), 20);
+      expect((await s.signEvent(T)).tags).toEqual(T.tags);
+      const other = (e: typeof T) => real.signEvent({ ...e, content: 'something else' });
+      await expect(new Nip46Signer(bunker({ signEvent: other }), real.pubkey(), 20).signEvent(T)).rejects.toThrow('not the event asked for');
+      const later = (e: typeof T) => real.signEvent({ ...e, created_at: e.created_at + 1 });
+      await expect(new Nip46Signer(bunker({ signEvent: later }), real.pubkey(), 20).signEvent(T)).rejects.toThrow('not the event asked for');
+      const forged = async (e: typeof T) => ({ ...(await real.signEvent(e)), sig: 'ab'.repeat(64) });
+      await expect(new Nip46Signer(bunker({ signEvent: forged }), real.pubkey(), 20).signEvent(T)).rejects.toThrow('not the event asked for');
+      // the verifier passed in is the one asked
+      const asked: string[] = [];
+      await new Nip46Signer(bunker(), real.pubkey(), 20, (sig) => (asked.push(sig), true)).signEvent(T);
+      expect(asked).toHaveLength(1);
+    });
   });
 
   test('bookmarks: 39701 d tags as https, r tags of 10003 and 30003, the user’s own, each once', () => {

@@ -50,7 +50,8 @@ export function signEventWith(secp: SecpPort, template: EventTemplate, secretKey
 /** Check an event's id and signature. Never trusts a cached verified flag, unlike nostr-tools. */
 export function verifyEventWith(secp: SecpPort, event: NostrEvent): boolean {
   if (typeof event?.id !== 'string' || typeof event.sig !== 'string' || typeof event.pubkey !== 'string') return false;
-  if (!/^[0-9a-f]{64}$/.test(event.pubkey)) return false;
+  // strict lower-case hex, as signedAsAsked checks: a native verifier must never see digits it would read loosely (F52)
+  if (!/^[0-9a-f]{64}$/.test(event.pubkey) || !/^[0-9a-f]{64}$/.test(event.id) || !/^[0-9a-f]{128}$/.test(event.sig)) return false;
   return getEventHash(event) === event.id && secp.verify(event.sig, event.id, event.pubkey);
 }
 

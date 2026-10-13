@@ -2,8 +2,9 @@
 // signers reached by a pasted bunker:// link. The permissions asked for up front, the link's rules, the capability
 // probe every provider passes at sign-in, both providers behind Signer, and the web bookmarks import reads (C§4.6).
 
-import type { EventTemplate, NostrEvent, Signer, SignerProvider } from './signer';
+import { signedAsAsked, type EventTemplate, type NostrEvent, type Signer, type SignerProvider } from './signer';
 import { isXOnlyPubkey } from './pairing';
+import { nobleSecp } from './secp';
 
 /** The kinds Kefli signs (C§2): saves, deletions, seals, the two lists, AUTH, NIP-98, Blossom and kind 39701. */
 export const SIGNED_KINDS = [30078, 5, 13, 10002, 10063, 22242, 27235, 24242, 39701] as const;
@@ -197,9 +198,48 @@ export interface BunkerLike {
   getPublicKey(): Promise<string>;
 }
 
+/**
+ * A bunker's own refusal reaches nostr-tools' BunkerSigner as the error string of its NIP-46 answer, with no code, so
+ * isSignerFailure read it as an answer and the event was dropped. These words mark it as the person or the bunker
+ * declining, so what depends on it waits. Any other error string stays an answer: a ciphertext the bunker can't open
+ * must not hold sync for ever.
+ */
+const REFUSAL = /\b(denied|declined?|reject(ed)?|refused?|unauthori[sz]ed|forbidden|cancel(l?ed)?|not (authori[sz]ed|allowed|permitted)|no permission|permission)\b/i;
+
+class BunkerFailure extends Error {
+  constructor(message: string, readonly code: 'rejected' | 'unavailable') {
+    super(message);
+    this.name = 'BunkerFailure';
+  }
+}
+
+/**
+ * A failed bunker request as Kefli reads it: code 'rejected' when its words say it declined, 'unavailable' when the
+ * request reached none of the bunker's relays or the session is closed, otherwise an Error carrying its words.
+ */
+export function bunkerFailure(e: unknown): unknown {
+  if (e instanceof TimeoutError || (typeof e === 'object' && e !== null && (e as { code?: unknown }).code !== undefined)) return e;
+  // BunkerSigner publishes with Promise.any: every relay of the bunker refused or was down
+  if (typeof AggregateError !== 'undefined' && e instanceof AggregateError) return new BunkerFailure('the bunker’s relays are unreachable', 'unavailable');
+  const message = typeof e === 'string' ? e : e instanceof Error ? e.message : String(e);
+  if (/not open anymore/.test(message)) return new BunkerFailure(message, 'unavailable');
+  if (REFUSAL.test(message)) return new BunkerFailure(message, 'rejected');
+  return e instanceof Error ? e : new Error(message);
+}
+
 export class Nip46Signer implements SignerProvider {
   readonly kind = 'nip46' as const;
-  constructor(private readonly bunker: BunkerLike, private readonly pk: string, private readonly timeoutMs = NIP46_TIMEOUT_MS) {}
+  constructor(
+    private readonly bunker: BunkerLike, private readonly pk: string, private readonly timeoutMs = NIP46_TIMEOUT_MS,
+    /** Checks the signature of what the bunker hands back (the phone passes libsecp256k1's). */
+    private readonly verify: (sig: string, id: string, pubkey: string) => boolean = nobleSecp.verify,
+  ) {}
+
+  private ask<T>(p: () => Promise<T>): Promise<T> {
+    return withTimeout(p(), this.timeoutMs).catch((e: unknown) => {
+      throw bunkerFailure(e);
+    });
+  }
 
   pubkey(): string {
     return this.pk;
@@ -214,18 +254,20 @@ export class Nip46Signer implements SignerProvider {
     return true;
   }
 
+  /** The bunker's answer, refused unless it is the event asked for under this key, validly signed (F46). */
   async signEvent(e: EventTemplate): Promise<NostrEvent> {
-    const signed = await withTimeout(this.bunker.signEvent(e), this.timeoutMs);
-    if (signed.pubkey !== this.pk) throw new Error('the signer signed with another key');
+    const signed = await this.ask(() => this.bunker.signEvent(e));
+    if (signed?.pubkey !== this.pk) throw new Error('the signer signed with another key');
+    if (!signedAsAsked({ ...e, pubkey: this.pk }, signed, this.verify)) throw new Error('the signer’s answer is not the event asked for');
     return signed;
   }
 
   nip44Encrypt(peer: string, plaintext: string): Promise<string> {
-    return withTimeout(this.bunker.nip44Encrypt(peer, plaintext), this.timeoutMs);
+    return this.ask(() => this.bunker.nip44Encrypt(peer, plaintext));
   }
 
   nip44Decrypt(peer: string, ciphertext: string): Promise<string> {
-    return withTimeout(this.bunker.nip44Decrypt(peer, ciphertext), this.timeoutMs);
+    return this.ask(() => this.bunker.nip44Decrypt(peer, ciphertext));
   }
 }
 
