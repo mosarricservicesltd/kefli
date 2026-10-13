@@ -68,7 +68,8 @@ export async function giftWrap(sender: Signer, recipient: string, template: Even
   };
   const bytes = signedSize(wrapTemplate);
   // The save request must be under its limit (C§4.4: under 8 KB); the ceiling may be reached (C§3.3).
-  if (bytes > MAX_EVENT_BYTES || (opts.maxBytes !== undefined && bytes >= opts.maxBytes)) throw new EventTooLargeError(bytes);
+  if (bytes > MAX_EVENT_BYTES) throw new EventTooLargeError(bytes);
+  if (opts.maxBytes !== undefined && bytes >= opts.maxBytes) throw new EventTooLargeError(bytes, opts.maxBytes);
   const wrap = signEventWith(secp, wrapTemplate, wrapKey);
   return { wrap, wrapKey, wrapPubkey: wrap.pubkey, rumor };
 }

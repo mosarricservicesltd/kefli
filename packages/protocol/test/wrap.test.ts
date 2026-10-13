@@ -65,6 +65,11 @@ describe('gift wraps (NIP-59, C§4.4)', () => {
   test('a save request over 8 KB is refused', async () => {
     const [device, user] = [signer(), signer()];
     await expect(wrapSaveRequest(device, user.pubkey(), 'u', request({ title: 'x'.repeat(4000) }), NOW)).rejects.toThrow(EventTooLargeError);
+    // the error names the limit that applied, not the 16 KB ceiling
+    const e = await wrapSaveRequest(device, user.pubkey(), 'u', request({ title: 'x'.repeat(4000) }), NOW).catch((x: EventTooLargeError) => x);
+    expect(e).toMatchObject({ limit: 8_192 });
+    expect((e as Error).message).toMatch(/not under the 8192-byte limit$/);
+    expect(new EventTooLargeError(20_000).message).toMatch(/over the 16384-byte ceiling$/);
   });
 
   test('pair-ack wraps to the device, sealed by the user', async () => {
