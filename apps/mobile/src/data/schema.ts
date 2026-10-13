@@ -93,7 +93,14 @@ ALTER TABLE relays ADD COLUMN added_at INTEGER;
 ALTER TABLE relays ADD COLUMN prior TEXT;
 `;
 
-export const MIGRATIONS: ((db: SqlDb) => void)[] = [(db) => db.exec(V1), (db) => db.exec(V2), (db) => db.exec(V3), (db) => db.exec(V4)];
+// v5: whether a nostr user's lists are known (read, or confirmed absent), before which nothing is published and saves
+// go only to the interim relays (mobile spec 4.6, F4). RULED: a nostr identity that already has relay rows has them.
+const V5 = `
+ALTER TABLE identities ADD COLUMN lists_settled INTEGER NOT NULL DEFAULT 0;
+UPDATE identities SET lists_settled = 1 WHERE provider = 'local' OR pubkey IN (SELECT owner FROM relays WHERE source != 'indexer');
+`;
+
+export const MIGRATIONS: ((db: SqlDb) => void)[] = [(db) => db.exec(V1), (db) => db.exec(V2), (db) => db.exec(V3), (db) => db.exec(V4), (db) => db.exec(V5)];
 export const SCHEMA_VERSION = MIGRATIONS.length;
 
 /** Opens the schema: WAL, foreign keys, then every migration past the stored version, each in a transaction. */

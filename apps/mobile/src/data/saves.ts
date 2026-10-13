@@ -5,9 +5,22 @@ import { itemHash } from '@kefli/protocol';
 import type { SqlDb } from './db';
 import { insertItem, type NewItem } from './items';
 import { enqueue, undo } from './outbox';
-import { hasList, indexerRelays, writeRelays } from './lists';
+import { hasList, indexerRelays, listsSettled, writeRelays } from './lists';
+import { KEEP_COPIES, getSetting } from './settings';
 
-export type SaveTargets = { api: string; blossom: string; mirror: string };
+/** interim: where a save goes while a nostr user's lists aren't known yet, the operator relay and relays[0] (4.6). */
+export type SaveTargets = { api: string; blossom: string; mirror: string; interim?: string[] };
+
+export const interimRelays = (d: { operator: { relay: string }; relays: string[] }): string[] => [d.operator.relay, d.relays[0]].filter(Boolean);
+
+/**
+ * A save's relays (4.6, F4): the write relays once the lists are known; before that, with Keep backup copies on,
+ * the interim relays, and with it off none, so the save waits until the lists settle and give it their relays.
+ */
+function publishTargets(db: SqlDb, owner: string, t: SaveTargets): string[] {
+  if (listsSettled(db, owner)) return writeRelays(db, owner);
+  return getSetting(db, KEEP_COPIES) === '0' ? [] : t.interim ?? [];
+}
 export type StagedBlob = { sha256: string; size: number; path: string };
 
 export function ensureIdentityRow(db: SqlDb, now: number, pubkey: string, origin: string, hasRecovery: boolean, provider: 'local' | 'nip55' | 'nip46' = 'local'): void {
@@ -47,7 +60,7 @@ export function queueSends(db: SqlDb, now: number, owner: string, hash: string, 
     rows.push(upload);
     rows.push(enqueue(db, now, { op: 'mirror_blob', signer: owner, subject: blob.sha256, payload: { sha256: blob.sha256 }, targets: [t.mirror], dependsOn: upload, held }));
   }
-  rows.push(enqueue(db, now, { op: 'publish_item', signer: owner, subject: hash, targets: writeRelays(db, owner), dependsOn: upload ?? register, held }));
+  rows.push(enqueue(db, now, { op: 'publish_item', signer: owner, subject: hash, targets: publishTargets(db, owner, t), dependsOn: upload ?? register, held }));
   return rows;
 }
 
@@ -64,7 +77,8 @@ export function queueSave(db: SqlDb, now: number, item: NewItem, blob: StagedBlo
     const held = item.textState === 'queued' ? [] : queueSends(db, now, item.owner, item.hash, blob, t, true, register);
     // The lists go out on the first save (C§3.1): the 10002 to the write relays and the indexer, the 10063 to the
     // write relays. Not Undo-able: an identity keeps its lists whether or not this save stays.
-    if (!hasList(db, item.owner, 10002)) {
+    // A nostr user's lists go out only once known, so a failed read never replaces the list their apps share (4.6).
+    if (!hasList(db, item.owner, 10002) && listsSettled(db, item.owner)) {
       const relays = writeRelays(db, item.owner);
       enqueue(db, now, { op: 'publish_lists', signer: item.owner, subject: item.owner, targets: [...new Set([...relays, ...indexerRelays(db, item.owner)])], dependsOn: register });
     }

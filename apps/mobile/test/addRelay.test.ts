@@ -117,6 +117,7 @@ describe('removing a relay in Advanced (FD 113)', () => {
   test('a nostr user’s own relays from their shared list aren’t removable here; one this phone added is', () => {
     const w = world('nip55');
     w.db.run("INSERT INTO relays (url, owner, read, write, source, added_by_app) VALUES ('wss://theirs.example', ?, 1, 1, 'user', 0)", w.pk);
+    w.db.run('UPDATE identities SET lists_settled = 1 WHERE pubkey = ?', w.pk);
     addRelay(w.db, 10, w.pk, MINE, D);
     expect(relayRows(w.db, w.pk)).toEqual([
       { url: 'wss://theirs.example', source: 'user', removable: false },
