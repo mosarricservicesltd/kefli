@@ -80,6 +80,14 @@ func (d *DB) Authorised(pk string) bool {
 	return d.known(pk, func() map[string]bool { return d.devices }) || d.ask(devicesQuery+` AND d.device_pubkey = ?`, pk)
 }
 
+// DeviceUser is asked of the database each time: only a wrap sent on an AUTHed connection needs it.
+func (d *DB) DeviceUser(pk string) (string, bool) {
+	var user string
+	err := d.keflid.QueryRow(`SELECT d.user_pubkey FROM devices d JOIN accounts a ON a.pubkey = d.user_pubkey
+		WHERE a.disabled = 0 AND d.device_pubkey = ?`, pk).Scan(&user)
+	return user, err == nil
+}
+
 func (d *DB) known(pk string, set func() map[string]bool) bool {
 	d.refresh()
 	d.mu.RLock()
@@ -107,6 +115,28 @@ func OpenWraps(path string) (*sql.DB, error) {
 		CREATE TABLE IF NOT EXISTS wraps (id TEXT PRIMARY KEY, author TEXT NOT NULL, p TEXT NOT NULL, at INTEGER NOT NULL);
 		CREATE INDEX IF NOT EXISTS wraps_p ON wraps(p);`)
 	return db, err
+}
+
+// WrapLife is how long a wrap stays recorded: a day past the 30 days the relay's sweep keeps it (contract 3.2), so the
+// record never forgets a wrap the relay still holds.
+const WrapLife = 31 * 24 * time.Hour
+
+// PruneWraps forgets the wraps the relay's sweep has dropped, which no kind 5 ever named: those past WrapLife, and
+// those addressed to a key on keflid's gone list, so the record keeps no recipient a deleted account had (F45).
+func PruneWraps(wraps, keflid *sql.DB, now time.Time) error {
+	if _, err := wraps.Exec(`DELETE FROM wraps WHERE at < ?`, now.Add(-WrapLife).Unix()); err != nil {
+		return err
+	}
+	gone, err := keys(keflid, `SELECT pubkey FROM gone`)
+	if err != nil {
+		return err
+	}
+	for k := range gone {
+		if _, err := wraps.Exec(`DELETE FROM wraps WHERE p = ?`, k); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Serve answers strfry line by line until in closes: each event's verdict, with the wrap record kept in step and the

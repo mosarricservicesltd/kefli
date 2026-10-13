@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 )
 
 // Used is the bytes counted against the user's quota: each blob once, whether the user or one of their devices holds it.
@@ -110,8 +111,17 @@ func (s *Store) RemoveDevice(ctx context.Context, user, device string) (found bo
 }
 
 // DeleteAccount removes the user's and their devices' ownership of blobs, their devices and their allowlist entry
-// (contract 6), and lists the user and the devices as gone for the relay's sweep. Running it again does nothing more.
+// (contract 6), and lists the user and the devices as gone for the relay's sweep. Running it again does nothing more,
+// and a key that never had an account, which the relay holds nothing for, isn't listed: any fresh key may call it, and
+// each row would cost every nightly sweep (F45).
 func (s *Store) DeleteAccount(ctx context.Context, user string) (orphaned []string, err error) {
+	var one int
+	switch err := s.db.QueryRowContext(ctx, `SELECT 1 FROM accounts WHERE pubkey = ?`, user).Scan(&one); {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, nil
+	case err != nil:
+		return nil, err
+	}
 	devices, err := s.userDevices(ctx, user)
 	if err != nil {
 		return nil, err

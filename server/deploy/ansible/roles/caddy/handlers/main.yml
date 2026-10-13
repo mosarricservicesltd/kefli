@@ -1,7 +1,9 @@
+# Restart runs before Reload when both are notified: a change to the admin socket's drop-in needs the restart first.
 - name: Restart caddy
   ansible.builtin.systemd_service:
     name: caddy
     state: restarted
+    daemon_reload: true
 
 - name: Reload caddy
   ansible.builtin.systemd_service:

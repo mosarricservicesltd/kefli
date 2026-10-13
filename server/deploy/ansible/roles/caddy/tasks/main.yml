@@ -38,6 +38,21 @@
     mode: "0755"
   loop: [/var/www/kefli, /var/www/kefli/downloads]
 
+# A restart, not a reload, puts it on: a reload asks the admin API where the new Caddyfile says it is, and the running
+# Caddy isn't there yet. Restart runs before Reload (handlers/main.yml), so the first run moves the API, then reloads.
+- name: The unit's drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/caddy.service.d
+    state: directory
+    mode: "0755"
+
+- name: The directory for Caddy's admin socket
+  ansible.builtin.copy:
+    src: caddy-10-kefli.conf
+    dest: /etc/systemd/system/caddy.service.d/10-kefli.conf
+    mode: "0644"
+  notify: Restart caddy
+
 # Validated as caddy, so the access log it opens stays Caddy's. Ansible's copy sits in root's own temp directory, which
 # caddy can't open, so root reads it in.
 - name: The Caddyfile
