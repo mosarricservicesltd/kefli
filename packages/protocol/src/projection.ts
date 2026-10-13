@@ -1,7 +1,7 @@
 // The spoken projection (contract 4.2): what a voice reads and what words counts, with each spoken
 // character mapped to its offset in the normalised Markdown for word highlighting (contract 7).
 // Runs on Hermes from the normalised string (mobile spec 2.6). Where this and the page fixtures
-// disagree, the fixtures win; choices the contract leaves open are marked RULED (contract 1.4, section 11.5).
+// disagree, the fixtures win; choices the contract leaves open are marked RULED (contract 1.4, section 11.6).
 
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { decodeNamedCharacterReference } from 'decode-named-character-reference';

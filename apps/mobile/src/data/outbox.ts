@@ -85,6 +85,18 @@ export function enqueue(db: SqlDb, now: number, e: Enqueue): number {
   });
 }
 
+/** Adds targets to the pending row for the same op, signer and subject, keeping its own; with none, enqueues one. */
+export function addTargets(db: SqlDb, now: number, e: Enqueue): number {
+  return db.tx(() => {
+    const existing = pendingRow(db, e.op, e.signer, e.subject);
+    if (!existing) return enqueue(db, now, e);
+    for (const t of new Set(e.targets)) {
+      db.run("INSERT OR IGNORE INTO outbox_targets (outbox_id, target, state, attempts, next_at) VALUES (?, ?, 'pending', 0, ?)", existing.id, t, now);
+    }
+    return existing.id;
+  });
+}
+
 /** The Undo window closed without Undo: held rows go to the queue. */
 export function release(db: SqlDb, ids: number[]): void {
   db.tx(() => {

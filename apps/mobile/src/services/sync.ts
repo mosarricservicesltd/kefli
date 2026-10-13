@@ -196,8 +196,15 @@ export async function syncLists(p: SyncPorts, owner: string): Promise<void> {
     if (!latest || (held && held.created_at >= latest.created_at)) continue;
     recordList(p.db, owner, kind, latest.id, latest.created_at, JSON.stringify(latest));
     if (kind !== KIND.relayList) continue;
-    for (const e of readRelayList(latest)) {
+    const entries = readRelayList(latest);
+    for (const e of entries) {
       p.db.run("INSERT OR IGNORE INTO relays (url, owner, read, write, source, added_by_app) VALUES (?, ?, ?, ?, 'user', 0)", e.url, owner, e.read ? 1 : 0, e.write ? 1 : 0);
+    }
+    // a relay of the person's own that the newer list dropped was removed elsewhere (FD 113), unless this phone
+    // added it after that list was made
+    const listed = new Set(entries.map((e) => e.url));
+    for (const r of p.db.all<{ url: string; added_at: number | null }>("SELECT url, added_at FROM relays WHERE owner = ? AND source = 'user'", owner)) {
+      if (!listed.has(r.url) && (r.added_at ?? 0) <= latest.created_at) p.db.run('DELETE FROM relays WHERE owner = ? AND url = ?', owner, r.url);
     }
   }
 }

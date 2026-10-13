@@ -1,7 +1,8 @@
 // The identity's relays and servers (mobile spec 4.1, 4.6): seeded from defaults.json for a generated identity,
 // read when building its 10002 and 10063 and choosing where saves go. The indexer relays carry the 10002 only.
-import type { RelayEntry } from '@kefli/protocol';
+import { KIND, type RelayEntry } from '@kefli/protocol';
 import type { SqlDb } from './db';
+import { addTargets, enqueue } from './outbox';
 
 export type DefaultsLike = { operator: { relay: string; blossom: string }; relays: string[]; indexer: string[]; mirrors: string[] };
 
@@ -96,4 +97,79 @@ function keepUserServers(db: SqlDb, owner: string, d: DefaultsLike, servers: str
  */
 export function confirmedAbsent(d: DefaultsLike, answered: Set<string>): boolean {
   return d.indexer.every((r) => answered.has(r)) && d.relays.filter((r) => answered.has(r)).length >= 2;
+}
+
+/**
+ * A typed relay address as the 10002 holds it (FD 113): wss:// added when no scheme is given, the host lowercased,
+ * a bare trailing / dropped. Any other scheme, credentials, a query or a fragment is refused (null). Written
+ * without URL, whose parsing Hermes doesn't fully have.
+ */
+export function relayAddress(typed: string): string | null {
+  const s = typed.trim();
+  const rest = /^[a-z][a-z0-9+.-]*:\/\//i.test(s) ? (/^wss:\/\//i.test(s) ? s.slice(6) : null) : s;
+  const m = rest === null ? null : /^((?:[a-z0-9-]+\.)+[a-z0-9-]+|localhost|\[[0-9a-f:]+\])(:\d{1,5})?(\/[^\s?#@]*)?$/i.exec(rest);
+  if (!m) return null;
+  const path = m[3] === '/' ? '' : m[3] ?? '';
+  return `wss://${m[1].toLowerCase()}${m[2] ?? ''}${path}`;
+}
+
+export type RelayRow = { url: string; source: 'operator' | 'default' | 'user'; removable: boolean };
+
+const isLocal = (db: SqlDb, owner: string) =>
+  (db.get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local') === 'local';
+
+/**
+ * Advanced's write relays (5.8, FD 113), in the 10002's order. A relay of the person's own is removable there on a
+ * generated identity, where only Advanced adds one; for a nostr user only when this phone added it, since the rest
+ * are the list their other nostr apps share.
+ */
+export function relayRows(db: SqlDb, owner: string): RelayRow[] {
+  const local = isLocal(db, owner);
+  return db
+    .all<{ url: string; source: RelayRow['source']; added_at: number | null }>(
+      "SELECT url, source, added_at FROM relays WHERE owner = ? AND source != 'indexer' AND write = 1 ORDER BY rowid", owner)
+    .map((r) => ({ url: r.url, source: r.source, removable: r.source === 'user' && (local || r.added_at !== null) }));
+}
+
+/**
+ * A relay the person adds in Advanced (FD 113, C§3.1): it joins the 10002 for reading and writing, the lists go out
+ * again, and every published save is published to it on the bulk lane, merged into any change already waiting. A
+ * generated identity that hasn't saved yet gets its default lists first, so its first save still writes to
+ * Kefli's relays. Returns false when the relay is already one Kefli writes to.
+ */
+export function addRelay(db: SqlDb, now: number, owner: string, url: string, d: DefaultsLike): boolean {
+  return db.tx(() => {
+    if (isLocal(db, owner)) seedGeneratedLists(db, owner, d);
+    const held = db.get<{ write: number; source: string }>('SELECT write, source FROM relays WHERE owner = ? AND url = ?', owner, url);
+    if (held?.write && held.source !== 'indexer') return false;
+    if (held) db.run("UPDATE relays SET read = 1, write = 1, source = 'user', added_by_app = 0, added_at = ? WHERE owner = ? AND url = ?", now, owner, url);
+    else db.run("INSERT INTO relays (url, owner, read, write, source, added_by_app, added_at) VALUES (?, ?, 1, 1, 'user', 0, ?)", url, owner, now);
+    if (hasList(db, owner, KIND.relayList)) publishLists(db, now, owner, []);
+    const items = db.all<{ hash: string }>('SELECT hash FROM items WHERE owner = ? AND published = 1 AND pending_delete_at IS NULL ORDER BY saved_at DESC', owner);
+    for (const { hash } of items) addTargets(db, now, { op: 'publish_item', signer: owner, subject: hash, targets: [url], lane: 'bulk' });
+    return true;
+  });
+}
+
+/**
+ * A relay the person added, removed in Advanced (FD 113): Kefli stops writing to it and sends the lists without it,
+ * to it as well, so its copy of the 10002 can't bring it back. What it holds stays there. Kefli's relay and the
+ * backups aren't removable, since the library outliving the service rests on them (C§1).
+ */
+export function removeRelay(db: SqlDb, now: number, owner: string, url: string): boolean {
+  return db.tx(() => {
+    if (!relayRows(db, owner).some((r) => r.url === url && r.removable)) return false;
+    db.run('DELETE FROM relays WHERE owner = ? AND url = ?', owner, url);
+    // a copy still under way stops: its waiting targets go, and a row left with none goes with them
+    db.run("DELETE FROM outbox_targets WHERE target = ? AND state = 'pending' AND outbox_id IN (SELECT id FROM outbox WHERE signer = ? AND op = 'publish_item' AND state = 'queued')", url, owner);
+    db.run("DELETE FROM outbox WHERE signer = ? AND op = 'publish_item' AND state = 'queued' AND NOT EXISTS (SELECT 1 FROM outbox_targets t WHERE t.outbox_id = outbox.id)", owner);
+    if (hasList(db, owner, KIND.relayList)) publishLists(db, now, owner, [url]);
+    return true;
+  });
+}
+
+/** The 10002 and 10063 to every write relay and indexer, and to any extra (C§3.1, 4.3). */
+function publishLists(db: SqlDb, now: number, owner: string, extra: string[]): void {
+  const targets = [...new Set([...writeRelays(db, owner), ...indexerRelays(db, owner), ...extra])];
+  enqueue(db, now, { op: 'publish_lists', signer: owner, subject: owner, targets });
 }
