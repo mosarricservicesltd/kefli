@@ -41,9 +41,18 @@ class KefliSecpModule : Module() {
   // A serialised point (33 bytes compressed or 65 uncompressed) to its x coordinate.
   private fun xOnly(point: ByteArray): ByteArray = point.copyOfRange(1, 33)
 
+  // Hex digits only, as noble's hexToBytes takes them: toInt(16) would also read a sign, so "+a" and "-f" would
+  // decode, and the phone would accept a signature string the extension and the relays refuse (F52).
   private fun bytes(h: String, length: Int): ByteArray {
     require(h.length == length * 2) { "expected $length bytes of hex" }
-    return ByteArray(length) { i -> h.substring(i * 2, i * 2 + 2).toInt(16).toByte() }
+    return ByteArray(length) { i -> ((nibble(h[i * 2]) shl 4) or nibble(h[i * 2 + 1])).toByte() }
+  }
+
+  private fun nibble(c: Char): Int = when (c) {
+    in '0'..'9' -> c - '0'
+    in 'a'..'f' -> c - 'a' + 10
+    in 'A'..'F' -> c - 'A' + 10
+    else -> throw IllegalArgumentException("not hex")
   }
 
   private fun hex(b: ByteArray): String = b.joinToString("") { "%02x".format(it) }

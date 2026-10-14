@@ -4,8 +4,9 @@ import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow, queueSave } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
-import { nextDue, release } from '../src/data/outbox';
-import { drain, relayResult, sendOne, type RelayAnswer, type SendPorts } from '../src/services/send';
+import { enqueue, nextDue, nextWakeAt, release } from '../src/data/outbox';
+import { drain, outboxWaker, relayResult, sendOne, type RelayAnswer, type SendPorts } from '../src/services/send';
+import { commitDelete, deleteItem } from '../src/data/library';
 import type { Defaults } from '../src/services/config';
 import { notBackedUp } from '../src/data/backup';
 import { memoryDb } from './sqlite';
@@ -17,7 +18,7 @@ const D: Defaults = {
 const HASH = 'cd'.repeat(32);
 
 type Answer = { status: number; body?: unknown };
-function world(answers: Partial<Record<string, Answer | ((n: number) => Answer)>> = {}, relay: (url: string) => RelayAnswer = () => ({ ok: true })) {
+function world(answers: Partial<Record<string, Answer | ((n: number) => Answer | undefined)>> = {}, relay: (url: string) => RelayAnswer = () => ({ ok: true })) {
   const db = memoryDb();
   migrate(db);
   const signer = new LocalSigner(nodeCrypto.randomBytes(32));
@@ -53,6 +54,11 @@ function world(answers: Partial<Record<string, Answer | ((n: number) => Answer)>
   };
   return { db, signer, ports, calls, published: items, all, blobs, tick: (s: number) => (clock += s), now: () => clock };
 }
+
+/** The row the last attempt touched: its state, and its target's next time and error. */
+const tried = (w: ReturnType<typeof world>) => w.db.get(
+  "SELECT o.state, t.next_at, t.last_error FROM outbox o JOIN outbox_targets t ON t.outbox_id = o.id WHERE t.attempts > 0 AND t.state = 'pending'",
+);
 
 async function save(w: ReturnType<typeof world>, withText = true) {
   ensureIdentityRow(w.db, w.now(), w.signer.pubkey(), 'early_share', true);
@@ -196,6 +202,57 @@ describe('sending a save (mobile spec 4.3)', () => {
     expect(nextDue(w.db, w.now())).toBeNull();
   });
 
+  test('a signer lookup that throws puts the row back in the queue with a backoff, where the retry timer sees it', async () => {
+    const w = world();
+    const { held } = await save(w, false);
+    release(w.db, held);
+    const signer = w.ports.signer;
+    w.ports.signer = async () => {
+      throw new Error('Keystore not ready');
+    };
+    expect(await sendOne(w.ports)).toBe(true);
+    expect(w.db.all("SELECT 1 FROM outbox WHERE state = 'sending'")).toEqual([]);
+    expect(tried(w)).toEqual({ state: 'queued', next_at: w.now() + 30, last_error: 'Keystore not ready' });
+    expect(nextWakeAt(w.db)).not.toBeNull();
+    w.ports.signer = signer;
+    w.tick(30);
+    await drain(w.ports);
+    expect(w.calls).toContain('POST http://api/register');
+  });
+
+  test('a signing that fails as the signer not answering waits at least a minute (F47)', async () => {
+    const w = world();
+    const { held } = await save(w, false);
+    release(w.db, held);
+    await sendOne(w.ports);
+    expect(w.calls).toEqual(['POST http://api/register']);
+    // the save's event or the lists are signed outside any send's own catch
+    w.signer.zero();
+    await sendOne(w.ports);
+    expect(w.db.all("SELECT 1 FROM outbox WHERE state = 'sending'")).toEqual([]);
+    expect(tried(w)).toMatchObject({ state: 'queued', next_at: w.now() + 60 });
+  });
+
+  test("a consumed inbox wrap is deleted with a kind 5 naming it on the operator relay, retried when it can't be reached (C§4.4)", async () => {
+    let down = true;
+    const w = world();
+    const id = 'ef'.repeat(32);
+    enqueue(w.db, w.now(), { op: 'delete_wrap', signer: w.signer.pubkey(), subject: id, payload: { id }, targets: ['ws://op'] });
+    w.ports.publish = async (url, event) => {
+      w.all.push({ relay: url, event });
+      if (down) throw new Error('unreachable');
+      return { ok: true };
+    };
+    await sendOne(w.ports);
+    expect(tried(w)).toMatchObject({ state: 'queued', last_error: 'unreachable' });
+    down = false;
+    w.tick(60);
+    await drain(w.ports);
+    const fives = w.all.filter((p) => p.event.kind === 5);
+    expect(fives.at(-1)).toMatchObject({ relay: 'ws://op', event: { tags: [['e', id], ['k', '1059']] } });
+    expect(w.db.get("SELECT 1 FROM outbox WHERE op = 'delete_wrap'")).toBeUndefined();
+  });
+
   test.each([
     [{ ok: true } as RelayAnswer, 'ok'],
     [{ ok: false, reason: 'duplicate: have it' } as RelayAnswer, 'ok'],
@@ -230,5 +287,125 @@ describe('sending a save (mobile spec 4.3)', () => {
     w.db.run('UPDATE blobs SET mirror_at = NULL');
     expect(notBackedUp(w.db, pk())).toBe(1);
   });
+
+  test('a mirror that took the blob after the save went out naming another gets the save republished naming it (F18)', async () => {
+    // m1 is down at first, then refuses; m2 takes it
+    const w = world({ 'PUT http://m1/mirror': (n) => ({ status: n === 1 ? 503 : 400 }) });
+    const { held } = await save(w);
+    release(w.db, held);
+    await drain(w.ports);
+    const servers = async (e: NostrEvent) => (await readItemEvent(w.signer, e)).item.item.text?.servers;
+    expect(await servers(w.published()[0].event)).toEqual(['http://blossom', 'http://m1']);
+    w.tick(120);
+    await sendOne(w.ports); // m1 refuses: m2 next
+    await sendOne(w.ports); // m2 takes it
+    expect(w.db.get('SELECT mirror_url FROM blobs')).toEqual({ mirror_url: 'http://m2' });
+    // the published save still names m1: not backed up until it names m2
+    expect(notBackedUp(w.db, w.signer.pubkey())).toBe(1);
+    expect(nextDue(w.db, w.now())?.row.op).toBe('publish_item');
+    await drain(w.ports);
+    const last = w.published()[w.published().length - 1].event;
+    expect(await servers(last)).toEqual(['http://blossom', 'http://m2']);
+    expect(notBackedUp(w.db, w.signer.pubkey())).toBe(0);
+    expect(w.db.get<{ n: number }>('SELECT COUNT(*) n FROM outbox')?.n).toBe(0);
+  });
+
+  test('a mirror that takes the blob the published save already names queues nothing', async () => {
+    // m1 is down at first, then takes it (the default answer)
+    const w = world({ 'PUT http://m1/mirror': (n) => (n === 1 ? { status: 503 } : undefined) });
+    const { held } = await save(w);
+    release(w.db, held);
+    await drain(w.ports);
+    const before = w.published().length;
+    w.tick(120);
+    await drain(w.ports);
+    expect(w.published()).toHaveLength(before);
+    expect(notBackedUp(w.db, w.signer.pubkey())).toBe(0);
+  });
+
+  const blobTargets = (w: ReturnType<typeof world>) => w.db.all<{ target: string }>(
+    "SELECT target FROM outbox_targets t JOIN outbox o ON o.id = t.outbox_id WHERE o.op = 'delete_blob' ORDER BY target").map((t) => t.target);
+
+  test('deleting a save made here deletes its blob from the servers its event names (F33)', async () => {
+    const w = world();
+    const { held } = await save(w);
+    release(w.db, held);
+    await drain(w.ports);
+    const d = deleteItem(w.db, w.now(), w.signer.pubkey(), HASH);
+    commitDelete(w.db, w.signer.pubkey(), HASH, d.held);
+    expect(blobTargets(w)).toEqual(['http://blossom', 'http://m1']);
+    await drain(w.ports);
+    expect(w.calls.filter((c) => c.startsWith('DELETE')).sort()).toEqual([`DELETE http://blossom/${(await readItemEvent(w.signer, w.published()[0].event)).item.item.text?.sha256}`, expect.stringMatching(/^DELETE http:\/\/m1\//)]);
+  });
+
+  test('a save deleted before any relay took it still has its blob deleted where it went (F33)', async () => {
+    const w = world({}, () => ({ ok: false, reason: 'blocked: no' }));
+    const { held } = await save(w);
+    release(w.db, held);
+    await drain(w.ports);
+    expect(w.db.get('SELECT published FROM items')).toEqual({ published: 0 });
+    const d = deleteItem(w.db, w.now(), w.signer.pubkey(), HASH);
+    commitDelete(w.db, w.signer.pubkey(), HASH, d.held);
+    expect(blobTargets(w)).toEqual(['http://blossom', 'http://m1']);
+  });
 });
 
+describe('the foreground retry (4.3, F11)', () => {
+  afterEach(() => jest.useRealTimers());
+
+  test('a failed send is tried again when it falls due, while Kefli is in front', async () => {
+    let down = true;
+    const w = world();
+    w.ports.publish = async (url) => {
+      if (down && url === 'ws://a') throw new Error('timeout');
+      return { ok: true };
+    };
+    const { held } = await save(w, false);
+    release(w.db, held);
+    await drain(w.ports);
+    jest.useFakeTimers();
+    let active = true;
+    const runs: number[] = [];
+    const waker = outboxWaker({ db: () => w.db, now: w.now, active: () => active, run: () => runs.push(w.now()) });
+    waker.arm();
+    jest.advanceTimersByTime(29_000);
+    expect(runs).toEqual([]);
+    jest.advanceTimersByTime(1_000);
+    expect(runs).toHaveLength(1);
+    // arm replaces the timer; stop clears it; nothing is armed in the background
+    waker.arm();
+    waker.stop();
+    expect(jest.getTimerCount()).toBe(0);
+    active = false;
+    waker.arm();
+    expect(jest.getTimerCount()).toBe(0);
+    // once nothing waits, nothing is armed
+    active = true;
+    down = false;
+    w.tick(30);
+    jest.useRealTimers();
+    await drain(w.ports);
+    jest.useFakeTimers();
+    waker.arm();
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test('a long wait is reached in steps of at most an hour, and a row already due runs within a second', async () => {
+    const w = world({ 'PUT http://blossom/upload': { status: 413 } });
+    const { held } = await save(w);
+    release(w.db, held);
+    await drain(w.ports);
+    jest.useFakeTimers();
+    const runs: number[] = [];
+    const waker = outboxWaker({ db: () => w.db, now: w.now, active: () => true, run: () => runs.push(1) });
+    waker.arm();
+    jest.advanceTimersByTime(3_599_000);
+    expect(runs).toEqual([]);
+    jest.advanceTimersByTime(1_000);
+    expect(runs).toHaveLength(1);
+    w.tick(86_400);
+    waker.arm();
+    jest.advanceTimersByTime(1_000);
+    expect(runs).toHaveLength(2);
+  });
+});

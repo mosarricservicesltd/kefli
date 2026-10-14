@@ -25,6 +25,7 @@ import { deriveArticle } from '../reader/blocks';
 import type { PageOutcome, ParserResult } from './page';
 import { settle, type PendingPorts } from './pending';
 import type { Filter } from './sync';
+import { open } from '../net/http';
 
 /** The extension's 2 MB of HTML plus the GCM tag. */
 export const INBOX_MAX_BYTES = 2 * 1_048_576 + 16;
@@ -82,13 +83,18 @@ export async function fromBrowser(p: Pick<InboxPorts, 'markdown'>, r: SaveReques
   return { kind: 'parsed', finalUrl: r.url, result, words: derived.words, spoken: derived.spoken, derived };
 }
 
-/** The inbox blob's HTML, or null when it can't be had or doesn't check out. */
+/** How long the inbox blob's server has to send the whole blob, as for a text (F12). */
+export const INBOX_TIMEOUT_MS = 60_000;
+
+/**
+ * The inbox blob's HTML, or null when it can't be had or doesn't check out. The deadline covers the whole body and
+ * the cap is counted as it streams (net/http, F12), so a server that trickles or never ends can't hold the inbox.
+ */
 export async function readBlob(p: Pick<InboxPorts, 'fetch' | 'crypto'>, html: NonNullable<SaveRequest['html']>): Promise<string | null> {
   try {
-    const res = await p.fetch(`${html.server.replace(/\/+$/, '')}/${html.sha256}`, { method: 'GET' });
-    if (!res.ok || Number(res.headers.get('content-length') ?? 0) > INBOX_MAX_BYTES) return null;
-    const blob = new Uint8Array(await res.arrayBuffer());
-    if (blob.length > INBOX_MAX_BYTES) return null;
+    const o = await open(p.fetch, `${html.server.replace(/\/+$/, '')}/${html.sha256}`, { method: 'GET' }, INBOX_TIMEOUT_MS);
+    if (!o.res.ok) return (o.done(), null);
+    const blob = await o.read(INBOX_MAX_BYTES);
     const text = await decryptText(blob, { sha256: html.sha256, key: html.key, nonce: html.nonce }, p.crypto);
     return new TextEncoder().encode(text).length > INBOX_MAX_BYTES - 16 ? null : text;
   } catch {

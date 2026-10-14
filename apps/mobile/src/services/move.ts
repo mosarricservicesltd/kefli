@@ -5,17 +5,18 @@
 //   2. copy each of S's saves to T through the outbox (data/move.ts), S's own unsent rows withdrawn;
 //   3. move S's connected browsers: POST /devices as T, and a pair-ack sealed by S carrying T and moved_from;
 //   4. confirm: T's outbox empty, then every copied save read back and opened from min(2, n) of T's write relays;
-//   5. retire S: its inbox drained once more (anything found goes back to step 2), kind 5s for its saves and its
-//      connected-browsers record to its write relays, DELETE /account as S, then S off the phone.
+//   5. retire S: its inbox drained once more (anything found goes back to step 2), what changed under S since the
+//      copy carried to T, kind 5s for its saves and its connected-browsers record to its write relays,
+//      DELETE /account as S, then S off the phone.
 // S stays whole until step 5, so a save is never deleted before its copy exists under T.
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { DEVICES_D, KIND, LIBRARY_KEY_D, T_TAG, buildDeletions, httpAuth, readItemEvent, type CryptoPort, type NostrEvent, type Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { enqueue } from '../data/outbox';
-import { itemAddresses } from '../data/libraryKey';
+import { itemAddresses, newestVersion } from '../data/libraryKey';
 import { listServers, writeRelays } from '../data/lists';
 import { indexText } from '../data/sync';
-import { copySave, moveJob, newerInEither, retireLocal, saveMove, sourceSaves, type MoveJob } from '../data/move';
+import { carryChanges, copySave, moveJob, newerInEither, retireLocal, saveMove, sourceMark, sourceSaves, type MoveJob } from '../data/move';
 import type { SaveTargets, StagedBlob } from '../data/saves';
 import { registered } from './connect';
 import type { RelayAnswer } from './send';
@@ -38,8 +39,11 @@ export type MovePorts = {
   stage: (sha256: string, bytes: Uint8Array) => string;
   /** A save's spoken words, from its text on the phone, for its search entry under T. */
   spoken: (hash: string) => string | null;
-  /** Step 1: an identity's lists, saves and deletions from its read relays, as a sync applies them. */
-  collect: (owner: string, signer: Signer) => Promise<void>;
+  /**
+   * Step 1: an identity's lists, saves and deletions from its read relays, as a sync applies them. False when some
+   * events wait for a signer that didn't answer, so the step waits too rather than moving on without them (F14).
+   */
+  collect: (owner: string, signer: Signer) => Promise<boolean>;
   runOutbox: () => Promise<unknown>;
   /** Step 5: S's inbox, drained one last time into S's rows. */
   drainSourceInbox: () => Promise<void>;
@@ -56,7 +60,7 @@ const targetsOf = (d: MoveDefaults): SaveTargets => ({ api: d.operator.api, blos
 async function prepare(p: MovePorts, job: MoveJob): Promise<boolean> {
   const ok = await registered({ db: p.db, now: p.now, owner: job.to, defaults: p.defaults, runOutbox: p.runOutbox });
   if (!ok) return false;
-  await p.collect(job.to, p.target);
+  if (!(await p.collect(job.to, p.target))) return false;
   return !!p.db.get('SELECT 1 FROM relays WHERE owner = ?', job.to);
 }
 
@@ -105,6 +109,7 @@ async function copyAll(p: MovePorts, job: MoveJob): Promise<boolean> {
       p.db.run("UPDATE items SET text_state = 'failed', fail_reason = 'blob_missing' WHERE owner = ? AND hash = ?", job.from, hash);
       blob = null;
     }
+    job.marks[hash] = sourceMark(p.db, job.from, hash);
     if (copySave(p.db, p.now(), job, hash, blob, t) === 'copied') indexCopy(p, job.to, hash);
     job.moved.push(hash);
     saveMove(p.db, p.now(), job);
@@ -134,16 +139,27 @@ function indexCopy(p: MovePorts, owner: string, hash: string): void {
   indexText(p.db, row, spoken ?? '');
 }
 
-/** Step 3: each browser connected to S gets T, a new token, and the pair-ack S seals (C§4.8, 4.4). */
-export function queueBrowsers(p: Pick<MovePorts, 'db' | 'now' | 'crypto'>, job: MoveJob, api: string): number {
-  const live = p.db.all<{ device_pubkey: string; label: string; relay: string }>(
-    'SELECT device_pubkey, label, relay FROM devices WHERE owner = ? AND revoked_at IS NULL GROUP BY device_pubkey ORDER BY connected_at', job.from);
+/**
+ * Step 3: each browser connected to S gets T, a new token, and the pair-ack S seals (C§4.8, 4.4), on the operator
+ * relay, where the browser listens (C§4.4: the pair relay is always the operator's). A browser known only from the
+ * synced record has no relay on this phone (F19). One this move has already paired with T, or is pairing, is left
+ * alone, so a move that goes back to step 2 for saves found at the end doesn't pair a browser twice.
+ */
+export function queueBrowsers(p: Pick<MovePorts, 'db' | 'now' | 'crypto'>, job: MoveJob, operator: { api: string; relay: string }): number {
+  const live = p.db.all<{ device_pubkey: string; label: string }>(
+    `SELECT device_pubkey, label FROM devices WHERE owner = ? AND revoked_at IS NULL
+       AND device_pubkey NOT IN (SELECT device_pubkey FROM devices WHERE owner = ? AND revoked_at IS NULL AND connected_at >= ? AND device_pubkey IS NOT NULL)
+       AND device_pubkey NOT IN (SELECT json_extract(payload, '$.device_pubkey') AS pk FROM outbox WHERE op = 'pair_ack' AND signer = ? AND pk IS NOT NULL)
+     GROUP BY device_pubkey ORDER BY connected_at`, job.from, job.to, job.since, job.to);
   for (const b of live) {
     const token = bytesToHex(p.crypto.randomBytes(32));
-    const post = enqueue(p.db, p.now(), { op: 'post_device', signer: job.to, subject: token, payload: { device_pubkey: b.device_pubkey, label: b.label }, targets: [`${api}/devices`] });
+    // the API moves the browser to T on a release S signs when this is sent (C§4.8 step 4, sendPostDevice)
+    const post = enqueue(p.db, p.now(), {
+      op: 'post_device', signer: job.to, subject: token, payload: { device_pubkey: b.device_pubkey, label: b.label, moved_from: job.from }, targets: [`${operator.api}/devices`],
+    });
     enqueue(p.db, p.now(), {
-      op: 'pair_ack', signer: job.to, subject: token, targets: [b.relay], dependsOn: post,
-      payload: { device_pubkey: b.device_pubkey, label: b.label, token, relay: b.relay, moved_from: job.from },
+      op: 'pair_ack', signer: job.to, subject: token, targets: [operator.relay], dependsOn: post,
+      payload: { device_pubkey: b.device_pubkey, label: b.label, token, relay: operator.relay, moved_from: job.from },
     });
   }
   return live.length;
@@ -189,13 +205,15 @@ async function holdsAll(p: MovePorts, relay: string, owner: string, want: string
 
 /** Step 5's servers: kind 5s for S's saves and record (unconfirmed, RULED), then DELETE /account as S, which must succeed. */
 async function retireRemote(p: MovePorts, job: MoveJob): Promise<boolean> {
-  // each save at every address it is at, never a plain hash it wasn't published under (F5), and S's records
+  // each save at every address it is at, never a plain hash it wasn't published under (F5), the saves deleted while
+  // the move ran whose kind 5s are still to go out (F20), and S's records
   const ds = [
     ...itemAddresses(p.db, job.from),
     ...p.db.all<{ d: string }>('SELECT d FROM items_future WHERE owner = ?', job.from).map((r) => r.d),
     DEVICES_D, LIBRARY_KEY_D,
   ];
-  const deletions = await buildDeletions(p.source, [...new Set(ds)], p.now());
+  // dated past the newest version of anything they name, whatever this phone's clock says (F36)
+  const deletions = await buildDeletions(p.source, [...new Set(ds)], Math.max(p.now(), newestVersion(p.db, job.from) + 1));
   await Promise.all(writeRelays(p.db, job.from).map(async (relay) => {
     for (const e of deletions) await p.publish(relay, e).catch(() => undefined);
   }));
@@ -211,49 +229,80 @@ async function retireRemote(p: MovePorts, job: MoveJob): Promise<boolean> {
 async function retire(p: MovePorts, job: MoveJob): Promise<'again' | boolean> {
   await p.drainSourceInbox().catch(() => undefined);
   if (sourceSaves(p.db, job.from, job.moved).length) return 'again';
+  // what changed under S since its saves were copied goes to T before S's rows go (F20), marked carried in the same
+  // transaction and saved before any of S's retirement goes out, so a later pass reads S's missing rows as retired
+  p.db.tx(() => {
+    carryChanges(p.db, p.now(), job);
+    saveMove(p.db, p.now(), job);
+  });
   if (!(await retireRemote(p, job))) return false;
   retireLocal(p.db, job.from, job.to);
   await p.retireKeys();
   return true;
 }
 
-/** Runs or resumes the move job, as far as it can go now. */
-export async function runMove(p: MovePorts, job: MoveJob | null = moveJob(p.db)): Promise<MoveOutcome> {
+/** One step's result: on to the next step, stay where the step itself put the job, or how this run ends. */
+type Step = 'next' | 'stay' | MoveOutcome;
+
+/** Step 1: both libraries collected in full, stopped by a save from a newer Kefli in either (C§10, FD 91 (i)). */
+async function collectBoth(p: MovePorts, job: MoveJob): Promise<Step> {
+  if (newerInEither(p.db, job.from, job.to)) return 'newer';
+  const fromAll = await p.collect(job.from, p.source);
+  const toAll = await p.collect(job.to, p.target);
+  if (!fromAll || !toAll) return 'waiting';
+  return newerInEither(p.db, job.from, job.to) ? 'newer' : 'next';
+}
+
+/** Step 3: the browsers queued with the step moved on, in one transaction, so each is paired once. */
+async function pairBrowsers(p: MovePorts, job: MoveJob): Promise<Step> {
+  const { operator } = await p.defaults();
+  job.step++;
+  p.db.tx(() => {
+    queueBrowsers(p, job, operator);
+    saveMove(p.db, p.now(), job);
+  });
+  await p.runOutbox();
+  return 'stay';
+}
+
+/** Step 5: S retired, or back to the copy for a save found at the end. */
+async function retireStep(p: MovePorts, job: MoveJob): Promise<Step> {
+  const r = await retire(p, job);
+  if (r === 'again') {
+    job.step = 2;
+    saveMove(p.db, p.now(), job);
+    return 'stay';
+  }
+  if (!r) return 'waiting';
+  saveMove(p.db, p.now(), job, 'done');
+  return 'done';
+}
+
+const STEPS: ((p: MovePorts, job: MoveJob) => Promise<Step>)[] = [
+  async (p, job) => ((await prepare(p, job)) ? 'next' : 'waiting'),
+  collectBoth,
+  async (p, job) => {
+    if (!(await copyAll(p, job))) return 'waiting';
+    await p.runOutbox();
+    return 'next';
+  },
+  pairBrowsers,
+  async (p, job) => {
+    await p.runOutbox();
+    return (await confirmed(p, job)) ? 'next' : 'waiting';
+  },
+  retireStep,
+];
+
+/** Runs or resumes the move job (the database's, unless given), as far as it can go now. */
+export async function runMove(p: MovePorts, given?: MoveJob | null): Promise<MoveOutcome> {
+  // read here, since the code gate's parser loses a function whose default parameter calls another
+  const job = given === undefined ? moveJob(p.db) : given;
   if (!job) return 'done';
   for (let guard = 0; guard < 12; guard++) {
-    if (job.step === 0) {
-      if (!(await prepare(p, job))) return 'waiting';
-    } else if (job.step === 1) {
-      if (newerInEither(p.db, job.from, job.to)) return 'newer';
-      await p.collect(job.from, p.source);
-      await p.collect(job.to, p.target);
-      if (newerInEither(p.db, job.from, job.to)) return 'newer';
-    } else if (job.step === 2) {
-      if (!(await copyAll(p, job))) return 'waiting';
-      await p.runOutbox();
-    } else if (job.step === 3) {
-      const api = (await p.defaults()).operator.api;
-      job.step++;
-      p.db.tx(() => {
-        queueBrowsers(p, job, api);
-        saveMove(p.db, p.now(), job);
-      });
-      await p.runOutbox();
-      continue;
-    } else if (job.step === 4) {
-      await p.runOutbox();
-      if (!(await confirmed(p, job))) return 'waiting';
-    } else {
-      const r = await retire(p, job);
-      if (r === 'again') {
-        job.step = 2;
-        saveMove(p.db, p.now(), job);
-        continue;
-      }
-      if (!r) return 'waiting';
-      saveMove(p.db, p.now(), job, 'done');
-      return 'done';
-    }
+    const r = await STEPS[Math.min(job.step, STEPS.length - 1)](p, job);
+    if (r === 'stay') continue;
+    if (r !== 'next') return r;
     job.step++;
     saveMove(p.db, p.now(), job);
   }

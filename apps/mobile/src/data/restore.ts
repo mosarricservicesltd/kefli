@@ -41,11 +41,15 @@ export function beginRestore(db: SqlDb, now: number, owner: string): boolean {
     || !!db.get("SELECT 1 FROM jobs WHERE id = ? AND state = 'running'", id(owner));
 }
 
-/** After a sync: done when no text is left waiting (texts a server didn't have count as settled). */
-export function settleRestore(db: SqlDb, now: number, owner: string): RestoreState | null {
+/**
+ * After a sync: done when no text is left waiting (texts a server didn't have count as settled). waiting is the
+ * sync's count of events its signer didn't answer for: while any wait, saves are still to come, so a restore that
+ * reads 0 of 0 is not done (F14).
+ */
+export function settleRestore(db: SqlDb, now: number, owner: string, waiting = 0): RestoreState | null {
   const r = restoreOf(db, owner);
   if (!r || r.state === 'done') return r?.state ?? null;
-  if (r.found < r.total) return r.state;
+  if (waiting > 0 || r.found < r.total) return r.state;
   db.run("UPDATE jobs SET state = 'done', updated_at = ?, data = ? WHERE id = ?", now, JSON.stringify({ owner, doneAt: now }), id(owner));
   return 'done';
 }

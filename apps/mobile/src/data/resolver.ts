@@ -4,7 +4,10 @@
 export type Origin = 'new' | 'early_share' | 'block_store' | 'recovery_code' | 'phone_pair' | 'nostr_signin';
 
 export type LaunchFacts = {
-  /** The key file's active identity, or null when there is none or it can't be read (a lost key counts as none). */
+  /**
+   * The key file's active identity, or null when there is none: no file, a lost key or a file it can't open (3.2).
+   * A Keystore that fails for now is never none; launch fails instead, before any of this (F21).
+   */
   identity: { pubkey: string; origin: Origin } | null;
   /** The database holds data from an identity. */
   dbHasData: boolean;
@@ -33,6 +36,17 @@ export function resolveLaunch(f: LaunchFacts): LaunchPlan {
   return { wipeDb, route: 'welcome', restoreCard: false, adoptBlockStore: false };
 }
 
+/**
+ * Where a launch goes when the key file couldn't be read for now (F21: the Keystore not ready, retried and still
+ * failing). Never treated as no identity: the database's own identity row decides, as resolveLaunch would with the
+ * key, and nothing is wiped or adopted. The library opens on what the phone holds, and what needs the key waits
+ * for a later launch to read it.
+ */
+export function resolveFailedLaunch(f: { identity: { origin: Origin } | null; welcomeAnswered: boolean }): LaunchPlan['route'] {
+  if (!f.identity) return 'welcome';
+  return f.identity.origin === 'early_share' && !f.welcomeAnswered ? 'welcome-early' : 'saves';
+}
+
 export type ShareFacts = { identity: { pubkey: string } | null; blockStore: string | null | undefined };
 
 /**
@@ -46,4 +60,24 @@ export function resolveShare(f: ShareFacts): SharePlan {
   if (f.identity) return { use: 'existing' };
   if (f.blockStore) return { use: 'block_store' };
   return { use: 'mint', writeBlockStore: f.blockStore === null };
+}
+
+export type BlockStoreFacts = {
+  /** Block Store's entry against the identity's words, or null when the read failed. */
+  entry: 'empty' | 'same' | 'other' | null;
+  /** Whether Block Store reports end-to-end encryption available now, or null when the check failed. */
+  e2ee: boolean | null;
+  /** The cloud flag this phone last wrote the identity's words with, or null with no record of a write. */
+  written: boolean | null;
+};
+
+/**
+ * Whether launch writes the identity's words to Block Store again (3.3, contract 2, F22): the entry is missing (a
+ * write that failed, or one never made), or its cloud flag no longer matches end-to-end encryption, rechecked at
+ * each launch. Never over another key's entry, which may be the way back to another library, nor after a failed
+ * read.
+ */
+export function blockStoreRewrite(f: BlockStoreFacts): boolean {
+  if (f.entry === 'empty') return true;
+  return f.entry === 'same' && f.e2ee !== null && f.written !== f.e2ee;
 }

@@ -39,6 +39,3 @@ yarn-error.*
 # generated native folders
 /ios
 /android
-
-# the Android test build's tick track, made by scripts/make-ticks.mjs
-assets/spike/*.wav

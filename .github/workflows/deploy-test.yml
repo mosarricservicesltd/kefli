@@ -1,0 +1,22 @@
+# The playbook test (server/deploy/ansible/test.sh): lint, then two runs against a fresh Debian container with systemd,
+# the second changing nothing, and the services checked through Caddy. About 25 minutes, so it runs only when the
+# server or its deployment changes, or by hand. Needs no secrets: the test inventory has no vault and no real host.
+name: Playbook test
+
+on:
+  push:
+    paths: ['server/**', '.github/workflows/deploy-test.yml']
+  pull_request:
+    paths: ['server/**', '.github/workflows/deploy-test.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  playbook:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - run: server/deploy/ansible/test.sh

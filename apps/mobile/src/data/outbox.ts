@@ -48,7 +48,12 @@ function pendingRow(db: SqlDb, op: string, signer: string, subject: string): Out
   return db.get<OutboxRow>(`SELECT * FROM outbox WHERE op = ? AND signer = ? AND subject = ? AND ${PENDING}`, op, signer, subject);
 }
 
+/**
+ * A target with no address is refused before anything is written: its row would never send, back off or give up,
+ * since a result's target = ? never matches NULL, and whatever waits on it would wait for ever (F19).
+ */
 function setTargets(db: SqlDb, id: number, targets: string[], now: number) {
+  if (targets.some((t) => typeof t !== 'string' || !t)) throw new Error('an outbox target needs an address');
   db.run('DELETE FROM outbox_targets WHERE outbox_id = ?', id);
   for (const t of new Set(targets)) {
     db.run("INSERT INTO outbox_targets (outbox_id, target, state, attempts, next_at) VALUES (?, ?, 'pending', 0, ?)", id, t, now);

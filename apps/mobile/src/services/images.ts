@@ -1,10 +1,11 @@
-// Fetching article images (mobile spec 4.5 phase 6, 5.6): one at a time, http(s) only, at most 5 MB, kept only if
-// the bytes are an image the Reader can draw. The store stays within 200 MB by evicting archived articles' images
-// first. Ports, like sync, so this runs in tests.
+// Fetching article images (mobile spec 4.5 phase 6, 5.6): one at a time, http(s) only, at most 5 MB and 20 s with no
+// cookies (net/http.ts), kept only if the bytes are an image the Reader can draw. The store stays within 200 MB by
+// evicting archived articles' images first. Ports, like sync, so this runs in tests.
 import { isPublicWebUrl } from '@kefli/protocol';
 import { articleBlocks } from '../reader/blocks';
 import { imageKind, imageSize } from '../reader/imageSize';
 import type { SqlDb } from '../data/db';
+import { open, TimedOut, TooLarge } from '../net/http';
 import {
   MAX_IMAGE_BYTES, evictions, forget, getImage, imagesOf, keptArticles, needsFetch, recordFailed, recordImage, wanted,
 } from '../data/images';
@@ -30,29 +31,34 @@ export function articleImages(markdown: string): string[] {
 /** The user agent page fetches use (5.4); some image servers refuse requests without a browser's. */
 export const IMAGE_UA = 'Mozilla/5.0 (Linux; Android 17; Pixel 10a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0 Mobile Safari/537.36';
 
+/** A page's 20 s (5.4), over the headers and the whole body. */
+export const IMAGE_TIMEOUT_MS = 20_000;
+
 export type Fetched = 'ok' | 'failed' | 'offline' | 'skipped';
+
+// built from a string: the code gate's parser reads a regex literal's escaped slashes as a comment
+const WEB = new RegExp('^https?://', 'i');
 
 export async function fetchImage(p: ImagePorts, owner: string, url: string, hash: string): Promise<Fetched> {
   // a page's image may name any address: only public web ones are fetched, never this phone's network (F26)
-  if (!/^https?:\/\//i.test(url) || !isPublicWebUrl(url)) return 'skipped';
-  let res: Response;
-  try {
-    res = await p.fetch(url, { headers: { 'User-Agent': IMAGE_UA, Accept: 'image/avif,image/webp,image/png,image/jpeg,image/gif;q=0.9,*/*;q=0.5' } });
-  } catch {
-    return 'offline';
-  }
+  if (!WEB.test(url) || !isPublicWebUrl(url)) return 'skipped';
   const fail = () => {
     recordFailed(p.db, url, hash, p.now());
     return 'failed' as const;
   };
-  if (!res.ok || Number(res.headers.get('content-length') ?? 0) > MAX_IMAGE_BYTES) return fail();
   let bytes: Uint8Array;
   try {
-    bytes = new Uint8Array(await res.arrayBuffer());
-  } catch {
-    return 'offline';
+    const o = await open(p.fetch, url, { headers: { 'User-Agent': IMAGE_UA, Accept: 'image/avif,image/webp,image/png,image/jpeg,image/gif;q=0.9,*/*;q=0.5' } }, IMAGE_TIMEOUT_MS);
+    if (!o.res.ok) {
+      o.done();
+      return fail();
+    }
+    bytes = await o.read(MAX_IMAGE_BYTES);
+  } catch (e) {
+    // a host too slow or too big is that image's failure, tried again in a day, so it can't hold up every sync (F12)
+    return e instanceof TimedOut || e instanceof TooLarge ? fail() : 'offline';
   }
-  if (bytes.length > MAX_IMAGE_BYTES || !imageKind(bytes)) return fail();
+  if (!imageKind(bytes)) return fail();
   for (const r of evictions(p.db, owner, bytes.length, hash)) {
     if (r.path) p.files.remove(r.path);
     forget(p.db, [r.url]);

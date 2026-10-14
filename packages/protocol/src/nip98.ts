@@ -15,8 +15,10 @@ export async function httpAuth(
   method: HttpMethod,
   body: Uint8Array | string | null,
   crypto: CryptoPort,
-  now = Math.floor(Date.now() / 1000),
+  at?: number,
 ): Promise<string> {
+  // the default is worked out here, not in the parameter list, where lizard's parser loses the function
+  const now = at ?? Math.floor(Date.now() / 1000);
   const tags = [['u', url], ['method', method]];
   if (method !== 'GET') {
     const bytes = body === null ? new Uint8Array() : typeof body === 'string' ? utf8ToBytes(body) : body;

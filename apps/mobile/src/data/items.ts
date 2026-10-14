@@ -12,6 +12,8 @@ export type ItemRow = {
   published: number; text_state: string; origin: string;
   /** The address the save was last published or seen at (F5). */
   remote_d: string | null;
+  /** Set while a delete's Undo can still bring the save back (F38). */
+  pending_delete_at: number | null;
 };
 
 export type NewItem = {

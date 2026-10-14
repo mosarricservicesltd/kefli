@@ -1,6 +1,6 @@
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
-import { MAX_IMAGE_BYTES, evictions, getImage, keptArticles, needsFetch, recordImage, wanted } from '../src/data/images';
+import { MAX_IMAGE_BYTES, evictions, getImage, keptArticles, markUsed, needsFetch, recordFailed, recordImage, wanted } from '../src/data/images';
 import { imageKind, imageSize } from '../src/reader/imageSize';
 import { articleImages, fetchArticleImages, fetchImage, imageState, removeImages, syncImages, type ImagePorts } from '../src/services/images';
 import { memoryDb } from './sqlite';
@@ -127,6 +127,21 @@ describe('article images (mobile spec 4.5 phase 6, 5.6)', () => {
     expect(evictions(w.db, PK, 150, null, 400).map((r) => r.url)).toEqual(['u3']);
     expect(evictions(w.db, PK, 250, null, 400).map((r) => r.url)).toEqual(['u3', 'u2']);
     expect(evictions(w.db, PK, 350, h(1), 400).map((r) => r.url)).toEqual(['u3', 'u2']);
+  });
+
+  test('an image the Reader showed lately outlasts one fetched later and never looked at', () => {
+    const w = world();
+    w.add(1);
+    w.add(2);
+    recordImage(w.db, 'old', h(1), '/img/old', 100, 1, 1, 5);
+    recordImage(w.db, 'new', h(2), '/img/new', 100, 1, 1, 9);
+    recordFailed(w.db, 'failed', h(1), 3);
+    expect(evictions(w.db, PK, 150, null, 300).map((r) => r.url)).toEqual(['old']);
+    markUsed(w.db, ['old', 'failed'], 20);
+    expect(evictions(w.db, PK, 150, null, 300).map((r) => r.url)).toEqual(['new']);
+    // a failure isn't an image held: it stays as it was, to be tried again after a day
+    expect(getImage(w.db, 'failed')?.last_used_at).toBeNull();
+    markUsed(w.db, [], 30);
   });
 
   test("an article's images go with it", async () => {

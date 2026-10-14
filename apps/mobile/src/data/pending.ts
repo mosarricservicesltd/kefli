@@ -9,12 +9,21 @@ import { writeRelays } from './lists';
 
 export type Pending = { id: number; hash: string; url: string; shared_url: string | null; published: number; event_id: string | null; x_state: string | null };
 
-/** Saves waiting for their parse, oldest first. */
+/**
+ * Saves waiting for their parse: those that haven't timed out first, oldest first, then those that have, the one
+ * that timed out longest ago first (F12).
+ */
 export function pendingParses(db: SqlDb, owner: string): Pending[] {
   return db.all<Pending>(
-    "SELECT id, hash, url, shared_url, published, event_id, x_state FROM items WHERE owner = ? AND text_state = 'queued' AND pending_delete_at IS NULL ORDER BY saved_at, id",
+    `SELECT id, hash, url, shared_url, published, event_id, x_state FROM items WHERE owner = ? AND text_state = 'queued' AND pending_delete_at IS NULL
+     ORDER BY COALESCE(timed_out_at, 0), saved_at, id`,
     owner,
   );
+}
+
+/** A pending parse whose page timed out goes to the back of the queue (F12). */
+export function timedOut(db: SqlDb, now: number, id: number): void {
+  db.run('UPDATE items SET timed_out_at = ? WHERE id = ?', now, id);
 }
 
 export type Parsed = {

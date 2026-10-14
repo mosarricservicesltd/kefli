@@ -32,7 +32,23 @@ class KefliNip55Module : Module() {
     return r
   }
 
+  /**
+   * Whether the provider at <pkg>.<TYPE> belongs to the signer itself. Authorities go to whichever app claims them
+   * first, and a signer that answers through its screen alone leaves its names free, so another app could take them
+   * and be handed every plaintext to encrypt (F46). A provider of anyone else's is treated as no provider.
+   */
+  private fun ownedBySigner(pkg: String, type: String): Boolean {
+    val owner = try {
+      context.packageManager.resolveContentProvider("$pkg.$type", 0)?.packageName
+    } catch (e: Exception) {
+      null
+    }
+    if (owner != null && owner != pkg) Log.i("KefliNip55", "$type resolver belongs to another app; not asked")
+    return owner == pkg
+  }
+
   private fun resolveOnce(pkg: String, type: String, args: Array<String>): Pair<String?, String?>? {
+    if (!ownedBySigner(pkg, type)) return null
     return try {
       val cursor = context.contentResolver.query(Uri.parse("content://$pkg.$type"), args, null, null, null)
       if (cursor == null) Log.i("KefliNip55", "$type resolver: no cursor")
@@ -129,9 +145,12 @@ class KefliNip55Module : Module() {
     }
 
     // Whether the signer answers through its resolver, without its screen: then background drains can run (4.7).
+    // Both directions are probed, since sync and the inbox decrypt out of sight: the probe is encrypted, and what comes
+    // back must decrypt to it again.
     AsyncFunction("canActInBackground") { pkg: String, peer: String, hex: String ->
       try {
-        resolve(pkg, "NIP44_ENCRYPT", arrayOf("kefli-probe", peer, hex))?.first != null
+        val encrypted = resolve(pkg, "NIP44_ENCRYPT", arrayOf("kefli-probe", peer, hex))?.first
+        encrypted != null && resolve(pkg, "NIP44_DECRYPT", arrayOf(encrypted, peer, hex))?.first == "kefli-probe"
       } catch (e: Exception) {
         false
       }

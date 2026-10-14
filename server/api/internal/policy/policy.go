@@ -6,8 +6,9 @@ package policy
 import (
 	"encoding/json"
 	"fmt"
-	"sync"
 	"time"
+
+	"github.com/richardminton-glitch/Kefli/server/api/internal/limit"
 )
 
 // Lookups is what the policy asks of keflid's database and of its own record of the wraps the relay holds.
@@ -16,6 +17,8 @@ type Lookups interface {
 	Registered(pubkey string) bool
 	// Authorised is a device key some enabled user has authorised (contract 4.4).
 	Authorised(pubkey string) bool
+	// DeviceUser is the enabled user who authorised a device key.
+	DeviceUser(pubkey string) (user string, ok bool)
 	// Wrap is a kind 1059 the relay holds: its author and its p tag.
 	Wrap(id string) (author, p string, ok bool)
 }
@@ -64,20 +67,38 @@ type Verdict struct {
 // Wrap is a kind 1059 the relay accepted, which the plugin records for later kind 5s.
 type Wrap struct{ ID, Author, P string }
 
-type Policy struct {
-	look  Lookups
-	now   func() time.Time
-	mu    sync.Mutex
-	rates map[string]*window
-}
+// The limits, each in fixed windows. An address is an IPv6 sender's /64 (F8). A wrap from a sender that isn't AUTHed as
+// its recipient or one of the recipient's devices counts against its address, then against the recipient from that
+// address, then against the recipient from everyone: someone filling one recipient's allowance uses up only its own
+// (F9), and the ceiling keeps junk from many addresses out of the recipient's inbox.
+const (
+	UserMax      = 60   // events a minute from a registered author, or wraps from a connection AUTHed as the recipient's
+	AddrMax      = 240  // unregistered events an hour from an address
+	ToAddrMax    = 120  // wraps an hour to one recipient from one address
+	RecipientMax = 1200 // wraps an hour to one recipient from unAUTHed senders everywhere
+)
 
-type window struct {
-	start time.Time
-	n     int
+type Policy struct {
+	look      Lookups
+	user      *limit.Limiter
+	addr      *limit.Limiter
+	toAddr    *limit.Limiter
+	recipient *limit.Limiter
 }
 
 func New(look Lookups, now func() time.Time) *Policy {
-	return &Policy{look: look, now: now, rates: map[string]*window{}}
+	return &Policy{
+		look:      look,
+		user:      limit.New(UserMax, time.Minute, now),
+		addr:      limit.New(AddrMax, time.Hour, now),
+		toAddr:    limit.New(ToAddrMax, time.Hour, now),
+		recipient: limit.New(RecipientMax, time.Hour, now),
+	}
+}
+
+func allowed(l *limit.Limiter, key string) bool {
+	ok, _ := l.Allow(key)
+	return ok
 }
 
 func accept(id string) Verdict { return Verdict{Out: Output{ID: id, Action: "accept"}} }
@@ -120,7 +141,7 @@ func (p *Policy) Decide(in Input) Verdict {
 // fromUser: a registered author writes what it likes, 60 events a minute. A wrap it sends is recorded; a deletion it
 // sends also removes the wraps it names that are addressed to it.
 func (p *Policy) fromUser(in Input, ev Event) Verdict {
-	if !p.allow("user:"+ev.Pubkey, 60, time.Minute) {
+	if !allowed(p.user, ev.Pubkey) {
 		return reject(ev.ID, "rate-limited: slow down")
 	}
 	v := accept(ev.ID)
@@ -153,19 +174,45 @@ func (p *Policy) consumed(ev Event) []string {
 	return out
 }
 
-// wrap: a gift wrap from a throwaway key, taken when its one p tag names a registered user or an authorised device;
-// 120 an hour per recipient and 240 per address.
+// wrap: a gift wrap from a throwaway key, taken when its one p tag names a registered user or an authorised device.
+// One sent on a connection AUTHed as its recipient's own key or device (a browser's save to its user, the phone's
+// pair-ack to its browser) counts only against that key; any other against the limits above.
 func (p *Policy) wrap(in Input, ev Event) Verdict {
 	ps := tags(ev, "p")
 	if len(ps) != 1 || !(p.look.Registered(ps[0]) || p.look.Authorised(ps[0])) {
 		return reject(ev.ID, "blocked: gift wraps here are for Kefli users and their browsers")
 	}
-	if !p.allow("to:"+ps[0], 120, time.Hour) || !p.allow("ip:"+in.SourceInfo, 240, time.Hour) {
-		return reject(ev.ID, "rate-limited: slow down")
+	to := ps[0]
+	if p.ownSide(in.Authed, to) {
+		if !allowed(p.user, in.Authed) {
+			return reject(ev.ID, "rate-limited: slow down")
+		}
+	} else {
+		// the sender's own address first, so a wrap it is refused never counts against the recipient
+		addr := limit.Addr(in.SourceInfo, 64)
+		if !allowed(p.addr, addr) || !allowed(p.toAddr, to+" "+addr) || !allowed(p.recipient, to) {
+			return reject(ev.ID, "rate-limited: slow down")
+		}
 	}
 	v := accept(ev.ID)
-	v.Record = &Wrap{ID: ev.ID, Author: ev.Pubkey, P: ps[0]}
+	v.Record = &Wrap{ID: ev.ID, Author: ev.Pubkey, P: to}
 	return v
+}
+
+// ownSide is whether a connection AUTHed as authed speaks for the recipient to: the same key, a device of it, or the
+// user whose device it is.
+func (p *Policy) ownSide(authed, to string) bool {
+	if authed == "" {
+		return false
+	}
+	if authed == to {
+		return true
+	}
+	if user, ok := p.look.DeviceUser(authed); ok && user == to {
+		return true
+	}
+	user, ok := p.look.DeviceUser(to)
+	return ok && user == authed
 }
 
 // undo: a deletion from an unregistered key, taken only when every event it names is a wrap by that key which the
@@ -180,25 +227,8 @@ func (p *Policy) undo(in Input, ev Event) Verdict {
 			return reject(ev.ID, "blocked: deletes only a gift wrap of its own that this relay holds")
 		}
 	}
-	if !p.allow("ip:"+in.SourceInfo, 240, time.Hour) {
+	if !allowed(p.addr, limit.Addr(in.SourceInfo, 64)) {
 		return reject(ev.ID, "rate-limited: slow down")
 	}
 	return accept(ev.ID)
-}
-
-// allow counts one event against key's limit in fixed windows.
-func (p *Policy) allow(key string, max int, per time.Duration) bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	now := p.now()
-	w := p.rates[key]
-	if w == nil || now.Sub(w.start) >= per {
-		w = &window{start: now}
-		p.rates[key] = w
-		if len(p.rates) > 200_000 {
-			p.rates = map[string]*window{key: w}
-		}
-	}
-	w.n++
-	return w.n <= max
 }

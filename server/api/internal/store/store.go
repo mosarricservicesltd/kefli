@@ -22,6 +22,11 @@ const InboxLife = 14 * 24 * time.Hour
 // OfferLife is how long a pairing offer is held (contract 6: five minutes).
 const OfferLife = 5 * time.Minute
 
+// GoneLife is how long a removed key stays on the gone list. The relay's nightly sweep drops wraps addressed to it at
+// once and its own events after 30 days (contract 3.2); the month past that leaves room for nights the sweep missed,
+// after which the row would only make every sweep longer (F45).
+const GoneLife = 60 * 24 * time.Hour
+
 var ErrTaken = errors.New("lookup taken")
 
 const schema = `
@@ -34,6 +39,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   disabled    INTEGER NOT NULL DEFAULT 0,
   nip05_name  TEXT
 );
+CREATE INDEX IF NOT EXISTS accounts_created ON accounts(created_at);
 CREATE TABLE IF NOT EXISTS devices (
   device_pubkey TEXT PRIMARY KEY,
   user_pubkey   TEXT NOT NULL REFERENCES accounts(pubkey) ON DELETE CASCADE,
@@ -106,6 +112,14 @@ func (s *Store) Register(ctx context.Context, pubkey string) error {
 	return err
 }
 
+// Registrations counts the accounts made since a time: the API's limit on new accounts from everyone (F8), which a
+// restart doesn't reset.
+func (s *Store) Registrations(ctx context.Context, since time.Time) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM accounts WHERE created_at > ?`, since.Unix()).Scan(&n)
+	return n, err
+}
+
 // SetDisabled takes a key off the allowlist, or puts it back, keeping its blobs (backend spec 5: keflictl).
 func (s *Store) SetDisabled(ctx context.Context, pubkey string, disabled bool) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE accounts SET disabled = ? WHERE pubkey = ?`, disabled, pubkey)
@@ -121,8 +135,9 @@ func (s *Store) Account(ctx context.Context, pubkey string) (quota int64, ok boo
 	return quota, err == nil, err
 }
 
-// AddDevice authorises a device key for the user; a key already authorised for another user moves (a move, contract 4.8).
-// The browser's label isn't kept (F30).
+// AddDevice authorises a device key for the user; a key already authorised for another user moves to this one. The API
+// calls it only with the device's own proof or its holder's release (contract 4.4, 4.8, F44). The browser's label
+// isn't kept (F30).
 func (s *Store) AddDevice(ctx context.Context, user, device string) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO devices(device_pubkey, user_pubkey, label, created_at) VALUES(?, ?, '', ?)
 		ON CONFLICT(device_pubkey) DO UPDATE SET user_pubkey = excluded.user_pubkey`, device, user, s.unix())
@@ -130,6 +145,17 @@ func (s *Store) AddDevice(ctx context.Context, user, device string) error {
 		_, err = s.db.ExecContext(ctx, `DELETE FROM gone WHERE pubkey = ?`, device)
 	}
 	return err
+}
+
+// DeviceHolder is the user a device key is authorised for, whether or not that account is enabled: the library whose
+// release a move needs (contract 4.8 step 4).
+func (s *Store) DeviceHolder(ctx context.Context, device string) (string, bool, error) {
+	var user string
+	err := s.db.QueryRowContext(ctx, `SELECT user_pubkey FROM devices WHERE device_pubkey = ?`, device).Scan(&user)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	return user, err == nil, err
 }
 
 // DeviceUser is the user a device key uploads for, if it is authorised.
@@ -211,12 +237,21 @@ func (s *Store) UseAuth(ctx context.Context, id string, until int64) (bool, erro
 	return n == 1, nil
 }
 
-// Sweep removes expired offers and used authorisation ids. Expired inbox blobs are ExpireInbox's.
+// Sweep removes expired offers, used authorisation ids and keys gone longer than GoneLife. Expired inbox blobs are
+// ExpireInbox's.
 func (s *Store) Sweep(ctx context.Context) error {
 	now := s.unix()
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM offers WHERE expires_at <= ?`, now); err != nil {
-		return err
+	for _, q := range []struct {
+		query string
+		arg   int64
+	}{
+		{`DELETE FROM offers WHERE expires_at <= ?`, now},
+		{`DELETE FROM used_auth WHERE until <= ?`, now},
+		{`DELETE FROM gone WHERE at <= ?`, s.Now().Add(-GoneLife).Unix()},
+	} {
+		if _, err := s.db.ExecContext(ctx, q.query, q.arg); err != nil {
+			return err
+		}
 	}
-	_, err := s.db.ExecContext(ctx, `DELETE FROM used_auth WHERE until <= ?`, now)
-	return err
+	return nil
 }

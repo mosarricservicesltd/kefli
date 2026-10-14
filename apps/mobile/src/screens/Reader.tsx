@@ -18,7 +18,7 @@ import { isDoubleTap, scrollYForWord, wordAtOffset, wordAtScroll, type Place, ty
 import { readerColors, type PaletteId, type ReaderColors } from '../reader/palette';
 import { setReaderPalette, setReaderSize, useReaderPrefs } from '../reader/prefs';
 import { BlockView, type FigureState, type Lit } from '../reader/Prose';
-import { getImage, needsFetch } from '../data/images';
+import { getImage, markUsed, needsFetch } from '../data/images';
 import { fetchArticleImages } from '../services/images';
 import { imagePorts } from '../services/runner';
 import { useApp } from '../services/app';
@@ -425,7 +425,10 @@ export default function Reader() {
       return [u, { row: r, failed: !!r && !r.path && !needsFetch(r, now), online } as FigureState];
     }));
   }, ['images'], [urls, online]);
-  // The article's images are fetched when it opens, on any network (4.5).
+  // The article's images are fetched when it opens, on any network (4.5); those already here count as used.
+  useEffect(() => {
+    if (article) markUsed(store(), urls, Math.floor(Date.now() / 1000));
+  }, [article, urls]);
   useEffect(() => {
     if (article && online && owner) fetchArticleImages(imagePorts(), owner, hash).catch(() => undefined);
   }, [article, online, owner, hash]);

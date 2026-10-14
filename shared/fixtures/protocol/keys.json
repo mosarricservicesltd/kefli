@@ -1,0 +1,7 @@
+{
+  "about": "NIP-06's own example (C§2): the twelve words, the path and the key they give. Exact.",
+  "mnemonic": "leader monkey parrot ring guide accident before fence cannon height naive bean",
+  "path": "m/44'/1237'/0'/0/0",
+  "secret_key": "7f7ff03d123792d6ac594bfa67bf6d0c0ab55b6b1fdb6249303fe861f1ccba9a",
+  "pubkey": "17162c921dc4d2518f9a101db33695df1afb56ab82f5ff3e5da6eec3ca5cd917"
+}

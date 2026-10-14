@@ -4,7 +4,7 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import { Relay } from 'nostr-tools/relay';
 import { httpAuth } from '../../../packages/protocol/src/nip98';
 import {
-  acceptPairAck, derivePairCode, newPairCode, sealOffer, type PairAck, type PairOffer,
+  acceptPairAck, derivePairCode, deviceProofTemplate, newPairCode, sealOffer, signStatement, type PairAck, type PairOffer,
 } from '../../../packages/protocol/src/pairing';
 import type { CryptoPort } from '../../../packages/protocol/src/ports';
 import type { LocalSigner, NostrEvent } from '../../../packages/protocol/src/signer';
@@ -38,18 +38,57 @@ export interface Offer {
   code: string;
   /** What the QR carries: the offer's JSON. */
   qr: string;
+  /** Whether the operator has it yet. */
+  posted: boolean;
 }
 
-/** A fresh offer, posted sealed under its typed code with POST /pair-offers, signed by the device key (NIP-98). */
-export async function postOffer(device: LocalSigner, defaults: Defaults, label: string, crypto: CryptoPort, now: number, get: typeof fetch = fetch): Promise<Offer> {
-  const offer: PairOffer = { v: 1, device_pubkey: device.pubkey(), relay: defaults.operator.relay, nonce: bytesToHex(crypto.randomBytes(16)), expires: now + OFFER_LIFE, label };
-  const code = newPairCode(crypto);
-  const { lookup, key } = await derivePairCode(code, crypto);
+/**
+ * A fresh offer, made here and not yet posted. It carries the device key's proof over its nonce (contract 4.4), which
+ * the phone forwards in POST /devices, so the operator authorises this key only for a phone that has this offer.
+ */
+export async function newOffer(device: LocalSigner, defaults: Defaults, label: string, crypto: CryptoPort, now: number): Promise<Offer> {
+  const nonce = bytesToHex(crypto.randomBytes(16));
+  const proof = await signStatement(device, deviceProofTemplate(defaults.operator.api, nonce, now));
+  const offer: PairOffer = { v: 1, device_pubkey: device.pubkey(), relay: defaults.operator.relay, nonce, expires: now + OFFER_LIFE, label, proof };
+  return { offer, code: newPairCode(crypto), qr: JSON.stringify(offer), posted: false };
+}
+
+/** Posts the offer sealed under its typed code with POST /pair-offers, signed by the device key (NIP-98). */
+export async function postOffer(device: LocalSigner, defaults: Defaults, o: Offer, crypto: CryptoPort, get: typeof fetch = fetch): Promise<void> {
+  const { lookup, key } = await derivePairCode(o.code, crypto);
   const url = `${defaults.operator.api}/pair-offers`;
-  const body = JSON.stringify({ v: 1, lookup, offer: await sealOffer(offer, key, crypto) });
+  const body = JSON.stringify({ v: 1, lookup, offer: await sealOffer(o.offer, key, crypto) });
   const res = await get(url, { method: 'POST', body, headers: { Authorization: await httpAuth(device, url, 'POST', body, crypto), 'Content-Type': 'application/json' } });
   if (!res.ok) throw new Error(`pair-offers answered ${res.status}`);
-  return { offer, code, qr: JSON.stringify(offer) };
+  o.posted = true;
+}
+
+/** An offer with less than this left isn't shown again after trouble; a new one is made. */
+export const OFFER_REUSE_MIN = 60;
+
+/**
+ * One try at showing a code (F42): the offer from the last try while it has a minute or more left, else a new one; the
+ * wait on the relay first, and the offer posted only once that is up, and only once. A page that can't reach the relay
+ * then tries again every ten seconds without posting anything, so it can't use up the operator's 30 offers an hour.
+ * Resolves with the offer to show and the wait; rejects on trouble, with the offer kept in `last` for the next try.
+ */
+export async function tryPairing(
+  last: { offer: Offer | null },
+  make: () => Promise<Offer>,
+  listen: (o: Offer) => Promise<Listening>,
+  post: (o: Offer) => Promise<void>,
+  now: number,
+): Promise<{ offer: Offer; listening: Listening }> {
+  if (!last.offer || last.offer.offer.expires - now < OFFER_REUSE_MIN) last.offer = await make();
+  const offer = last.offer;
+  const listening = await listen(offer);
+  try {
+    if (!offer.posted) await post(offer);
+  } catch (e) {
+    listening.stop();
+    throw e;
+  }
+  return { offer, listening };
 }
 
 export function formatCode(code: string): string {

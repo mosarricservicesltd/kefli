@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/richardminton-glitch/Kefli/server/api/internal/auth"
@@ -30,6 +31,11 @@ const MaxBlob = 8 << 20
 type Server struct {
 	Dir  string
 	Base string // public address blobs are served from, such as https://blossom.kefli.app
+	// MinFree is the space an upload must leave free on the blobs' disk, which the databases and the relay share: the
+	// quotas are per account, so only this bounds what every account together can fill (F8). 0 sets no floor.
+	MinFree int64
+	// Free is the space free for dir's filesystem; the disk's, from statfs, unless a test says otherwise.
+	Free func(dir string) (int64, error)
 	st   *store.Store
 	log  *slog.Logger
 	// commitMu makes an upload's quota check, rename and owner row one step (F2)
@@ -37,7 +43,18 @@ type Server struct {
 }
 
 func New(dir, base string, st *store.Store, log *slog.Logger) *Server {
-	return &Server{Dir: dir, Base: strings.TrimRight(base, "/"), st: st, log: log}
+	return &Server{Dir: dir, Base: strings.TrimRight(base, "/"), Free: diskFree, st: st, log: log}
+}
+
+func diskFree(dir string) (int64, error) {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return 0, err
+	}
+	var st syscall.Statfs_t
+	if err := syscall.Statfs(dir, &st); err != nil {
+		return 0, err
+	}
+	return int64(st.Bavail) * int64(st.Bsize), nil
 }
 
 func (s *Server) Routes(mux *http.ServeMux) {
@@ -107,7 +124,28 @@ func (s *Server) allowed(r *http.Request, sha string, size int64) (*uploader, in
 	if size > MaxBlob {
 		return nil, http.StatusRequestEntityTooLarge, "too_large"
 	}
+	if status, reason := s.room(size); status != 0 {
+		return nil, status, reason
+	}
 	return s.withinQuota(r, up, sha, size)
+}
+
+// room refuses an upload that would leave less than MinFree on the disk with 507, which clients retry later, as backend
+// spec 7's disk-full drill expects.
+func (s *Server) room(size int64) (int, string) {
+	if s.MinFree <= 0 {
+		return 0, ""
+	}
+	free, err := s.Free(s.Dir)
+	if err != nil {
+		s.log.Error("free space", "err", err)
+		return http.StatusInternalServerError, "server"
+	}
+	if free-size < s.MinFree {
+		s.log.Error("uploads held: the disk is nearly full", "free", free, "floor", s.MinFree)
+		return http.StatusInsufficientStorage, "storage"
+	}
+	return 0, ""
 }
 
 func (s *Server) withinQuota(r *http.Request, up *uploader, sha string, size int64) (*uploader, int, string) {

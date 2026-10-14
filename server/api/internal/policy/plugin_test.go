@@ -21,6 +21,12 @@ const (
 )
 
 func setup(t *testing.T) (*policy.Policy, *sql.DB, *store.Store) {
+	p, wraps, st, _ := setupDB(t)
+	return p, wraps, st
+}
+
+// setupDB is setup with keflid's database as the plugin opens it, read-only.
+func setupDB(t *testing.T) (*policy.Policy, *sql.DB, *store.Store, *sql.DB) {
 	t.Helper()
 	dir := t.TempDir()
 	st, err := store.Open(filepath.Join(dir, "keflid.db"))
@@ -36,7 +42,7 @@ func setup(t *testing.T) (*policy.Policy, *sql.DB, *store.Store) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return policy.New(policy.NewDB(ro, wraps), time.Now), wraps, st
+	return policy.New(policy.NewDB(ro, wraps), time.Now), wraps, st, ro
 }
 
 func lineFor(ev map[string]any) string {
@@ -130,5 +136,69 @@ func TestApplyIgnoresRefusals(t *testing.T) {
 	_ = wraps.QueryRow(`SELECT COUNT(*) FROM wraps`).Scan(&n)
 	if n != 0 {
 		t.Fatal("a refused wrap was recorded")
+	}
+}
+
+// F45: the record used to keep every wrap the sweep dropped, and the recipients of deleted accounts, for good.
+func TestPruneWraps(t *testing.T) {
+	_, wraps, st, ro := setupDB(t)
+	ctx := context.Background()
+	deleted := strings.Repeat("4", 64)
+	for _, k := range []string{user, deleted} {
+		if err := st.Register(ctx, k); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := st.DeleteAccount(ctx, deleted); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	for _, w := range []struct {
+		id, p string
+		at    time.Time
+	}{
+		{"kept", user, now.Add(-policy.WrapLife + time.Hour)},
+		{"swept", user, now.Add(-policy.WrapLife - time.Hour)},
+		{"to the deleted", deleted, now},
+	} {
+		if _, err := wraps.Exec(`INSERT INTO wraps(id, author, p, at) VALUES(?, ?, ?, ?)`, w.id, throw, w.p, w.at.Unix()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := policy.PruneWraps(wraps, ro, now); err != nil {
+		t.Fatal(err)
+	}
+	var left []string
+	rows, _ := wraps.Query(`SELECT id FROM wraps`)
+	for rows.Next() {
+		var id string
+		_ = rows.Scan(&id)
+		left = append(left, id)
+	}
+	rows.Close()
+	if len(left) != 1 || left[0] != "kept" {
+		t.Fatalf("left %v, want only the wrap the relay still holds", left)
+	}
+}
+
+// F9: a wrap sent on a connection AUTHed as the recipient's device is told apart through keflid's database.
+func TestAuthedWrapsAgainstTheDatabase(t *testing.T) {
+	p, wraps, st := setup(t)
+	ctx := context.Background()
+	if err := st.Register(ctx, user); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddDevice(ctx, user, device); err != nil {
+		t.Fatal(err)
+	}
+	var lines []string
+	for i := 0; i <= policy.ToAddrMax; i++ {
+		lines = append(lines, lineFor(map[string]any{"id": "junk", "pubkey": throw, "kind": 1059, "tags": [][]string{{"p", user}}}))
+	}
+	raw, _ := json.Marshal(map[string]any{"id": "save", "pubkey": throw, "kind": 1059, "tags": [][]string{{"p", user}}})
+	authed, _ := json.Marshal(map[string]any{"type": "new", "event": json.RawMessage(raw), "sourceType": "IP4", "sourceInfo": "198.51.100.1", "authed": device})
+	out, _ := serve(t, p, wraps, append(lines, string(authed))...)
+	if out[policy.ToAddrMax].Action != "reject" || out[len(out)-1].Action != "accept" {
+		t.Fatalf("the junk's last %+v, the browser's save %+v", out[policy.ToAddrMax], out[len(out)-1])
 	}
 }

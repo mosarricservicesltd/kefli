@@ -9,6 +9,7 @@ import android.view.View
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
+import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import expo.modules.kotlin.Promise
@@ -18,7 +19,7 @@ import org.json.JSONTokener
 // A page that turns Kefli's own fetch away (a bot check answering 403) is loaded once in a browser engine, as a person's
 // browser would load it (mobile spec 8.2, 7.1), and its rendered HTML handed back for the usual parse. The WebView is
 // attached to no window, holds no bridge, has no file or content access and opens no windows; it follows only http(s)
-// navigations, loads no images, and goes as soon as it answers. RULED: the HTML handed back has no scripts, styles,
+// navigations, loads no images, and goes as soon as it answers, its cookies and storage cleared after it. RULED: the HTML handed back has no scripts, styles,
 // SVG, frames or embeds, and no style, data-, aria-, event, srcset or sizes attributes, none of which the parse reads
 // (class and id stay, which Readability scores by); a page's own scripts can build it past the 5 MB cap otherwise. A challenge page is waited out until the page itself
 // arrives or the time runs out. One page at a time; others queue behind it.
@@ -52,6 +53,26 @@ object Renderer {
   private var current: Load? = null
   private val queue = java.util.ArrayDeque<Load>()
   private lateinit var app: Context
+  /** Original views open, which share the app's one jar; while any is, a render's clear waits for the last to close. */
+  private var holds = 0
+  private var owed = false
+
+  /** An Original view opened (on) or closed: the jar is left alone while one is open, then cleared if a render ended. */
+  fun hold(on: Boolean) {
+    main.post {
+      if (on) {
+        holds++
+      } else if (holds > 0 && --holds == 0 && owed) {
+        owed = false
+        clearJar()
+      }
+    }
+  }
+
+  private fun clearJar() {
+    WebStorage.getInstance().deleteAllData()
+    CookieManager.getInstance().run { removeAllCookies { flush() } }
+  }
 
   fun render(context: Context, url: String, promise: Promise) {
     main.post {
@@ -138,6 +159,10 @@ object Renderer {
       destroy()
     }
     load.view = null
+    // what the page set (a bot check's clearance, a site's storage) goes with it, so no later render or fetch carries
+    // it and no site can follow one person from page to page (F27); while an Original view is open, whose sign-in
+    // lives in the same jar, the clear waits until it closes
+    if (holds > 0) owed = true else clearJar()
     if (current === load) current = null
     load.promise.resolve(result.toString())
     next()

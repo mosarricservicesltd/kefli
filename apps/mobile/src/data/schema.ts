@@ -110,8 +110,15 @@ ALTER TABLE items ADD COLUMN remote_d TEXT;
 UPDATE items SET remote_d = 'kefli/item/' || hash WHERE published = 1 OR event_id IS NOT NULL;
 `;
 
+// v7: when a pending parse last timed out, so a page that keeps timing out goes to the back of the queue and can't
+// hold up the shares after it (F12); null for a page that hasn't.
+const V7 = `
+ALTER TABLE items ADD COLUMN timed_out_at INTEGER;
+`;
+
 export const MIGRATIONS: ((db: SqlDb) => void)[] = [
   (db) => db.exec(V1), (db) => db.exec(V2), (db) => db.exec(V3), (db) => db.exec(V4), (db) => db.exec(V5), (db) => db.exec(V6),
+  (db) => db.exec(V7),
 ];
 export const SCHEMA_VERSION = MIGRATIONS.length;
 

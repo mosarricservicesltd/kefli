@@ -93,9 +93,9 @@ export function savesAt(db: SqlDb, owner: string, ds: string[]): Map<string, str
 
 /**
  * Every address a save of this identity may be at, for Delete my data and a move's retirement of the old identity:
- * the address each was last published or seen at, its keyed one, and old addresses still waiting to be retired. A
- * save's unkeyed kefli/item/<hash> is named only if it was published there, so deleting a library never publishes
- * the plain hash of a save that was only ever keyed (F5).
+ * the address each was last published or seen at, its keyed one, old addresses still waiting to be retired, and the
+ * addresses of saves whose delete is still owed (deletesOwed). A save's unkeyed kefli/item/<hash> is named only if it
+ * was published there, so deleting a library never publishes the plain hash of a save that was only ever keyed (F5).
  */
 export function itemAddresses(db: SqlDb, owner: string): string[] {
   const key = libraryKey(db, owner);
@@ -104,10 +104,46 @@ export function itemAddresses(db: SqlDb, owner: string): string[] {
     if (it.remote_d) out.add(it.remote_d);
     if (key) out.add(savedD(key, it.hash));
   }
-  for (const r of db.all<{ payload: string | null }>("SELECT payload FROM outbox WHERE signer = ? AND op = 'delete_item' AND subject LIKE 'retire:%'", owner)) {
-    for (const d of (JSON.parse(r.payload ?? '{}') as { ds?: string[] }).ds ?? []) out.add(d);
-  }
+  // old addresses still waiting to be retired, and saves whose delete is queued or was given up on (deletesOwed)
+  for (const d of deletesOwed(db, owner).ds) out.add(d);
   return [...out];
+}
+
+/**
+ * What deletes still queued, or given up on, owe (F20, F32): the addresses of saves already gone from the phone, at
+ * every address each was at, their blobs, and the newest version's time, which a kind 5 must be dated past (F36).
+ * Delete my data and a move's retirement send these with the rest, since both then clear the outbox.
+ */
+export function deletesOwed(db: SqlDb, owner: string): { ds: string[]; blobs: string[]; after: number } {
+  const key = libraryKey(db, owner);
+  const ds = new Set<string>();
+  let after = 0;
+  for (const r of db.all<{ payload: string | null }>("SELECT payload FROM outbox WHERE signer = ? AND op = 'delete_item'", owner)) {
+    const p = JSON.parse(r.payload ?? '{}') as { ds?: string[]; hash?: string; after?: number };
+    for (const d of p.ds ?? []) ds.add(d);
+    if (p.hash && key) ds.add(savedD(key, p.hash));
+    after = Math.max(after, p.after ?? 0);
+  }
+  const blobs = db.all<{ payload: string | null }>("SELECT payload FROM outbox WHERE signer = ? AND op = 'delete_blob'", owner)
+    .map((r) => (JSON.parse(r.payload ?? '{}') as { sha256?: string }).sha256)
+    .filter((s): s is string => !!s);
+  return { ds: [...ds], blobs: [...new Set(blobs)], after };
+}
+
+/**
+ * The newest version of anything a retirement's kind 5s name (F36): the identity's saves, those from a newer Kefli,
+ * its connected-browsers and library-key records, and the deletes it still owes. Another phone on the same library
+ * may date them by a clock ahead of this one's, so the kind 5s go past the newest of them, not past this phone's now.
+ */
+export function newestVersion(db: SqlDb, owner: string): number {
+  const at = (sql: string) => db.get<{ at: number | null }>(sql, owner)?.at ?? 0;
+  return Math.max(
+    at('SELECT MAX(event_created_at) AS at FROM items WHERE owner = ?'),
+    at('SELECT MAX(created_at) AS at FROM items_future WHERE owner = ?'),
+    at('SELECT MAX(created_at) AS at FROM lists WHERE owner = ? AND kind = 30078'),
+    at('SELECT library_key_at AS at FROM identities WHERE pubkey = ?'),
+    deletesOwed(db, owner).after,
+  );
 }
 
 /**

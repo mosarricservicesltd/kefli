@@ -1,0 +1,10 @@
+{
+  "about": "One text blob (C§4.2): the Markdown as parsed, its normalised form, text_hash, and the AES-256-GCM blob under the key and nonce. Exact.",
+  "markdown": "# Reading later\r\n\r\nA quiet article, saved to read offline.   \r\n\r\n\r\n\r\nIt keeps its place.\t\r\n",
+  "normalised": "# Reading later\n\nA quiet article, saved to read offline.\n\nIt keeps its place.\n",
+  "text_hash": "91a945f120d4ca44e6b31fb6b2e04523b43430f67462b9778048dda9280a1aa6",
+  "key": "wZtam7I5AhoLRVbp25hnvKrlI7mS9eww5AUdnzo2sQ0=",
+  "nonce": "Z9s6FIB2V7XPxJqn",
+  "sha256": "3fcefa087cfd085c5d3a1bcf52178843cc131df7067750e8ac1803eb24b5a691",
+  "blob": "69o5MjAX0GsOPv3EPsTyaVIrXJqRQ65zXjuxo2xOoVnhXPzFvB/eQBEYj5vjtYC+EBGVoUV5Gf4cAmINPNlDeVKvXlH/LEEtA1UEwY5PqHYWR+oydZGvCAbBKPfsWg=="
+}

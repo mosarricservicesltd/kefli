@@ -3,7 +3,7 @@
 // sentence sub-lines do. `say` is what the live region announces, text only.
 import { QUEUE_MAX } from './queue';
 
-export type ToastKind = 'saving' | 'saved' | 'notext' | 'offline' | 'undone' | 'unqueued' | 'full' | 'failed' | 'browserpage' | 'onphone';
+export type ToastKind = 'saving' | 'saved' | 'notext' | 'offline' | 'undone' | 'unqueued' | 'full' | 'failed' | 'browserpage' | 'onphone' | 'undofailed' | 'toolong';
 
 export interface ToastState {
   kind: ToastKind;
@@ -47,6 +47,12 @@ const COPY: Record<ToastKind, Make> = {
   onphone: (s) => ({ cover: s.hash, mark: 'ok', title: 'Already on your phone', sub: 'Remove it from your phone’s Saves.', wrap: true, timed: true, say: 'Already on your phone. Remove it from your phone’s Saves.' }),
   // decision 100: a browser's own page has no web address to save
   browserpage: () => ({ tile: 'alert', tone: 'bad', title: 'Can’t save this page', sub: 'Kefli saves web pages, and this one belongs to the browser.', wrap: true, timed: true, say: 'Can’t save this page. Kefli saves web pages, and this one belongs to the browser.' }),
+  // F40: Undo couldn't retract the save (the relay refused or was out of reach) and the phone hasn't collected it, so it
+  // may still arrive. Drafted, needs Richard's read; on the prototype and the flow map (decision 116).
+  undofailed: (s) => ({ cover: s.hash, mark: 'bad', tile: 'alert', tone: 'bad', title: 'Couldn’t undo this save', sub: 'If it reaches your phone, remove it there.', wrap: true, timed: true, say: 'Couldn’t undo this save. If it reaches your phone, remove it there.' }),
+  // F39: an address too long to send even with everything else left out, so nothing is saved. Drafted, needs Richard's
+  // read; on the prototype and the flow map (decision 116).
+  toolong: () => ({ tile: 'alert', tone: 'bad', title: 'Can’t save this page', sub: 'Its address is too long to send to your phone.', wrap: true, timed: true, say: 'Can’t save this page. Its address is too long to send to your phone.' }),
 };
 
 /** When the corner mark lands: with the cover's last leaf (520 ms, then 34 ms a leaf), and never later than 1 s. */

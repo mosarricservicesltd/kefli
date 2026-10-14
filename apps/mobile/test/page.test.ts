@@ -11,7 +11,7 @@ const expected = (id: string) => (JSON.parse(readFileSync(join(PDFS, 'expected.j
 
 const PDF_BYTES = new TextEncoder().encode('%PDF-1.7\n…');
 
-function ports(body: Uint8Array, headers: Record<string, string>, read: ReturnType<typeof runs>) {
+function ports(body: Uint8Array<ArrayBuffer>, headers: Record<string, string>, read: ReturnType<typeof runs>) {
   const calls = { pdf: 0, parse: 0 };
   const p: PagePorts = {
     fetch: (async () => new Response(body, { status: 200, headers })) as unknown as typeof fetch,
@@ -58,6 +58,19 @@ describe('a linked PDF (contract 4.2, flow decision 103)', () => {
     expect(await fetchPage(big.p, 'https://example.com/huge.pdf')).toMatchObject({ kind: 'failed', reason: 'too_large' });
     const fine = ports(PDF_BYTES, { 'content-type': 'application/pdf', 'content-length': String(6 * 1024 * 1024) }, runs('report-one-column'));
     expect((await fetchPage(fine.p, 'https://example.com/six-mb.pdf')).kind).toBe('parsed');
+  });
+
+  test('a picture or a film over a page’s 5 MB fails on its declared length, unread; a download may still be a PDF', async () => {
+    const six = String(6 * 1024 * 1024);
+    for (const type of ['video/mp4', 'image/jpeg', 'application/zip']) {
+      // an empty body: read, it would be refused as not_html; too_large is the declared length, before any reading
+      const { p } = ports(new Uint8Array(0), { 'content-type': type, 'content-length': six }, runs('report-one-column'));
+      expect(await fetchPage(p, 'https://example.com/film')).toMatchObject({ kind: 'failed', reason: 'too_large' });
+    }
+    for (const type of ['application/octet-stream', 'binary/octet-stream', 'application/force-download']) {
+      const { p } = ports(PDF_BYTES, { 'content-type': type, 'content-length': six }, runs('report-one-column'));
+      expect((await fetchPage(p, 'https://example.com/report')).kind).toBe('parsed');
+    }
   });
 
   test('without the pdf port, a PDF is still not a page', async () => {

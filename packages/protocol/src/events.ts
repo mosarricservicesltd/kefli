@@ -7,9 +7,15 @@ import { parseItem, serialiseItem } from './item';
 import type { ParsedItem } from './item';
 import type { EventTemplate, NostrEvent, Signer } from './signer';
 
+/**
+ * An event over the limit that applied: the 16 KB ceiling every event keeps to (C§3.3), which may be reached, or a
+ * tighter one such as a save request's 8 KB (C§4.4), which must be stayed under. limit names it.
+ */
 export class EventTooLargeError extends Error {
-  constructor(readonly bytes: number) {
-    super(`event would be ${bytes} bytes serialised, over the ${MAX_EVENT_BYTES}-byte ceiling`);
+  constructor(readonly bytes: number, readonly limit: number = MAX_EVENT_BYTES) {
+    super(limit === MAX_EVENT_BYTES
+      ? `event would be ${bytes} bytes serialised, over the ${MAX_EVENT_BYTES}-byte ceiling`
+      : `event would be ${bytes} bytes serialised, not under the ${limit}-byte limit`);
     this.name = 'EventTooLargeError';
   }
 }

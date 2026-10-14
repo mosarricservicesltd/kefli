@@ -16,9 +16,48 @@ function within<T>(p: Promise<T>, ms: number): Promise<T> {
 
 const pool = new RelayPool((url) => within(Relay.connect(url), PUBLISH_TIMEOUT_MS));
 
-/** A relay that doesn't answer in time is closed, so the next save connects afresh rather than waiting on it. */
-export async function publish(url: string, event: NostrEvent): Promise<void> {
+/** How long a fresh connection is given to send its AUTH challenge before a save goes without it. */
+export const AUTH_WAIT_MS = 1_000;
+const AUTH_POLL_MS = 50;
+
+/** What AUTH needs of a connection: nostr-tools' Relay has it. */
+export type AuthRelay = Pick<Relay, 'auth'>;
+
+/** Connections already given their wait for a challenge, so one that never sends one costs a single wait. */
+const waited = new WeakSet<AuthRelay>();
+
+/**
+ * NIP-42 AUTH as the device key before a wrap goes out (contract 3.2, F9): the operator relay counts a wrap sent on a
+ * connection AUTHed as a device the recipient authorised against that key alone, so a flood from elsewhere can't use up
+ * the user's allowance. nostr-tools keeps one AUTH per connection, so a connection held between saves answers at once.
+ * A fresh one is asked again every 50 ms until its challenge arrives (strfry sends it on connect), for at most waitMs
+ * by the clock.
+ * onauth is left alone: nostr-tools rethrows a refused AUTH it started itself, which nothing could catch. True when
+ * the relay took the AUTH; false stops nothing, and the wrap goes as an unAUTHed one would.
+ */
+export async function authAs(relay: AuthRelay, device: LocalSigner, waitMs = AUTH_WAIT_MS): Promise<boolean> {
+  const sign = (evt: Parameters<LocalSigner['signEvent']>[0]) => device.signEvent(evt) as never;
+  // a deadline by the clock, so a busy machine's late timers don't stretch the wait past waitMs
+  const until = Date.now() + (waited.has(relay) ? 0 : waitMs);
+  waited.add(relay);
+  for (;;) {
+    try {
+      await within(relay.auth(sign), PUBLISH_TIMEOUT_MS);
+      return true;
+    } catch (e) {
+      if (!String(e).includes('no challenge') || Date.now() >= until) return false;
+    }
+    await new Promise((later) => setTimeout(later, Math.min(AUTH_POLL_MS, Math.max(0, until - Date.now()))));
+  }
+}
+
+/**
+ * A relay that doesn't answer in time is closed, so the next save connects afresh rather than waiting on it. With
+ * the device key, the connection AUTHs as the device first (authAs).
+ */
+export async function publish(url: string, event: NostrEvent, device?: LocalSigner): Promise<void> {
   const relay = await pool.get(url);
+  if (device) await authAs(relay, device);
   try {
     await within(relay.publish(event), PUBLISH_TIMEOUT_MS);
   } catch (e) {
@@ -60,18 +99,18 @@ export async function fetchWraps(url: string, device: LocalSigner, since: number
 
 /**
  * Whether the phone has collected a save: it publishes a kind 5 for the wrap, signed by the user, once the save is in the
- * library (contract 4.4). Deletions are public, so no AUTH is needed. False when the relay doesn't answer in time.
+ * library (contract 4.4). Deletions are public, so no AUTH is needed. False when the relay can't be reached or doesn't
+ * answer in time (F40).
  */
 export async function collected(url: string, wrapId: string, user: string): Promise<boolean> {
-  const relay = await pool.get(url);
   return within(
-    new Promise<boolean>((done) => {
+    pool.get(url).then((relay) => new Promise<boolean>((done) => {
       let seen = false;
       const sub = relay.subscribe([{ kinds: [5], authors: [user], '#e': [wrapId], limit: 1 }], {
         onevent: () => void (seen = true),
         oneose: () => (sub.close(), done(seen)),
       });
-    }),
+    })),
     PUBLISH_TIMEOUT_MS,
   ).catch(() => false);
 }

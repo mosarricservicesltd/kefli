@@ -3,13 +3,24 @@
 import { base64 } from '@scure/base';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { schnorr } from '@noble/curves/secp256k1.js';
+import { getEventHash } from 'nostr-tools/pure';
 import { KIND } from './constants';
 import type { CryptoPort } from './ports';
+import { nobleSecp } from './secp';
 import { connectedEntry } from './devices';
 import type { DeviceEntry, DevicesRecord } from './devices';
 import { giftWrap } from './wrap';
 import type { Rumor, WrapOptions } from './wrap';
-import type { NostrEvent, Signer } from './signer';
+import type { EventTemplate, NostrEvent, Signer } from './signer';
+
+/**
+ * A signed statement carried without the parts its reader already knows: the time and the BIP-340 signature of the
+ * event that deviceProofTemplate or releaseTemplate builds, by the key that template names (C§4.4, 4.8, 6).
+ */
+export interface Statement {
+  created_at: number;
+  sig: string;
+}
 
 export interface PairOffer {
   v: 1;
@@ -19,9 +30,53 @@ export interface PairOffer {
   /** Unix seconds. */
   expires: number;
   label: string;
+  /** The device key's proof that it is offering itself for this pairing (C§4.4), forwarded in POST /devices. */
+  proof: Statement;
 }
 
-export type OfferProblem = 'version' | 'expired' | 'device_pubkey' | 'label' | 'relay' | 'nonce';
+export type OfferProblem = 'version' | 'expired' | 'device_pubkey' | 'label' | 'relay' | 'nonce' | 'proof';
+
+/** The operator API path whose call a device proof and a release are for (C§6). */
+export const DEVICES_PATH = '/devices';
+
+/**
+ * What a device signs for its offer (C§4.4): a kind 27235 naming POST <api>/devices and the offer's nonce, made when
+ * the offer is. It has no payload tag, so it can never pass as a request's own NIP-98, and only the device key can make
+ * it, so a POST /devices that carries it shows the browser itself asked to be connected.
+ */
+export function deviceProofTemplate(api: string, nonce: string, createdAt: number): EventTemplate {
+  return { kind: KIND.httpAuth, created_at: createdAt, tags: [['u', api + DEVICES_PATH], ['method', 'POST'], ['nonce', nonce]], content: '' };
+}
+
+/**
+ * What the library a browser is connected to signs to hand it to another (C§4.8 step 4): a kind 27235 naming POST
+ * <api>/devices, the device and the library it goes to. The move's source key S signs it at the moment T asks.
+ */
+export function releaseTemplate(api: string, device: string, to: string, createdAt: number): EventTemplate {
+  return { kind: KIND.httpAuth, created_at: createdAt, tags: [['u', api + DEVICES_PATH], ['method', 'POST'], ['device', device], ['to', to]], content: '' };
+}
+
+/** Signs a statement and keeps its time and signature; the reader rebuilds the rest from what it knows. */
+export async function signStatement(signer: Signer, template: EventTemplate): Promise<Statement> {
+  const e = await signer.signEvent(template);
+  return { created_at: e.created_at, sig: e.sig };
+}
+
+const HEX64 = /^[0-9a-f]{64}$/;
+
+/** Whether sig is pubkey's signature over the template's event. */
+export function statementHolds(pubkey: unknown, template: EventTemplate, sig: unknown, verify = nobleSecp.verify): boolean {
+  if (typeof pubkey !== 'string' || !HEX64.test(pubkey) || typeof sig !== 'string' || !/^[0-9a-f]{128}$/.test(sig)) return false;
+  return verify(sig, getEventHash({ ...template, pubkey }), pubkey);
+}
+
+/** An offer's proof holds: signed by its device_pubkey over its nonce, for this API, and made before it expires. */
+export function proofHolds(o: Partial<PairOffer>, api: string, verify = nobleSecp.verify): boolean {
+  const p = o.proof;
+  if (typeof p?.created_at !== 'number' || !Number.isSafeInteger(p.created_at) || typeof o.nonce !== 'string') return false;
+  if (typeof o.expires !== 'number' || p.created_at > o.expires) return false;
+  return statementHolds(o.device_pubkey, deviceProofTemplate(api, o.nonce, p.created_at), p.sig, verify);
+}
 
 export const OFFER_SKEW = 60;
 
@@ -35,15 +90,21 @@ export function isXOnlyPubkey(hex: unknown): boolean {
   }
 }
 
-/** Check an offer from a QR or a decrypted typed code. Returns the first problem, or null when it can be shown. */
-export function checkOffer(o: Partial<PairOffer> | null, operatorRelay: string, now: number): OfferProblem | null {
+/**
+ * Check an offer from a QR or a decrypted typed code against the operator in defaults.json. Returns the first problem,
+ * or null when it can be shown. verify is the platform's BIP-340 check (the phone passes its native one).
+ */
+export function checkOffer(
+  o: Partial<PairOffer> | null, operator: { relay: string; api: string }, now: number, verify = nobleSecp.verify,
+): OfferProblem | null {
   if (!o || o.v !== 1) return 'version';
   if (typeof o.expires !== 'number' || o.expires + OFFER_SKEW < now) return 'expired';
   if (!isXOnlyPubkey(o.device_pubkey)) return 'device_pubkey';
   // Plain text: no control characters and under 64 characters (code points).
   if (typeof o.label !== 'string' || o.label.trim() === '' || [...o.label].length >= 64 || /[\u0000-\u001f\u007f-\u009f]/.test(o.label)) return 'label';
-  if (o.relay !== operatorRelay) return 'relay';
+  if (o.relay !== operator.relay) return 'relay';
   if (typeof o.nonce !== 'string' || o.nonce === '') return 'nonce';
+  if (!proofHolds(o, operator.api, verify)) return 'proof';
   return null;
 }
 

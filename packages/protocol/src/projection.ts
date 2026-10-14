@@ -1,7 +1,7 @@
 // The spoken projection (contract 4.2): what a voice reads and what words counts, with each spoken
 // character mapped to its offset in the normalised Markdown for word highlighting (contract 7).
 // Runs on Hermes from the normalised string (mobile spec 2.6). Where this and the page fixtures
-// disagree, the fixtures win; choices the contract leaves open are marked RULED (contract 1.4, section 11.7).
+// disagree, the fixtures win; choices the contract leaves open are marked RULED (contract 1.4, section 11.8).
 
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { decodeNamedCharacterReference } from 'decode-named-character-reference';
@@ -18,11 +18,15 @@ export interface Projection {
   blockStarts: number[];
 }
 
-/** A closing quote or bracket that may follow terminal punctuation. */
-const CLOSERS = `"'”’»)]}`;
-const TERMINAL = new RegExp(`[.!?][${CLOSERS.replace(']', '\\]')}]?$`);
+/**
+ * A closing quote or bracket that may follow terminal punctuation. This, ENTITY, ASCII_PUNCT, FENCE and the word match
+ * are built from plain strings: the code gate's parser loses its place in a template or a regex literal holding quotes,
+ * a backtick or a slash, and stops scoring the functions after it.
+ */
+const CLOSERS = '\u0022\u0027”’»)]}';
+const TERMINAL = new RegExp('[.!?][' + CLOSERS.replace(']', '\\]') + ']?$');
 
-const ENTITY = /^&(?:#[xX]([0-9a-fA-F]{1,6})|#([0-9]{1,7})|([A-Za-z][A-Za-z0-9]{0,31}));/;
+const ENTITY = new RegExp('^&(?:#[xX]([0-9a-fA-F]{1,6})|#([0-9]{1,7})|([A-Za-z][A-Za-z0-9]{0,31}));');
 
 function decodeEntity(m: RegExpExecArray): string | null {
   if (m[3]) {
@@ -34,7 +38,7 @@ function decodeEntity(m: RegExpExecArray): string | null {
   return cp === 0 || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff) ? '�' : String.fromCodePoint(cp);
 }
 
-const ASCII_PUNCT = /[!-/:-@[-`{-~]/;
+const ASCII_PUNCT = new RegExp('[!-/:-@[-\u0060{-~]');
 
 /**
  * Map each character of a node's decoded value to its offset in the source, between start and end.
@@ -46,6 +50,7 @@ function align(value: string, src: string, start: number, end: number): number[]
   const out: number[] = [];
   let i = start;
   let j = 0;
+  let ref: { source: number; decoded: number } | null;
   while (j < value.length) {
     if (i >= end) {
       // Nothing left to align with; keep the map monotonic.
@@ -61,21 +66,22 @@ function align(value: string, src: string, start: number, end: number): number[]
       out.push(i + 1);
       i += 2;
       j++;
-    } else if (s === '&') {
-      const m = ENTITY.exec(src.slice(i, i + 40));
-      const decoded = m && decodeEntity(m);
-      if (m && decoded && value.startsWith(decoded, j)) {
-        for (let k = 0; k < decoded.length; k++) out.push(i);
-        i += m[0].length;
-        j += decoded.length;
-      } else {
-        i++;
-      }
+    } else if (s === '&' && (ref = referenceAt(src, i, value, j))) {
+      for (let k = 0; k < ref.decoded; k++) out.push(i);
+      i += ref.source;
+      j += ref.decoded;
     } else {
       i++;
     }
   }
   return out;
+}
+
+/** A character reference at src[i] that decodes to what value holds at j: how long it is in each, or null. */
+function referenceAt(src: string, i: number, value: string, j: number): { source: number; decoded: number } | null {
+  const m = ENTITY.exec(src.slice(i, i + 40));
+  const decoded = m && decodeEntity(m);
+  return m && decoded && value.startsWith(decoded, j) ? { source: m[0].length, decoded: decoded.length } : null;
 }
 
 class Builder {
@@ -90,13 +96,6 @@ class Builder {
   push(value: string, offsets: number[]) {
     this.#block += value;
     this.#blockOffsets.push(...offsets);
-  }
-
-  /** Add synthetic characters, mapped to the last real offset. */
-  #synthetic(s: string) {
-    const at = this.#blockOffsets.length ? this.#blockOffsets[this.#blockOffsets.length - 1] : (this.offsets[this.offsets.length - 1] ?? 0);
-    this.#block += s;
-    for (let k = 0; k < s.length; k++) this.#blockOffsets.push(at);
   }
 
   /** End a block: each run of whitespace (JS \s, so no-break spaces too) becomes one space (RULED), and headings and list items get a full stop. */
@@ -177,7 +176,7 @@ function unspoken(node: Nodes): boolean {
 }
 
 /** Wikipedia's own project namespace, in the languages that localise its name; most keep "Wikipedia". */
-const PROJECT_PAGE = /\/wiki\/(?:Wikipedia|Wikipédia|Project|Википедия|Вікіпедія|Βικιπαίδεια|ويكيبيديا|ویکی‌پدیا|ויקיפדיה|위키백과|विकिपीडिया|วิกิพีเดีย):/i;
+const PROJECT_PAGE = new RegExp('/wiki/(?:Wikipedia|Wikipédia|Project|Википедия|Вікіпедія|Βικιπαίδεια|ويكيبيديا|ویکی‌پدیا|ויקיפדיה|위키백과|विकिपीडिया|วิกิพีเดีย):', 'i');
 
 function decodedPath(url: string): string {
   try {
@@ -253,6 +252,30 @@ function inline(b: Builder, node: Nodes): void {
   }
 }
 
+// A fence of three backticks or tildes, built from strings: the code gate's parser loses its place at a backtick.
+const FENCE = new RegExp('^[ \\t>]*(' + '\u0060'.repeat(3) + '|~~~)');
+
+/**
+ * RULED: code blocks are spoken, as the text of a node. Each value line is the end of its source line, since the
+ * parser only removes indentation from the front.
+ */
+function codeBlock(b: Builder, node: Extract<Nodes, { type: 'code' }>, start: number, end: number): void {
+  // A fenced block's content starts on the line after its fence; an indented block's on its own first line.
+  const lineOf = b.src.lastIndexOf('\n', start - 1) + 1;
+  const fenced = FENCE.test(b.src.slice(lineOf, end));
+  let lineStart = fenced ? b.src.indexOf('\n', start) + 1 : lineOf;
+  const lines = node.value.split('\n');
+  lines.forEach((line, n) => {
+    let lineEnd = b.src.indexOf('\n', lineStart);
+    if (lineEnd === -1) lineEnd = b.src.length;
+    const srcLine = b.src.slice(lineStart, lineEnd);
+    const at = lineStart + Math.max(0, srcLine.length - line.length);
+    b.push(line, Array.from(line, (_, k) => at + k));
+    if (n < lines.length - 1) b.push('\n', [lineEnd]);
+    lineStart = lineEnd + 1;
+  });
+}
+
 function block(b: Builder, node: Nodes, inListItem: boolean): void {
   const pos = node.position;
   switch (node.type) {
@@ -265,27 +288,11 @@ function block(b: Builder, node: Nodes, inListItem: boolean): void {
       // RULED: the full stop goes on each paragraph directly inside a list item.
       b.end(inListItem);
       return;
-    case 'code': {
-      // RULED: code blocks are spoken, as the text of a node. Each value line is the end of its source line,
-      // since the parser only removes indentation from the front.
+    case 'code':
       if (!pos) return;
-      // A fenced block's content starts on the line after its fence; an indented block's on its own first line.
-      const lineOf = b.src.lastIndexOf('\n', pos.start.offset! - 1) + 1;
-      const fenced = /^[ \t>]*(```|~~~)/.test(b.src.slice(lineOf, pos.end.offset!));
-      let lineStart = fenced ? b.src.indexOf('\n', pos.start.offset!) + 1 : lineOf;
-      const lines = node.value.split('\n');
-      lines.forEach((line, n) => {
-        let lineEnd = b.src.indexOf('\n', lineStart);
-        if (lineEnd === -1) lineEnd = b.src.length;
-        const srcLine = b.src.slice(lineStart, lineEnd);
-        const at = lineStart + Math.max(0, srcLine.length - line.length);
-        b.push(line, Array.from(line, (_, k) => at + k));
-        if (n < lines.length - 1) b.push('\n', [lineEnd]);
-        lineStart = lineEnd + 1;
-      });
+      codeBlock(b, node, pos.start.offset!, pos.end.offset!);
       b.end(false);
       return;
-    }
     case 'html':
       if (pos) b.push(node.value, align(node.value, b.src, pos.start.offset!, pos.end.offset!));
       b.end(false);
@@ -312,7 +319,7 @@ export function projectTree(markdown: string, tree: Root): Projection {
   const b = new Builder(markdown);
   for (const c of tree.children) block(b, c, false);
   const wordStarts: number[] = [];
-  const re = /\S+/g;
+  const re = new RegExp('\\S+', 'g');
   for (let m = re.exec(b.text); m; m = re.exec(b.text)) wordStarts.push(m.index);
   return { text: b.text, offsets: b.offsets, wordStarts, blockStarts: b.blockStarts };
 }

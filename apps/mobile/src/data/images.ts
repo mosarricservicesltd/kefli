@@ -38,8 +38,12 @@ export function recordFailed(db: SqlDb, url: string, hash: string, now: number):
   db.run('INSERT OR REPLACE INTO images (url, hash, path, bytes, w, h, fetched_at, last_used_at) VALUES (?, ?, NULL, NULL, NULL, NULL, ?, NULL)', url, hash, now);
 }
 
-export function markUsed(db: SqlDb, url: string, now: number): void {
-  db.run('UPDATE images SET last_used_at = ? WHERE url = ?', now, url);
+/** The Reader showing an article: its images held here count as just used, so eviction takes the longest unused first. */
+export function markUsed(db: SqlDb, urls: string[], now: number): void {
+  if (!urls.length) return;
+  db.tx(() => {
+    for (const url of urls) db.run('UPDATE images SET last_used_at = ? WHERE url = ? AND path IS NOT NULL', now, url);
+  });
 }
 
 /**

@@ -6,10 +6,12 @@ import LOGO from '../../../shared/brand/out/extension/options-logo-28.svg';
 import { BROWSER, COMMIT, DEFAULTS_URL, FLAVOUR } from './config';
 import { webCrypto } from './crypto';
 import { debugText, history } from './debug';
-import { loadDefaults } from './defaults';
+import { loadDefaults, relayRows, type Defaults } from './defaults';
 import { deviceSigner } from './device';
 import { icon } from './icons';
-import { browserLabel, formatCode, listenForAck, OFFER_LIFE, pairingFrom, postOffer, type Listening, type Offer } from './pair';
+import type { PairAck } from '../../../packages/protocol/src/pairing';
+import { exclusive } from './lock';
+import { browserLabel, formatCode, listenForAck, newOffer, pairingFrom, postOffer, tryPairing, type Listening, type Offer } from './pair';
 import { failed, queued, shown, waiting, type Queued, type Shown } from './queue';
 import { chromeStore, KEYS, type Pairing } from './store';
 
@@ -28,6 +30,10 @@ let view: View = { kind: 'loading' };
 let listening: Listening | null = null;
 let ticker: ReturnType<typeof setInterval> | undefined;
 let retry: ReturnType<typeof setTimeout> | undefined;
+/** The code on show, kept across a try that hit trouble so the next one shows it again rather than posting another. */
+const last: { offer: Offer | null } = { offer: null };
+/** The operator's defaults as last fetched, which name Kefli's own relay in Advanced (F43). */
+let kept: Defaults | null = null;
 let queue: Shown[] = [];
 let pinned = true;
 /** Copy debug info reads Copied for 1.5 s after a copy. */
@@ -122,7 +128,7 @@ function waysHTML(shortcut: string | null): string {
 
 function advancedHTML(p: Pairing, open: boolean): string {
   const blocked = queue.some((e) => e.why === 'blocked');
-  const relays = p.write_relays.map((r, i) => `<div class="li"><span class="ic">${icon('server')}</span><span class="t">${i === 0 ? 'Kefli' : `Backup ${i}`}<small>${esc(r.replace(/^wss?:\/\//, ''))}</small></span>${i === 0 && blocked ? '<span class="sdot bad">Blocked in this browser</span>' : ''}</div>`);
+  const relays = relayRows(p.write_relays, kept).map((r) => `<div class="li"><span class="ic">${icon('server')}</span><span class="t">${esc(r.label)}<small>${esc(r.url.replace(/^wss?:\/\//, ''))}</small></span>${r.operator && blocked ? '<span class="sdot bad">Blocked in this browser</span>' : ''}</div>`);
   const build = `<div class="li"><span class="ic">${icon('info')}</span><span class="t">Kefli ${esc(chrome.runtime.getManifest().version)}<small>${FLAVOUR} · ${esc(COMMIT)}</small></span><button class="chip" data-act="debug">${copied ? 'Copied' : 'Copy debug info'}</button></div>`;
   const body = open
     ? `<section class="sect" style="margin-top:var(--space-8)"><h2>Relays</h2>${list(relays)}<p class="fine">Set by your phone when you connected this browser.</p></section>
@@ -135,7 +141,7 @@ function unpairHTML(confirm: boolean): string {
   const n = queue.length;
   if (!confirm) return `<button class="btn secondary destructive" data-act="unpair">Disconnect this browser</button><p class="fine">To stop this browser completely, also remove it under Connected browsers on your phone. If you undo a save your phone already picked up, remove it there too.</p>`;
   const unsent = n ? `${n} ${plural(n, 'save hasn’t', 'saves haven’t')} reached your phone yet. Disconnecting deletes ${plural(n, 'it', 'them')} from this browser. ` : '';
-  const yes = n ? `Disconnect and delete ${plural(n, '1 save', `${n} saves`)}` : 'Disconnect';
+  const yes = n ? `Disconnect and delete ${n} ${plural(n, 'save', 'saves')}` : 'Disconnect';
   return `<div class="confirm" role="group" aria-labelledby="unpairhead"><h2 id="unpairhead">Disconnect this browser?</h2><p>${unsent}This browser will stop sending saves to your phone. To stop it completely, also remove it under Connected browsers on your phone.</p><div class="row"><button class="btn secondary" data-act="unpair-cancel">Cancel</button><button class="btn danger" data-act="unpair-yes">${yes}</button></div></div>`;
 }
 
@@ -175,27 +181,45 @@ function stopPairing() {
 
 async function connected(pairing: Pairing) {
   stopPairing();
+  last.offer = null;
+  kept = (await store.get<Defaults>(KEYS.defaults)) ?? null;
   queue = await reveal(await queued(store));
   view = { kind: 'connected', pairing, confirm: false, advanced: false };
   await render();
   say('Connected to your phone');
 }
 
-/** Makes an offer and waits for the phone; any failure to reach the operator shows the offline line and tries again. */
+/**
+ * Shows a code and waits for the phone; any failure to reach the operator shows the offline line and tries again. A try
+ * after trouble shows the same code while it has a minute left, and nothing is posted until the relay answers (F42).
+ */
 async function startPairing() {
   stopPairing();
   try {
     const defaults = await loadDefaults(store, DEFAULTS_URL);
     if (!defaults) throw new Error('no defaults');
     const device = await deviceSigner(store, webCrypto);
-    const offer = await postOffer(device, defaults, label(), webCrypto, now());
-    listening = await listenForAck(defaults.operator.relay, device, offer.offer.nonce, now(), (ack) => void store.set(KEYS.pairing, pairingFrom(ack, offer.offer.label, now())), offline);
-    view = { kind: 'show', offer, left: OFFER_LIFE };
+    const onAck = (o: Offer) => (ack: PairAck) => void store.set(KEYS.pairing, pairingFrom(ack, o.offer.label, now()));
+    const { offer, listening: l } = await tryPairing(
+      last,
+      () => newOffer(device, defaults, label(), webCrypto, now()),
+      (o) => listenForAck(defaults.operator.relay, device, o.offer.nonce, now(), onAck(o), offline),
+      (o) => postOffer(device, defaults, o, webCrypto),
+      now(),
+    );
+    listening = l;
+    view = { kind: 'show', offer, left: Math.max(0, offer.offer.expires - now()) };
     ticker = setInterval(countdown, 1000);
     await render();
   } catch {
     offline();
   }
+}
+
+/** Show a new one: the expired code is dropped, so the next try makes a fresh offer. */
+function newCode() {
+  last.offer = null;
+  return startPairing();
 }
 
 function offline() {
@@ -263,15 +287,16 @@ function setConnected(change: Partial<Extract<View, { kind: 'connected' }>>) {
 }
 
 const ACTIONS: Record<string, (id?: string) => void | Promise<void>> = {
-  newcode: startPairing,
+  newcode: newCode,
   adv: () => setConnected({ advanced: view.kind === 'connected' && !view.advanced }),
   unpair: () => setConnected({ confirm: true }),
   'unpair-cancel': () => setConnected({ confirm: false }),
   // Disconnecting deletes what hadn't reached the phone, as the confirm said
   // and the save history with them
-  // and the session's Undo keys and last popup save, which would otherwise last until the browser closes (F31)
+  // and the session's Undo keys and last popup save, which would otherwise last until the browser closes (F31);
+  // the queue under its lock, so a send the background is finishing can't write it back (F41)
   'unpair-yes': async () => {
-    await store.remove(KEYS.queue);
+    await exclusive('queue', () => store.remove(KEYS.queue));
     await store.remove(KEYS.history);
     await chrome.storage.session.clear().catch(() => undefined);
     await store.remove(KEYS.pairing);

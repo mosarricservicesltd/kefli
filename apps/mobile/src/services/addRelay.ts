@@ -1,6 +1,7 @@
 // Add a relay (FD 113, C§3.1): before a typed relay joins the 10002, Kefli checks that it answers and that it takes
 // an event from this person. The event is the newest relay list the phone holds, already signed, so the check asks
-// nothing of a nostr app; an identity with no list yet is checked for an answer only. A relay that answers OK false
+// nothing of a nostr app, unless the relay asks for AUTH before it takes the list (the pool signs AUTH only when a relay
+// refuses with auth-required, F13); an identity with no list yet is checked for an answer only. A relay that answers OK false
 // (an account, a payment or proof of work needed, or a refusal) won't take saves either.
 import type { NostrEvent } from '@kefli/protocol';
 import { KIND } from '@kefli/protocol';

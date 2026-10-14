@@ -37,10 +37,6 @@ export function useVoice(): Session | null {
   return useSyncExternalStore((l) => (listeners.add(l), () => listeners.delete(l)), () => session);
 }
 
-export function voiceSession(): Session | null {
-  return session;
-}
-
 /** Stores the position; publishes it (and syncs) when the session stops moving. */
 function keep(word: number, publish: boolean) {
   const owner = appState()?.owner;

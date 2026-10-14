@@ -1,5 +1,5 @@
-// Drains the outbox with the real network (mobile spec 4.3): after a share's rows are released and at start,
-// through the relay pool (4.4).
+// Drains the outbox with the real network (mobile spec 4.3): after a share's rows are released, at start and,
+// while Kefli is in front, when a retry falls due, through the relay pool (4.4).
 import { AppState } from 'react-native';
 import { phonePagePorts } from './pagePorts';
 import { verifyEventWith } from '@kefli/protocol';
@@ -9,7 +9,7 @@ import { RelayPool } from '../net/pool';
 import { LOCAL_STACK, loadDefaults, type Defaults } from './config';
 import { currentSigner, retireSourceKeys, setCurrentSigner, signerOf, withScreen } from './identity';
 import { launchPlan } from './launchState';
-import { drain } from './send';
+import { drain, outboxWaker } from './send';
 import { syncInbound, syncOwner, type SyncPorts, type SyncResult } from './sync';
 import { runMove, type MoveOutcome } from './move';
 import { moveJob } from '../data/move';
@@ -50,7 +50,16 @@ export const pool = new RelayPool({
   allowInsecure: LOCAL_STACK,
 });
 
-/** Sends whatever is due; concurrent calls share one run. Returns how many rows were sent. */
+// A failed send is tried again when it falls due while Kefli is in front (F11); in the background nothing runs
+// until the next open, as no background task exists yet (4.8).
+const waker = outboxWaker({
+  db: store,
+  now: () => Math.floor(Date.now() / 1000),
+  active: () => AppState.currentState === 'active',
+  run: () => void runOutbox().catch(() => 0),
+});
+
+/** Sends whatever is due; concurrent calls share one run, after which the retry timer is armed. Returns how many rows were sent. */
 export function runOutbox(): Promise<number> {
   running ??= (async () => {
     try {
@@ -70,6 +79,7 @@ export function runOutbox(): Promise<number> {
       });
     } finally {
       running = null;
+      waker.arm();
     }
   })();
   return running;
@@ -105,7 +115,7 @@ export function runSync(): Promise<SyncResult> {
       if (restoring) beginRestore(store(), Math.floor(Date.now() / 1000), restoring);
       const r = await syncInbound(syncPorts());
       const owner = store().get<{ pubkey: string }>("SELECT pubkey FROM identities WHERE role = 'active'")?.pubkey;
-      if (owner) settleRestore(store(), Math.floor(Date.now() / 1000), owner);
+      if (owner) settleRestore(store(), Math.floor(Date.now() / 1000), owner, r.waiting);
       // early saves move into the library just brought back, after the restore's first pass (C§4.8, FD 6)
       if (owner) await runMoveJob().catch((e) => console.log(`[kefli-move] ${JSON.stringify({ error: String((e as Error).message) })}`));
       // links a sign-in chose to bring in join after the restore's first pass (FD 82)
@@ -194,7 +204,7 @@ export function runMoveJob(): Promise<MoveOutcome> {
           const md = textFiles.readText(hash);
           return md === null ? null : deriveArticle(md).spoken;
         },
-        collect: async (owner, signer) => void (await syncOwner(syncPorts(), owner, signer)),
+        collect: async (owner, signer) => (await syncOwner(syncPorts(), owner, signer)).waiting === 0,
         runOutbox,
         drainSourceInbox: async () => void (await drainInbox({
           db: store(), now: () => Math.floor(Date.now() / 1000), signer: source,
@@ -247,11 +257,13 @@ export function startSync(): () => void {
       watchInbox();
     } else {
       unwatchInbox();
+      waker.stop();
     }
   });
   return () => {
     sub.remove();
     unwatchInbox();
+    waker.stop();
   };
 }
 
@@ -320,6 +332,7 @@ export function connectPorts(owner: string): ConnectPorts {
     fetch,
     crypto: phoneCrypto,
     runOutbox,
+    verify: nativeSecp.verify,
   };
 }
 

@@ -3,17 +3,23 @@
 //   1. the operator: kind 5s for every wrap the phone knows of, and for every save when the operator relay is in
 //      the user's 10002; every blob on the operator Blossom server; then DELETE /account. Unreachable after a
 //      minute of retries, or DELETE /account refused, and nothing else runs: the key stays, to try again.
-//   2. every other server: each other write relay gets kind 5s for every save, the connected-browsers record
-//      included, and the generated identity's lists, deleted and then replaced by empty ones (C§4.7: the indexer,
-//      which refuses kind 5, gets the empty lists alone); each other Blossom server named in
-//      a save's text.servers, the mirror among them, gets a delete for every blob. A relay is confirmed when it
-//      answered OK to every kind 5, a server when it answered 2xx or 404 to every delete; each gets a minute.
+//   2. every other server: each other write relay gets kind 5s for every save, on the phone or found on the relays,
+//      the connected-browsers record included, and the generated identity's lists, deleted and then replaced by
+//      empty ones (C§4.7: the indexer, which refuses kind 5, gets the empty lists alone); each other Blossom
+//      server named in a save's text.servers, the mirror among them, gets a delete for every blob. A relay is
+//      confirmed when it answered OK to every kind 5, a server when it answered 2xx or 404 to every delete; each
+//      gets a minute.
 //   3. the phone: the key file, Block Store, the database and the files.
 // Each step's result is kept in a delete_account job, so a deletion cut short resumes where it stopped.
-import { DEVICES_D, KIND, LIBRARY_KEY_D, buildDeletions, buildRelayList, buildServerList, deleteBlob, httpAuth, type CryptoPort, type NostrEvent, type Signer } from '@kefli/protocol';
+import {
+  DEVICES_D, ITEM_D_PREFIX, KIND, LIBRARY_KEY_D, T_TAG, buildDeletions, buildRelayList, buildServerList, deleteBlob, httpAuth, readItemEvent,
+  type CryptoPort, type NostrEvent, type Signer,
+} from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
-import { itemAddresses } from '../data/libraryKey';
+import { deletesOwed, itemAddresses, newestVersion } from '../data/libraryKey';
+import { relayEntries } from '../data/lists';
 import type { RelayAnswer } from './send';
+import { pageStream, type Filter } from './sync';
 
 export type DelPorts = {
   db: SqlDb;
@@ -21,6 +27,8 @@ export type DelPorts = {
   signer: Signer;
   defaults: { operator: { relay: string; blossom: string; api: string }; indexer: string[] };
   publish: (relay: string, event: NostrEvent) => Promise<RelayAnswer>;
+  /** The relays' saves and records, read before signing; without it, only what the phone holds is deleted. */
+  query?: (relay: string, filters: Filter[]) => Promise<NostrEvent[]>;
   fetch: typeof fetch;
   crypto: CryptoPort;
   sleep: (ms: number) => Promise<void>;
@@ -29,6 +37,23 @@ export type DelPorts = {
   /** Each server's minute (spec 7.2). */
   budgetMs?: number;
 };
+
+/** What the screen hands deletePorts: the relay pool among them, which both publishes and reads. */
+export type DelDeps = Omit<DelPorts, 'now' | 'publish' | 'query' | 'sleep'> & {
+  pool: { publish: DelPorts['publish']; query: (relay: string, filters: never) => Promise<NostrEvent[]> };
+};
+
+/**
+ * The Delete my data screen's ports: time in seconds, the pool's publish, and the pool's read, so every save on the
+ * user's relays is named, not only those on the phone (C§4.7, F32).
+ */
+export function deletePorts({ pool, ...d }: DelDeps): DelPorts {
+  return {
+    ...d, now: () => Math.floor(Date.now() / 1000), sleep: (ms) => new Promise<void>((ok) => setTimeout(ok, ms)),
+    publish: (url, e) => pool.publish(url, e),
+    query: (url, filters) => pool.query(url, filters as never),
+  };
+}
 
 /** own: one of the user's own servers, which only a nostr user has (FD 91 (e)). */
 export type Target = { url: string; kind: 'relay' | 'server'; host: string; own: boolean };
@@ -45,15 +70,17 @@ const host = (u: string) => {
 };
 const trim = (u: string) => u.replace(/\/+$/, '');
 
-/** The servers step 2 asks: other write relays in the 10002, and other Blossom servers that hold a save's text. */
+/**
+ * The servers step 2 asks: other write relays in the 10002, and the other Blossom servers named in a save's
+ * text.servers (C§4.7), the only ones that hold its text; a nostr user's own servers in their 10063 never do (F32).
+ */
 export function deleteTargets(db: SqlDb, owner: string, operator: { relay: string; blossom: string }): Target[] {
   const relays = db.all<{ url: string; source: string }>("SELECT url, source FROM relays WHERE owner = ? AND write = 1 AND source != 'indexer' ORDER BY rowid", owner)
     .filter((r) => trim(r.url) !== trim(operator.relay));
   const named = db.all<{ text_servers: string }>('SELECT text_servers FROM items WHERE owner = ? AND text_servers IS NOT NULL', owner)
     .flatMap((r) => JSON.parse(r.text_servers) as string[]);
-  const listed = db.all<{ url: string; role: string }>("SELECT url, role FROM servers WHERE owner = ? AND role != 'operator'", owner);
-  const ownServers = new Set(listed.filter((s) => s.role === 'user').map((s) => trim(s.url)));
-  const servers = [...new Set([...named, ...listed.map((s) => s.url)].map(trim))].filter((u) => u !== trim(operator.blossom));
+  const ownServers = new Set(db.all<{ url: string }>("SELECT url FROM servers WHERE owner = ? AND role = 'user'", owner).map((s) => trim(s.url)));
+  const servers = [...new Set(named.map(trim))].filter((u) => u !== trim(operator.blossom));
   const seen = new Set<string>();
   return [
     ...relays.filter((r) => !seen.has(r.url) && seen.add(r.url)).map((r) => ({ url: r.url, kind: 'relay' as const, host: host(r.url), own: r.source === 'user' })),
@@ -90,16 +117,53 @@ async function withinMinute(p: DelPorts, attempt: () => Promise<boolean>): Promi
 
 /**
  * Every d this identity holds: each save at every address it is at (itemAddresses, which names an unkeyed address
- * only where a save was published there, F5), saves from a newer Kefli, the connected-browsers record and the library
- * key's record.
+ * only where a save was published there, F5, and saves deleted here whose kind 5s haven't all gone out, F32), saves
+ * from a newer Kefli, the connected-browsers record and the library key's record.
  */
 function allDs(db: SqlDb, owner: string): string[] {
   const future = db.all<{ d: string }>('SELECT d FROM items_future WHERE owner = ?', owner).map((r) => r.d);
   return [...new Set([...itemAddresses(db, owner), ...future, DEVICES_D, LIBRARY_KEY_D])];
 }
 
+/** The texts' blobs: the phone's saves', and those of saves deleted here whose blob deletes are still to go. */
 function blobs(db: SqlDb, owner: string): string[] {
-  return db.all<{ s: string }>('SELECT DISTINCT text_sha256 AS s FROM items WHERE owner = ? AND text_sha256 IS NOT NULL', owner).map((r) => r.s);
+  const held = db.all<{ s: string }>('SELECT DISTINCT text_sha256 AS s FROM items WHERE owner = ? AND text_sha256 IS NOT NULL', owner).map((r) => r.s);
+  return [...new Set([...held, ...deletesOwed(db, owner).blobs])];
+}
+
+type OnRelays = { ds: string[]; blobs: string[]; newest: number };
+
+/**
+ * Every kind 30078 with #t kefli on the user's relays, whatever its v (C§4.7 step 2), so a save another device made
+ * since this phone last synced is deleted too (F32). A save the phone doesn't hold is opened for its text's blob,
+ * which goes with the rest; one that doesn't open still gets its kind 5. A relay that doesn't answer adds nothing.
+ * newest: the newest event's time, which the kind 5s are dated past (F36).
+ */
+async function onRelays(p: DelPorts, owner: string, held: Set<string>): Promise<OnRelays> {
+  const query = p.query;
+  if (!query) return { ds: [], blobs: [], newest: 0 };
+  const filter: Filter = { kinds: [KIND.appData], authors: [owner], '#t': [T_TAG] };
+  const relays = [...new Set([p.defaults.operator.relay, ...relayEntries(p.db, owner).map((r) => r.url)])];
+  const found = new Map<string, NostrEvent>();
+  await Promise.all(relays.map(async (relay) => {
+    for (const e of await pageStream(query, relay, filter).catch(() => [])) {
+      const d = e.tags.find((t) => t[0] === 'd')?.[1];
+      if (e.pubkey !== owner || !d) continue;
+      const had = found.get(d);
+      if (!had || had.created_at < e.created_at) found.set(d, e);
+    }
+  }));
+  const shas: string[] = [];
+  for (const [d, e] of found) {
+    if (held.has(d) || !d.startsWith(ITEM_D_PREFIX)) continue;
+    try {
+      const sha = (await readItemEvent(p.signer, e)).item.item.text?.sha256;
+      if (typeof sha === 'string') shas.push(sha);
+    } catch {
+      // not one that opens: its kind 5 goes all the same
+    }
+  }
+  return { ds: [...found.keys()], blobs: shas, newest: Math.max(0, ...[...found.values()].map((e) => e.created_at)) };
 }
 
 async function wrapDeletions(p: DelPorts, owner: string): Promise<NostrEvent[]> {
@@ -128,14 +192,18 @@ async function listDeletion(p: DelPorts): Promise<NostrEvent> {
 
 /**
  * A nostr user's lists (C§4.7): never deleted, since their other apps share them, but republished without the
- * operator's relay and Blossom server and without any default this phone added. RULED: a list with nothing of
- * theirs left in it (Kefli made it, finding none) is left as it is, neither emptied nor deleted.
+ * operator's relay and Blossom server, even where they listed these themselves (F32), and without any default this
+ * phone added. RULED: a list with nothing of theirs left in it (Kefli made it, finding none) is left as it is,
+ * neither emptied nor deleted.
  */
 async function listRewrites(p: DelPorts): Promise<NostrEvent[]> {
   const pk = p.signer.pubkey();
+  const op = p.defaults.operator;
   const relays = p.db.all<{ url: string; read: number; write: number }>("SELECT url, read, write FROM relays WHERE owner = ? AND source != 'indexer' AND added_by_app = 0 ORDER BY rowid", pk)
+    .filter((r) => trim(r.url) !== trim(op.relay))
     .map((r) => ({ url: r.url, read: !!r.read, write: !!r.write }));
-  const servers = p.db.all<{ url: string }>('SELECT url FROM servers WHERE owner = ? AND added_by_app = 0 AND in_10063 = 1 ORDER BY rowid', pk).map((r) => r.url);
+  const servers = p.db.all<{ url: string }>('SELECT url FROM servers WHERE owner = ? AND added_by_app = 0 AND in_10063 = 1 ORDER BY rowid', pk)
+    .map((r) => r.url).filter((u) => trim(u) !== trim(op.blossom));
   const out: NostrEvent[] = [];
   if (relays.length) out.push(await buildRelayList(p.signer, relays, p.now()));
   if (servers.length) out.push(await buildServerList(p.signer, servers, p.now()));
@@ -154,17 +222,23 @@ async function emptyLists(p: DelPorts, deletion: NostrEvent): Promise<NostrEvent
 /**
  * Everything the deletion publishes, signed before anything is sent: for a nostr user, the approval in their app.
  * empties: a generated identity's emptied lists, sent after the kind 5s and not counted towards a relay's confirmation.
+ * blobs: the texts of saves found only on the relays, deleted with the phone's.
  */
-export type Signed = { wraps: NostrEvent[]; items: NostrEvent[]; lists: NostrEvent[]; empties?: NostrEvent[]; nostr: boolean };
+export type Signed = { wraps: NostrEvent[]; items: NostrEvent[]; lists: NostrEvent[]; empties?: NostrEvent[]; blobs?: string[]; nostr: boolean };
 
 export async function signDeletion(p: DelPorts): Promise<Signed> {
   const owner = p.signer.pubkey();
   const nostr = (p.db.get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local') !== 'local';
+  const held = allDs(p.db, owner);
+  const remote = await onRelays(p, owner, new Set(held));
   const wraps = await wrapDeletions(p, owner);
-  const items = await buildDeletions(p.signer, allDs(p.db, owner), p.now());
-  if (nostr) return { wraps, items, lists: await listRewrites(p), nostr };
+  // dated past the newest version of anything they name, whatever this phone's clock says (F36)
+  const newest = Math.max(remote.newest, newestVersion(p.db, owner));
+  const items = await buildDeletions(p.signer, [...new Set([...held, ...remote.ds])], Math.max(p.now(), newest + 1));
+  const extra = { blobs: remote.blobs, nostr };
+  if (nostr) return { wraps, items, lists: await listRewrites(p), ...extra };
   const deletion = await listDeletion(p);
-  return { wraps, items, lists: [deletion], empties: await emptyLists(p, deletion), nostr };
+  return { wraps, items, lists: [deletion], empties: await emptyLists(p, deletion), ...extra };
 }
 
 /** Sends every event to a relay; true when it answered OK to each (a relay that refuses one hasn't confirmed). */
@@ -181,6 +255,8 @@ async function deleteBlobs(p: DelPorts, server: string, shas: string[]): Promise
   return true;
 }
 
+const allBlobs = (p: DelPorts, owner: string, signed: Signed) => [...new Set([...blobs(p.db, owner), ...(signed.blobs ?? [])])];
+
 async function stepOperator(p: DelPorts, owner: string, signed: Signed): Promise<boolean> {
   const op = p.defaults.operator;
   const inList = !!p.db.get("SELECT 1 FROM relays WHERE owner = ? AND url = ? AND source != 'indexer'", owner, op.relay);
@@ -191,7 +267,7 @@ async function stepOperator(p: DelPorts, owner: string, signed: Signed): Promise
     for (const e of events) await p.publish(op.relay, e);
     return true;
   });
-  const shas = blobs(p.db, owner);
+  const shas = allBlobs(p, owner, signed);
   const cleared = reached && (await withinMinute(p, () => deleteBlobs(p, op.blossom, shas)));
   if (!cleared) return false;
   const url = `${trim(op.api)}/account`;
@@ -202,7 +278,7 @@ async function stepOperator(p: DelPorts, owner: string, signed: Signed): Promise
 }
 
 async function stepOther(p: DelPorts, owner: string, t: Target, signed: Signed): Promise<boolean> {
-  if (t.kind === 'server') return withinMinute(p, () => deleteBlobs(p, t.url, blobs(p.db, owner)));
+  if (t.kind === 'server') return withinMinute(p, () => deleteBlobs(p, t.url, allBlobs(p, owner, signed)));
   const confirmed = await withinMinute(p, () => sendAll(p, t.url, [...signed.items, ...signed.lists]));
   await Promise.all((signed.empties ?? []).map((e) => p.publish(t.url, e).catch(() => undefined)));
   return confirmed;

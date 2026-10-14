@@ -2,20 +2,20 @@
 // network. It sends register, upload_blob, mirror_blob, publish_item, publish_lists, delete_item, delete_blob,
 // post_device, pair_ack, delete_device, delete_wrap, copy_relay and publish_library_key.
 import {
-  KIND, buildDeletions, buildDevicesEvent, buildItemEvent, buildLibraryKeyEvent, buildRelayList, buildServerList, deleteBlob, httpAuth, mirrorBlob,
-  savedD, uploadBlob, wrapPairAck,
+  DEVICES_PATH, KIND, buildDeletions, buildDevicesEvent, buildItemEvent, buildLibraryKeyEvent, buildRelayList, buildServerList, deleteBlob, httpAuth,
+  isSignerFailure, mirrorBlob, releaseTemplate, savedD, signStatement, uploadBlob, wrapPairAck,
 } from '@kefli/protocol';
-import type { CryptoPort, NostrEvent, Signer } from '@kefli/protocol';
+import type { CryptoPort, NostrEvent, Signer, Statement } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
-import { hasDevices, localRecord, noteRecord, pairAcked, recordCreatedAt, type PairPayload } from '../data/devices';
-import { getItem, itemJson, markPublished } from '../data/items';
+import { hasDevices, localRecord, noteRecord, pairAcked, recordCreatedAt, type DeviceProof, type PairPayload } from '../data/devices';
+import { getItem, itemJson, markPublished, type ItemRow } from '../data/items';
 import { markBacked } from '../data/backup';
 import { keyPublished, libraryKey, libraryKeyPublished, madeHere, makeLibraryKey } from '../data/libraryKey';
 import { indexerRelays, listServers, nextListTime, recordList, relayEntries, writeRelays } from '../data/lists';
-import { begin, enqueue, finish, nextDue } from '../data/outbox';
+import { backoff, begin, enqueue, finish, nextDue, nextWakeAt } from '../data/outbox';
 import type { OutboxRow, OutboxTarget, TargetResult } from '../data/outbox';
 import type { Defaults } from './config';
-import { pageStream, streamFilter, type SyncPorts } from './sync';
+import { pageStream, streamFilter, takeNewerLists, type SyncPorts } from './sync';
 
 export type RelayAnswer = { ok: true } | { ok: false; reason: string };
 
@@ -35,6 +35,11 @@ export type SendPorts = {
 };
 
 const DAY = 86_400;
+/**
+ * How often a publish held by a delete's Undo looks again. The window itself may run longer (the toast follows
+ * Android's accessibility timeout and pauses while touched); the hold repeats until the save is gone or shown again.
+ */
+const UNDO_WAIT = 15;
 const err = (e: unknown) => String((e as Error)?.message ?? e);
 
 /** A relay's OK prefix decides the outcome (4.3). */
@@ -67,11 +72,27 @@ async function sendRegister(p: SendPorts, row: OutboxRow, signer: Signer, t: Out
   return [r];
 }
 
-/** POST /devices: the browser's key may upload against this identity's quota (C§4.4, 6). */
+/**
+ * POST /devices: the browser's key may upload against this identity's quota (C§4.4, 6). The API takes it only with the
+ * device's own proof from the offer, or, in a move (C§4.8 step 4), with a release signed now by the source key S, the
+ * library that holds the browser: S is always a key on this phone, and the browser can't be asked again.
+ */
 async function sendPostDevice(p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
   // the browser's label stays in the self-encrypted connected-browsers record, never with the operator (F30)
-  const { device_pubkey } = JSON.parse(row.payload ?? '{}') as { device_pubkey: string };
-  return [await apiCall(p, signer, t.target, 'POST', JSON.stringify({ v: 1, device_pubkey }))];
+  const { device_pubkey, proof, moved_from } = JSON.parse(row.payload ?? '{}') as { device_pubkey: string; proof?: DeviceProof; moved_from?: string };
+  let consent: { proof: DeviceProof } | { release: Statement & { pubkey: string } };
+  if (moved_from) {
+    const source = await p.signer(moved_from);
+    if (!source) return [{ target: t.target, kind: 'retry', error: 'the source key is not on the phone' }];
+    const api = t.target.slice(0, -DEVICES_PATH.length);
+    consent = { release: { pubkey: moved_from, ...(await signStatement(source, releaseTemplate(api, device_pubkey, row.signer, p.now()))) } };
+  } else if (proof) {
+    consent = { proof };
+  } else {
+    // queued by a build before the proof: the API would refuse it, so the browser shows a new code instead
+    return [{ target: t.target, kind: 'rejected', error: 'no proof from the browser' }];
+  }
+  return [await apiCall(p, signer, t.target, 'POST', JSON.stringify({ v: 1, device_pubkey, ...consent }))];
 }
 
 /** DELETE /devices/<pk>; a 404 means the API no longer holds it, which is the point. */
@@ -100,6 +121,12 @@ async function sendPairAck(p: SendPorts, row: OutboxRow, signer: Signer, t: Outb
   return [r];
 }
 
+/** A Blossom server's refusal: rejected when it is final, otherwise retried. */
+function httpResult(target: string, r: { status: number; reason: string }, final: boolean): TargetResult {
+  const error = 'HTTP ' + r.status + ' ' + r.reason;
+  return { target, kind: final ? 'rejected' : 'retry', error };
+}
+
 async function sendUpload(p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
   const { sha256 } = JSON.parse(row.payload ?? '{}') as { sha256: string };
   const blob = await p.readBlob(sha256);
@@ -108,11 +135,13 @@ async function sendUpload(p: SendPorts, row: OutboxRow, signer: Signer, t: Outbo
     const r = await uploadBlob(t.target, blob, sha256, signer, p.fetch);
     if (r.ok) {
       p.db.run('UPDATE blobs SET operator_at = ?, last_error = NULL WHERE sha256 = ?', p.now(), sha256);
+      // until its save is published, the text is known to be here, so a delete before then still reaches it (F33)
+      p.db.run('UPDATE items SET text_servers = ? WHERE owner = ? AND text_sha256 = ? AND text_servers IS NULL', JSON.stringify([t.target]), row.signer, sha256);
       return [{ target: t.target, kind: 'ok' }];
     }
     // A 413 from the operator is a full quota: the text stays on the phone and the upload retries daily (G5).
     if (r.status === 413) return [{ target: t.target, kind: 'retry', error: r.reason, waitSec: DAY }];
-    return [r.permanent && r.status !== 401 ? { target: t.target, kind: 'rejected', error: `HTTP ${r.status} ${r.reason}` } : { target: t.target, kind: 'retry', error: `HTTP ${r.status} ${r.reason}` }];
+    return [httpResult(t.target, r, r.permanent && r.status !== 401)];
   } catch (e) {
     return [{ target: t.target, kind: 'retry', error: err(e) }];
   }
@@ -133,6 +162,7 @@ async function sendMirror(p: SendPorts, row: OutboxRow, signer: Signer, t: Outbo
     const r = await mirrorBlob(t.target, from, sha256, signer, p.fetch);
     if (r.ok) {
       p.db.run('UPDATE blobs SET mirror_at = ?, mirror_url = ?, last_error = NULL WHERE sha256 = ?', p.now(), t.target, sha256);
+      republishNaming(p.db, p.now(), row.signer, sha256, t.target);
       return [{ target: t.target, kind: 'ok' }];
     }
     // A mirror refuses with any 4xx but 401 and 429, a 413 included: move to the next entry, never dead.
@@ -143,50 +173,83 @@ async function sendMirror(p: SendPorts, row: OutboxRow, signer: Signer, t: Outbo
   }
 }
 
+/**
+ * A mirror took the blob after its save went out naming another, as when the first mirror failed for a while and
+ * then refused (F18): each such save is published again naming this one (C§4.2), and counts as not backed up until
+ * it is. A save not yet published names the mirror when it goes, from the blob's row.
+ */
+function republishNaming(db: SqlDb, now: number, owner: string, sha256: string, mirror: string): void {
+  const stale = db.all<{ hash: string }>(
+    `SELECT hash FROM items WHERE owner = ? AND text_sha256 = ? AND event_id IS NOT NULL AND pending_delete_at IS NULL
+     AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(text_servers, '[]')) WHERE value = ?)`,
+    owner, sha256, mirror,
+  );
+  for (const { hash } of stale) enqueue(db, now, { op: 'publish_item', signer: owner, subject: hash, targets: writeRelays(db, owner) });
+}
+
 /** A blob no save names any more, on each server that held it; a 404 counts as done (4.3). */
 async function sendDeleteBlob(p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
   const { sha256 } = JSON.parse(row.payload ?? '{}') as { sha256: string };
   try {
     const r = await deleteBlob(t.target, sha256, signer, p.fetch);
     if (r.ok) return [{ target: t.target, kind: 'ok' }];
-    return [r.permanent ? { target: t.target, kind: 'rejected', error: `HTTP ${r.status} ${r.reason}` } : { target: t.target, kind: 'retry', error: `HTTP ${r.status} ${r.reason}` }];
+    return [httpResult(t.target, r, r.permanent)];
   } catch (e) {
     return [{ target: t.target, kind: 'retry', error: err(e) }];
   }
 }
 
-async function sendPublish(p: SendPorts, row: OutboxRow, signer: Signer, targets: OutboxTarget[]): Promise<TargetResult[]> {
-  const item = getItem(p.db, row.signer, row.subject);
-  if (!item) return targets.map((t) => ({ target: t.target, kind: 'rejected' as const, error: 'item gone' }));
+/** The same outcome for every target. */
+function each(targets: OutboxTarget[], kind: 'retry' | 'rejected', error: string, waitSec?: number): TargetResult[] {
+  return targets.map((t) => ({ target: t.target, kind, error, ...(waitSec ? { waitSec } : {}) }) as TargetResult);
+}
+
+/** One event to every target, each answer read as 4.3 says. */
+function publishTo(p: SendPorts, targets: OutboxTarget[], event: NostrEvent): Promise<TargetResult[]> {
+  return Promise.all(targets.map(async (t) => {
+    try {
+      return relayResult(t.target, await p.publish(t.target, event), event.id);
+    } catch (e) {
+      return { target: t.target, kind: 'retry', error: err(e) } as TargetResult;
+    }
+  }));
+}
+
+/** text.servers never lists the operator alone (contract 4.2): the mirror that holds it, else the one being tried. */
+function textServers(p: SendPorts, item: ItemRow): string[] {
   const blob = item.text_sha256 ? p.db.get<{ mirror_url: string | null }>('SELECT mirror_url FROM blobs WHERE sha256 = ?', item.text_sha256) : null;
   const d = p.defaults();
-  // text.servers never lists the operator alone (contract 4.2): the mirror that holds it, else the one being tried.
-  const servers = [d.operator.blossom, blob?.mirror_url ?? d.mirrors[0]];
+  return [d.operator.blossom, blob?.mirror_url ?? d.mirrors[0]];
+}
+
+/** A relay took the save's event: the row records it, with the servers it names, and its old address is retired. */
+function published(p: SendPorts, owner: string, item: ItemRow, event: NostrEvent, servers: string[], d: string): void {
+  markPublished(p.db, owner, item.hash, event.id, event.created_at);
+  // the servers the event names, for a later delete (C§4.1) and for knowing which mirror it names (F18)
+  if (item.text_sha256) p.db.run('UPDATE items SET text_servers = ? WHERE id = ?', JSON.stringify(servers), item.id);
+  retireAddress(p.db, p.now(), owner, item.hash, item.remote_d, d, item.event_created_at ?? 0);
+}
+
+async function sendPublish(p: SendPorts, row: OutboxRow, signer: Signer, targets: OutboxTarget[]): Promise<TargetResult[]> {
+  const item = getItem(p.db, row.signer, row.subject);
+  if (!item) return each(targets, 'rejected', 'item gone');
+  // a save waiting on its delete's Undo isn't published: one that went out after its kind 5 would bring it back (F38)
+  if (item.pending_delete_at !== null) return each(targets, 'retry', 'waiting on a delete', UNDO_WAIT);
   // the address is keyed (F5): an identity made here makes its key now; any other waits until sync has learnt it
   const key = libraryKey(p.db, row.signer) ?? (madeHere(p.db, row.signer) ? makeLibraryKey(p.db, p.now(), row.signer, p.crypto.randomBytes) : null);
-  if (!key) return targets.map((t) => ({ target: t.target, kind: 'retry' as const, error: 'library key not known yet' }));
+  if (!key) return each(targets, 'retry', 'library key not known yet');
   // the key's record reaches a relay before any save it addresses, so another phone finding the saves finds the key
   if (!keyPublished(p.db, row.signer) && !(await sendLibraryKey(p, row, signer, targets)).some((r) => r.kind === 'ok')) {
-    return targets.map((t) => ({ target: t.target, kind: 'retry' as const, error: 'library key record not sent yet' }));
+    return each(targets, 'retry', 'library key record not sent yet');
   }
+  const servers = textServers(p, item);
   // Built at send time, created_at = max(now, last + 1), so a newer state always replaces the old one.
   const createdAt = Math.max(p.now(), (item.event_created_at ?? 0) + 1);
   const { event } = await buildItemEvent(signer, item.hash, itemJson(item, servers), createdAt, key);
-  const results = await Promise.all(
-    targets.map(async (t) => {
-      try {
-        return relayResult(t.target, await p.publish(t.target, event), event.id);
-      } catch (e) {
-        return { target: t.target, kind: 'retry', error: err(e) } as TargetResult;
-      }
-    }),
-  );
-  if (results.some((r) => r.kind === 'ok')) {
-    markPublished(p.db, row.signer, item.hash, event.id, createdAt);
-    retireAddress(p.db, p.now(), row.signer, item.hash, item.remote_d, savedD(key, item.hash), item.event_created_at ?? 0);
-  }
+  const results = await publishTo(p, targets, event);
+  if (results.some((r) => r.kind === 'ok')) published(p, row.signer, item, event, servers, savedD(key, item.hash));
   // backed up once a relay the operator doesn't run holds it (FD 93)
-  if (results.some((r) => r.kind === 'ok' && r.target !== d.operator.relay)) markBacked(p.db, event.id);
+  if (results.some((r) => r.kind === 'ok' && r.target !== p.defaults().operator.relay)) markBacked(p.db, event.id);
   return results;
 }
 
@@ -205,13 +268,7 @@ async function sendLibraryKey(p: SendPorts, row: OutboxRow, signer: Signer, targ
   const key = libraryKey(p.db, row.signer);
   if (!key) return targets.map((t) => ({ target: t.target, kind: 'rejected' as const, error: 'no library key' }));
   const event = await buildLibraryKeyEvent(signer, key, p.now());
-  const results = await Promise.all(targets.map(async (t) => {
-    try {
-      return relayResult(t.target, await p.publish(t.target, event), event.id);
-    } catch (e) {
-      return { target: t.target, kind: 'retry', error: err(e) } as TargetResult;
-    }
-  }));
+  const results = await publishTo(p, targets, event);
   if (results.some((r) => r.kind === 'ok')) libraryKeyPublished(p.db, row.signer, event.created_at);
   return results;
 }
@@ -244,10 +301,26 @@ async function sendDeleteItem(p: SendPorts, row: OutboxRow, signer: Signer, targ
 }
 
 /**
+ * The newest 10002 and 10063 on the indexer and the identity's relays, taken in as sync takes them, just before the
+ * lists are built: one another app published since the last sync joins this phone's rather than being overwritten.
+ * A relay that doesn't answer adds nothing.
+ */
+async function readNewerLists(p: SendPorts, owner: string): Promise<void> {
+  const query = p.query;
+  if (!query) return;
+  const relays = [...new Set([...indexerRelays(p.db, owner), ...relayEntries(p.db, owner).map((r) => r.url)])];
+  const kinds = [KIND.relayList, KIND.serverList];
+  const copies = (await Promise.all(relays.map((r) => query(r, [{ kinds, authors: [owner] }]).catch(() => [])))).flat();
+  takeNewerLists(p.db, owner, copies, kinds);
+}
+
+/**
  * The 10002 to every target; the 10063 and the connected-browsers record (C§4.9) to the write relays only (4.3).
- * All are built from the tables at send time; the record only once there is a browser in it.
+ * All are built from the tables at send time, after any newer list on the relays is taken in; the record only once
+ * there is a browser in it.
  */
 async function sendLists(p: SendPorts, row: OutboxRow, signer: Signer, targets: OutboxTarget[]): Promise<TargetResult[]> {
+  await readNewerLists(p, row.signer);
   // after the lists already held, so a phone whose clock is behind doesn't publish lists older than its own (F36)
   const now = nextListTime(p.db, row.signer, p.now());
   const relayList = await buildRelayList(signer, relayEntries(p.db, row.signer), now);
@@ -326,32 +399,53 @@ async function sendDeleteWrap(p: SendPorts, row: OutboxRow, signer: Signer, t: O
   }
 }
 
+type Sender = (p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget) => Promise<TargetResult[]>;
+
+/** The ops sent one target at a time. */
+const PER_TARGET: Record<string, Sender> = {
+  register: sendRegister, upload_blob: sendUpload, mirror_blob: sendMirror, delete_blob: sendDeleteBlob,
+  post_device: sendPostDevice, delete_device: sendDeleteDevice, pair_ack: sendPairAck, delete_wrap: sendDeleteWrap,
+};
+
+async function dispatch(p: SendPorts, row: OutboxRow, signer: Signer, targets: OutboxTarget[]): Promise<TargetResult[]> {
+  if (row.op === 'publish_item') return sendPublish(p, row, signer, targets);
+  if (row.op === 'publish_lists') return sendLists(p, row, signer, targets);
+  if (row.op === 'delete_item') return sendDeleteItem(p, row, signer, targets);
+  if (row.op === 'publish_library_key') return sendLibraryKey(p, row, signer, targets);
+  if (row.op === 'copy_relay') return (await Promise.all(targets.map((t) => sendCopyRelay(p, row, t)))).flat();
+  const one = PER_TARGET[row.op];
+  if (!one) return each(targets, 'rejected', 'unknown op ' + row.op);
+  return (await Promise.all(targets.map((t) => one(p, row, signer, t)))).flat();
+}
+
+/** The shortest wait after a signer that didn't answer (out of sight, timed out, declined, zeroed), in seconds. */
+const SIGNER_WAIT = 60;
+
+/**
+ * A lookup or send that threw (a Keystore not ready, a signer refusing out of sight or timing out, a zeroed key):
+ * every target is retried with its backoff, longer for a signer, so the row goes back to the queue where the drain and
+ * the retry timer see it, rather than staying 'sending' until the next start.
+ */
+function threw(targets: OutboxTarget[], e: unknown): TargetResult[] {
+  const signer = isSignerFailure(e);
+  return targets.map((t) => {
+    const waitSec = signer ? Math.max(SIGNER_WAIT, backoff(t.attempts + 1)) : backoff(t.attempts + 1);
+    return { target: t.target, kind: 'retry', error: err(e), waitSec };
+  });
+}
+
 /** Sends the next due row, if any. Returns whether it did anything. */
 export async function sendOne(p: SendPorts): Promise<boolean> {
   const due = nextDue(p.db, p.now());
   if (!due) return false;
   const { row, targets } = due;
   begin(p.db, row.id);
-  const signer = await p.signer(row.signer);
   let results: TargetResult[];
-  if (!signer) {
-    results = targets.map((t) => ({ target: t.target, kind: 'retry', error: 'signer unavailable' }));
-  } else if (row.op === 'publish_item') {
-    results = await sendPublish(p, row, signer, targets);
-  } else if (row.op === 'publish_lists') {
-    results = await sendLists(p, row, signer, targets);
-  } else if (row.op === 'delete_item') {
-    results = await sendDeleteItem(p, row, signer, targets);
-  } else if (row.op === 'publish_library_key') {
-    results = await sendLibraryKey(p, row, signer, targets);
-  } else if (row.op === 'copy_relay') {
-    results = (await Promise.all(targets.map((t) => sendCopyRelay(p, row, t)))).flat();
-  } else {
-    const one = {
-      register: sendRegister, upload_blob: sendUpload, mirror_blob: sendMirror, delete_blob: sendDeleteBlob,
-      post_device: sendPostDevice, delete_device: sendDeleteDevice, pair_ack: sendPairAck, delete_wrap: sendDeleteWrap,
-    }[row.op];
-    results = one ? (await Promise.all(targets.map((t) => one(p, row, signer, t)))).flat() : targets.map((t) => ({ target: t.target, kind: 'rejected', error: `unknown op ${row.op}` }));
+  try {
+    const signer = await p.signer(row.signer);
+    results = signer ? await dispatch(p, row, signer, targets) : each(targets, 'retry', 'signer unavailable');
+  } catch (e) {
+    results = threw(targets, e);
   }
   finish(p.db, p.now(), row.id, results);
   return true;
@@ -362,4 +456,33 @@ export async function drain(p: SendPorts, maxRows = 100): Promise<number> {
   let n = 0;
   while (n < maxRows && (await sendOne(p))) n++;
   return n;
+}
+
+/** The foreground retry timer's longest wait; it re-arms after each drain, so a longer wait is reached in steps. */
+const MAX_WAKE = 3600;
+
+export type WakePorts = { db: () => SqlDb; now: () => number; active: () => boolean; run: () => void };
+
+/**
+ * The foreground retry (4.3, F11): after each drain, one timer to when the outbox next has something due, which
+ * drains again; nothing is armed while Kefli isn't in front. arm replaces any earlier timer; stop clears it.
+ */
+export function outboxWaker(p: WakePorts): { arm: () => void; stop: () => void } {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const stop = () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+  };
+  const arm = () => {
+    stop();
+    if (!p.active()) return;
+    const at = nextWakeAt(p.db());
+    if (at === null) return;
+    const wait = Math.min(MAX_WAKE, Math.max(1, at - p.now()));
+    timer = setTimeout(() => {
+      timer = null;
+      p.run();
+    }, wait * 1000);
+  };
+  return { arm, stop };
 }

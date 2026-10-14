@@ -1,6 +1,6 @@
 // Fetching and parsing a page (mobile spec 5.4, section 9), for a share and for a pending parse: a desktop Chrome
-// user agent and a mobile one on 403, a 20 s timeout, a 5 MB cap, and only text/html and application/xhtml+xml
-// parse. The parse runs in the kefli-parser WebView (a port here), then contract 4.2's guard: not readerable and
+// user agent and a mobile one on 403, a 20 s timeout over the headers and the whole body, a 5 MB cap counted as the
+// body streams, no cookies (net/http.ts), and only text/html and application/xhtml+xml parse. The parse runs in the kefli-parser WebView (a port here), then contract 4.2's guard: not readerable and
 // fewer than 120 spoken words is a failed parse. A network failure is "offline": the save waits and tries again.
 // A page still turned away with 403 by both is loaded once in a browser engine (the render port, 8.2), since bot
 // checks such as Cloudflare's tell Android's HTTP client from a browser; its rendered HTML takes the same parse. So is a
@@ -9,6 +9,7 @@
 import { base64 } from '@scure/base';
 import { normaliseMarkdown, pdfMarkdown, type PdfRuns } from '@kefli/protocol';
 import { deriveArticle, type Derived } from '../reader/blocks';
+import { open, TimedOut, TooLarge, type Opened } from '../net/http';
 
 export const PAGE_MAX_BYTES = 5 * 1024 * 1024;
 /**
@@ -41,11 +42,13 @@ export type PagePorts = {
 export type FailReason = 'http' | 'not_html' | 'too_large' | 'not_readable' | 'pdf_no_text' | 'pdf_locked';
 
 export type PageOutcome =
-  | { kind: 'offline' }
+  /** timedOut: the server or the network was too slow, against the 20 s deadline, rather than not there. */
+  | { kind: 'offline'; timedOut?: true }
   | { kind: 'failed'; reason: FailReason; finalUrl: string }
   | { kind: 'parsed'; finalUrl: string; result: Extract<ParserResult, { ok: true }>; words: number; spoken: string; derived: Derived };
 
 const PDF_TYPE = /^\s*application\/(?:x-)?pdf\b/i;
+const HTML_TYPE = /^\s*(text\/html|application\/xhtml\+xml)\b/i;
 
 /** A PDF by its declared type or, since servers often say application/octet-stream, by its first bytes. */
 export function isPdf(contentType: string, bytes: Uint8Array): boolean {
@@ -56,40 +59,50 @@ export function isPdf(contentType: string, bytes: Uint8Array): boolean {
 export function refusal(status: number, contentType: string, bytes: number, pdf = false): FailReason | null {
   if (status < 200 || status > 299) return 'http';
   if (pdf) return bytes > PDF_MAX_BYTES ? 'too_large' : null;
-  if (!/^\s*(text\/html|application\/xhtml\+xml)\b/i.test(contentType)) return 'not_html';
+  if (!HTML_TYPE.test(contentType)) return 'not_html';
   if (bytes > PAGE_MAX_BYTES) return 'too_large';
   return null;
 }
 
-async function get(p: PagePorts, url: string, ua: string): Promise<Response> {
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), PAGE_TIMEOUT_MS);
-  try {
-    return await p.fetch(url, { signal: ctl.signal, headers: { 'User-Agent': ua, Accept: 'text/html,application/xhtml+xml,application/pdf;q=0.9', 'Accept-Language': 'en-GB,en;q=0.9' } });
-  } finally {
-    clearTimeout(timer);
-  }
+function get(p: PagePorts, url: string, ua: string): Promise<Opened> {
+  const headers = { 'User-Agent': ua, Accept: 'text/html,application/xhtml+xml,application/pdf;q=0.9', 'Accept-Language': 'en-GB,en;q=0.9' };
+  return open(p.fetch, url, { headers }, PAGE_TIMEOUT_MS);
 }
 
-type Answer = { res: Response; bytes: Uint8Array } | { tooLarge: string } | null;
+/** A type that names something other than a PDF: a page, a picture, a film, a sound, a font, plain text, an archive. */
+const NOT_PDF = /^\s*(?:(?:text|image|video|audio|font|model|multipart)\/|application\/(?:xhtml\+xml|zip|gzip|x-tar|x-7z-compressed|vnd\.rar)\b)/i;
 
-/** The page as fetched: as desktop Chrome, then as a phone on 403; null when the network failed. */
+/**
+ * The cap a body is read under: with the pdf port, a PDF's 20 MB for a body that may be one, known by its type or,
+ * served as octet-stream, a download or no type at all, only by its first bytes; a page's 5 MB for a type that names
+ * anything else, so a large picture or film fails on its declared length without being downloaded.
+ */
+export function capFor(p: Pick<PagePorts, 'pdf'>, contentType: string): number {
+  return p.pdf && !NOT_PDF.test(contentType) ? PDF_MAX_BYTES : PAGE_MAX_BYTES;
+}
+
+type Answer = { res: Response; bytes: Uint8Array } | Extract<PageOutcome, { kind: 'offline' | 'failed' }>;
+
+/** The page as fetched: as desktop Chrome, then as a phone on 403; or why it can't be had. */
 async function answer(p: PagePorts, url: string): Promise<Answer> {
+  let o: Opened | null = null;
   try {
-    let res = await get(p, url, DESKTOP_UA);
-    if (res.status === 403) res = await get(p, url, MOBILE_UA);
-    const declared = Number(res.headers.get('content-length') ?? 0);
-    if (declared > (PDF_TYPE.test(res.headers.get('content-type') ?? '') ? PDF_MAX_BYTES : PAGE_MAX_BYTES)) return { tooLarge: res.url || url };
-    return { res, bytes: new Uint8Array(await res.arrayBuffer()) };
-  } catch {
-    return null;
+    o = await get(p, url, DESKTOP_UA);
+    if (o.res.status === 403) {
+      o.done();
+      o = await get(p, url, MOBILE_UA);
+    }
+    const { res } = o;
+    return { res, bytes: await o.read(capFor(p, res.headers.get('content-type') ?? '')) };
+  } catch (e) {
+    if (e instanceof TooLarge) return { kind: 'failed', reason: 'too_large', finalUrl: o?.res.url || url };
+    return e instanceof TimedOut ? { kind: 'offline', timedOut: true } : { kind: 'offline' };
   }
 }
 
 export async function fetchPage(p: PagePorts, url: string): Promise<PageOutcome> {
   const a = await answer(p, url);
-  if (!a) return { kind: 'offline' };
-  if ('tooLarge' in a) return { kind: 'failed', reason: 'too_large', finalUrl: a.tooLarge };
+  if ('kind' in a) return a;
   const { res, bytes } = a;
   const finalUrl = res.url || url;
   // RULED: a 1xx is also loaded in the engine: Android's HTTP client hands back a 103 Early Hints as the final answer

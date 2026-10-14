@@ -2,7 +2,7 @@
   "name": "@kefli/protocol",
   "version": "0.1.0",
   "private": true,
-  "description": "Platform-free protocol code for Kefli: normalise, the item JSON, events, encryption (contract v1.5)",
+  "description": "Platform-free protocol code for Kefli: normalise, the item JSON, events, encryption (contract v1.11)",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "scripts": {

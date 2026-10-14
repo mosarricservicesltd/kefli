@@ -1,0 +1,70 @@
+{
+  "about": "One kind 1059 save request (C§4.4) from a connected browser: the wrap opens with the user's key to rumor, sealed by the device; the phone accepts it against devices; the inbox blob decrypts to html. The blob is exact; the wrap verifies.",
+  "user": {
+    "secret_key": "4706e92b823e07d20ba93c04198c7681692debe0bfe9ba6e2a077c01445694aa",
+    "pubkey": "2110b3fc3d760024ce006df1d5fb1666000cd97692fb170fa34bb12da542cc87"
+  },
+  "device": {
+    "secret_key": "90b89c0fad9df0d612f6db2af068064b42d144ea1d46990f8498bfde5121b38c",
+    "pubkey": "1e908de99cf59c9aee754763792c3e23bdea1ff7482ecd07fdf9fc26e78b4f38"
+  },
+  "operator_blossom": "https://blossom.kefli.example",
+  "devices": {
+    "v": 1,
+    "devices": [
+      {
+        "device_pubkey": "1e908de99cf59c9aee754763792c3e23bdea1ff7482ecd07fdf9fc26e78b4f38",
+        "label": "Chrome on a Windows laptop",
+        "token": "a3baec88691562541751a39c2460ae01cef9887ae667ec8151629b1aaf8efab8",
+        "connected_at": 1791000000,
+        "revoked_at": null
+      }
+    ]
+  },
+  "wrap": {
+    "kind": 1059,
+    "created_at": 1790831961,
+    "tags": [
+      ["p", "2110b3fc3d760024ce006df1d5fb1666000cd97692fb170fa34bb12da542cc87"]
+    ],
+    "content": "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",
+    "pubkey": "2f28676b3527ed469056a7714c728dd94b4c5d35846ab6ee1304230346bb779e",
+    "id": "7f8bb4ef78aa4a9bf483305606dedf01afef227c0eeb5b7b8f6cb8cb3e3c81cc",
+    "sig": "7fe592ffb6a23113cfaf50bd4dfd549c376667d7631d6349ee19bc4eb72d6f5382c27af1286751762b1822aceb2bb52b95b2e5b87e5e0adda1da984170af7f63"
+  },
+  "rumor": {
+    "pubkey": "1e908de99cf59c9aee754763792c3e23bdea1ff7482ecd07fdf9fc26e78b4f38",
+    "created_at": 1791000060,
+    "kind": 30078,
+    "tags": [
+      ["d", "kefli/save-request/7c1f6f5e-3a2b-4c8d-9e0f-1a2b3c4d5e6f"]
+    ],
+    "content": "{\"v\":1,\"url\":\"https://example.com/captured\",\"canonical\":null,\"title\":\"A page\",\"site\":\"example.com\",\"byline\":null,\"lang\":\"en\",\"hero\":null,\"captured_at\":1791000060,\"token\":\"a3baec88691562541751a39c2460ae01cef9887ae667ec8151629b1aaf8efab8\",\"html\":{\"sha256\":\"269e97080141f2720910c516eaf2918bd9c8b1564e64b2e251482a3486c436a4\",\"key\":\"2xoZm/KGeXM/yhEYcNS7cjQCqIoqBGdXopOk6sdahpU=\",\"nonce\":\"V3KtkeZXpGtwcohr\",\"server\":\"https://blossom.kefli.example\"}}",
+    "id": "31ac2e4281cebc2eef1c73cfd6659abde7f56a9b408ac53a2b570d70466d3a0c"
+  },
+  "request": {
+    "v": 1,
+    "url": "https://example.com/captured",
+    "canonical": null,
+    "title": "A page",
+    "site": "example.com",
+    "byline": null,
+    "lang": "en",
+    "hero": null,
+    "captured_at": 1791000060,
+    "token": "a3baec88691562541751a39c2460ae01cef9887ae667ec8151629b1aaf8efab8",
+    "html": {
+      "sha256": "269e97080141f2720910c516eaf2918bd9c8b1564e64b2e251482a3486c436a4",
+      "key": "2xoZm/KGeXM/yhEYcNS7cjQCqIoqBGdXopOk6sdahpU=",
+      "nonce": "V3KtkeZXpGtwcohr",
+      "server": "https://blossom.kefli.example"
+    }
+  },
+  "inbox_blob": {
+    "html": "<div><h1>A page</h1><p>Captured in the browser, read on the phone.</p></div>",
+    "sha256": "269e97080141f2720910c516eaf2918bd9c8b1564e64b2e251482a3486c436a4",
+    "key": "2xoZm/KGeXM/yhEYcNS7cjQCqIoqBGdXopOk6sdahpU=",
+    "nonce": "V3KtkeZXpGtwcohr",
+    "blob": "zk12VACTvErp2BxVMxCZzXqaDhbnw1HNu9B9n9H1vquk8fChzi6abpt9bxJ1kn5tFzv8zeS8EdYQ0Msu7gHGrgk3c44U+mSVi+Nctakge0CuiN6sitWooA7XQS4="
+  }
+}

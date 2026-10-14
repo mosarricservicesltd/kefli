@@ -49,4 +49,17 @@ describe('the restore job (mobile spec 4.10, 5.3)', () => {
     expect(beginRestore(w.db, 13, PK)).toBe(false);
     expect(settleRestore(w.db, 14, 'cd'.repeat(32))).toBeNull();
   });
+
+  test('saves waiting for the signer keep a restore at 0 of 0 running until they arrive (F14)', () => {
+    const w = world();
+    queueRestore(w.db, 10, PK);
+    beginRestore(w.db, 11, PK);
+    expect(settleRestore(w.db, 12, PK, 2)).toBe('running');
+    expect(restoreCardShows(restoreOf(w.db, PK), 12)).toBe(true);
+    // the signer answers at the next sync and the saves come with their texts
+    w.add(1, 'cached');
+    w.add(2, 'cached');
+    expect(settleRestore(w.db, 20, PK, 0)).toBe('done');
+    expect(restoreOf(w.db, PK)).toMatchObject({ state: 'done', found: 2, total: 2 });
+  });
 });

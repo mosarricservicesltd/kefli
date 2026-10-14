@@ -3,7 +3,9 @@ import { base64 } from '@scure/base';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import { verifyEvent } from 'nostr-tools/pure';
 import { itemHash } from '../../../packages/protocol/src/normalise';
-import { acceptSaveRequest, derivePairCode, openOffer, wrapPairAck, type PairAck, type SaveRequest } from '../../../packages/protocol/src/pairing';
+import {
+  acceptSaveRequest, checkOffer, derivePairCode, deviceProofTemplate, openOffer, proofHolds, statementHolds, wrapPairAck, type PairAck, type SaveRequest,
+} from '../../../packages/protocol/src/pairing';
 import { LocalSigner, type NostrEvent } from '../../../packages/protocol/src/signer';
 import { decryptText } from '../../../packages/protocol/src/text';
 import { unwrap } from '../../../packages/protocol/src/wrap';
@@ -11,7 +13,7 @@ import { GUARD_WORDS, HTML_MAX_BYTES, isWebAddress, keepHtml, linkOnly, pageUrl,
 import { webCrypto } from '../src/crypto';
 import { loadDefaults, type Defaults } from '../src/defaults';
 import { deviceSigner } from '../src/device';
-import { ackFor, browserLabel, formatCode, OFFER_LIFE, pairingFrom, postOffer } from '../src/pair';
+import { ackFor, browserLabel, formatCode, newOffer, OFFER_LIFE, OFFER_REUSE_MIN, pairingFrom, postOffer, tryPairing, type Offer } from '../src/pair';
 import { ATTEMPTS_MAX, BLOB_KEEP_MAX, dequeue, enqueue, failed, flush, QUEUE_MAX, queued, shown, waiting, whyNot } from '../src/queue';
 import { deliver, prepare, retract, type Net, type Pending } from '../src/save';
 import { KEYS, memoryStore, type Pairing } from '../src/store';
@@ -46,7 +48,10 @@ describe('pairing (contract 4.4)', () => {
   test('the offer is posted sealed under its typed code, signed by the device key', async () => {
     let posted: { url: string; init: RequestInit } | null = null;
     const get = (async (url: string, init: RequestInit) => ((posted = { url, init }), json({ v: 1 }))) as unknown as typeof fetch;
-    const o = await postOffer(device, DEFAULTS, 'Chrome on a Mac', webCrypto, NOW, get);
+    const o = await newOffer(device, DEFAULTS, 'Chrome on a Mac', webCrypto, NOW);
+    expect(o.posted).toBe(false);
+    await postOffer(device, DEFAULTS, o, webCrypto, get);
+    expect(o.posted).toBe(true);
     expect(o.offer).toMatchObject({ v: 1, device_pubkey: device.pubkey(), relay: DEFAULTS.operator.relay, expires: NOW + OFFER_LIFE, label: 'Chrome on a Mac' });
     expect(JSON.parse(o.qr)).toEqual(o.offer);
     expect(o.code).toMatch(/^[0-9A-HJKMNP-TV-Z]{8}$/);
@@ -59,9 +64,93 @@ describe('pairing (contract 4.4)', () => {
     expect(await openOffer(body.offer, key, webCrypto)).toEqual(o.offer);
   });
 
+  test("the QR and the typed code's sealed offer both carry the device key's proof over the nonce, which the phone accepts", async () => {
+    let sealed = '';
+    const get = (async (_url: string, init: RequestInit) => ((sealed = JSON.parse(String(init.body)).offer), json({ v: 1 }))) as unknown as typeof fetch;
+    const o = await newOffer(device, DEFAULTS, 'Chrome on a Mac', webCrypto, NOW);
+    await postOffer(device, DEFAULTS, o, webCrypto, get);
+    const typed = await openOffer(sealed, (await derivePairCode(o.code, webCrypto)).key, webCrypto);
+    for (const offer of [JSON.parse(o.qr), typed]) {
+      expect(offer.proof.created_at).toBe(NOW);
+      expect(statementHolds(device.pubkey(), deviceProofTemplate(DEFAULTS.operator.api, o.offer.nonce, NOW), offer.proof.sig)).toBe(true);
+      expect(checkOffer(offer, DEFAULTS.operator, NOW)).toBeNull();
+    }
+    // a fresh offer has a fresh nonce, and the old proof doesn't hold for it
+    const next = await newOffer(device, DEFAULTS, 'Chrome on a Mac', webCrypto, NOW);
+    expect(next.offer.nonce).not.toBe(o.offer.nonce);
+    expect(proofHolds({ ...next.offer, proof: o.offer.proof }, DEFAULTS.operator.api)).toBe(false);
+    // and a proof only the device key makes: the user's own key can't stand in for it
+    const forged = await newOffer(user, DEFAULTS, 'x', webCrypto, NOW);
+    expect(proofHolds({ ...forged.offer, device_pubkey: device.pubkey() }, DEFAULTS.operator.api)).toBe(false);
+  });
+
   test('an operator that refuses the offer is an error the page shows as offline', async () => {
     const get = (async () => json({}, false)) as unknown as typeof fetch;
-    await expect(postOffer(device, DEFAULTS, 'x', webCrypto, NOW, get)).rejects.toThrow('500');
+    const o = await newOffer(device, DEFAULTS, 'x', webCrypto, NOW);
+    await expect(postOffer(device, DEFAULTS, o, webCrypto, get)).rejects.toThrow('500');
+    expect(o.posted).toBe(false);
+  });
+
+  describe('trying again after trouble (F42)', () => {
+    const attempt = (last: { offer: Offer | null }, relayUp: boolean, at = NOW) => {
+      const calls: string[] = [];
+      const run = tryPairing(
+        last,
+        () => (calls.push('make'), newOffer(device, DEFAULTS, 'x', webCrypto, at)),
+        async () => {
+          calls.push('listen');
+          if (!relayUp) throw new Error('connection failed');
+          return { stop: () => void calls.push('stop') };
+        },
+        async (o) => {
+          calls.push('post');
+          o.posted = true;
+        },
+        at,
+      );
+      return { run, calls };
+    };
+
+    test('a relay that can’t be reached posts nothing, and the next try shows the same code', async () => {
+      const last = { offer: null as Offer | null };
+      const all: string[] = [];
+      // five minutes of tries every ten seconds, as the page makes them: the code is shown again until it has under a
+      // minute left, and nothing reaches the operator's limit
+      for (let i = 0; i < 30; i++) {
+        const a = attempt(last, false, NOW + i * 10);
+        await expect(a.run).rejects.toThrow('connection failed');
+        all.push(...a.calls);
+      }
+      expect(all.filter((c) => c === 'post')).toHaveLength(0);
+      expect(all.filter((c) => c === 'make')).toHaveLength(2);
+      last.offer = await newOffer(device, DEFAULTS, 'x', webCrypto, NOW);
+      const code = last.offer.code;
+      const up = attempt(last, true, NOW + OFFER_LIFE - OFFER_REUSE_MIN + 1);
+      // the offer is made fresh once it has under a minute left
+      expect(up.calls[0]).toBe('make');
+      const { offer } = await up.run;
+      expect(up.calls).toEqual(['make', 'listen', 'post']);
+      expect(offer.code).not.toBe(code);
+    });
+
+    test('an offer posted once isn’t posted again when the relay drops and the page tries again', async () => {
+      const last = { offer: null as Offer | null };
+      const first = await attempt(last, true).run;
+      const again = attempt(last, true, NOW + 30);
+      expect((await again.run).offer).toBe(first.offer);
+      expect(again.calls).toEqual(['listen']);
+    });
+
+    test('a post that fails closes the wait, and the next try posts the same offer', async () => {
+      const last = { offer: null as Offer | null };
+      const calls: string[] = [];
+      const failing = tryPairing(last, () => newOffer(device, DEFAULTS, 'x', webCrypto, NOW), async () => ({ stop: () => void calls.push('stop') }), async () => { throw new Error('pair-offers answered 429'); }, NOW);
+      await expect(failing).rejects.toThrow('429');
+      expect(calls).toEqual(['stop']);
+      const a = attempt(last, true, NOW + 10);
+      expect((await a.run).offer).toBe(last.offer);
+      expect(a.calls).toEqual(['listen', 'post']);
+    });
   });
 
   test("only this offer's pair-ack is accepted, and it becomes the pairing record", async () => {
@@ -134,8 +223,8 @@ function fakeNet(o: { upload?: 'ok' | 'down' | 'refused'; publish?: 'ok' | 'down
       calls.push('remove');
       return { ok: true, url: 'u' };
     },
-    async publish(_relay, e) {
-      calls.push(`publish ${e.kind}`);
+    async publish(_relay, e, as) {
+      calls.push(`publish ${e.kind}${as ? ` as ${as.pubkey().slice(0, 4)}` : ''}`);
       published.push(e);
       if (o.publish === 'down') throw new Error('timeout');
       if (o.publish === 'blocked') throw new Error('blocked: not allowed');
@@ -155,7 +244,8 @@ describe('delivery', () => {
   test('the blob goes up before the wrap, and is then dropped', async () => {
     const r = await send({});
     expect(r.d).toBe('sent');
-    expect(r.calls).toEqual(['upload', 'publish 1059']);
+    // the wrap goes on a connection AUTHed as the device (F9)
+    expect(r.calls).toEqual(['upload', `publish 1059 as ${device.pubkey().slice(0, 4)}`]);
     expect(r.pending.blob).toBeNull();
   });
   test('an unreachable server leaves the save to wait, the blob kept', async () => {
@@ -238,8 +328,8 @@ describe('the queue (extension spec 4, decisions 30, 31 and 60)', () => {
     expect(left).toHaveLength(1);
     expect(left[0]).toMatchObject({ id: 'no', attempts: ATTEMPTS_MAX, stopped: true, why: 'reach' });
     expect(await flush(store, async () => 'sent', true)).toEqual([]);
-    expect(await flush(store, async () => 'sent', true, true, 'other')).toEqual([]);
-    expect(await flush(store, async () => 'sent', true, true, 'no')).toEqual(['no']);
+    expect(await flush(store, async () => 'sent', true, { all: true, only: 'other' })).toEqual([]);
+    expect(await flush(store, async () => 'sent', true, { all: true, only: 'no' })).toEqual(['no']);
   });
 });
 
@@ -390,7 +480,7 @@ describe('Copy debug info (extension spec 11, decision 108)', () => {
     });
     expect(text).toContain('Kefli extension 0.1.0 (beta, abc1234)');
     expect(text).toContain(`Library key: ${PAIRING.user_pubkey.slice(0, 8)}…`);
-    expect(text).toContain('Waiting: 1 (offline 0, couldn’t reach 1, blocked 0, stopped 0; most attempts 0)');
+    expect(text).toContain('Waiting: 1 (sending 0, offline 0, couldn’t reach 1, blocked 0, stopped 0; most attempts 0)');
     expect(text).toContain(`page  ${pending.id.slice(0, 8)}  waiting, couldn’t reach`);
     expect(text).toContain('Last look for a move: never');
     for (const secret of ['example.com', 'A private title', (await store.get<string>(KEYS.device))!, dev.pubkey(), PAIRING.user_pubkey, PAIRING.token]) expect(text).not.toContain(secret);

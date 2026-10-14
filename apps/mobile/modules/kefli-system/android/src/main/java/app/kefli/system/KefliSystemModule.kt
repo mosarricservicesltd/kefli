@@ -14,6 +14,10 @@ import android.provider.MediaStore
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.webkit.CookieManager
+import android.webkit.WebStorage
+import android.webkit.WebView
+import android.webkit.WebViewDatabase
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import com.facebook.react.ReactActivity
@@ -95,6 +99,24 @@ class KefliSystemModule : Module() {
       (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(clip)
       true
     }
+
+    // Delete my data and Sign out (7.2, F28): the app's one WebView profile, which the Original view and the parser
+    // share, loses its cookies, its sites' storage (localStorage, IndexedDB and the rest) and its cache, so the next
+    // library on the phone inherits no logins and no pages. Resolves once the cookies are gone and written out.
+    AsyncFunction("clearWebData") { promise: Promise ->
+      val context = appContext.reactContext ?: return@AsyncFunction promise.reject(CodedException("no context"))
+      WebStorage.getInstance().deleteAllData()
+      WebViewDatabase.getInstance(context).clearHttpAuthUsernamePassword()
+      WebView(context).run {
+        clearCache(true)
+        destroy()
+      }
+      val cookies = CookieManager.getInstance()
+      cookies.removeAllCookies {
+        cookies.flush()
+        promise.resolve(null)
+      }
+    }.runOnQueue(Queues.MAIN)
 
     // The character under a point in the Reader (FD 107: double-tap a word to play from it). React Native reports
     // where a Text was pressed but not which character, so the text view under the point, in React Native's

@@ -1,6 +1,7 @@
 {
   "threshold": 15,
   "cc_limit": 10,
+  "coverage_file": "coverage/lcov.info",
   "branches": [
     "main",
     "master"
@@ -15,6 +16,7 @@
     "*/apps/mobile/src/share/*",
     "*/apps/mobile/scripts/*",
     "*/server/dev/*",
+    "*/server/staging/*",
     "*/apps/mobile/src/services/runner.ts",
     "*/apps/mobile/src/services/save.ts",
     "*/apps/mobile/src/services/staging.ts",
@@ -37,6 +39,7 @@
     "*/apps/mobile/src/ui/artwork.ts",
     "*/shared/fixtures/build-pages.ts",
     "*/shared/fixtures/build-pdfs.ts",
+    "*/shared/fixtures/build-protocol.ts",
     "*/docs/design/icons/negative-space/*",
     "*/docs/design/mockups/cover-v1.js",
     "*/shared/cover/test.cjs",
@@ -46,6 +49,8 @@
     "*/apps/extension/src/saved.ts",
     "*/apps/extension/src/capture.ts",
     "*/apps/extension/src/relay.ts",
-    "*/apps/extension/scripts/*"
+    "*/apps/extension/scripts/*",
+    "*/apps/extension/build.mjs",
+    "*/tools/design-qa/*"
   ]
 }

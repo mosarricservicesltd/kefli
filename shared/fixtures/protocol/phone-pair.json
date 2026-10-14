@@ -1,0 +1,18 @@
+{
+  "about": "One phone-pair offer (C§2): the QR's text, the six digits, the HKDF lookup and key, and sealed, which opens to payload, whose mnemonic gives the QR's pubkey. Exact.",
+  "qr": {
+    "v": 1,
+    "pubkey": "17162c921dc4d2518f9a101db33695df1afb56ab82f5ff3e5da6eec3ca5cd917",
+    "secret": "8d032ddba5e5b91671e6ef1966d0d277136651368ccdc0701f8d518eb9d28ecc",
+    "expires": 1791000300
+  },
+  "qr_text": "{\"v\":1,\"pubkey\":\"17162c921dc4d2518f9a101db33695df1afb56ab82f5ff3e5da6eec3ca5cd917\",\"secret\":\"8d032ddba5e5b91671e6ef1966d0d277136651368ccdc0701f8d518eb9d28ecc\",\"expires\":1791000300}",
+  "six": "042917",
+  "lookup": "60935d7ff6a8b311c4d34c9a113a913e121e2b43d2f2b3890eb2006f0a9b2ca3",
+  "key": "dac4a89cd5fb679fcc858230687807a0bde8bd2f7a7e31fd4210b881208b406c",
+  "sealed": "3zMyuuL6cws4lBI5AYAdkLRzA0N60kzvw6wYpmpkspPQF3c3MJ9EotwzYXrCDG+eDJK/kVGEYeG3hut2qGOcEYIwdzkTGE5qbXPHK/zqP609y5BVCDwlzZxpzipMZr6bYTlrplb0Shn9cbg7IMtOYq6rTdYBpeaOj7PESlPGbg==",
+  "payload": {
+    "v": 1,
+    "mnemonic": "leader monkey parrot ring guide accident before fence cannon height naive bean"
+  }
+}

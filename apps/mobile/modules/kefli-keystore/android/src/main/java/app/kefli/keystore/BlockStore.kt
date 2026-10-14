@@ -9,8 +9,9 @@ import com.google.android.gms.tasks.Task
 
 // Block Store (mobile spec 3.3): one entry, kefli.mnemonic.v1, holding the active local identity's
 // mnemonic. Written for device-to-device restore always, and with shouldBackupToCloud only while
-// end-to-end encryption is available, checked at each write. Adapted from expo-block-store 1.0.0
-// (MIT, © its authors): the client calls and their bridging, cut to the one entry Kefli keeps.
+// end-to-end encryption is available, checked at each write and, through check, at each launch (F22).
+// Adapted from expo-block-store 1.0.0 (MIT, © its authors): the client calls and their bridging, cut to
+// the one entry Kefli keeps.
 object BlockStore {
   const val KEY = "kefli.mnemonic.v1"
 
@@ -31,6 +32,17 @@ object BlockStore {
       val cloud = e2ee.getOrDefault(false)
       val data = StoreBytesData.Builder().setKey(KEY).setBytes(mnemonic.toByteArray(Charsets.UTF_8)).setShouldBackupToCloud(cloud).build()
       client(context).storeBytes(data).bridge(done) { cloud }
+    }
+  }
+
+  /**
+   * How the entry stands against a mnemonic, without the words reaching JavaScript: entry is "empty", "same" or
+   * "other", or null when the read failed; e2ee is null when that check failed.
+   */
+  fun check(context: Context, mnemonic: String, done: (Map<String, Any?>) -> Unit) {
+    get(context) { entry ->
+      val state = entry.fold({ if (it == null) "empty" else if (it == mnemonic) "same" else "other" }, { null })
+      isE2EEAvailable(context) { e2ee -> done(mapOf("entry" to state, "e2ee" to e2ee.getOrNull())) }
     }
   }
 

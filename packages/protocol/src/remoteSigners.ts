@@ -2,8 +2,9 @@
 // signers reached by a pasted bunker:// link. The permissions asked for up front, the link's rules, the capability
 // probe every provider passes at sign-in, both providers behind Signer, and the web bookmarks import reads (C§4.6).
 
-import type { EventTemplate, NostrEvent, Signer, SignerProvider } from './signer';
+import { signedAsAsked, type EventTemplate, type NostrEvent, type Signer, type SignerProvider } from './signer';
 import { isXOnlyPubkey } from './pairing';
+import { nobleSecp } from './secp';
 
 /** The kinds Kefli signs (C§2): saves, deletions, seals, the two lists, AUTH, NIP-98, Blossom and kind 39701. */
 export const SIGNED_KINDS = [30078, 5, 13, 10002, 10063, 22242, 27235, 24242, 39701] as const;
@@ -89,6 +90,7 @@ export interface Nip55Port {
   signEvent(pkg: string, eventJson: string, pubkey: string, screen: boolean): Promise<string>;
   nip44Encrypt(pkg: string, plaintext: string, peer: string, pubkey: string, screen: boolean): Promise<string>;
   nip44Decrypt(pkg: string, ciphertext: string, peer: string, pubkey: string, screen: boolean): Promise<string>;
+  /** Whether the signer's resolver alone encrypts to the user's own key and decrypts that again (both are needed out of sight). */
   canActInBackground(pkg: string, pubkey: string): Promise<boolean>;
   /** Whether the signer signs this event through its resolver alone, never its screen (decision 104). */
   signInBackground(pkg: string, eventJson: string, pubkey: string): Promise<boolean>;
@@ -100,7 +102,7 @@ export interface Nip55Port {
  */
 export const BACKGROUND_KINDS = [30078, 5, 13, 10002, 10063, 22242, 27235, 24242] as const;
 
-/** A permission the signer may lack: a kind to sign, or NIP-44 encryption. */
+/** A permission the signer may lack: a kind to sign, or NIP-44 to its own key, encrypting and decrypting both. */
 export type BackgroundNeed = (typeof BACKGROUND_KINDS)[number] | 'nip44';
 
 /**
@@ -116,22 +118,25 @@ export function probeEvent(kind: number): EventTemplate {
  * minutes a NIP-46 request gets, so the outbox retries it rather than waiting on it for ever. With screen false, a
  * request the signer won't answer out of sight is refused instead of opening its screen (FD 104): what the phone does
  * on its own never puts the signer in front of the person. withScreen() is the same signer for what they started.
+ * What it signs is checked against what was asked whatever the port does (F46), as Nip46Signer's is.
  */
 export class Nip55Signer implements SignerProvider {
   readonly kind = 'nip55' as const;
   constructor(
     private readonly port: Nip55Port, private readonly pkg: string, private readonly pk: string,
     private readonly timeoutMs = NIP46_TIMEOUT_MS, readonly screen = true,
+    /** Checks the signature of what the signer hands back (the phone passes libsecp256k1's). */
+    private readonly verify: (sig: string, id: string, pubkey: string) => boolean = nobleSecp.verify,
   ) {}
 
   /** This signer, allowed to open the signer app's screen: for what the person started and is watching. */
   withScreen(): Nip55Signer {
-    return this.screen ? this : new Nip55Signer(this.port, this.pkg, this.pk, this.timeoutMs, true);
+    return this.screen ? this : new Nip55Signer(this.port, this.pkg, this.pk, this.timeoutMs, true, this.verify);
   }
 
   /** This signer, never opening the signer app's screen: for what the phone does on its own. */
   outOfSight(): Nip55Signer {
-    return this.screen ? new Nip55Signer(this.port, this.pkg, this.pk, this.timeoutMs, false) : this;
+    return this.screen ? new Nip55Signer(this.port, this.pkg, this.pk, this.timeoutMs, false, this.verify) : this;
   }
 
   pubkey(): string {
@@ -152,7 +157,8 @@ export class Nip55Signer implements SignerProvider {
 
   async signEvent(e: EventTemplate): Promise<NostrEvent> {
     const signed = JSON.parse(await withTimeout(this.port.signEvent(this.pkg, JSON.stringify({ ...e, pubkey: this.pk }), this.pk, this.screen), this.timeoutMs)) as NostrEvent;
-    if (signed.pubkey !== this.pk) throw new Error('the signer signed with another key');
+    if (signed?.pubkey !== this.pk) throw new Error('the signer signed with another key');
+    if (!signedAsAsked({ ...e, pubkey: this.pk }, signed, this.verify)) throw new Error('the signer’s answer is not the event asked for');
     return signed;
   }
 
@@ -183,7 +189,8 @@ export class Nip55Signer implements SignerProvider {
     const asking = this.withScreen();
     for (const [n, need] of missing.entries()) {
       step(n + 1);
-      if (need === 'nip44') await asking.nip44Encrypt(this.pk, PROBE_TEXT);
+      // both directions: sync and the inbox decrypt out of sight, so a signer that only encrypts isn't enough
+      if (need === 'nip44') await asking.nip44Decrypt(this.pk, await asking.nip44Encrypt(this.pk, PROBE_TEXT));
       else await asking.signEvent(probeEvent(need));
     }
   }
@@ -197,9 +204,48 @@ export interface BunkerLike {
   getPublicKey(): Promise<string>;
 }
 
+/**
+ * A bunker's own refusal reaches nostr-tools' BunkerSigner as the error string of its NIP-46 answer, with no code, so
+ * isSignerFailure read it as an answer and the event was dropped. These words mark it as the person or the bunker
+ * declining, so what depends on it waits. Any other error string stays an answer: a ciphertext the bunker can't open
+ * must not hold sync for ever.
+ */
+const REFUSAL = /\b(denied|declined?|reject(ed)?|refused?|unauthori[sz]ed|forbidden|cancel(l?ed)?|not (authori[sz]ed|allowed|permitted)|no permission|permission)\b/i;
+
+class BunkerFailure extends Error {
+  constructor(message: string, readonly code: 'rejected' | 'unavailable') {
+    super(message);
+    this.name = 'BunkerFailure';
+  }
+}
+
+/**
+ * A failed bunker request as Kefli reads it: code 'rejected' when its words say it declined, 'unavailable' when the
+ * request reached none of the bunker's relays or the session is closed, otherwise an Error carrying its words.
+ */
+export function bunkerFailure(e: unknown): unknown {
+  if (e instanceof TimeoutError || (typeof e === 'object' && e !== null && (e as { code?: unknown }).code !== undefined)) return e;
+  // BunkerSigner publishes with Promise.any: every relay of the bunker refused or was down
+  if (typeof AggregateError !== 'undefined' && e instanceof AggregateError) return new BunkerFailure('the bunker’s relays are unreachable', 'unavailable');
+  const message = typeof e === 'string' ? e : e instanceof Error ? e.message : String(e);
+  if (/not open anymore/.test(message)) return new BunkerFailure(message, 'unavailable');
+  if (REFUSAL.test(message)) return new BunkerFailure(message, 'rejected');
+  return e instanceof Error ? e : new Error(message);
+}
+
 export class Nip46Signer implements SignerProvider {
   readonly kind = 'nip46' as const;
-  constructor(private readonly bunker: BunkerLike, private readonly pk: string, private readonly timeoutMs = NIP46_TIMEOUT_MS) {}
+  constructor(
+    private readonly bunker: BunkerLike, private readonly pk: string, private readonly timeoutMs = NIP46_TIMEOUT_MS,
+    /** Checks the signature of what the bunker hands back (the phone passes libsecp256k1's). */
+    private readonly verify: (sig: string, id: string, pubkey: string) => boolean = nobleSecp.verify,
+  ) {}
+
+  private ask<T>(p: () => Promise<T>): Promise<T> {
+    return withTimeout(p(), this.timeoutMs).catch((e: unknown) => {
+      throw bunkerFailure(e);
+    });
+  }
 
   pubkey(): string {
     return this.pk;
@@ -214,18 +260,20 @@ export class Nip46Signer implements SignerProvider {
     return true;
   }
 
+  /** The bunker's answer, refused unless it is the event asked for under this key, validly signed (F46). */
   async signEvent(e: EventTemplate): Promise<NostrEvent> {
-    const signed = await withTimeout(this.bunker.signEvent(e), this.timeoutMs);
-    if (signed.pubkey !== this.pk) throw new Error('the signer signed with another key');
+    const signed = await this.ask(() => this.bunker.signEvent(e));
+    if (signed?.pubkey !== this.pk) throw new Error('the signer signed with another key');
+    if (!signedAsAsked({ ...e, pubkey: this.pk }, signed, this.verify)) throw new Error('the signer’s answer is not the event asked for');
     return signed;
   }
 
   nip44Encrypt(peer: string, plaintext: string): Promise<string> {
-    return withTimeout(this.bunker.nip44Encrypt(peer, plaintext), this.timeoutMs);
+    return this.ask(() => this.bunker.nip44Encrypt(peer, plaintext));
   }
 
   nip44Decrypt(peer: string, ciphertext: string): Promise<string> {
-    return withTimeout(this.bunker.nip44Decrypt(peer, ciphertext), this.timeoutMs);
+    return this.ask(() => this.bunker.nip44Decrypt(peer, ciphertext));
   }
 }
 

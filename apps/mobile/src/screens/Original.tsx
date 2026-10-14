@@ -2,8 +2,9 @@
 // reader-original-failed, reader-original-offline, reader-error-menu): react-native-webview under Kefli's bar, with
 // ⋯ (Open in browser, Copy link, Delete) and the floating Archive. A save whose text couldn't be fetched opens here
 // with its notice. While the page loads, the Reader's skeleton sits under the bar; a page that won't load points to
-// Open in browser; offline, the view says it needs a connection.
-import { useCallback, useState } from 'react';
+// Open in browser; offline, the view says it needs a connection. The page stays on the web and opens no other app
+// (net/navigation.ts), and runs incognito, holding the jar while open and emptying it when it closes (net/cookies.ts).
+import { useCallback, useEffect, useState } from 'react';
 import { Linking, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,6 +12,8 @@ import { WebView } from 'react-native-webview';
 import * as Clipboard from 'expo-clipboard';
 import { radius } from '@kefli/tokens';
 import { rowByHash, rowStatus, type LibRow } from '../data/library';
+import { holdJar } from '../net/cookies';
+import { originalMayLoad } from '../net/navigation';
 import { useApp } from '../services/app';
 import { store } from '../services/store';
 import { Button } from '../ui/Button';
@@ -39,6 +42,7 @@ export function OriginalView({ row, failedSave }: { row: LibRow; failedSave: boo
   const [st, setSt] = useState<'loading' | 'page' | 'failed'>('loading');
   const playing = !!useVoice();
   useFocusEffect(useCallback(() => setToastFloor((playing ? DOCK_LIFTED : 16) + 52), [playing]));
+  useEffect(() => holdJar(), []);
   const leave = () => router.back();
   const reopen = () => router.push(`/reader/${row.hash}`);
   const menu = () => openSheet(row.title ?? row.url, () => (
@@ -81,7 +85,9 @@ export function OriginalView({ row, failedSave }: { row: LibRow; failedSave: boo
         <View style={{ flex: 1 }}>
           <WebView
             source={{ uri: row.url }}
-            originWhitelist={['http://*', 'https://*']}
+            originWhitelist={['*']}
+            onShouldStartLoadWithRequest={(r) => originalMayLoad(r.url)}
+            incognito
             setSupportMultipleWindows={false}
             allowFileAccess={false}
             javaScriptCanOpenWindowsAutomatically={false}
