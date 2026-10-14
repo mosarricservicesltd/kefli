@@ -11,6 +11,7 @@ import { webCrypto } from '../src/crypto';
 import { history } from '../src/debug';
 import { relayRows, type Defaults } from '../src/defaults';
 import { deviceSigner } from '../src/device';
+import { PerSave } from '../src/lock';
 import { applyMove, followMoves } from '../src/move';
 import { changeQueue, dequeue, enqueue, flush, queued, settle } from '../src/queue';
 import { AddressTooLongError, fetchNet, prepare, timed, uploadTimeoutMs, type Net, type Pending } from '../src/save';
@@ -464,6 +465,26 @@ describe('a capture the operator refuses (contract 4.4 and 5, v1.12)', () => {
     expect(await h.session.get(`undo:${w.id}`)).toMatchObject({ sha256: null });
   });
 
+  test('a flush that starts while a refused save goes again leaves it to that save, so it goes once, under its own toast', async () => {
+    const held = gate();
+    const n = net({ blossom: operator(413, 'quota'), hold: held.p });
+    const h = harness({ net: n.net });
+    const saving = h.work.save(PAGE, 1, false);
+    // the new wrap is in the queue under its new id, and its publish is under way
+    await until(() => n.asked.n === 1);
+    const [e] = await queued(h.store);
+    expect(e).toMatchObject({ blob: null, sha256: null, why: 'sending' });
+    expect(e.id).not.toBe(h.toasts[0].id);
+    const flushing = h.work.flushQueue();
+    for (let i = 0; i < 50; i++) await settled();
+    expect(n.asked.n).toBe(1);
+    held.open();
+    await Promise.all([saving, flushing]);
+    expect(n.asked.n).toBe(1);
+    expect(kinds(h.toasts)).toEqual(['saving', 'notext']);
+    expect((await history(h.store)).map((e) => e.outcome)).toEqual(['sent, no text']);
+  });
+
   test('one queued in an earlier browser session, its Undo key gone with that session, goes the same way', async () => {
     const h = harness({ online: false });
     await h.work.save(PAGE, 1, false);
@@ -540,6 +561,31 @@ describe('the queue’s lock (F41)', () => {
     const ack: PairAck = { v: 1, user_pubkey: user.pubkey(), write_relays: [], blossom_servers: [], token: 'cd'.repeat(32), moved_from: user.pubkey() };
     await Promise.all([applyMove(store, device, ack, NOW), enqueue(store, entry('c'), 'offline')]);
     expect((await queued(store)).map((e) => e.id).sort()).toEqual(['a', 'b', 'c']);
+  });
+
+  test('a save given a new id mid-run is busy under it until that run ends, and a run under it waits (v1.12)', async () => {
+    const saves = new PerSave();
+    const held = gate();
+    const order: string[] = [];
+    const first = saves.run('old', async () => {
+      saves.follow('old', 'new');
+      await held.p;
+      order.push('old');
+    });
+    // the run's work starts a turn later, and gives the save its new id there
+    await settled();
+    expect(saves.busy('new')).toBe(true);
+    const next = saves.run('new', async () => void order.push('new'));
+    await settled();
+    expect(order).toEqual([]);
+    held.open();
+    await Promise.all([first, next]);
+    expect(order).toEqual(['old', 'new']);
+    await settled();
+    expect([saves.busy('old'), saves.busy('new')]).toEqual([false, false]);
+    // with nothing running under the old id, nothing is held
+    saves.follow('idle', 'other');
+    expect(saves.busy('other')).toBe(false);
   });
 
   test('a change that throws leaves the queue as it was, and the next still runs', async () => {

@@ -75,8 +75,8 @@ export function background(b: Browser) {
    * The operator refused the save's upload for good (contract 4.4 and 5, v1.12), and the extension doesn't wait for room:
    * the request goes with `html` null, rebuilt and signed again with the same uuid. The new wrap, its key and its id take
    * the old one's place in the queue and in Undo's key before it is sent, so a worker stopped meanwhile leaves the new
-   * wrap for the next flush. A request that can't be rebuilt goes as it was, and the phone, finding no blob, fetches the
-   * page at once.
+   * wrap for the next flush, and the new id is busy for as long as this send runs, as the old one is. A request that
+   * can't be rebuilt goes as it was, and the phone, finding no blob, fetches the page at once.
    */
   async function withoutHtml(p: Delivered, ctx: SaveContext): Promise<void> {
     const was = p.id;
@@ -84,6 +84,7 @@ export function background(b: Browser) {
     const again = await withoutText(p, ctx.device, b.now());
     if (again) {
       Object.assign(p, { id: again.wrap.id, wrap: again.wrap, sealed: again.sealed });
+      saves.follow(was, p.id);
       await replaceWrap(b.store, was, p);
       await moveUndoKey(was, p.id, again.wrapKey);
     }

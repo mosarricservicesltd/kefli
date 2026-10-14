@@ -32,4 +32,15 @@ export class PerSave {
     void tail.then(() => this.runs.get(id) === tail && this.runs.delete(id));
     return run;
   }
+
+  /**
+   * A save given a new id while a run under its old one goes on, as when its request is wrapped again (v1.12): the new id
+   * is busy, and runs under it wait, until that run has ended, so a flush can't send the new wrap beside it.
+   */
+  follow(was: string, to: string): void {
+    const tail = this.runs.get(was);
+    if (!tail) return;
+    this.runs.set(to, tail);
+    void tail.then(() => this.runs.get(to) === tail && this.runs.delete(to));
+  }
 }
