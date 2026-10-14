@@ -18,8 +18,9 @@ object Spool {
   fun dir(context: Context): File = File(context.filesDir, "share-spool").apply { mkdirs() }
 
   /**
-   * Shares whose spool couldn't be written (a full disk), held for their own sheet in this process, which saves them
-   * or says That didn't save, as for any share. The failure used to close the app, the share with it.
+   * Shares whose spool couldn't be written (a full disk), held in this process for their own sheet, which saves them
+   * or says That didn't save, as for any share, and for the pickup after it (list). The failure used to close the app,
+   * the share with it.
    */
   private val unwritten = ConcurrentHashMap<String, String>()
 
@@ -96,7 +97,12 @@ object Spool {
     return File(dir(context), "$id.json").delete() || held
   }
 
-  /** Spools left by a share that never finished, oldest first. */
+  /**
+   * Spools left by a share that never finished, oldest first, and then those held in memory: a held share whose sheet
+   * closed before saving it (Back as the sheet rose, or That didn't save) was otherwise kept unsaved until the process
+   * went. The pickup leaves a young one, or one a sheet still has open, to its sheet (pickup.ts).
+   */
   fun list(context: Context): List<String> =
-    dir(context).listFiles { f -> f.name.endsWith(".json") }.orEmpty().sortedBy { it.lastModified() }.map { it.name.removeSuffix(".json") }
+    dir(context).listFiles { f -> f.name.endsWith(".json") }.orEmpty().sortedBy { it.lastModified() }.map { it.name.removeSuffix(".json") } +
+      unwritten.keys
 }

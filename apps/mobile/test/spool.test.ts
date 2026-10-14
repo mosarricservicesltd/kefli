@@ -43,8 +43,12 @@ describe("the share's spool (8.5)", () => {
     expect(synced).toMatch(/catch \(e: IOException\) \{\s+tmp\.delete\(\)\s+throw e/);
     expect(member('read')).toContain('?.readText() ?: unwritten[id]');
     expect(member('delete')).toContain('unwritten.remove(id)');
-    // the start-up pickup lists the files alone: a held share is its own sheet's, and goes with the process
-    expect(member('list')).not.toContain('unwritten');
+  });
+
+  test('one held for a sheet that closed before saving it is saved by the pickup, as a file left behind is', () => {
+    // listed with the files alone, a held share whose sheet closed first (Back as it rose, or That didn't save) stayed
+    // unsaved until the process went; the pickup leaves a young one, or one a sheet has open (pickup.test.ts)
+    expect(member('list')).toMatch(/\.map \{ it\.name\.removeSuffix\("\.json"\) \} \+\s+unwritten\.keys/);
   });
 });
 
