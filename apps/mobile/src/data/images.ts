@@ -74,14 +74,18 @@ export function wanted(db: SqlDb, hashes: string[], urlsOf: (hash: string) => st
   return out;
 }
 
+/** The bytes of the images held on the phone. */
+export function heldBytes(db: SqlDb): number {
+  return db.get<{ n: number | null }>('SELECT SUM(bytes) AS n FROM images WHERE path IS NOT NULL')?.n ?? 0;
+}
+
 /**
  * What to evict to bring the store within budget after adding `incoming` bytes: archived articles' images first,
  * then images of articles outside the kept set, then the least recently used; never those of `protect` (the open
  * article). Returns the rows whose files go.
  */
 export function evictions(db: SqlDb, owner: string, incoming: number, protect: string | null, budget = MAX_TOTAL_BYTES): ImageRow[] {
-  const total = db.get<{ n: number | null }>('SELECT SUM(bytes) AS n FROM images WHERE path IS NOT NULL')?.n ?? 0;
-  let over = total + incoming - budget;
+  let over = heldBytes(db) + incoming - budget;
   if (over <= 0) return [];
   const kept = new Set(keptArticles(db, owner));
   const rows = db.all<ImageRow & { state: string | null }>(

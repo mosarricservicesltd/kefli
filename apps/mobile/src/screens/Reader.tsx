@@ -19,7 +19,7 @@ import { readerColors, type PaletteId, type ReaderColors } from '../reader/palet
 import { setReaderPalette, setReaderSize, useReaderPrefs } from '../reader/prefs';
 import { BlockView, type FigureState, type Lit } from '../reader/Prose';
 import { getImage, markUsed, needsFetch } from '../data/images';
-import { fetchArticleImages } from '../services/images';
+import { fetchArticleImages, imageUrls } from '../services/images';
 import { imagePorts } from '../services/runner';
 import { useApp } from '../services/app';
 import { runOutbox, runSync, setReading } from '../services/runner';
@@ -417,7 +417,9 @@ export default function Reader() {
     if (article && owner && row && row.words !== article.words) reconcileWords(store(), Math.floor(Date.now() / 1000), owner, hash, article.words);
   }, [article, owner, hash, row?.words]); // eslint-disable-line react-hooks/exhaustive-deps
   const voice = useVoice();
-  const urls = useMemo(() => (article ? article.blocks.flatMap((b) => (b.kind === 'img' ? [b.src] : [])) : []), [article]);
+  // the images fetched and shown, at most MAX_ARTICLE_IMAGES: a figure past them is left out, so a page naming
+  // thousands doesn't have each one looked up again whenever an image arrives
+  const urls = useMemo(() => (article ? imageUrls(article.blocks) : []), [article]);
   const imgs = useLive(() => {
     const now = Math.floor(Date.now() / 1000);
     return new Map(urls.map((u) => {

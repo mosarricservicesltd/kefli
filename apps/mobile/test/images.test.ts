@@ -2,7 +2,8 @@ import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { MAX_IMAGE_BYTES, evictions, getImage, keptArticles, markUsed, needsFetch, recordFailed, recordImage, wanted } from '../src/data/images';
 import { imageKind, imageSize } from '../src/reader/imageSize';
-import { articleImages, fetchArticleImages, fetchImage, imageState, removeImages, syncImages, type ImagePorts } from '../src/services/images';
+import { MAX_ARTICLE_IMAGES, SLOW_RUN, articleImages, fetchArticleImages, fetchImage, imageState, removeImages, syncImages, type ImagePorts } from '../src/services/images';
+import { TimedOut } from '../src/net/http';
 import { memoryDb } from './sqlite';
 
 const PK = 'ab'.repeat(32);
@@ -153,5 +154,102 @@ describe('article images (mobile spec 4.5 phase 6, 5.6)', () => {
     removeImages(w.ports, h(1));
     expect(w.files.size).toBe(0);
     expect(getImage(w.db, 'https://e.com/a.png')).toBeUndefined();
+  });
+});
+
+describe('article images a page can make too many, too big or too slow', () => {
+  const kept = (w: ReturnType<typeof world>) => w.db.get<{ n: number | null }>('SELECT SUM(bytes) AS n FROM images WHERE path IS NOT NULL')?.n ?? 0;
+  const counting = (w: ReturnType<typeof world>) => {
+    const asked: string[] = [];
+    const f = w.ports.fetch;
+    w.ports.fetch = ((url: string, init: RequestInit) => (asked.push(url), f(url, init))) as never;
+    return asked;
+  };
+
+  test("the open article's own images never take the store past its budget", async () => {
+    const w = world();
+    w.add(1);
+    w.ports.budget = 1_000;
+    const urls = Array.from({ length: 30 }, (_, i) => `https://e.com/p${i}.png`);
+    const image = new Uint8Array(100);
+    image.set(png(10, 10));
+    for (const u of urls) w.served.set(u, new Response(image as never));
+    w.texts.set(h(1), urls.map((u) => `![](${u})`).join('\n\n'));
+    // a run stops once it has fetched the store's budget
+    expect(await fetchArticleImages(w.ports, PK, h(1))).toBe(10);
+    expect(kept(w)).toBeLessThanOrEqual(1_000);
+    // opened again, the store is full of the article's own: the rest are left out without a byte downloaded, as
+    // failures tried again after a day
+    const asked = counting(w);
+    expect(await fetchArticleImages(w.ports, PK, h(1))).toBe(0);
+    expect(asked).toEqual([]);
+    expect(kept(w)).toBeLessThanOrEqual(1_000);
+    expect(imageState(w.db, urls[29], w.now())).toBe('failed');
+  });
+
+  test('an article of 50,000 images: each named once, in linear time, and at most 500 fetched a run', async () => {
+    const w = world();
+    w.add(1);
+    const urls = Array.from({ length: 50_000 }, (_, i) => `https://img${i % 7}.example.com/photo/${i}.png`);
+    w.ports.readArticle = () => ({ blocks: [...urls, ...urls].map((src) => ({ kind: 'img', src })) });
+    const asked: string[] = [];
+    w.ports.fetch = (async (url: string) => (asked.push(url), new Response(png(2, 2) as never))) as never;
+    const t = Date.now();
+    await fetchArticleImages(w.ports, PK, h(1));
+    // before, finding them once each compared every address with every other: the run hadn't ended after 15 minutes
+    expect(Date.now() - t).toBeLessThan(20_000);
+    expect(asked).toEqual(urls.slice(0, MAX_ARTICLE_IMAGES));
+    expect(articleImages(urls.map((u) => `![](${u})`).join('\n\n'))).toHaveLength(MAX_ARTICLE_IMAGES);
+  });
+
+  test('image servers that time out three in a row end the run; the rest wait for the next', async () => {
+    const w = world();
+    w.add(1);
+    const urls = Array.from({ length: 10 }, (_, i) => `https://slow.example.com/${i}.png`);
+    w.texts.set(h(1), urls.map((u) => `![](${u})`).join('\n\n'));
+    const asked: string[] = [];
+    w.ports.fetch = (async (url: string) => {
+      asked.push(url);
+      throw new TimedOut();
+    }) as never;
+    expect(await fetchArticleImages(w.ports, PK, h(1))).toBe(0);
+    expect(asked).toHaveLength(SLOW_RUN);
+    expect(imageState(w.db, urls[0], w.now())).toBe('failed');
+    expect(imageState(w.db, urls[SLOW_RUN], w.now())).toBe('waiting');
+  });
+
+  test('an image whose header claims a size no phone can lay out or decode is left out', async () => {
+    const w = world();
+    w.add(1);
+    const cases: [number, number, 'ok' | 'failed'][] = [
+      [1, 2_147_483_647, 'failed'], [20_000, 20_000, 'failed'], [40_000, 10, 'failed'], [30_000, 100, 'ok'], [4_000, 3_000, 'ok'],
+    ];
+    for (const [iw, ih, want] of cases) {
+      const u = `https://e.com/${iw}x${ih}.png`;
+      w.served.set(u, new Response(png(iw, ih) as never));
+      expect([iw, ih, await fetchImage(w.ports, PK, u, h(1))]).toEqual([iw, ih, want]);
+    }
+    expect(w.db.all<{ w: number }>('SELECT w FROM images WHERE path IS NOT NULL ORDER BY w').map((r) => r.w)).toEqual([4_000, 30_000]);
+  });
+
+  test('an image that ends up on this phone’s network after a redirect is not kept', async () => {
+    const w = world();
+    w.add(1);
+    const res = new Response(png(10, 10) as never);
+    Object.defineProperty(res, 'url', { value: 'http://192.168.1.1/cam.png' });
+    w.ports.fetch = (async () => res) as never;
+    expect(await fetchImage(w.ports, PK, 'https://e.com/r.png', h(1))).toBe('failed');
+    expect(w.files.size).toBe(0);
+  });
+
+  test('the Reader opening an article twice fetches each image once', async () => {
+    const w = world();
+    w.add(1);
+    const urls = Array.from({ length: 5 }, (_, i) => `https://e.com/twice${i}.png`);
+    for (const u of urls) w.served.set(u, new Response(png(4, 4) as never));
+    w.texts.set(h(1), urls.map((u) => `![](${u})`).join('\n\n'));
+    const asked = counting(w);
+    await Promise.all([fetchArticleImages(w.ports, PK, h(1)), fetchArticleImages(w.ports, PK, h(1)), syncImages(w.ports, PK)]);
+    expect([...asked].sort()).toEqual([...urls].sort());
   });
 });
