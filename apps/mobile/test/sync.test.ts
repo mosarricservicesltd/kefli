@@ -640,6 +640,26 @@ describe('events another client spoilt, or a relay sends to wear the phone out',
     expect(w.db.get('SELECT COUNT(*) AS n FROM items')).toEqual({ n: 499 });
   }, 120_000);
 
+  test('an archival relay’s every version of every save: paging keeps the newest at each address, and every kind 5', async () => {
+    const w = world();
+    // 20 saves of 25 versions each, each version a second apart, a page of 7 at a time, and their kind 5s
+    for (let v = 0; v < 25; v++) for (let s = 1; s <= 20; s++) w.relays.get('ws://a')!.push(await remoteSave(w, h(s), 6000 + v * 20 + s, null, { progress: v / 25 }));
+    for (const e of await buildDeletions(w.signer, Array.from({ length: 120 }, (_, i) => `kefli/item/${h(1000 + i)}`), 7000)) w.relays.get('ws://a')!.push(e);
+    w.caps.set('ws://a', 7);
+    const items = await pageStream(w.ports.query, 'ws://a', streamFilter('items', w.pk, null));
+    expect(items.map((e) => e.created_at).sort((a, b) => a - b)).toEqual(Array.from({ length: 20 }, (_, s) => 6000 + 24 * 20 + s + 1));
+    expect(await pageStream(w.ports.query, 'ws://a', streamFilter('deletions', w.pk, null))).toHaveLength(3);
+  });
+
+  test('a version dated more than a day ahead doesn’t hide the one before it from a restore', async () => {
+    const w = world();
+    w.tick(2 * SKEW);
+    w.publish(await remoteSave(w, h(1), 6000, null, { title: 'now' }));
+    w.publish(await remoteSave(w, h(1), w.ports.now() + 3 * SKEW, null, { title: 'from a clock days ahead' }));
+    expect(await syncInbound(w.ports)).toMatchObject({ items: 1 });
+    expect(row(w, h(1))).toMatchObject({ title: 'now', event_created_at: 6000 });
+  });
+
   test('an archival relay replaying every version of a save asks the signer once, not once a version', async () => {
     const w = world();
     const r = refusing(w);

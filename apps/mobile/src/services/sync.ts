@@ -66,25 +66,38 @@ const MAX_PAGES = 200;
  */
 export const notYet = (e: { created_at: number }, now: number) => e.created_at > now + SKEW;
 
-export async function pageStream(query: SyncPorts['query'], relay: string, base: Filter): Promise<NostrEvent[]> {
-  const seen = new Map<string, NostrEvent>();
+/** An addressable event's address (NIP-01: kinds 30000 to 39999, by author and d), at which only the newest counts. */
+const addressOf = (e: NostrEvent) => (e.kind >= 30_000 && e.kind < 40_000 ? `${e.kind}:${e.pubkey}:${e.tags.find((t) => t[0] === 'd')?.[1] ?? ''}` : null);
+
+/**
+ * A relay's events for base, paged back by until. Of an addressable event, only the newest version read is kept
+ * (replaces), which is all any reader of these uses: an archival relay, or a hostile one that kept everything, answered
+ * a first read with every version of every save, 30,000 events (57 MB) for 300 saves of 100 versions each, and up to
+ * MAX_PAGES answers a relay, all held at once. Every id read is still counted, so paging goes on as before. Given now,
+ * an event dated past it by more than SKEW is left out (notYet), so the newest version kept is one that is due.
+ */
+export async function pageStream(query: SyncPorts['query'], relay: string, base: Filter, now = Infinity): Promise<NostrEvent[]> {
+  const ids = new Set<string>();
+  const kept = new Map<string, NostrEvent>();
   let until: number | undefined;
   for (let i = 0; MAX_PAGES > i; i++) {
     const page = await query(relay, [{ ...base, limit: PAGE, ...(until === undefined ? {} : { until }) }]);
     let fresh = 0;
     let oldest = until ?? Infinity;
     for (const e of page) {
-      if (!seen.has(e.id)) {
-        seen.set(e.id, e);
-        fresh++;
-      }
       oldest = Math.min(oldest, e.created_at);
+      if (ids.has(e.id)) continue;
+      ids.add(e.id);
+      fresh++;
+      const at = addressOf(e) ?? e.id;
+      const held = kept.get(at);
+      if (!notYet(e, now) && (!held || replaces(e, held))) kept.set(at, e);
     }
     if (fresh === 0) break;
     // The next page's until is the oldest seen, inclusive: events sharing that second aren't skipped.
     until = oldest;
   }
-  return [...seen.values()];
+  return [...kept.values()];
 }
 
 export function streamFilter(stream: Stream, owner: string, since: number | null): Filter {
@@ -106,7 +119,7 @@ async function collect(p: SyncPorts, owner: string): Promise<Collected[]> {
     jobs.map(async ({ relay, stream }) => {
       try {
         const since = stream === 'deletions' && backfilling ? null : getCursor(p.db, relay, stream, owner)?.since ?? null;
-        const events = await pageStream(p.query, relay, streamFilter(stream, owner, since));
+        const events = await pageStream(p.query, relay, streamFilter(stream, owner, since), p.now());
         return { relay, stream, events };
       } catch {
         return null; // unreachable: its cursor stays, and the next trigger asks again
