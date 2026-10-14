@@ -215,6 +215,31 @@ describe('the library (mobile spec 5.6)', () => {
     expect(nextUnread(w.db, w.pk, h(1))!.hash).toBe(h(3));
   });
 
+  test('the next unread reads one row, not the whole list, however large the library', () => {
+    const w = world();
+    w.db.tx(() => {
+      for (let n = 1; n <= 20_000; n++) w.add(n, { text_state: n % 3 ? 'remote' : 'cached' });
+    });
+    let rows = 0;
+    const counted = {
+      ...w.db,
+      all: <T,>(sql: string, ...p: never[]) => { const r = w.db.all<T>(sql, ...p); rows += r.length; return r; },
+      get: <T,>(sql: string, ...p: never[]) => { const r = w.db.get<T>(sql, ...p); rows += r ? 1 : 0; return r; },
+    };
+    // the Reader asks on each render, and it renders as each batch of blocks comes and each word is reached
+    expect(nextUnread(counted, w.pk, h(19_998))!.hash).toBe(h(19_995));
+    expect(nextUnread(counted, w.pk, h(20_000))!.hash).toBe(h(19_998));
+    expect(rows).toBeLessThanOrEqual(2);
+  });
+
+  test('a position that is not a number leaves the stored one as it was', () => {
+    const w = world();
+    w.add(1, { words: 100, position_word: 40 });
+    for (const bad of [NaN, Infinity, -Infinity]) setPosition(w.db, 1500, w.pk, h(1), bad, true);
+    expect(w.db.get('SELECT position_word, progress FROM items WHERE hash = ?', h(1))).toEqual({ position_word: 40, progress: 0 });
+    expect(w.outbox()).toEqual([]);
+  });
+
   test('the position is clamped, stored, and published only when asked', () => {
     const w = world();
     w.add(1, { words: 100 });
