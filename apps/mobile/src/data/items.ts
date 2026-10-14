@@ -1,6 +1,6 @@
 // Items: the saves on this phone (mobile spec 4.1, 4.2). The item JSON is rebuilt from the row at send time,
 // unknown fields re-emitted from extra, so the outbox always publishes the latest state.
-import type { Item, ItemText, ParsedItem } from '@kefli/protocol';
+import { sameUrl, type Item, type ItemText, type ParsedItem } from '@kefli/protocol';
 import type { SqlDb } from './db';
 
 export type ItemRow = {
@@ -59,19 +59,35 @@ export function itemJson(row: ItemRow, servers: string[] | null): ParsedItem {
   return { item, extra: row.extra ? JSON.parse(row.extra) : {} };
 }
 
+/** The servers a row's text_servers lists, as the newest event it took named them; none for a list that won't read. */
+function listed(textServers: string | null): string[] {
+  try {
+    const v: unknown = textServers ? JSON.parse(textServers) : [];
+    return Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
 /**
  * The servers a save's next event names for its text (contract 4.2): the operator and the mirror that holds the blob,
  * or the one being tried. While this phone holds the text and the operator hasn't taken its upload (its blob's
  * operator_at is null: waiting, or refused, C§4.2, v1.12), the event names only a mirror already holding the blob, as a
  * move's copy of a text backed up under the old identity (C§4.8), and with none, null: the save goes out without text.
+ * A text another phone uploaded keeps the servers its newest event named, so a save sent again from here still names
+ * the mirror that holds it (F18), unless they name no mirror, which text.servers never leaves out.
  */
-export function textServers(db: SqlDb, row: Pick<ItemRow, 'owner' | 'text_sha256'>, operator: string, mirror: string): string[] | null {
+export function textServers(db: SqlDb, row: Pick<ItemRow, 'owner' | 'text_sha256' | 'text_servers'>, operator: string, mirror: string): string[] | null {
   const blob = row.text_sha256
     ? db.get<{ operator_at: number | null; mirror_at: number | null; mirror_url: string | null }>(
       'SELECT operator_at, mirror_at, mirror_url FROM blobs WHERE sha256 = ? AND owner = ?', row.text_sha256, row.owner)
     : undefined;
-  if (blob && blob.operator_at === null) return blob.mirror_at !== null && blob.mirror_url ? [blob.mirror_url] : null;
-  return [operator, blob?.mirror_url ?? mirror];
+  if (!blob) {
+    const theirs = listed(row.text_servers);
+    return theirs.some((s) => !sameUrl(s, operator)) ? theirs : [operator, mirror];
+  }
+  if (blob.operator_at !== null) return [operator, blob.mirror_url ?? mirror];
+  return blob.mirror_at !== null && blob.mirror_url ? [blob.mirror_url] : null;
 }
 
 export function markPublished(db: SqlDb, owner: string, hash: string, eventId: string, createdAt: number): void {

@@ -6,7 +6,7 @@ import { ensureIdentityRow, orphanBlobs, queueSave, reviveRefused } from '../src
 import { seedGeneratedLists } from '../src/data/lists';
 import { enqueue, nextDue, nextWakeAt, release } from '../src/data/outbox';
 import { drain, outboxWaker, refusalOf, relayResult, sendOne, type RelayAnswer, type SendPorts } from '../src/services/send';
-import { commitDelete, deleteItem } from '../src/data/library';
+import { commitDelete, deleteItem, setArchived } from '../src/data/library';
 import type { Defaults } from '../src/services/config';
 import { notBackedUp } from '../src/data/backup';
 import { memoryDb } from './sqlite';
@@ -467,6 +467,28 @@ describe('fair use: a refused text holds back only itself (C§4.2, C§5, v1.12)'
     expect(blob(w)).toMatchObject({ last_error: null });
     expect(notBackedUp(w.db, w.signer.pubkey())).toBe(0);
     expect(w.db.get<{ n: number }>('SELECT COUNT(*) n FROM outbox')?.n).toBe(0);
+  });
+
+  test.each([
+    [JSON.stringify(['http://blossom', 'http://m2']), ['http://blossom', 'http://m2']],
+    [JSON.stringify(['http://m2']), ['http://m2']],
+    // a list that names no mirror, or won't read, gets the operator and the default mirror, as text.servers must
+    [JSON.stringify(['http://blossom']), ['http://blossom', 'http://m1']],
+    ['{not json', ['http://blossom', 'http://m1']],
+    [null, ['http://blossom', 'http://m1']],
+  ])("a save whose text another phone uploaded (%s), sent again from here, names the servers its newest event named", async (named, servers) => {
+    const w = world();
+    ensureIdentityRow(w.db, w.now(), w.signer.pubkey(), 'early_share', true);
+    seedGeneratedLists(w.db, w.signer.pubkey(), D);
+    w.db.run(
+      `INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, text_sha256, text_key, text_nonce, text_hash, text_servers, published, event_id, event_created_at)
+       VALUES (?, ?, 'https://example.com/a', 5, 'unread', 'cached', 'sync', ?, 'k', 'n', 'th', ?, 1, 'e1', 5)`,
+      w.signer.pubkey(), HASH, 'ab'.repeat(32), named,
+    );
+    w.db.run("UPDATE identities SET registered_at = 1");
+    release(w.db, setArchived(w.db, w.now(), w.signer.pubkey(), HASH, true).held);
+    await drain(w.ports);
+    expect((await lastItem(w)).text?.servers).toEqual(servers);
   });
 
   test('a staged text that has gone can never be sent: the save goes without it', async () => {
