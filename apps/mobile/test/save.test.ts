@@ -33,7 +33,9 @@ jest.mock('expo-modules-core', () => ({
 }), { virtual: true });
 
 // eslint-disable-next-line import/first
-import { overHttps, saveLink } from '../src/services/save';
+import * as http from '../src/net/http';
+// eslint-disable-next-line import/first
+import { saveLink } from '../src/services/save';
 // eslint-disable-next-line import/first
 import { pickUpSpools } from '../src/share/pickup';
 
@@ -174,13 +176,17 @@ describe('a plain http link (release builds allow no cleartext)', () => {
     expect(getItem(mockWorld.db, owner, r.hash!)).toMatchObject({ url: 'https://news.example/story', shared_url: 'http://news.example/story', text_state: 'cached' });
   });
 
-  test('a local one, or one with a port, keeps its http; https stays as it is', () => {
-    expect(overHttps('http://news.example/a?b=1#c')).toBe('https://news.example/a?b=1#c');
-    expect(overHttps('HTTP://news.example/a')).toBe('https://news.example/a');
-    expect(overHttps('http://localhost:8080/a')).toBe('http://localhost:8080/a');
-    expect(overHttps('http://192.168.1.1/')).toBe('http://192.168.1.1/');
-    expect(overHttps('http://news.example:8080/a')).toBe('http://news.example:8080/a');
-    expect(overHttps('https://news.example/a')).toBe('https://news.example/a');
+  test("the share asks by net/http's one rule, which pending parses and images follow too", async () => {
+    // a copy of its own here could drift from the rule the queue behind it keeps (net/http overHttps, its cases there)
+    setUp();
+    const rule = jest.spyOn(http, 'overHttps');
+    mockWorld.page = { fetch: (async () => Promise.reject(new Error('offline'))) as never, parse: async () => ({ ok: false, reason: 'error' }) };
+    try {
+      await saveLink('http://news.example:8080/a', () => undefined);
+      expect(rule).toHaveBeenCalledWith('http://news.example:8080/a');
+    } finally {
+      rule.mockRestore();
+    }
   });
 });
 
