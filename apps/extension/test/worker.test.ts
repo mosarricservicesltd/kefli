@@ -594,6 +594,36 @@ describe('the queue in storage.local’s 10 MB', () => {
   });
 });
 
+describe('Undo pressed twice (a double click, Enter twice on the toast’s button)', () => {
+  test('a sent save is retracted once, and the second press says nothing over Removed from Kefli', async () => {
+    const n = net();
+    const h = harness({ net: n.net });
+    await h.work.save(PAGE, 1, false);
+    const id = h.toasts[0].id!;
+    await Promise.all([h.work.undo(id, 1), h.work.undo(id, 1)]);
+    expect(kinds(h.toasts)).toEqual(['saving', 'saved', 'undone']);
+    expect(n.published.filter((e) => e.kind === 5)).toHaveLength(1);
+    expect((await history(h.store)).map((e) => e.outcome)).toEqual(['undo: retracted', 'sent']);
+  });
+
+  test('a waiting save comes off the queue once, and the second press says nothing over it', async () => {
+    const h = harness({ online: false });
+    await h.work.save(PAGE, 1, false);
+    const id = h.toasts[0].id!;
+    await Promise.all([h.work.undo(id, 1), h.work.undo(id, 1)]);
+    expect(kinds(h.toasts)).toEqual(['saving', 'offline', 'unqueued']);
+  });
+
+  test('an Undo that couldn’t retract can still be pressed again', async () => {
+    const h = harness({ net: net({ retract: 'refused' }).net, collected: [false, false, false, false] });
+    await h.work.save(PAGE, 1, false);
+    const id = h.toasts[0].id!;
+    await h.work.undo(id, 1);
+    await h.work.undo(id, 1);
+    expect(kinds(h.toasts)).toEqual(['saving', 'saved', 'undofailed', 'undofailed']);
+  });
+});
+
 describe('a field no wrap could ever hold (F39, faster)', () => {
   test('is left out at once, and the page’s other details stay', async () => {
     const started = Date.now();
