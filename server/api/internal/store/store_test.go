@@ -287,8 +287,8 @@ func TestOpenCountsOlderTinyBlobsAsABlock(t *testing.T) {
 
 // Contract 4.4 and 5: a browser's capture counts against its library's storage until the phone deletes it or it
 // expires after 14 days, and from the moment it expires the library no longer holds it, as it is no longer served,
-// though the hourly sweep hasn't removed it yet. Its file is still on the disk until then, so an upload of it adds
-// nothing to anyone's day.
+// though the hourly sweep hasn't removed it yet. Before anything reads the library's figures, its file is still a
+// blob the server stores, so an upload of it adds nothing to anyone's day; the figures let it go as they read.
 func TestAnExpiredCaptureNoLongerCounts(t *testing.T) {
 	st, clock := open(t)
 	ctx := context.Background()
@@ -313,9 +313,15 @@ func TestAnExpiredCaptureNoLongerCounts(t *testing.T) {
 	*clock = clock.Add(InboxLife - time.Second)
 	counted(15_000, true)
 	*clock = clock.Add(time.Second)
-	counted(5_000, false)
+	if held, err := st.Holds(ctx, "user", capture); err != nil || held {
+		t.Fatalf("holds the expired capture %v %v", held, err)
+	}
 	if stored, err := st.Stored(ctx, capture); err != nil || !stored {
-		t.Fatalf("the expired capture's file, before the sweep: stored %v %v", stored, err)
+		t.Fatalf("the expired capture's file, before anything lets it go: stored %v %v", stored, err)
+	}
+	counted(5_000, false)
+	if stored, err := st.Stored(ctx, capture); err != nil || stored {
+		t.Fatalf("the library's figures kept the expired capture: stored %v %v", stored, err)
 	}
 }
 

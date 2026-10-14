@@ -16,40 +16,53 @@ type Figures struct {
 	Today int64 `json:"today"`
 }
 
-// Figures reads a library's figures, its account enabled or not; ok is false when the key has no account.
+// Figures reads a library's figures, its account enabled or not; ok is false when the key has no account. What the
+// library uses and its day are the running totals the database keeps on its accounts row (schema step 3), once the
+// library's browsers' captures past their 14 days and its uploads a day old have been let go: so the figures are
+// exactly those of the blobs it holds now and the uploads of the last 24 hours, and reading them takes the same few
+// index lookups however many blobs the library holds, where summing its rows on every upload, refused or not, let one
+// full library's requests hold the database connection every other request waits for.
 func (s *Store) Figures(ctx context.Context, account string) (Figures, bool, error) {
+	if err := s.letGo(ctx, account); err != nil {
+		return Figures{}, false, err
+	}
 	f := Figures{Daily: DailyLimit}
-	err := s.db.QueryRowContext(ctx, `SELECT quota_bytes FROM accounts WHERE pubkey = ?`, account).Scan(&f.Quota)
+	err := s.db.QueryRowContext(ctx, `SELECT quota_bytes, used_bytes, day_bytes FROM accounts WHERE pubkey = ?`, account).Scan(&f.Quota, &f.Used, &f.Today)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Figures{}, false, nil
-	}
-	if err == nil {
-		f.Used, err = s.Used(ctx, account)
-	}
-	if err == nil {
-		f.Today, err = s.Today(ctx, account)
 	}
 	return f, err == nil, err
 }
 
+// letGo drops what no longer counts for the library, as the hourly sweep does for every library (ExpireInbox, Sweep):
+// its uploads a day old, which leave its day, and its browsers' captures past their 14 days (contract 4.4, 5), from
+// the moment they expire. A capture let go here keeps its file until the hourly sweep of files, which no longer finds
+// it held; nothing serves it meanwhile.
+func (s *Store) letGo(ctx context.Context, account string) error {
+	now := s.Now()
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM uploads WHERE account = ? AND at <= ?`, account, now.Add(-Day).Unix()); err != nil {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, `DELETE FROM owners WHERE account = ? AND expires_at IS NOT NULL AND expires_at <= ?`, account, now.Unix())
+	return err
+}
+
 // live keeps the owner rows the library still holds: a device's inbox row past its 14 days no longer counts (contract
-// 4.4, 5), from the moment it expires, though the hourly sweep may not have removed it yet.
+// 4.4, 5), from the moment it expires, though neither the library's figures nor the hourly sweep may have let it go yet.
 const live = `(expires_at IS NULL OR expires_at > ?)`
 
 // Used is the bytes counted against the user's quota: each blob once, whether the user or one of their devices holds it,
-// at its Cost.
+// at its Cost (Figures).
 func (s *Store) Used(ctx context.Context, account string) (int64, error) {
-	var n int64
-	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(size), 0) FROM (SELECT sha256, MAX(size) AS size FROM owners WHERE account = ? AND `+live+` GROUP BY sha256)`, account, s.unix()).Scan(&n)
-	return n, err
+	f, _, err := s.Figures(ctx, account)
+	return f.Used, err
 }
 
 // Today is what the library's uploads added to the disk in the last 24 hours, from the uploads log (contract 5), each
-// at its Cost.
+// at its Cost (Figures).
 func (s *Store) Today(ctx context.Context, account string) (int64, error) {
-	var n int64
-	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(size), 0) FROM uploads WHERE account = ? AND at > ?`, account, s.Now().Add(-Day).Unix()).Scan(&n)
-	return n, err
+	f, _, err := s.Figures(ctx, account)
+	return f.Today, err
 }
 
 // Holds is whether the user, or one of their devices, already owns the blob, so a repeat upload costs no quota. An
@@ -74,8 +87,8 @@ type querier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-// Stored is whether any owner holds the blob, an expired inbox row the sweep hasn't reached yet included: its file is
-// on the disk, so an upload of it adds nothing to a library's day (contract 5).
+// Stored is whether any owner holds the blob, an expired inbox row not yet let go of included: its file is on the
+// disk, so an upload of it adds nothing to a library's day (contract 5).
 func (s *Store) Stored(ctx context.Context, sha string) (bool, error) {
 	return stored(ctx, s.db, sha)
 }
@@ -129,8 +142,10 @@ func (s *Store) insertOwner(ctx context.Context, q querier, sha, owner, account 
 		}
 		expires = s.Now().Add(InboxLife).Unix()
 	}
-	_, err := q.ExecContext(ctx, `INSERT INTO owners(sha256, owner, account, size, created_at, expires_at) VALUES(?, ?, ?, ?, ?, ?)
-		ON CONFLICT(sha256, owner) DO NOTHING`, sha, owner, account, Cost(size), s.unix(), expires)
+	// a blob's rows in one library share one size, the first's, which the library's running total counted (schema step 3)
+	_, err := q.ExecContext(ctx, `INSERT INTO owners(sha256, owner, account, size, created_at, expires_at)
+		VALUES(?, ?, ?, COALESCE((SELECT size FROM owners WHERE sha256 = ? AND account = ? LIMIT 1), ?), ?, ?)
+		ON CONFLICT(sha256, owner) DO NOTHING`, sha, owner, account, sha, account, Cost(size), s.unix(), expires)
 	return err
 }
 

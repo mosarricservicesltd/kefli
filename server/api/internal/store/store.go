@@ -82,7 +82,6 @@ CREATE TABLE IF NOT EXISTS owners (
   expires_at INTEGER,
   PRIMARY KEY (sha256, owner)
 );
-CREATE INDEX IF NOT EXISTS owners_account ON owners(account);
 CREATE INDEX IF NOT EXISTS owners_expiry ON owners(expires_at) WHERE expires_at IS NOT NULL;
 CREATE TABLE IF NOT EXISTS offers (
   kind       TEXT NOT NULL,
@@ -125,6 +124,34 @@ var steps = []string{
 	// the blobs and the day's uploads recorded before count that way too, from the first figures this keflid reports.
 	`UPDATE owners SET size = 4096 WHERE size < 4096;
 	UPDATE uploads SET size = 4096 WHERE size < 4096`,
+	// 3: each library's figures as two running totals, so reading them costs the same for a library of one blob as for
+	// one of 12,800: summing its rows on every upload let one full library's preflights hold keflid's one database
+	// connection, other users' uploads taking 4.6 s. used_bytes is what the owners rows of the account count for, each
+	// blob once (the rows of one blob in one library share one size, insertOwner sees to it), and day_bytes the sum of
+	// its uploads rows; the triggers keep both on every insert and delete, whichever code makes it, and Figures lets go
+	// of a library's expired captures and day-old uploads before it reads them. No code updates the size, account or
+	// sha256 of a row of either table, which the totals would then miss. A library's rows of one blob are found by
+	// (account, sha256), where an index on account alone let SQLite read every row of the library to find them, for
+	// each upload's check and each row the triggers see; it serves what the index on account did.
+	`DROP INDEX IF EXISTS owners_account;
+	CREATE INDEX owners_library ON owners(account, sha256);
+	ALTER TABLE accounts ADD COLUMN used_bytes INTEGER NOT NULL DEFAULT 0;
+	ALTER TABLE accounts ADD COLUMN day_bytes INTEGER NOT NULL DEFAULT 0;
+	UPDATE owners SET size = (SELECT MAX(o.size) FROM owners o WHERE o.sha256 = owners.sha256 AND o.account = owners.account);
+	UPDATE accounts SET
+	  used_bytes = (SELECT COALESCE(SUM(size), 0) FROM (SELECT MAX(size) AS size FROM owners WHERE account = accounts.pubkey GROUP BY sha256)),
+	  day_bytes = (SELECT COALESCE(SUM(size), 0) FROM uploads WHERE account = accounts.pubkey);
+	CREATE INDEX owners_inbox ON owners(account, expires_at) WHERE expires_at IS NOT NULL;
+	CREATE TRIGGER owners_held AFTER INSERT ON owners
+	  WHEN NOT EXISTS (SELECT 1 FROM owners WHERE sha256 = NEW.sha256 AND account = NEW.account AND owner != NEW.owner)
+	  BEGIN UPDATE accounts SET used_bytes = used_bytes + NEW.size WHERE pubkey = NEW.account; END;
+	CREATE TRIGGER owners_let_go AFTER DELETE ON owners
+	  WHEN NOT EXISTS (SELECT 1 FROM owners WHERE sha256 = OLD.sha256 AND account = OLD.account)
+	  BEGIN UPDATE accounts SET used_bytes = used_bytes - OLD.size WHERE pubkey = OLD.account; END;
+	CREATE TRIGGER uploads_logged AFTER INSERT ON uploads
+	  BEGIN UPDATE accounts SET day_bytes = day_bytes + NEW.size WHERE pubkey = NEW.account; END;
+	CREATE TRIGGER uploads_aged AFTER DELETE ON uploads
+	  BEGIN UPDATE accounts SET day_bytes = day_bytes - OLD.size WHERE pubkey = OLD.account; END`,
 }
 
 type Store struct {
