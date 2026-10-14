@@ -28,6 +28,10 @@ import (
 // MaxBlob caps one upload (backend spec 3.2: 8 MB); a page's HTML is at most 2 MB before encryption (contract 4.4).
 const MaxBlob = 8 << 20
 
+// MaxInFlight is how many uploads one account may have going at once: each may write MaxBlob to the disk before it is
+// counted against the quota, and the phone sends one at a time.
+const MaxInFlight = 8
+
 type Server struct {
 	Dir  string
 	Base string // public address blobs are served from, such as https://blossom.kefli.app
@@ -42,10 +46,15 @@ type Server struct {
 	log  *slog.Logger
 	// commitMu makes an upload's quota check, rename and owner row one step (F2)
 	commitMu sync.Mutex
+	// flightMu guards the uploads in flight: their bytes, which count against MinFree until they finish, and how many
+	// each account has going
+	flightMu sync.Mutex
+	inflight int64
+	flights  map[string]int
 }
 
 func New(dir, base string, st *store.Store, log *slog.Logger) *Server {
-	return &Server{Dir: dir, Base: strings.TrimRight(base, "/"), Free: diskFree, FreeFiles: diskFiles, st: st, log: log}
+	return &Server{Dir: dir, Base: strings.TrimRight(base, "/"), Free: diskFree, FreeFiles: diskFiles, st: st, log: log, flights: map[string]int{}}
 }
 
 func statfs(dir string) (*syscall.Statfs_t, error) {
@@ -151,7 +160,14 @@ func (s *Server) allowed(r *http.Request, sha string, size int64) (*uploader, in
 // room refuses an upload that would leave less than MinFree on the disk with 507, which clients retry later, as backend
 // spec 7's disk-full drill expects; and so one that would leave less than a tenth of the disk's files free, since every
 // blob is a file and the quota counts only bytes, so tiny blobs could use up the inodes every writer on the disk needs.
+// The bytes of uploads in flight count as used.
 func (s *Server) room(size int64) (int, string) {
+	s.flightMu.Lock()
+	defer s.flightMu.Unlock()
+	return s.roomLocked(size)
+}
+
+func (s *Server) roomLocked(size int64) (int, string) {
 	if s.MinFree <= 0 {
 		return 0, ""
 	}
@@ -160,8 +176,8 @@ func (s *Server) room(size int64) (int, string) {
 		s.log.Error("free space", "err", err)
 		return http.StatusInternalServerError, "server"
 	}
-	if free-size < s.MinFree {
-		s.log.Error("uploads held: the disk is nearly full", "free", free, "floor", s.MinFree)
+	if free-s.inflight-size < s.MinFree {
+		s.log.Error("uploads held: the disk is nearly full", "free", free, "in_flight", s.inflight, "floor", s.MinFree)
 		return http.StatusInsufficientStorage, "storage"
 	}
 	return s.roomForFile()
@@ -179,6 +195,32 @@ func (s *Server) roomForFile() (int, string) {
 		return http.StatusInsufficientStorage, "storage"
 	}
 	return 0, ""
+}
+
+// takeOff counts an upload as in flight, once its account has fewer than MaxInFlight going (429 otherwise) and the
+// disk has room for it beside the others in flight (507), in one step so uploads at once can't each pass alone;
+// land, deferred, ends it.
+func (s *Server) takeOff(account string, size int64) (int, string) {
+	s.flightMu.Lock()
+	defer s.flightMu.Unlock()
+	if s.flights[account] >= MaxInFlight {
+		return http.StatusTooManyRequests, "rate"
+	}
+	if status, reason := s.roomLocked(size); status != 0 {
+		return status, reason
+	}
+	s.inflight += size
+	s.flights[account]++
+	return 0, ""
+}
+
+func (s *Server) land(account string, size int64) {
+	s.flightMu.Lock()
+	defer s.flightMu.Unlock()
+	s.inflight -= size
+	if s.flights[account]--; s.flights[account] <= 0 {
+		delete(s.flights, account)
+	}
 }
 
 func (s *Server) withinQuota(r *http.Request, up *uploader, sha string, size int64) (*uploader, int, string) {
@@ -224,10 +266,17 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	up, status, reason := s.allowed(r, sha, r.ContentLength)
+	if status == 0 {
+		status, reason = s.takeOff(up.account, r.ContentLength)
+	}
 	if status != 0 {
+		if status == http.StatusTooManyRequests {
+			w.Header().Set("Retry-After", "10")
+		}
 		refuse(w, status, reason)
 		return
 	}
+	defer s.land(up.account, r.ContentLength)
 	tmp, size, err := s.receive(r.Body, sha)
 	if tmp != "" {
 		defer os.Remove(tmp) // gone once renamed; otherwise a refused upload leaves nothing behind (F2)

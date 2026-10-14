@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
 	"io"
@@ -8,9 +9,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/nbd-wtf/go-nostr"
+	"github.com/richardminton-glitch/Kefli/server/api/internal/blossom"
 	"github.com/richardminton-glitch/Kefli/server/api/internal/httpapi"
 	"github.com/richardminton-glitch/Kefli/server/api/internal/store"
 )
@@ -283,6 +288,99 @@ func TestUploadsLeaveTheDiskRoom(t *testing.T) {
 	if len(e.files()) != 1 {
 		t.Fatalf("a refused upload left %v", e.files())
 	}
+}
+
+// held starts an upload of body by k whose body stops halfway until the returned release is called; it returns once
+// the server is reading it, and the release gives the upload's status.
+func (e *env) held(k key, body []byte) func() int {
+	e.t.Helper()
+	before := len(e.temporaries())
+	sha := hash(body)
+	pr, pw := io.Pipe()
+	req, _ := http.NewRequest("PUT", e.blob.URL+"/upload", pr)
+	req.ContentLength = int64(len(body))
+	req.Header.Set("Authorization", k.sign(e.t, 24242, nostr.Tags{{"t", "upload"}, {"x", sha}, {"expiration", strconv.FormatInt(e.clock.Add(time.Hour).Unix(), 10)}}, e.clock))
+	req.Header.Set("X-SHA-256", sha)
+	status := make(chan int, 1)
+	// a test that fails while this is held must still let the server close
+	e.t.Cleanup(func() { pw.CloseWithError(io.ErrUnexpectedEOF) })
+	go func() {
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			status <- -1
+			return
+		}
+		res.Body.Close()
+		status <- res.StatusCode
+	}()
+	go func() { _, _ = pw.Write(body[:len(body)/2]) }()
+	for i := 0; len(e.temporaries()) == before; i++ {
+		if i == 500 {
+			e.t.Fatal("the held upload never reached the disk")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return func() int {
+		_, _ = pw.Write(body[len(body)/2:])
+		pw.Close()
+		return <-status
+	}
+}
+
+// temporaries are the uploads being received.
+func (e *env) temporaries() []string {
+	var out []string
+	for _, f := range e.files() {
+		if strings.HasPrefix(f, ".upload-") {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// Each upload passed the quota and the disk's floor before its body was read, so uploads at once each counted the
+// disk as though the others weren't coming: on a 64 MB disk with a 16 MB floor (probe inflight, keflid in a
+// container), twelve 8 MB uploads at once filled it ("no space left on device", five answered 500) and the seven taken
+// left 8 MB free, under the floor. Now the bytes of uploads in flight count against the floor until they finish.
+func TestUploadsInFlightCountAgainstTheFloor(t *testing.T) {
+	e := newEnv(t)
+	user, other := newKey(), newKey()
+	e.registered(user, other)
+	e.bs.MinFree = 1000
+	e.bs.Free = func(string) (int64, error) { return 1000 + 3000, nil }
+	first := bytes.Repeat([]byte("a"), 2000)
+	release := e.held(user, first)
+	s, b := e.upload(other, bytes.Repeat([]byte("b"), 1500))
+	expect(t, s, 507, b)
+	if s := release(); s != 200 {
+		t.Fatalf("the held upload: %d", s)
+	}
+	// done, its bytes are the disk's to count (here, a disk that never fills)
+	s, b = e.upload(other, bytes.Repeat([]byte("b"), 1500))
+	expect(t, s, 200, b)
+}
+
+// One account's uploads in flight could each write up to 8 MB before any was checked against the quota again; at most
+// MaxInFlight go at once, and one more waits with 429, which the phone and the extension send again later.
+func TestUploadsInFlightPerAccount(t *testing.T) {
+	e := newEnv(t)
+	user, other := newKey(), newKey()
+	e.registered(user, other)
+	var releases []func() int
+	for i := 0; i < blossom.MaxInFlight; i++ {
+		releases = append(releases, e.held(user, []byte(fmt.Sprintf("held upload number %d", i))))
+	}
+	s, b := e.upload(user, []byte("one too many"))
+	expect(t, s, 429, b)
+	s, b = e.upload(other, []byte("someone else's"))
+	expect(t, s, 200, b)
+	for _, r := range releases {
+		if s := r(); s != 200 {
+			t.Fatalf("a held upload: %d", s)
+		}
+	}
+	s, b = e.upload(user, []byte("one too many"))
+	expect(t, s, 200, b)
 }
 
 // Every blob is a file, and the quota counts bytes: one account's 4-byte blobs used up a disk's inodes long before its
