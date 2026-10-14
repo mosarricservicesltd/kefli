@@ -65,7 +65,7 @@ function net(o: { publish?: 'ok' | 'down'; retract?: 'ok' | 'refused'; hold?: Pr
   return { net: n, published, asked };
 }
 
-function harness(o: { paired?: boolean; online?: boolean; net?: Net; collected?: boolean[]; store?: Store; session?: Store; alarmHold?: Promise<void> } = {}) {
+function harness(o: { paired?: boolean; online?: boolean; net?: Net; collected?: boolean[]; store?: Store; session?: Store; alarmHold?: Promise<void>; toast?: Browser['toast']; checkMovesSoon?: Browser['checkMovesSoon'] } = {}) {
   const store = o.store ?? memoryStore();
   const session = o.session ?? memoryStore();
   const toasts: Omit<ToastState, 'shortcut'>[] = [];
@@ -79,7 +79,7 @@ function harness(o: { paired?: boolean; online?: boolean; net?: Net; collected?:
     online: () => o.online ?? true,
     context: async () => ((o.paired ?? true) ? { ...ctx, now: clock.now } : null),
     openOptions: () => void opened.n++,
-    toast: async (_w, s) => void toasts.push(s),
+    toast: o.toast ?? (async (_w, s) => void toasts.push(s)),
     tick: async () => undefined,
     badge: async () => undefined,
     flushAlarm: async (on) => {
@@ -92,7 +92,7 @@ function harness(o: { paired?: boolean; online?: boolean; net?: Net; collected?:
       alarm.on = on;
       if (!on) alarm.cleared++;
     },
-    checkMovesSoon: async () => undefined,
+    checkMovesSoon: o.checkMovesSoon ?? (async () => undefined),
     collected: async () => answers.shift() ?? false,
     wait: async () => undefined,
   };
@@ -419,5 +419,107 @@ describe('hardening (F52)', () => {
     const [a, b] = await Promise.all([deviceSigner(store, webCrypto), deviceSigner(store, webCrypto)]);
     expect(a.pubkey()).toBe(b.pubkey());
     expect((await deviceSigner(store, webCrypto)).pubkey()).toBe(a.pubkey());
+  });
+});
+
+/** Whether a promise ends within ms, and how: the saves below otherwise never end, or end in a rejection nobody hears. */
+function ends(p: Promise<unknown>, ms = 2000): Promise<string> {
+  let t: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<string>((r) => (t = setTimeout(() => r('still pending'), ms)));
+  return Promise.race([p.then(() => 'ended', (e: unknown) => `rejected: ${String(e)}`), late]).finally(() => clearTimeout(t));
+}
+
+/** A store whose writes to one key are refused, as chrome.storage refuses a write past its quota. */
+function refusing(key: string, times = Infinity): Store & { data: Map<string, unknown> } {
+  const store = memoryStore();
+  const set = store.set.bind(store);
+  let left = times;
+  store.set = async (k, v) => {
+    if (k === key && left-- > 0) throw new Error('QUOTA_BYTES quota exceeded');
+    return set(k, v);
+  };
+  return store;
+}
+
+describe('a save the browser’s own parts let down', () => {
+  test('a toast the page never lets show doesn’t hold the save: it is sent, and nothing is left at Saving…', async () => {
+    const n = net();
+    const h = harness({ net: n.net, toast: () => new Promise<void>(() => undefined) });
+    expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+    expect(n.published.map((e) => e.kind)).toEqual([1059]);
+    expect(await queued(h.store)).toEqual([]);
+    expect((await history(h.store))[0]).toMatchObject({ outcome: 'sent' });
+  });
+
+  test('a toast slow to show still lands before the one that replaces it', async () => {
+    const shown: string[] = [];
+    const slow = gate();
+    const h = harness({
+      toast: async (_w, s) => {
+        if (s.kind === 'saving') await slow.p;
+        shown.push(s.kind);
+      },
+    });
+    expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+    slow.open();
+    await until(() => shown.length === 2);
+    expect(shown).toEqual(['saving', 'saved']);
+  });
+
+  test('a look for a move that fails leaves the key as it was: the save and the queue’s flush still go', async () => {
+    const n = net();
+    const failing = async () => {
+      throw new Error('storage gone');
+    };
+    const h = harness({ net: n.net, online: false, checkMovesSoon: failing });
+    expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+    expect(kinds(h.toasts)).toEqual(['saving', 'offline']);
+    const online = harness({ store: h.store, net: n.net, checkMovesSoon: failing });
+    expect(await ends(online.work.flushQueue())).toBe('ended');
+    expect(n.published.map((e) => e.kind)).toEqual([1059]);
+    expect(await queued(h.store)).toEqual([]);
+  });
+
+  test('a session that can’t keep the Undo key doesn’t stop the save; Undo then says it couldn’t', async () => {
+    const session = refusing('undo:', 0);
+    session.set = async () => {
+      throw new Error('QUOTA_BYTES quota exceeded');
+    };
+    const h = harness({ session, collected: [false, false] });
+    expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+    expect(kinds(h.toasts)).toEqual(['saving', 'saved']);
+    await h.work.undo(h.toasts[0].id!, 1);
+    expect(h.toasts.at(-1)!.kind).toBe('undofailed');
+  });
+
+  test('a queue storage.local won’t write: the save is still sent, and one that can’t be sent is refused out loud', async () => {
+    const n = net();
+    const h = harness({ store: refusing(KEYS.queue), net: n.net });
+    expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+    expect(kinds(h.toasts)).toEqual(['saving', 'saved']);
+    expect(n.published).toHaveLength(1);
+    const down = harness({ store: refusing(KEYS.queue), net: net({ publish: 'down' }).net });
+    expect(await ends(down.work.save(PAGE, 1, false))).toBe('ended');
+    expect(kinds(down.toasts)).toEqual(['saving', 'full']);
+    expect((await history(down.store))[0]).toMatchObject({ outcome: 'queue full' });
+  });
+
+  test('a save refused by storage before its send, and not sent, is kept without its text when it can be', async () => {
+    // the first write, the save going in with its text, is refused; the smaller one after the send is taken
+    const store = refusing(KEYS.queue, 1);
+    const h = harness({ store, net: net({ publish: 'down' }).net });
+    expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+    expect(kinds(h.toasts)).toEqual(['saving', 'failed']);
+    expect(await queued(store)).toMatchObject([{ why: 'reach', blob: null, attempts: 0, stopped: false }]);
+  });
+
+  test('a history storage won’t write doesn’t stop a save, its toast or the queue’s flush', async () => {
+    const store = refusing(KEYS.history);
+    const h = harness({ store, online: false });
+    expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+    expect(kinds(h.toasts)).toEqual(['saving', 'offline']);
+    const online = harness({ store });
+    expect(await ends(online.work.flushQueue())).toBe('ended');
+    expect(await queued(store)).toEqual([]);
   });
 });
