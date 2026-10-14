@@ -1,10 +1,10 @@
 // The 10002 and 10063 Kefli republishes for a nostr user (C§3.1, FD 76, FD 113): their lists as held, entry for entry,
 // with Kefli's own changes; LIST_MAX bounds only what Kefli itself uses.
-import { LIST_MAX, LocalSigner, readRelayList, readServerList, type NostrEvent } from '@kefli/protocol';
+import { LIST_MAX, LocalSigner, readRelayList, readServerList, relayTags, type NostrEvent } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
-import { addRelay, listEdits, listServers, recordList, removeRelay, writeRelays } from '../src/data/lists';
+import { addRelay, listEdits, listServers, recordList, relayEntries, removeRelay, writeRelays } from '../src/data/lists';
 import { settleUserLists } from '../src/services/nostrSignIn';
 import { takeNewerLists } from '../src/services/sync';
 import { drain, type SendPorts } from '../src/services/send';
@@ -33,7 +33,7 @@ async function world() {
   const serverList = await s.signEvent({ kind: 10063, created_at: 500, tags: THEIR_SERVERS, content: '' });
   // on the relays, as their other apps left them
   const onRelays: NostrEvent[] = [relayList, serverList];
-  let down = false;
+  let down: boolean | string[] = false;
   let clock = 1000;
   const sent: { relay: string; event: NostrEvent }[] = [];
   const p: SendPorts = {
@@ -41,8 +41,8 @@ async function world() {
     defaults: () => ({ v: 1, operator: { ...D.operator, api: 'https://api.example' }, relays: D.relays, indexer: D.indexer, mirrors: D.mirrors }),
     publish: async (relay, event) => (sent.push({ relay, event }), { ok: true }),
     readBlob: async () => null,
-    query: async (_relay, filters) => {
-      if (down) throw new Error('unreachable');
+    query: async (relay, filters) => {
+      if (down === true || (Array.isArray(down) && down.includes(relay))) throw new Error('unreachable');
       return onRelays.filter((e) => filters.some((f) => f.kinds.includes(e.kind)));
     },
   };
@@ -51,7 +51,7 @@ async function world() {
   const newest = (kind: number) => sent.filter((x) => x.event.kind === kind).at(-1)?.event;
   return {
     db, s, pk, p, sent, newest, signIn, onRelays, relayList, serverList,
-    setDown: (d: boolean) => (down = d), tick: (n: number) => (clock += n),
+    setDown: (d: boolean | string[]) => (down = d), tick: (n: number) => (clock += n),
   };
 }
 
@@ -82,6 +82,22 @@ describe('a nostr user’s lists as Kefli republishes them (C§3.1)', () => {
     w.tick(3600);
     await drain(w.p);
     expect(w.newest(10002)!.tags).toEqual([...THEIR_RELAYS, ['r', D.operator.relay], ['r', D.relays[0]]]);
+  });
+
+  test('their list gone from every relay since sign-in, confirmed absent, leaves the tables as the list; one relay down, it waits', async () => {
+    const w = await world();
+    w.signIn();
+    w.onRelays.splice(0);
+    // the indexer and only one default relay answer: not confirmed absent, so nothing goes
+    w.setDown([D.relays[1]]);
+    await drain(w.p);
+    expect(w.newest(10002)).toBeUndefined();
+    // the indexer and two default relays answer without it (C§3.1): the tables are all there is of their list
+    w.setDown(false);
+    w.tick(3600);
+    await drain(w.p);
+    expect(w.newest(10002)!.tags).toEqual(relayTags(relayEntries(w.db, w.pk)));
+    expect(w.newest(10063)!.tags).toEqual(listServers(w.db, w.pk).map((u) => ['server', u]));
   });
 
   test('a relay added in Advanced and then removed goes from the list though it sat past LIST_MAX; theirs stay', async () => {

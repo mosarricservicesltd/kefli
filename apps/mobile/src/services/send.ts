@@ -14,7 +14,8 @@ import {
 } from '../data/backup';
 import { keyPublished, libraryKey, libraryKeyPublished, madeHere, makeLibraryKey } from '../data/libraryKey';
 import {
-  indexerRelays, listEdits, listEditsSent, listServers, listsUnread, nextListTime, recordList, relayEntries, relayListTags, serverListTags, writeRelays,
+  confirmedAbsent, indexerRelays, listEdits, listEditsSent, listServers, listsUnread, nextListTime, recordList, relayEntries, relayListTags,
+  serverListTags, writeRelays,
 } from '../data/lists';
 import { backoff, begin, enqueue, finish, nextDue, nextWakeAt, releaseDependents, wake } from '../data/outbox';
 import type { OutboxRow, OutboxTarget, TargetResult } from '../data/outbox';
@@ -444,17 +445,21 @@ async function sendDeleteItem(p: SendPorts, row: OutboxRow, signer: Signer, targ
 }
 
 /**
- * The newest 10002 and 10063 on the indexer and the identity's relays, taken in as sync takes them, just before the
- * lists are built: one another app published since the last sync joins this phone's rather than being overwritten.
- * A relay that doesn't answer adds nothing.
+ * The newest 10002 and 10063 on the indexer, the default relays (as a sign-in reads them) and the identity's relays,
+ * taken in as sync takes them, just before the lists are built: one another app published since the last sync joins
+ * this phone's rather than being overwritten. A relay that doesn't answer adds nothing. Returns the relays that
+ * answered, for whether a list not held is confirmed absent (C§3.1).
  */
-async function readNewerLists(p: SendPorts, owner: string): Promise<void> {
+async function readNewerLists(p: SendPorts, owner: string): Promise<Set<string>> {
+  const answered = new Set<string>();
   const query = p.query;
-  if (!query) return;
-  const relays = [...new Set([...indexerRelays(p.db, owner), ...relayEntries(p.db, owner).map((r) => r.url)])];
+  if (!query) return answered;
+  const d = p.defaults();
+  const relays = [...new Set([...indexerRelays(p.db, owner), ...d.indexer, ...d.relays, ...relayEntries(p.db, owner).map((r) => r.url)])];
   const kinds = [KIND.relayList, KIND.serverList];
-  const copies = (await Promise.all(relays.map((r) => query(r, [{ kinds, authors: [owner] }]).catch(() => [])))).flat();
-  takeNewerLists(p.db, owner, copies, kinds);
+  const ask = (r: string) => query(r, [{ kinds, authors: [owner] }]).then((e) => (answered.add(r), e), (): NostrEvent[] => []);
+  takeNewerLists(p.db, owner, (await Promise.all(relays.map(ask))).flat(), kinds);
+  return answered;
 }
 
 /**
@@ -498,12 +503,13 @@ function listsSent(db: SqlDb, owner: string, l: Lists): void {
 /**
  * The 10002 to every target; the 10063 and the connected-browsers record (C§4.9) to the write relays only (4.3).
  * The lists are those held, entry for entry, with Kefli's changes (relayListTags, serverListTags), built at send time
- * after any newer list on the relays is taken in; a person's own list not read since sign-in waits for a read. The
- * record goes only once there is a browser in it.
+ * after any newer list on the relays is taken in. A person's own list not read since sign-in waits for a read, unless
+ * the read confirms it gone from every relay (C§3.1), when the tables are all there is of it. The record goes only
+ * once there is a browser in it.
  */
 async function sendLists(p: SendPorts, row: OutboxRow, signer: Signer, targets: OutboxTarget[]): Promise<TargetResult[]> {
-  await readNewerLists(p, row.signer);
-  if (listsUnread(p.db, row.signer)) return each(targets, 'retry', 'their lists not read yet');
+  const answered = await readNewerLists(p, row.signer);
+  if (listsUnread(p.db, row.signer) && !confirmedAbsent(p.defaults(), answered)) return each(targets, 'retry', 'their lists not read yet');
   // after the lists already held, so a phone whose clock is behind doesn't publish lists older than its own (F36)
   const now = nextListTime(p.db, row.signer, p.now());
   const l: Lists = {

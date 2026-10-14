@@ -185,7 +185,8 @@ export function serverListTags(db: SqlDb, owner: string): string[][] {
 /**
  * Whether the person's own entries are held without the list they came from, as a sign-in leaves them until a read
  * records it (C§3.1: every edit starts from the newest copy seen). A list sent from the tables alone would lose every
- * entry past LIST_MAX and every one Kefli doesn't use, so none is sent until a read brings the list.
+ * entry past LIST_MAX and every one Kefli doesn't use, so none is sent until a read brings the list, or confirms it
+ * gone from every relay (confirmedAbsent).
  */
 export function listsUnread(db: SqlDb, owner: string): boolean {
   const relays = !heldTags(db, owner, KIND.relayList) && !!db.get("SELECT 1 FROM relays WHERE owner = ? AND source = 'user' AND added_at IS NULL", owner);
