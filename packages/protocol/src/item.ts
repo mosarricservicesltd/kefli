@@ -65,8 +65,33 @@ export interface ParsedItem {
   extra: Record<string, unknown>;
 }
 
-/** Parse decrypted item JSON. Throws on JSON that isn't an object with a url. */
+/**
+ * How deep an item's JSON may nest: an item is three deep (text.servers), and a newer client's fields can add some.
+ * Deeper is refused before it is parsed, since parsing and writing back such JSON recurse once a level: 5,000 levels,
+ * well inside a 16 KB event, overflowed the stack that sync and every republish of the save run on.
+ */
+export const ITEM_MAX_DEPTH = 32;
+
+/** The deepest nesting of arrays and objects in JSON text, counted without parsing it (strings skipped). */
+export function jsonDepth(json: string): number {
+  let depth = 0;
+  let max = 0;
+  let inString = false;
+  for (let i = 0; i < json.length; i++) {
+    const c = json.charCodeAt(i);
+    if (inString) {
+      if (c === 0x5c) i++; // backslash: the next character is escaped
+      else if (c === 0x22) inString = false;
+    } else if (c === 0x22) inString = true;
+    else if (c === 0x5b || c === 0x7b) max = Math.max(max, ++depth);
+    else if (c === 0x5d || c === 0x7d) depth--;
+  }
+  return max;
+}
+
+/** Parse decrypted item JSON. Throws on JSON that isn't an object with a url, or nests deeper than ITEM_MAX_DEPTH. */
 export function parseItem(json: string): ParsedItem {
+  if (jsonDepth(json) > ITEM_MAX_DEPTH) throw new TypeError('item nests too deep');
   const raw: unknown = JSON.parse(json);
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) throw new TypeError('item is not an object');
   const o = raw as Record<string, unknown>;
