@@ -43,8 +43,12 @@ export function orpSplit(w: string): [string, string, string] {
   return [w.slice(0, k), w.charAt(k), w.slice(k + 1)];
 }
 
-/** How long a word shows (5.6 rsvp): 60,000 ÷ wpm, held for long words, numbers and pauses, easing in after a start. */
-export function delay(t: Token, ramp: number, wpm: number): number {
+/**
+ * How long a word shows (5.6 rsvp): 60,000 ÷ wpm, held for long words, numbers and pauses, easing in after a start.
+ * No word at all (an article of images alone has none) shows for no time, so Play goes straight to the end.
+ */
+export function delay(t: Token | undefined, ramp: number, wpm: number): number {
+  if (!t) return 0;
   let m = 1;
   if (core(t.w).length >= 9 || /\d/.test(t.w)) m = 1.4;
   if (/[,;:—–]$/.test(t.w)) m = Math.max(m, 1.8);
