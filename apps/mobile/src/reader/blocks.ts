@@ -5,6 +5,8 @@
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import type { Nodes, PhrasingContent, RootContent } from 'mdast';
 import { projectTree, sentences, type Sentence } from '@kefli/protocol';
+import { beyondLimits } from './limits';
+import { plainArticle } from './plain';
 
 export type Span = { text: string; em?: boolean; strong?: boolean; code?: boolean; href?: string };
 
@@ -49,12 +51,19 @@ function inline(nodes: PhrasingContent[], style: Style, spans: Span[], images: D
   for (const n of nodes) (INLINE[n.type] ?? other)(n, style, spans, images);
 }
 
+/** The end of s without its trailing spaces, counted back by hand: / +$/ backtracks quadratically on a long run of spaces that a later character ends. */
+function trimmedEnd(s: string): number {
+  let e = s.length;
+  while (e > 0 && s.charCodeAt(e - 1) === 32) e--;
+  return e;
+}
+
 function trimSpans(spans: Span[]): Span[] {
   const out = spans.filter((s) => s.text !== '');
   if (out.length) {
     out[0] = { ...out[0], text: out[0].text.replace(/^ +/, '') };
     const l = out.length - 1;
-    out[l] = { ...out[l], text: out[l].text.replace(/ +$/, '') };
+    out[l] = { ...out[l], text: out[l].text.slice(0, trimmedEnd(out[l].text)) };
   }
   return out.filter((s) => s.text !== '');
 }
@@ -65,7 +74,8 @@ function phrasing(nodes: PhrasingContent[], at: number, make: (spans: Span[]) =>
   inline(nodes, {}, spans, images);
   const t = trimSpans(spans);
   if (t.length) out.push({ ...make(t), start: at } as Draft);
-  out.push(...images);
+  // one at a time: spreading a paragraph's images as arguments overflows the stack past about 120,000 of them
+  for (const img of images) out.push(img);
 }
 
 /** A list's items: each item's first paragraph carries its marker; nested blocks go one level in. */
@@ -129,7 +139,8 @@ export type Derived = Article & { v: number; sentences: Sentence[]; spoken: stri
 /** The version of what deriveArticle writes; a stored file of another version is derived again. 2: citation markers go silent (contract 1.6). */
 export const DERIVED_VERSION = 2;
 
-export function deriveArticle(markdown: string): Derived {
+/** The CommonMark parse, the blocks and the spoken projection: the article as written. */
+function richArticle(markdown: string): Derived {
   const tree = fromMarkdown(markdown);
   const drafts: Draft[] = [];
   walk(tree.children, drafts, { depth: 0 });
@@ -141,6 +152,20 @@ export function deriveArticle(markdown: string): Derived {
     return { ...d, firstWord: starts[i], words: Math.max(0, next - starts[i]) } as Block;
   });
   return { v: DERIVED_VERSION, blocks, words: wordOffsets.length, sentences: sentences(p), spoken: p.text };
+}
+
+/**
+ * The article's blocks, words and sentences. Markdown the parse or the projection can't take in linear time
+ * (./limits), or that overflows the stack all the same, is read plain (./plain): the save keeps all its text, as
+ * paragraphs, headings and code, and nothing hangs the phone or throws out of a save, a sync or the Reader.
+ */
+export function deriveArticle(markdown: string): Derived {
+  if (beyondLimits(markdown)) return { ...plainArticle(markdown), v: DERIVED_VERSION };
+  try {
+    return richArticle(markdown);
+  } catch {
+    return { ...plainArticle(markdown), v: DERIVED_VERSION };
+  }
 }
 
 export function articleBlocks(markdown: string): Article {
