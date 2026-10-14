@@ -269,7 +269,9 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     const endless = () => new ReadableStream<Uint8Array>({ pull: (c) => void (pulled.n++, c.enqueue(new Uint8Array(MB))) }, { highWaterMark: 0 });
     w.ports.fetch = (async () => new Response(endless(), { status: 200 })) as never;
     await w.send(w.request({ html: blob.html }));
-    expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_blob: 1 });
+    // larger than any capture: given up at the cap, and the page fetched instead
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    expect(w.item(itemHash('https://example.com/a'))?.text_state).toBe('queued');
     expect(pulled.n).toBeLessThanOrEqual(INBOX_MAX_BYTES / MB + 2);
 
     jest.useFakeTimers();
@@ -281,6 +283,109 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  test('a connected browser’s request with fields of another type is a save at once, with those fields left out', async () => {
+    const w = world();
+    await w.send({ ...w.request({ url: 'https://example.com/a/amp' }), title: { a: 1 }, lang: ['en'], canonical: 5, hero: 5, captured_at: 'yesterday' });
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    expect(w.cursor()).toBe(w.now());
+    expect(w.db.get('SELECT title, lang, canonical, hero, saved_at FROM items')).toEqual({ title: null, lang: null, canonical: null, hero: null, saved_at: w.now() });
+  });
+
+  test('a request whose address isn’t a link is failed_parse at once, rather than tried for a week', async () => {
+    const w = world();
+    for (const url of ['javascript:alert(1)', '', 'file:///etc/passwd']) await w.send(w.request({ url }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_parse: 3 });
+    expect(w.cursor()).toBe(w.now());
+    expect(w.db.get('SELECT COUNT(*) AS n FROM items')).toEqual({ n: 0 });
+  });
+
+  test('a captured_at years ahead can’t keep a missing blob tried for ever: it ends two weeks after the request was sent', async () => {
+    const w = world();
+    const blob = await w.withHtml('<h1>Never served</h1>', false);
+    await w.send(w.request({ captured_at: 1e15, html: blob.html }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_blob: 1 });
+    w.tick(INBOX_BLOB_LIFE);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    expect(w.item(itemHash('https://example.com/a'))).toMatchObject({ text_state: 'queued', saved_at: T0 });
+    expect(w.ops()).toContain('delete_wrap');
+  });
+
+  test('a blob that can’t be this capture is given up at once and the page fetched instead, not fetched again for two weeks', async () => {
+    for (const spoil of ['other bytes', 'too large', 'wrong key'] as const) {
+      const w = world();
+      const blob = await w.withHtml('<h1>Spoilt</h1>', false);
+      let fetches = 0;
+      const big = new Uint8Array(INBOX_MAX_BYTES + 1);
+      const wrongKey = await encryptText('<h1>Spoilt</h1>', nodeCrypto);
+      w.ports.fetch = (async () => {
+        fetches++;
+        return new Response((spoil === 'other bytes' ? new Uint8Array([1, 2, 3]) : spoil === 'too large' ? big : wrongKey.blob) as never);
+      }) as never;
+      // for the wrong key, the request names the served blob's sha256 but a key of its own
+      const html = spoil === 'wrong key' ? { ...blob.html, sha256: wrongKey.text.sha256 } : blob.html;
+      await w.send(w.request({ html }));
+      expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+      expect(w.item(itemHash('https://example.com/a'))?.text_state).toBe('queued');
+      expect(pendingParses(w.db, w.owner).map((p) => p.url)).toEqual(['https://example.com/a']);
+      expect(w.ops()).toContain('delete_wrap');
+      w.tick(86_400);
+      expect(await drainInbox(w.ports, w.owner)).toEqual({});
+      expect(fetches).toBe(1);
+    }
+  });
+
+  test('a retried blob whose taking fails part way waits for the next drain, and the saves sent since still arrive', async () => {
+    const w = world();
+    const blob = await w.withHtml('<h1>Later</h1>', false);
+    await w.send(w.request({ html: blob.html }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_blob: 1 });
+    blob.serve();
+    const targets = w.ports.targets;
+    let failing = true;
+    w.ports.targets = async () => {
+      if (failing) {
+        failing = false;
+        throw new Error('defaults unreachable');
+      }
+      return targets();
+    };
+    await w.send(w.request({ url: 'https://example.com/b' }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    expect(w.item(itemHash('https://example.com/b'))).toBeDefined();
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    expect(w.item(itemHash('https://example.com/a'))?.text_state).toBe('cached');
+  });
+
+  test('once the Blossom server doesn’t answer, the drain’s other blobs wait for the next drain rather than each timing out', async () => {
+    const w = world();
+    const blobs = [];
+    for (let i = 0; i < 5; i++) {
+      const b = await w.withHtml(`<h1>Page ${i}</h1>`);
+      blobs.push(b);
+      await w.send(w.request({ url: `https://example.com/${i}`, html: b.html }));
+    }
+    const fetch = w.ports.fetch;
+    let fetches = 0;
+    w.ports.fetch = (async () => {
+      fetches++;
+      throw new TypeError('Network request failed');
+    }) as never;
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_blob: 5 });
+    expect(fetches).toBe(1);
+    w.ports.fetch = fetch;
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 5 });
+  });
+
+  test('a save whose browser is disconnected while its blob waits is fetched from its page, not left waiting', async () => {
+    const w = world();
+    const blob = await w.withHtml('<h1>Later</h1>', false);
+    await w.send(w.request({ html: blob.html }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_blob: 1 });
+    w.db.run('UPDATE devices SET revoked_at = 5');
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ ignored_token: 1 });
+    expect(w.item(itemHash('https://example.com/a'))?.text_state).toBe('queued');
   });
 
   test('a request naming another server is taken without its HTML', async () => {
