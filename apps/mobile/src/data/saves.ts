@@ -161,16 +161,19 @@ export function reviveRefused(db: SqlDb, now: number): number {
   });
 }
 
+/** The texts no save names: the saves' texts read once into a set (NOT IN), since items has no index on text_sha256. */
+const ORPHANS = "FROM blobs WHERE kind = 'text' AND sha256 NOT IN (SELECT text_sha256 FROM items WHERE text_sha256 IS NOT NULL)";
+
 /**
  * Blobs no save names any more, a deleted save's or one whose text another phone's replaced: their rows go, and the
  * staged files they kept are returned for the caller to remove (4.1). An upload still under way for one finds no save
- * naming it and deletes it from the server it reached (send.ts).
+ * naming it and deletes it from the server it reached (send.ts). It runs after every outbox run, so it reads the saves
+ * once rather than once for each text.
  */
 export function orphanBlobs(db: SqlDb): string[] {
   return db.tx(() => {
-    const rows = db.all<{ sha256: string; staged_path: string | null }>(
-      "SELECT sha256, staged_path FROM blobs b WHERE kind = 'text' AND NOT EXISTS (SELECT 1 FROM items i WHERE i.text_sha256 = b.sha256)");
-    for (const r of rows) db.run('DELETE FROM blobs WHERE sha256 = ?', r.sha256);
+    const rows = db.all<{ staged_path: string | null }>(`SELECT staged_path ${ORPHANS}`);
+    if (rows.length) db.run(`DELETE ${ORPHANS}`);
     return rows.map((r) => r.staged_path).filter((p): p is string => !!p);
   });
 }

@@ -92,11 +92,7 @@ export function runOutbox(): Promise<number> {
     } finally {
       running = null;
       // texts no save names any more, a deleted save's or one another phone's replaced, leave the phone (C§4.1)
-      try {
-        sweepStaged(store());
-      } catch {
-        // the next run sweeps them
-      }
+      sweep();
       waker.arm();
     }
   })();
@@ -147,6 +143,8 @@ export function runSync(): Promise<SyncResult> {
       if (owner) await parsePending(owner).catch(() => undefined);
       return r;
     } finally {
+      // the staged texts of the saves this sync deleted, or whose text it replaced, in one sweep
+      sweep();
       syncing = null;
       syncListeners.forEach((l) => l());
     }
@@ -298,16 +296,21 @@ export function imagePorts(): ImagePorts {
 }
 
 /**
- * Everything a save holds on the phone: its text, blocks and images (4.5: a deletion removes them all), and the staged
- * ciphertext of a text no save names any more, as a deleted save's waiting upload (C§4.1, v1.12).
+ * Everything a save holds on the phone: its text, blocks and images (4.5: a deletion removes them all). The staged
+ * ciphertext of a text no save names any more, as a deleted save's waiting upload (C§4.1, v1.12), goes in one sweep
+ * after the outbox's run or the sync's, rather than once for each of the many saves a sync can delete.
  */
 export function removeAllFiles(hash: string): void {
   textFiles.removeAll(hash);
   removeImages(imagePorts(), hash);
+}
+
+/** The staged texts no save names any more leave the phone (C§4.1); a sweep that fails is left for the next. */
+function sweep(): void {
   try {
     sweepStaged(store());
   } catch {
-    // the outbox's next run sweeps them
+    // the next run sweeps them
   }
 }
 

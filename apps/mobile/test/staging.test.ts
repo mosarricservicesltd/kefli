@@ -78,6 +78,18 @@ describe('staged texts (4.2, C§4.1)', () => {
     expect(w.db.all('SELECT sha256 FROM blobs')).toEqual([]);
   });
 
+  test('the sweep reads the saves once, not once for each text: 4,000 texts take a moment, on every outbox run', () => {
+    const w = world();
+    for (let n = 0; 4000 > n; n++) {
+      w.db.run("INSERT INTO blobs (sha256, hash, kind, owner) VALUES (?, ?, 'text', ?)", sha(n), sha(n), PK);
+      w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, text_sha256) VALUES (?, ?, 'https://e.com', 1, 'unread', 'cached', 'share', ?)", PK, sha(n), n % 2 ? sha(n) : null);
+    }
+    const t0 = Date.now();
+    expect(orphanBlobs(w.db)).toEqual([]);
+    expect(Date.now() - t0).toBeLessThan(150);
+    expect(w.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM blobs')?.n).toBe(2000);
+  });
+
   test("a blob row with no staged file, or another phone's inbox blob, is no business of the sweep's files", () => {
     const w = world();
     w.db.run("INSERT INTO blobs (sha256, hash, kind, owner) VALUES (?, ?, 'text', ?)", sha(3), sha(3), PK);
