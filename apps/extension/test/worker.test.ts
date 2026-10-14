@@ -71,7 +71,7 @@ function net(o: { publish?: 'ok' | 'down'; retract?: 'ok' | 'refused'; hold?: Pr
   return { net: n, published, asked };
 }
 
-function harness(o: { paired?: boolean; online?: boolean; net?: Net; collected?: boolean[]; store?: Store; session?: Store; alarmHold?: Promise<void> } = {}) {
+function harness(o: { paired?: boolean; pairing?: Pairing; online?: boolean; net?: Net; collected?: boolean[]; store?: Store; session?: Store; alarmHold?: Promise<void> } = {}) {
   const store = o.store ?? memoryStore();
   const session = o.session ?? memoryStore();
   const toasts: Omit<ToastState, 'shortcut'>[] = [];
@@ -83,7 +83,7 @@ function harness(o: { paired?: boolean; online?: boolean; net?: Net; collected?:
     store, session, net: o.net ?? net().net,
     now: () => clock.now,
     online: () => o.online ?? true,
-    context: async () => ((o.paired ?? true) ? { ...ctx, now: clock.now } : null),
+    context: async () => ((o.paired ?? true) ? { ...ctx, pairing: o.pairing ?? ctx.pairing, now: clock.now } : null),
     openOptions: () => void opened.n++,
     toast: async (_w, s) => void toasts.push(s),
     tick: async () => undefined,
@@ -403,6 +403,15 @@ describe('a capture the operator refuses (contract 4.4 and 5, v1.12)', () => {
     expect(await h.session.get(`undo:${w.id}`)).toMatchObject({ sha256: null, hash: saving.hash });
   });
 
+  test('a 413 with no reason and no body, as a proxy in front of the server may send, is a refusal too', async () => {
+    const bare = (async () => new Response('', { status: 413 })) as unknown as typeof fetch;
+    const n = net({ blossom: bare });
+    const h = harness({ net: n.net });
+    await h.work.save(PAGE, 1, false);
+    expect(kinds(h.toasts)).toEqual(['saving', 'notext']);
+    expect((await open(n.published[0])).req.html).toBeNull();
+  });
+
   test('the toast is the one for a save without text: Saved to Kefli, the host, the phone fetching the text, and Undo', async () => {
     const h = harness({ net: net({ blossom: operator(413, 'quota') }).net });
     await h.work.save(PAGE, 1, false);
@@ -546,6 +555,45 @@ describe('a capture the operator refuses (contract 4.4 and 5, v1.12)', () => {
     expect(n.asked.n).toBe(1);
     expect(kinds(h.toasts)).toEqual(['saving', 'notext']);
     expect((await history(h.store)).map((e) => e.outcome)).toEqual(['sent, no text']);
+  });
+
+  test('refused part way through a pass over the queue: the saves before keep their text, those after go without it', async () => {
+    const h = harness({ online: false });
+    for (const i of [1, 2, 3]) await h.work.save({ ...PAGE, url: `https://example.com/${i}` }, 1, false);
+    const q = await queued(h.store);
+    // the day's 20 MB runs out after the first upload
+    let k = 0;
+    const daily = operator(413, 'daily');
+    const blossom = (async (input: RequestInfo | URL, init?: RequestInit) =>
+      k++ === 0 ? new Response(JSON.stringify({ sha256: q[0].sha256 }), { status: 200 }) : daily(input, init)) as typeof fetch;
+    const n = net({ blossom });
+    await harness({ store: h.store, session: h.session, net: n.net }).work.flushQueue();
+    expect(n.asked.uploads).toBe(3);
+    const sent = await Promise.all(n.published.map(open));
+    expect(sent.map((s) => [s.req.url, s.req.html === null])).toEqual([['https://example.com/1', false], ['https://example.com/2', true], ['https://example.com/3', true]]);
+    expect(n.published[0].id).toBe(q[0].id);
+    expect(await queued(h.store)).toEqual([]);
+    expect((await history(h.store)).slice(0, 3).map((e) => e.outcome)).toEqual(['sent, no text', 'sent, no text', 'sent from queue']);
+  });
+
+  test('a move into a full library: a save waiting from before the move goes to the new library, with its token, without its HTML', async () => {
+    const T = new LocalSigner(hexToBytes('33'.repeat(32)));
+    const h = harness({ online: false });
+    await h.work.save(PAGE, 1, false);
+    await h.store.set(KEYS.pairing, PAIRING);
+    const ack: PairAck = { v: 1, user_pubkey: T.pubkey(), write_relays: ['wss://relay.example'], blossom_servers: ['https://blossom.example'], token: 'cd'.repeat(32), moved_from: user.pubkey() };
+    const moved = await applyMove(h.store, device, ack, NOW);
+    const n = net({ blossom: operator(413, 'quota') });
+    // the background reads the new library's pairing after the move
+    await harness({ store: h.store, net: n.net, pairing: moved }).work.flushQueue();
+    expect(n.asked.uploads).toBe(1);
+    const [w] = n.published;
+    expect(w.tags).toEqual([['p', T.pubkey()]]);
+    const { rumor, seal } = await unwrap(T, w);
+    const req = JSON.parse(rumor.content) as SaveRequest;
+    expect(req).toMatchObject({ url: PAGE.url, token: 'cd'.repeat(32), html: null });
+    expect(seal.pubkey).toBe(device.pubkey());
+    expect(await queued(h.store)).toEqual([]);
   });
 
   test('one queued in an earlier browser session, its Undo key gone with that session, goes the same way', async () => {
