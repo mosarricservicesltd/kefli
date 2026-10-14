@@ -84,6 +84,14 @@ function referenceAt(src: string, i: number, value: string, j: number): { source
   return m && decoded && value.startsWith(decoded, j) ? { source: m[0].length, decoded: decoded.length } : null;
 }
 
+/**
+ * Appends xs to out one at a time: push(...xs) passes every element as an argument, and a block of a few hundred
+ * thousand characters (a long <pre>, a PDF paragraph that never ends a sentence) is past the engine's stack for that.
+ */
+function append(out: number[], xs: number[]): void {
+  for (const x of xs) out.push(x);
+}
+
 class Builder {
   text = '';
   offsets: number[] = [];
@@ -95,30 +103,33 @@ class Builder {
 
   push(value: string, offsets: number[]) {
     this.#block += value;
-    this.#blockOffsets.push(...offsets);
+    append(this.#blockOffsets, offsets);
   }
 
   /** End a block: each run of whitespace (JS \s, so no-break spaces too) becomes one space (RULED), and headings and list items get a full stop. */
   end(fullStop: boolean) {
-    // Collapse and trim whitespace, keeping the offset of each kept character.
-    let block = '';
+    // Collapse and trim whitespace, keeping the offset of each kept character: a run becomes one space at its first
+    // character's offset, written once something follows it. Nothing reads back the block while it is built, since
+    // V8 copies a string grown a character at a time whole to read its end, which made a long block quadratic.
+    const raw = this.#block;
+    const parts: string[] = [];
     const offs: number[] = [];
-    for (let k = 0; k < this.#block.length; k++) {
-      const c = this.#block[k];
+    let space = -1;
+    for (let k = 0; k < raw.length; k++) {
+      const c = raw[k];
       if (/\s/.test(c)) {
-        if (block !== '' && !block.endsWith(' ')) {
-          block += ' ';
-          offs.push(this.#blockOffsets[k]);
-        }
-      } else {
-        block += c;
-        offs.push(this.#blockOffsets[k]);
+        if (offs.length > 0 && space === -1) space = this.#blockOffsets[k];
+        continue;
       }
+      if (space !== -1) {
+        parts.push(' ');
+        offs.push(space);
+        space = -1;
+      }
+      parts.push(c);
+      offs.push(this.#blockOffsets[k]);
     }
-    if (block.endsWith(' ')) {
-      block = block.slice(0, -1);
-      offs.pop();
-    }
+    const block = parts.join('');
     this.#block = '';
     this.#blockOffsets = [];
     if (block === '') return;
@@ -129,7 +140,7 @@ class Builder {
     }
     this.blockStarts.push(this.text.length);
     this.text += block;
-    this.offsets.push(...offs);
+    append(this.offsets, offs);
     if (fullStop && !TERMINAL.test(block)) {
       this.text += '.';
       this.offsets.push(offs[offs.length - 1]);
