@@ -1,6 +1,7 @@
 // Backed up (mobile spec 4.3, C§3.1, FD 93): a save counts as backed up once a relay the operator doesn't run has
 // accepted its newest event and, for a save with text this phone uploaded, a mirror holds the blob and that event
-// names it (C§4.2, F18). A change still queued, retrying or dead leaves it not backed up. Advanced counts the rest.
+// names it (C§4.2, F18). A change still queued, retrying or dead leaves it not backed up, and so does a text the
+// operator hasn't taken (C§1, v1.12): its blob has no mirror. Advanced counts the rest.
 import type { SqlDb } from './db';
 
 /** A relay off the operator accepted this event: if it is still the save's newest, the save is backed up. */

@@ -5,7 +5,7 @@ import { migrate } from '../src/data/schema';
 import { ensureIdentityRow, queueSave } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
 import { enqueue, nextDue, nextWakeAt, release } from '../src/data/outbox';
-import { drain, outboxWaker, relayResult, sendOne, type RelayAnswer, type SendPorts } from '../src/services/send';
+import { drain, outboxWaker, refusalOf, relayResult, sendOne, type RelayAnswer, type SendPorts } from '../src/services/send';
 import { commitDelete, deleteItem } from '../src/data/library';
 import type { Defaults } from '../src/services/config';
 import { notBackedUp } from '../src/data/backup';
@@ -17,7 +17,7 @@ const D: Defaults = {
 };
 const HASH = 'cd'.repeat(32);
 
-type Answer = { status: number; body?: unknown };
+type Answer = { status: number; body?: unknown; headers?: Record<string, string> };
 function world(answers: Partial<Record<string, Answer | ((n: number) => Answer | undefined)>> = {}, relay: (url: string) => RelayAnswer = () => ({ ok: true })) {
   const db = memoryDb();
   migrate(db);
@@ -36,7 +36,7 @@ function world(answers: Partial<Record<string, Answer | ((n: number) => Answer |
     counts.set(key, n);
     const a = answers[key];
     const ans = typeof a === 'function' ? a(n) : a;
-    if (ans) return new Response(JSON.stringify(ans.body ?? {}), { status: ans.status });
+    if (ans) return new Response(JSON.stringify(ans.body ?? {}), { status: ans.status, headers: ans.headers });
     if (url.endsWith('/upload') || url.endsWith('/mirror')) {
       const sha = url.endsWith('/upload') ? (init.headers as Record<string, string>)['X-SHA-256'] : String(JSON.parse(String(init.body)).url).split('/').pop();
       return new Response(JSON.stringify({ sha256: sha }), { status: 200 });
@@ -54,6 +54,14 @@ function world(answers: Partial<Record<string, Answer | ((n: number) => Answer |
   };
   return { db, signer, ports, calls, published: items, all, blobs, tick: (s: number) => (clock += s), now: () => clock };
 }
+
+const FIGURES = { quota: 52_428_800, used: 52_428_000, daily: 20_971_520, today: 2_000 };
+
+/** The operator's refusal (C§5): 413 with its reason in X-Reason and the body, and the figures for room or the day. */
+const refuse = (reason: string, status = 413): Answer => ({
+  status, headers: { 'X-Reason': reason },
+  body: { v: 1, error: reason, ...(reason === 'quota' || reason === 'daily' ? FIGURES : {}) },
+});
 
 /** The row the last attempt touched: its state, and its target's next time and error. */
 const tried = (w: ReturnType<typeof world>) => w.db.get(
@@ -170,12 +178,12 @@ describe('sending a save (mobile spec 4.3)', () => {
     expect(nextDue(w.db, w.now() + 86_399)).toBeNull();
   });
 
-  test('a full quota (413) on the operator retries daily', async () => {
-    const w = world({ 'PUT http://blossom/upload': (n) => (n === 1 ? { status: 413 } : { status: 0 }) });
+  test('a full quota (413 quota) on the operator retries the text daily, and the save goes without it (C§4.2)', async () => {
+    const w = world({ 'PUT http://blossom/upload': refuse('quota') });
     const { held } = await save(w);
     release(w.db, held);
     await drain(w.ports);
-    expect(w.published()).toHaveLength(0);
+    expect(w.published()).toHaveLength(3);
     expect(nextDue(w.db, w.now() + 86_399)).toBeNull();
     expect(nextDue(w.db, w.now() + 86_400)?.row.op).toBe('upload_blob');
   });
@@ -347,6 +355,157 @@ describe('sending a save (mobile spec 4.3)', () => {
     const d = deleteItem(w.db, w.now(), w.signer.pubkey(), HASH);
     commitDelete(w.db, w.signer.pubkey(), HASH, d.held);
     expect(blobTargets(w)).toEqual(['http://blossom', 'http://m1']);
+  });
+});
+
+type W = ReturnType<typeof world>;
+const blob = (w: W) => w.db.get<{ operator_at: number | null; mirror_at: number | null; last_error: string | null }>('SELECT operator_at, mirror_at, last_error FROM blobs');
+const lastItem = async (w: W) => (await readItemEvent(w.signer, w.published().at(-1)!.event)).item.item;
+const ops = (w: W) => w.db.all<{ op: string; state: string }>("SELECT op, state FROM outbox WHERE op NOT IN ('register', 'publish_lists') ORDER BY id");
+const puts = (w: W) => w.calls.filter((c) => c.startsWith('PUT'));
+
+describe('fair use: a refused text holds back only itself (C§4.2, C§5, v1.12)', () => {
+  test.each([['quota'], ['daily']])('refused for %s: the save goes at once without its text, the figures are kept, the text waits a day', async (reason) => {
+    const w = world({ 'PUT http://blossom/upload': refuse(reason) });
+    const kept: unknown[] = [];
+    w.ports.onFigures = (owner, f) => kept.push([owner, f]);
+    const { held } = await save(w);
+    release(w.db, held);
+    await drain(w.ports);
+    // to every write relay, its link, title and state, but no text
+    expect(w.published().map((p) => p.relay).sort()).toEqual(['ws://a', 'ws://b', 'ws://op']);
+    const item = await lastItem(w);
+    expect([item.url, item.title, item.text, item.text_hash]).toEqual(['https://example.com/a', 'Title', null, null]);
+    expect(blob(w)).toEqual({ operator_at: null, mirror_at: null, last_error: reason });
+    expect(kept).toEqual([[w.signer.pubkey(), FIGURES]]);
+    // the mirror copies from the operator, so it waits too; nothing is due until a day has passed
+    expect(puts(w)).toEqual(['PUT http://blossom/upload']);
+    expect(nextDue(w.db, w.now() + 86_399)).toBeNull();
+    expect(nextDue(w.db, w.now() + 86_400)?.row.op).toBe('upload_blob');
+    // the text stays on the phone, and the save counts as not backed up
+    expect(w.db.get('SELECT text_state, text_sha256 IS NOT NULL AS kept FROM items')).toEqual({ text_state: 'cached', kept: 1 });
+    expect(notBackedUp(w.db, w.signer.pubkey())).toBe(1);
+  });
+
+  test('a text over 8 MB (too_large) is never sent again; the save goes without it, and the text stays here', async () => {
+    const w = world({ 'PUT http://blossom/upload': refuse('too_large') });
+    const kept: unknown[] = [];
+    w.ports.onFigures = (owner, f) => kept.push([owner, f]);
+    const { held } = await save(w);
+    release(w.db, held);
+    await drain(w.ports);
+    expect((await lastItem(w)).text).toBeNull();
+    expect(blob(w)?.last_error).toBe('too_large');
+    expect(kept).toEqual([]);
+    expect(ops(w)).toEqual([{ op: 'upload_blob', state: 'dead' }, { op: 'mirror_blob', state: 'dead' }]);
+    expect(nextWakeAt(w.db)).toBeNull();
+    w.tick(30 * 86_400);
+    await drain(w.ports);
+    expect(puts(w)).toEqual(['PUT http://blossom/upload']);
+    expect(notBackedUp(w.db, w.signer.pubkey())).toBe(1);
+  });
+
+  test.each([
+    [{ status: 403, body: { v: 1, error: 'forbidden' } }, 'http 403'],
+    // a 413 without a reason of the operator's, as a proxy's own page, is no refusal for good
+    [{ status: 413 }, 'http 413'],
+    [{ status: 400 }, 'http 400'],
+  ])('any other 4xx but 401 and 429 (%j) is tried again a day later, the save going without its text', async (answer, error) => {
+    const w = world({ 'PUT http://blossom/upload': answer as Answer });
+    const { held } = await save(w);
+    release(w.db, held);
+    await drain(w.ports);
+    expect(blob(w)?.last_error).toBe(error);
+    expect((await lastItem(w)).text).toBeNull();
+    expect(nextDue(w.db, w.now() + 86_399)).toBeNull();
+    expect(nextDue(w.db, w.now() + 86_400)?.row.op).toBe('upload_blob');
+  });
+
+  test('a disk past its floor (507) sends the save without its text and retries the upload as any server error', async () => {
+    const w = world({ 'PUT http://blossom/upload': (n) => (n === 1 ? { status: 507, body: { v: 1, error: 'storage' } } : undefined) });
+    const { held, sha } = await save(w);
+    release(w.db, held);
+    await drain(w.ports);
+    expect((await lastItem(w)).text).toBeNull();
+    expect(blob(w)?.last_error).toBe('http 507');
+    expect(tried(w)).toMatchObject({ next_at: w.now() + 30 });
+    w.tick(30);
+    await drain(w.ports);
+    expect((await lastItem(w)).text).toMatchObject({ sha256: sha, servers: ['http://blossom', 'http://m1'] });
+    expect(blob(w)).toMatchObject({ last_error: null });
+  });
+
+  test.each([[401], [429], [503]])('a %i is no refusal: the save waits for its text, as before', async (status) => {
+    const w = world({ 'PUT http://blossom/upload': (n) => (n === 1 ? { status } : undefined) });
+    const { held, sha } = await save(w);
+    release(w.db, held);
+    await drain(w.ports);
+    expect(w.published()).toHaveLength(0);
+    expect(blob(w)?.last_error).toBeNull();
+    w.tick(60);
+    await drain(w.ports);
+    expect((await lastItem(w)).text?.sha256).toBe(sha);
+  });
+
+  test('the text taken later: the mirror follows, and the save goes out again naming both (C§4.2, FD 117)', async () => {
+    const w = world({ 'PUT http://blossom/upload': (n) => (n === 1 ? refuse('quota') : n === 2 ? { status: 503 } : undefined) });
+    const { held, sha } = await save(w);
+    release(w.db, held);
+    await drain(w.ports);
+    const first = w.published().length;
+    // a server error the next day leaves the refusal's reason as it was
+    w.tick(86_400);
+    await drain(w.ports);
+    expect(blob(w)?.last_error).toBe('quota');
+    w.tick(60);
+    await drain(w.ports);
+    expect(puts(w)).toEqual(['PUT http://blossom/upload', 'PUT http://blossom/upload', 'PUT http://blossom/upload', 'PUT http://m1/mirror']);
+    const item = await lastItem(w);
+    expect(item.text).toMatchObject({ sha256: sha, servers: ['http://blossom', 'http://m1'] });
+    expect(item.text_hash).not.toBeNull();
+    expect(w.published()).toHaveLength(first + 3);
+    expect(blob(w)).toMatchObject({ last_error: null });
+    expect(notBackedUp(w.db, w.signer.pubkey())).toBe(0);
+    expect(w.db.get<{ n: number }>('SELECT COUNT(*) n FROM outbox')?.n).toBe(0);
+  });
+
+  test('an upload whose save no longer names the text leaves the outbox unsent, its mirror with it', async () => {
+    const w = world();
+    const { held } = await save(w);
+    release(w.db, held);
+    // another phone's text took the save's place before the upload went
+    w.db.run("UPDATE items SET text_sha256 = 'ee' || substr(text_sha256, 3)");
+    await drain(w.ports);
+    expect(puts(w)).toEqual([]);
+    expect(ops(w)).toEqual([]);
+  });
+
+  test.each([
+    [{ status: 413, headers: { 'X-Reason': 'quota' } }, 'quota'],
+    [{ status: 413, headers: { 'X-Reason': 'daily' }, body: { v: 1, error: 'daily', quota: 'lots' } }, 'daily'],
+  ])('a refusal for room without figures (%j) still refuses the text, keeping no figures', async (answer, reason) => {
+    const w = world({ 'PUT http://blossom/upload': answer as Answer });
+    const kept: unknown[] = [];
+    w.ports.onFigures = (owner, f) => kept.push([owner, f]);
+    const { held } = await save(w);
+    release(w.db, held);
+    await drain(w.ports);
+    expect(blob(w)?.last_error).toBe(reason);
+    expect(kept).toEqual([]);
+  });
+
+  test.each([
+    [{ status: 413, reason: 'quota', permanent: true }, 'quota'],
+    [{ status: 413, reason: 'daily', permanent: true }, 'daily'],
+    [{ status: 413, reason: 'too_large', permanent: true }, 'too_large'],
+    [{ status: 413, reason: 'nginx', permanent: true }, 'http 413'],
+    [{ status: 404, reason: '', permanent: true }, 'http 404'],
+    [{ status: 507, reason: 'storage', permanent: false }, 'http 507'],
+    [{ status: 401, reason: 'auth', permanent: false }, null],
+    [{ status: 429, reason: 'slow', permanent: false }, null],
+    [{ status: 502, reason: 'descriptor names another blob', permanent: false }, null],
+  ])('%j is refused as %s', (r, why) => {
+    expect(refusalOf(r)).toBe(why);
   });
 });
 

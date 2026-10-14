@@ -21,7 +21,11 @@ function publishTargets(db: SqlDb, owner: string, t: SaveTargets): string[] {
   if (listsSettled(db, owner)) return writeRelays(db, owner);
   return getSetting(db, KEEP_COPIES) === '0' ? [] : t.interim ?? [];
 }
-export type StagedBlob = { sha256: string; size: number; path: string };
+export type StagedBlob = {
+  sha256: string; size: number; path: string;
+  /** A mirror that already holds the blob, as the one a move's source backed it up to (C§4.8, v1.12). */
+  mirror?: string | null;
+};
 
 export function ensureIdentityRow(db: SqlDb, now: number, pubkey: string, origin: string, hasRecovery: boolean, provider: 'local' | 'nip55' | 'nip46' = 'local'): void {
   db.run(
@@ -48,21 +52,38 @@ function registerFirst(db: SqlDb, now: number, owner: string, t: SaveTargets): n
 }
 
 /**
- * A save's sends (4.3): the blob's upload and mirror if it has text, then its publish to every write relay (C§3.1),
- * each after the one it needs. held: the share sheet's rows wait for it to close without Undo.
+ * A text's sends (4.3): its blob staged, the upload to the operator, and the mirror after it, to the mirror that already
+ * holds the blob when there is one. Returns the upload's row, then the mirror's.
+ */
+export function queueText(db: SqlDb, now: number, owner: string, hash: string, blob: StagedBlob, t: SaveTargets, held: boolean, register: number | null): number[] {
+  const mirror = blob.mirror ?? null;
+  db.run('INSERT OR REPLACE INTO blobs (sha256, hash, kind, staged_path, size, owner, mirror_at, mirror_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    blob.sha256, hash, 'text', blob.path, blob.size, owner, mirror ? now : null, mirror);
+  const upload = enqueue(db, now, { op: 'upload_blob', signer: owner, subject: blob.sha256, payload: { sha256: blob.sha256 }, targets: [t.blossom], dependsOn: register, held });
+  return [upload, enqueue(db, now, { op: 'mirror_blob', signer: owner, subject: blob.sha256, payload: { sha256: blob.sha256 }, targets: [mirror ?? t.mirror], dependsOn: upload, held })];
+}
+
+/**
+ * A save's sends (4.3): the text's upload and mirror if it has text, then its publish to every write relay (C§3.1),
+ * after the upload, which a refusal of the text releases (send.ts, v1.12). held: the share sheet's rows wait for it to
+ * close without Undo.
  */
 export function queueSends(db: SqlDb, now: number, owner: string, hash: string, blob: StagedBlob | null, t: SaveTargets, held: boolean, register: number | null): number[] {
-  const rows: number[] = [];
-  let upload: number | null = null;
-  if (blob) {
-    db.run('INSERT OR REPLACE INTO blobs (sha256, hash, kind, staged_path, size, owner) VALUES (?, ?, ?, ?, ?, ?)', blob.sha256, hash, 'text', blob.path, blob.size, owner);
-    upload = enqueue(db, now, { op: 'upload_blob', signer: owner, subject: blob.sha256, payload: { sha256: blob.sha256 }, targets: [t.blossom], dependsOn: register, held });
-    rows.push(upload);
-    rows.push(enqueue(db, now, { op: 'mirror_blob', signer: owner, subject: blob.sha256, payload: { sha256: blob.sha256 }, targets: [t.mirror], dependsOn: upload, held }));
-  }
-  rows.push(enqueue(db, now, { op: 'publish_item', signer: owner, subject: hash, targets: publishTargets(db, owner, t), dependsOn: upload ?? register, held }));
+  const rows = blob ? queueText(db, now, owner, hash, blob, t, held, register) : [];
+  rows.push(enqueue(db, now, { op: 'publish_item', signer: owner, subject: hash, targets: publishTargets(db, owner, t), dependsOn: rows[0] ?? register, held }));
   return rows;
 }
+
+/** Whether any of owner's saves names this text, one waiting on its delete's Undo included. */
+export function namesText(db: SqlDb, owner: string, sha256: string): boolean {
+  return !!db.get('SELECT 1 FROM items WHERE owner = ? AND text_sha256 = ?', owner, sha256);
+}
+
+/** A text no save of the owner's needs sent any more: its upload and mirror leave the outbox, one under way too (C§4.1). */
+export function withdrawText(db: SqlDb, owner: string, sha256: string): void {
+  db.run("DELETE FROM outbox WHERE signer = ? AND subject = ? AND op IN ('upload_blob', 'mirror_blob')", owner, sha256);
+}
+
 
 /**
  * Returns the held outbox rows, for release when the sheet closes (or undo). A save whose page couldn't be fetched

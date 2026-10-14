@@ -5,15 +5,16 @@ import {
   DEVICES_PATH, KIND, buildDeletions, buildDevicesEvent, buildItemEvent, buildLibraryKeyEvent, buildRelayList, buildServerList, deleteBlob, httpAuth,
   isSignerFailure, mirrorBlob, releaseTemplate, savedD, signStatement, uploadBlob, wrapPairAck,
 } from '@kefli/protocol';
-import type { CryptoPort, NostrEvent, Signer, Statement } from '@kefli/protocol';
+import type { AccountFigures, BlossomOutcome, CryptoPort, NostrEvent, Signer, Statement } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { hasDevices, localRecord, noteRecord, pairAcked, recordCreatedAt, type DeviceProof, type PairPayload } from '../data/devices';
-import { getItem, itemJson, markPublished, type ItemRow } from '../data/items';
+import { getItem, itemJson, markPublished, textServers, type ItemRow } from '../data/items';
 import { markBacked } from '../data/backup';
 import { keyPublished, libraryKey, libraryKeyPublished, madeHere, makeLibraryKey } from '../data/libraryKey';
 import { indexerRelays, listServers, nextListTime, recordList, relayEntries, writeRelays } from '../data/lists';
-import { backoff, begin, enqueue, finish, nextDue, nextWakeAt } from '../data/outbox';
+import { backoff, begin, enqueue, finish, nextDue, nextWakeAt, releaseDependents } from '../data/outbox';
 import type { OutboxRow, OutboxTarget, TargetResult } from '../data/outbox';
+import { namesText, withdrawText } from '../data/saves';
 import type { Defaults } from './config';
 import { pageStream, streamFilter, takeNewerLists, type SyncPorts } from './sync';
 
@@ -32,6 +33,8 @@ export type SendPorts = {
   readBlob: (sha256: string) => Promise<Uint8Array | null>;
   /** The events matching filters until EOSE, for copying the library to an added relay; throws when unreachable. */
   query?: SyncPorts['query'];
+  /** A 413 quota or daily brought the library's figures (C§5): kept as the last known, by data/account.ts recordFigures. */
+  onFigures?: (owner: string, figures: AccountFigures) => void;
 };
 
 const DAY = 86_400;
@@ -127,24 +130,74 @@ function httpResult(target: string, r: { status: number; reason: string }, final
   return { target, kind: final ? 'rejected' : 'retry', error };
 }
 
+type Refusal = Extract<BlossomOutcome, { ok: false }>;
+
+/** The operator's 413 reasons (C§5): room in the library, the day's uploads, and a blob over 8 MB. */
+const ROOM = new Set(['quota', 'daily', 'too_large']);
+
+/**
+ * Why the operator refused an upload, as blobs.last_error keeps it (C§5, v1.12): quota, daily or too_large, and for
+ * any other 4xx but 401 and 429, or a disk past its floor (507), http and the status. Null for an answer that is no
+ * refusal (401, 429, any other 5xx, a descriptor naming another blob), which is retried as before.
+ */
+export function refusalOf(r: Pick<Refusal, 'status' | 'reason' | 'permanent'>): string | null {
+  if (r.status === 413 && ROOM.has(r.reason)) return r.reason;
+  return r.permanent || r.status === 507 ? `http ${r.status}` : null;
+}
+
 async function sendUpload(p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
   const { sha256 } = JSON.parse(row.payload ?? '{}') as { sha256: string };
+  // its save has gone, or took another phone's text, since this was queued: no save would name the blob (C§4.1)
+  if (!namesText(p.db, row.signer, sha256)) return (withdrawText(p.db, row.signer, sha256), []);
   const blob = await p.readBlob(sha256);
   if (!blob) return [{ target: t.target, kind: 'rejected', error: 'staged blob missing' }];
   try {
     const r = await uploadBlob(t.target, blob, sha256, signer, p.fetch);
-    if (r.ok) {
-      p.db.run('UPDATE blobs SET operator_at = ?, last_error = NULL WHERE sha256 = ?', p.now(), sha256);
-      // until its save is published, the text is known to be here, so a delete before then still reaches it (F33)
-      p.db.run('UPDATE items SET text_servers = ? WHERE owner = ? AND text_sha256 = ? AND text_servers IS NULL', JSON.stringify([t.target]), row.signer, sha256);
-      return [{ target: t.target, kind: 'ok' }];
-    }
-    // A 413 from the operator is a full quota: the text stays on the phone and the upload retries daily (G5).
-    if (r.status === 413) return [{ target: t.target, kind: 'retry', error: r.reason, waitSec: DAY }];
-    return [httpResult(t.target, r, r.permanent && r.status !== 401)];
+    return r.ok ? uploaded(p, row.signer, t.target, sha256) : refused(p, row, t.target, sha256, r);
   } catch (e) {
     return [{ target: t.target, kind: 'retry', error: err(e) }];
   }
+}
+
+/** The operator took the text (4.3): its blob records it, and its saves name the operator (textTaken). */
+function uploaded(p: SendPorts, owner: string, target: string, sha256: string): TargetResult[] {
+  p.db.run('UPDATE blobs SET operator_at = ?, last_error = NULL WHERE sha256 = ? AND owner = ?', p.now(), sha256, owner);
+  textTaken(p.db, p.now(), owner, sha256, target);
+  return [{ target, kind: 'ok' }];
+}
+
+/**
+ * Saves whose text the operator now holds (4.3). One whose events haven't named the text yet records the operator,
+ * so a delete before its next publish still reaches it (F33). One whose newest event names the text on a mirror alone,
+ * as a move's copy of a text backed up under the old identity does (C§4.8), names the operator too and goes out again
+ * naming both, since a mirror already holds the blob.
+ */
+function textTaken(db: SqlDb, now: number, owner: string, sha256: string, operator: string): void {
+  db.run('UPDATE items SET text_servers = ? WHERE owner = ? AND text_sha256 = ? AND text_servers IS NULL', JSON.stringify([operator]), owner, sha256);
+  const onMirror = db.all<{ hash: string; text_servers: string }>(
+    `SELECT hash, text_servers FROM items WHERE owner = ? AND text_sha256 = ? AND event_id IS NOT NULL AND pending_delete_at IS NULL
+     AND NOT EXISTS (SELECT 1 FROM json_each(text_servers) WHERE value = ?)`, owner, sha256, operator);
+  for (const r of onMirror) {
+    db.run('UPDATE items SET text_servers = ? WHERE owner = ? AND hash = ?', JSON.stringify([operator, ...(JSON.parse(r.text_servers) as string[])]), owner, r.hash);
+    enqueue(db, now, { op: 'publish_item', signer: owner, subject: r.hash, targets: writeRelays(db, owner) });
+  }
+}
+
+/**
+ * The operator refused the text (C§5, v1.12): its reason is kept on the blob, a refusal for room brings the library's
+ * figures, and the save's publish goes now without the text, which stays on the phone (C§4.2). A text over 8 MB is never
+ * sent again; one refused for room, the day's uploads or any other 4xx is tried again a day later, and a full disk
+ * (507) as any server error is.
+ */
+function refused(p: SendPorts, row: OutboxRow, target: string, sha256: string, r: Refusal): TargetResult[] {
+  const why = refusalOf(r);
+  if (!why) return [httpResult(target, r, false)];
+  p.db.run('UPDATE blobs SET last_error = ? WHERE sha256 = ? AND owner = ?', why, sha256, row.signer);
+  if (r.figures && (why === 'quota' || why === 'daily')) p.onFigures?.(row.signer, r.figures);
+  releaseDependents(p.db, row.id, 'publish_item');
+  const error = `HTTP ${r.status} ${r.reason}`;
+  if (why === 'too_large') return [{ target, kind: 'rejected', error }];
+  return [{ target, kind: 'retry', error, ...(r.status === 507 ? {} : { waitSec: DAY }) }];
 }
 
 /** The mirror after this one in defaults, or the first again after a day once every entry has refused (4.2). */
@@ -161,8 +214,8 @@ async function sendMirror(p: SendPorts, row: OutboxRow, signer: Signer, t: Outbo
   try {
     const r = await mirrorBlob(t.target, from, sha256, signer, p.fetch);
     if (r.ok) {
-      p.db.run('UPDATE blobs SET mirror_at = ?, mirror_url = ?, last_error = NULL WHERE sha256 = ?', p.now(), t.target, sha256);
-      republishNaming(p.db, p.now(), row.signer, sha256, t.target);
+      p.db.run('UPDATE blobs SET mirror_at = ?, mirror_url = ?, last_error = NULL WHERE sha256 = ? AND owner = ?', p.now(), t.target, sha256, row.signer);
+      republishNaming(p.db, p.now(), row.signer, sha256, t.target, p.defaults().operator.blossom);
       return [{ target: t.target, kind: 'ok' }];
     }
     // A mirror refuses with any 4xx but 401 and 429, a 413 included: move to the next entry, never dead.
@@ -175,14 +228,16 @@ async function sendMirror(p: SendPorts, row: OutboxRow, signer: Signer, t: Outbo
 
 /**
  * A mirror took the blob after its save went out naming another, as when the first mirror failed for a while and
- * then refused (F18): each such save is published again naming this one (C§4.2), and counts as not backed up until
- * it is. A save not yet published names the mirror when it goes, from the blob's row.
+ * then refused (F18), or naming no server at all, its text then waiting for the operator (C§4.2, v1.12): each such save
+ * is published again naming the operator and this mirror (C§4.2), and counts as not backed up until it is. A save not
+ * yet published names the mirror when it goes, from the blob's row.
  */
-function republishNaming(db: SqlDb, now: number, owner: string, sha256: string, mirror: string): void {
+function republishNaming(db: SqlDb, now: number, owner: string, sha256: string, mirror: string, operator: string): void {
   const stale = db.all<{ hash: string }>(
     `SELECT hash FROM items WHERE owner = ? AND text_sha256 = ? AND event_id IS NOT NULL AND pending_delete_at IS NULL
-     AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(text_servers, '[]')) WHERE value = ?)`,
-    owner, sha256, mirror,
+     AND (NOT EXISTS (SELECT 1 FROM json_each(COALESCE(text_servers, '[]')) WHERE value = ?)
+       OR NOT EXISTS (SELECT 1 FROM json_each(COALESCE(text_servers, '[]')) WHERE value = ?))`,
+    owner, sha256, mirror, operator,
   );
   for (const { hash } of stale) enqueue(db, now, { op: 'publish_item', signer: owner, subject: hash, targets: writeRelays(db, owner) });
 }
@@ -215,18 +270,15 @@ function publishTo(p: SendPorts, targets: OutboxTarget[], event: NostrEvent): Pr
   }));
 }
 
-/** text.servers never lists the operator alone (contract 4.2): the mirror that holds it, else the one being tried. */
-function textServers(p: SendPorts, item: ItemRow): string[] {
-  const blob = item.text_sha256 ? p.db.get<{ mirror_url: string | null }>('SELECT mirror_url FROM blobs WHERE sha256 = ?', item.text_sha256) : null;
-  const d = p.defaults();
-  return [d.operator.blossom, blob?.mirror_url ?? d.mirrors[0]];
-}
-
-/** A relay took the save's event: the row records it, with the servers it names, and its old address is retired. */
-function published(p: SendPorts, owner: string, item: ItemRow, event: NostrEvent, servers: string[], d: string): void {
+/**
+ * A relay took the save's event: the row records it, with the servers it names, and its old address is retired. An
+ * event without the text (servers null, C§4.2) leaves text_servers as it was: the servers known to hold the text, none
+ * yet or the operator once it has it (F33), which the mirror's success then finds not named (republishNaming).
+ */
+function published(p: SendPorts, owner: string, item: ItemRow, event: NostrEvent, servers: string[] | null, d: string): void {
   markPublished(p.db, owner, item.hash, event.id, event.created_at);
   // the servers the event names, for a later delete (C§4.1) and for knowing which mirror it names (F18)
-  if (item.text_sha256) p.db.run('UPDATE items SET text_servers = ? WHERE id = ?', JSON.stringify(servers), item.id);
+  if (item.text_sha256 && servers) p.db.run('UPDATE items SET text_servers = ? WHERE id = ?', JSON.stringify(servers), item.id);
   retireAddress(p.db, p.now(), owner, item.hash, item.remote_d, d, item.event_created_at ?? 0);
 }
 
@@ -242,7 +294,8 @@ async function sendPublish(p: SendPorts, row: OutboxRow, signer: Signer, targets
   if (!keyPublished(p.db, row.signer) && !(await sendLibraryKey(p, row, signer, targets)).some((r) => r.kind === 'ok')) {
     return each(targets, 'retry', 'library key record not sent yet');
   }
-  const servers = textServers(p, item);
+  // text.servers never lists the operator alone (contract 4.2), and names no server while the operator lacks the text
+  const servers = textServers(p.db, item, p.defaults().operator.blossom, p.defaults().mirrors[0]);
   // Built at send time, created_at = max(now, last + 1), so a newer state always replaces the old one.
   const createdAt = Math.max(p.now(), (item.event_created_at ?? 0) + 1);
   const { event } = await buildItemEvent(signer, item.hash, itemJson(item, servers), createdAt, key);
