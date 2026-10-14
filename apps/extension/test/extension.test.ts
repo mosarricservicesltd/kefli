@@ -404,6 +404,20 @@ describe('the queue (extension spec 4, decisions 30, 31 and 60)', () => {
 describe('capture (contract 4.2 and 4.4)', () => {
   const words = (n: number) => Array.from({ length: n }, () => 'word').join(' ') + '\n';
   test('the address loses its fragment', () => expect(pageUrl('https://a.example/x?y=1#z')).toBe('https://a.example/x?y=1'));
+  test('an address goes to the phone without its user name and password (contract 4.3, ruling 8)', async () => {
+    // a link's address keeps them (a link's href does in Chrome); Chrome's location.href leaves them out, but pageUrl
+    // doesn't count on every browser doing so
+    expect(pageUrl('https://user:hunter2@a.example/x?y=1#z')).toBe('https://a.example/x?y=1');
+    expect(linkOnly('https://user:hunter2@a.example/x#z').url).toBe('https://a.example/x#z');
+    expect(linkOnly('https://www.bank.example@evil.example/x').url).toBe('https://evil.example/x');
+    // a link without any is sent exactly as it was
+    expect(linkOnly('https://a.example/x y#z').url).toBe('https://a.example/x y#z');
+    const { pending } = await prepare(linkOnly('https://user:hunter2@a.example/x'), { device, defaults: DEFAULTS, pairing: PAIRING, crypto: webCrypto, now: NOW });
+    const req = JSON.parse((await unwrap(user, pending.wrap)).rumor.content) as SaveRequest;
+    expect(req.url).toBe('https://a.example/x');
+    expect(JSON.stringify(req)).not.toContain('hunter2');
+    expect(pending.hash).toBe(itemHash('https://a.example/x'));
+  });
   test('only web addresses can be saved (decision 100)', () => {
     expect(['https://a.example/', 'HTTP://b.example/x.pdf'].every(isWebAddress)).toBe(true);
     expect(['chrome://settings/', 'about:blank', 'file:///tmp/a.html', 'chrome-extension://x/options.html'].some(isWebAddress)).toBe(false);
