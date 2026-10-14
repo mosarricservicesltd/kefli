@@ -55,7 +55,7 @@ async function activeIdentity(): Promise<KeyIdentity | null> {
  * for what they start.
  */
 async function signerFor(id: KeyIdentity): Promise<SignerProvider | null> {
-  if (id.provider === 'nip55') return id.package ? new Nip55Signer(nip55Port, id.package, id.pubkey, NIP46_TIMEOUT_MS, false) : null;
+  if (id.provider === 'nip55') return id.package ? new Nip55Signer(nip55Port, id.package, id.pubkey, NIP46_TIMEOUT_MS, false, nativeSecp.verify) : null;
   if (id.provider === 'nip46' && !id.bunker) return null;
   const secret = await KefliKeystore.readSecret(id.pubkey);
   if (!secret) return null;

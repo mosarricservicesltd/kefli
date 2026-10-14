@@ -52,6 +52,35 @@ describe('the user’s own nostr app (contract 2)', () => {
     await expect(s.signEvent({ kind: 1, created_at: 1, tags: [], content: 'hi' })).rejects.toThrow('another key');
   });
 
+  test('a NIP-55 answer that is not the event asked for is refused, whatever the port checked (F46)', async () => {
+    const real = new LocalSigner(nodeCrypto.randomBytes(32));
+    let change: (e: NostrEvent) => NostrEvent = (e) => e;
+    const port: Nip55Port = {
+      signEvent: async (_pkg, json) => {
+        const asked = JSON.parse(json);
+        return JSON.stringify(change(await real.signEvent(asked)));
+      },
+      nip44Encrypt: async () => '', nip44Decrypt: async () => '', canActInBackground: async () => false, signInBackground: async () => false,
+    };
+    const s = new Nip55Signer(port, 'com.example.signer', real.pubkey());
+    const asked = { kind: 30078, created_at: 5, tags: [['d', 'kefli/item/x']], content: 'mine' };
+    await expect(s.signEvent(asked)).resolves.toMatchObject(asked);
+    // another event, validly signed by the same key
+    const other = await real.signEvent({ ...asked, content: 'theirs' });
+    change = () => other;
+    await expect(s.signEvent(asked)).rejects.toThrow('not the event asked for');
+    await expect(s.outOfSight().signEvent(asked)).rejects.toThrow('not the event asked for');
+    // the right event with a signature that doesn't verify
+    change = (e) => ({ ...e, sig: e.sig.replace(/^./, (c) => (c === '0' ? '1' : '0')) });
+    await expect(s.signEvent(asked)).rejects.toThrow('not the event asked for');
+    // the verifier handed in is the one used
+    const said: string[] = [];
+    const checked = new Nip55Signer(port, 'pkg', real.pubkey(), 20, false, (sig) => (said.push(sig), true));
+    change = (e) => e;
+    await checked.withScreen().signEvent(asked);
+    expect(said).toHaveLength(1);
+  });
+
   test('an unanswered NIP-55 request fails after its wait, so the outbox can retry', async () => {
     const never: Nip55Port = { signEvent: () => new Promise(() => undefined), nip44Encrypt: () => new Promise(() => undefined), nip44Decrypt: () => new Promise(() => undefined), canActInBackground: async () => false, signInBackground: async () => false };
     const s = new Nip55Signer(never, 'com.example.signer', PK, 20);
@@ -71,7 +100,7 @@ describe('the user’s own nostr app (contract 2)', () => {
         return JSON.stringify(await real.signEvent(e));
       },
       nip44Encrypt: async (_pkg, text, peer) => (asked.push('encrypt'), real.nip44Encrypt(peer, text)),
-      nip44Decrypt: async (_pkg, text, peer) => real.nip44Decrypt(peer, text),
+      nip44Decrypt: async (_pkg, text, peer) => (asked.push('decrypt'), real.nip44Decrypt(peer, text)),
       canActInBackground: async () => true,
       signInBackground: async (_pkg, json) => approved.has(JSON.parse(json).kind),
     });
@@ -101,7 +130,8 @@ describe('the user’s own nostr app (contract 2)', () => {
       const missing = await s.missingInBackground();
       expect(missing).toEqual(['nip44', 13, 10063, 24242]);
       await expect(s.approve(missing, () => undefined)).rejects.toThrow('rejected');
-      expect(asked).toEqual(['encrypt']);
+      // both directions, since sync and the inbox decrypt out of sight
+      expect(asked).toEqual(['encrypt', 'decrypt']);
     });
 
     test('a signer out of sight never asks for the screen; withScreen does, and approving always does', async () => {

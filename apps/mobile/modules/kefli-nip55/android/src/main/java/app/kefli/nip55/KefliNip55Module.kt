@@ -145,9 +145,12 @@ class KefliNip55Module : Module() {
     }
 
     // Whether the signer answers through its resolver, without its screen: then background drains can run (4.7).
+    // Both directions are probed, since sync and the inbox decrypt out of sight: the probe is encrypted, and what comes
+    // back must decrypt to it again.
     AsyncFunction("canActInBackground") { pkg: String, peer: String, hex: String ->
       try {
-        resolve(pkg, "NIP44_ENCRYPT", arrayOf("kefli-probe", peer, hex))?.first != null
+        val encrypted = resolve(pkg, "NIP44_ENCRYPT", arrayOf("kefli-probe", peer, hex))?.first
+        encrypted != null && resolve(pkg, "NIP44_DECRYPT", arrayOf(encrypted, peer, hex))?.first == "kefli-probe"
       } catch (e: Exception) {
         false
       }
