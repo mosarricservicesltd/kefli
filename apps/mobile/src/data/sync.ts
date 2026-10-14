@@ -37,6 +37,14 @@ function version(r: Row | undefined): LocalVersion | null {
 
 const STRINGS = ['canonical', 'title', 'site', 'byline', 'lang', 'hero', 'source_ref', 'audio_pref'] as const;
 
+const WEB = new RegExp('^https?://', 'i');
+
+/**
+ * Whether a save's address is one the phone can open, fetch and share: a page on the web (C§4.1). One another client
+ * wrote as javascript:, file: or content: would otherwise be a row the Reader's original view loads.
+ */
+export const isWebAddress = (url: string) => WEB.test(url);
+
 /**
  * The most servers a text is fetched from: its own (the operator's and a mirror, C§4.2, a move's target's too) and
  * then the 10063's. Each may take a minute to fail, and a save from another client named 10,000.
@@ -67,17 +75,36 @@ function textOf(t: unknown) {
 
 const NO_TEXT = { text_sha256: null, text_key: null, text_nonce: null, text_servers: null };
 
-/** The row's columns from item JSON, each field checked, since another client wrote it (C§10). */
+/** More words than any text has: a 20 MB PDF, the largest file one is made from (4.2), holds about four million. */
+export const MAX_WORDS = 10_000_000;
+/** How far past the event that carries it a save's own time may be: another device's clock a day ahead (F36). */
+const SAVED_AHEAD = 86_400;
+
+/**
+ * saved_at as a time the save could have been made: no later than a day past the event carrying it, which can't be
+ * older than the save it publishes, and not before 1970; otherwise the event's time. One 1e300 years ahead sorted the
+ * save to the top of Saves for good, and gave no date the phone could show.
+ */
+function savedAtOf(v: unknown, createdAt: number): number {
+  const t = num(v);
+  return t !== null && t >= 0 && t <= createdAt + SAVED_AHEAD ? Math.floor(t) : createdAt;
+}
+
+/**
+ * The row's columns from item JSON, each field checked, since another client wrote it (C§10): progress within 0 to 1
+ * (C§4.1), so the word reached is within the text; words no more than MAX_WORDS; hero an http(s) address, since the
+ * phone fetches it.
+ */
 export function itemColumns({ item, extra }: ParsedItem, event: NostrEvent) {
   const o = item as unknown as Record<string, unknown>;
   const strings = Object.fromEntries(STRINGS.map((k) => [k, str(o[k])])) as Record<(typeof STRINGS)[number], string | null>;
   const raw = num(item.words);
-  const words = raw !== null && raw >= 0 ? Math.round(raw) : null;
-  const progress = num(item.progress) ?? 0;
+  const words = raw !== null && raw >= 0 && raw <= MAX_WORDS ? Math.round(raw) : null;
+  const progress = Math.min(1, Math.max(0, num(item.progress) ?? 0));
   const text = textOf(item.text);
   return {
-    ...strings, ...(text ?? NO_TEXT),
-    url: item.url, saved_at: num(item.saved_at) ?? event.created_at, state: item.state === 'archived' ? 'archived' : 'unread',
+    ...strings, ...(text ?? NO_TEXT), hero: strings.hero && WEB.test(strings.hero) ? strings.hero : null,
+    url: item.url, saved_at: savedAtOf(item.saved_at, event.created_at), state: item.state === 'archived' ? 'archived' : 'unread',
     progress, words, title: strings.title, text_hash: text ? str(item.text_hash) : null, source_kind: str(item.source_kind) ?? 'web',
     extra: Object.keys(extra).length ? JSON.stringify(extra) : null,
     position_word: wordReached({ progress, words }),
@@ -150,6 +177,7 @@ export function applyItem(db: SqlDb, now: number, owner: string, hash: string, e
   return db.tx(() => {
     const row = db.get<Row>('SELECT * FROM items WHERE owner = ? AND hash = ?', owner, hash);
     if (parsed.item.v !== 1) return future(db, owner, hash, event, row, parsed.item.v);
+    if (!isWebAddress(parsed.item.url)) return { outcome: 'ignored' };
     const outcome = mergeItem(version(row), event);
     // a save deleted here stays deleted while its kind 5 waits to go out, which a read reaching back a day (F36) would
     // otherwise undo from a relay the kind 5 hasn't reached; once it is out, whatever the relays still hold is read again

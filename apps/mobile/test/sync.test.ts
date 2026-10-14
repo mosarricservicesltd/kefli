@@ -645,6 +645,33 @@ describe('events another client spoilt, or a relay sends to wear the phone out',
     expect(listServers(w.db, w.pk).length).toBeLessThanOrEqual(2 + LIST_MAX);
   });
 
+  test('numbers out of range are brought within it: progress 0 to 1, words to MAX_WORDS, saved_at no later than its event allows', async () => {
+    const cases: [Record<string, unknown>, Record<string, unknown>][] = [
+      [{ progress: 1e300, words: 10 }, { progress: 1, position_word: 10 }],
+      [{ progress: -5 }, { progress: 0, position_word: 0 }],
+      [{ words: 1e300, progress: 0.5 }, { words: null, position_word: 0 }],
+      [{ saved_at: 1e300 }, { saved_at: 6000 }],
+      [{ saved_at: -1e300 }, { saved_at: 6000 }],
+      [{ saved_at: 5000.7 }, { saved_at: 5000 }],
+      [{ hero: 'javascript:alert(1)' }, { hero: null }],
+    ];
+    for (const [over, want] of cases) {
+      const w = world();
+      w.publish(await rawEvent(w, `kefli/item/${h(1)}`, itemJson(h(1), over), 6000));
+      await syncInbound(w.ports);
+      expect(row(w, h(1))).toMatchObject(want);
+    }
+  });
+
+  test('a save whose address isn’t a page on the web isn’t taken', async () => {
+    const w = world();
+    for (const [n, url] of [[1, 'javascript:alert(1)'], [2, 'file:///data/data/app.kefli/files/key'], [3, 'content://x'], [4, 'https://example.com/ok']] as const) {
+      w.publish(await rawEvent(w, `kefli/item/${h(n)}`, itemJson(h(n), { url }), 6000 + n));
+    }
+    expect(await syncInbound(w.ports)).toMatchObject({ items: 1 });
+    expect(w.db.all('SELECT url FROM items')).toEqual([{ url: 'https://example.com/ok' }]);
+  });
+
   test('a save naming hundreds of text servers is fetched from at most TEXT_SERVERS_MAX of them, each up to a minute', async () => {
     const w = world();
     const enc = await encryptText(normaliseMarkdown('# A\n\nwords'), nodeCrypto);
