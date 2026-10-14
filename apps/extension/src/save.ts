@@ -8,7 +8,7 @@ import { finalizeEvent } from 'nostr-tools/pure';
 import { uploadBlob, deleteBlob, type BlossomOutcome } from '../../../packages/protocol/src/blossom';
 import { EventTooLargeError } from '../../../packages/protocol/src/events';
 import { itemHash } from '../../../packages/protocol/src/normalise';
-import { wrapSaveRequest, type SaveRequest } from '../../../packages/protocol/src/pairing';
+import { SAVE_REQUEST_MAX_BYTES, wrapSaveRequest, type SaveRequest } from '../../../packages/protocol/src/pairing';
 import type { CryptoPort } from '../../../packages/protocol/src/ports';
 import type { LocalSigner, NostrEvent } from '../../../packages/protocol/src/signer';
 import { encryptText } from '../../../packages/protocol/src/text';
@@ -136,13 +136,22 @@ export class AddressTooLongError extends Error {
 }
 
 /**
+ * A field longer than a whole wrap's limit, which could never go in one: it is left out before the first try rather than
+ * after a try for each field spared before it. A page's 1 MB title cost five wraps of a megabyte each, seven seconds of
+ * the worker's time, and a 2 MB link address eight, fourteen seconds, before it was refused.
+ */
+const unwrappable = (s: string | null) => s !== null && s.length > SAVE_REQUEST_MAX_BYTES;
+const fitting = (s: string | null) => (unwrappable(s) ? null : s);
+
+/**
  * The request and its wrap, the HTML encrypted with a fresh key; nothing is sent yet. A wrap has to stay under 8 KB, so a
  * page with a long address or hero loses what it can spare until it fits; one that still doesn't is AddressTooLongError.
  */
 export async function prepare(c: Captured, ctx: SaveContext): Promise<Prepared> {
+  if (unwrappable(c.url)) throw new AddressTooLongError();
   const enc = c.html === null ? null : await encryptText(c.html, ctx.crypto);
   let request: SaveRequest = {
-    v: 1, url: c.url, canonical: c.canonical, title: c.title, site: c.site, byline: c.byline, lang: c.lang, hero: c.hero,
+    v: 1, url: c.url, canonical: fitting(c.canonical), title: fitting(c.title), site: fitting(c.site), byline: fitting(c.byline), lang: fitting(c.lang), hero: fitting(c.hero),
     captured_at: ctx.now, token: ctx.pairing.token,
     html: enc ? { ...enc.text, server: ctx.defaults.operator.blossom } : null,
   };

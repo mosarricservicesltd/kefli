@@ -46,6 +46,18 @@ export const QUEUE_MAX = 8;
 export const ATTEMPTS_MAX = 200;
 /** An inbox blob larger than this (as base64) isn't kept while offline; the phone fetches that page itself. */
 export const BLOB_KEEP_MAX = 900_000;
+/**
+ * The blobs kept at once, saves on their first send included: room for the eight largest that wait. Saves on their
+ * first send aren't counted among the eight, so a dozen big pages saved while the server was slow kept a dozen blobs,
+ * past the 10 MB Chrome gives storage.local (QUOTA_BYTES); the write that went over was refused and that save was lost.
+ * Past this a blob isn't kept, as one too large isn't, and the phone fetches that page itself.
+ */
+export const BLOBS_KEEP_MAX = QUEUE_MAX * BLOB_KEEP_MAX;
+/**
+ * The most entries kept at once, saves on their first send included, so they can't fill storage.local between them
+ * even without blobs (an entry is up to 20 KB). A save past this is sent all the same, without being kept first.
+ */
+export const ENTRIES_MAX = 64;
 
 export interface Queued extends Omit<Pending, (typeof PLAIN)[number]> {
   /**
@@ -58,7 +70,9 @@ export interface Queued extends Omit<Pending, (typeof PLAIN)[number]> {
 }
 
 export async function queued(store: Store): Promise<Queued[]> {
-  return ((await store.get<Queued[]>(KEYS.queue)) ?? []).map(sealedOnly);
+  const kept = await store.get<Queued[]>(KEYS.queue);
+  // anything else there (a value no version of the queue writes) would stop every save, flush and the options page
+  return Array.isArray(kept) ? kept.filter((e) => typeof e?.id === 'string').map(sealedOnly) : [];
 }
 
 /** Reads, changes in place and writes back the queue under its lock, so no change made meanwhile is overwritten (F41). */
@@ -71,15 +85,23 @@ export function changeQueue<T>(store: Store, edit: (q: Queued[]) => T | Promise<
   });
 }
 
-const keepable = (blob: string | null) => (blob !== null && blob.length > BLOB_KEEP_MAX ? null : blob);
+/** The blob as kept: none when it is too large, or when the other entries' blobs leave no room for it. */
+function keepable(blob: string | null, q: Queued[], but?: string): string | null {
+  if (blob === null || blob.length > BLOB_KEEP_MAX) return null;
+  const others = q.reduce((n, e) => n + (e.id === but ? 0 : (e.blob?.length ?? 0)), 0);
+  return others + blob.length > BLOBS_KEEP_MAX ? null : blob;
+}
 /** How many of the eight are taken: every entry but saves on their first send, and the one named. */
 const taken = (q: Queued[], but?: string) => q.filter((e) => e.why !== 'sending' && e.id !== but).length;
 
-/** 'full' when eight already wait (decision 31). A save going in for its first send is always taken; settle decides. */
+/**
+ * 'full' when eight already wait (decision 31), or when ENTRIES_MAX entries are kept. A save going in for its first send
+ * is otherwise always taken; settle decides.
+ */
 export async function enqueue(store: Store, p: Pending, why: Queued['why']): Promise<'queued' | 'full'> {
   return changeQueue(store, (q) => {
-    if (why !== 'sending' && taken(q) >= QUEUE_MAX) return 'full';
-    q.push({ ...sealedOnly(p), blob: keepable(p.blob), why, stopped: false });
+    if ((why !== 'sending' && taken(q) >= QUEUE_MAX) || q.length >= ENTRIES_MAX) return 'full';
+    q.push({ ...sealedOnly(p), blob: keepable(p.blob, q), why, stopped: false });
     return 'queued';
   });
 }
@@ -108,7 +130,7 @@ export async function settle(store: Store, p: Pick<Pending, 'id' | 'blob'>, d: D
       return d === 'sent' ? 'sent' : 'full';
     }
     const attempts = first ? 0 : q[i].attempts + 1;
-    q[i] = { ...q[i], blob: keepable(p.blob), attempts, why: whyNot(d, online), stopped: attempts >= ATTEMPTS_MAX };
+    q[i] = { ...q[i], blob: keepable(p.blob, q, p.id), attempts, why: whyNot(d, online), stopped: attempts >= ATTEMPTS_MAX };
     return 'queued';
   });
 }

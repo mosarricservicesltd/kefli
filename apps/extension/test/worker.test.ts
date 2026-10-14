@@ -12,7 +12,7 @@ import { history } from '../src/debug';
 import { relayRows, type Defaults } from '../src/defaults';
 import { deviceSigner } from '../src/device';
 import { applyMove, followMoves } from '../src/move';
-import { changeQueue, dequeue, enqueue, flush, queued, settle } from '../src/queue';
+import { BLOB_KEEP_MAX, BLOBS_KEEP_MAX, changeQueue, dequeue, enqueue, ENTRIES_MAX, flush, QUEUE_MAX, queued, settle } from '../src/queue';
 import { AddressTooLongError, fetchNet, prepare, timed, uploadTimeoutMs, type Net, type Pending } from '../src/save';
 import { KEYS, memoryStore, type Pairing, type Store } from '../src/store';
 import { toastCopy, type ToastState } from '../src/toastCopy';
@@ -521,5 +521,93 @@ describe('a save the browser’s own parts let down', () => {
     const online = harness({ store });
     expect(await ends(online.work.flushQueue())).toBe('ended');
     expect(await queued(store)).toEqual([]);
+  });
+});
+
+/** chrome.storage.local's 10 MB (QUOTA_BYTES), counted as Chrome counts it: a write that would go past it is refused. */
+function quotaStore(quota = 10_485_760): Store & { bytes(): number } {
+  const kept = new Map<string, string>();
+  const bytes = () => [...kept].reduce((n, [k, v]) => n + k.length + v.length, 0);
+  return {
+    async get<T>(k: string) {
+      const v = kept.get(k);
+      return v === undefined ? undefined : (JSON.parse(v) as T);
+    },
+    async set(k, v) {
+      const s = JSON.stringify(v);
+      if (bytes() - (kept.has(k) ? k.length + kept.get(k)!.length : 0) + k.length + s.length > quota) throw new Error('QUOTA_BYTES quota exceeded');
+      kept.set(k, s);
+    },
+    async remove(k) {
+      kept.delete(k);
+    },
+    bytes,
+  };
+}
+
+describe('the queue in storage.local’s 10 MB', () => {
+  const blobbed = (id: string, chars: number): Pending => ({ ...entry(id), blob: 'b'.repeat(chars), sha256: 's' });
+
+  test('blobs are kept only while there is room for them: eight of the largest', async () => {
+    const store = memoryStore();
+    for (let i = 0; i < QUEUE_MAX; i++) await enqueue(store, blobbed(`w${i}`, BLOB_KEEP_MAX), 'offline');
+    await enqueue(store, blobbed('first send', BLOB_KEEP_MAX), 'sending');
+    const q = await queued(store);
+    expect(q.map((e) => e.blob === null)).toEqual([...Array(QUEUE_MAX).fill(false), true]);
+    expect(q.reduce((n, e) => n + (e.blob?.length ?? 0), 0)).toBeLessThanOrEqual(BLOBS_KEEP_MAX);
+  });
+
+  test('a save on its first send past ENTRIES_MAX isn’t kept first', async () => {
+    const store = memoryStore();
+    for (let i = 0; i < ENTRIES_MAX; i++) expect(await enqueue(store, entry(`s${i}`), 'sending')).toBe('queued');
+    expect(await enqueue(store, entry('one more'), 'sending')).toBe('full');
+  });
+
+  test('a dozen big pages on their first send at once are all kept as they send, with room left for the rest', async () => {
+    const store = quotaStore();
+    // a big page's blob, under BLOB_KEEP_MAX: twelve of them are over the 10 MB
+    const sends = Array.from({ length: 12 }, (_, i) => ({ ...blobbed(`big${i}`, 893_000), wrap: { id: `big${i}`, content: 'w'.repeat(8_000) } as NostrEvent, sealed: 's'.repeat(6_000) }));
+    for (const p of sends) expect(await enqueue(store, p, 'sending')).toBe('queued');
+    // every one is in storage while it sends, so a worker stopped now loses none (F23), and the pairing, the defaults
+    // and the history still have room
+    expect(await queued(store)).toHaveLength(12);
+    await expect(store.set('room', 'r'.repeat(1_000_000))).resolves.toBeUndefined();
+    await store.remove('room');
+    // none could send: eight wait, with what room there is for their blobs, and four are refused as ninths (decision 31)
+    const settled = [];
+    for (const p of sends) settled.push(await settle(store, p, 'unreachable', true, true));
+    expect(settled.sort()).toEqual([...Array(4).fill('full'), ...Array(8).fill('queued')]);
+    expect(await queued(store)).toHaveLength(QUEUE_MAX);
+    expect(store.bytes()).toBeLessThan(BLOBS_KEEP_MAX + 1_000_000);
+  });
+
+  test('a queue storage holds that no version wrote is read as empty, and saves go on', async () => {
+    const store = memoryStore();
+    await store.set(KEYS.queue, { not: 'a list' });
+    expect(await queued(store)).toEqual([]);
+    await store.set(KEYS.queue, [null, 7, { id: 'kept', wrap: {}, sealed: '', why: 'offline', stopped: false, attempts: 0 }]);
+    expect((await queued(store)).map((e) => e.id)).toEqual(['kept']);
+    await store.set(KEYS.queue, 'junk');
+    const h = harness({ store });
+    expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+    expect(kinds(h.toasts)).toEqual(['saving', 'saved']);
+  });
+});
+
+describe('a field no wrap could ever hold (F39, faster)', () => {
+  test('is left out at once, and the page’s other details stay', async () => {
+    const started = Date.now();
+    const { pending } = await prepare({ ...PAGE, title: 'T'.repeat(1_000_000), byline: 'A writer', site: `S${'😀'.repeat(300_000)}` }, ctx);
+    const req = JSON.parse((await unwrap(user, pending.wrap)).rumor.content) as SaveRequest;
+    expect(req).toMatchObject({ title: null, site: null, byline: 'A writer', lang: 'en' });
+    expect(req.html).not.toBeNull();
+    expect(pending.title).toBe('example.com');
+    expect(Date.now() - started).toBeLessThan(1500);
+  });
+
+  test('an address no wrap could hold is refused at once', async () => {
+    const started = Date.now();
+    await expect(prepare(linkOnly(`https://example.com/?q=${'x'.repeat(2_000_000)}`), ctx)).rejects.toBeInstanceOf(AddressTooLongError);
+    expect(Date.now() - started).toBeLessThan(1000);
   });
 });
