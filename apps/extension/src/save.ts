@@ -19,8 +19,11 @@ import type { Pairing } from './store';
 export interface Net {
   upload(server: string, blob: Uint8Array, sha256: string, signer: LocalSigner): Promise<BlossomOutcome>;
   remove(server: string, sha256: string, signer: LocalSigner): Promise<BlossomOutcome>;
-  /** Resolves once the relay answers OK true; rejects on a refusal, a timeout or no connection. */
-  publish(relay: string, event: NostrEvent): Promise<void>;
+  /**
+   * Resolves once the relay answers OK true; rejects on a refusal, a timeout or no connection. With the device key,
+   * the connection AUTHs as the device first (F9).
+   */
+  publish(relay: string, event: NostrEvent, device?: LocalSigner): Promise<void>;
 }
 
 /**
@@ -145,7 +148,7 @@ export async function deliver(p: Pick<Pending, 'id' | 'wrap' | 'blob' | 'sha256'
     p.blob = null;
   }
   try {
-    await net.publish(relay, p.wrap);
+    await net.publish(relay, p.wrap, device);
     return 'sent';
   } catch (e) {
     return String(e).includes('blocked') || String(e).includes('restricted') ? 'blocked' : 'unreachable';

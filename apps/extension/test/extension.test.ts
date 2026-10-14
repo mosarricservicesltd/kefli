@@ -201,8 +201,8 @@ function fakeNet(o: { upload?: 'ok' | 'down' | 'refused'; publish?: 'ok' | 'down
       calls.push('remove');
       return { ok: true, url: 'u' };
     },
-    async publish(_relay, e) {
-      calls.push(`publish ${e.kind}`);
+    async publish(_relay, e, as) {
+      calls.push(`publish ${e.kind}${as ? ` as ${as.pubkey().slice(0, 4)}` : ''}`);
       published.push(e);
       if (o.publish === 'down') throw new Error('timeout');
       if (o.publish === 'blocked') throw new Error('blocked: not allowed');
@@ -222,7 +222,8 @@ describe('delivery', () => {
   test('the blob goes up before the wrap, and is then dropped', async () => {
     const r = await send({});
     expect(r.d).toBe('sent');
-    expect(r.calls).toEqual(['upload', 'publish 1059']);
+    // the wrap goes on a connection AUTHed as the device (F9)
+    expect(r.calls).toEqual(['upload', `publish 1059 as ${device.pubkey().slice(0, 4)}`]);
     expect(r.pending.blob).toBeNull();
   });
   test('an unreachable server leaves the save to wait, the blob kept', async () => {
