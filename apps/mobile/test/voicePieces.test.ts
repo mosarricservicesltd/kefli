@@ -1,29 +1,13 @@
 // A sentence longer than the system voice takes at a time (mobile spec 8.1): Android's engine speaks at most
 // getMaxSpeechInputLength (4,000) characters a call. Node can't run the Kotlin: the second test reads its source,
 // standing in for the check on the phone listed in HANDOVER.
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { deriveArticle } from '../src/reader/blocks';
+import { kotlinSource, member } from './kotlin';
 
 /** The most kefli-voice hands the engine in one call: getMaxSpeechInputLength() - 1. */
 const ENGINE_CHARS = 3_999;
 
-const voiceSource = (file: string) =>
-  readFileSync(join(__dirname, '..', 'modules', 'kefli-voice', 'android', 'src', 'main', 'java', 'app', 'kefli', 'voice', file), 'utf8');
-
-/** A function of a Kotlin object, from its name to the line before the next member (indented two spaces). */
-function member(kt: string, name: string): string {
-  const at = kt.indexOf(`fun ${name}(`);
-  if (at === -1) throw new Error(`no fun ${name}`);
-  const [first, ...rest] = kt.slice(at).split('\n');
-  const body: string[] = [first];
-  for (const line of rest) {
-    if (line.startsWith('  }')) body.push(line);
-    if (line !== '' && !line.startsWith('    ')) break;
-    body.push(line);
-  }
-  return body.join('\n');
-}
+const voiceSource = (file: string) => kotlinSource('kefli-voice', 'voice', file);
 
 describe('a sentence longer than the engine takes (8.1)', () => {
   test('the Reader can still hand the voice one: a word the splitter keeps whole, as a paragraph of Chinese is', () => {
