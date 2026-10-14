@@ -103,14 +103,20 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
   test('without HTML, or for an X post, the save waits for its parse as a share does', async () => {
     const w = world();
     const { html } = await w.withHtml('<h1>x</h1>');
-    await w.send(w.request());
-    await w.send(w.request({ url: 'https://x.com/someone/status/123', html }));
+    const read = { canonical: 'https://example.com/a', byline: 'A writer', hero: 'https://example.com/a.jpg' };
+    await w.send(w.request(read));
+    await w.send(w.request({ url: 'https://x.com/someone/status/123', html, ...read }));
     expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 2 });
     expect(pendingParses(w.db, w.owner).map((p) => [p.url, p.x_state]).sort()).toEqual([
       ['https://example.com/a', null],
       ['https://x.com/someone/status/123', 'pending'],
     ]);
     expect(w.parses()).toBe(0);
+    // what the browser read stands until the parse, but an X post's is the post's, so none of it is kept
+    expect(w.db.all('SELECT canonical, title, site, byline, lang, hero FROM items ORDER BY url')).toEqual([
+      { ...read, title: 'From the browser', site: 'example.com', lang: 'en' },
+      { canonical: null, title: null, site: null, byline: null, lang: null, hero: null },
+    ]);
   });
 
   test('a save the signer can’t open out of sight waits for it, then arrives once it answers (F3)', async () => {

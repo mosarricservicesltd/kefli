@@ -10,6 +10,7 @@
 // browser's label is kept in origin_device for the row's "From Chrome".
 import { browserSavedAt, isXPost, itemHash, type SaveRequest } from '@kefli/protocol';
 import type { SqlDb } from './db';
+import type { NewItem } from './items';
 import { enqueue, release } from './outbox';
 import { queueSave, type SaveTargets } from './saves';
 
@@ -70,20 +71,26 @@ export function usesBlob(r: SaveRequest, now: number): boolean {
 export type Admitted = { outcome: 'created' | 'merged' | 'unarchived'; hash: string; fetch: boolean };
 
 /**
+ * What the extension read of the page, which stands until the parse. An X post's is the post's, not its article's,
+ * which is checked first, as for a shared one (5.4), so none of it is kept.
+ */
+function readByBrowser(r: SaveRequest): Pick<NewItem, 'canonical' | 'title' | 'site' | 'byline' | 'lang' | 'hero' | 'xState'> {
+  if (isXPost(r.url)) return { canonical: null, title: null, site: null, byline: null, lang: null, hero: null, xState: 'pending' };
+  return { canonical: r.canonical, title: r.title, site: r.site, byline: r.byline, lang: r.lang, hero: r.hero, xState: null };
+}
+
+/**
  * An accepted request becomes a save (C§4.4): created, an archived save un-archived, or matched. A save still
  * fetching its blob (a drain cut short) carries on fetching.
  */
 export function admit(db: SqlDb, now: number, owner: string, r: SaveRequest, label: string, t: SaveTargets): Admitted {
   return db.tx(() => {
-    const x = isXPost(r.url);
     const hash = requestHash(r);
     const blob = usesBlob(r, now);
     const existing = db.get<{ state: string; text_state: string }>('SELECT state, text_state FROM items WHERE owner = ? AND hash = ?', owner, hash);
-    // The extension's metadata stands until the parse; an X post is checked first, as a shared one is (5.4).
     const held = queueSave(db, now, {
-      owner, hash, url: r.url, canonical: x ? null : r.canonical, title: x ? null : r.title, site: x ? null : r.site, byline: x ? null : r.byline,
-      savedAt: browserSavedAt(r.captured_at, now), words: null, lang: x ? null : r.lang, hero: x ? null : r.hero,
-      text: null, textHash: null, textState: 'queued', sharedUrl: r.url, origin: 'browser', xState: x ? 'pending' : null,
+      owner, hash, url: r.url, ...readByBrowser(r), savedAt: browserSavedAt(r.captured_at, now), words: null,
+      text: null, textHash: null, textState: 'queued', sharedUrl: r.url, origin: 'browser',
     }, null, t);
     release(db, held);
     if (existing) {
