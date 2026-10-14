@@ -48,7 +48,7 @@ export type BlossomOutcome =
    */
   | { ok: false; status: number; permanent: boolean; reason: string; figures?: AccountFigures };
 
-function outcome(status: number, reason: string): BlossomOutcome {
+function outcome(status: number, reason: string): Extract<BlossomOutcome, { ok: false }> {
   // Written 500 > status: lizard, which the code-gate uses, reads "status <" as the start of a generic.
   return { ok: false, status, permanent: status >= 400 && 500 > status && status !== 401 && status !== 429, reason };
 }
