@@ -1,6 +1,6 @@
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
-import { indexText } from '../src/data/sync';
+import { INDEX_CHARS, indexText } from '../src/data/sync';
 import { deleteItem } from '../src/data/library';
 import { QUERY_WORDS, QUERY_WORD_CHARS, matchExpression, queryWords, search } from '../src/data/search';
 import { memoryDb } from './sqlite';
@@ -58,6 +58,18 @@ describe('search (mobile spec 4.9, 5.6)', () => {
     expect(search(w.db, PK, `waiting ${'x'.repeat(200_000)}`)).toEqual([]);
     expect(queryWords(pasted).length).toBeLessThanOrEqual(QUERY_WORDS);
     expect(queryWords('x'.repeat(5_000))[0]).toHaveLength(QUERY_WORD_CHARS);
+  });
+
+  test("a book-length text is indexed up to INDEX_CHARS, its title and opening found, in a bounded time", () => {
+    const w = world();
+    const filler = 'saving reading later quiet stone heather river winter '.repeat(Math.ceil((INDEX_CHARS * 2.5) / 55));
+    const t = Date.now();
+    w.add(1, 'A very long book', `opening words ${filler} closingword`);
+    // before, all five megabytes went into the index in one transaction on the JS thread
+    expect(Date.now() - t).toBeLessThan(5_000);
+    expect(search(w.db, PK, 'opening').map((r) => r.hash)).toEqual([h(1)]);
+    expect(search(w.db, PK, 'book').map((r) => r.hash)).toEqual([h(1)]);
+    expect(search(w.db, PK, 'closingword')).toEqual([]);
   });
 
   test('a save waiting on a delete is not found', () => {
