@@ -464,6 +464,19 @@ describe('a capture the operator refuses (contract 4.4 and 5, v1.12)', () => {
     expect(await h.session.get(`undo:${w.id}`)).toMatchObject({ sha256: null });
   });
 
+  test('one queued in an earlier browser session, its Undo key gone with that session, goes the same way', async () => {
+    const h = harness({ online: false });
+    await h.work.save(PAGE, 1, false);
+    const n = net({ blossom: operator(413, 'daily') });
+    const later = harness({ store: h.store, net: n.net });
+    await later.work.flushQueue();
+    const [w] = n.published;
+    expect((await open(w)).req.html).toBeNull();
+    expect(await queued(h.store)).toEqual([]);
+    expect(await later.session.get(`undo:${w.id}`)).toBeUndefined();
+    expect((await history(h.store))[0]).toMatchObject({ outcome: 'sent, no text', id: w.id.slice(0, 8) });
+  });
+
   test('one whose request then can’t reach the relay waits under its new wrap, and goes later without uploading again', async () => {
     const down = net({ blossom: operator(413, 'quota'), publish: 'down' });
     const h = harness({ net: down.net });
