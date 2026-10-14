@@ -554,7 +554,10 @@ async function sendCopyRelay(p: SendPorts, row: OutboxRow, t: OutboxTarget): Pro
   return [await copyEvents(p, t, events)];
 }
 
-/** The library as the identity's other write relays hold it, the newest event of each save then every deletion; null when none answered. */
+/**
+ * The library as the identity's other write relays hold it: the newest event of each save, then every deletion. Null
+ * when none of them answered.
+ */
 async function heldLibrary(db: SqlDb, query: NonNullable<SendPorts['query']>, owner: string, target: string): Promise<NostrEvent[] | null> {
   const sources = writeRelays(db, owner).filter((u) => u !== target);
   const read = await Promise.all(sources.map(async (u) => {
