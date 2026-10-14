@@ -179,7 +179,8 @@ chrome.runtime.onMessage.addListener((msg: { type: string; id?: string; all?: bo
   const done = () => reply(true);
   if (msg.type === 'undo' && msg.id) void work.undo(msg.id, sender.tab?.id ?? 'popup').then(done, done);
   else if (msg.type === 'options') void chrome.runtime.openOptionsPage().then(done, done);
-  else if (msg.type === 'retry') void work.flushQueue(true, msg.id).then(done, done);
+  // Retry answers whether its save went, under whatever wrap it went (v1.12), so the options page says Sent only then
+  else if (msg.type === 'retry') void work.flushQueue(true, msg.id).then((sent) => reply(sent.length > 0), () => reply(false));
   else return false;
   return true;
 });

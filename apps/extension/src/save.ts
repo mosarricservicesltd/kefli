@@ -1,7 +1,8 @@
 // A browser save (contract 4.4): the captured HTML encrypted into an inbox blob for the operator Blossom server, then a
 // save request wrapped to the user, rumor and seal by the device key, the wrap by a fresh key kept for Undo. Delivery
-// uploads the blob, then publishes the wrap to the operator relay only. Network calls come through Net, so the tests can
-// play the relay and the server.
+// uploads the blob, then publishes the wrap to the operator relay only; an upload the operator refuses for good sends the
+// request again without its HTML (v1.12), and a wrap that waited is made again first, so the phone's look at its inbox
+// finds it. Network calls come through Net, so the tests can play the relay and the server.
 import { base64 } from '@scure/base';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { finalizeEvent } from 'nostr-tools/pure';
@@ -65,7 +66,18 @@ export interface Pending {
   host: string;
   created_at: number;
   attempts: number;
+  /** When its wrap was made, in Unix seconds (WRAP_FRESH_FOR); one queued by an earlier build has none, so counts as old. */
+  wrapped_at?: number;
 }
+
+/**
+ * How long a wrap may wait before it goes, in seconds (contract 4.4). The phone reads its inbox from two days and five
+ * minutes before its last look, and NIP-59 dates a wrap up to two days back, so a wrap that waited in the queue longer
+ * than five minutes while the phone looked could carry a date the phone has already read past, and never reach it. A wrap
+ * made more than a minute ago is made again just before it goes, leaving four of the five minutes for the send and for
+ * this computer's clock running behind the phone's.
+ */
+export const WRAP_FRESH_FOR = 60;
 
 export interface Prepared {
   pending: Pending;
@@ -104,6 +116,18 @@ export class AddressTooLongError extends Error {
   }
 }
 
+type Encrypted = Awaited<ReturnType<typeof encryptText>>;
+
+/** The save as the queue keeps it, its blob only while the request still names the HTML (F39 may have spared it). */
+function pendingOf(wrap: NostrEvent, sealed: string, request: SaveRequest, enc: Encrypted | null, now: number): Pending {
+  const text = request.html && enc;
+  return {
+    id: wrap.id, wrap, sealed, blob: text ? base64.encode(text.blob) : null, sha256: text ? text.text.sha256 : null,
+    hash: itemHash(request.url, request.canonical), title: request.title ?? hostOf(request.url), host: hostOf(request.url), created_at: now, attempts: 0,
+    wrapped_at: now,
+  };
+}
+
 /**
  * The request and its wrap, the HTML encrypted with a fresh key; nothing is sent yet. A wrap has to stay under 8 KB, so a
  * page with a long address or hero loses what it can spare until it fits; one that still doesn't is AddressTooLongError.
@@ -120,12 +144,7 @@ export async function prepare(c: Captured, ctx: SaveContext): Promise<Prepared> 
     try {
       const { wrap, wrapKey } = await wrapSaveRequest(ctx.device, ctx.pairing.user_pubkey, uuid, request, ctx.now);
       const sealed = await ctx.device.nip44Encrypt(ctx.device.pubkey(), JSON.stringify({ uuid, request }));
-      const text = request.html && enc;
-      const pending: Pending = {
-        id: wrap.id, wrap, sealed, blob: text ? base64.encode(enc.blob) : null, sha256: text ? enc.text.sha256 : null,
-        hash: itemHash(request.url, request.canonical), title: request.title ?? hostOf(request.url), host: hostOf(request.url), created_at: ctx.now, attempts: 0,
-      };
-      return { pending, wrapKey };
+      return { pending: pendingOf(wrap, sealed, request, enc, ctx.now), wrapKey };
     } catch (e) {
       if (!(e instanceof EventTooLargeError)) throw e;
       if (spared === SPARE.length) throw new AddressTooLongError();
@@ -134,25 +153,103 @@ export async function prepare(c: Captured, ctx: SaveContext): Promise<Prepared> 
   }
 }
 
-export type Delivery = 'sent' | 'unreachable' | 'blocked';
+/** A request wrapped again: the new wrap, the key that alone can retract it, and the request sealed to the device. */
+export interface Again {
+  wrap: NostrEvent;
+  wrapKey: Uint8Array;
+  sealed: string;
+}
+
+/** What a request wrapped again changes: its token in a move, its HTML when the operator refused the upload. */
+export type Change = (request: SaveRequest) => SaveRequest;
 
 /**
- * Uploads the blob if it is still here, then publishes the wrap. The blob going first means the phone finds the HTML
- * when the request arrives; a blob the server refuses for good is dropped, and the phone fetches the page itself
- * (contract 4.4). 'blocked' is a relay that answered and refused, which the options page names.
+ * A save's request read back from its copy sealed to the device, changed, and wrapped again for `to` with the same uuid,
+ * so the phone reads the same save request under a new wrap, key and id. Null when the sealed copy can't be read, as for
+ * a save queued before requests were kept.
  */
-export async function deliver(p: Pick<Pending, 'id' | 'wrap' | 'blob' | 'sha256'>, server: string, relay: string, device: LocalSigner, net: Net): Promise<Delivery> {
-  if (p.blob !== null && p.sha256 !== null) {
-    const up = await net.upload(server, base64.decode(p.blob), p.sha256, device).catch(() => null);
-    if (!up || (!up.ok && !up.permanent)) return 'unreachable';
-    p.blob = null;
+export async function wrapAgain(sealed: string, device: LocalSigner, to: string, change: Change, now: number): Promise<Again | null> {
+  let kept: { uuid: string; request: SaveRequest };
+  try {
+    kept = JSON.parse(await device.nip44Decrypt(device.pubkey(), sealed));
+  } catch {
+    return null;
   }
+  const request = change(kept.request);
+  const { wrap, wrapKey } = await wrapSaveRequest(device, to, kept.uuid, request, now);
+  return { wrap, wrapKey, sealed: await device.nip44Encrypt(device.pubkey(), JSON.stringify({ uuid: kept.uuid, request })) };
+}
+
+/** The request, changed, signed again and wrapped for the recipient of the wrap it replaces; null when that can't be done. */
+async function wrapFor(p: Pick<Pending, 'wrap' | 'sealed'>, device: LocalSigner, change: Change, now: number): Promise<Again | null> {
+  try {
+    const to = p.wrap.tags.find((t) => t[0] === 'p')?.[1];
+    return to ? await wrapAgain(p.sealed, device, to, change, now) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The request with `html` null (contract 4.4, v1.12), signed again and wrapped for the recipient of the wrap it replaces.
+ * Null when that can't be done; the old wrap then goes as it was, and the phone, finding no blob, fetches the page.
+ */
+export function withoutText(p: Pick<Pending, 'wrap' | 'sealed'>, device: LocalSigner, now: number): Promise<Again | null> {
+  return wrapFor(p, device, (r) => ({ ...r, html: null }), now);
+}
+
+/** The same request under a wrap made now, for a save that waited (WRAP_FRESH_FOR); null when that can't be done. */
+export function freshWrap(p: Pick<Pending, 'wrap' | 'sealed'>, device: LocalSigner, now: number): Promise<Again | null> {
+  return wrapFor(p, device, (r) => r, now);
+}
+
+export type Delivery = 'sent' | 'unreachable' | 'blocked';
+
+/** What delivery reads of a save, and may change: its blob goes once uploaded, and another wrap can take its wrap's place. */
+export type Delivered = Pick<Pending, 'id' | 'wrap' | 'sealed' | 'blob' | 'sha256' | 'wrapped_at'>;
+
+/**
+ * What its caller does with a save between its upload and its publish: with `refused`, the operator refused the upload,
+ * and the request goes again without its HTML (v1.12); otherwise a wrap that waited too long is made again
+ * (WRAP_FRESH_FOR).
+ */
+export type BeforePublish = (p: Delivered, refused: boolean) => Promise<void>;
+
+/**
+ * The inbox blob's upload, while the save still has one: 'done' once the operator holds it, or when there is none to
+ * send; 'refused' for any 4xx answer but 401 and 429 (contract 4.4 and 5), never tried again; and 'unreachable' for
+ * anything else, a 5xx, a 507, a 401, a 429 or no answer, which the queue tries again.
+ */
+async function uploadInbox(p: Delivered, server: string, device: LocalSigner, net: Net): Promise<'done' | 'refused' | 'unreachable'> {
+  if (p.blob === null || p.sha256 === null) return 'done';
+  const up = await net.upload(server, base64.decode(p.blob), p.sha256, device).catch(() => null);
+  if (!up || (!up.ok && !up.permanent)) return 'unreachable';
+  p.blob = null;
+  return up.ok ? 'done' : 'refused';
+}
+
+/** The wrap published; 'blocked' is a relay that answered and refused, which the options page names. */
+async function publishWrap(p: Delivered, relay: string, device: LocalSigner, net: Net): Promise<Delivery> {
   try {
     await net.publish(relay, p.wrap, device);
     return 'sent';
   } catch (e) {
     return String(e).includes('blocked') || String(e).includes('restricted') ? 'blocked' : 'unreachable';
   }
+}
+
+/**
+ * Uploads the blob if it is still here, then publishes the wrap. The blob going first means the phone finds the HTML
+ * when the request arrives. When the operator refuses the upload for good, a 413 for room or size among the reasons,
+ * the extension doesn't wait (contract 4.4 and 5, v1.12): `before` puts the request without its HTML in the wrap's
+ * place, and that wrap goes, so the phone fetches the page itself. Otherwise `before` makes a wrap that waited too long
+ * again, so the phone's look at its inbox finds it.
+ */
+export async function deliver(p: Delivered, server: string, relay: string, device: LocalSigner, net: Net, before: BeforePublish): Promise<Delivery> {
+  const up = await uploadInbox(p, server, device, net);
+  if (up === 'unreachable') return up;
+  await before(p, up === 'refused');
+  return publishWrap(p, relay, device, net);
 }
 
 /** Undo after the wrap reached the relay: a kind 5 signed by the wrap's key, and the inbox blob removed (contract 4.4). */

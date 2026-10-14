@@ -2,7 +2,7 @@
   "name": "@kefli/extension",
   "version": "0.1.1",
   "private": true,
-  "description": "The Kefli browser extension: Chrome and Firefox from one codebase (extension spec, contract v1.11 section 4.4)",
+  "description": "The Kefli browser extension: Chrome and Firefox from one codebase (extension spec, contract v1.12 section 4.4)",
   "scripts": {
     "build": "node build.mjs dev",
     "build:dev": "node build.mjs dev",

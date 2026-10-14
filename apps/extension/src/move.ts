@@ -2,10 +2,11 @@
 // connected browser a pair-ack sealed by S, the key the browser knows, carrying T's pubkey, relays, servers and a new
 // token, with moved_from = S. The browser takes it only from its current user, replaces its pairing, and wraps any save
 // still waiting again for T, so nothing queued goes to the library that moved away.
-import { acceptPairAck, wrapSaveRequest, type PairAck, type SaveRequest } from '../../../packages/protocol/src/pairing';
+import { acceptPairAck, type PairAck } from '../../../packages/protocol/src/pairing';
 import type { LocalSigner, NostrEvent } from '../../../packages/protocol/src/signer';
 import { unwrap } from '../../../packages/protocol/src/wrap';
 import { changeQueue, type Queued } from './queue';
+import { wrapAgain } from './save';
 import { KEYS, type Pairing, type Store } from './store';
 
 /**
@@ -43,17 +44,8 @@ export async function followMoves(device: LocalSigner, wraps: NostrEvent[], curr
  * request can't be read (queued before requests were kept) stays as it was.
  */
 export async function rewrap(e: Queued, device: LocalSigner, pairing: Pairing, now: number): Promise<Queued> {
-  let kept: { uuid: string; request: SaveRequest };
-  try {
-    kept = JSON.parse(await device.nip44Decrypt(device.pubkey(), e.sealed));
-  } catch {
-    return e;
-  }
-  const { uuid, request } = kept;
-  const moved: SaveRequest = { ...request, token: pairing.token };
-  const { wrap } = await wrapSaveRequest(device, pairing.user_pubkey, uuid, moved, now);
-  const sealed = await device.nip44Encrypt(device.pubkey(), JSON.stringify({ uuid, request: moved }));
-  return { ...e, id: wrap.id, wrap, sealed };
+  const again = await wrapAgain(e.sealed, device, pairing.user_pubkey, (r) => ({ ...r, token: pairing.token }), now);
+  return again ? { ...e, id: again.wrap.id, wrap: again.wrap, sealed: again.sealed, wrapped_at: now } : e;
 }
 
 /**
