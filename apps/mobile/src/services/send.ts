@@ -212,7 +212,7 @@ async function sendPublish(p: SendPorts, row: OutboxRow, signer: Signer, targets
   const item = getItem(p.db, row.signer, row.subject);
   if (!item) return each(targets, 'rejected', 'item gone');
   // a save waiting on its delete's Undo isn't published: one that went out after its kind 5 would bring it back (F38)
-  if (p.db.get('SELECT 1 FROM items WHERE id = ? AND pending_delete_at IS NOT NULL', item.id)) return each(targets, 'retry', 'waiting on a delete', UNDO_WAIT);
+  if (item.pending_delete_at !== null) return each(targets, 'retry', 'waiting on a delete', UNDO_WAIT);
   // the address is keyed (F5): an identity made here makes its key now; any other waits until sync has learnt it
   const key = libraryKey(p.db, row.signer) ?? (madeHere(p.db, row.signer) ? makeLibraryKey(p.db, p.now(), row.signer, p.crypto.randomBytes) : null);
   if (!key) return each(targets, 'retry', 'library key not known yet');
