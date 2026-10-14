@@ -5,7 +5,8 @@ import { hexToBytes } from '@noble/hashes/utils.js';
 import { useWebSocketImplementation } from 'nostr-tools/relay';
 import { finalizeEvent, verifyEvent } from 'nostr-tools/pure';
 import { LocalSigner, type NostrEvent } from '../../../packages/protocol/src/signer';
-import { AUTH_WAIT_MS, authAs, fetchWraps, publish, WRAPS_MAX } from '../src/relay';
+import { listenForAck } from '../src/pair';
+import { AUTH_WAIT_MS, authAs, fetchWraps, publish, PUBLISH_TIMEOUT_MS, WRAPS_MAX } from '../src/relay';
 
 const device = new LocalSigner(hexToBytes('22'.repeat(32)));
 
@@ -13,7 +14,7 @@ const device = new LocalSigner(hexToBytes('22'.repeat(32)));
  * How each test's relay behaves, by host: when it sends its challenge (never if undefined) and what it is, whether AUTH
  * is taken, whether its first connection answers no EVENT, and what it says to a REQ (EOSE alone if nothing is set).
  */
-interface Script { challengeAfter?: number; challenge?: unknown; authOk?: boolean; firstSilent?: boolean; onReq?: (s: FakeSocket, sub: string) => void }
+interface Script { challengeAfter?: number; challenge?: unknown; authOk?: boolean; firstSilent?: boolean; neverOpens?: boolean; onReq?: (s: FakeSocket, sub: string) => void }
 const scripts = new Map<string, Script>();
 const sockets: FakeSocket[] = [];
 
@@ -39,6 +40,7 @@ class FakeSocket {
     this.script = scripts.get(new URL(url).host) ?? {};
     this.silent = !!this.script.firstSilent && !sockets.some((s) => s.url === url);
     sockets.push(this);
+    if (this.script.neverOpens) return;
     setTimeout(() => {
       this.readyState = FakeSocket.OPEN;
       this.onopen?.();
@@ -203,6 +205,20 @@ describe('a relay that misbehaves', () => {
     expect(got.length).toBeGreaterThan(0);
     expect(got.length).toBeLessThanOrEqual(WRAPS_MAX);
   }, 60_000);
+
+  test('a relay that takes the connection and never opens it is given up on, and the socket closed', async () => {
+    const url = relay({ neverOpens: true });
+    // nostr-tools rejects with a string, "connection timed out", which delivery reads as unreachable
+    await expect(publish(url, wrap(30))).rejects.toBeDefined();
+    expect(socketOf(url).readyState).toBe(FakeSocket.CLOSED);
+  }, PUBLISH_TIMEOUT_MS + 10_000);
+
+  test('the pairing page’s wait on a relay that never opens ends, so the page can say it can’t connect', async () => {
+    const url = relay({ neverOpens: true });
+    const started = Date.now();
+    await expect(listenForAck(url, device, 'n', 0, () => undefined, () => undefined, 100)).rejects.toBeDefined();
+    expect(Date.now() - started).toBeLessThan(3000);
+  });
 
   test('a CLOSED whose reason isn’t a string ends the look at once', async () => {
     const url = relay({ onReq: (s, sub) => s.say(['CLOSED', sub, 42]) });

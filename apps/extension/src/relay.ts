@@ -14,7 +14,8 @@ function within<T>(p: Promise<T>, ms: number): Promise<T> {
   });
 }
 
-const pool = new RelayPool((url) => within(Relay.connect(url), PUBLISH_TIMEOUT_MS));
+// nostr-tools closes a connection still opening at its own timeout, so one given up on isn't left to open unheld
+const pool = new RelayPool((url) => within(Relay.connect(url, { timeout: PUBLISH_TIMEOUT_MS }), PUBLISH_TIMEOUT_MS));
 
 /** How long a fresh connection is given to send its AUTH challenge before a save goes without it. */
 export const AUTH_WAIT_MS = 1_000;

@@ -124,12 +124,18 @@ export interface Listening {
 }
 
 /**
+ * How long the page waits for the operator relay to open: a relay that takes the connection and never opens it left the
+ * page blank, with no code and no line saying it can't connect, for as long as it held on.
+ */
+export const LISTEN_CONNECT_MS = 10_000;
+
+/**
  * Waits on the operator relay for the pair-ack. Gift wraps are served only after NIP-42 AUTH by the key they name, so a
  * subscription the relay closes as auth-required authenticates and asks again. onTrouble fires when the relay can't
  * be reached, so the page can say so and try again.
  */
-export async function listenForAck(relayUrl: string, device: LocalSigner, nonce: string, since: number, onAck: (ack: PairAck) => void, onTrouble: () => void): Promise<Listening> {
-  const relay = await Relay.connect(relayUrl);
+export async function listenForAck(relayUrl: string, device: LocalSigner, nonce: string, since: number, onAck: (ack: PairAck) => void, onTrouble: () => void, connectMs = LISTEN_CONNECT_MS): Promise<Listening> {
+  const relay = await Relay.connect(relayUrl, { timeout: connectMs });
   const sign = (evt: Parameters<LocalSigner['signEvent']>[0]) => device.signEvent(evt) as never;
   relay.onauth = sign;
   relay.onclose = onTrouble;
