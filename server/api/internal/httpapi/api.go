@@ -42,6 +42,9 @@ type Config struct {
 	// MaxRegistrations is how many new accounts an hour the API takes from everyone together (DefaultMaxRegistrations
 	// when 0), so a caller with many addresses still can't make accounts without end (F8).
 	MaxRegistrations int
+	// MaxOffers is how many pairing offers the API holds at once, pair and phone offers together (DefaultMaxOffers when
+	// 0), so offers posted from many addresses can't fill the disk.
+	MaxOffers int
 }
 
 // DefaultMaxRegistrations is backend spec 5's alert level, 200 new accounts an hour, held as a limit.
@@ -64,6 +67,33 @@ const MaxBlockMisses = 10
 // costs its owner something.
 const MaxBlockRegistrations = 20
 
+// DefaultMaxOffers is how many offers are held at once from everyone: each is at most maxOffer bytes, so 80 MB at
+// most, where pairings in progress in any five minutes number a few hundred at the most.
+const DefaultMaxOffers = 10_000
+
+// MaxBlockOffers is how many offers an hour one IPv6 /48 may post, beside the 30 per /64 and per key: a /48 is 65,536
+// /64s, which could otherwise post two million offers an hour, and hold DefaultMaxOffers full alone. It is four /64s'
+// worth; an IPv4 /24 has no such limit, being many people's, and each address costs its owner something.
+const MaxBlockOffers = 120
+
+// MaxAddressCalls is how many API requests one address (an IPv6 /64) makes a minute, counted before anything is read
+// or verified: any key may call DELETE /account or DELETE /devices, so a fresh key per request goes round every limit
+// per key. The phone calls the API a handful of times in its life (registration, each Connect and Disconnect, a second
+// phone), so a carrier's address shared by thousands stays far below it.
+const MaxAddressCalls = 600
+
+// MaxBlockCalls is the same a minute for one IPv6 /48, whose 65,536 /64s would otherwise each make MaxAddressCalls.
+const MaxBlockCalls = 3000
+
+// MaxDevices is how many device keys one library may have authorised at once. Each is a wrap recipient on the relay,
+// and the write policy holds every one in memory; the phone's connected-browsers record (contract 4.9) holds about 42
+// under the 16 KB ceiling, so this leaves room for rows a Disconnect hasn't reached yet.
+const MaxDevices = 64
+
+// maxOffer is the largest offer taken: a pair offer sealed as the extension makes it is under 1 KB, a phone offer
+// under 300 bytes.
+const maxOffer = 8192
+
 const maxBody = 64 << 10
 
 type API struct {
@@ -77,6 +107,9 @@ type API struct {
 	regBlk *limit.Limiter // registrations, MaxBlockRegistrations a day per IPv6 /48
 	misses *limit.Limiter // phone-offer lookups that found nothing, MaxMisses an offer's life from everyone
 	blkMis *limit.Limiter // the same, MaxBlockMisses an offer's life per block of addresses
+	offBlk *limit.Limiter // offers posted, MaxBlockOffers an hour per IPv6 /48
+	adrCal *limit.Limiter // requests, MaxAddressCalls a minute per address, before anything is read
+	blkCal *limit.Limiter // the same, MaxBlockCalls a minute per IPv6 /48
 	// logKey keys the fingerprints the logs show for pubkeys (short)
 	logKey []byte
 }
@@ -90,6 +123,9 @@ func New(cfg Config, st *store.Store, log *slog.Logger) *API {
 	if cfg.MaxRegistrations == 0 {
 		cfg.MaxRegistrations = DefaultMaxRegistrations
 	}
+	if cfg.MaxOffers == 0 {
+		cfg.MaxOffers = DefaultMaxOffers
+	}
 	return &API{
 		cfg: cfg, st: st, log: log, now: now, logKey: logKey,
 		calls:  limit.New(60, time.Minute, now),
@@ -98,6 +134,9 @@ func New(cfg Config, st *store.Store, log *slog.Logger) *API {
 		regBlk: limit.New(MaxBlockRegistrations, 24*time.Hour, now),
 		misses: limit.New(MaxMisses, store.OfferLife, now),
 		blkMis: limit.New(MaxBlockMisses, store.OfferLife, now),
+		offBlk: limit.New(MaxBlockOffers, time.Hour, now),
+		adrCal: limit.New(MaxAddressCalls, time.Minute, now),
+		blkCal: limit.New(MaxBlockCalls, time.Minute, now),
 	}
 }
 
@@ -168,6 +207,9 @@ type request struct {
 }
 
 func (a *API) authed(w http.ResponseWriter, r *http.Request) (*request, bool) {
+	if !a.callAllowed(w, r) {
+		return nil, false
+	}
 	raw, err := io.ReadAll(io.LimitReader(r.Body, maxBody+1))
 	if err != nil || len(raw) > maxBody {
 		fail(w, http.StatusRequestEntityTooLarge, "too_large")
@@ -187,6 +229,25 @@ func (a *API) authed(w http.ResponseWriter, r *http.Request) (*request, bool) {
 		return nil, false
 	}
 	return a.parsed(w, ev, raw)
+}
+
+// callAllowed counts a request against its IPv6 /48, then its address, before its body is read or its signature
+// checked, so a flood from one place costs a map lookup each.
+func (a *API) callAllowed(w http.ResponseWriter, r *http.Request) bool {
+	ip := ClientIP(r, a.cfg.TrustProxy)
+	var counts []func() (bool, time.Duration)
+	if block := limit.Block(ip); strings.Contains(block, ":") {
+		counts = append(counts, func() (bool, time.Duration) { return a.blkCal.Allow(block) })
+	}
+	counts = append(counts, func() (bool, time.Duration) { return a.adrCal.Allow(limit.Addr(ip, 64)) })
+	for _, allow := range counts {
+		if ok, retry := allow(); !ok {
+			w.Header().Set("Retry-After", retryAfter(retry))
+			fail(w, http.StatusTooManyRequests, "rate")
+			return false
+		}
+	}
+	return true
 }
 
 func (a *API) fresh(ctx context.Context, ev *nostr.Event) bool {

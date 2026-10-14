@@ -66,6 +66,14 @@ line='{"type":"new","event":{"id":"'$(printf 'b%.0s' {1..64})'","pubkey":"%s","k
 policy() { printf "$line\n" "$1" | docker exec -i "$name" runuser -u strfry -- /usr/local/lib/kefli/relay-write-policy | jq -r .action; }
 check 'the write policy, as strfry, accepts the registered key' '[ "$(policy $key)" = accept ]'
 check 'and refuses another' '[ "$(policy $(printf "c%.0s" {1..64}))" = reject ]'
+# The relay's floor: the wrapper names the disk and the floor, and with a floor above any disk's size the policy holds
+# the registered key's event, rate-limited.
+full() { printf "$line\n" "$1" | docker exec -i "$name" runuser -u strfry -- /usr/local/lib/kefli/kefli-writepolicy -db /var/lib/kefli/keflid.db \
+  -wraps /tmp/floor-wraps.db -room /var/lib/strfry/db -min-free-mb 1000000000 | jq -r .msg; }
+check "the write policy keeps the relay's floor" \
+  'grep -qF -- "-room /var/lib/strfry/db -min-free-mb 2048" <<<"$(box cat /usr/local/lib/kefli/relay-write-policy)" && [[ "$(full $key)" == rate-limited:* ]]'
+check 'strfry keeps no compression window per connection' 'grep -qx " *slidingWindow = false" <<<"$(box cat /etc/strfry.conf)"'
+check 'the mail forwarder is held to 768 MB' '[ "$(box systemctl show -p MemoryMax --value kefli-mailfwd)" = 805306368 ]'
 check 'the sweep runs' 'box systemctl start relay-sweep'
 check 'the access log holds no address' '! box grep -q 127.0.0.1 /var/log/caddy/access.log'
 # F6: a WebSocket connection to the relay, and a request with a query to a stopped upstream (Caddy's error log), leave
@@ -85,6 +93,21 @@ check "the journal holds no request's address or query" \
 check 'the journal keeps seven days' 'grep -qx "MaxRetentionSec=7day" <<<"$(box cat /etc/systemd/journald.conf.d/10-kefli.conf)"'
 check 'SSH takes keys only' 'grep -qx "passwordauthentication no" <<<"$(box sshd -T)"'
 check 'the firewall is loaded' 'grep -qF 198.51.100.7 <<<"$(box nft list set inet filter ssh_allow4)"'
+# The firewall's limit on web connections one client holds: from outside the container, at its bridge address (the
+# rules let loopback through first), 520 connections at once open 512 and the rest are reset, and once they are let go
+# a request from outside is answered.
+ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$name")
+held() {
+  local open=0 fds=() fd
+  for _ in $(seq "$1"); do
+    if exec {fd}<>"/dev/tcp/$ip/443"; then fds+=("$fd"); open=$((open + 1)); fi
+  done 2>/dev/null
+  for fd in "${fds[@]}"; do exec {fd}>&-; done
+  echo "$open"
+}
+check 'one client holds at most 512 web connections at once' '[ "$(held 520)" = 512 ]'
+check 'and a request from outside is answered once they are let go' \
+  'sleep 1; curl -sfk --max-time 5 --resolve "api.kefli.app:443:$ip" https://api.kefli.app/defaults.json'
 
 echo "${failures} failed"
 exit $((failures > 0))

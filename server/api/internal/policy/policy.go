@@ -84,6 +84,8 @@ type Policy struct {
 	addr      *limit.Limiter
 	toAddr    *limit.Limiter
 	recipient *limit.Limiter
+	// Full says whether the relay's disk is below its floor, when every new event waits (nil: never).
+	Full func() bool
 }
 
 func New(look Lookups, now func() time.Time) *Policy {
@@ -115,8 +117,22 @@ func tags(ev Event, name string) []string {
 	return out
 }
 
-// Decide is the rule table (contract 3.2). Imports by the operator (a restore) are taken as they are.
+// Full is the answer to every new event the rules would take while the relay's disk is below its floor. Both clients
+// send a rate-limited event again later, the phone after a minute and the extension at its next try, so a save waits
+// for room rather than being dropped (blocked, invalid and error are final to the phone).
+const Full = "rate-limited: the relay is nearly full, try again later"
+
+// Decide is the rule table (contract 3.2), with the disk's floor over it. Imports by the operator (a restore) are taken
+// as they are.
 func (p *Policy) Decide(in Input) Verdict {
+	v := p.decide(in)
+	if v.Out.Action == "accept" && in.Type == "new" && in.SourceType != "Import" && p.Full != nil && p.Full() {
+		return reject(v.Out.ID, Full)
+	}
+	return v
+}
+
+func (p *Policy) decide(in Input) Verdict {
 	var ev Event
 	if err := json.Unmarshal(in.Event, &ev); err != nil || ev.ID == "" {
 		return reject("", "invalid: unreadable event")
