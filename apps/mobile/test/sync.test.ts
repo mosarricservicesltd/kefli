@@ -596,6 +596,41 @@ describe('text fetches are bounded (F12)', () => {
     w.ports.fetch = w.fetch;
     expect(await syncInbound(w.ports)).toMatchObject({ texts: 30 });
   });
+
+  test('a server sending other bytes for every blob is asked twice a sync, not once a text', async () => {
+    const w = world();
+    w.tick(2 * SKEW);
+    for (let i = 1; i <= 20; i++) w.publish(await remoteSave(w, h(i), 6000 + i, `# T${i}\n\nwords ${i}`, { url: `https://example.com/${i}` }));
+    // the operator's server down, and the mirror answering each blob with a megabyte of something else
+    let sent = 0;
+    w.ports.fetch = (async (url: string) => {
+      if (url.startsWith('http://blossom/')) throw new TypeError('Network request failed');
+      sent++;
+      return new Response(new Uint8Array(1024 * 1024) as never, { status: 200 });
+    }) as unknown as typeof fetch;
+    expect(await syncInbound(w.ports)).toMatchObject({ items: 20, texts: 0, missing: 0 });
+    expect(sent).toBe(2);
+    // with the operator down, every text is asked for again at the next sync
+    expect(w.db.get("SELECT COUNT(*) AS n FROM items WHERE text_state = 'remote'")).toEqual({ n: 20 });
+    w.ports.fetch = w.fetch;
+    expect(await syncInbound(w.ports)).toMatchObject({ texts: 20 });
+  });
+
+  test('a text whose key doesn’t open its blob is missing at once, its blob fetched from one server, not every one', async () => {
+    const w = world();
+    w.tick(2 * SKEW);
+    const e = await remoteSave(w, h(1), 6000, '# A\n\nwords', { url: 'https://example.com/a' });
+    w.publish(e);
+    await syncInbound(w.ports);
+    // the row's key spoilt, as another client could write it
+    w.db.run("UPDATE items SET text_key = ?, text_state = 'remote' WHERE hash = ?", Buffer.from(new Uint8Array(32).fill(9)).toString('base64'), h(1));
+    let asked = 0;
+    const f = w.fetch;
+    w.ports.fetch = (async (u: string, i?: RequestInit) => (asked++, f(u, i))) as typeof fetch;
+    expect(await fetchText(w.ports, job(w, h(1)))).toBe('missing');
+    expect(asked).toBe(1);
+    expect(row(w, h(1))).toMatchObject({ text_state: 'failed', fail_reason: 'blob_missing' });
+  });
 });
 
 /** A kind 30078 at d as another client of the person's might publish it: any JSON, self-encrypted, signed by them. */

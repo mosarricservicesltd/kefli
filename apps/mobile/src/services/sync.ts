@@ -13,6 +13,7 @@ import {
   DEVICES_D, KIND, LIBRARY_KEY_D, LibraryKeyVersionError, T_TAG, decryptText, isSignerFailure, newest, readDevicesEvent, readItemEvent, readLibraryKeyEvent,
   readRelayList, readServerList, replaces,
 } from '@kefli/protocol';
+import { bytesToHex } from '@noble/hashes/utils.js';
 import { deriveArticle, type Derived } from '../reader/blocks';
 import type { CryptoPort, NostrEvent, Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
@@ -250,42 +251,54 @@ function namedServers(job: TextJob): unknown[] {
 }
 
 /**
- * One server's copy of a text's blob: its bytes; 'lacks', not there, or larger than any text; or 'down', not reached,
- * no whole answer within TEXT_TIMEOUT_MS, or 5xx or 429, after which the rest of the sync doesn't ask it (down).
+ * What one sync has found of the blob servers: one not answering (Infinity), or how many times one sent bytes that
+ * weren't the blob asked for. Kept a sync, so a server can't cost it once a text (fetchText).
  */
-async function fromServer(p: SyncPorts, server: string, sha256: string, down: Set<string>): Promise<Uint8Array | 'lacks' | 'down'> {
-  if (down.has(server)) return 'down';
-  try {
-    const got = await getBlob(p, `${server}/${sha256}`);
-    if (got.status >= 200 && got.status <= 299) return got.bytes ?? 'lacks';
-    if (got.status < 500 && got.status !== 429) return 'lacks';
-  } catch {
-    // not reached, or not finished in time
-  }
-  down.add(server);
+export type Strikes = Map<string, number>;
+/** How many blobs a server may answer with other bytes before the rest of the sync stops asking it. */
+const WRONG_BYTES_MAX = 2;
+
+/**
+ * One server's copy of a text's blob: its bytes, which are the blob asked for (its sha256); 'lacks', not there, larger
+ * than any text, or other bytes; or 'down', not reached, no whole answer within TEXT_TIMEOUT_MS, 5xx or 429. Once one
+ * is down, or has sent other bytes WRONG_BYTES_MAX times, the rest of the sync doesn't ask it.
+ */
+async function fromServer(p: SyncPorts, server: string, sha256: string, strikes: Strikes): Promise<Uint8Array | 'lacks' | 'down'> {
+  if ((strikes.get(server) ?? 0) >= WRONG_BYTES_MAX) return 'down';
+  // status 0: not reached, or not finished in time
+  const got = await getBlob(p, `${server}/${sha256}`).catch((): Got => ({ status: 0, bytes: null }));
+  const ok = got.status >= 200 && got.status <= 299;
+  if (ok && got.bytes && bytesToHex(p.crypto.sha256(got.bytes)) === sha256) return got.bytes;
+  if (ok && got.bytes) strikes.set(server, (strikes.get(server) ?? 0) + 1);
+  if (ok || (got.status > 0 && got.status < 500 && got.status !== 429)) return 'lacks';
+  strikes.set(server, Infinity);
   return 'down';
 }
 
 /**
  * One text from its servers, then the identity's 10063 servers: 'ok', 'missing' everywhere, or 'offline'. At most
- * TEXT_SERVERS_MAX of them, http(s) only (blobServers), however many the save or the lists name. down is the servers
- * a sync has found not answering: asked again for each text, one that accepts and never answers held a sync a minute
- * a text, 30 minutes for 30 and hours for a restored library, while every later sync waited on it. A text whose
- * servers are all down is 'offline', and asked for at the next sync.
+ * TEXT_SERVERS_MAX of them, http(s) only (blobServers), however many the save or the lists name. strikes is what the
+ * sync has found of the servers (Strikes): asked again for each text, one that accepts and never answers held a sync a
+ * minute a text, 30 minutes for 30 and hours for a restored library, while every later sync waited on it, and one
+ * sending up to 20 MB of other bytes, as a mirror gone bad can, cost that much a text. A text whose servers are down is
+ * 'offline', and asked for at the next sync. The blob asked for whose key doesn't open it is 'missing' at once: every
+ * server holding it holds the same bytes, which were fetched again from each.
  */
-export async function fetchText(p: SyncPorts, job: TextJob, down = new Set<string>()): Promise<'ok' | 'missing' | 'offline'> {
+export async function fetchText(p: SyncPorts, job: TextJob, strikes: Strikes = new Map()): Promise<'ok' | 'missing' | 'offline'> {
   // the 10063 as published is asked as well as the rows kept from it (C§8, F37); each server once, slash or not
   const servers = blobServers([...namedServers(job), ...listServers(p.db, job.owner), ...heldServerList(p.db, job.owner)]);
   let unreachable = 0;
   for (const server of servers) {
-    const bytes = await fromServer(p, server, job.text_sha256, down);
+    const bytes = await fromServer(p, server, job.text_sha256, strikes);
     if (bytes === 'down') unreachable++;
     if (typeof bytes === 'string') continue;
     let markdown: string;
     try {
       markdown = await decryptText(bytes, { sha256: job.text_sha256, key: job.text_key, nonce: job.text_nonce }, p.crypto);
     } catch {
-      continue; // the wrong bytes, or a key that doesn't open them: as if this server lacked it
+      // the blob named, which its key doesn't open: no other server's copy would open either
+      unreachable = 0;
+      break;
     }
     const derived = deriveArticle(markdown);
     p.files.writeText(job.hash, markdown, derived);
@@ -429,9 +442,9 @@ export async function syncOwner(p: SyncPorts, owner: string, signer: Signer): Pr
   for (const c of collected) if (c.stream === 'items' && c.relay !== operator) for (const e of c.events) markBacked(p.db, e.id);
   let texts = 0;
   let missing = 0;
-  const down = new Set<string>();
+  const strikes: Strikes = new Map();
   for (const job of textQueue(p.db, owner, p.openHash?.())) {
-    const r = await fetchText(p, job, down);
+    const r = await fetchText(p, job, strikes);
     if (r === 'ok') texts++;
     if (r === 'missing') missing++;
   }
