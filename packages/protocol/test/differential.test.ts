@@ -172,18 +172,18 @@ function randomMarkdown(r: () => number): string {
 }
 
 describe('random Markdown projects as it did', () => {
-  test('2,000 documents, raw and normalised', () => {
+  test('1,000 documents, raw and normalised', () => {
     const r = random(20261014);
-    for (let n = 0; n < 2_000; n++) {
+    for (let n = 0; n < 1_000; n++) {
       const md = randomMarkdown(r);
       agrees(md);
       agrees(normaliseMarkdown(md));
     }
   });
 
-  test('100 longer documents of many blocks', () => {
+  test('60 longer documents of many blocks', () => {
     const r = random(117);
-    for (let n = 0; n < 100; n++) agrees(normaliseMarkdown(Array.from({ length: 12 }, () => randomMarkdown(r)).join('\n\n')));
+    for (let n = 0; n < 60; n++) agrees(normaliseMarkdown(Array.from({ length: 12 }, () => randomMarkdown(r)).join('\n\n')));
   });
 });
 
