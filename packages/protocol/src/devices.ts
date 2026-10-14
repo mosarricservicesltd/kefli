@@ -1,5 +1,7 @@
 // The connected-browsers record (C§4.9): kind 30078, d kefli/devices, self-encrypted like a save.
 
+import { utf8ToBytes } from '@noble/hashes/utils.js';
+import { v2 as nip44 } from 'nostr-tools/nip44';
 import { DEVICES_D, KIND, MAX_EVENT_BYTES, T_TAG } from './constants';
 import { EventTooLargeError, eventBytes, overCeiling, signedSize, signWithinCeiling } from './events';
 import type { NostrEvent, Signer } from './signer';
@@ -37,17 +39,38 @@ export function connectedEntry(record: DevicesRecord, token: string): DeviceEntr
   return record.devices.find((e) => e.token === token && e.revoked_at === null) ?? null;
 }
 
-/** Self-encrypt and sign the record, dropping revoked entries, earliest revoked_at first, only while it is over the ceiling. */
+/**
+ * The length of NIP-44 v2's base64 payload for a plaintext of this many UTF-8 bytes: version, nonce, the padded text
+ * with its length prefix, and the MAC. It follows from the length alone, so a size is known before anything is
+ * encrypted.
+ */
+export function nip44Length(bytes: number): number {
+  const padded = nip44.utils.calcPaddedLen(Math.max(1, bytes)) + (bytes >= 65_536 ? 6 : 2);
+  return 4 * Math.ceil((1 + 32 + padded + 32) / 3);
+}
+
+/**
+ * Self-encrypt and sign the record, dropping revoked entries, earliest revoked_at first, only while it is over the
+ * ceiling. The sizes are worked out from the entries' lengths (nip44Length), so the signer is asked to encrypt once:
+ * encrypting again after each entry dropped asked a bunker 273 times for a record of 300 revoked entries. One that is
+ * over the ceiling with every revoked entry gone is refused without asking it at all.
+ */
 export async function buildDevicesEvent(signer: Signer, record: DevicesRecord, createdAt: number): Promise<NostrEvent> {
-  const devices = [...record.devices];
-  const revoked = devices.filter((e) => e.revoked_at !== null).sort((x, y) => x.revoked_at! - y.revoked_at!);
-  for (;;) {
-    const content = await signer.nip44Encrypt(signer.pubkey(), JSON.stringify({ v: 1, devices }));
-    const template = { kind: KIND.appData, created_at: createdAt, tags: [['d', DEVICES_D], ['t', T_TAG]], content };
-    const next = revoked.shift();
-    if (signedSize(template) <= MAX_EVENT_BYTES || !next) return signWithinCeiling(signer, template);
-    devices.splice(devices.indexOf(next), 1);
+  const template = (content: string) => ({ kind: KIND.appData, created_at: createdAt, tags: [['d', DEVICES_D], ['t', T_TAG]], content });
+  // the record's JSON is '{"v":1,"devices":[' and ']}' around the entries, a comma between each two
+  const empty = utf8ToBytes(JSON.stringify({ v: 1, devices: [] })).length;
+  const bytes = new Map(record.devices.map((e) => [e, utf8ToBytes(JSON.stringify(e)).length]));
+  let [count, sum] = [record.devices.length, [...bytes.values()].reduce((a, b) => a + b, 0)];
+  const size = () => signedSize(template('')) + nip44Length(empty + sum + Math.max(0, count - 1));
+  const gone = new Set<DeviceEntry>();
+  for (const e of record.devices.filter((x) => x.revoked_at !== null).sort((x, y) => x.revoked_at! - y.revoked_at!)) {
+    if (size() <= MAX_EVENT_BYTES) break;
+    gone.add(e);
+    [count, sum] = [count - 1, sum - bytes.get(e)!];
   }
+  if (size() > MAX_EVENT_BYTES) throw new EventTooLargeError(size());
+  const devices = record.devices.filter((e) => !gone.has(e));
+  return signWithinCeiling(signer, template(await signer.nip44Encrypt(signer.pubkey(), JSON.stringify({ v: 1, devices }))));
 }
 
 const HEX64 = /^[0-9a-f]{64}$/;

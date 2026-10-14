@@ -2,8 +2,8 @@ import { verifyEvent } from 'nostr-tools/pure';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import {
   acceptPairAck, EventTooLargeError, LocalSigner, UnwrapError, WRAP_BACKDATE_MAX, acceptSaveRequest, browserSavedAt,
-  buildDevicesEvent, checkOffer, derivePairCode, deviceProofTemplate, giftWrap, mergeDevices, newPairCode, nobleSecp, openOffer,
-  proofHolds, readDevicesEvent, readPairCode, releaseTemplate, sealOffer, signStatement, statementHolds, unwrap, wrapPairAck,
+  buildDevicesEvent, checkOffer, derivePairCode, deviceProofTemplate, giftWrap, mergeDevices, newPairCode, nip44Length, nobleSecp, openOffer,
+  proofHolds, readDevicesEvent, readPairCode, releaseTemplate, sealOffer, signStatement, signedSize, statementHolds, unwrap, wrapPairAck,
   wrapSaveRequest,
 } from '../src';
 import type { DevicesRecord, PairOffer, SaveRequest } from '../src';
@@ -318,6 +318,34 @@ describe('connected-browsers record (C§4.9)', () => {
     const kept = back.devices.filter((x) => x.revoked_at !== null).map((x) => x.revoked_at!);
     const dropped = big.devices.filter((x) => x.revoked_at !== null && !kept.includes(x.revoked_at)).map((x) => x.revoked_at!);
     expect(Math.max(...dropped)).toBeLessThan(Math.min(...kept));
+  });
+
+  test('a record over the ceiling asks the signer to encrypt once, however many revoked entries go; one that can’t fit, not at all', async () => {
+    const s = signer();
+    const encrypt = jest.spyOn(s, 'nip44Encrypt');
+    const devices = Array.from({ length: 320 }, (_, i) => ({ ...hexEntry(bytesToHex(nodeCrypto.randomBytes(32)), i < 300 ? i + 1 : null), label: `B${i}` }));
+    const e = await buildDevicesEvent(s, { v: 1, devices }, NOW);
+    expect(encrypt).toHaveBeenCalledTimes(1);
+    expect(signedSize(e)).toBeLessThanOrEqual(16_384);
+    // as many entries as fit are kept, the latest revoked of them: one more would be over
+    const back = await readDevicesEvent(s, e);
+    const kept = back.devices.filter((x) => x.revoked_at !== null).length;
+    expect(back.devices.filter((x) => x.revoked_at === null)).toHaveLength(20);
+    expect(Math.min(...back.devices.map((x) => x.revoked_at ?? Infinity))).toBe(300 - kept + 1);
+    const oneMore = [...devices.filter((x) => x.revoked_at === null || x.revoked_at > 300 - kept - 1)];
+    expect(signedSize({ kind: 30078, created_at: NOW, tags: e.tags, content: 'x'.repeat(nip44Length(new TextEncoder().encode(JSON.stringify({ v: 1, devices: oneMore })).length)) })).toBeGreaterThan(16_384);
+    // 200 connected entries can't fit whatever goes, and the signer isn't asked
+    encrypt.mockClear();
+    const connected = Array.from({ length: 200 }, () => hexEntry(bytesToHex(nodeCrypto.randomBytes(32))));
+    await expect(buildDevicesEvent(s, { v: 1, devices: connected }, NOW)).rejects.toThrow(EventTooLargeError);
+    expect(encrypt).not.toHaveBeenCalled();
+  });
+
+  test('nip44Length is the length of what NIP-44 v2 makes', async () => {
+    const s = signer();
+    for (const n of [1, 31, 32, 33, 100, 256, 257, 1000, 4096, 12_000, 65_535]) {
+      expect((await s.nip44Encrypt(s.pubkey(), 'x'.repeat(n))).length).toBe(nip44Length(n));
+    }
   });
 
   test('a copy another client spoilt reads as its well-formed entries only, each with its own fields alone', async () => {
