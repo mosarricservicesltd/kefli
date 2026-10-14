@@ -172,11 +172,19 @@ async function take(p: InboxPorts, owner: string, wrapId: string, j: Extract<Jud
   return outcome;
 }
 
+/**
+ * The longest d kept with a wrap's outcome: kefli/save-request/ and a uuid is 55. Anyone can send a wrap whose rumor's
+ * d runs to 9 KB, and the outcome of each was kept with it, up to 260 MB a day under the most the relay lets everyone
+ * together send one person (C§3.2).
+ */
+const REQUEST_D_MAX = 128;
+
 async function handle(p: InboxPorts, owner: string, wrapId: string, rumor: Rumor, seal: NostrEvent, blossom: string, drain: Drain, retry = false): Promise<Outcome> {
   const j = judge(p.db, owner, rumor, seal, blossom, drain.devices);
   const d = rumor.tags.find((x) => x[0] === 'd')?.[1] ?? null;
   if ('outcome' in j) {
-    recordSeen(p.db, p.now(), wrapId, { owner, outcome: j.outcome, requestD: j.outcome === 'ignored_foreign' ? null : d });
+    const requestD = j.outcome === 'ignored_foreign' || d === null || d.length > REQUEST_D_MAX ? null : d;
+    recordSeen(p.db, p.now(), wrapId, { owner, outcome: j.outcome, requestD });
     return j.outcome;
   }
   return take(p, owner, wrapId, j, JSON.stringify({ rumor, seal }), retry, drain);

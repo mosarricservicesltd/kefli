@@ -1,4 +1,4 @@
-import { LocalSigner, encryptText, giftWrap, itemHash, wrapSaveRequest, type NostrEvent, type SaveRequest } from '@kefli/protocol';
+import { LocalSigner, encryptText, giftWrap, itemHash, makeRumor, wrapSaveRequest, type NostrEvent, type SaveRequest } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import { finalizeEvent, generateSecretKey } from 'nostr-tools/pure';
 import { v2 as nip44 } from 'nostr-tools/nip44';
@@ -293,6 +293,17 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     w.tick(INBOX_DEEP_EVERY);
     await drainInbox(w.ports, w.owner);
     expect(queries).toBeGreaterThan(1);
+  });
+
+  test('a wrap whose rumor carries a d of kilobytes keeps none of it with its outcome', async () => {
+    const w = world();
+    // anyone can send it: a request with a token no browser holds, under a d of 8 KB
+    const long = makeRumor(w.device.pubkey(), { kind: 30078, created_at: 1, tags: [['d', `kefli/save-request/${'x'.repeat(8_000)}`]], content: JSON.stringify(w.request({ token: 'ee'.repeat(32) })) });
+    await w.sendRawRumor(JSON.stringify(long));
+    await w.send(w.request({ token: 'ff'.repeat(32) }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ ignored_token: 2 });
+    const kept = w.db.all<{ n: number | null }>('SELECT length(request_d) AS n FROM inbox_seen');
+    expect(kept.every((r) => (r.n ?? 0) <= 128)).toBe(true);
   });
 
   test('outcomes of wraps nothing was taken from are forgotten after two weeks; a save’s are kept, so a replay stays a repeat', async () => {
