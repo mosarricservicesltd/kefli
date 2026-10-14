@@ -106,8 +106,16 @@ export function applyFailed(db: SqlDb, now: number, owner: string, p: Pending, r
   });
 }
 
-/** An X post's check found its article (5.4): the save now parses that address, and is re-keyed by it (FD 80). */
+/**
+ * An X post's check found its article (5.4): the save now parses that address, and is re-keyed by it (FD 80). RULED:
+ * an article address too long for the save's event (data/saves addressFits) is no article Kefli can keep, as on the
+ * sheet: the save keeps the post's address and is read as the post, so it is never left at one it can't publish.
+ */
 export function xFound(db: SqlDb, p: Pending, article: string): Pending {
+  if (!addressFits(article)) {
+    db.run("UPDATE items SET x_state = 'none' WHERE id = ?", p.id);
+    return { ...p, x_state: 'none' };
+  }
   db.run('UPDATE items SET url = ?, x_state = NULL WHERE id = ?', article, p.id);
   return { ...p, url: article, x_state: null };
 }

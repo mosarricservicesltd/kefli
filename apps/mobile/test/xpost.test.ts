@@ -116,6 +116,31 @@ describe('X posts (mobile spec 5.4, FD 78, G3)', () => {
     expect([1, 2, 3, 7, 8, 20].map(xRetryDelay)).toEqual([30, 60, 120, 1920, 3600, 3600]);
   });
 
+  test('a waiting post whose article address is too long to publish keeps the post’s address (C§3.3)', async () => {
+    const db = memoryDb();
+    migrate(db);
+    const PK = 'ab'.repeat(32);
+    ensureIdentityRow(db, 1, PK, 'new', true);
+    const T = { api: 'http://api', blossom: 'http://b', mirror: 'http://m' };
+    const A = 'https://x.com/a/status/1';
+    queueSave(db, 1, { owner: PK, hash: itemHash(A), url: A, canonical: null, title: null, site: null, byline: null, savedAt: 1, words: null,
+      lang: null, hero: null, text: null, textHash: null, textState: 'queued', sharedUrl: A, origin: 'share', xState: 'pending' }, null, T);
+    const far = `https://news.com/a?${'x'.repeat(12_000)}`;
+    const asked: string[] = [];
+    const ports: PendingPorts = {
+      db, now: () => 9,
+      x: net({ [xEmbedUrl(A)]: { json: embed([far]) } }),
+      page: {
+        fetch: (async (url: string) => (asked.push(url), Object.defineProperty(new Response('<p/>', { status: 404, headers: { 'content-type': 'text/html' } }), 'url', { value: url }))) as never,
+        parse: async () => ({ ok: false, reason: 'not_readable' }),
+      },
+      crypto: nodeCrypto, stage: (sha) => `/s/${sha}`, unstage: () => undefined, writeText: () => undefined, targets: async () => T,
+    };
+    await runPendingParses(ports, PK);
+    expect(asked).toEqual([A]);
+    expect(db.get('SELECT hash, url, x_state, text_state FROM items')).toEqual({ hash: itemHash(A), url: A, x_state: 'none', text_state: 'failed' });
+  });
+
   test('a waiting post: its article re-keys the save; no article fails it; X failing leaves it waiting', async () => {
     const db = memoryDb();
     migrate(db);
