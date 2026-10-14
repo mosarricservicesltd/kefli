@@ -3,7 +3,9 @@ import { base64 } from '@scure/base';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import { verifyEvent } from 'nostr-tools/pure';
 import { itemHash } from '../../../packages/protocol/src/normalise';
-import { acceptSaveRequest, derivePairCode, openOffer, wrapPairAck, type PairAck, type SaveRequest } from '../../../packages/protocol/src/pairing';
+import {
+  acceptSaveRequest, checkOffer, derivePairCode, deviceProofTemplate, openOffer, proofHolds, statementHolds, wrapPairAck, type PairAck, type SaveRequest,
+} from '../../../packages/protocol/src/pairing';
 import { LocalSigner, type NostrEvent } from '../../../packages/protocol/src/signer';
 import { decryptText } from '../../../packages/protocol/src/text';
 import { unwrap } from '../../../packages/protocol/src/wrap';
@@ -46,7 +48,7 @@ describe('pairing (contract 4.4)', () => {
   test('the offer is posted sealed under its typed code, signed by the device key', async () => {
     let posted: { url: string; init: RequestInit } | null = null;
     const get = (async (url: string, init: RequestInit) => ((posted = { url, init }), json({ v: 1 }))) as unknown as typeof fetch;
-    const o = newOffer(device, DEFAULTS, 'Chrome on a Mac', webCrypto, NOW);
+    const o = await newOffer(device, DEFAULTS, 'Chrome on a Mac', webCrypto, NOW);
     expect(o.posted).toBe(false);
     await postOffer(device, DEFAULTS, o, webCrypto, get);
     expect(o.posted).toBe(true);
@@ -62,9 +64,29 @@ describe('pairing (contract 4.4)', () => {
     expect(await openOffer(body.offer, key, webCrypto)).toEqual(o.offer);
   });
 
+  test("the QR and the typed code's sealed offer both carry the device key's proof over the nonce, which the phone accepts", async () => {
+    let sealed = '';
+    const get = (async (_url: string, init: RequestInit) => ((sealed = JSON.parse(String(init.body)).offer), json({ v: 1 }))) as unknown as typeof fetch;
+    const o = await newOffer(device, DEFAULTS, 'Chrome on a Mac', webCrypto, NOW);
+    await postOffer(device, DEFAULTS, o, webCrypto, get);
+    const typed = await openOffer(sealed, (await derivePairCode(o.code, webCrypto)).key, webCrypto);
+    for (const offer of [JSON.parse(o.qr), typed]) {
+      expect(offer.proof.created_at).toBe(NOW);
+      expect(statementHolds(device.pubkey(), deviceProofTemplate(DEFAULTS.operator.api, o.offer.nonce, NOW), offer.proof.sig)).toBe(true);
+      expect(checkOffer(offer, DEFAULTS.operator, NOW)).toBeNull();
+    }
+    // a fresh offer has a fresh nonce, and the old proof doesn't hold for it
+    const next = await newOffer(device, DEFAULTS, 'Chrome on a Mac', webCrypto, NOW);
+    expect(next.offer.nonce).not.toBe(o.offer.nonce);
+    expect(proofHolds({ ...next.offer, proof: o.offer.proof }, DEFAULTS.operator.api)).toBe(false);
+    // and a proof only the device key makes: the user's own key can't stand in for it
+    const forged = await newOffer(user, DEFAULTS, 'x', webCrypto, NOW);
+    expect(proofHolds({ ...forged.offer, device_pubkey: device.pubkey() }, DEFAULTS.operator.api)).toBe(false);
+  });
+
   test('an operator that refuses the offer is an error the page shows as offline', async () => {
     const get = (async () => json({}, false)) as unknown as typeof fetch;
-    const o = newOffer(device, DEFAULTS, 'x', webCrypto, NOW);
+    const o = await newOffer(device, DEFAULTS, 'x', webCrypto, NOW);
     await expect(postOffer(device, DEFAULTS, o, webCrypto, get)).rejects.toThrow('500');
     expect(o.posted).toBe(false);
   });
@@ -101,7 +123,7 @@ describe('pairing (contract 4.4)', () => {
       }
       expect(all.filter((c) => c === 'post')).toHaveLength(0);
       expect(all.filter((c) => c === 'make')).toHaveLength(2);
-      last.offer = newOffer(device, DEFAULTS, 'x', webCrypto, NOW);
+      last.offer = await newOffer(device, DEFAULTS, 'x', webCrypto, NOW);
       const code = last.offer.code;
       const up = attempt(last, true, NOW + OFFER_LIFE - OFFER_REUSE_MIN + 1);
       // the offer is made fresh once it has under a minute left

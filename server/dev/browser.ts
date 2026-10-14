@@ -20,7 +20,8 @@ import { launch } from '../../tools/design-qa/cdp.mjs';
 import { kefliBundle } from '../../shared/vendor/build-parser-bundle.mjs';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import {
-  LocalSigner, acceptPairAck, derivePairCode, encryptText, httpAuth, newPairCode, sealOffer, unwrap, uploadBlob, wrapSaveRequest,
+  LocalSigner, acceptPairAck, derivePairCode, deviceProofTemplate, encryptText, httpAuth, newPairCode, sealOffer, signStatement, unwrap, uploadBlob,
+  wrapSaveRequest,
   type NostrEvent, type PairOffer, type SaveRequest,
 } from '../../packages/protocol/src';
 import { nodeCrypto } from '../../packages/protocol/src/node';
@@ -124,7 +125,10 @@ async function main() {
   const state = load();
   const device = new LocalSigner(hexToBytes(state.sk));
   const now = Math.floor(Date.now() / 1000);
-  const offer: PairOffer = { v: 1, device_pubkey: device.pubkey(), relay: defaults.operator.relay, nonce: bytesToHex(nodeCrypto.randomBytes(16)), expires: now + OFFER_LIFE, label };
+  const nonce = bytesToHex(nodeCrypto.randomBytes(16));
+  // the device key's proof over the nonce, as the extension signs it (contract 4.4)
+  const proof = await signStatement(device, deviceProofTemplate(defaults.operator.api, nonce, now));
+  const offer: PairOffer = { v: 1, device_pubkey: device.pubkey(), relay: defaults.operator.relay, nonce, expires: now + OFFER_LIFE, label, proof };
 
   const code = newPairCode(nodeCrypto);
   const { lookup, key } = await derivePairCode(code, nodeCrypto);

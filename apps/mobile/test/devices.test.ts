@@ -1,6 +1,6 @@
 import {
-  LocalSigner, PAIR_ACK_D, buildDevicesEvent, derivePairCode, newPairCode, readDevicesEvent, sealOffer, unwrap,
-  type NostrEvent, type PairOffer,
+  LocalSigner, PAIR_ACK_D, buildDevicesEvent, derivePairCode, deviceProofTemplate, newPairCode, nobleSecp, readDevicesEvent, sealOffer,
+  signEventWith, unwrap, type NostrEvent, type PairOffer,
 } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import { schnorr } from '@noble/curves/secp256k1.js';
@@ -9,6 +9,7 @@ import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
 import { absorbRecord, browserCount, connectedBrowsers, disconnect, localRecord } from '../src/data/devices';
+import { enqueue } from '../src/data/outbox';
 import { youStats } from '../src/data/you';
 import { connectBrowser, lookupCode, readScan, type ConnectPorts } from '../src/services/connect';
 import { drain, type RelayAnswer, type SendPorts } from '../src/services/send';
@@ -22,13 +23,25 @@ const D: Defaults = {
 };
 const T0 = 1_800_000_000;
 
+const deviceSecrets = new Map<string, Uint8Array>();
+
 function deviceKey() {
   const sk = nodeCrypto.randomBytes(32);
-  return { signer: new LocalSigner(sk), pubkey: bytesToHex(schnorr.getPublicKey(sk)) };
+  const pubkey = bytesToHex(schnorr.getPublicKey(sk));
+  deviceSecrets.set(pubkey, sk);
+  return { signer: new LocalSigner(sk), pubkey };
+}
+
+/** The proof the extension signs with its offer (C§4.4), made when the offer is; fixed aux, so the same each time. */
+const MADE = T0 - 100;
+const fixedAux = { ...nobleSecp, sign: (hash: string, sk: Uint8Array) => nobleSecp.sign(hash, sk, '00'.repeat(32)) };
+function proofOf(pubkey: string, nonce = 'n-1', api = D.operator.api): PairOffer['proof'] {
+  const e = signEventWith(fixedAux, deviceProofTemplate(api, nonce, MADE), deviceSecrets.get(pubkey)!);
+  return { created_at: e.created_at, sig: e.sig };
 }
 
 function offerFor(pubkey: string, over: Partial<PairOffer> = {}): PairOffer {
-  return { v: 1, device_pubkey: pubkey, relay: D.operator.relay, nonce: 'n-1', expires: T0 + 300, label: 'Chrome on a Linux laptop', ...over };
+  return { v: 1, device_pubkey: pubkey, relay: D.operator.relay, nonce: 'n-1', expires: T0 + 300, label: 'Chrome on a Linux laptop', proof: proofOf(pubkey), ...over };
 }
 
 function world(opts: { relay?: (url: string, e: NostrEvent) => RelayAnswer; status?: (method: string, url: string) => number; registered?: boolean } = {}) {
@@ -41,10 +54,12 @@ function world(opts: { relay?: (url: string, e: NostrEvent) => RelayAnswer; stat
   if (opts.registered !== false) db.run('UPDATE identities SET registered_at = 1 WHERE pubkey = ?', owner);
   let clock = T0;
   const calls: string[] = [];
+  const bodies: Record<string, unknown>[] = [];
   const events: { relay: string; event: NostrEvent }[] = [];
   const offers = new Map<string, string>();
   const fetch = (async (url: string, init: RequestInit) => {
     calls.push(`${init.method} ${url}`);
+    if (init.method === 'POST' && url.endsWith('/devices')) bodies.push(JSON.parse(String(init.body)));
     const s = opts.status?.(init.method!, url);
     if (s) return new Response('{}', { status: s });
     const m = /\/pair-offers\/([0-9a-f]+)$/.exec(url);
@@ -63,20 +78,44 @@ function world(opts: { relay?: (url: string, e: NostrEvent) => RelayAnswer; stat
     db, now: () => clock, owner, defaults: async () => D, signer: async () => signer, fetch, crypto: nodeCrypto,
     runOutbox: () => drain(send),
   };
-  return { db, signer, owner, ports, send, calls, events, offers, tick: (s: number) => (clock += s) };
+  return { db, signer, owner, ports, send, calls, bodies, events, offers, tick: (s: number) => (clock += s) };
 }
 
 describe('connected browsers (mobile spec 5.5, contract 4.4 and 4.9)', () => {
   test('a scanned offer is checked as the contract says', () => {
     const { pubkey } = deviceKey();
-    expect(readScan(JSON.stringify(offerFor(pubkey)), D.operator.relay, T0)).toEqual({ offer: offerFor(pubkey) });
-    expect(readScan(JSON.stringify(offerFor(pubkey, { expires: T0 - 61 })), D.operator.relay, T0)).toEqual({ problem: 'expired' });
+    expect(readScan(JSON.stringify(offerFor(pubkey)), D.operator, T0)).toEqual({ offer: offerFor(pubkey) });
+    expect(readScan(JSON.stringify(offerFor(pubkey, { expires: T0 - 61 })), D.operator, T0)).toEqual({ problem: 'expired' });
     // 60 s of skew is allowed
-    expect('offer' in readScan(JSON.stringify(offerFor(pubkey, { expires: T0 - 59 })), D.operator.relay, T0)).toBe(true);
-    expect(readScan(JSON.stringify(offerFor(pubkey, { relay: 'wss://elsewhere' })), D.operator.relay, T0)).toEqual({ problem: 'wrong' });
-    expect(readScan('https://example.com', D.operator.relay, T0)).toEqual({ problem: 'wrong' });
-    expect(readScan('null', D.operator.relay, T0)).toEqual({ problem: 'wrong' });
+    expect('offer' in readScan(JSON.stringify(offerFor(pubkey, { expires: T0 - 59 })), D.operator, T0)).toBe(true);
+    expect(readScan(JSON.stringify(offerFor(pubkey, { relay: 'wss://elsewhere' })), D.operator, T0)).toEqual({ problem: 'wrong' });
+    expect(readScan('https://example.com', D.operator, T0)).toEqual({ problem: 'wrong' });
+    expect(readScan('null', D.operator, T0)).toEqual({ problem: 'wrong' });
   });
+
+  test("an offer without the device key's proof, or with one that doesn't hold, reads as a wrong code (C§4.4)", () => {
+    const { pubkey } = deviceKey();
+    const other = deviceKey().pubkey;
+    const scan = (o: Partial<PairOffer>) => readScan(JSON.stringify(o), D.operator, T0);
+    // an extension from before contract v1.11 sends none
+    expect(scan({ ...offerFor(pubkey), proof: undefined })).toEqual({ problem: 'wrong' });
+    // signed by another key, over another nonce, or for another operator
+    expect(scan(offerFor(pubkey, { proof: proofOf(other) }))).toEqual({ problem: 'wrong' });
+    expect(scan(offerFor(pubkey, { proof: proofOf(pubkey, 'n-2') }))).toEqual({ problem: 'wrong' });
+    expect(scan(offerFor(pubkey, { proof: proofOf(pubkey, 'n-1', 'http://api.elsewhere') }))).toEqual({ problem: 'wrong' });
+    expect(scan(offerFor(pubkey, { proof: { ...proofOf(pubkey), created_at: MADE + 1 } }))).toEqual({ problem: 'wrong' });
+    // the phone's own verify decides
+    expect(readScan(JSON.stringify(offerFor(pubkey)), D.operator, T0, () => false)).toEqual({ problem: 'wrong' });
+  });
+
+  test("a typed code's offer is held to the same proof", async () => {
+    const w = world();
+    const { pubkey } = deviceKey();
+    const code = newPairCode(nodeCrypto);
+    const { lookup, key } = await derivePairCode(code, nodeCrypto);
+    w.offers.set(lookup, await sealOffer(offerFor(pubkey, { proof: proofOf(deviceKey().pubkey) }), key, nodeCrypto));
+    expect(await lookupCode(w.ports, code)).toEqual({ problem: 'wrong' });
+  }, 20_000);
 
   test('a typed code finds its offer; a wrong or short one does not', async () => {
     const w = world();
@@ -106,8 +145,11 @@ describe('connected browsers (mobile spec 5.5, contract 4.4 and 4.9)', () => {
   test('Connect posts the device, wraps the pair-ack to it, and republishes the record', async () => {
     const w = world();
     const dev = deviceKey();
-    expect(await connectBrowser(w.ports, offerFor(dev.pubkey))).toBe('connected');
+    const offer = offerFor(dev.pubkey);
+    expect(await connectBrowser(w.ports, offer)).toBe('connected');
     expect(w.calls).toContain('POST http://api/devices');
+    // the device's proof goes with it, its nonce beside it, and nothing names the browser to the operator (F30)
+    expect(w.bodies).toEqual([{ v: 1, device_pubkey: dev.pubkey, proof: { nonce: 'n-1', ...offer.proof } }]);
     const wrap = w.events.find((e) => e.event.kind === 1059)!;
     expect(wrap.relay).toBe(D.operator.relay);
     const { rumor, seal } = await unwrap(dev.signer, wrap.event);
@@ -142,6 +184,15 @@ describe('connected browsers (mobile spec 5.5, contract 4.4 and 4.9)', () => {
     expect(await connectBrowser(w.ports, offerFor(deviceKey().pubkey))).toBe('failed');
     expect(w.db.all('SELECT op FROM outbox')).toEqual([]);
     expect(w.events.some((e) => e.event.kind === 1059)).toBe(false);
+  });
+
+  test('a post_device queued before the proof is refused here, without asking the API', async () => {
+    const w = world();
+    const dev = deviceKey();
+    const id = enqueue(w.db, T0, { op: 'post_device', signer: w.owner, subject: 't', payload: { device_pubkey: dev.pubkey, label: 'Chrome' }, targets: [`${D.operator.api}/devices`] });
+    await drain(w.send);
+    expect(w.calls.filter((c) => c.endsWith('/devices'))).toEqual([]);
+    expect(w.db.get<{ state: string }>('SELECT state FROM outbox WHERE id = ?', id)?.state).toBe('dead');
   });
 
   test('Disconnect revokes at once, republishes and calls DELETE /devices', async () => {

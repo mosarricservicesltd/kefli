@@ -4,7 +4,7 @@
 // post_device then pair_ack; the pair-ack's success writes the row. Disconnect revokes at once. A row's relay is
 // the one its pair-ack went to, and a row from the record has none, since the record carries no relay: anything
 // sending to the browser later uses the operator relay, where it always listens (C§4.4, F19).
-import { DEVICES_D, KIND, mergeDevices, type DevicesRecord } from '@kefli/protocol';
+import { DEVICES_D, KIND, mergeDevices, type DevicesRecord, type Statement } from '@kefli/protocol';
 import type { SqlDb } from './db';
 import { indexerRelays, writeRelays } from './lists';
 import { enqueue } from './outbox';
@@ -74,13 +74,15 @@ export function queueRecord(db: SqlDb, now: number, owner: string): number {
 }
 
 export type PairPayload = { device_pubkey: string; label: string; nonce: string; token: string; relay: string };
+/** The device key's proof from the offer, as POST /devices carries it (C§4.4, 6). */
+export type DeviceProof = Statement & { nonce: string };
 export type ConnectRows = { register: number | null; post: number; ack: number };
 
-/** Connect (5.5): post_device to the API, then the pair-ack to the device on the offer's relay. */
-export function queueConnect(db: SqlDb, now: number, owner: string, api: string, pair: PairPayload, register: number | null): ConnectRows {
+/** Connect (5.5): post_device to the API with the offer's proof, then the pair-ack to the device on the offer's relay. */
+export function queueConnect(db: SqlDb, now: number, owner: string, api: string, pair: PairPayload, proof: DeviceProof, register: number | null): ConnectRows {
   return db.tx(() => {
     const post = enqueue(db, now, {
-      op: 'post_device', signer: owner, subject: pair.token, payload: { device_pubkey: pair.device_pubkey, label: pair.label },
+      op: 'post_device', signer: owner, subject: pair.token, payload: { device_pubkey: pair.device_pubkey, label: pair.label, proof },
       targets: [`${api}/devices`], dependsOn: register,
     });
     const ack = enqueue(db, now, { op: 'pair_ack', signer: owner, subject: pair.token, payload: pair, targets: [pair.relay], dependsOn: post });

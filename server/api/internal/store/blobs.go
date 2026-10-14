@@ -93,8 +93,9 @@ func (s *Store) deleteOwned(ctx context.Context, where string, args ...any) ([]s
 	return s.orphans(ctx, shas)
 }
 
-// RemoveDevice revokes a device the user authorised and deletes its unexpired inbox blobs (contract 6). found is false
-// when the device isn't the user's.
+// RemoveDevice revokes a device the user authorised and deletes its unexpired inbox blobs that count against the user
+// (contract 6). found is false when the device isn't the user's. A blob the device sent while another library held it
+// stays that library's, to expire or go with its account (F44).
 func (s *Store) RemoveDevice(ctx context.Context, user, device string) (found bool, orphaned []string, err error) {
 	res, err := s.db.ExecContext(ctx, `DELETE FROM devices WHERE device_pubkey = ? AND user_pubkey = ?`, device, user)
 	if err != nil {
@@ -103,7 +104,7 @@ func (s *Store) RemoveDevice(ctx context.Context, user, device string) (found bo
 	if n, _ := res.RowsAffected(); n == 0 {
 		return false, nil, nil
 	}
-	if orphaned, err = s.deleteOwned(ctx, `owner = ?`, device); err != nil {
+	if orphaned, err = s.deleteOwned(ctx, `owner = ? AND account = ?`, device, user); err != nil {
 		return true, nil, err
 	}
 	_, err = s.db.ExecContext(ctx, `INSERT INTO gone(pubkey, at) VALUES(?, ?) ON CONFLICT(pubkey) DO UPDATE SET at = excluded.at`, device, s.unix())

@@ -1,4 +1,6 @@
-import { LocalSigner, encryptText, normaliseMarkdown, readItemEvent, textHash, unwrap, type NostrEvent, type Signer } from '@kefli/protocol';
+import {
+  LocalSigner, encryptText, normaliseMarkdown, readItemEvent, releaseTemplate, statementHolds, textHash, unwrap, type NostrEvent, type Signer,
+} from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { migrate } from '../src/data/schema';
@@ -42,6 +44,7 @@ function world(o: { down?: Set<string>; accountStatus?: number } = {}) {
   const blossom = new Map<string, { bytes: Uint8Array; owners: Set<string> }>();
   const staged = new Map<string, Uint8Array>();
   const log: string[] = [];
+  const devicePosts: { author: string; body: Record<string, unknown> }[] = [];
   const signerOf = async (pk: string) => signers.get(pk) ?? null;
   const authorOf = (init: RequestInit) => {
     const a = (init.headers as Record<string, string> | undefined)?.Authorization ?? '';
@@ -63,6 +66,7 @@ function world(o: { down?: Set<string>; accountStatus?: number } = {}) {
     }
     if (url.endsWith('/mirror')) return new Response(JSON.stringify({ sha256: String(JSON.parse(String(init.body)).url).split('/').pop() }), { status: 200 });
     if (url.endsWith('/account')) return new Response('{}', { status: o.accountStatus ?? 200 });
+    if (url.endsWith('/devices') && method === 'POST') devicePosts.push({ author: authorOf(init), body: JSON.parse(String(init.body)) });
     if (method === 'GET' && blossom.has(sha)) return new Response(blossom.get(sha)!.bytes as never, { status: 200 });
     if (method === 'GET' || method === 'HEAD') return new Response('', { status: method === 'GET' && /^[0-9a-f]{64}$/.test(sha) ? 404 : 200 });
     return new Response('{}', { status: 200 });
@@ -126,7 +130,7 @@ function world(o: { down?: Set<string>; accountStatus?: number } = {}) {
     }
     return enc.text.sha256;
   }
-  return { db, S, T, p, log, relays, blossom, staged, save, tick: (s: number) => (clock += s), keysRetired: () => keysRetired };
+  return { db, S, T, p, log, devicePosts, relays, blossom, staged, save, tick: (s: number) => (clock += s), keysRetired: () => keysRetired };
 }
 
 /** Runs the move with relays a and b unreachable, so it stops at step 4's read-back with S whole; then time passes. */
@@ -275,6 +279,38 @@ describe('The move (contract 4.8, mobile spec 4.10)', () => {
     expect(ack.nonce).toBeUndefined();
     expect(w.db.all<{ token: string }>('SELECT token FROM devices WHERE owner = ?', w.T.pubkey()).map((r) => r.token)).toEqual([ack.token]);
     expect(w.log.some((l) => l.startsWith('POST http://api/devices') && l.endsWith(w.T.pubkey().slice(0, 4)))).toBe(true);
+  });
+
+  test('POST /devices as T carries a release S signs for that browser going to T, and no proof (C§4.8 step 4)', async () => {
+    const w = world();
+    const device = new LocalSigner(nodeCrypto.randomBytes(32));
+    w.db.run("INSERT INTO devices (token, owner, device_pubkey, label, relay, connected_at) VALUES ('old', ?, ?, 'Firefox', 'ws://op', 1)", w.S.pubkey(), device.pubkey());
+    expect(await runMove(w.p)).toBe('done');
+    expect(w.devicePosts).toHaveLength(1);
+    const [{ author, body }] = w.devicePosts;
+    expect(author).toBe(w.T.pubkey());
+    expect(Object.keys(body).sort()).toEqual(['device_pubkey', 'release', 'v']);
+    const release = body.release as { pubkey: string; created_at: number; sig: string };
+    expect(release.pubkey).toBe(w.S.pubkey());
+    expect(statementHolds(w.S.pubkey(), releaseTemplate(D.operator.api, device.pubkey(), w.T.pubkey(), release.created_at), release.sig)).toBe(true);
+    // the release names T: it does nothing for anyone else who might hold it
+    expect(statementHolds(w.S.pubkey(), releaseTemplate(D.operator.api, device.pubkey(), w.S.pubkey(), release.created_at), release.sig)).toBe(false);
+  });
+
+  test("a POST /devices the API refuses leaves that browser with S, and the move still finishes", async () => {
+    const w = world();
+    const device = new LocalSigner(nodeCrypto.randomBytes(32));
+    w.db.run("INSERT INTO devices (token, owner, device_pubkey, label, relay, connected_at) VALUES ('old', ?, ?, 'Firefox', 'ws://op', 1)", w.S.pubkey(), device.pubkey());
+    const fetch = w.p.fetch;
+    const p: MovePorts = { ...w.p, fetch: (async (url: string, init: RequestInit) => (String(url).endsWith('/devices') ? new Response('{"v":1,"error":"release: holder"}', { status: 403 }) : fetch(url, init))) as typeof globalThis.fetch };
+    p.runOutbox = () => drain({
+      db: w.db, now: () => 1_000, signer: async (pk) => (pk === w.S.pubkey() ? w.S : pk === w.T.pubkey() ? w.T : null),
+      fetch: p.fetch, crypto: nodeCrypto, defaults: () => D, publish: w.p.publish, readBlob: w.p.readStaged,
+    });
+    expect(await runMove(p)).toBe('done');
+    // no pair-ack went to the browser, so it isn't told it moved to a library the operator doesn't hold it for
+    expect(w.relays.get('ws://op')!.some((e) => e.kind === 1059 && e.tags.some((t) => t[0] === 'p' && t[1] === device.pubkey()))).toBe(false);
+    expect(w.db.all('SELECT token FROM devices WHERE owner = ?', w.T.pubkey())).toEqual([]);
   });
 
   test('a browser known only from the synced record gets its pair-ack on the operator relay, and the move finishes (F19)', async () => {

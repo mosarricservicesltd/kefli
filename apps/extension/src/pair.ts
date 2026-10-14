@@ -4,7 +4,7 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import { Relay } from 'nostr-tools/relay';
 import { httpAuth } from '../../../packages/protocol/src/nip98';
 import {
-  acceptPairAck, derivePairCode, newPairCode, sealOffer, type PairAck, type PairOffer,
+  acceptPairAck, derivePairCode, deviceProofTemplate, newPairCode, sealOffer, signStatement, type PairAck, type PairOffer,
 } from '../../../packages/protocol/src/pairing';
 import type { CryptoPort } from '../../../packages/protocol/src/ports';
 import type { LocalSigner, NostrEvent } from '../../../packages/protocol/src/signer';
@@ -42,9 +42,14 @@ export interface Offer {
   posted: boolean;
 }
 
-/** A fresh offer, made here and not yet posted. */
-export function newOffer(device: LocalSigner, defaults: Defaults, label: string, crypto: CryptoPort, now: number): Offer {
-  const offer: PairOffer = { v: 1, device_pubkey: device.pubkey(), relay: defaults.operator.relay, nonce: bytesToHex(crypto.randomBytes(16)), expires: now + OFFER_LIFE, label };
+/**
+ * A fresh offer, made here and not yet posted. It carries the device key's proof over its nonce (contract 4.4), which
+ * the phone forwards in POST /devices, so the operator authorises this key only for a phone that has this offer.
+ */
+export async function newOffer(device: LocalSigner, defaults: Defaults, label: string, crypto: CryptoPort, now: number): Promise<Offer> {
+  const nonce = bytesToHex(crypto.randomBytes(16));
+  const proof = await signStatement(device, deviceProofTemplate(defaults.operator.api, nonce, now));
+  const offer: PairOffer = { v: 1, device_pubkey: device.pubkey(), relay: defaults.operator.relay, nonce, expires: now + OFFER_LIFE, label, proof };
   return { offer, code: newPairCode(crypto), qr: JSON.stringify(offer), posted: false };
 }
 
@@ -69,12 +74,12 @@ export const OFFER_REUSE_MIN = 60;
  */
 export async function tryPairing(
   last: { offer: Offer | null },
-  make: () => Offer,
+  make: () => Promise<Offer>,
   listen: (o: Offer) => Promise<Listening>,
   post: (o: Offer) => Promise<void>,
   now: number,
 ): Promise<{ offer: Offer; listening: Listening }> {
-  if (!last.offer || last.offer.offer.expires - now < OFFER_REUSE_MIN) last.offer = make();
+  if (!last.offer || last.offer.offer.expires - now < OFFER_REUSE_MIN) last.offer = await make();
   const offer = last.offer;
   const listening = await listen(offer);
   try {

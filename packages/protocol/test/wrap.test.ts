@@ -2,8 +2,9 @@ import { verifyEvent } from 'nostr-tools/pure';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import {
   acceptPairAck, EventTooLargeError, LocalSigner, UnwrapError, WRAP_BACKDATE_MAX, acceptSaveRequest, browserSavedAt,
-  buildDevicesEvent, checkOffer, derivePairCode, giftWrap, mergeDevices, newPairCode, openOffer, readDevicesEvent,
-  readPairCode, sealOffer, unwrap, wrapPairAck, wrapSaveRequest,
+  buildDevicesEvent, checkOffer, derivePairCode, deviceProofTemplate, giftWrap, mergeDevices, newPairCode, nobleSecp, openOffer,
+  proofHolds, readDevicesEvent, readPairCode, releaseTemplate, sealOffer, signStatement, statementHolds, unwrap, wrapPairAck,
+  wrapSaveRequest,
 } from '../src';
 import type { DevicesRecord, PairOffer, SaveRequest } from '../src';
 import { nodeCrypto } from '../src/node';
@@ -11,6 +12,8 @@ import { nodeCrypto } from '../src/node';
 const signer = () => new LocalSigner(nodeCrypto.randomBytes(32));
 const NOW = 1_760_000_000;
 const RELAY = 'wss://relay.kefli.example';
+const API = 'https://api.kefli.example';
+const OPERATOR = { relay: RELAY, api: API };
 const BLOSSOM = 'https://blossom.kefli.example';
 
 const request = (over: Partial<SaveRequest> = {}): SaveRequest => ({
@@ -155,7 +158,9 @@ describe('typed pair code (C§4.4)', () => {
   });
 
   test('an offer round trips, and the wrong code gives null', async () => {
-    const offer: PairOffer = { v: 1, device_pubkey: signer().pubkey(), relay: RELAY, nonce: 'n', expires: NOW + 300, label: 'Firefox on a Mac' };
+    const device = signer();
+    const proof = await signStatement(device, deviceProofTemplate(API, 'n', NOW));
+    const offer: PairOffer = { v: 1, device_pubkey: device.pubkey(), relay: RELAY, nonce: 'n', expires: NOW + 300, label: 'Firefox on a Mac', proof };
     const { key } = await derivePairCode('K7QM4XPD', nodeCrypto);
     const sealed = await sealOffer(offer, key, nodeCrypto);
     expect(await openOffer(sealed, key, nodeCrypto)).toEqual(offer);
@@ -165,7 +170,15 @@ describe('typed pair code (C§4.4)', () => {
 });
 
 describe('offer checks (C§4.4)', () => {
-  const good = (): PairOffer => ({ v: 1, device_pubkey: signer().pubkey(), relay: RELAY, nonce: 'n', expires: NOW + 300, label: 'Chrome on a Windows laptop' });
+  const device = signer();
+  const nonce = 'aa'.repeat(16);
+  // made when the offer was, before any expiry the cases try
+  const MADE = NOW - 400;
+  let proof: PairOffer['proof'];
+  beforeAll(async () => {
+    proof = await signStatement(device, deviceProofTemplate(API, nonce, MADE));
+  });
+  const good = (): PairOffer => ({ v: 1, device_pubkey: device.pubkey(), relay: RELAY, nonce, expires: NOW + 300, label: 'Chrome on a Windows laptop', proof });
   test.each([
     ['valid', {}, null],
     ['within the skew', { expires: NOW - 60 }, null],
@@ -177,8 +190,58 @@ describe('offer checks (C§4.4)', () => {
     ['label with a newline', { label: 'a\nb' }, 'label'],
     ['another relay', { relay: 'wss://evil.example' }, 'relay'],
     ['no nonce', { nonce: '' }, 'nonce'],
-  ] as const)('%s', (_n, over, want) => {
-    expect(checkOffer({ ...good(), ...over } as PairOffer, RELAY, NOW)).toBe(want);
+    ['no proof', { proof: undefined }, 'proof'],
+    ['another nonce than the proof signed', { nonce: 'bb'.repeat(16) }, 'proof'],
+    ['another device than signed it', { device_pubkey: signer().pubkey() }, 'proof'],
+    ['an offer that expires before its proof was made', { expires: MADE - 1 }, 'proof', MADE],
+  ] as [string, Partial<PairOffer>, string | null, number?][])('%s', (_n, over, want, at = NOW) => {
+    expect(checkOffer({ ...good(), ...over } as PairOffer, OPERATOR, at)).toBe(want);
+  });
+
+  test('a proof signed for another API, or with its time or signature changed, is refused', () => {
+    expect(checkOffer(good(), { relay: RELAY, api: 'https://api.elsewhere.example' }, NOW)).toBe('proof');
+    expect(proofHolds({ ...good(), proof: { ...proof, created_at: MADE + 1 } }, API)).toBe(false);
+    const flipped = proof.sig.slice(0, -1) + (proof.sig.endsWith('0') ? '1' : '0');
+    expect(proofHolds({ ...good(), proof: { ...proof, sig: flipped } }, API)).toBe(false);
+    expect(proofHolds({ ...good(), proof: { created_at: MADE, sig: proof.sig.toUpperCase() } }, API)).toBe(false);
+    expect(proofHolds({ ...good(), proof: { created_at: String(MADE) as never, sig: proof.sig } }, API)).toBe(false);
+    expect(proofHolds(good(), API)).toBe(true);
+  });
+
+  test('the proof is a kind 27235 for POST <api>/devices with the nonce and no payload tag, by the device key', async () => {
+    const e = await device.signEvent(deviceProofTemplate(API, nonce, MADE));
+    expect(e.kind).toBe(27235);
+    expect(e.tags).toEqual([['u', `${API}/devices`], ['method', 'POST'], ['nonce', nonce]]);
+    expect(e.content).toBe('');
+    expect(e.created_at).toBe(MADE);
+    expect(verifyEvent(e)).toBe(true);
+    // the offer's two fields are that event's time and signature: anything with the key can rebuild and check it
+    expect(verifyEvent({ ...e, sig: proof.sig })).toBe(true);
+  });
+
+  test("checkOffer uses the platform's verify", () => {
+    const calls: string[] = [];
+    const verify = (sig: string, id: string, pk: string) => (calls.push(pk), nobleSecp.verify(sig, id, pk));
+    expect(checkOffer(good(), OPERATOR, NOW, verify)).toBeNull();
+    expect(calls).toEqual([device.pubkey()]);
+    expect(checkOffer(good(), OPERATOR, NOW, () => false)).toBe('proof');
+  });
+});
+
+describe('a release for a move (C§4.8 step 4)', () => {
+  const [source, target] = [signer(), signer()];
+  const device = signer().pubkey();
+
+  test("the source's release holds for that device going to that target, and for nothing else", async () => {
+    const r = await signStatement(source, releaseTemplate(API, device, target.pubkey(), NOW));
+    expect(r.created_at).toBe(NOW);
+    expect(statementHolds(source.pubkey(), releaseTemplate(API, device, target.pubkey(), NOW), r.sig)).toBe(true);
+    expect(statementHolds(target.pubkey(), releaseTemplate(API, device, target.pubkey(), NOW), r.sig)).toBe(false);
+    expect(statementHolds(source.pubkey(), releaseTemplate(API, device, signer().pubkey(), NOW), r.sig)).toBe(false);
+    expect(statementHolds(source.pubkey(), releaseTemplate(API, signer().pubkey(), target.pubkey(), NOW), r.sig)).toBe(false);
+    expect(statementHolds(source.pubkey(), releaseTemplate(API, device, target.pubkey(), NOW + 1), r.sig)).toBe(false);
+    // a release is no device proof, and a device proof no release
+    expect(statementHolds(source.pubkey(), deviceProofTemplate(API, device, NOW), r.sig)).toBe(false);
   });
 });
 

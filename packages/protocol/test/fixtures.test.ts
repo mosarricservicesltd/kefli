@@ -4,7 +4,7 @@ import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  KIND, LIBRARY_KEY_D, LocalSigner, acceptPairAck, acceptSaveRequest, buildDevicesEvent, buildItemEvent, checkOffer,
+  KIND, LIBRARY_KEY_D, LocalSigner, acceptPairAck, acceptSaveRequest, buildDevicesEvent, buildItemEvent, checkOffer, proofHolds, releaseTemplate, statementHolds,
   decryptText, derivePairCode, derivePhonePair, httpAuth, isDeleted, itemHash, normaliseMarkdown, openOffer,
   openPhoneOffer, readDevicesEvent, readItemEvent, readLibraryKeyEvent, readPairCode, readPhoneQr, readRelayList,
   readServerList, readSix, savedD, sealOffer, sealPhoneOffer, secretKeyFromMnemonic, textHash, unwrap, wrapPairAck,
@@ -172,7 +172,17 @@ describe('the typed-code pair offer (C§4.4, §9)', () => {
     expect(bytesToHex(key)).toBe(f.key);
     expect(await openOffer(f.sealed, key, nodeCrypto)).toEqual(f.offer);
     expect(await sealOffer(f.offer, key, replaying(base64.decode(f.sealed)))).toBe(f.sealed);
-    expect(checkOffer(f.offer, f.offer.relay, f.offer.expires)).toBeNull();
+    expect(checkOffer(f.offer, { relay: f.offer.relay, api: f.api }, f.offer.expires)).toBeNull();
+  });
+
+  test("the offer's proof and a move's release verify, and the POST /devices bodies carry them (C§4.4, 4.8, 6)", () => {
+    const { offer, post, move_post: move } = f;
+    expect(proofHolds(offer, f.api)).toBe(true);
+    expect(post).toEqual({ v: 1, device_pubkey: offer.device_pubkey, proof: { nonce: offer.nonce, ...offer.proof } });
+    const r = move.body.release;
+    expect(r.pubkey).toBe(move.source_pubkey);
+    expect(statementHolds(r.pubkey, releaseTemplate(f.api, move.body.device_pubkey, move.target_pubkey, r.created_at), r.sig)).toBe(true);
+    expect(statementHolds(r.pubkey, releaseTemplate(f.api, move.body.device_pubkey, r.pubkey, r.created_at), r.sig)).toBe(false);
   });
 });
 

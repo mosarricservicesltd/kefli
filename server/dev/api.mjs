@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { verifyEvent } from 'nostr-tools/pure';
+import { getEventHash, verifyEvent } from 'nostr-tools/pure';
 
 const PORT = Number(process.env.PORT ?? 8447);
 const BASE = `http://localhost:${PORT}`;
@@ -70,7 +70,7 @@ async function register(req, res) {
   send(res, 200, { v: 1 });
 }
 
-// device pubkey → { user, label }; lookup → { offer, expires }
+// device pubkey → { user }; lookup → { offer, expires }
 const devices = new Map();
 const offers = new Map();
 const OFFER_LIFE = 300;
@@ -90,14 +90,65 @@ async function authed(req, res, path, { registeredOnly = true } = {}) {
   return { pubkey: auth.pubkey, json };
 }
 
+// ids of device proofs and releases used, as keflid's replay check holds them
+const usedConsent = new Set();
+const PROOF_LIFE = OFFER_LIFE + 60;
+
+const HEX64 = /^[0-9a-f]{64}$/;
+const outside = (at, before, after) => !Number.isSafeInteger(at) || at > now() + after || at < now() - before;
+
+/** A statement as POST /devices carries it, its time and signature, checked against the event it stands for (contract 6). */
+function statementHolds(pubkey, tags, s) {
+  if (!HEX64.test(pubkey ?? '') || !/^[0-9a-f]{128}$/.test(s?.sig ?? '')) return null;
+  const ev = { kind: 27235, pubkey, created_at: s.created_at, tags, content: '' };
+  ev.id = getEventHash(ev);
+  ev.sig = s.sig;
+  return verifyEvent(ev) ? ev.id : null;
+}
+
+/** The device's proof from its offer, or the holder's release for a move, as keflid checks them (F44). */
+function consent({ proof, release }, device, caller) {
+  const head = [['u', `${BASE}/devices`], ['method', 'POST']];
+  if (proof) {
+    if (outside(proof.created_at, PROOF_LIFE, 60)) return { why: 'proof: stale' };
+    const id = statementHolds(device, [...head, ['nonce', String(proof.nonce ?? '')]], proof);
+    return id ? { id, name: 'proof' } : { why: 'proof: signature' };
+  }
+  if (release) {
+    if (outside(release.created_at, 60, 60)) return { why: 'release: stale' };
+    const id = statementHolds(release.pubkey, [...head, ['device', device], ['to', caller]], release);
+    return id ? { id, name: 'release', holder: release.pubkey } : { why: 'release: signature' };
+  }
+  return { why: 'proof: missing', status: 400 };
+}
+
+/** The answer when a checked consent can't move the device to caller, [200] when caller has it already, else null. */
+function refusal(c, pk, caller) {
+  const held = devices.get(pk)?.user;
+  if (held === caller) return [200];
+  if (c.holder && held !== c.holder) return [403, 'release: holder'];
+  return usedConsent.has(c.id) ? [403, `${c.name}: replayed`] : null;
+}
+
+/** The answer to a POST /devices from caller: the device taken only with its consent (F44). */
+function takeDevice(json, caller) {
+  // a label from an older phone is ignored, as keflid ignores it (F30)
+  const pk = String(json?.device_pubkey ?? '');
+  if (!HEX64.test(pk) || pk === caller) return [400, 'device'];
+  const c = consent(json, pk, caller);
+  const no = c.why ? [c.status ?? 403, c.why] : refusal(c, pk, caller);
+  if (no) return no;
+  usedConsent.add(c.id);
+  devices.set(pk, { user: caller });
+  console.log(`device ${pk.slice(0, 12)}… for ${caller.slice(0, 12)}… on its ${c.name}`);
+  return [200];
+}
+
 async function postDevice(req, res) {
   const a = await authed(req, res, '/devices');
   if (!a) return;
-  const { device_pubkey: pk, label } = a.json ?? {};
-  if (!/^[0-9a-f]{64}$/.test(pk ?? '') || typeof label !== 'string') return send(res, 400, { v: 1, error: 'bad device' });
-  devices.set(pk, { user: a.pubkey, label });
-  console.log(`device ${pk.slice(0, 12)}… (${label}) for ${a.pubkey.slice(0, 12)}…`);
-  send(res, 200, { v: 1 });
+  const [status, error] = takeDevice(a.json, a.pubkey);
+  send(res, status, error ? { v: 1, error } : { v: 1 });
 }
 
 async function deleteDevice(req, res, pk) {

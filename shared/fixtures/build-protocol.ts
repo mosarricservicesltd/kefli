@@ -17,8 +17,8 @@ import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import {
   LocalSigner, buildDeletions, buildDevicesEvent, buildItemEvent, buildLibraryKeyEvent, buildRelayList, buildServerList,
-  countWords, derivePairCode, derivePhonePair, encryptText, httpAuth, itemHash, normaliseMarkdown, progressAt, savedD,
-  sealOffer, sealPhoneOffer, secretKeyFromMnemonic, textHash, wrapPairAck, wrapSaveRequest,
+  countWords, derivePairCode, derivePhonePair, deviceProofTemplate, encryptText, httpAuth, itemHash, normaliseMarkdown, progressAt, savedD,
+  releaseTemplate, sealOffer, sealPhoneOffer, secretKeyFromMnemonic, signStatement, textHash, wrapPairAck, wrapSaveRequest,
   type CryptoPort, type DevicesRecord, type Item, type NostrEvent, type PairAck, type PairOffer, type SaveRequest,
 } from '../../packages/protocol/src';
 import { nodeCrypto } from '../../packages/protocol/src/node';
@@ -197,10 +197,18 @@ async function pairOffer() {
   seed('pair offer');
   const code = '7K3MZQ2D';
   const { lookup, key } = await derivePairCode(code, nodeCrypto);
-  const offer: PairOffer = { v: 1, device_pubkey: signerOf('browser').pubkey(), relay: DEFAULTS.operator.relay, nonce: bytesToHex(take(16)), expires: T0 + 300, label: 'Chrome on a Windows laptop' };
+  const device = signerOf('browser');
+  const nonce = bytesToHex(take(16));
+  const proof = await signStatement(device, deviceProofTemplate(DEFAULTS.operator.api, nonce, T0));
+  const offer: PairOffer = { v: 1, device_pubkey: device.pubkey(), relay: DEFAULTS.operator.relay, nonce, expires: T0 + 300, label: 'Chrome on a Windows laptop', proof };
+  const [source, target] = [signerOf('library'), signerOf('move target')];
+  const release = await signStatement(source, releaseTemplate(DEFAULTS.operator.api, device.pubkey(), target.pubkey(), T0 + 120));
   return {
-    about: 'One typed-code pair offer (C§4.4): typed is read leniently to code; scrypt gives lookup and key; sealed is base64(IV ‖ ciphertext ‖ tag) and opens to offer. Exact.',
+    about: "One typed-code pair offer (C§4.4): typed is read leniently to code; scrypt gives lookup and key; sealed is base64(IV ‖ ciphertext ‖ tag) and opens to offer, whose proof is the device key's signature over the kind 27235 for POST api/devices with its nonce, made at proof.created_at. post is the POST /devices body a phone sends for it, and move_post the body a move's target sends for the same device (C§4.8 step 4), its release signed by the source. The signatures are verified, not matched; the rest is exact.",
     typed: '7k3m-zq2d', code, lookup, key: bytesToHex(key), sealed: await sealOffer(offer, key, seeded), offer,
+    api: DEFAULTS.operator.api,
+    post: { v: 1, device_pubkey: device.pubkey(), proof: { nonce, ...proof } },
+    move_post: { source_pubkey: source.pubkey(), target_pubkey: target.pubkey(), body: { v: 1, device_pubkey: device.pubkey(), release: { pubkey: source.pubkey(), ...release } } },
   };
 }
 

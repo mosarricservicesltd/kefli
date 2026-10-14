@@ -1,9 +1,10 @@
 // Connect a browser (mobile spec 5.5, contract 4.4): a scanned QR or a typed code becomes a checked offer, and
 // Connect queues post_device then pair_ack and runs the outbox while the button is busy. Any failed attempt is
 // Can't connect, and the queued rows are withdrawn, so a browser never connects later behind the person's back.
-// Ports keep it testable.
+// An offer counts only with the device key's proof over its nonce (C§4.4), which post_device forwards to the API;
+// one without it, as from an extension before contract v1.11, reads as a wrong code. Ports keep it testable.
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { checkOffer, derivePairCode, httpAuth, openOffer, readPairCode, type CryptoPort, type PairOffer, type Signer } from '@kefli/protocol';
+import { checkOffer, derivePairCode, httpAuth, openOffer, readPairCode, type CryptoPort, type PairOffer, type SecpPort, type Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { cancelConnect, connectState, queueConnect } from '../data/devices';
 import { registerFirst } from '../data/saves';
@@ -17,26 +18,30 @@ export type ConnectPorts = {
   fetch: typeof fetch;
   crypto: CryptoPort;
   runOutbox: () => Promise<unknown>;
+  /** BIP-340 verify for the offer's proof; the phone passes its native one, the tests noble's. */
+  verify?: SecpPort['verify'];
 };
+
+type Operator = { relay: string; api: string };
 
 export type OfferResult = { offer: PairOffer } | { problem: 'expired' | 'wrong' | 'offline' };
 
 /** A checked offer, or why not: an expired one has its own state; anything else unusable reads as a wrong code. */
-export function checked(o: Partial<PairOffer> | null, operatorRelay: string, now: number): OfferResult {
-  const problem = checkOffer(o, operatorRelay, now);
+export function checked(o: Partial<PairOffer> | null, operator: Operator, now: number, verify?: SecpPort['verify']): OfferResult {
+  const problem = checkOffer(o, operator, now, verify);
   if (problem === 'expired') return { problem: 'expired' };
   return problem ? { problem: 'wrong' } : { offer: o as PairOffer };
 }
 
 /** A QR's text, read as an offer (C§4.4). */
-export function readScan(raw: string, operatorRelay: string, now: number): OfferResult {
+export function readScan(raw: string, operator: Operator, now: number, verify?: SecpPort['verify']): OfferResult {
   let o: Partial<PairOffer> | null;
   try {
     o = JSON.parse(raw);
   } catch {
     o = null;
   }
-  return checked(o && typeof o === 'object' ? o : null, operatorRelay, now);
+  return checked(o && typeof o === 'object' ? o : null, operator, now, verify);
 }
 
 const targetsOf = (d: Awaited<ReturnType<ConnectPorts['defaults']>>) => ({ api: d.operator.api, blossom: d.operator.blossom, mirror: d.mirrors[0] });
@@ -68,7 +73,7 @@ export async function lookupCode(p: ConnectPorts, typed: string): Promise<OfferR
   if (!res.ok) return { problem: 'offline' };
   const body = (await res.json().catch(() => null)) as { offer?: unknown } | null;
   const offer = typeof body?.offer === 'string' ? await openOffer(body.offer, key, p.crypto) : null;
-  return checked(offer, d.operator.relay, p.now());
+  return checked(offer, d.operator, p.now(), p.verify);
 }
 
 /** Connect (5.5): resolves once the pair-ack is taken, or as soon as anything fails. */
@@ -76,7 +81,8 @@ export async function connectBrowser(p: ConnectPorts, offer: PairOffer): Promise
   const d = await p.defaults();
   const token = bytesToHex(p.crypto.randomBytes(32));
   const pair = { device_pubkey: offer.device_pubkey, label: offer.label.trim(), nonce: offer.nonce, token, relay: offer.relay };
-  const rows = p.db.tx(() => queueConnect(p.db, p.now(), p.owner, d.operator.api, pair, registerFirst(p.db, p.now(), p.owner, targetsOf(d))));
+  const proof = { nonce: offer.nonce, ...offer.proof };
+  const rows = p.db.tx(() => queueConnect(p.db, p.now(), p.owner, d.operator.api, pair, proof, registerFirst(p.db, p.now(), p.owner, targetsOf(d))));
   // A run already going when the rows were queued may end before reaching them, so up to three runs.
   for (let i = 0; 3 > i; i++) {
     await p.runOutbox().catch(() => 0);

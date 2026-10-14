@@ -153,7 +153,10 @@ export function queueBrowsers(p: Pick<MovePorts, 'db' | 'now' | 'crypto'>, job: 
      GROUP BY device_pubkey ORDER BY connected_at`, job.from, job.to, job.since, job.to);
   for (const b of live) {
     const token = bytesToHex(p.crypto.randomBytes(32));
-    const post = enqueue(p.db, p.now(), { op: 'post_device', signer: job.to, subject: token, payload: { device_pubkey: b.device_pubkey, label: b.label }, targets: [`${operator.api}/devices`] });
+    // the API moves the browser to T on a release S signs when this is sent (C§4.8 step 4, sendPostDevice)
+    const post = enqueue(p.db, p.now(), {
+      op: 'post_device', signer: job.to, subject: token, payload: { device_pubkey: b.device_pubkey, label: b.label, moved_from: job.from }, targets: [`${operator.api}/devices`],
+    });
     enqueue(p.db, p.now(), {
       op: 'pair_ack', signer: job.to, subject: token, targets: [operator.relay], dependsOn: post,
       payload: { device_pubkey: b.device_pubkey, label: b.label, token, relay: operator.relay, moved_from: job.from },

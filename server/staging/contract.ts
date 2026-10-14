@@ -3,7 +3,10 @@
 //   npx tsx server/staging/contract.ts [http://localhost:8447]
 import { Relay } from 'nostr-tools/relay';
 import { finalizeEvent, generateSecretKey } from 'nostr-tools/pure';
-import { LocalSigner, encryptText, httpAuth, uploadBlob, deleteBlob, giftWrap, type NostrEvent } from '../../packages/protocol/src';
+import { bytesToHex } from '@noble/hashes/utils.js';
+import {
+  LocalSigner, deviceProofTemplate, encryptText, httpAuth, signStatement, uploadBlob, deleteBlob, giftWrap, type NostrEvent,
+} from '../../packages/protocol/src';
 import { nodeCrypto } from '../../packages/protocol/src/node';
 
 const API = process.argv[2] ?? 'http://localhost:8447';
@@ -61,9 +64,13 @@ async function main() {
   const user = key(), device = key(), stranger = key();
   const reg = await api(user, 'POST', '/register', { v: 1 });
   check('POST /register', reg.status === 200 && reg.body?.v === 1, JSON.stringify(reg));
-  const dev = await api(user, 'POST', '/devices', { v: 1, device_pubkey: device.pubkey(), label: 'Contract test browser' });
-  check('POST /devices authorises a device key', dev.status === 200, JSON.stringify(dev));
-  check('POST /devices refused to an unregistered key', (await api(stranger, 'POST', '/devices', { v: 1, device_pubkey: device.pubkey(), label: 'x' })).status === 403);
+  const nonce = bytesToHex(nodeCrypto.randomBytes(16));
+  const proof = { nonce, ...(await signStatement(device, deviceProofTemplate(API, nonce, now()))) };
+  const bare = await api(user, 'POST', '/devices', { v: 1, device_pubkey: device.pubkey() });
+  check("POST /devices without the device's proof is refused (F44)", bare.status === 400 && bare.body?.error === 'proof: missing', JSON.stringify(bare));
+  const dev = await api(user, 'POST', '/devices', { v: 1, device_pubkey: device.pubkey(), proof });
+  check("POST /devices authorises a device key with the device's proof", dev.status === 200, JSON.stringify(dev));
+  check('POST /devices refused to an unregistered key', (await api(stranger, 'POST', '/devices', { v: 1, device_pubkey: device.pubkey(), proof })).status === 403);
 
   const relay = await Relay.connect(relayUrl);
   // kind 30078: allowlisted by author, no AUTH needed to write (contract 3.2)

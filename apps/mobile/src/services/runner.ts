@@ -332,6 +332,7 @@ export function connectPorts(owner: string): ConnectPorts {
     fetch,
     crypto: phoneCrypto,
     runOutbox,
+    verify: nativeSecp.verify,
   };
 }
 

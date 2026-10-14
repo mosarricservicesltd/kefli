@@ -135,8 +135,9 @@ func (s *Store) Account(ctx context.Context, pubkey string) (quota int64, ok boo
 	return quota, err == nil, err
 }
 
-// AddDevice authorises a device key for the user; a key already authorised for another user moves (a move, contract 4.8).
-// The browser's label isn't kept (F30).
+// AddDevice authorises a device key for the user; a key already authorised for another user moves to this one. The API
+// calls it only with the device's own proof or its holder's release (contract 4.4, 4.8, F44). The browser's label
+// isn't kept (F30).
 func (s *Store) AddDevice(ctx context.Context, user, device string) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO devices(device_pubkey, user_pubkey, label, created_at) VALUES(?, ?, '', ?)
 		ON CONFLICT(device_pubkey) DO UPDATE SET user_pubkey = excluded.user_pubkey`, device, user, s.unix())
@@ -144,6 +145,17 @@ func (s *Store) AddDevice(ctx context.Context, user, device string) error {
 		_, err = s.db.ExecContext(ctx, `DELETE FROM gone WHERE pubkey = ?`, device)
 	}
 	return err
+}
+
+// DeviceHolder is the user a device key is authorised for, whether or not that account is enabled: the library whose
+// release a move needs (contract 4.8 step 4).
+func (s *Store) DeviceHolder(ctx context.Context, device string) (string, bool, error) {
+	var user string
+	err := s.db.QueryRowContext(ctx, `SELECT user_pubkey FROM devices WHERE device_pubkey = ?`, device).Scan(&user)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	return user, err == nil, err
 }
 
 // DeviceUser is the user a device key uploads for, if it is authorised.

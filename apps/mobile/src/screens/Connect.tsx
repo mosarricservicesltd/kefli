@@ -13,6 +13,7 @@ import type { PairOffer } from '@kefli/protocol';
 import { connectBrowser, lookupCode, readScan } from '../services/connect';
 import { loadDefaults } from '../services/config';
 import { useApp } from '../services/app';
+import { nativeSecp } from '../crypto/secp';
 import { connectPorts } from '../services/runner';
 import { Button } from '../ui/Button';
 import { Icon } from '../ui/Icon';
@@ -102,12 +103,12 @@ export default function Connect() {
   const [step, setStep] = useState<Step | null>(null);
   const [offer, setOffer] = useState<PairOffer | null>(null);
   const [codeError, setCodeError] = useState<string | null>(null);
-  const relay = useRef<string | null>(null);
+  const operator = useRef<{ relay: string; api: string } | null>(null);
   const lastScan = useRef<string | null>(null);
   const granted = !!perm?.granted;
 
   useEffect(() => {
-    loadDefaults().then((d) => (relay.current = d.operator.relay)).catch(() => undefined);
+    loadDefaults().then((d) => (operator.current = d.operator)).catch(() => undefined);
   }, []);
   // The explanation only while CAMERA isn't granted; refused once Android won't ask again.
   useEffect(() => {
@@ -126,9 +127,9 @@ export default function Connect() {
     setStep(r.granted ? 'scan' : 'refused');
   };
   const scanned = (data: string) => {
-    if (!relay.current || data === lastScan.current || (step !== 'scan' && step !== 'expired' && step !== 'failed')) return;
+    if (!operator.current || data === lastScan.current || (step !== 'scan' && step !== 'expired' && step !== 'failed')) return;
     lastScan.current = data;
-    const r = readScan(data, relay.current, Math.floor(Date.now() / 1000));
+    const r = readScan(data, operator.current, Math.floor(Date.now() / 1000), nativeSecp.verify);
     if ('offer' in r) {
       setOffer(r.offer);
       setStep('confirm');

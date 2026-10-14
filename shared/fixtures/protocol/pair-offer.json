@@ -1,16 +1,43 @@
 {
-  "about": "One typed-code pair offer (C§4.4): typed is read leniently to code; scrypt gives lookup and key; sealed is base64(IV ‖ ciphertext ‖ tag) and opens to offer. Exact.",
+  "about": "One typed-code pair offer (C§4.4): typed is read leniently to code; scrypt gives lookup and key; sealed is base64(IV ‖ ciphertext ‖ tag) and opens to offer, whose proof is the device key's signature over the kind 27235 for POST api/devices with its nonce, made at proof.created_at. post is the POST /devices body a phone sends for it, and move_post the body a move's target sends for the same device (C§4.8 step 4), its release signed by the source. The signatures are verified, not matched; the rest is exact.",
   "typed": "7k3m-zq2d",
   "code": "7K3MZQ2D",
   "lookup": "492575d4a44f8e7156b5747c40891785a117ccfddc1c2bda465bf5ac28fb95c9",
   "key": "0ec0c6d5cee3eb8f15ee9697f3e65ed588063d059b4496f60ed7a3f781e9b55c",
-  "sealed": "qcGZa/jQDnC18XxjRQ3RWngZY+EvyIiixe8SRuk9AWobWy03ls2UYfpysHnqCGw1C45PNXcR483oZNq74fyfTkqcdiTOpv/d3eCwoCVKYFWYOPRt6izpGcDFrkWwrjEfGwJZjgup0rMhRjX3gyKkcBw1HgR+knfERk3OKmxc9xgyizCuVKVLuIc1IElSp1JebxuqH7TKJ968fxkE5T9EFY6Gsb1Sc7qDrIHd5HXvfbeJ2ecQQfy2qVEktT+Q7vvgfQipaG3yqLN9IV+fN+SLnY4q6Thuz5/6PSZ8pNU80GWanw538rrPZkKfXFOX1/6CVF+4wZYhmPMo4Y7C0Wn4",
+  "sealed": "NFQejBrI6bKe7AxoNZ2f0/dm2nVn4pdpzzKabeNgYjVQTgX6iNRJHwU9J5ZKcbHZ3nI3cDOL6RIz+uPG7JmGTb/B4c42lYE1glF1XoK32g7YZR3b8nSGFdu9vwFE+GwdFDlexZwsMhZRoR3kB6wkfbZ0U897EnaBuCQVzfcoKtIT/YOPbcPSSie4LYvWfHWe/BPsuLt415gQ10DwhRdvl6a+7rgQPfwraCTrar3td8hAwOh/S5yUpqJw3sQs2I6jp8r1cKY8JC32PLn4eSvVqTKqPiO84B4o+3brGMdidH+O5HZd6ihCJxrQR329a/Yy8WWYom+mrVjwDzGwNgdMOFbxEGxpFTX2gCgeZrjGMXOhz2yV74qiL6wpcJ2vlqKa6LpQdibahlZ/cTbMtjCgT1I3syPGFJwnmhOE9WK/Kyg22EovRv/H8ZBPFEdhNUI6akGdUdCT67CZoingD/VENR4GZqjRQr9w7nhGY7hz7bFd+chrtCosCSy4Pd5T1h0BOAfy/5dCJ+3g8YQTn4GiV4r+/in7rugLsOQ4D3BuGR30cbCDuAcYApBP",
   "offer": {
     "v": 1,
     "device_pubkey": "1e908de99cf59c9aee754763792c3e23bdea1ff7482ecd07fdf9fc26e78b4f38",
     "relay": "wss://relay.kefli.example",
     "nonce": "42068b5a45dc4a3d5bd6447bb6f9949c",
     "expires": 1791000300,
-    "label": "Chrome on a Windows laptop"
+    "label": "Chrome on a Windows laptop",
+    "proof": {
+      "created_at": 1791000000,
+      "sig": "696bc3b2ae15448cb1baaa466a9fd4b7d03d2acb9459806d4db028ce3b43ae60dc7697a685ec3ec6f3c11b6b2b9ffee8b03fec45726d573fac64019580dddfaf"
+    }
+  },
+  "api": "https://api.kefli.example",
+  "post": {
+    "v": 1,
+    "device_pubkey": "1e908de99cf59c9aee754763792c3e23bdea1ff7482ecd07fdf9fc26e78b4f38",
+    "proof": {
+      "nonce": "42068b5a45dc4a3d5bd6447bb6f9949c",
+      "created_at": 1791000000,
+      "sig": "696bc3b2ae15448cb1baaa466a9fd4b7d03d2acb9459806d4db028ce3b43ae60dc7697a685ec3ec6f3c11b6b2b9ffee8b03fec45726d573fac64019580dddfaf"
+    }
+  },
+  "move_post": {
+    "source_pubkey": "2110b3fc3d760024ce006df1d5fb1666000cd97692fb170fa34bb12da542cc87",
+    "target_pubkey": "f2858fb5675361d0338595e67738a562b7b61d93dc25b2a8dffa8ec8644ad2dc",
+    "body": {
+      "v": 1,
+      "device_pubkey": "1e908de99cf59c9aee754763792c3e23bdea1ff7482ecd07fdf9fc26e78b4f38",
+      "release": {
+        "pubkey": "2110b3fc3d760024ce006df1d5fb1666000cd97692fb170fa34bb12da542cc87",
+        "created_at": 1791000120,
+        "sig": "c258853fd3277b732cad53bca9530cb6e258c9344bc5647ff8ce61ababdb767558d6e50d2215deed217f2df4c92ec12aab0115cf7707f7aa8fde55300f2702be"
+      }
+    }
   }
 }

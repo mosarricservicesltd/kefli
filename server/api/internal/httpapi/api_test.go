@@ -208,7 +208,7 @@ func TestRegisterAndDevices(t *testing.T) {
 	expect(t, s, 200, b)
 	s, b = e.call(user, "POST", "/devices", map[string]any{"v": 1, "device_pubkey": "nothex", "label": "x"})
 	expect(t, s, 400, b)
-	s, b = e.call(user, "POST", "/devices", map[string]any{"v": 1, "device_pubkey": device.pk, "label": "Chrome on a Mac"})
+	s, b = e.call(user, "POST", "/devices", map[string]any{"v": 1, "device_pubkey": device.pk, "label": "Chrome on a Mac", "proof": e.proof(device, "n1", e.clock)})
 	expect(t, s, 200, b)
 	if u, ok, _ := e.st.DeviceUser(t.Context(), device.pk); !ok || u != user.pk {
 		t.Fatal("device not authorised")
@@ -469,7 +469,7 @@ func TestDeviceInboxAndAccountDeletion(t *testing.T) {
 	e := newEnv(t)
 	user, device := newKey(), newKey()
 	e.call(user, "POST", "/register", map[string]any{"v": 1})
-	e.call(user, "POST", "/devices", map[string]any{"v": 1, "device_pubkey": device.pk, "label": "Firefox"})
+	expect(t, e.addDevice(user, device), 200, nil)
 	inbox, own, shared := []byte("an inbox blob"), []byte("the user's blob"), []byte("held twice")
 	for _, up := range []struct {
 		k key

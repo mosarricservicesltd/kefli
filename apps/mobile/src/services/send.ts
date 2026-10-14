@@ -2,12 +2,12 @@
 // network. It sends register, upload_blob, mirror_blob, publish_item, publish_lists, delete_item, delete_blob,
 // post_device, pair_ack, delete_device, delete_wrap, copy_relay and publish_library_key.
 import {
-  KIND, buildDeletions, buildDevicesEvent, buildItemEvent, buildLibraryKeyEvent, buildRelayList, buildServerList, deleteBlob, httpAuth, mirrorBlob,
-  savedD, uploadBlob, wrapPairAck,
+  DEVICES_PATH, KIND, buildDeletions, buildDevicesEvent, buildItemEvent, buildLibraryKeyEvent, buildRelayList, buildServerList, deleteBlob, httpAuth,
+  mirrorBlob, releaseTemplate, savedD, signStatement, uploadBlob, wrapPairAck,
 } from '@kefli/protocol';
-import type { CryptoPort, NostrEvent, Signer } from '@kefli/protocol';
+import type { CryptoPort, NostrEvent, Signer, Statement } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
-import { hasDevices, localRecord, noteRecord, pairAcked, recordCreatedAt, type PairPayload } from '../data/devices';
+import { hasDevices, localRecord, noteRecord, pairAcked, recordCreatedAt, type DeviceProof, type PairPayload } from '../data/devices';
 import { getItem, itemJson, markPublished, type ItemRow } from '../data/items';
 import { markBacked } from '../data/backup';
 import { keyPublished, libraryKey, libraryKeyPublished, madeHere, makeLibraryKey } from '../data/libraryKey';
@@ -72,11 +72,27 @@ async function sendRegister(p: SendPorts, row: OutboxRow, signer: Signer, t: Out
   return [r];
 }
 
-/** POST /devices: the browser's key may upload against this identity's quota (C§4.4, 6). */
+/**
+ * POST /devices: the browser's key may upload against this identity's quota (C§4.4, 6). The API takes it only with the
+ * device's own proof from the offer, or, in a move (C§4.8 step 4), with a release signed now by the source key S, the
+ * library that holds the browser: S is always a key on this phone, and the browser can't be asked again.
+ */
 async function sendPostDevice(p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
   // the browser's label stays in the self-encrypted connected-browsers record, never with the operator (F30)
-  const { device_pubkey } = JSON.parse(row.payload ?? '{}') as { device_pubkey: string };
-  return [await apiCall(p, signer, t.target, 'POST', JSON.stringify({ v: 1, device_pubkey }))];
+  const { device_pubkey, proof, moved_from } = JSON.parse(row.payload ?? '{}') as { device_pubkey: string; proof?: DeviceProof; moved_from?: string };
+  let consent: { proof: DeviceProof } | { release: Statement & { pubkey: string } };
+  if (moved_from) {
+    const source = await p.signer(moved_from);
+    if (!source) return [{ target: t.target, kind: 'retry', error: 'the source key is not on the phone' }];
+    const api = t.target.slice(0, -DEVICES_PATH.length);
+    consent = { release: { pubkey: moved_from, ...(await signStatement(source, releaseTemplate(api, device_pubkey, row.signer, p.now()))) } };
+  } else if (proof) {
+    consent = { proof };
+  } else {
+    // queued by a build before the proof: the API would refuse it, so the browser shows a new code instead
+    return [{ target: t.target, kind: 'rejected', error: 'no proof from the browser' }];
+  }
+  return [await apiCall(p, signer, t.target, 'POST', JSON.stringify({ v: 1, device_pubkey, ...consent }))];
 }
 
 /** DELETE /devices/<pk>; a 404 means the API no longer holds it, which is the point. */
