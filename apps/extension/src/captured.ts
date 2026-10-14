@@ -1,5 +1,6 @@
 // What the capture script hands the background (contract 4.4's save request, before the HTML is encrypted), and the
 // rules it applies that need no page: the address, the guard and the cap.
+import { withoutUserInfo } from '../../../packages/protocol/src/normalise';
 import { countWords } from '../../../packages/protocol/src/projection';
 
 export interface Captured {
@@ -24,19 +25,22 @@ export function isWebAddress(url: string): boolean {
   return /^https?:\/\//i.test(url);
 }
 
-/** A save made from a link or a page where no script can run: the address alone (extension spec 4). */
+/**
+ * A save made from a link or a page where no script can run: the address alone (extension spec 4), without any user
+ * name and password in it, which no save keeps (contract 4.3, ruling 8).
+ */
 export function linkOnly(url: string): Captured {
-  return { url, canonical: null, hero: null, title: null, site: null, byline: null, lang: null, html: null };
+  return { url: withoutUserInfo(url), canonical: null, hero: null, title: null, site: null, byline: null, lang: null, html: null };
 }
 
 /** What kefliParse returns (shared/vendor/parser-runner.js). */
 export type Parsed = { ok: boolean; title?: string | null; byline?: string | null; site?: string | null; lang?: string | null; hero?: string | null; canonical?: string | null; readerable?: boolean; markdown?: string };
 
-/** The page's address without its fragment (contract 4.4). */
+/** The page's address without its fragment (contract 4.4), or any user name and password (contract 4.3, ruling 8). */
 export function pageUrl(href: string): string {
   const u = new URL(href);
   u.hash = '';
-  return u.href;
+  return withoutUserInfo(u.href);
 }
 
 /**

@@ -8,7 +8,7 @@
 // first bytes, has a larger cap; the parser WebView reads its text runs with pdf.js and pdfMarkdown lays them out here.
 // Whatever a page holds, a parse ends as parsed or failed and never throws: a share's save and the pending parses
 // behind it go on (a failed parse keeps the save's link, without text).
-import { normaliseMarkdown, pdfMarkdown, type PdfRuns } from '@kefli/protocol';
+import { normaliseMarkdown, ownCanonical, pdfMarkdown, type PdfRuns } from '@kefli/protocol';
 import { deriveArticle, type Derived } from '../reader/blocks';
 import { open, TimedOut, TooLarge, type Opened } from '../net/http';
 
@@ -245,7 +245,7 @@ export async function parsePdf(p: Pick<PagePorts, 'pdf'>, bytes: Uint8Array, fin
     if (tooLong(markdown)) return { kind: 'failed', reason: 'too_large', finalUrl };
     const derived = deriveArticle(markdown);
     if (derived.words < PDF_MIN_WORDS) return { kind: 'failed', reason: 'pdf_no_text', finalUrl };
-    const result = fitted({ ok: true as const, title: article.title, byline: article.byline, site: null, lang: null, hero: null, canonical: null, readerable: true, markdown });
+    const result = fitted({ ok: true as const, title: article.title, byline: article.byline, site: null, lang: null, hero: null, canonical: null, readerable: true, markdown }, finalUrl);
     return { kind: 'parsed', finalUrl, result, words: derived.words, spoken: derived.spoken, derived };
   });
 }
@@ -279,7 +279,7 @@ export function parsedOutcome(result: Extract<ParserResult, { ok: true }>, final
   return guarded(finalUrl, () => {
     const derived = deriveArticle(result.markdown);
     if (!result.readerable && derived.words < GUARD_WORDS) return { kind: 'failed', reason: 'not_readable', finalUrl };
-    return { kind: 'parsed', finalUrl, result: fitted(result), words: derived.words, spoken: derived.spoken, derived };
+    return { kind: 'parsed', finalUrl, result: fitted(result, finalUrl), words: derived.words, spoken: derived.spoken, derived };
   });
 }
 
@@ -313,11 +313,21 @@ function cut(s: string | null, max: number): string | null {
 /** s if it is at most max code units, else null. */
 const upTo = (s: string | null, max: number): string | null => (s !== null && s.length > max ? null : s);
 
-/** A parse's fields fitted to FIELD_MAX. */
-function fitted<R extends Extract<ParserResult, { ok: true }>>(r: R): R {
+/**
+ * The page's canonical link as a save keeps it (contract 4.3): none past FIELD_MAX.url, left out before it is read,
+ * since whatwg-url reads an address a code point at a time (a page's canonical of a megabyte took 8 s on Node, one of
+ * 5 MB 51 s); then only from the page's own site, ruled on the address the page was read at, so a page at
+ * amp.evil.example can't send its save to another site's address.
+ */
+function canonicalAt(canonical: string | null, finalUrl: string): string | null {
+  return ownCanonical(finalUrl, upTo(canonical, FIELD_MAX.url));
+}
+
+/** A parse's fields fitted to FIELD_MAX, for the page read at finalUrl. */
+function fitted<R extends Extract<ParserResult, { ok: true }>>(r: R, finalUrl: string): R {
   return {
     ...r,
     title: cut(r.title, FIELD_MAX.title), byline: cut(r.byline, FIELD_MAX.byline), site: cut(r.site, FIELD_MAX.site),
-    lang: upTo(r.lang, FIELD_MAX.lang), hero: upTo(r.hero, FIELD_MAX.url), canonical: upTo(r.canonical, FIELD_MAX.url),
+    lang: upTo(r.lang, FIELD_MAX.lang), hero: upTo(r.hero, FIELD_MAX.url), canonical: canonicalAt(r.canonical, finalUrl),
   };
 }
