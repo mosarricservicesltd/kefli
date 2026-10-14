@@ -1,4 +1,4 @@
-import { LocalSigner, encryptText, giftWrap, itemHash, makeRumor, wrapSaveRequest, type NostrEvent, type SaveRequest } from '@kefli/protocol';
+import { LocalSigner, SAVE_REQUEST_MAX_BYTES, encryptText, giftWrap, itemHash, makeRumor, wrapSaveRequest, type NostrEvent, type SaveRequest } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import { finalizeEvent, generateSecretKey } from 'nostr-tools/pure';
 import { v2 as nip44 } from 'nostr-tools/nip44';
@@ -7,7 +7,7 @@ import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
 import { absorbRecord } from '../src/data/devices';
-import { SEEN_KEEP, browserName, INBOX_BLOB_LIFE } from '../src/data/inbox';
+import { SEEN_KEEP, browserName, INBOX_BLOB_LIFE, inboxScan } from '../src/data/inbox';
 import { pendingParses } from '../src/data/pending';
 import {
   INBOX_DEEP_EVERY, INBOX_MAX_BYTES, INBOX_TIMEOUT_MS, INBOX_UNWRAPS, drainInbox, judge, readBlob, type InboxPorts,
@@ -105,6 +105,9 @@ function world() {
     parses: () => parses, tick: (s: number) => (clock += s), now: () => clock,
   };
 }
+
+/** Random bytes of zero, so a wrap is dated exactly when it says rather than up to two days earlier (NIP-59). */
+const noBackdate = (n: number) => new Uint8Array(n);
 
 /** The user's key, counting what the drain asks of it; failing as a signer that doesn't answer while refusing. */
 function countingSigner(user: LocalSigner, refuse = () => false) {
@@ -297,13 +300,82 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
 
   test('one drain opens at most INBOX_UNWRAPS wraps; the rest wait for the next, the cursor staying', async () => {
     const w = world();
+    w.ports.query = w.relayLike(500);
     // older than the browser's wrap, however far NIP-59 backdates it, so opened first
     w.junk(INBOX_UNWRAPS, w.now() - 3 * 86_400);
     await w.send(w.request());
     expect(await drainInbox(w.ports, w.owner)).toEqual({ ignored_foreign: INBOX_UNWRAPS });
     expect(w.cursor()).toBeNull();
     expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    // that drain read the newest answer alone, full, so the window may hold more it didn't read: the cursor stays
+    // until a read reaches the window's end
+    expect(w.cursor()).toBeNull();
+    w.tick(INBOX_DEEP_EVERY);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({});
     expect(w.cursor()).toBe(w.now());
+  });
+
+  test('a flood around a backdated browser save, read but not all opened, can’t move the cursor past it: the save arrives', async () => {
+    const w = world();
+    w.ports.query = w.relayLike(500);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+    const opened = w.now();
+    // a day with the app closed: halfway through it the browser saves a page, its wrap dated 1.9 days earlier (NIP-59)
+    w.tick(12 * 3600);
+    const sent = w.now() - Math.round(1.9 * 86_400);
+    const { wrap } = await wrapSaveRequest(w.device, w.owner, 'real', w.request({ url: 'https://example.com/real' }), sent, { now: sent, random: noBackdate });
+    w.wraps.push(wrap);
+    w.tick(12 * 3600);
+    // and 1,500 junk wraps spread through the window, half older than the save and half newer
+    for (let i = 0; i < 750; i++) {
+      w.junk(1, sent - 1 - i * 60);
+      w.junk(1, sent + 1 + i * 60);
+    }
+    // the drain at open reads them all and opens its budget; the live subscription's, a minute later, the newest answer
+    await drainInbox(w.ports, w.owner);
+    w.tick(60);
+    await drainInbox(w.ports, w.owner);
+    // neither read the whole window and opened all it read, so the cursor stays and the save stays in the window
+    expect(w.cursor()).toBe(opened);
+    w.tick(INBOX_DEEP_EVERY);
+    await drainInbox(w.ports, w.owner);
+    expect(w.item(itemHash('https://example.com/real'))).toBeDefined();
+  });
+
+  test('a window deeper than one deep read is read in turn, each deep read going on from where the last stopped', async () => {
+    const w = world();
+    w.ports.query = w.relayLike(500);
+    // the browser's wrap backdated two days, beneath 6,000 newer: more than one deep read reaches
+    const sent = w.now() - 2 * 86_400 + 600;
+    const { wrap } = await wrapSaveRequest(w.device, w.owner, 'deep', w.request({ url: 'https://example.com/deep' }), sent, { now: sent, random: noBackdate });
+    w.wraps.push(wrap);
+    for (let i = 0; i < 6_000; i++) w.junk(1, w.now() - i * 20);
+    for (let n = 0; n < 40 && !w.item(itemHash('https://example.com/deep')); n++) {
+      await drainInbox(w.ports, w.owner);
+      w.tick(INBOX_DEEP_EVERY);
+    }
+    expect(w.item(itemHash('https://example.com/deep'))).toBeDefined();
+  });
+
+  test('a scan goes on where it stopped when the app is opened again, rather than beginning again at the top', async () => {
+    const w = world();
+    w.ports.query = w.relayLike(500);
+    const sent = w.now() - 2 * 86_400 + 600;
+    const { wrap } = await wrapSaveRequest(w.device, w.owner, 'deep', w.request({ url: 'https://example.com/deep' }), sent, { now: sent, random: noBackdate });
+    w.wraps.push(wrap);
+    for (let i = 0; i < 6_000; i++) w.junk(1, w.now() - i * 20);
+    await drainInbox(w.ports, w.owner);
+    expect(inboxScan(w.db, D.operator.relay, w.owner)).not.toBeNull();
+    // each open a new process, whose first drain reads deep: one deep read each, which alone never reaches the save
+    for (let n = 0; n < 6 && !w.item(itemHash('https://example.com/deep')); n++) {
+      w.tick(3600);
+      let fresh: typeof import('../src/services/inbox') | undefined;
+      jest.isolateModules(() => {
+        fresh = require('../src/services/inbox');
+      });
+      await fresh!.drainInbox(w.ports, w.owner);
+    }
+    expect(w.item(itemHash('https://example.com/deep'))).toBeDefined();
   });
 
   test('while the window is full, a drain reads back through it at most every quarter of an hour', async () => {
@@ -327,13 +399,30 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
 
   test('a wrap whose rumor carries a d of kilobytes keeps none of it with its outcome', async () => {
     const w = world();
-    // anyone can send it: a request with a token no browser holds, under a d of 8 KB
-    const long = makeRumor(w.device.pubkey(), { kind: 30078, created_at: 1, tags: [['d', `kefli/save-request/${'x'.repeat(8_000)}`]], content: JSON.stringify(w.request({ token: 'ee'.repeat(32) })) });
-    await w.sendRawRumor(JSON.stringify(long));
+    // anyone can send it: a request with a token no browser holds, under a d of 2.5 KB, its wrap still under 8 KB
+    const long = makeRumor(w.device.pubkey(), { kind: 30078, created_at: 1, tags: [['d', `kefli/save-request/${'x'.repeat(2_500)}`]], content: JSON.stringify(w.request({ token: 'ee'.repeat(32) })) });
+    const id = await w.sendRawRumor(JSON.stringify(long));
+    expect(JSON.stringify(w.wraps.find((x) => x.id === id)).length).toBeLessThan(SAVE_REQUEST_MAX_BYTES);
     await w.send(w.request({ token: 'ff'.repeat(32) }));
     expect(await drainInbox(w.ports, w.owner)).toEqual({ ignored_token: 2 });
     const kept = w.db.all<{ n: number | null }>('SELECT length(request_d) AS n FROM inbox_seen');
     expect(kept.every((r) => (r.n ?? 0) <= 128)).toBe(true);
+  });
+
+  test('a wrap of a save request’s limit or more can’t hold one: never opened, nothing kept of it, the cursor moving on', async () => {
+    const w = world();
+    const { signer, asked } = countingSigner(w.user);
+    w.ports.signer = signer;
+    // a rumor under a d of 8 KB, as anyone can send, and wraps of 16 KB of anything
+    const long = makeRumor(w.device.pubkey(), { kind: 30078, created_at: 1, tags: [['d', `kefli/save-request/${'x'.repeat(8_000)}`]], content: JSON.stringify(w.request()) });
+    await w.sendRawRumor(JSON.stringify(long));
+    w.sendRawSeal(JSON.stringify({ x: 'y'.repeat(12_000) }));
+    await w.send(w.request());
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    // the browser's own wrap opened (two decrypts), the others not at all
+    expect(asked.decrypts).toBe(2);
+    expect(w.db.all('SELECT outcome FROM inbox_seen')).toEqual([{ outcome: 'created' }]);
+    expect(w.cursor()).toBe(w.now());
   });
 
   test('outcomes of wraps nothing was taken from are forgotten after two weeks; a save’s are kept, so a replay stays a repeat', async () => {

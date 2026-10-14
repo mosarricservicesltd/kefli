@@ -66,6 +66,34 @@ export function forgetIgnored(db: SqlDb, now: number, owner: string): void {
   );
 }
 
+/**
+ * A deep read part way down an inbox window too large for one (services/inbox.ts): the until its next answer starts
+ * at, when it began, and whether a wrap read since was left unopened. Kept with the settings, so a scan goes on where
+ * it stopped after the app is closed: begun again at each open, one in a window too large for one open's reads never
+ * ended, and the cursor never moved again.
+ */
+export type InboxScan = { until: number; startedAt: number; left: boolean };
+
+const scanKey = (relay: string, owner: string) => `inbox.scan ${owner} ${relay}`;
+
+export function inboxScan(db: SqlDb, relay: string, owner: string): InboxScan | null {
+  const raw = db.get<{ value: string }>('SELECT value FROM settings WHERE key = ?', scanKey(relay, owner))?.value;
+  try {
+    const s = JSON.parse(raw ?? 'null') as Partial<InboxScan> | null;
+    return s && Number.isFinite(s.until) && Number.isFinite(s.startedAt) ? { until: s.until!, startedAt: s.startedAt!, left: s.left === true } : null;
+  } catch {
+    return null;
+  }
+}
+
+export function keepInboxScan(db: SqlDb, relay: string, owner: string, scan: InboxScan): void {
+  db.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', scanKey(relay, owner), JSON.stringify(scan));
+}
+
+export function endInboxScan(db: SqlDb, relay: string, owner: string): void {
+  db.run('DELETE FROM settings WHERE key = ?', scanKey(relay, owner));
+}
+
 /** Wraps whose blob couldn't be read yet, with the rumor and seal kept for the retry. */
 export function failedBlobs(db: SqlDb, owner: string): { wrap_id: string; wrap_json: string }[] {
   return db.all("SELECT wrap_id, wrap_json FROM inbox_seen WHERE owner = ? AND outcome = 'failed_blob' AND wrap_json IS NOT NULL ORDER BY seen_at", owner);
