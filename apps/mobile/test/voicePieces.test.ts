@@ -1,0 +1,58 @@
+// A sentence longer than the system voice takes at a time (mobile spec 8.1): Android's engine speaks at most
+// getMaxSpeechInputLength (4,000) characters a call. Node can't run the Kotlin: the second test reads its source,
+// standing in for the check on the phone listed in HANDOVER.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { deriveArticle } from '../src/reader/blocks';
+
+/** The most kefli-voice hands the engine in one call: getMaxSpeechInputLength() - 1. */
+const ENGINE_CHARS = 3_999;
+
+const voiceSource = (file: string) =>
+  readFileSync(join(__dirname, '..', 'modules', 'kefli-voice', 'android', 'src', 'main', 'java', 'app', 'kefli', 'voice', file), 'utf8');
+
+/** A function of a Kotlin object, from its name to the line before the next member (indented two spaces). */
+function member(kt: string, name: string): string {
+  const at = kt.indexOf(`fun ${name}(`);
+  if (at === -1) throw new Error(`no fun ${name}`);
+  const [first, ...rest] = kt.slice(at).split('\n');
+  const body: string[] = [first];
+  for (const line of rest) {
+    if (line.startsWith('  }')) body.push(line);
+    if (line !== '' && !line.startsWith('    ')) break;
+    body.push(line);
+  }
+  return body.join('\n');
+}
+
+describe('a sentence longer than the engine takes (8.1)', () => {
+  test('the Reader can still hand the voice one: a word the splitter keeps whole, as a paragraph of Chinese is', () => {
+    const chinese = '这是一个很长的段落，没有空格。'.repeat(400);
+    const token = 'x'.repeat(10_000);
+    for (const md of [`${chinese}\n`, `Before.\n\n${token}\n\nAfter.\n`]) {
+      const long = deriveArticle(md).sentences.filter((s) => s.text.length > ENGINE_CHARS);
+      expect(long.length).toBe(1);
+      expect(long[0].wordStarts).toEqual([0]);
+    }
+  });
+
+  test('kefli-voice writes such a sentence a piece at a time, each a segment from its own offset, instead of cutting it', () => {
+    const engine = voiceSource('VoiceEngine.kt');
+    // the rest of the sentence past the limit was dropped unheard
+    expect(engine).not.toMatch(/substring\(0, max\)/);
+    const piece = member(engine, 'nextPiece');
+    expect(piece).toContain('Pieces.end(whole, offset, TextToSpeech.getMaxSpeechInputLength() - 1)');
+    expect(piece).toContain('whole.substring(offset, end)');
+    // the next sentence only once this one's last piece is written; each piece its own utterance and file
+    expect(piece).toMatch(/nextOffset = Pieces\.next\(whole, end\)\s+if \(nextOffset >= whole\.length\) \{\s+nextSentence = si \+ 1\s+nextOffset = 0/);
+    expect(piece).toContain('val id = "$hash:$generation:$si:$offset"');
+    expect(piece).toContain('"$generation-$si-$offset.wav"');
+    expect(member(engine, 'writeAhead')).toContain('val synth = nextPiece()');
+    expect(member(engine, 'current')).toContain('it.id == id');
+    expect(member(engine, 'startFrom')).toMatch(/nextOffset = s\.wordStarts\[/);
+    const pieces = voiceSource('VoiceAudio.kt');
+    expect(pieces).toContain('object Pieces {');
+    expect(member(pieces, 'end')).toMatch(/for \(k in limit - 1 downTo from \+ max \/ 2\) if \(breaksAfter\(text\[k\]\)\) return k \+ 1/);
+    expect(member(pieces, 'end')).toContain('isHighSurrogate()');
+  });
+});
