@@ -114,17 +114,21 @@ function isAlternateForm(hostname: string, pathname: string): boolean {
   return ALTERNATE_LABEL.test(hostname) || /\/amp\/?$/.test(pathname);
 }
 
+/** Whether a host has two labels or more, not counting the empty one a trailing dot leaves: com. is one label. */
+const twoLabels = (host: string): boolean => host.split('.').filter((label) => label !== '').length >= 2;
+
 /**
  * RULED: whether a canonical link on canonicalHost can stand for a page on pageHost (contract 4.3, ruling 11): only
  * from the page's own site, or a page at amp.evil.example could take another site's address and land on, or replace,
  * a save of it. The canonical's host is the page's, or equals it once a leading m. or amp. label is taken off the
- * page's and then a leading www. off each, provided the page's host so shortened still has a dot in it (m.com is no
- * mobile form of com). Hosts are compared as the URL record serialises them: in ASCII, lowercase, without their ports.
+ * page's and then a leading www. off each, provided the page's host so shortened still has two labels (m.com is no
+ * mobile form of com, nor m.com. of com.). Hosts are compared as the URL record serialises them: in ASCII, lowercase,
+ * without their ports.
  */
 function sameSite(pageHost: string, canonicalHost: string): boolean {
   if (canonicalHost === pageHost) return true;
   const site = pageHost.replace(ALTERNATE_LABEL, '').replace(WWW_LABEL, '');
-  return site.includes('.') && canonicalHost.replace(WWW_LABEL, '') === site;
+  return twoLabels(site) && canonicalHost.replace(WWW_LABEL, '') === site;
 }
 
 /** The canonical's URL record, when it is an http or https URL on the page's own site (sameSite); null otherwise. */
