@@ -252,7 +252,8 @@ async function retryOne(id: string) {
   clearTimeout(dots);
   sending.delete(id);
   queue = await reveal(await queued(store));
-  if (entry && !queue.some((e) => e.id === id)) {
+  // a save whose HTML the operator refused waits on under a new wrap's id (v1.12), so Sent waits for its page to leave
+  if (entry && !queue.some((e) => e.id === id || e.hash === entry.hash)) {
     sent.set(id, entry);
     say(`Sent ${entry.title}`);
     setTimeout(() => { sent.delete(id); void render(); }, SENT_HOLD_MS);
