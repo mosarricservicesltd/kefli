@@ -398,8 +398,8 @@ describe('a capture the operator refuses (contract 4.4 and 5, v1.12)', () => {
     expect(acceptSaveRequest(rumor, seal, devices, DEFAULTS.operator.blossom).ok).toBe(true);
     expect(await queued(h.store)).toEqual([]);
     expect(await history(h.store)).toMatchObject([{ outcome: 'sent, no text', link: false, id: w.id.slice(0, 8) }]);
-    // Undo's key follows the new wrap, with no inbox blob to delete
-    expect(await h.session.get(`undo:${saving.id}`)).toBeUndefined();
+    // Undo's key follows the new wrap, with no inbox blob to delete, and the first wrap's id points to it (F40)
+    expect(await h.session.get(`undo:${saving.id}`)).toEqual({ to: w.id });
     expect(await h.session.get(`undo:${w.id}`)).toMatchObject({ sha256: null, hash: saving.hash });
   });
 
@@ -445,6 +445,69 @@ describe('a capture the operator refuses (contract 4.4 and 5, v1.12)', () => {
     const [del] = n.published.filter((e) => e.kind === 5);
     expect(del).toMatchObject({ pubkey: w.pubkey, tags: [['e', w.id], ['k', '1059']] });
     expect(n.asked.removes).toBe(0);
+  });
+
+  test('Undo on the offline toast, after a flush sent the save without its HTML, retracts the wrap that went (F40)', async () => {
+    const h = harness({ online: false });
+    await h.work.save(PAGE, 1, false);
+    const offline = h.toasts.at(-1)!;
+    expect(offline.kind).toBe('offline');
+    // the browser is online again and the queue goes while that toast still shows, its Undo naming the first wrap
+    const n = net({ blossom: operator(413, 'quota') });
+    const online = harness({ store: h.store, session: h.session, net: n.net, collected: [false, false] });
+    await online.work.flushQueue();
+    const [w] = n.published;
+    expect(w.id).not.toBe(offline.id);
+    await online.work.undo(offline.id!, 1);
+    expect(kinds(online.toasts)).toEqual(['undone']);
+    const [del] = n.published.filter((e) => e.kind === 5);
+    expect(del).toMatchObject({ pubkey: w.pubkey, tags: [['e', w.id], ['k', '1059']] });
+    expect(n.asked.removes).toBe(0);
+    expect((await history(h.store))[0]).toMatchObject({ outcome: 'undo: retracted', id: w.id.slice(0, 8) });
+    expect(await h.session.get(`undo:${w.id}`)).toBeUndefined();
+  });
+
+  test('Undo pressed while the queue sends the save waits for it, and retracts the wrap that went without its HTML (F40 a)', async () => {
+    const h = harness({ online: false });
+    await h.work.save(PAGE, 1, false);
+    const id = h.toasts[0].id!;
+    const held = gate();
+    const refusing = operator(413, 'daily');
+    const slow = async (input: RequestInfo | URL, init?: RequestInit) => {
+      await held.p;
+      return refusing(input, init);
+    };
+    const n = net({ blossom: slow as typeof fetch });
+    const online = harness({ store: h.store, session: h.session, net: n.net, collected: [false, false] });
+    const flushing = online.work.flushQueue();
+    await until(() => n.asked.uploads === 1);
+    const undoing = online.work.undo(id, 1);
+    for (let i = 0; i < 20; i++) await settled();
+    expect(online.toasts).toEqual([]);
+    held.open();
+    await Promise.all([flushing, undoing]);
+    expect(kinds(online.toasts)).toEqual(['undone']);
+    const [w, del] = n.published;
+    expect(w.id).not.toBe(id);
+    expect(del).toMatchObject({ kind: 5, pubkey: w.pubkey, tags: [['e', w.id], ['k', '1059']] });
+  });
+
+  test('Undo on the offline toast while the request, sent again without its HTML, waits for the relay takes it off the queue', async () => {
+    for (const onPhone of [false, true]) {
+      const h = harness({ online: false });
+      await h.work.save(PAGE, 1, false);
+      const offline = h.toasts.at(-1)!;
+      const n = net({ blossom: operator(413, 'quota'), publish: 'down' });
+      const online = harness({ store: h.store, session: h.session, net: n.net, collected: [onPhone] });
+      await online.work.flushQueue();
+      const [e] = await queued(h.store);
+      expect(e.id).not.toBe(offline.id);
+      await online.work.undo(offline.id!, 1);
+      expect(await queued(h.store)).toEqual([]);
+      // its send may have reached the relay all the same, so the new wrap is retracted too, with its own key
+      expect(n.published.filter((x) => x.kind === 5).map((x) => [x.pubkey, x.tags])).toEqual([[e.wrap.pubkey, [['e', e.id], ['k', '1059']]]]);
+      expect(online.toasts.at(-1)).toMatchObject({ kind: onPhone ? 'onphone' : 'unqueued' });
+    }
   });
 
   test('a save waiting in the queue that is then refused goes from there without its HTML, under a new wrap', async () => {
