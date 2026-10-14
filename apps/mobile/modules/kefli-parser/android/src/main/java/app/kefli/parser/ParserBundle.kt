@@ -3,12 +3,12 @@ package app.kefli.parser
 
 object ParserBundle {
   const val ASSET = "kefli-parser.js"
-  const val SHA256 = "9ea3a05f77bb7d2c58c377d0ac26b4d15a75719925fc2aa18c0dac9e026e435c"
+  const val SHA256 = "610a8ba89a112d211aa7976eba9132fb082504bf7e53ff3d43cc1968eb77d8e3"
 
   /** The PDF modules the bundle may ask for, by name, with their sha256s. */
   val PDF_ASSETS = mapOf(
     "pdf.min.mjs" to "44ec6f011027ee77791386b66c14876a5fc29e20bf0433c07c6726fff7212b72",
     "pdf.worker.min.mjs" to "bd88805178a26c729db8c0107a5b630cb900ec070f4d8c7529a3e45530afd41d",
-    "pdf-runner.mjs" to "c826f2ea25324ebd0c4b8e580a0ae927f7752481eb29257b9949cb8770536e95",
+    "pdf-runner.mjs" to "698b7a9153a38d1a66418d46e3e8cd3f2d99380c124f5bb94bbefe3b59503db2",
   )
 }

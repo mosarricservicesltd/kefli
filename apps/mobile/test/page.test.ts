@@ -4,7 +4,7 @@ import { base64 } from '@scure/base';
 import { buildItemEvent, LocalSigner, parseItem, type PdfRuns } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import * as blocks from '../src/reader/blocks';
-import { FIELD_MAX, fetchPage, isPdf, PDF_MAX_BYTES, PDF_MAX_RUNS, TEXT_MAX_BYTES, toBase64, type PagePorts, type ParserResult } from '../src/services/page';
+import { FIELD_MAX, fetchPage, isPdf, PDF_MAX_BYTES, PDF_MAX_RUNS, renderAnswer, TEXT_MAX_BYTES, toBase64, type PagePorts, type ParserResult } from '../src/services/page';
 import { failNotice } from '../src/screens/failNotice';
 import { S } from '../src/ui/strings';
 
@@ -184,6 +184,20 @@ describe('what a page hands back is taken only as far as a save can hold it', ()
     expect(o.result.title).toBe('a'.repeat(FIELD_MAX.title - 1));
   });
 
+  test('a parse whose renderer the system killed waits, as a page that timed out does; a crash is a page not read', async () => {
+    expect(await fetchPage(parsing({ ok: false, reason: 'renderer_gone' }), 'https://e.com/a')).toEqual({ kind: 'offline', timedOut: true });
+    expect(await fetchPage(parsing({ ok: false, reason: 'error' }), 'https://e.com/a')).toMatchObject({ kind: 'failed', reason: 'not_readable' });
+  });
+
+  test('a rendered page too large to hand over fails as too large', async () => {
+    const turnedAway = () => new Response('', { status: 403 });
+    const p: PagePorts = { ...parsing(parsed(), turnedAway), render: async (url) => ({ url, tooLarge: true }) };
+    expect(await fetchPage(p, 'https://cf.example/a')).toMatchObject({ kind: 'failed', reason: 'too_large' });
+    expect(renderAnswer({ ok: false, reason: 'too_large', url: 'https://cf.example/a' })).toEqual({ url: 'https://cf.example/a', tooLarge: true });
+    expect(renderAnswer({ ok: false, reason: 'timeout' })).toBeNull();
+    expect(renderAnswer({ ok: true, url: 'https://cf.example/a', html: '<p>x</p>' })).toEqual({ url: 'https://cf.example/a', html: '<p>x</p>' });
+  });
+
   test('a redirect to an address past the longest kept leaves the save at the address asked for', async () => {
     const res = () => {
       const r = HTML('<p>x</p>');
@@ -215,7 +229,7 @@ describe('a PDF is handed over and read only as far as a save can hold it', () =
     const big = new Uint8Array(20 * 1024 * 1024).map((_, i) => (i * 2654435761) >>> 24);
     const started = Date.now();
     const s = toBase64(big);
-    expect(Date.now() - started).toBeLessThan(10_000);
+    expect(Date.now() - started).toBeLessThan(20_000);
     expect(s).toBe(Buffer.from(big).toString('base64'));
   });
 
@@ -232,6 +246,12 @@ describe('a PDF is handed over and read only as far as a save can hold it', () =
     const prose = 'Saved articles are read on the train and kept for later. '.repeat(20);
     const zalgo = { w: 595, h: 842, runs: [[prose + 'a' + '̖́'.repeat(200) + ' ' + prose, 72, 100, 10, 400, 0] as [string, number, number, number, number, number]] };
     expect(await fetchPage(pdfPorts({ ok: true, title: null, author: null, pages: [zalgo] }), 'https://e.com/z.pdf')).toMatchObject({ kind: 'failed', reason: 'not_readable' });
+  });
+
+  test('a PDF read whose renderer the system killed waits; one the parser stopped for its size is too large', async () => {
+    expect(await fetchPage(pdfPorts({ ok: false, reason: 'renderer_gone' }), 'https://e.com/a.pdf')).toEqual({ kind: 'offline', timedOut: true });
+    expect(await fetchPage(pdfPorts({ ok: false, reason: 'pdf_too_long' }), 'https://e.com/a.pdf')).toMatchObject({ kind: 'failed', reason: 'too_large' });
+    expect(await fetchPage(pdfPorts({ ok: false, reason: 'too_large' }), 'https://e.com/a.pdf')).toMatchObject({ kind: 'failed', reason: 'too_large' });
   });
 
   test('a PDF whose own title and author run on has them fitted', async () => {

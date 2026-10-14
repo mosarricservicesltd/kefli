@@ -3913,9 +3913,29 @@ if (typeof module === "object") {
     return { ok: false, reason: 'error', message: String(e && e.message ? e.message : e) };
   }
 
+  // What kefliRun hands back across the bridge is a Java string and then a Hermes one, each a copy, so a result is
+  // bounded before it is sent. MARKDOWN_MAX is the phone's most text for a save in code units (page.ts
+  // TEXT_MAX_BYTES; UTF-8 is at least a byte a unit, so longer is over it in bytes too); OUTPUT_MAX bounds the whole
+  // result, a PDF's runs included (pdf-runner.mjs stops them well inside it).
+  var MARKDOWN_MAX = 5 * 1024 * 1024 - 16;
+  var OUTPUT_MAX = 64 * 1024 * 1024;
+  var TOO_LARGE = '{"ok":false,"reason":"too_large"}';
+
+  function bounded(result) {
+    if (result && typeof result.markdown === 'string' && result.markdown.length > MARKDOWN_MAX) return TOO_LARGE;
+    var json = JSON.stringify(result);
+    return json.length > OUTPUT_MAX ? TOO_LARGE : json;
+  }
+
   function kefliRun(jobId) {
     var send = function (result) {
-      window.KefliHost.output(jobId, JSON.stringify(result));
+      var json;
+      try {
+        json = bounded(result);
+      } catch (e) {
+        json = JSON.stringify(failure(e)); // past the engine's longest string
+      }
+      window.KefliHost.output(jobId, json);
     };
     try {
       var job = JSON.parse(window.KefliHost.input(jobId));

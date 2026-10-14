@@ -51,14 +51,29 @@ export type ParserResult =
   | { ok: true; title: string | null; byline: string | null; site: string | null; lang: string | null; hero: string | null; canonical: string | null; readerable: boolean; markdown: string }
   | { ok: false; reason: string };
 
+/** A page loaded in a browser engine: its rendered HTML and final address, or that the page was too large to hand over. */
+export type RenderAnswer = { url: string; html: string } | { url: string; tooLarge: true };
+
 export type PagePorts = {
   fetch: typeof fetch;
   parse: (bodyBase64: string, contentType: string, url: string) => Promise<ParserResult>;
-  /** The page loaded in a browser engine: its rendered HTML and final address, or null. */
-  render?: (url: string) => Promise<{ url: string; html: string } | null>;
+  /** The page loaded in a browser engine, or null when that failed. */
+  render?: (url: string) => Promise<RenderAnswer | null>;
   /** A PDF's text runs, read by pdf.js in the parser WebView. */
   pdf?: (bodyBase64: string) => Promise<({ ok: true } & PdfRuns) | { ok: false; reason: string }>;
 };
+
+/** The render port's answer for what the native renderer gave (kefli-parser's Rendered). */
+export function renderAnswer(r: { ok: true; url: string; html: string } | { ok: false; reason: string; url?: string }): RenderAnswer | null {
+  if (r.ok) return { url: r.url, html: r.html };
+  return r.reason === 'too_large' && r.url ? { url: r.url, tooLarge: true } : null;
+}
+
+/**
+ * The parser WebView's renderer was killed by the system (for memory, often with Kefli in the background) or never
+ * loaded the bundle: nothing about the page is known, so it waits and is tried again as a page that timed out is.
+ */
+const RENDERER_GONE = 'renderer_gone';
 
 export type FailReason = 'http' | 'not_html' | 'too_large' | 'not_readable' | 'pdf_no_text' | 'pdf_locked';
 
@@ -209,8 +224,9 @@ function overRuns(read: PdfRuns): boolean {
 }
 
 /** A PDF's runs laid out as Markdown (contract 4.2, PDFs): the same text, derivation and blob as a page's after this. */
-export async function parsePdf(p: Pick<PagePorts, 'pdf'>, bytes: Uint8Array, finalUrl: string): Promise<Settled> {
+export async function parsePdf(p: Pick<PagePorts, 'pdf'>, bytes: Uint8Array, finalUrl: string): Promise<PageOutcome> {
   const read = await p.pdf!(toBase64(bytes)).catch(() => ({ ok: false as const, reason: 'error' }));
+  if (!read.ok && read.reason === RENDERER_GONE) return { kind: 'offline', timedOut: true };
   if (!read.ok) return { kind: 'failed', reason: PDF_FAILURES[read.reason] ?? 'not_readable', finalUrl };
   if (overRuns(read)) return { kind: 'failed', reason: 'too_large', finalUrl };
   return guarded(finalUrl, () => {
@@ -225,20 +241,21 @@ export async function parsePdf(p: Pick<PagePorts, 'pdf'>, bytes: Uint8Array, fin
 }
 
 /** A page turned away from the fetch, loaded in a browser engine and parsed as fetched HTML; null when that failed too. */
-async function rendered403(p: PagePorts, url: string): Promise<Settled | null> {
+async function rendered403(p: PagePorts, url: string): Promise<PageOutcome | null> {
   const r = await p.render!(url).catch(() => null);
   if (!r) return null;
   const at = r.url.length > FIELD_MAX.url ? url : r.url;
   // UTF-8 is at least a byte a code unit: a page past the cap in code units is refused before it is encoded
-  if (r.html.length > RENDER_MAX_BYTES) return { kind: 'failed', reason: 'too_large', finalUrl: at };
+  if ('tooLarge' in r || r.html.length > RENDER_MAX_BYTES) return { kind: 'failed', reason: 'too_large', finalUrl: at };
   const bytes = new TextEncoder().encode(r.html);
   if (bytes.length > RENDER_MAX_BYTES) return { kind: 'failed', reason: 'too_large', finalUrl: at };
   return parseHtml(p, bytes, 'text/html; charset=utf-8', at);
 }
 
 /** The parse and contract 4.2's guard, for a fetched page and for a browser's own HTML (4.7). */
-export async function parseHtml(p: Pick<PagePorts, 'parse'>, bytes: Uint8Array, contentType: string, finalUrl: string): Promise<Settled> {
+export async function parseHtml(p: Pick<PagePorts, 'parse'>, bytes: Uint8Array, contentType: string, finalUrl: string): Promise<PageOutcome> {
   const result = await p.parse(toBase64(bytes), contentType, finalUrl).catch((): ParserResult => ({ ok: false, reason: 'error' }));
+  if (!result.ok && result.reason === RENDERER_GONE) return { kind: 'offline', timedOut: true };
   if (!result.ok) return { kind: 'failed', reason: result.reason === 'too_large' ? 'too_large' : 'not_readable', finalUrl };
   return parsedOutcome(result, finalUrl);
 }
