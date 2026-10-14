@@ -387,18 +387,25 @@ async function saveEvent(p: SendPorts, signer: Signer, item: ItemRow, servers: s
   }
 }
 
+/**
+ * The library key a save's address is keyed by (F5), or why the save waits for it: an identity made here makes its
+ * key now; any other waits until sync has learnt it. The key's record reaches a relay before any save it addresses,
+ * so another phone finding the saves finds the key.
+ */
+async function addressKey(p: SendPorts, row: OutboxRow, signer: Signer, targets: OutboxTarget[]): Promise<Uint8Array | string> {
+  const key = libraryKey(p.db, row.signer) ?? (madeHere(p.db, row.signer) ? makeLibraryKey(p.db, p.now(), row.signer, p.crypto.randomBytes) : null);
+  if (!key) return 'library key not known yet';
+  if (!keyPublished(p.db, row.signer) && !(await sendLibraryKey(p, row, signer, targets)).some((r) => r.kind === 'ok')) return 'library key record not sent yet';
+  return key;
+}
+
 async function sendPublish(p: SendPorts, row: OutboxRow, signer: Signer, targets: OutboxTarget[]): Promise<TargetResult[]> {
   const item = getItem(p.db, row.signer, row.subject);
   if (!item) return each(targets, 'rejected', 'item gone');
   // a save waiting on its delete's Undo isn't published: one that went out after its kind 5 would bring it back (F38)
   if (item.pending_delete_at !== null) return each(targets, 'retry', 'waiting on a delete', UNDO_WAIT);
-  // the address is keyed (F5): an identity made here makes its key now; any other waits until sync has learnt it
-  const key = libraryKey(p.db, row.signer) ?? (madeHere(p.db, row.signer) ? makeLibraryKey(p.db, p.now(), row.signer, p.crypto.randomBytes) : null);
-  if (!key) return each(targets, 'retry', 'library key not known yet');
-  // the key's record reaches a relay before any save it addresses, so another phone finding the saves finds the key
-  if (!keyPublished(p.db, row.signer) && !(await sendLibraryKey(p, row, signer, targets)).some((r) => r.kind === 'ok')) {
-    return each(targets, 'retry', 'library key record not sent yet');
-  }
+  const key = await addressKey(p, row, signer, targets);
+  if (typeof key === 'string') return each(targets, 'retry', key);
   // text.servers never lists the operator alone (contract 4.2), and names no server while the operator lacks the text
   const servers = textServers(p.db, item, p.defaults().operator.blossom, p.defaults().mirrors[0]);
   const event = await saveEvent(p, signer, item, servers, key);
