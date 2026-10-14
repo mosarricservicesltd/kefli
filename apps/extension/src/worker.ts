@@ -238,13 +238,19 @@ export function background(b: Browser) {
     return b.toast(where, { kind: 'unqueued', title: s.title, host: s.host, link: false });
   }
 
-  /** A pass over the queue, from the alarm, the browser coming online or Retry. Quiet when not paired (F10). */
-  async function flushQueue(all = false, only?: string): Promise<void> {
+  /**
+   * A pass over the queue, from the alarm, the browser coming online or Retry. Quiet when not paired (F10). Returns the ids
+   * the saves sent went under, a new wrap's for a save sent without its HTML (v1.12), so Retry knows its save went.
+   */
+  async function flushQueue(all = false, only?: string): Promise<string[]> {
     // a save queued before a move must go to the new key, so a waiting queue looks for one first
     await b.checkMovesSoon();
     const ctx = await b.context();
     // nothing to send to, and nobody asked: the alarm goes rather than opening the options page every minute
-    if (!ctx) return b.flushAlarm(false);
+    if (!ctx) {
+      await b.flushAlarm(false);
+      return [];
+    }
     const before = await queued(b.store);
     const stoppedBefore = new Set(before.filter((e) => e.stopped).map((e) => e.id));
     for (const e of before) if (e.textless) textless.add(e.id);
@@ -252,6 +258,7 @@ export function background(b: Browser) {
     for (const id of sent) await record(b.store, b.now(), id, textless.delete(id) ? 'sent, no text' : 'sent from queue');
     for (const e of await queued(b.store)) if (e.stopped && !stoppedBefore.has(e.id)) await record(b.store, b.now(), e.id, 'stopped');
     await queueChanged();
+    return sent;
   }
 
   /**

@@ -248,12 +248,13 @@ async function retryOne(id: string) {
   sending.set(id, { dots: false });
   void render();
   const dots = setTimeout(() => { const s = sending.get(id); if (s) { s.dots = true; void render(); } }, BUSY_AFTER_MS);
-  await chrome.runtime.sendMessage({ type: 'retry', id }).catch(() => undefined);
+  // the background answers whether the save went: one whose HTML the operator refused may wait on under a new wrap's id
+  // (v1.12), and two saves of one page may wait, so what is left in the queue can't tell
+  const went: unknown = await chrome.runtime.sendMessage({ type: 'retry', id }).catch(() => false);
   clearTimeout(dots);
   sending.delete(id);
   queue = await reveal(await queued(store));
-  // a save whose HTML the operator refused waits on under a new wrap's id (v1.12), so Sent waits for its page to leave
-  if (entry && !queue.some((e) => e.id === id || e.hash === entry.hash)) {
+  if (entry && went === true) {
     sent.set(id, entry);
     say(`Sent ${entry.title}`);
     setTimeout(() => { sent.delete(id); void render(); }, SENT_HOLD_MS);

@@ -593,6 +593,25 @@ describe('a capture the operator refuses (contract 4.4 and 5, v1.12)', () => {
     }
   });
 
+  test('Retry learns whether its save went: under its new wrap when sent without its HTML, and not while it still waits', async () => {
+    const h = harness({ online: false });
+    await h.work.save(PAGE, 1, false);
+    await h.work.save({ ...PAGE, url: 'https://example.com/b' }, 1, false);
+    const [first, second] = await queued(h.store);
+    // the relay is down: the first goes again without its HTML, and waits under its new wrap
+    const o: Parameters<typeof net>[0] = { blossom: operator(413, 'quota'), publish: 'down' };
+    const online = harness({ store: h.store, session: h.session, net: net(o).net });
+    expect(await online.work.flushQueue(true, first.id)).toEqual([]);
+    const waitingNow = (await queued(h.store)).find((e) => e.id !== second.id)!;
+    expect(waitingNow).toMatchObject({ textless: true });
+    expect(waitingNow.id).not.toBe(first.id);
+    o.publish = 'ok';
+    expect(await online.work.flushQueue(true, waitingNow.id)).toEqual([waitingNow.id]);
+    expect((await queued(h.store)).map((e) => e.id)).toEqual([second.id]);
+    // and a pass with nothing paired sends nothing
+    expect(await harness({ paired: false, store: h.store }).work.flushQueue(true, second.id)).toEqual([]);
+  });
+
   test('a save waiting with its HTML is recorded as sent from the queue, as before', async () => {
     const h = harness({ online: false });
     await h.work.save(PAGE, 1, false);
