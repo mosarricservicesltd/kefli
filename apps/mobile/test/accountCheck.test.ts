@@ -133,6 +133,58 @@ describe('GET /account (C§6)', () => {
     }
   });
 
+  test('a signer that doesn’t answer in time is a failed check too, the time counted from the ask', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    try {
+      // a nostr app reached through a bunker may take its two minutes, or never answer
+      let asked = 0;
+      const silent = (s: Signer): Signer => ({ ...s, pubkey: () => s.pubkey(), capabilities: () => s.capabilities(),
+        signEvent: () => ((asked += 1), new Promise(() => undefined)),
+        nip44Encrypt: (peer, text) => s.nip44Encrypt(peer, text), nip44Decrypt: (peer, text) => s.nip44Decrypt(peer, text) });
+      const w = world(undefined, { signer: silent });
+      recordFigures(w.db, w.owner, ANSWER, 1);
+      let result: string | null = null;
+      void checkAccount(w.ports).then((r) => (result = r));
+      await jest.advanceTimersByTimeAsync(ACCOUNT_TIMEOUT_MS - 1);
+      expect(result).toBeNull();
+      await jest.advanceTimersByTimeAsync(1);
+      expect(result).toBe('failed');
+      expect(w.calls).toHaveLength(0);
+      expect(accountFigures(w.db, w.owner)).toMatchObject({ at: 1 });
+      // the next ask goes again, rather than sharing the one given up
+      void checkAccount(w.ports);
+      await jest.advanceTimersByTimeAsync(0);
+      expect(asked).toBe(2);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('a slow signer and a slow server share the one deadline', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    try {
+      const slow = (s: Signer): Signer => ({ ...s, pubkey: () => s.pubkey(), capabilities: () => s.capabilities(),
+        signEvent: (e) => new Promise((ok) => setTimeout(() => ok(s.signEvent(e)), ACCOUNT_TIMEOUT_MS - 1000)),
+        nip44Encrypt: (peer, text) => s.nip44Encrypt(peer, text), nip44Decrypt: (peer, text) => s.nip44Decrypt(peer, text) });
+      const w = world(() => new Promise<Response>(() => undefined), { signer: slow });
+      let result: string | null = null;
+      void checkAccount(w.ports).then((r) => (result = r));
+      await jest.advanceTimersByTimeAsync(ACCOUNT_TIMEOUT_MS);
+      expect(w.calls).toHaveLength(1);
+      expect(result).toBe('failed');
+      // an answer that still comes after the check gave up is the server's own, and kept
+      const v = world(() => new Promise<Response>((ok) => setTimeout(() => ok(new Response(JSON.stringify(ANSWER), { status: 200 })), 2000)), { signer: slow });
+      let late: string | null = null;
+      void checkAccount(v.ports).then((r) => (late = r));
+      await jest.advanceTimersByTimeAsync(ACCOUNT_TIMEOUT_MS);
+      expect([late, accountFigures(v.db, v.owner)]).toEqual(['failed', null]);
+      await jest.advanceTimersByTimeAsync(1000);
+      expect(accountFigures(v.db, v.owner)).toMatchObject({ used: ANSWER.used });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   test('asks made while one is under way share it, and a later ask goes again', async () => {
     let release: (r: Response) => void = () => undefined;
     const w = world(() => new Promise<Response>((ok) => (release = ok)));

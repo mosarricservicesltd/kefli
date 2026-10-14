@@ -22,7 +22,10 @@ export type AccountPorts = {
   crypto: CryptoPort;
 };
 
-/** The longest a check takes before it counts as failed, and the most of an answer read. */
+/**
+ * The longest a check takes before it counts as failed, from the ask, the signing included (a nostr app reached through
+ * a bunker may take its two minutes), and the most of an answer read.
+ */
 export const ACCOUNT_TIMEOUT_MS = 15_000;
 const MAX_BYTES = 4096;
 
@@ -66,11 +69,27 @@ function settle(p: AccountPorts, a: Answer): Check {
   return kept(p, a) ? 'ok' : 'failed';
 }
 
-async function attempt(p: AccountPorts): Promise<Check> {
+async function asked(p: AccountPorts): Promise<Check> {
   try {
     return settle(p, await ask(p, await signerFor(p)));
   } catch {
     return 'failed';
+  }
+}
+
+/**
+ * The check within its deadline: a signer or a server still busy past it counts as failed. An answer that comes after
+ * all is still kept, being the server's own; the request itself is let go at its own deadline (net/http).
+ */
+async function attempt(p: AccountPorts): Promise<Check> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<Check>((done) => {
+    timer = setTimeout(() => done('failed'), ACCOUNT_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([asked(p), late]);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
