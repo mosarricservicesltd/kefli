@@ -4,10 +4,10 @@ import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { base64 } from '@scure/base';
-import { buildItemEvent, LocalSigner, parseItem, type PdfRuns } from '@kefli/protocol';
+import { buildItemEvent, itemHash, LocalSigner, parseItem, type PdfRuns } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import * as blocks from '../src/reader/blocks';
-import { FIELD_MAX, fetchPage, isPdf, PDF_MAX_BYTES, PDF_MAX_RUNS, renderAnswer, TEXT_MAX_BYTES, toBase64, type PagePorts, type ParserResult } from '../src/services/page';
+import { FIELD_MAX, fetchPage, isPdf, parsedOutcome, PDF_MAX_BYTES, PDF_MAX_RUNS, renderAnswer, TEXT_MAX_BYTES, toBase64, type PagePorts, type ParserResult } from '../src/services/page';
 import { failNotice } from '../src/screens/failNotice';
 import { S } from '../src/ui/strings';
 
@@ -238,6 +238,41 @@ describe('what a page hands back is taken only as far as a save can hold it', ()
       return r;
     };
     expect(await fetchPage(parsing(parsed(), res), 'https://e.com/asked')).toMatchObject({ kind: 'parsed', finalUrl: 'https://e.com/asked' });
+  });
+});
+
+describe("a page's canonical link is kept only from its own site (contract 4.3, ruling 11)", () => {
+  const story = 'https://news.example/2026/10/story';
+  /** A page answered at landed, after any redirect, whose parse names canonical. */
+  const naming = (canonical: string, landed?: string) => parsing(parsed({ canonical }), () => {
+    const r = HTML('<p>x</p>');
+    if (landed) Object.defineProperty(r, 'url', { value: landed });
+    return r;
+  });
+
+  test("a page at an amp. host naming another site's address keeps its own, as its save's hash does", async () => {
+    const o = await fetchPage(naming(story), 'https://amp.evil.example/2026/10/story');
+    if (o.kind !== 'parsed') throw new Error(o.kind);
+    expect(o.result.canonical).toBeNull();
+    expect(itemHash(o.finalUrl, o.result.canonical)).toBe(itemHash('https://amp.evil.example/2026/10/story'));
+  });
+
+  test('so does one a short link redirected to, and an ordinary page naming another site', async () => {
+    const landed = await fetchPage(naming(story, 'https://m.evil.example/2026/10/story'), 'https://short.example/x');
+    expect(landed).toMatchObject({ kind: 'parsed', finalUrl: 'https://m.evil.example/2026/10/story', result: { canonical: null } });
+    expect(await fetchPage(naming('https://news.example/a'), 'https://syndicated.example/a')).toMatchObject({ result: { canonical: null } });
+  });
+
+  test("the site's own AMP page keeps its canonical, and joins the story's save", async () => {
+    const o = await fetchPage(naming(story), 'https://amp.news.example/2026/10/story');
+    if (o.kind !== 'parsed') throw new Error(o.kind);
+    expect(o.result.canonical).toBe(story);
+    expect(itemHash(o.finalUrl, o.result.canonical)).toBe(itemHash(story));
+  });
+
+  test("a browser's own HTML, taken as a parse, keeps a canonical only from the page's site too", () => {
+    const o = parsedOutcome({ ...(parsed() as Extract<ParserResult, { ok: true }>), canonical: story }, 'https://amp.evil.example/2026/10/story');
+    expect(o).toMatchObject({ kind: 'parsed', result: { canonical: null } });
   });
 });
 

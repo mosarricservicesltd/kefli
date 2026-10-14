@@ -4,6 +4,7 @@
 // content HTML, which is what a save sends). The guard and the 2 MB cap are applied here, so only what a save needs
 // crosses to the background, and a page too large to read in good time isn't read at all (captured.ts, PAGE_LIMITS).
 // The background calls window.kefliCapture() once both files are in.
+import { ownCanonical } from '../../../packages/protocol/src/normalise';
 import { keepHtml, pageUrl, tooLargeToRead, unread, type Captured, type PageSize, type Parsed } from './captured';
 declare function kefliParse(bodyBase64: string, contentType: string, url: string): Parsed;
 declare function kefliArticle(bodyBase64: string, contentType: string, url: string): { ok: boolean; content?: string };
@@ -75,7 +76,8 @@ export function capture(doc: Document, href: string): Captured {
   const html = keepHtml(parsed, content === undefined ? undefined : absoluteFragments(content, baseOf(doc, url)));
   return {
     url,
-    canonical: parsed.canonical ?? null,
+    // only from the page's own site (contract 4.3), so a page can't send a save to another site's address
+    canonical: ownCanonical(url, parsed.canonical),
     hero: parsed.hero ?? null,
     title: parsed.title ?? (doc.title.trim() || null),
     site: parsed.site ?? null,

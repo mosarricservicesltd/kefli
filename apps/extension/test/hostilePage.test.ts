@@ -1,7 +1,8 @@
 // What a page itself can do to a save: be too large to read in good time, keep its thread busy or never finish loading,
-// or name a javascript: base for its links.
-import { GUARD_SAMPLE_CHARS, keepHtml, linkOnly, orAfter, PAGE_LIMITS, tooLargeToRead, unread, type PageSize } from '../src/captured';
-import { baseOf } from '../src/capture';
+// name a javascript: base for its links, or name another site's address as its own.
+import { itemHash } from '../../../packages/protocol/src/normalise';
+import { GUARD_SAMPLE_CHARS, keepHtml, linkOnly, orAfter, PAGE_LIMITS, tooLargeToRead, unread, type PageSize, type Parsed } from '../src/captured';
+import { baseOf, capture } from '../src/capture';
 
 describe('a page too large to read in good time (PAGE_LIMITS)', () => {
   // measured in Chrome on the pages themselves (the extension's probes): elements, the body’s text less its scripts and
@@ -81,6 +82,37 @@ describe('a capture or a shortcut press the page never lets finish', () => {
     expect(await orAfter(new Promise(() => undefined), 50, null)).toBeNull();
     expect(Date.now() - started).toBeLessThan(2000);
     expect(await orAfter(Promise.resolve('read'), 50, null)).toBe('read');
+  });
+});
+
+describe("a page's canonical link is kept only from its own site (contract 4.3, ruling 11)", () => {
+  const ARTICLE = Array.from({ length: 150 }, (_, i) => `word${i}`).join(' ') + '\n';
+  /** A small page as capture reads it, without a browser: no elements to count, a body of a few words. */
+  const page = { getElementsByTagName: () => [], body: { textContent: 'a few words', querySelectorAll: () => [] }, documentElement: { outerHTML: '<html><body><p>a few words</p></body></html>' }, title: 'A page', querySelector: () => null } as unknown as Document;
+  /** capture on that page, with the parser bundle's two calls answering as for a page naming canonical. */
+  const captured = (href: string, canonical: string | null) => {
+    const g = globalThis as unknown as { kefliParse: () => Parsed; kefliArticle: () => { ok: boolean; content?: string } };
+    g.kefliParse = () => ({ ok: true, title: 'A story', canonical, readerable: true, markdown: ARTICLE });
+    g.kefliArticle = () => ({ ok: true, content: '<p>a few words</p>' });
+    return capture(page, href);
+  };
+  const story = 'https://news.example/2026/10/story';
+
+  test("a page at an amp. host naming another site's address keeps its own, and the save request names none", () => {
+    const c = captured('https://amp.evil.example/2026/10/story#top', story);
+    expect(c).toMatchObject({ url: 'https://amp.evil.example/2026/10/story', canonical: null, html: '<p>a few words</p>' });
+    expect(itemHash(c.url, c.canonical)).not.toBe(itemHash(story));
+  });
+
+  test('so does an ordinary page naming another site', () => {
+    expect(captured('https://syndicated.example/a', 'https://news.example/a').canonical).toBeNull();
+  });
+
+  test("the site's own AMP and mobile pages keep theirs, and join the story's save", () => {
+    const amp = captured('https://amp.news.example/2026/10/story', story);
+    expect(amp.canonical).toBe(story);
+    expect(itemHash(amp.url, amp.canonical)).toBe(itemHash(story));
+    expect(captured('https://m.news.example/a', 'https://www.news.example/a').canonical).toBe('https://www.news.example/a');
   });
 });
 
