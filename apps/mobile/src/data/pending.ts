@@ -7,7 +7,11 @@ import { enqueue } from './outbox';
 import { addressFits, fitSave, registerFirst, queueSends, queueText, type PageFields, type SaveTargets, type StagedBlob } from './saves';
 import { writeRelays } from './lists';
 
-export type Pending = { id: number; hash: string; url: string; shared_url: string | null; published: number; event_id: string | null; x_state: string | null };
+export type Pending = {
+  id: number; hash: string; url: string; shared_url: string | null; published: number; event_id: string | null; x_state: string | null;
+  /** When it was last tried and couldn't be had (F12), as pendingParses reads it; null for one never tried. */
+  timed_out_at?: number | null;
+};
 
 /**
  * Saves waiting for their parse: those that haven't timed out first, oldest first, then those that have, the one
@@ -18,13 +22,13 @@ export type Pending = { id: number; hash: string; url: string; shared_url: strin
 export function pendingParses(db: SqlDb, owner: string): Pending[] {
   return db.all<Pending>(
     // the person's own saves before an import's, which may run to thousands and take days past the day's 20 MB (FD 117)
-    `SELECT id, hash, url, shared_url, published, event_id, x_state FROM items WHERE owner = ? AND text_state = 'queued' AND pending_delete_at IS NULL
+    `SELECT id, hash, url, shared_url, published, event_id, x_state, timed_out_at FROM items WHERE owner = ? AND text_state = 'queued' AND pending_delete_at IS NULL
      ORDER BY lower(substr(url, 1, 7)) = 'http://', COALESCE(timed_out_at, 0), origin = 'import', saved_at, id`,
     owner,
   );
 }
 
-/** A pending parse whose page timed out goes to the back of the queue (F12). */
+/** A pending parse whose page timed out, or whose X post X didn't answer, goes to the back of the queue (F12). */
 export function timedOut(db: SqlDb, now: number, id: number): void {
   db.run('UPDATE items SET timed_out_at = ? WHERE id = ?', now, id);
 }
