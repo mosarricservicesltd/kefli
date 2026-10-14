@@ -82,8 +82,12 @@ function tabUrl(url: string): string {
  * the save before it was queued, until the browser stopped the worker and lost it.
  */
 const CAPTURE_WAIT_MS = 30_000;
-/** How long the shortcut waits to learn whether a toast took the press for its Undo: a page too busy to say has none. */
-const REACH_WAIT_MS = 1_000;
+/**
+ * How long the shortcut waits to learn whether a toast took the press for its Undo: a page too busy to say has none
+ * showing. Two seconds outlasts the long tasks of a heavy page, which would otherwise turn a press meant for Undo into
+ * a second save.
+ */
+const REACH_WAIT_MS = 2_000;
 
 /** Tabs whose page is still being read: another press there (the shortcut held down, a page slow to read) is that save. */
 const reading = new Set<number>();
