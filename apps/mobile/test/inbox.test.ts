@@ -4,10 +4,12 @@ import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
 import { absorbRecord } from '../src/data/devices';
-import { browserName, INBOX_BLOB_LIFE } from '../src/data/inbox';
+import { browserName, INBOX_BLOB_LIFE, queueDeleteInboxBlob } from '../src/data/inbox';
+import { enqueue } from '../src/data/outbox';
 import { pendingParses } from '../src/data/pending';
 import { INBOX_MAX_BYTES, INBOX_TIMEOUT_MS, drainInbox, judge, readBlob, type InboxPorts } from '../src/services/inbox';
 import { GUARD_WORDS, type ParserResult } from '../src/services/page';
+import { sendOne, type SendPorts } from '../src/services/send';
 import { memoryDb } from './sqlite';
 
 const D = { operator: { relay: 'ws://op', blossom: 'http://blossom', api: 'http://api' }, mirrors: ['http://m1'], relays: ['ws://a'], indexer: ['ws://a'] };
@@ -69,10 +71,13 @@ function world() {
     return { html: { ...enc.text, server: D.operator.blossom }, serve: () => blobs.set(`${D.operator.blossom}/${enc.text.sha256}`, enc.blob) };
   };
   const ops = () => db.all<{ op: string; subject: string }>('SELECT op, subject FROM outbox ORDER BY id').map((r) => r.op);
+  /** The blob deletes queued, one row per target. */
+  const deletes = () => db.all<{ subject: string; payload: string; signer: string; lane: string; target: string }>(
+    "SELECT o.subject, o.payload, o.signer, o.lane, t.target FROM outbox o JOIN outbox_targets t ON t.outbox_id = o.id WHERE o.op = 'delete_blob' ORDER BY o.id, t.target");
   const item = (hash: string) => db.get<{ text_state: string; title: string; origin: string; origin_device: string; state: string; saved_at: number }>(
     'SELECT text_state, title, origin, origin_device, state, saved_at FROM items WHERE owner = ? AND hash = ?', owner, hash);
   return {
-    db, owner, user, userSk, device, ports, wraps, blobs, texts, request, send, withHtml, ops, item, parses: () => parses, tick: (s: number) => (clock += s),
+    db, owner, user, userSk, device, ports, wraps, blobs, texts, request, send, withHtml, ops, deletes, item, parses: () => parses, tick: (s: number) => (clock += s),
     answerMissing: (status: number) => void (missing = status),
   };
 }
@@ -310,6 +315,135 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     expect(await drainInbox(w.ports, w.owner)).toEqual({ unarchived: 1 });
     expect(w.item(hash)).toMatchObject({ state: 'unread', saved_at: T0 + 150 });
     expect(w.ops().filter((o) => o === 'delete_wrap')).toHaveLength(3);
+  });
+
+  test("with the wrap's kind 5, the request's inbox blob is deleted from Kefli's server with the user's key (C§4.4, v1.12)", async () => {
+    const w = world();
+    const { html } = await w.withHtml('<html><h1>Read later</h1><p>…</p></html>');
+    await w.send(w.request({ html }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    expect(w.deletes()).toEqual([{ subject: html.sha256, payload: JSON.stringify({ sha256: html.sha256 }), signer: w.owner, lane: 'bulk', target: D.operator.blossom }]);
+    expect(w.ops()).toEqual(expect.arrayContaining(['upload_blob', 'mirror_blob', 'publish_item', 'delete_wrap', 'delete_blob']));
+    // the save's own text, under its own key, is uploaded and kept
+    const own = w.db.get<{ text_sha256: string }>('SELECT text_sha256 FROM items')!.text_sha256;
+    expect(own).not.toBe(html.sha256);
+    expect(w.db.get("SELECT 1 AS n FROM outbox WHERE op = 'upload_blob' AND subject = ?", own)).toEqual({ n: 1 });
+  });
+
+  test('a repeat save, an un-archived one, an X post and a capture already gone delete theirs too', async () => {
+    const w = world();
+    const first = await w.withHtml('<h1>First</h1>');
+    await w.send(w.request({ html: first.html }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    // matched: the save keeps its text, so the second capture isn't read, but it is deleted
+    w.tick(100);
+    const again = await w.withHtml('<h1>Again</h1>');
+    await w.send(w.request({ captured_at: T0 + 50, html: again.html }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ merged: 1 });
+    expect(w.parses()).toBe(1);
+    w.db.run("UPDATE items SET state = 'archived'");
+    w.tick(100);
+    const back = await w.withHtml('<h1>Back</h1>');
+    await w.send(w.request({ captured_at: T0 + 150, html: back.html }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ unarchived: 1 });
+    // an X post's HTML is discarded (C§4.3); a capture the operator no longer has meets a 404, which counts as done
+    const x = await w.withHtml('<h1>x</h1>');
+    await w.send(w.request({ url: 'https://x.com/someone/status/123', html: x.html }));
+    const gone = await w.withHtml('<h1>Gone</h1>', false);
+    await w.send(w.request({ url: 'https://example.com/b', html: gone.html }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 2 });
+    expect(w.parses()).toBe(1);
+    expect(w.deletes().map((d) => d.subject).sort()).toEqual([first, again, back, x, gone].map((b) => b.html.sha256).sort());
+    expect(new Set(w.deletes().map((d) => d.target))).toEqual(new Set([D.operator.blossom]));
+  });
+
+  test('the delete goes out signed by the user, and a 404 counts as done', async () => {
+    const w = world();
+    const one = await w.withHtml('<h1>One</h1>');
+    const two = await w.withHtml('<h1>Two</h1>');
+    await w.send(w.request({ html: one.html }));
+    await w.send(w.request({ url: 'https://example.com/b', html: two.html }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 2 });
+    // only the deletes left in the outbox, so each send is one of them
+    w.db.run("DELETE FROM outbox WHERE op != 'delete_blob'");
+    const calls: { method: string; url: string; auth: NostrEvent }[] = [];
+    // the server answers the first 404 (the blob expired meanwhile) and the second 200
+    const answers = [404, 200];
+    const ports: SendPorts = {
+      db: w.db, now: w.ports.now, signer: async (pk) => (pk === w.owner ? w.user : null), crypto: nodeCrypto,
+      fetch: (async (url: string, init: RequestInit) => {
+        const header = (init.headers as Record<string, string>).Authorization;
+        calls.push({ method: String(init.method), url, auth: JSON.parse(Buffer.from(header.slice('Nostr '.length), 'base64').toString()) });
+        return new Response('', { status: answers[calls.length - 1] });
+      }) as never,
+      defaults: () => ({ v: 1, ...D }),
+      publish: async () => ({ ok: true }),
+      readBlob: async () => null,
+    };
+    expect(await sendOne(ports)).toBe(true);
+    expect(await sendOne(ports)).toBe(true);
+    expect(await sendOne(ports)).toBe(false);
+    expect(calls.map((c) => [c.method, c.url]).sort()).toEqual([one, two].map((b) => ['DELETE', `${D.operator.blossom}/${b.html.sha256}`]).sort());
+    for (const c of calls) {
+      expect(c.auth).toMatchObject({ kind: 24242, pubkey: w.owner });
+      expect(c.auth.tags).toEqual(expect.arrayContaining([['t', 'delete'], ['x', c.url.split('/').pop()]]));
+    }
+    expect(w.db.get('SELECT COUNT(*) AS n FROM outbox')).toEqual({ n: 0 });
+  });
+
+  test('a wrap that is left, or whose blob fails, deletes nothing until it is taken', async () => {
+    const w = world();
+    const { html } = await w.withHtml('<h1>x</h1>');
+    // an unknown token; a request naming another server, taken without its HTML; a blob the operator fails to serve
+    await w.send(w.request({ token: 'cd'.repeat(32), html }));
+    await w.send(w.request({ url: 'https://example.com/b', html: { ...html, server: 'http://elsewhere' } }));
+    w.answerMissing(503);
+    const later = await w.withHtml('<h1>Later</h1>', false);
+    await w.send(w.request({ url: 'https://example.com/c', html: later.html }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ ignored_token: 1, created: 1, failed_blob: 1 });
+    expect(w.deletes()).toEqual([]);
+    // read at the next drain, its capture goes
+    later.serve();
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    expect(w.deletes().map((d) => d.subject)).toEqual([later.html.sha256]);
+  });
+
+  test("a request naming a save's own text, or no sha256 at all, deletes nothing (RULED)", async () => {
+    const w = world();
+    const { html } = await w.withHtml('<h1>Mine</h1>');
+    await w.send(w.request({ html }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    const own = w.db.get<{ text_sha256: string }>('SELECT text_sha256 FROM items')!.text_sha256;
+    w.db.run("DELETE FROM outbox WHERE op = 'delete_blob'");
+    // a faulty or hostile browser names the save's own text, for the same page and for another
+    const forged = { ...html, sha256: own };
+    w.tick(60);
+    await w.send(w.request({ html: forged }));
+    await w.send(w.request({ url: 'https://example.com/b', html: forged }));
+    await w.send(w.request({ url: 'https://example.com/c', html: { ...html, sha256: '../account' } }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ merged: 1, created: 2 });
+    expect(w.deletes()).toEqual([]);
+    expect(w.ops().filter((o) => o === 'delete_wrap')).toHaveLength(4);
+  });
+
+  test("an inbox blob's delete leaves alone this phone's uploads and a delete already waiting", () => {
+    const w = world();
+    const staged = 'ef'.repeat(32);
+    w.db.run("INSERT INTO blobs (sha256, hash, kind, staged_path, size, owner) VALUES (?, 'h', 'text', '/staged', 10, ?)", staged, w.owner);
+    queueDeleteInboxBlob(w.db, T0, w.owner, staged, D.operator.blossom);
+    expect(w.deletes()).toEqual([]);
+    // a save's delete, to every server it named, keeps them all
+    const waiting = '12'.repeat(32);
+    enqueue(w.db, T0, { op: 'delete_blob', signer: w.owner, subject: waiting, payload: { sha256: waiting }, targets: [D.operator.blossom, D.mirrors[0]], lane: 'bulk' });
+    queueDeleteInboxBlob(w.db, T0, w.owner, waiting, D.operator.blossom);
+    expect(w.deletes().map((d) => d.target)).toEqual([D.operator.blossom, D.mirrors[0]]);
+    for (const bad of [null, 42, {}, 'AB'.repeat(32), 'ab'.repeat(31)]) queueDeleteInboxBlob(w.db, T0, w.owner, bad, D.operator.blossom);
+    expect(w.deletes()).toHaveLength(2);
+    const capture = '34'.repeat(32);
+    queueDeleteInboxBlob(w.db, T0, w.owner, capture, D.operator.blossom);
+    expect(w.deletes().filter((d) => d.subject === capture)).toEqual([
+      { subject: capture, payload: JSON.stringify({ sha256: capture }), signer: w.owner, lane: 'bulk', target: D.operator.blossom },
+    ]);
   });
 
   test("the row names the browser by its brand", () => {

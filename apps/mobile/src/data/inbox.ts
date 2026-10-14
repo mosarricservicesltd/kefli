@@ -1,7 +1,9 @@
 // The inbox (mobile spec 4.7, contract 4.4): browser saves arriving as gift wraps on the operator relay. Every
 // wrap's outcome is kept in inbox_seen, so each is acted on once; failed_blob keeps its rumor in wrap_json and is
 // tried again at each drain, since the subscription no longer reaches it. An accepted request becomes a save as a
-// share does, through queueSave, so the repeat-save rule applies (contract 4.1); its sends go out at once.
+// share does, through queueSave, so the repeat-save rule applies (contract 4.1); its sends go out at once. A wrap
+// that made or matched a save is closed with a kind 5 for it and, from contract 1.12, a delete of its inbox blob, so
+// a capture takes room in the library's storage on the operator's server only until the phone has taken it.
 //
 // RULED: a request with HTML joins Saves as text_state 'fetching' ("Getting the text…") until its inbox blob is
 // read; pending parses (phase 7) take only 'queued', so they never fetch the page over a browser's own HTML. The
@@ -86,4 +88,48 @@ export function noteDeviceSave(db: SqlDb, now: number, owner: string, token: str
 /** Only a wrap that created, un-archived or matched a save is deleted (C§4.4), with a kind 5 to the operator relay. */
 export function queueDeleteWrap(db: SqlDb, now: number, owner: string, wrapId: string, operatorRelay: string): void {
   enqueue(db, now, { op: 'delete_wrap', signer: owner, subject: wrapId, payload: { id: wrapId }, targets: [operatorRelay], lane: 'bulk' });
+}
+
+const SHA256 = /^[0-9a-f]{64}$/;
+
+/**
+ * Whether something other than a capture holds this blob: a save on this phone names it as its text, this phone
+ * staged it, or a delete of it already waits in the outbox.
+ */
+function accountedFor(db: SqlDb, owner: string, sha256: string): boolean {
+  return !!db.get(
+    `SELECT 1 FROM items WHERE text_sha256 = ?
+     UNION ALL SELECT 1 FROM blobs WHERE sha256 = ?
+     UNION ALL SELECT 1 FROM outbox WHERE op = 'delete_blob' AND signer = ? AND subject = ? AND state IN ('held', 'queued', 'sending')
+     LIMIT 1`,
+    sha256, sha256, owner, sha256,
+  );
+}
+
+/**
+ * The request's inbox blob, deleted from the operator Blossom server with the user's key once its wrap has made or
+ * matched a save (C§4.4, v1.12), which the server allows the library the blob counts against (C§5); a 404 counts as
+ * done (4.3). It goes whether or not its HTML was read: an X post's is discarded, a repeat save needs none, and the
+ * server's 14 days run from the upload, which a browser offline at capture makes later than captured_at.
+ *
+ * RULED: a user's delete removes every upload of the blob counted against the library (C§5), so a request naming a
+ * save's own text, which only a faulty or hostile browser could send, would delete that text from the operator. Such
+ * a blob is left alone, and so is an address that isn't a sha256, which the delete's authorisation can't name, so its
+ * row would be tried again for ever.
+ */
+export function queueDeleteInboxBlob(db: SqlDb, now: number, owner: string, sha256: unknown, operatorBlossom: string): void {
+  if (typeof sha256 !== 'string' || !SHA256.test(sha256) || accountedFor(db, owner, sha256)) return;
+  enqueue(db, now, { op: 'delete_blob', signer: owner, subject: sha256, payload: { sha256 }, targets: [operatorBlossom], lane: 'bulk' });
+}
+
+/**
+ * A wrap that created, un-archived or matched a save, closed in one transaction (C§4.4): its outcome recorded, a kind
+ * 5 for it queued for the operator relay, and with it the delete of its inbox blob, if the request names one.
+ */
+export function closeWrap(db: SqlDb, now: number, wrapId: string, s: Seen, operator: { relay: string; blossom: string }, html: SaveRequest['html']): void {
+  db.tx(() => {
+    recordSeen(db, now, wrapId, s);
+    queueDeleteWrap(db, now, s.owner, wrapId, operator.relay);
+    if (html) queueDeleteInboxBlob(db, now, s.owner, html.sha256, operator.blossom);
+  });
 }

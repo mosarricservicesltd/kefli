@@ -8,8 +8,9 @@
 // capped and checked against its sha256: Readability's content HTML, which the canonical Markdown conversion
 // (kefliMarkdown) turns into the save's text, with the title and the rest as the extension read them; a blob that can't be read is failed_blob and
 // tried again from wrap_json at each drain, while one the operator answers 404 for is gone, and the save fetches its
-// page at once (v1.12). Only created, merged and unarchived queue delete_wrap; every other wrap is left, so a phone
-// without the record yet can't remove a save another phone still needs.
+// page at once (v1.12). Only created, merged and unarchived queue delete_wrap, and with it the delete of the
+// request's inbox blob (v1.12); every other wrap is left, so a phone without the record yet can't remove a save
+// another phone still needs.
 //
 // RULED: a request naming another server for its HTML is taken without it, and the page is fetched instead, so a
 // save from a connected browser is never lost to a bad field.
@@ -17,7 +18,7 @@ import { KIND, UnwrapError, acceptSaveRequest, decryptText, unwrap, type CryptoP
 import type { SqlDb } from '../data/db';
 import { localRecord } from '../data/devices';
 import {
-  INBOX_BLOB_LIFE, admit, failedBlobs, giveUpBlob, noteDeviceSave, queueDeleteWrap, recordSeen, seenOutcome, type Outcome,
+  INBOX_BLOB_LIFE, admit, closeWrap, failedBlobs, giveUpBlob, noteDeviceSave, recordSeen, seenOutcome, type Outcome,
 } from '../data/inbox';
 import type { Pending } from '../data/pending';
 import type { SaveTargets } from '../data/saves';
@@ -146,8 +147,8 @@ async function take(p: InboxPorts, owner: string, wrapId: string, j: Extract<Jud
   // A retried wrap finds the save it made itself: still its creation.
   const outcome = retry && a.outcome === 'merged' ? 'created' : a.outcome;
   noteDeviceSave(p.db, p.now(), owner, j.token);
-  recordSeen(p.db, p.now(), wrapId, { ...seen, outcome });
-  queueDeleteWrap(p.db, p.now(), owner, wrapId, d.operator.relay);
+  // the save no longer needs the capture: the wrap's kind 5 and the inbox blob's delete go together (C§4.4, v1.12)
+  closeWrap(p.db, p.now(), wrapId, { ...seen, outcome }, d.operator, j.request.html);
   return outcome;
 }
 
