@@ -136,11 +136,11 @@ function pendingRow(db: SqlDb, owner: string, hash: string): Pending | undefined
 }
 
 /**
- * What one drain learns as it goes: the connected-browsers record, read once; whether the signer has stopped
- * answering; and whether the Blossom server has, after which the drain's other blobs wait for the next drain rather
- * than each waiting out the deadline.
+ * What one drain learns as it goes: the connected-browsers record, read once; how many wraps it has opened, and
+ * whether the signer has stopped answering; and whether the Blossom server has, after which the drain's other blobs
+ * wait for the next drain rather than each waiting out the deadline.
  */
-type Drain = { devices: DevicesRecord; blobsDown: boolean };
+type Drain = { devices: DevicesRecord; opens: number; waiting: boolean; blobsDown: boolean };
 
 /**
  * An accepted request, made a save; its HTML read and parsed when it brings some. A blob that can't be this capture
@@ -252,12 +252,42 @@ async function readWindow(p: InboxPorts, relay: string, owner: string, since: nu
   return [...got.values()];
 }
 
+/**
+ * One wrap opened and judged (4.7), or 'held' for the next drain. The signer couldn't answer (out of sight, timed out,
+ * declined): the wrap waits, unrecorded but for when it was first tried, and the cursor stays so it is fetched again
+ * (F3), and the drain's other wraps wait unasked, since they'd fail the same way, two minutes each for a bunker, as
+ * sync's do (F14). Taking it failed part way (the network, the database): it is tried again at the next drain. Either
+ * way, one still failing a week after its first try is filed as not ours.
+ */
+async function openOne(p: InboxPorts, owner: string, w: NostrEvent, blossom: string, drain: Drain): Promise<Outcome | 'held'> {
+  drain.opens++;
+  let opened: Awaited<ReturnType<typeof unwrap>>;
+  try {
+    opened = await unwrap(p.signer, w);
+  } catch (e) {
+    if (!(e instanceof UnwrapError)) {
+      drain.waiting = true;
+      if (!stale(p, owner, w)) return 'held';
+    }
+    // not a wrap this key opens: someone else's message sharing the p tag
+    recordSeen(p.db, p.now(), w.id, { owner, outcome: 'ignored_foreign' });
+    return 'ignored_foreign';
+  }
+  try {
+    return await handle(p, owner, w.id, opened.rumor, opened.seal, blossom, drain);
+  } catch {
+    if (!stale(p, owner, w)) return 'held';
+    recordSeen(p.db, p.now(), w.id, { owner, outcome: 'ignored_foreign' });
+    return 'ignored_foreign';
+  }
+}
+
 /** One drain of the inbox. Restartable: the cursor moves only after the relay answers. */
 export async function drainInbox(p: InboxPorts, owner: string): Promise<InboxResult> {
   const out: InboxResult = {};
   const d = await p.defaults();
   const relay = d.operator.relay;
-  const drain: Drain = { devices: localRecord(p.db, owner), blobsDown: false };
+  const drain: Drain = { devices: localRecord(p.db, owner), opens: 0, waiting: false, blobsDown: false };
   await retryBlobs(p, owner, d.operator.blossom, out, drain);
   const startedAt = p.now();
   const since = getCursor(p.db, relay, 'inbox', owner)?.since;
@@ -268,48 +298,12 @@ export async function drainInbox(p: InboxPorts, owner: string): Promise<InboxRes
     return out; // unreachable: the cursor stays
   }
   let held = false;
-  // once the signer hasn't answered, the rest of this drain's wraps wait for the next one unasked, since they would
-  // fail the same way, two minutes each for a bunker, as sync's do (F14)
-  let waiting = false;
-  let opens = 0;
   for (const w of wraps.sort((a, b) => a.created_at - b.created_at)) {
     if (w.kind !== KIND.giftWrap || seenOutcome(p.db, w.id)) continue;
-    if (waiting || opens >= INBOX_UNWRAPS) {
-      held = true;
-      continue;
-    }
-    opens++;
-    let opened: Awaited<ReturnType<typeof unwrap>>;
-    try {
-      opened = await unwrap(p.signer, w);
-    } catch (e) {
-      // the signer couldn't answer (out of sight, timed out, declined): the wrap waits for the next drain, unrecorded,
-      // and the cursor stays so it is fetched again (F3); one still failing after a week is filed as not ours
-      if (!(e instanceof UnwrapError)) {
-        waiting = true;
-        if (!stale(p, owner, w)) {
-          held = true;
-          continue;
-        }
-      }
-      // not a wrap this key opens: someone else's message sharing the p tag
-      recordSeen(p.db, p.now(), w.id, { owner, outcome: 'ignored_foreign' });
-      out.ignored_foreign = (out.ignored_foreign ?? 0) + 1;
-      continue;
-    }
-    let o: Outcome;
-    try {
-      o = await handle(p, owner, w.id, opened.rumor, opened.seal, d.operator.blossom, drain);
-    } catch {
-      // ours, but taking it failed part way (a signer, the network, the database): tried again next drain (F3)
-      if (!stale(p, owner, w)) {
-        held = true;
-        continue;
-      }
-      o = 'ignored_foreign';
-      recordSeen(p.db, p.now(), w.id, { owner, outcome: o });
-    }
-    out[o] = (out[o] ?? 0) + 1;
+    // once the signer hasn't answered, and past the drain's budget, the rest wait for the next drain unasked
+    const o = drain.waiting || drain.opens >= INBOX_UNWRAPS ? 'held' : await openOne(p, owner, w, d.operator.blossom, drain);
+    if (o === 'held') held = true;
+    else out[o] = (out[o] ?? 0) + 1;
   }
   if (!held) {
     setCursor(p.db, startedAt, relay, 'inbox', owner, startedAt);

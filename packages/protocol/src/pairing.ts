@@ -243,6 +243,16 @@ function cleanRequest(r: SaveRequest, sentAt: number | null): SaveRequest | null
   };
 }
 
+/** A rumor's content as a request this client reads: JSON, v 1, a url that is a string; otherwise null. */
+function requestOf(content: string): SaveRequest | null {
+  try {
+    const r = JSON.parse(content) as SaveRequest | null;
+    return r?.v === 1 && typeof r.url === 'string' ? r : null;
+  } catch {
+    return null;
+  }
+}
+
 function isLink(url: string): boolean {
   try {
     normalise(url);
@@ -260,13 +270,8 @@ function isLink(url: string): boolean {
 export function acceptSaveRequest(rumor: Rumor, seal: NostrEvent, devices: DevicesRecord, operatorBlossom: string): SaveRequestVerdict {
   const d = rumor.tags.find((t) => t[0] === 'd')?.[1] ?? '';
   if (rumor.kind !== KIND.appData || !d.startsWith(SAVE_REQUEST_D_PREFIX)) return { ok: false, reason: 'other' };
-  let parsed: SaveRequest;
-  try {
-    parsed = JSON.parse(rumor.content);
-  } catch {
-    return { ok: false, reason: 'version' };
-  }
-  if (parsed?.v !== 1 || typeof parsed.url !== 'string') return { ok: false, reason: 'version' };
+  const parsed = requestOf(rumor.content);
+  if (!parsed) return { ok: false, reason: 'version' };
   const device = connectedEntry(devices, parsed.token);
   if (!device) return { ok: false, reason: 'token' };
   if (seal.pubkey !== device.device_pubkey) return { ok: false, reason: 'device' };
