@@ -1,6 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fetchPage, isPdf, PDF_MAX_BYTES, type PagePorts } from '../src/services/page';
+import { base64 } from '@scure/base';
+import { buildItemEvent, LocalSigner, parseItem, type PdfRuns } from '@kefli/protocol';
+import { nodeCrypto } from '@kefli/protocol/node';
+import * as blocks from '../src/reader/blocks';
+import { FIELD_MAX, fetchPage, isPdf, PDF_MAX_BYTES, PDF_MAX_RUNS, TEXT_MAX_BYTES, toBase64, type PagePorts, type ParserResult } from '../src/services/page';
 import { failNotice } from '../src/screens/failNotice';
 import { S } from '../src/ui/strings';
 
@@ -97,5 +101,143 @@ describe('a linked PDF (contract 4.2, flow decision 103)', () => {
     expect(failNotice('pdf_locked')).toBe(S.reader.pdfLocked);
     expect(failNotice('not_readable')).toBe(S.reader.errorNotice);
     expect(failNotice(null)).toBe(S.reader.errorNotice);
+  });
+
+  test('a PDF after a byte order mark or a blank line, served as a download, is known by its header', () => {
+    const late = new TextEncoder().encode('﻿\r\n%PDF-1.4\n…');
+    expect(isPdf('application/octet-stream', late)).toBe(true);
+    expect(isPdf('', late)).toBe(true);
+    // further in than a reader looks, it is not
+    expect(isPdf('application/octet-stream', new TextEncoder().encode(' '.repeat(1100) + '%PDF-1.4'))).toBe(false);
+    // a page that mentions one near its top is still a page
+    expect(isPdf('text/html', new TextEncoder().encode('<title>%PDF-1.7 explained</title>'))).toBe(false);
+  });
+});
+
+const HTML = (s: string) => new Response(new TextEncoder().encode(s), { status: 200, headers: { 'content-type': 'text/html' } });
+const ARTICLE = Array.from({ length: 40 }, (_, i) => `Paragraph ${i} of an article worth keeping, long enough to read.`).join('\n\n') + '\n';
+const parsed = (over: Partial<Extract<ParserResult, { ok: true }>> = {}): ParserResult => ({
+  ok: true, title: 'A title', byline: null, site: null, lang: 'en', hero: null, canonical: null, readerable: true, markdown: ARTICLE, ...over,
+});
+/** Page ports whose fetch answers a page and whose parse gives result, counting parses. */
+function parsing(result: ParserResult | (() => ParserResult), res: () => Response = () => HTML('<p>x</p>')) {
+  const p: PagePorts = { fetch: (async () => res()) as unknown as typeof fetch, parse: async () => (typeof result === 'function' ? result() : result) };
+  return p;
+}
+
+describe('what a page hands back is taken only as far as a save can hold it', () => {
+  test('Markdown past the most text a save keeps fails as too large, before it is derived', async () => {
+    const derive = jest.spyOn(blocks, 'deriveArticle');
+    // a page's Markdown can outgrow its HTML: 500 nested lists indent every line in them
+    expect(await fetchPage(parsing(parsed({ markdown: 'x'.repeat(TEXT_MAX_BYTES + 1) })), 'https://e.com/a')).toMatchObject({ kind: 'failed', reason: 'too_large' });
+    // counted as UTF-8: two bytes a character here
+    expect(await fetchPage(parsing(parsed({ markdown: 'é'.repeat(TEXT_MAX_BYTES / 2 + 1) })), 'https://e.com/b')).toMatchObject({ kind: 'failed', reason: 'too_large' });
+    expect(derive).not.toHaveBeenCalled();
+    derive.mockRestore();
+  });
+
+  test('a long real article is kept', async () => {
+    const long = Array.from({ length: 6000 }, (_, i) => `Paragraph ${i}: ${'a sentence of a long and real report. '.repeat(4)}`).join('\n\n') + '\n';
+    expect(long.length).toBeGreaterThan(900_000);
+    const o = await fetchPage(parsing(parsed({ markdown: long })), 'https://e.com/long');
+    expect(o).toMatchObject({ kind: 'parsed', words: 6000 * 34 });
+  });
+
+  test('a derivation that throws is a page that could not be read, never a throw', async () => {
+    const derive = jest.spyOn(blocks, 'deriveArticle').mockImplementation(() => {
+      throw new RangeError('Maximum call stack size exceeded');
+    });
+    try {
+      expect(await fetchPage(parsing(parsed()), 'https://e.com/deep')).toEqual({ kind: 'failed', reason: 'not_readable', finalUrl: 'https://e.com/deep' });
+    } finally {
+      derive.mockRestore();
+    }
+  });
+
+  test('a parse refused for its size by the parser says too large', async () => {
+    expect(await fetchPage(parsing({ ok: false, reason: 'too_large' }), 'https://e.com/a')).toMatchObject({ kind: 'failed', reason: 'too_large' });
+  });
+
+  test('absurd fields are fitted, so the save fits its 16 KB event', async () => {
+    const url = 'https://news.example/' + 'p'.repeat(FIELD_MAX.url - 30);
+    const hostile = parsed({
+      title: 'T'.repeat(10_000), byline: 'B'.repeat(5_000), site: 'S'.repeat(5_000), lang: 'l'.repeat(10_000),
+      hero: 'https://e.com/' + 'i'.repeat(5_000), canonical: 'https://e.com/' + 'c'.repeat(5_000),
+    });
+    const o = await fetchPage(parsing(hostile), url);
+    if (o.kind !== 'parsed') throw new Error(o.kind);
+    const r = o.result;
+    expect([r.title?.length, r.byline?.length, r.site?.length, r.lang, r.hero, r.canonical]).toEqual([FIELD_MAX.title, FIELD_MAX.byline, FIELD_MAX.site, null, null, null]);
+    // the item as the outbox writes it, at the longest address kept, signs under the ceiling
+    const item = parseItem(JSON.stringify({
+      v: 1, url, canonical: r.canonical, title: r.title, site: r.site, byline: r.byline, saved_at: 1_760_000_000, state: 'unread', progress: 0,
+      words: o.words, lang: r.lang, text: { sha256: 'ab'.repeat(32), key: 'k'.repeat(44), nonce: 'n'.repeat(16), servers: ['https://blossom.kefli.app', 'https://mirror.example.net'] },
+      text_hash: 'cd'.repeat(32), hero: r.hero, source_kind: 'web', audio_pref: null,
+    }));
+    const signer = new LocalSigner(nodeCrypto.randomBytes(32));
+    await expect(buildItemEvent(signer, 'ef'.repeat(32), item, 1_760_000_000, nodeCrypto.randomBytes(32))).resolves.toBeDefined();
+  });
+
+  test('a title cut at the most kept never splits a pair of surrogates', async () => {
+    const o = await fetchPage(parsing(parsed({ title: 'a'.repeat(FIELD_MAX.title - 1) + '😀'.repeat(10) })), 'https://e.com/t');
+    if (o.kind !== 'parsed') throw new Error(o.kind);
+    expect(o.result.title).toBe('a'.repeat(FIELD_MAX.title - 1));
+  });
+
+  test('a redirect to an address past the longest kept leaves the save at the address asked for', async () => {
+    const res = () => {
+      const r = HTML('<p>x</p>');
+      Object.defineProperty(r, 'url', { value: 'https://e.com/' + 'r'.repeat(70_000) });
+      return r;
+    };
+    expect(await fetchPage(parsing(parsed(), res), 'https://e.com/asked')).toMatchObject({ kind: 'parsed', finalUrl: 'https://e.com/asked' });
+  });
+});
+
+describe('a PDF is handed over and read only as far as a save can hold it', () => {
+  const pdfPorts = (read: ({ ok: true } & PdfRuns) | { ok: false; reason: string }, seen: { body?: string } = {}): PagePorts => ({
+    fetch: (async () => new Response(PDF_BYTES, { status: 200, headers: { 'content-type': 'application/pdf' } })) as unknown as typeof fetch,
+    parse: async () => ({ ok: false, reason: 'not_readable' }),
+    pdf: async (b) => {
+      seen.body = b;
+      return read;
+    },
+  });
+
+  test('base64 for the WebView is the standard one, in linear time and memory for a 20 MB file', () => {
+    for (let n = 0; n < 40; n++) {
+      const bytes = nodeCrypto.randomBytes(n);
+      expect(toBase64(bytes)).toBe(base64.encode(bytes));
+    }
+    const odd = nodeCrypto.randomBytes(3 * 2048 * 3 + 2);
+    expect(toBase64(odd)).toBe(Buffer.from(odd).toString('base64'));
+    // @scure/base without a built-in toBase64, as on Hermes, took 15 s and 1.4 GB in Node for this
+    const big = new Uint8Array(20 * 1024 * 1024).map((_, i) => (i * 2654435761) >>> 24);
+    const started = Date.now();
+    const s = toBase64(big);
+    expect(Date.now() - started).toBeLessThan(10_000);
+    expect(s).toBe(Buffer.from(big).toString('base64'));
+  });
+
+  test('more runs than a save can hold fail as too large, before any layout', async () => {
+    const layout = jest.spyOn(blocks, 'deriveArticle');
+    const page = { w: 595, h: 842, runs: Array.from({ length: PDF_MAX_RUNS + 1 }, () => ['a', 72, 100, 10, 5, 0] as [string, number, number, number, number, number]) };
+    expect(await fetchPage(pdfPorts({ ok: true, title: null, author: null, pages: [page] }), 'https://e.com/glyphs.pdf')).toMatchObject({ kind: 'failed', reason: 'too_large' });
+    expect(layout).not.toHaveBeenCalled();
+    layout.mockRestore();
+  });
+
+  test('text normalisation refuses (a run of stacked marks) is a PDF that could not be read', async () => {
+    // prose enough that the layout keeps the block, with one letter carrying 400 marks in it
+    const prose = 'Saved articles are read on the train and kept for later. '.repeat(20);
+    const zalgo = { w: 595, h: 842, runs: [[prose + 'a' + '̖́'.repeat(200) + ' ' + prose, 72, 100, 10, 400, 0] as [string, number, number, number, number, number]] };
+    expect(await fetchPage(pdfPorts({ ok: true, title: null, author: null, pages: [zalgo] }), 'https://e.com/z.pdf')).toMatchObject({ kind: 'failed', reason: 'not_readable' });
+  });
+
+  test('a PDF whose own title and author run on has them fitted', async () => {
+    const r = runs('report-one-column');
+    const o = await fetchPage(pdfPorts({ ...r, title: 'T'.repeat(5_000_000), author: 'A'.repeat(5_000_000) }), 'https://e.com/r.pdf');
+    if (o.kind !== 'parsed') throw new Error(o.kind);
+    expect([o.result.title?.length, o.result.byline?.length]).toEqual([FIELD_MAX.title, FIELD_MAX.byline]);
   });
 });
