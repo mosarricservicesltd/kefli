@@ -3,6 +3,16 @@
 // has no timeouts of its own, so a deadline cleared there leaves the body to a server that may send a byte a minute,
 // and a cap checked after arrayBuffer() comes too late for an endless one. expo/fetch also sends and keeps cookies
 // unless told otherwise, in the jar the WebViews share, so a site would know every later fetch for the same person.
+//
+// Redirects (5.4, 7.1): a page, an image or X's embed is asked for with redirect: 'manual', which expo/fetch (the
+// global fetch on Android in SDK 57) honours by turning OkHttp's own following off and handing back the 3xx itself,
+// Location and all (its NativeRequest.kt). Each hop is followed here, inside the one deadline, and its address is
+// checked before it is asked for. Left to OkHttp, a saved page or an image could send the phone to 192.168.1.1, or
+// to a loopback or link-local address; and since each hop followed here is a fresh request, which expo/fetch answers
+// from the phone's own files when it names http://filesystem.local, that name is refused at every hop as at the
+// first (services/page.ts fetchable). A fetch that follows redirects anyway (React Native's own, under
+// EXPO_PUBLIC_USE_RN_FETCH) has its answer refused when it says it ended somewhere a hop couldn't go.
+import { isPublicWebUrl } from '@kefli/protocol';
 
 export class TimedOut extends Error {
   constructor() {
@@ -18,9 +28,32 @@ export class TooLarge extends Error {
   }
 }
 
+/**
+ * A fetch the phone won't make or finish, which asking again would only repeat, so what was asked for fails rather
+ * than waiting as offline: a redirect to an address the caller doesn't allow, or one naming nowhere a request can
+ * go (redirect); or more redirects than the caller follows (redirects).
+ */
+export class Blocked extends Error {
+  constructor(readonly why: 'redirect' | 'redirects') {
+    super(`blocked: ${why}`);
+    this.name = 'Blocked';
+  }
+}
+
+/** How a fetch follows redirects itself: at most max of them, each to an address allow passes. */
+export type Hops = { max: number; allow: (url: string) => boolean };
+
+/** The most redirects a page, an image or X's embed is followed through (5.4); one more fails it. */
+export const MAX_REDIRECTS = 10;
+
+/** The open web's hops: ten at most, each to a public http(s) address (7.1). */
+export const WEB_HOPS: Hops = { max: MAX_REDIRECTS, allow: isPublicWebUrl };
+
 /** A response whose body is still under the deadline it was asked for with. */
 export type Opened = {
   res: Response;
+  /** The address the answer came from: the last hop's, or where a fetch that follows redirects itself says it ended. */
+  url: string;
   /** The body, at most maxBytes: TooLarge past it (declared or streamed), TimedOut at the deadline. Ends the deadline. */
   read: (maxBytes: number) => Promise<Uint8Array>;
   /** Ends the deadline without reading the body, and lets the request go. */
@@ -29,46 +62,104 @@ export type Opened = {
 
 const noop = () => undefined;
 
-/** Fetches url with no cookies, the deadline running from now until the body is read or done() is called. */
-export async function open(f: typeof fetch, url: string, init: RequestInit, timeoutMs: number): Promise<Opened> {
-  const ctl = new AbortController();
-  let late = false;
+/** The Fetch Standard's redirect statuses: anything else, a 300 or a 304 among them, is an answer in itself. */
+const REDIRECTS = new Set([301, 302, 303, 307, 308]);
+
+/**
+ * Where a redirect sends its request next, resolved against the address that answered: null for an answer that is no
+ * redirect (an empty Location among them), '' for a Location that names nowhere a request can go.
+ */
+export function redirectTo(res: Pick<Response, 'status' | 'headers'>, at: string): string | null {
+  const to = REDIRECTS.has(res.status) ? res.headers.get('location') : null;
+  if (!to) return null;
+  try {
+    return new URL(to, at).href;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Whether an answer said to come from said, for a request to asked, has strayed from an address allow passes to one
+ * it refuses, as a fetch or a browser engine that follows redirects itself can. An address the caller chose to ask
+ * for though allow refuses it (a share of a page on the person's own network) is held to nothing more.
+ */
+export function strayed(hops: Hops, asked: string, said: string): boolean {
+  return said !== asked && hops.allow(asked) && !hops.allow(said);
+}
+
+/** What a failure to fetch was: the deadline's, or itself. */
+const failure = (e: unknown, late: boolean): unknown => (late ? new TimedOut() : e);
+
+/** The request a read is on: its controller changes with each hop, and the deadline lets go of the one current. */
+type Line = { ctl: AbortController; late: boolean };
+
+/** The answer at the end of the redirects, each hop asked for afresh under the line; without hops, the fetch's own. */
+async function arrive(f: typeof fetch, url: string, init: RequestInit, line: Line, hops?: Hops): Promise<{ res: Response; url: string }> {
+  let at = url;
+  for (let n = 0; ; n++) {
+    const res = await f(at, { ...init, credentials: 'omit', signal: line.ctl.signal, ...(hops ? { redirect: 'manual' as const } : {}) });
+    const next = hops ? redirectTo(res, at) : null;
+    if (next === null) return { res, url: arrived(res, at, hops) };
+    // the redirect's own answer is let go, its body unread
+    line.ctl.abort();
+    if (n >= hops!.max) throw new Blocked('redirects');
+    if (!hops!.allow(next)) throw new Blocked('redirect');
+    if (line.late) throw new TimedOut();
+    line.ctl = new AbortController();
+    at = next;
+  }
+}
+
+/** Where an answer came from: where the fetch says it ended, refused when that strays (strayed). */
+function arrived(res: Response, at: string, hops?: Hops): string {
+  const said = res.url || at;
+  if (hops && strayed(hops, at, said)) throw new Blocked('redirect');
+  return said;
+}
+
+/**
+ * Fetches url with no cookies, the deadline running from now until the body is read or done() is called. With hops,
+ * redirects are followed one at a time inside that deadline, each address checked before it is asked for (Blocked).
+ */
+export async function open(f: typeof fetch, url: string, init: RequestInit, timeoutMs: number, hops?: Hops): Promise<Opened> {
+  const line: Line = { ctl: new AbortController(), late: false };
   let timer: ReturnType<typeof setTimeout> | undefined;
   // the deadline is raced as well as signalled, so a fetch or a body that ignores the abort still lets go
   const deadline = new Promise<never>((_, fail) => {
     timer = setTimeout(() => {
-      late = true;
-      ctl.abort();
+      line.late = true;
+      line.ctl.abort();
       fail(new TimedOut());
     }, timeoutMs);
   });
   deadline.catch(noop);
   const end = () => clearTimeout(timer);
-  const why = (e: unknown) => (late ? new TimedOut() : e);
-  let res: Response;
+  let landed: { res: Response; url: string };
   try {
-    res = await Promise.race([f(url, { ...init, credentials: 'omit', signal: ctl.signal }), deadline]);
+    landed = await Promise.race([arrive(f, url, init, line, hops), deadline]);
   } catch (e) {
     end();
-    throw why(e);
+    throw failure(e, line.late);
   }
+  const { res } = landed;
   const read = async (maxBytes: number): Promise<Uint8Array> => {
     try {
       const declared = Number(res.headers.get('content-length') ?? 0);
       if (declared > maxBytes) throw new TooLarge(declared);
       return await Promise.race([body(res, maxBytes), deadline]);
     } catch (e) {
-      ctl.abort();
-      throw why(e);
+      line.ctl.abort();
+      throw failure(e, line.late);
     } finally {
       end();
     }
   };
   const done = () => {
     end();
-    ctl.abort();
+    line.ctl.abort();
   };
-  return { res, read, done };
+  return { res, url: landed.url, read, done };
 }
 
 /** The body chunk by chunk, refused as soon as it passes the cap; a fetch with no stream is read whole and then checked. */

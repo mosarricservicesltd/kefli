@@ -1,6 +1,7 @@
 // Fetching article images (mobile spec 4.5 phase 6, 5.6): one at a time, http(s) only, at most 5 MB and 20 s with no
-// cookies (net/http.ts), kept only if the bytes are an image the Reader can draw. The store stays within 200 MB by
-// evicting archived articles' images first, and an image that won't fit beside the open article's own is left out.
+// cookies, through redirects followed by hand, each to a public address (net/http.ts), kept only if the bytes are an
+// image the Reader can draw. The store stays within 200 MB by evicting archived articles' images first, and an image
+// that won't fit beside the open article's own is left out.
 // A page can name thousands, or images from servers that never answer: an article's first 500 are fetched, a run
 // stops at three time-outs in a row or once it has fetched the store's budget, and an image already on its way isn't
 // asked for twice. Ports, like sync, so this runs in tests.
@@ -9,7 +10,7 @@ import { articleBlocks } from '../reader/blocks';
 import { LIMITS } from '../reader/limits';
 import { drawable, imageKind, imageSize } from '../reader/imageSize';
 import type { SqlDb } from '../data/db';
-import { open, TimedOut, TooLarge } from '../net/http';
+import { Blocked, open, TimedOut, TooLarge, WEB_HOPS } from '../net/http';
 import {
   MAX_IMAGE_BYTES, MAX_TOTAL_BYTES, evictions, forget, getImage, heldBytes, imagesOf, keptArticles, needsFetch, recordFailed, recordImage, wanted,
   type ImageRow,
@@ -80,11 +81,14 @@ function room(p: ImagePorts, owner: string, incoming: number, hash: string): Ima
   return heldBytes(p.db) + incoming - freed > budget ? null : out;
 }
 
-/** The image's bytes, or how it failed: a redirect onto this phone's network is not kept (F26). */
+/**
+ * The image's bytes, or how it failed: a redirect onto this phone's network is never followed, nor one ending there
+ * kept (F26), and either is that image's failure, not the network's, so the images after it are still fetched.
+ */
 async function download(p: ImagePorts, url: string): Promise<Uint8Array | Exclude<Counted, 'ok'>> {
   try {
-    const o = await open(p.fetch, url, { headers: { 'User-Agent': IMAGE_UA, Accept: IMAGE_ACCEPT } }, IMAGE_TIMEOUT_MS);
-    if (!o.res.ok || (o.res.url && !isPublicWebUrl(o.res.url))) {
+    const o = await open(p.fetch, url, { headers: { 'User-Agent': IMAGE_UA, Accept: IMAGE_ACCEPT } }, IMAGE_TIMEOUT_MS, WEB_HOPS);
+    if (!o.res.ok) {
       o.done();
       return 'failed';
     }
@@ -92,7 +96,7 @@ async function download(p: ImagePorts, url: string): Promise<Uint8Array | Exclud
   } catch (e) {
     // a host too slow or too big is that image's failure, tried again in a day, so it can't hold up every sync (F12)
     if (e instanceof TimedOut) return 'slow';
-    return e instanceof TooLarge ? 'failed' : 'offline';
+    return e instanceof TooLarge || e instanceof Blocked ? 'failed' : 'offline';
   }
 }
 

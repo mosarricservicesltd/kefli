@@ -1,16 +1,18 @@
 // Fetching and parsing a page (mobile spec 5.4, section 9), for a share and for a pending parse: a desktop Chrome
 // user agent and a mobile one on 403, a 20 s timeout over the headers and the whole body, a 5 MB cap counted as the
-// body streams, no cookies (net/http.ts), and only text/html and application/xhtml+xml parse. The parse runs in the kefli-parser WebView (a port here), then contract 4.2's guard: not readerable and
-// fewer than 120 spoken words is a failed parse. A network failure is "offline": the save waits and tries again.
+// body streams, no cookies, redirects followed by hand, ten at most and each to a public address (net/http.ts), and
+// only text/html and application/xhtml+xml parse. The parse runs in the kefli-parser WebView (a port here), then
+// contract 4.2's guard: not readerable and fewer than 120 spoken words is a failed parse. A network failure is
+// "offline": the save waits and tries again; a redirect the phone won't follow fails, the save keeping its link.
 // A page still turned away with 403 by both is loaded once in a browser engine (the render port, 8.2), since bot
 // checks such as Cloudflare's tell Android's HTTP client from a browser; its rendered HTML takes the same parse. So is a
 // page whose answer arrives as a bare 1xx. A PDF (contract 4.2, PDFs; flow decision 103), known by its type or its
 // first bytes, has a larger cap; the parser WebView reads its text runs with pdf.js and pdfMarkdown lays them out here.
 // Whatever a page holds, a parse ends as parsed or failed and never throws: a share's save and the pending parses
 // behind it go on (a failed parse keeps the save's link, without text).
-import { normaliseMarkdown, pdfMarkdown, type PdfRuns } from '@kefli/protocol';
+import { normaliseMarkdown, pdfMarkdown, urlParts, type PdfRuns } from '@kefli/protocol';
 import { deriveArticle, type Derived } from '../reader/blocks';
-import { open, TimedOut, TooLarge, type Opened } from '../net/http';
+import { Blocked, open, strayed, TimedOut, TooLarge, WEB_HOPS, type Opened } from '../net/http';
 
 export const PAGE_MAX_BYTES = 5 * 1024 * 1024;
 /**
@@ -145,9 +147,10 @@ export function toBase64(bytes: Uint8Array): string {
   return parts.join('');
 }
 
+/** The page asked for as ua, its user agent sent again at each hop. */
 function get(p: PagePorts, url: string, ua: string): Promise<Opened> {
   const headers = { 'User-Agent': ua, Accept: 'text/html,application/xhtml+xml,application/pdf;q=0.9', 'Accept-Language': 'en-GB,en;q=0.9' };
-  return open(p.fetch, url, { headers }, PAGE_TIMEOUT_MS);
+  return open(p.fetch, url, { headers }, PAGE_TIMEOUT_MS, WEB_HOPS);
 }
 
 /** A type that names something other than a PDF: a page, a picture, a film, a sound, a font, plain text, an archive. */
@@ -162,7 +165,7 @@ export function capFor(p: Pick<PagePorts, 'pdf'>, contentType: string): number {
   return p.pdf && !NOT_PDF.test(contentType) ? PDF_MAX_BYTES : PAGE_MAX_BYTES;
 }
 
-type Answer = { res: Response; bytes: Uint8Array } | Extract<PageOutcome, { kind: 'offline' | 'failed' }>;
+type Answer = { res: Response; url: string; bytes: Uint8Array } | Extract<PageOutcome, { kind: 'offline' | 'failed' }>;
 
 /** The page as fetched: as desktop Chrome, then as a phone on 403; or why it can't be had. */
 async function answer(p: PagePorts, url: string): Promise<Answer> {
@@ -174,40 +177,64 @@ async function answer(p: PagePorts, url: string): Promise<Answer> {
       o = await get(p, url, MOBILE_UA);
     }
     const { res } = o;
-    return { res, bytes: await o.read(capFor(p, res.headers.get('content-type') ?? '')) };
+    return { res, url: o.url, bytes: await o.read(capFor(p, res.headers.get('content-type') ?? '')) };
   } catch (e) {
-    if (e instanceof TooLarge) return { kind: 'failed', reason: 'too_large', finalUrl: o ? landedAt(o.res, url) : url };
-    return e instanceof TimedOut ? { kind: 'offline', timedOut: true } : { kind: 'offline' };
+    return unfetched(e, o, url);
   }
 }
 
+/**
+ * Why a page couldn't be had: too large, or a redirect the phone won't follow (net/http Blocked), fails it, the save
+ * keeping its link; anything else is the network, timed out or not there.
+ */
+function unfetched(e: unknown, o: Opened | null, url: string): Extract<PageOutcome, { kind: 'offline' | 'failed' }> {
+  if (e instanceof TooLarge) return { kind: 'failed', reason: 'too_large', finalUrl: o ? landedAt(o.url, url) : url };
+  if (e instanceof Blocked) {
+    // why alone, never the address (7.1)
+    console.log(`[kefli-page] ${JSON.stringify({ refused: 'http', blocked: e.why })}`);
+    return { kind: 'failed', reason: 'http', finalUrl: url };
+  }
+  return e instanceof TimedOut ? { kind: 'offline', timedOut: true } : { kind: 'offline' };
+}
+
 /** Where a fetch ended, unless that is past FIELD_MAX.url: then the address asked for, which a failed parse keeps too. */
-function landedAt(res: Response, url: string): string {
-  const at = res.url || url;
+function landedAt(at: string, url: string): string {
   return at.length > FIELD_MAX.url ? url : at;
 }
+
+/** expo/fetch's stand-in host for file: URLs, with or without the trailing dot a host may carry. */
+const FILES_HOST = /^filesystem\.local\.?$/i;
+// built from a string: the code gate's parser reads a regex literal's escaped slashes as a comment
+const WEB = new RegExp('^https?://', 'i');
 
 /**
  * Whether url is one fetchPage asks for: http(s) only, since expo/fetch reads file: URLs from the phone's own storage,
  * and never its stand-in for them, http://filesystem.local, which it serves from the phone's files too, before any
- * network. A shared link, a synced save's or an X post's can name either; a browser's goes through isPublicWebUrl.
+ * network. RULED: the host is read as the protocol's URL parser reads it, as OkHttp does, so no way of writing it
+ * (http:///filesystem.local/, a backslash, capitals, a trailing dot, fullwidth letters) gets past. A shared link, a
+ * synced save's or an X post's can name either; a browser's goes through isPublicWebUrl, and every redirect too.
  */
 export function fetchable(url: string): boolean {
-  return /^https?:\/\//i.test(url) && !/^http:\/\/filesystem\.local/i.test(url);
+  const host = WEB.test(url) ? urlParts(url)?.hostname : undefined;
+  return !!host && !FILES_HOST.test(host);
 }
 
 export async function fetchPage(p: PagePorts, url: string): Promise<PageOutcome> {
   if (!fetchable(url)) return { kind: 'failed', reason: 'http', finalUrl: url };
   const a = await answer(p, url);
   if ('kind' in a) return a;
-  const { res, bytes } = a;
-  const finalUrl = landedAt(res, url);
+  const finalUrl = landedAt(a.url, url);
   // RULED: a 1xx is also loaded in the engine: Android's HTTP client hands back a 103 Early Hints as the final answer
   // on some HTTP/2 sites (Substack, behind Cloudflare), with an empty body
-  if ((res.status === 403 || res.status < 200) && p.render) {
+  if ((a.res.status === 403 || a.res.status < 200) && p.render) {
     const rendered = await rendered403(p, finalUrl);
     if (rendered) return rendered;
   }
+  return fromAnswer(p, a.res, a.bytes, finalUrl);
+}
+
+/** A fetched answer read as a PDF or a page, or refused for its status, type or size. */
+function fromAnswer(p: PagePorts, res: Response, bytes: Uint8Array, finalUrl: string): Promise<PageOutcome> | PageOutcome {
   const contentType = res.headers.get('content-type') ?? '';
   const pdf = !!p.pdf && isPdf(contentType, bytes);
   const refused = refusal(res.status, contentType, bytes.length, pdf);
@@ -250,10 +277,15 @@ export async function parsePdf(p: Pick<PagePorts, 'pdf'>, bytes: Uint8Array, fin
   });
 }
 
-/** A page turned away from the fetch, loaded in a browser engine and parsed as fetched HTML; null when that failed too. */
+/**
+ * A page turned away from the fetch, loaded in a browser engine and parsed as fetched HTML; null when that failed too.
+ * The engine follows the page's redirects and scripts itself: one that ends on an address no hop could go to (7.1)
+ * fails as a redirect the fetch won't follow does, so nothing from the phone's own network becomes a save's text.
+ */
 async function rendered403(p: PagePorts, url: string): Promise<PageOutcome | null> {
   const r = await p.render!(url).catch(() => null);
   if (!r) return null;
+  if (strayed(WEB_HOPS, url, r.url)) return { kind: 'failed', reason: 'http', finalUrl: url };
   const at = r.url.length > FIELD_MAX.url ? url : r.url;
   // UTF-8 is at least a byte a code unit: a page past the cap in code units is refused before it is encoded
   if ('tooLarge' in r || r.html.length > RENDER_MAX_BYTES) return { kind: 'failed', reason: 'too_large', finalUrl: at };
