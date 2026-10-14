@@ -41,8 +41,8 @@ export const SLOW_RUN = 3;
  * RULED: the seconds one run spends starting parses; the parse under way when they pass finishes. The queue runs
  * inside the sync's single run (runner.ts), so an import of thousands held every later sync, the outbox and other
  * phones' saves with it, for hours. A count of parses couldn't bound that: one takes from under a second to over a
- * minute (the 20 s deadline, again on a 403, then the browser engine). A minute is some twenty typical pages, and a
- * sync waits at most about two for its parses; the next run starts soon after while any were never tried.
+ * minute (the 20 s deadline, again on a 403, then the browser engine). A minute is some twenty typical pages, a sync
+ * now waits about two minutes at most for its parses, and the next run starts soon after while any were never tried.
  */
 export const RUN_SECONDS = 60;
 
