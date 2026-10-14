@@ -122,3 +122,52 @@ func TestACopyOfAStoredBlobIsNotWrittenAgain(t *testing.T) {
 		t.Fatalf("the blob sent again isn't on the disk: %v", err)
 	}
 }
+
+// Nothing syncs a blob's file before its rename, so a power cut can leave it short on the disk, or empty, under its
+// own name; the next copy of it sent whole wrote it again, until copies were checked and not written, after which
+// the file stayed short for good and was served short (probe truncated). A copy whose file on the disk isn't the size
+// of its body, checked against its hash as any upload's is, is written again, and the blob is served whole; one whose
+// file is whole is still not written.
+func TestACopyMendsAFileCutShort(t *testing.T) {
+	s, st, clock, mux := testServer(t)
+	user := newSigner()
+	if err := st.Register(context.Background(), user.pk); err != nil {
+		t.Fatal(err)
+	}
+	blob := bytes.Repeat([]byte("a text whose file a power cut left short "), 2000)
+	sum := sha256.Sum256(blob)
+	sha := hex.EncodeToString(sum[:])
+	put := func() int {
+		req := httptest.NewRequest("PUT", "/upload", bytes.NewReader(blob))
+		req.Header.Set("Authorization", user.auth(t, "upload", sha, *clock))
+		req.Header.Set("X-SHA-256", sha)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if c := put(); c != http.StatusOK {
+		t.Fatalf("upload %d", c)
+	}
+	get := fetcher(mux)
+	for _, cut := range []int{0, len(blob) / 2} {
+		if err := os.WriteFile(s.path(sha), blob[:cut], 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if c := put(); c != http.StatusOK {
+			t.Fatalf("a copy over a file of %d bytes: %d", cut, c)
+		}
+		if got, err := os.ReadFile(s.path(sha)); err != nil || !bytes.Equal(got, blob) {
+			t.Fatalf("a file of %d bytes, after a whole copy: %d bytes (%v)", cut, len(got), err)
+		}
+		if d := get("GET", sha, mirror); d.code != http.StatusOK || d.sent != int64(len(blob)) {
+			t.Fatalf("served %d, %d bytes", d.code, d.sent)
+		}
+	}
+	whole := inode(t, s.path(sha))
+	if c := put(); c != http.StatusOK || inode(t, s.path(sha)) != whole {
+		t.Fatalf("a copy of a whole file: %d, written again %v", c, inode(t, s.path(sha)) != whole)
+	}
+	if f, _, _ := st.Figures(context.Background(), user.pk); f.Used != int64(len(blob)) || f.Today != int64(len(blob)) {
+		t.Fatalf("figures %+v: a mended file counts once", f)
+	}
+}

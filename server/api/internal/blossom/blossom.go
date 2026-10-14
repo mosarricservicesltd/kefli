@@ -448,7 +448,7 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer s.land(up.account, r.ContentLength)
-	tmp, size, err := s.receive(r.Body, sha, s.onDisk(r.Context(), sha))
+	tmp, size, err := s.receive(r.Body, sha, s.onDisk(r.Context(), sha, r.ContentLength))
 	if tmp != "" {
 		defer os.Remove(tmp) // gone once renamed; otherwise a refused upload leaves nothing behind (F2)
 	}
@@ -521,16 +521,18 @@ func copyChecked(w io.Writer, body io.Reader, sha string) (int64, error) {
 	return n, nil
 }
 
-// onDisk is whether the blob's file is on the disk for an owner already, as for a repeat upload, a move's or a
-// browser's copy of a blob its library holds: its body is then checked against the hash and not written again. A
-// copy costs no fair use, and each was written whole and renamed over identical bytes, so one address could keep the
-// disk writing at the link's rate, 8 MB a request.
-func (s *Server) onDisk(ctx context.Context, sha string) bool {
+// onDisk is whether the blob's file is on the disk for an owner already, and whole, as for a repeat upload, a move's
+// or a browser's copy of a blob its library holds: its body is then checked against the hash and not written again.
+// A copy costs no fair use, and each was written whole and renamed over identical bytes, so one address could keep
+// the disk writing at the link's rate, 8 MB a request. A file of another size than the body, as one a power cut left
+// short after its rename, is written again from the body, whose hash is checked as any upload's is: a body of another
+// size than the blob's never has its hash, so only a file that is wrong is ever written over.
+func (s *Server) onDisk(ctx context.Context, sha string, size int64) bool {
 	if held, err := s.st.Stored(ctx, sha); err != nil || !held {
 		return false
 	}
-	_, err := os.Stat(s.path(sha))
-	return err == nil
+	info, err := os.Stat(s.path(sha))
+	return err == nil && info.Size() == size
 }
 
 // commit checks the real size against the library's limits again, renames the received file into place, so a reader
