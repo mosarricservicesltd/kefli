@@ -10,14 +10,26 @@ import java.util.UUID
 object Spool {
   fun dir(context: Context): File = File(context.filesDir, "share-spool").apply { mkdirs() }
 
+  /**
+   * An extra as text. An app sharing styled text passes a CharSequence, which getStringExtra reads as null, so the
+   * sheet said That wasn't a link; read as a CharSequence, plain and styled text both arrive. Extras that can't be
+   * read at all (a class only the sender has) are no text, rather than a crash before the sheet rises.
+   */
+  private fun textExtra(intent: Intent, name: String): String? =
+    try {
+      intent.getCharSequenceExtra(name)?.toString()
+    } catch (e: RuntimeException) {
+      null
+    }
+
   /** Writes the share and returns its id. Text and subject are kept as sent; nothing is parsed here. */
   fun write(context: Context, intent: Intent, referrer: String?): String {
     val id = UUID.randomUUID().toString()
     val body = JSONObject()
       .put("v", 1)
       .put("id", id)
-      .put("text", intent.getStringExtra(Intent.EXTRA_TEXT) ?: JSONObject.NULL)
-      .put("subject", intent.getStringExtra(Intent.EXTRA_SUBJECT) ?: JSONObject.NULL)
+      .put("text", textExtra(intent, Intent.EXTRA_TEXT) ?: JSONObject.NULL)
+      .put("subject", textExtra(intent, Intent.EXTRA_SUBJECT) ?: JSONObject.NULL)
       .put("referrer", referrer ?: JSONObject.NULL)
       .put("receivedAt", System.currentTimeMillis())
     val tmp = File(dir(context), "$id.json.tmp")
