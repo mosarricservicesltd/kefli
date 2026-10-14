@@ -525,6 +525,43 @@ describe('fair use: a refused text holds back only itself (C§4.2, C§5, v1.12)'
     expect(ops(w)).toEqual([]);
   });
 
+  test('a save a 413 held back before v1.12 goes out once the update starts, its text refused again as now (11.1, item 2)', async () => {
+    const w = world({ 'PUT http://blossom/upload': refuse('quota') });
+    const { held } = await save(w);
+    release(w.db, held);
+    w.db.run('UPDATE identities SET registered_at = 1');
+    w.db.run("DELETE FROM outbox WHERE op = 'register'");
+    // as 0.0.8 left a 413: the upload a day off with the bare reason and nothing on the blob, the publish waiting on it
+    const up = w.db.get<{ id: number }>("SELECT id FROM outbox WHERE op = 'upload_blob'")!.id;
+    w.db.run("UPDATE outbox_targets SET attempts = 1, next_at = ?, last_error = 'quota' WHERE outbox_id = ?", w.now() + 80_000, up);
+    expect(reviveRefused(w.db, w.now())).toBe(1);
+    await drain(w.ports);
+    expect(puts(w)).toEqual(['PUT http://blossom/upload']);
+    expect((await lastItem(w)).text).toBeNull();
+    expect(blob(w)?.last_error).toBe('quota');
+    // a day off again from this refusal, and nothing more to put back
+    expect(nextDue(w.db, w.now() + 86_399)).toBeNull();
+    expect(reviveRefused(w.db, w.now())).toBe(0);
+  });
+
+  test('a save whose staged text had gone before v1.12 died with its upload: it goes now without the text', async () => {
+    const w = world();
+    const { held, sha } = await save(w);
+    release(w.db, held);
+    w.db.run('UPDATE identities SET registered_at = 1');
+    w.db.run("DELETE FROM outbox WHERE op = 'register'");
+    // 0.0.8: the missing staged text rejected the upload, and the mirror and the publish died with it
+    w.db.run("UPDATE outbox SET state = 'dead' WHERE op IN ('upload_blob', 'mirror_blob', 'publish_item')");
+    w.db.run("UPDATE outbox_targets SET state = 'rejected', last_error = 'staged blob missing' WHERE outbox_id = (SELECT id FROM outbox WHERE op = 'upload_blob')");
+    w.blobs.delete(sha!);
+    expect(reviveRefused(w.db, w.now())).toBe(1);
+    await drain(w.ports);
+    expect(w.published().map((p) => p.relay).sort()).toEqual(['ws://a', 'ws://b', 'ws://op']);
+    expect((await lastItem(w)).text).toBeNull();
+    expect(puts(w)).toEqual([]);
+    expect(reviveRefused(w.db, w.now())).toBe(0);
+  });
+
   test("reviving a dead upload already queued again leaves the queued one, and a too-large text dead", () => {
     const w = world();
     ensureIdentityRow(w.db, w.now(), w.signer.pubkey(), 'early_share', true);

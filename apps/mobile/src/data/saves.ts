@@ -136,29 +136,60 @@ function revive(db: SqlDb, now: number, r: { id: number; op: string; signer: str
 }
 
 /**
- * Saves a refusal held back for good before v1.12 (C§4.2; 11.1, item 2): an upload the operator refused with a 4xx
- * went dead and took the save's publish with it, so the save never reached a relay. Its publish goes now, without the
- * text, and the upload and its mirror are tried again, as any refused text is; a text refused for good since, over
- * 8 MB, stays as it is. Run at start, it finds nothing once they have gone. Returns how many uploads it revived.
+ * Saves the code before v1.12 held back (C§4.2; 11.1, item 2), put back at start: it finds nothing once they have
+ * gone. Returns how many rows it put back.
+ * - An upload the operator refused with a 4xx went dead and took the save's publish with it, so the save never reached
+ *   a relay. Its publish goes now, without the text, and the upload and its mirror are tried again, as any refused text
+ *   is; a text refused for good since, over 8 MB, stays as it is.
+ * - A publish that died with an upload which failed for good on the phone, its staged text gone, goes without it.
+ * - An upload a 413 sent a day off held its save back for that day; it is tried now, and its refusal releases the save.
  */
 export function reviveRefused(db: SqlDb, now: number): number {
-  return db.tx(() => {
-    const dead = db.all<{ id: number; signer: string; subject: string }>(
-      `SELECT o.id, o.signer, o.subject FROM outbox o JOIN blobs b ON b.sha256 = o.subject AND b.owner = o.signer
-       WHERE o.op = 'upload_blob' AND o.state = 'dead' AND b.operator_at IS NULL AND b.last_error IS NULL
-         AND EXISTS (SELECT 1 FROM outbox_targets t WHERE t.outbox_id = o.id AND t.last_error LIKE 'HTTP 4%')`);
-    for (const u of dead) {
-      // read before the upload is touched: a deleted row's dependents lose their link to it
-      const after = db.all<{ id: number; op: string; subject: string }>(
-        "SELECT id, op, subject FROM outbox WHERE depends_on = ? AND state = 'dead' AND op IN ('publish_item', 'mirror_blob')", u.id);
-      const kept = revive(db, now, { ...u, op: 'upload_blob' }, false);
-      for (const d of after) {
-        if (d.op === 'publish_item' || kept) revive(db, now, { ...d, signer: u.signer }, d.op === 'publish_item');
-        else db.run('DELETE FROM outbox WHERE id = ?', d.id);
-      }
+  return db.tx(() => reviveUploads(db, now) + revivePublishes(db, now) + wakeDayWaits(db, now));
+}
+
+function reviveUploads(db: SqlDb, now: number): number {
+  const dead = db.all<{ id: number; signer: string; subject: string }>(
+    `SELECT o.id, o.signer, o.subject FROM outbox o JOIN blobs b ON b.sha256 = o.subject AND b.owner = o.signer
+     WHERE o.op = 'upload_blob' AND o.state = 'dead' AND b.operator_at IS NULL AND b.last_error IS NULL
+       AND EXISTS (SELECT 1 FROM outbox_targets t WHERE t.outbox_id = o.id AND t.last_error LIKE 'HTTP 4%')`);
+  for (const u of dead) {
+    // read before the upload is touched: a deleted row's dependents lose their link to it
+    const after = db.all<{ id: number; op: string; subject: string }>(
+      "SELECT id, op, subject FROM outbox WHERE depends_on = ? AND state = 'dead' AND op IN ('publish_item', 'mirror_blob')", u.id);
+    const kept = revive(db, now, { ...u, op: 'upload_blob' }, false);
+    for (const d of after) {
+      if (d.op === 'publish_item' || kept) revive(db, now, { ...d, signer: u.signer }, d.op === 'publish_item');
+      else db.run('DELETE FROM outbox WHERE id = ?', d.id);
     }
-    return dead.length;
-  });
+  }
+  return dead.length;
+}
+
+/** Publishes dead beside an upload refused on the phone: from v1.12 such an upload releases its save first (send.ts). */
+function revivePublishes(db: SqlDb, now: number): number {
+  const dead = db.all<{ id: number; signer: string; subject: string }>(
+    `SELECT p.id, p.signer, p.subject FROM outbox p JOIN outbox u ON u.id = p.depends_on
+     WHERE p.op = 'publish_item' AND p.state = 'dead' AND u.op = 'upload_blob' AND u.state = 'dead'
+       AND EXISTS (SELECT 1 FROM outbox_targets t WHERE t.outbox_id = u.id AND t.state = 'rejected')`);
+  for (const p of dead) revive(db, now, { ...p, op: 'publish_item' }, true);
+  return dead.length;
+}
+
+/** The longest wait the outbox sets an upload short of a refusal (backoff, 4.3); a longer one is a 413's day. */
+const LONGEST_BACKOFF = 3600;
+
+/**
+ * Uploads a 413 sent a day off before v1.12: their wait is longer than any backoff, and their blob has no reason,
+ * which v1.12 records with every refusal it waits a day on (send.ts). They fall due now.
+ */
+function wakeDayWaits(db: SqlDb, now: number): number {
+  return db.run(
+    `UPDATE outbox_targets SET next_at = ? WHERE state = 'pending' AND next_at > ? AND outbox_id IN (
+       SELECT o.id FROM outbox o JOIN blobs b ON b.sha256 = o.subject AND b.owner = o.signer
+       WHERE o.op = 'upload_blob' AND o.state = 'queued' AND b.operator_at IS NULL AND b.last_error IS NULL)`,
+    now, now + LONGEST_BACKOFF,
+  ).changes;
 }
 
 /** The texts no save names: the saves' texts read once into a set (NOT IN), since items has no index on text_sha256. */
