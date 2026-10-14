@@ -31,6 +31,7 @@ test('the inbox blob a save request names is exact, and decrypts to its HTML', a
   expect(await decryptText(blob, b, webCrypto)).toBe(b.html);
 });
 
+// scrypt at N 16,384 in pure JS: a fifth of a second alone, and over four on a loaded machine under coverage
 test('the typed code gives its lookup and key, and the offer seals and opens exactly', async () => {
   const f = load('pair-offer.json');
   const { lookup, key } = await derivePairCode(f.code, webCrypto);
@@ -38,7 +39,7 @@ test('the typed code gives its lookup and key, and the offer seals and opens exa
   expect(bytesToHex(key)).toBe(f.key);
   expect(await openOffer(f.sealed, key, webCrypto)).toEqual(f.offer);
   expect(await sealOffer(f.offer, key, replaying(base64.decode(f.sealed)))).toBe(f.sealed);
-});
+}, 60_000);
 
 test("the mnemonic gives its key at NIP-06's path", async () => {
   const f = load('keys.json');
