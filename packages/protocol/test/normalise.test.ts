@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { NotALinkError, isItemD, itemD, itemHash, normalise } from '../src';
+import { NotALinkError, isItemD, itemD, itemHash, normalise, ownCanonical } from '../src';
 
 type Case = { name: string; url: string; canonical?: string; expect: string | null };
 const fixtures: { cases: Case[] } = JSON.parse(
@@ -19,6 +19,73 @@ describe('normalise fixtures (C§4.3)', () => {
 
   test('normalising is idempotent', () => {
     for (const c of fixtures.cases) if (c.expect !== null) expect(normalise(c.expect)).toBe(c.expect);
+  });
+
+  test("every case gives the same answer with the phone's URL as the platform's (whatwg-url-minimum, Expo's)", () => {
+    // normalise reads URLs with whatwg-url on every engine, never the platform's: the phone's has no Unicode step
+    const kept = fixtures.cases.map((c) => ownCanonical(c.url, c.canonical));
+    const real = globalThis.URL;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    globalThis.URL = require('whatwg-url-minimum').URL;
+    try {
+      fixtures.cases.forEach((c, i) => {
+        let got: string | null;
+        try {
+          got = normalise(c.url, c.canonical);
+        } catch (e) {
+          if (!(e instanceof NotALinkError)) throw e;
+          got = null;
+        }
+        expect([c.name, got, ownCanonical(c.url, c.canonical)]).toEqual([c.name, c.expect, kept[i]]);
+      });
+    } finally {
+      globalThis.URL = real;
+    }
+  });
+});
+
+describe("a page's canonical counts only from its own site (ruling 11)", () => {
+  const story = 'https://news.example/2026/10/story';
+
+  test("a page at an amp. or m. host, or a path ending /amp, can't take another site's address and land on its save", () => {
+    for (const page of ['https://amp.evil.example/2026/10/story', 'https://m.evil.example/2026/10/story', 'https://evil.example/2026/10/story/amp']) {
+      expect(itemHash(page, story)).not.toBe(itemHash(story));
+      expect(itemHash(page, story)).toBe(itemHash(page));
+    }
+    // the site's own AMP page still joins the story's save
+    expect(itemHash('https://amp.news.example/2026/10/story', story)).toBe(itemHash(story));
+  });
+
+  test('ownCanonical keeps a canonical on the page’s own site, as normalise takes it', () => {
+    expect(ownCanonical('https://amp.news.example/2026/10/story', story)).toBe(story);
+    expect(ownCanonical('https://m.news.example/a', 'https://www.news.example/a')).toBe('https://www.news.example/a');
+    // an ordinary page keeps one on its own host, which normalise reads only for the alternate forms
+    expect(ownCanonical('https://news.example/a?ref=x', 'https://news.example/a')).toBe('https://news.example/a');
+  });
+
+  test('ownCanonical leaves out one on another site, from any page, as a page naming none', () => {
+    expect(ownCanonical('https://amp.evil.example/2026/10/story', story)).toBeNull();
+    expect(ownCanonical('https://syndicated.example/a', 'https://news.example/a')).toBeNull();
+    expect(ownCanonical('https://m.example.com/a', 'https://example.com@evil.example/a')).toBeNull();
+  });
+
+  test('ownCanonical takes nothing that isn’t a link, and never throws', () => {
+    const long = `https://${'a'.repeat(2_000)}.example/a`;
+    for (const [url, canonical] of [
+      ['https://m.example.com/a', null], ['https://m.example.com/a', undefined], ['https://m.example.com/a', ''],
+      ['https://m.example.com/a', 'javascript:alert(1)'], ['https://m.example.com/a', 'not a url'], ['https://m.example.com/a', long],
+      ['not a url', 'https://example.com/a'], ['file:///etc/passwd', 'file:///etc/passwd'], [long, long],
+    ] as const) {
+      expect(ownCanonical(url, canonical)).toBeNull();
+    }
+  });
+
+  test('ownCanonical and normalise agree on every fixture', () => {
+    for (const c of fixtures.cases.filter((k) => k.canonical !== undefined && k.expect !== null)) {
+      const own = ownCanonical(c.url, c.canonical);
+      if (own === null) expect(normalise(c.url, c.canonical)).toBe(normalise(c.url));
+      else expect([normalise(c.url), normalise(own)]).toContain(normalise(c.url, c.canonical));
+    }
   });
 });
 
