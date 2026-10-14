@@ -229,7 +229,8 @@ describe('inbound sync (mobile spec 4.5)', () => {
     expect(w.removed).toContain(`text:${h(8)}`);
     expect(w.files.get(h(8))).toBe('Second text.\n');
     const job = w.db.get<{ op: string; payload: string }>("SELECT op, payload FROM outbox WHERE op = 'delete_blob'");
-    expect(job).toEqual({ op: 'delete_blob', payload: JSON.stringify({ sha256: oldSha }) });
+    // with when the operator took it, for the room its deletion gives back (C§5)
+    expect(job).toEqual({ op: 'delete_blob', payload: JSON.stringify({ sha256: oldSha, up: 1 }) });
     // The sender deletes it from both servers; a server that no longer has it counts as done.
     w.blobs.get('http://m1')!.delete(oldSha);
     const send: SendPorts = {

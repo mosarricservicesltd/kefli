@@ -84,6 +84,29 @@ export function withdrawText(db: SqlDb, owner: string, sha256: string): void {
   db.run("DELETE FROM outbox WHERE signer = ? AND subject = ? AND op IN ('upload_blob', 'mirror_blob')", owner, sha256);
 }
 
+export type BlobRow = { size: number | null; operator_at: number | null; mirror_at: number | null; mirror_url: string | null };
+
+/** This phone's blob of a text, staged here for owner: its size, and when the operator and a mirror took it. */
+export const blobRow = (db: SqlDb, owner: string, sha256: string) =>
+  db.get<BlobRow>('SELECT size, operator_at, mirror_at, mirror_url FROM blobs WHERE sha256 = ? AND owner = ?', sha256, owner);
+
+/**
+ * Where a text no save names is deleted from (4.3): every server the save named and the mirror this phone's upload
+ * reached. The operator is among them once this phone's upload got there, since the upload records it (send.ts, F33).
+ */
+export function textHolders(named: string | null, blob: BlobRow | undefined): string[] {
+  const mirror = blob?.mirror_at && blob.mirror_url ? [blob.mirror_url] : [];
+  return [...new Set([...(named ? (JSON.parse(named) as string[]) : []), ...mirror])];
+}
+
+/**
+ * A blob deletion's payload: the hash, and when this phone knows them, the blob's size and when the operator took it,
+ * so the operator's confirmation adds to the room the last known figures leave (C§5, data/backup.ts).
+ */
+export function blobDeletion(sha256: string, blob: BlobRow | undefined): { sha256: string; size?: number; up?: number } {
+  return { sha256, ...(blob?.size ? { size: blob.size } : {}), ...(blob?.operator_at ? { up: blob.operator_at } : {}) };
+}
+
 
 /**
  * Returns the held outbox rows, for release when the sheet closes (or undo). A save whose page couldn't be fetched

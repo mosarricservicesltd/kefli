@@ -192,4 +192,13 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     await runPendingParses(w.ports, PK);
     expect(w.db.get('SELECT hash, url, text_state FROM items')).toEqual({ hash: itemHash('https://c.com/a'), url: 'https://c.com/a', text_state: 'cached' });
   });
+
+  test("a published save's text is its only change: uploaded and mirrored, the save not sent again until they hold it (C§4.2)", async () => {
+    const w = world({ 'https://c.com/a': {} });
+    w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, published, event_id, modified_at) VALUES (?, ?, 'https://c.com/a', 10, 'unread', 'queued', 'sync', 1, 'e1', 7)", PK, itemHash('https://c.com/a'));
+    await runPendingParses(w.ports, PK);
+    expect(w.outbox().filter((o) => o.op !== 'register').map((o) => o.op)).toEqual(['upload_blob', 'mirror_blob']);
+    // the row stays clean, so a newer copy from another phone is still taken over it (data/sync.ts keeps the text)
+    expect(w.db.get('SELECT dirty, modified_at, text_servers FROM items')).toEqual({ dirty: 0, modified_at: 7, text_servers: null });
+  });
 });
