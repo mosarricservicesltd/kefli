@@ -454,7 +454,9 @@ async function sendDeleteItem(p: SendPorts, row: OutboxRow, signer: Signer, targ
 /**
  * The newest 10002 and 10063 on the indexer, the default relays (as a sign-in reads them) and the identity's relays,
  * taken in as sync takes them, just before the lists are built: one another app published since the last sync joins
- * this phone's rather than being overwritten. A relay that doesn't answer adds nothing. Returns the relays that
+ * this phone's rather than being overwritten. A relay that doesn't answer adds nothing. A copy dated more than a day
+ * past this phone's clock waits for its time, as sync's read leaves it: taken here, it froze the lists, every list
+ * sent from here being dated after it and every later one from another app being older. Returns the relays that
  * answered, for whether a list not held is confirmed absent (C§3.1).
  */
 async function readNewerLists(p: SendPorts, owner: string): Promise<Set<string>> {
@@ -465,7 +467,7 @@ async function readNewerLists(p: SendPorts, owner: string): Promise<Set<string>>
   const relays = [...new Set([...indexerRelays(p.db, owner), ...d.indexer, ...d.relays, ...relayEntries(p.db, owner).map((r) => r.url)])];
   const kinds = [KIND.relayList, KIND.serverList];
   const ask = (r: string) => query(r, [{ kinds, authors: [owner] }]).then((e) => (answered.add(r), e), (): NostrEvent[] => []);
-  takeNewerLists(p.db, owner, (await Promise.all(relays.map(ask))).flat(), kinds);
+  takeNewerLists(p.db, owner, (await Promise.all(relays.map(ask))).flat(), kinds, p.now());
   return answered;
 }
 

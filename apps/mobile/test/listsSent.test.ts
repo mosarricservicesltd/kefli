@@ -165,6 +165,20 @@ describe('a nostr user’s lists as Kefli republishes them (C§3.1)', () => {
     expect(urls).not.toContain(MINE);
   });
 
+  test('a list on a relay dated a year ahead waits for its time: the list sent is the one held, dated by this phone', async () => {
+    const w = await world();
+    w.signIn();
+    await drain(w.p);
+    const ahead = await w.s.signEvent({ kind: 10002, created_at: w.p.now() + 365 * 86_400, tags: [['r', 'wss://ahead.example']], content: '' });
+    w.onRelays.push(ahead);
+    addRelay(w.db, w.p.now(), w.pk, MINE, D);
+    w.tick(10);
+    await drain(w.p);
+    const sent = w.newest(10002)!;
+    expect(sent.tags).toEqual([...THEIR_RELAYS, ['r', D.operator.relay], ['r', D.relays[0]], ['r', MINE]]);
+    expect(sent.created_at).toBeLessThan(w.p.now() + 86_400);
+  });
+
   test('a relay another app lists that Kefli holds only as an indexer stays in the list', async () => {
     const w = await world();
     w.signIn();
