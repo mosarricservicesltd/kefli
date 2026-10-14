@@ -138,14 +138,16 @@ export type Derived = Article & { v: number; sentences: Sentence[]; spoken: stri
 
 /**
  * The version of what deriveArticle writes; a stored file of another version is derived again. 2: citation markers
- * go silent (contract 1.6). 3: no sentence over VOICE_CHARS, and Markdown past reader/limits read plain.
+ * go silent (contract 1.6). 3: no sentence over VOICE_CHARS, and Markdown past reader/limits read plain. 4: a code
+ * block's words find their block (offsets in UTF-16 units, its lines as the parse reads them).
  */
-export const DERIVED_VERSION = 3;
+export const DERIVED_VERSION = 4;
 
 /**
- * A sentence's characters at most, for the voice: Android's engine takes 4,000 (getMaxSpeechInputLength) and the
- * voice module drops the rest of a longer one, so run-on text, or a paragraph in a script without full stops the
- * splitter knows, would go partly unheard.
+ * A sentence's characters at most, for the voice. Android's engine takes 4,000 at a time (getMaxSpeechInputLength):
+ * the voice module writes a longer one in pieces, but run-on text is still cut here into sentences the voice can
+ * pause on and the highlight can fall back to (a paragraph with no full stops, or in a script whose full stops the
+ * splitter doesn't know).
  */
 export const VOICE_CHARS = 3_000;
 
