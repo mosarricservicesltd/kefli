@@ -56,6 +56,15 @@ function rekey(db: SqlDb, now: number, owner: string, from: Pending, to: string)
   return { hash: to, merged: true };
 }
 
+/**
+ * RULED: a waiting save is still the one its parse began for: its row is there, under the same hash, and not waiting
+ * on a delete's Undo. A save deleted while its page was fetched had its text uploaded anyway, to servers no delete
+ * would ever clear, its sends queued for a row that was gone, and its search entry written for it.
+ */
+function live(db: SqlDb, p: Pending): boolean {
+  return !!db.get('SELECT 1 FROM items WHERE id = ? AND hash = ? AND pending_delete_at IS NULL', p.id, p.hash);
+}
+
 /** The page's fields fitted under the event ceiling (C§3.3) at this address; with every one shed if even that fails. */
 function fittedAt(url: string, parsed: Parsed): PageFields {
   const fields = { url, canonical: parsed.canonical, title: parsed.title, site: parsed.site, byline: parsed.byline, lang: parsed.lang, hero: parsed.hero };
@@ -69,6 +78,9 @@ function fittedAt(url: string, parsed: Parsed): PageFields {
  */
 export function applyParsed(db: SqlDb, now: number, owner: string, p: Pending, parsed: Parsed, blob: StagedBlob, t: SaveTargets): Applied {
   return db.tx(() => {
+    // deleted while its page was fetched, or waiting on its delete's Undo: the row takes nothing, as one that joined
+    // another save takes nothing, so the caller drops the staged text
+    if (!live(db, p)) return { hash: p.hash, merged: true };
     const unpublished = !p.published && !p.event_id;
     const adopted = unpublished && addressFits(parsed.url);
     const page = fittedAt(adopted ? parsed.url : p.url, parsed);
@@ -88,6 +100,7 @@ export function applyParsed(db: SqlDb, now: number, owner: string, p: Pending, p
 /** A page that can't be read (an HTTP error, not HTML, too large, not readable): the save goes out without text. */
 export function applyFailed(db: SqlDb, now: number, owner: string, p: Pending, reason: string, t: SaveTargets): void {
   db.tx(() => {
+    if (!live(db, p)) return;
     db.run("UPDATE items SET text_state = 'failed', fail_reason = ?, modified_at = ?, dirty = 1 WHERE id = ?", reason, now, p.id);
     queueSends(db, now, owner, p.hash, null, t, false, registerFirst(db, now, owner, t));
   });

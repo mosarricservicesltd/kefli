@@ -4,6 +4,7 @@ import { migrate } from '../src/data/schema';
 import { ensureIdentityRow, queueSave } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
 import { pendingParses } from '../src/data/pending';
+import { commitDelete, deleteItem } from '../src/data/library';
 import { DESKTOP_UA, MOBILE_UA, PAGE_MAX_BYTES, RENDER_MAX_BYTES, fetchPage, refusal, type ParserResult } from '../src/services/page';
 import { runPendingParses, type PendingPorts } from '../src/services/pending';
 import { TimedOut } from '../src/net/http';
@@ -209,5 +210,29 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
       [itemHash('https://d.com/r'), 'https://d.com/r', null, null],
     ]);
     expect(rows.every((r) => r.title.length <= 300)).toBe(true);
+  });
+
+  test('a save deleted while its page is fetched takes nothing: no upload, no sends, no text, no search entry', async () => {
+    const w = world({ 'https://f.com/a': {}, 'https://f.com/b': { status: 404 } });
+    w.share('https://f.com/a');
+    w.share('https://f.com/b');
+    const fetch = w.ports.page.fetch;
+    let open!: () => void;
+    const gate = new Promise<void>((r) => (open = r));
+    w.ports.page.fetch = (async (url: string, init: RequestInit) => (await gate, fetch(url, init))) as never;
+    const run = runPendingParses(w.ports, PK);
+    await new Promise((r) => setTimeout(r, 20));
+    // while the first is fetched: it is deleted for good, and the second is deleted and waits on its Undo
+    const a = deleteItem(w.db, 6000, PK, itemHash('https://f.com/a'));
+    commitDelete(w.db, PK, itemHash('https://f.com/a'), a.held);
+    deleteItem(w.db, 6000, PK, itemHash('https://f.com/b'));
+    open();
+    await run;
+    expect(w.outbox().filter((r) => ['upload_blob', 'mirror_blob', 'publish_item'].includes(r.op))).toEqual([]);
+    expect(w.db.all('SELECT sha256 FROM blobs')).toEqual([]);
+    expect([w.staged.size, w.texts.size]).toEqual([0, 0]);
+    expect(w.db.get('SELECT COUNT(*) AS n FROM items_fts')).toEqual({ n: 0 });
+    // the second, if its delete is undone, is still waiting for its parse
+    expect(w.db.all('SELECT url, text_state FROM items')).toEqual([{ url: 'https://f.com/b', text_state: 'queued' }]);
   });
 });
