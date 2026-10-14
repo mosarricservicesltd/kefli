@@ -91,3 +91,23 @@ describe('spoken projection (C§4.2)', () => {
     expect(p.blockStarts).toEqual([0, 11]);
   });
 });
+
+describe('blocks of any length (a long <pre>, a PDF paragraph that never ends a sentence)', () => {
+  // Each was past V8's stack at about 150,000 characters while the projection spread a block's offsets into push(),
+  // and collapsing a block's whitespace was quadratic (57 s for this paragraph once the spread was gone; now 1 s).
+  test('a paragraph of 400,000 characters is projected, every character mapped, in linear time', () => {
+    const md = normaliseMarkdown('word '.repeat(80_000));
+    const started = Date.now();
+    const p = project(md);
+    expect(Date.now() - started).toBeLessThan(15_000);
+    expect(p.wordStarts.length).toBe(80_000);
+    expect(p.offsets.length).toBe(p.text.length);
+    expect(p.offsets[p.offsets.length - 1]).toBe(md.length - 2);
+  });
+
+  test('a code line of 400,000 characters is one word', () => {
+    const md = normaliseMarkdown('```\n' + 'x'.repeat(400_000) + '\n```');
+    expect(countWords(md)).toBe(1);
+    expect(project(md).offsets.length).toBe(400_000);
+  });
+});

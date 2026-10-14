@@ -3,10 +3,12 @@ package app.kefli.parser
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.webkit.CookieManager
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebStorage
@@ -23,12 +25,22 @@ import org.json.JSONTokener
 // SVG, frames or embeds, and no style, data-, aria-, event, srcset or sizes attributes, none of which the parse reads
 // (class and id stay, which Readability scores by); a page's own scripts can build it past the 5 MB cap otherwise. A challenge page is waited out until the page itself
 // arrives or the time runs out. One page at a time; others queue behind it.
+//
+// The page is a stranger's and runs its own scripts, so: HTML past the 16 MB the parse takes is never handed over, since
+// a script can build a page of hundreds of MB and the string would be copied into the app's own memory several times
+// over; a renderer that goes (crashed, or killed for memory) answers the load, rather than taking the app with it; and a
+// page whose script never returns, holding the renderer every WebView shares, has its renderer ended when its time is
+// up (Android 10 and later), so the parse behind it isn't held too.
 object Renderer {
   private const val TIMEOUT_MS = 20_000L
   /** A challenge that reloads itself is given this long after each finished load to move on. */
   private const val SETTLE_MS = 1_500L
+  /** How long a WebView past its time has to answer a trivial script before its renderer is taken as stuck. */
+  private const val PROBE_MS = 2_000L
   private val main = Handler(Looper.getMainLooper())
 
+  // 16777216 is RENDER_MAX_BYTES in page.ts, in UTF-16 code units: UTF-8 is at least a byte a unit, so a page past it
+  // here is past it there too.
   private const val READ = """(function(){
     var d = document, t = d.title || '';
     var challenge = /just a moment|attention required|checking your browser/i.test(t)
@@ -42,7 +54,9 @@ object Renderer {
         if (a === 'style' || a === 'srcset' || a === 'sizes' || a.indexOf('data-') === 0 || a.indexOf('aria-') === 0 || a.indexOf('on') === 0) n.removeAttribute(a);
       }
     });
-    return JSON.stringify({ challenge: false, url: location.href, html: '<!doctype html>' + c.outerHTML });
+    var html = '<!doctype html>' + c.outerHTML;
+    if (html.length > 16777216) return JSON.stringify({ challenge: false, url: location.href, html: '', tooLarge: true });
+    return JSON.stringify({ challenge: false, url: location.href, html: html });
   })()"""
 
   private class Load(val url: String, val promise: Promise) {
@@ -89,12 +103,14 @@ object Renderer {
     start(app, load)
   }
 
+  private fun failure(reason: String): JSONObject = JSONObject().put("ok", false).put("reason", reason)
+
   @SuppressLint("SetJavaScriptEnabled")
   private fun start(context: Context, load: Load) {
     val view = try {
       WebView(context)
     } catch (e: Exception) {
-      return finish(load, JSONObject().put("ok", false).put("reason", "no_webview"))
+      return finish(load, failure("no_webview"))
     }
     load.view = view
     // a phone-sized layout, so the page renders as it would on screen
@@ -129,8 +145,18 @@ object Renderer {
         main.removeCallbacksAndMessages(load)
         main.postAtTime({ read(load) }, load, android.os.SystemClock.uptimeMillis() + SETTLE_MS)
       }
+
+      // the renderer went (crashed, or killed for memory): the load fails as a timed-out one does, and the app stays
+      override fun onRenderProcessGone(v: WebView, detail: RenderProcessGoneDetail): Boolean {
+        if (load.view === v && !load.done) {
+          load.view = null
+          v.destroy()
+          finish(load, failure("timeout"))
+        }
+        return true
+      }
     }
-    main.postDelayed({ if (!load.done) finish(load, JSONObject().put("ok", false).put("reason", "timeout")) }, TIMEOUT_MS)
+    main.postDelayed({ if (!load.done) expire(load) }, TIMEOUT_MS)
     view.loadUrl(load.url)
   }
 
@@ -146,8 +172,31 @@ object Renderer {
       }
       // still on the challenge: wait for its next load, or the timeout
       if (page.optBoolean("challenge")) return@evaluateJavascript
-      finish(load, JSONObject().put("ok", true).put("url", page.optString("url", load.url)).put("html", page.optString("html")))
+      val url = page.optString("url", load.url)
+      if (page.optBoolean("tooLarge")) {
+        finish(load, failure("too_large").put("url", url))
+        return@evaluateJavascript
+      }
+      finish(load, JSONObject().put("ok", true).put("url", url).put("html", page.optString("html")))
     }
+  }
+
+  /**
+   * A load past its time, answered as timed out. Its WebView goes once it has had PROBE_MS to answer a trivial script:
+   * one that doesn't is held by the page's own script, and so is the renderer every WebView shares, which is ended.
+   */
+  private fun expire(load: Load) {
+    val view = load.view
+    load.view = null
+    finish(load, failure("timeout"))
+    if (view == null) return
+    view.stopLoading()
+    var answered = false
+    view.evaluateJavascript("1") { answered = true }
+    main.postDelayed({
+      if (!answered && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) view.webViewRenderProcess?.terminate()
+      view.destroy()
+    }, PROBE_MS)
   }
 
   private fun finish(load: Load, result: JSONObject) {

@@ -110,15 +110,32 @@
     return absoluteHttp(metaContent(doc, 'meta[property="og:image"]'), url) || absoluteHttp(metaContent(doc, 'meta[name="twitter:image"]'), url);
   }
 
-  // contract 4.2; packages/protocol's normaliseMarkdown is the same rule, and a test holds them together.
+  // contract 4.2; packages/protocol's normaliseMarkdown is the same rule, and a test holds them together. A run of
+  // combining marks past MAX_COMBINING_RUN is refused, since NFC orders each run in time quadratic in its length, and
+  // a line's end is trimmed by a loop, since /[ \t]+$/ backtracks over every run of spaces inside a line.
+  var MAX_COMBINING_RUN = 256;
+
+  function longestCombiningRun(s) {
+    var marks = /\p{M}+/gu;
+    var longest = 0;
+    for (var m = marks.exec(s); m; m = marks.exec(s)) longest = Math.max(longest, m[0].length);
+    return longest;
+  }
+
+  function trimLineEnd(line) {
+    var end = line.length;
+    while (end > 0 && (line.charCodeAt(end - 1) === 32 || line.charCodeAt(end - 1) === 9)) end--;
+    return line.slice(0, end);
+  }
+
   function normaliseMarkdown(md) {
+    var run = longestCombiningRun(md);
+    if (run > MAX_COMBINING_RUN) throw new RangeError('a run of ' + run + ' combining marks, over the ' + MAX_COMBINING_RUN + ' normalisation takes');
     return md
       .normalize('NFC')
       .replace(/\r\n/g, '\n')
       .split('\n')
-      .map(function (line) {
-        return line.replace(/[ \t]+$/, '');
-      })
+      .map(trimLineEnd)
       .join('\n')
       .replace(/\n{3,}/g, '\n\n')
       .replace(/\n*$/, '\n');
@@ -175,9 +192,29 @@
     return { ok: false, reason: 'error', message: String(e && e.message ? e.message : e) };
   }
 
+  // What kefliRun hands back across the bridge is a Java string and then a Hermes one, each a copy, so a result is
+  // bounded before it is sent. MARKDOWN_MAX is the phone's most text for a save in code units (page.ts
+  // TEXT_MAX_BYTES; UTF-8 is at least a byte a unit, so longer is over it in bytes too); OUTPUT_MAX bounds the whole
+  // result, a PDF's runs included (pdf-runner.mjs stops them well inside it).
+  var MARKDOWN_MAX = 5 * 1024 * 1024 - 16;
+  var OUTPUT_MAX = 64 * 1024 * 1024;
+  var TOO_LARGE = '{"ok":false,"reason":"too_large"}';
+
+  function bounded(result) {
+    if (result && typeof result.markdown === 'string' && result.markdown.length > MARKDOWN_MAX) return TOO_LARGE;
+    var json = JSON.stringify(result);
+    return json.length > OUTPUT_MAX ? TOO_LARGE : json;
+  }
+
   function kefliRun(jobId) {
     var send = function (result) {
-      window.KefliHost.output(jobId, JSON.stringify(result));
+      var json;
+      try {
+        json = bounded(result);
+      } catch (e) {
+        json = JSON.stringify(failure(e)); // past the engine's longest string
+      }
+      window.KefliHost.output(jobId, json);
     };
     try {
       var job = JSON.parse(window.KefliHost.input(jobId));
