@@ -3,6 +3,7 @@ import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow, queueSave } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
+import * as pendingData from '../src/data/pending';
 import { pendingParses } from '../src/data/pending';
 import { DESKTOP_UA, MOBILE_UA, PAGE_MAX_BYTES, RENDER_MAX_BYTES, fetchPage, refusal, type ParserResult } from '../src/services/page';
 import { runPendingParses, type PendingPorts } from '../src/services/pending';
@@ -184,6 +185,50 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     asked.length = 0;
     expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 1, failed: 0, waiting: 5, xWaiting: 0 });
     expect(asked.slice(0, 2)).toEqual(['https://h.com/ok', 'https://a.com/slow']);
+  });
+
+  test('a dead link shared offline waits at the back without holding up the shares behind it', async () => {
+    // fetch rejecting, as for a domain that is gone, a broken certificate or a redirect loop: before, the first such
+    // page stopped the queue, and it came first again at every sync, so nothing behind it was ever parsed
+    const w = world({ 'https://b.com/ok': {}, 'https://c.com/ok': {}, 'https://gone.example/a': 'down' });
+    for (const u of ['https://gone.example/a', 'https://b.com/ok', 'https://c.com/ok']) w.share(u);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 2, failed: 0, waiting: 1, xWaiting: 0 });
+    expect(pendingParses(w.db, PK).map((x) => x.url)).toEqual(['https://gone.example/a']);
+    w.share('https://d.com/new');
+    expect(pendingParses(w.db, PK).map((x) => x.url)).toEqual(['https://d.com/new', 'https://gone.example/a']);
+  });
+
+  test('three in a row that cannot be had are the network: the rest wait for the next sync, unasked', async () => {
+    const w = world({ 'https://e.com/ok': {} });
+    for (const u of ['https://a.com/x', 'https://b.com/x', 'https://c.com/x', 'https://e.com/ok']) w.share(u);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 0, waiting: 4, xWaiting: 0 });
+    expect(w.uas).toHaveLength(3);
+  });
+
+  test('an X post whose check cannot reach X waits at the back without holding up the rest', async () => {
+    const w = world({ 'https://b.com/ok': {} });
+    w.share('https://x.com/someone/status/1');
+    w.db.run("UPDATE items SET x_state = 'pending' WHERE url = 'https://x.com/someone/status/1'");
+    w.share('https://b.com/ok');
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 1, failed: 0, waiting: 1, xWaiting: 0 });
+    expect(pendingParses(w.db, PK).map((x) => x.url)).toEqual(['https://x.com/someone/status/1']);
+  });
+
+  test('a save whose parse throws waits at the back and the rest go on, with no staged blob left behind', async () => {
+    const w = world({ 'https://a.com/one': {}, 'https://b.com/two': {} });
+    for (const u of ['https://a.com/one', 'https://b.com/two']) w.share(u);
+    const apply = jest.spyOn(pendingData, 'applyParsed').mockImplementationOnce(() => {
+      throw new Error('database disk image is malformed');
+    });
+    try {
+      expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 1, failed: 0, waiting: 1, xWaiting: 0 });
+    } finally {
+      apply.mockRestore();
+    }
+    expect(pendingParses(w.db, PK).map((x) => x.url)).toEqual(['https://a.com/one']);
+    // only the parsed save's blob is staged; the one whose save couldn't take it went
+    expect(w.staged.size).toBe(1);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 1, failed: 0, waiting: 0, xWaiting: 0 });
   });
 
   test("another phone's save without text keeps its address when parsed here", async () => {
