@@ -11,9 +11,9 @@ export type Pending = { id: number; hash: string; url: string; shared_url: strin
 
 /**
  * Saves waiting for their parse: those that haven't timed out first, oldest first, then those that have, the one
- * that timed out longest ago first (F12). RULED: plain http pages come after all the rest. Release builds allow no
- * cleartext, so such a fetch fails at once, and that reads as offline, which stops the queue: one http save, first in
- * line, held every save behind it at every sync, for good.
+ * that timed out longest ago first (F12). RULED: plain http pages come after all the rest. Each is fetched over https
+ * first (net/http overHttps), and an old site with no https can take the whole 20 s to fail there, so an import of
+ * old bookmarks spends its slowest last; one that only cleartext could fetch fails at once (net/http Blocked).
  */
 export function pendingParses(db: SqlDb, owner: string): Pending[] {
   return db.all<Pending>(

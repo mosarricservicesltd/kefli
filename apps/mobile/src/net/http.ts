@@ -12,6 +12,9 @@
 // from the phone's own files when it names http://filesystem.local, that name is refused at every hop as at the
 // first (services/page.ts fetchable). A fetch that follows redirects anyway (React Native's own, under
 // EXPO_PUBLIC_USE_RN_FETCH) has its answer refused when it says it ended somewhere a hop couldn't go.
+//
+// Cleartext (7.1): release builds allow none, and OkHttp refuses plain http before it connects. That refusal is a
+// failure of what was asked for (Blocked), never the network, which would leave a save waiting for good.
 import { isPublicWebUrl } from '@kefli/protocol';
 
 export class TimedOut extends Error {
@@ -31,10 +34,11 @@ export class TooLarge extends Error {
 /**
  * A fetch the phone won't make or finish, which asking again would only repeat, so what was asked for fails rather
  * than waiting as offline: a redirect to an address the caller doesn't allow, or one naming nowhere a request can
- * go (redirect); or more redirects than the caller follows (redirects).
+ * go (redirect); more redirects than the caller follows (redirects); or plain http, which the build refuses before
+ * connecting (cleartext), in OkHttp's words "CLEARTEXT communication to ... not permitted by network security policy".
  */
 export class Blocked extends Error {
-  constructor(readonly why: 'redirect' | 'redirects') {
+  constructor(readonly why: 'redirect' | 'redirects' | 'cleartext') {
     super(`blocked: ${why}`);
     this.name = 'Blocked';
   }
@@ -88,8 +92,31 @@ export function strayed(hops: Hops, asked: string, said: string): boolean {
   return said !== asked && hops.allow(asked) && !hops.allow(said);
 }
 
-/** What a failure to fetch was: the deadline's, or itself. */
-const failure = (e: unknown, late: boolean): unknown => (late ? new TimedOut() : e);
+// a build's refusal of plain http, as OkHttp words it, wrapped by expo/fetch or not
+const CLEARTEXT = /\bcleartext\b/i;
+
+/**
+ * What a failure to fetch was: the deadline's; the build refusing cleartext, which every later try would meet too,
+ * where it read as the network and left the save waiting for good; or itself.
+ */
+function failure(e: unknown, late: boolean): unknown {
+  if (late) return new TimedOut();
+  return CLEARTEXT.test(String((e as Error | undefined)?.message ?? '')) ? new Blocked('cleartext') : e;
+}
+
+// an http address's host and port as written, with no user info: a string, as the code gate misreads regex literals
+const PLAIN_HOST = new RegExp('^http://(?:[^@/?#]*@)?([^/?#]*)', 'i');
+
+/**
+ * RULED (services/save.ts, for shares): a public http:// address is fetched over https, as browsers now try first,
+ * since release builds allow no cleartext. One with a port, and a local one (the local stack's own pages), keep their
+ * http. Pending parses and article images ask the same way; a page with no https fails there as any page that can't
+ * be had does, and the save keeps the address it has until its page parses.
+ */
+export function overHttps(url: string): string {
+  const host = PLAIN_HOST.exec(url)?.[1];
+  return host && !host.includes(':') && isPublicWebUrl(url) ? `https://${url.slice('http://'.length)}` : url;
+}
 
 /** The request a read is on: its controller changes with each hop, and the deadline lets go of the one current. */
 type Line = { ctl: AbortController; late: boolean };

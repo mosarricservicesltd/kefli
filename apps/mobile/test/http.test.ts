@@ -4,7 +4,7 @@ import { xEmbedUrl } from '@kefli/protocol';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { MAX_IMAGE_BYTES } from '../src/data/images';
-import { open, TimedOut, TooLarge } from '../src/net/http';
+import { open, overHttps, TimedOut, TooLarge } from '../src/net/http';
 import { fetchImage, imageState, IMAGE_TIMEOUT_MS, type ImagePorts } from '../src/services/images';
 import { fetchPage, PAGE_MAX_BYTES, PAGE_TIMEOUT_MS, type PagePorts } from '../src/services/page';
 import { checkXPost, X_TIMEOUT_MS } from '../src/services/xpost';
@@ -106,6 +106,33 @@ describe('no read sends or keeps cookies (F27)', () => {
     // the post's t.co link, and the hop past it to see that it ends there
     expect(calls.map((c) => c.url)).toEqual(['https://news.example/s', 'https://img.example/c.png', xEmbedUrl(post), 'https://t.co/z', 'https://news.example/s']);
     for (const c of calls) expect(c.init.credentials).toBe('omit');
+  });
+});
+
+describe('plain http, which release builds refuse (7.1)', () => {
+  const words = (cause: string) => (async () => {
+    throw new Error(`fetch failed: ${cause}`);
+  }) as unknown as typeof fetch;
+
+  test("OkHttp's refusal of cleartext is a failure of what was asked for; any other error is still the network", async () => {
+    // as expo/fetch reports OkHttp's refusal, which comes before any connection
+    const refused = words('java.net.UnknownServiceException: CLEARTEXT communication to g.example not permitted by network security policy');
+    await expect(open(refused, 'http://g.example/', {}, 1_000)).rejects.toMatchObject({ name: 'Blocked', why: 'cleartext' });
+    expect(await fetchPage(pagePorts(refused), 'http://g.example/')).toEqual({ kind: 'failed', reason: 'http', finalUrl: 'http://g.example/' });
+    const offline = words('java.net.UnknownHostException: Unable to resolve host "g.example": No address associated with hostname');
+    await expect(open(offline, 'https://g.example/', {}, 1_000)).rejects.toThrow('Unable to resolve host');
+    expect(await fetchPage(pagePorts(offline), 'https://g.example/')).toEqual({ kind: 'offline' });
+  });
+
+  test('a public http address is asked for over https; a local one, or one with a port, keeps its http', () => {
+    expect(overHttps('http://news.example/a?b=1#c')).toBe('https://news.example/a?b=1#c');
+    expect(overHttps('HTTP://news.example/a')).toBe('https://news.example/a');
+    expect(overHttps('http://user@news.example/a')).toBe('https://user@news.example/a');
+    expect(overHttps('http://localhost:8080/a')).toBe('http://localhost:8080/a');
+    expect(overHttps('http://192.168.1.1/')).toBe('http://192.168.1.1/');
+    expect(overHttps('http://printer.local/')).toBe('http://printer.local/');
+    expect(overHttps('http://news.example:8080/a')).toBe('http://news.example:8080/a');
+    expect(overHttps('https://news.example/a')).toBe('https://news.example/a');
   });
 });
 

@@ -1,9 +1,11 @@
 // Sync's phase 7 (mobile spec 4.5): pending parses, one at a time, until the network goes. Each is fetched and
-// parsed as a share is (page.ts); its text is encrypted under a fresh key, staged, written and indexed, and its
-// sends queued (data/pending.ts). Ports, so this runs in tests.
+// parsed as a share is (page.ts), a public http address over https first (net/http overHttps); its text is
+// encrypted under a fresh key, staged, written and indexed, and its sends queued (data/pending.ts). Ports, so this
+// runs in tests.
 import { encryptText, isPublicWebUrl, itemHash, textHash, type CryptoPort } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { applyFailed, applyParsed, pendingParses, timedOut, xFound, xNoArticle, type Pending } from '../data/pending';
+import { overHttps } from '../net/http';
 import { checkXPost, type XPorts } from './xpost';
 import type { SaveTargets } from '../data/saves';
 import { indexText } from '../data/sync';
@@ -47,11 +49,12 @@ async function step(p: PendingPorts, owner: string, queued: Pending): Promise<St
     }
     item = xFound(p.db, item, x.url);
   }
-  // a page a browser asked for is never fetched from a private, loopback or link-local address (7.1)
+  // a page a browser asked for is never fetched from a private, loopback or link-local address (7.1); a share made
+  // offline, an import or another phone's save naming a public http address is fetched over https, as a share is
   const fromBrowser = p.db.get<{ origin: string }>('SELECT origin FROM items WHERE id = ?', item.id)?.origin === 'browser';
   const outcome = fromBrowser && !isPublicWebUrl(item.url)
     ? { kind: 'failed' as const, reason: 'http' as const, finalUrl: item.url }
-    : await fetchPage(p.page, item.url);
+    : await fetchPage(p.page, overHttps(item.url));
   if (outcome.kind === 'offline') return 'unreached';
   return settle(p, owner, item, outcome);
 }

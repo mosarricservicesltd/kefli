@@ -3,7 +3,8 @@
 // body streams, no cookies, redirects followed by hand, ten at most and each to a public address (net/http.ts), and
 // only text/html and application/xhtml+xml parse. The parse runs in the kefli-parser WebView (a port here), then
 // contract 4.2's guard: not readerable and fewer than 120 spoken words is a failed parse. A network failure is
-// "offline": the save waits and tries again; a redirect the phone won't follow fails, the save keeping its link.
+// "offline": the save waits and tries again; a redirect the phone won't follow, or plain http the build refuses,
+// fails, the save keeping its link.
 // A page still turned away with 403 by both is loaded once in a browser engine (the render port, 8.2), since bot
 // checks such as Cloudflare's tell Android's HTTP client from a browser; its rendered HTML takes the same parse. So is a
 // page whose answer arrives as a bare 1xx. A PDF (contract 4.2, PDFs; flow decision 103), known by its type or its
@@ -184,8 +185,8 @@ async function answer(p: PagePorts, url: string): Promise<Answer> {
 }
 
 /**
- * Why a page couldn't be had: too large, or a redirect the phone won't follow (net/http Blocked), fails it, the save
- * keeping its link; anything else is the network, timed out or not there.
+ * Why a page couldn't be had: too large, a redirect the phone won't follow or cleartext the build refuses (net/http
+ * Blocked) fails it, the save keeping its link; anything else is the network, timed out or not there.
  */
 function unfetched(e: unknown, o: Opened | null, url: string): Extract<PageOutcome, { kind: 'offline' | 'failed' }> {
   if (e instanceof TooLarge) return { kind: 'failed', reason: 'too_large', finalUrl: o ? landedAt(o.url, url) : url };

@@ -242,6 +242,27 @@ describe('article images a page can make too many, too big or too slow', () => {
     expect(w.files.size).toBe(0);
   });
 
+  test('an http image is asked for over https; one only cleartext would bring fails alone, and the run goes on', async () => {
+    const w = world();
+    w.add(1);
+    w.served.set('https://e.com/old.png', new Response(png(4, 4) as never));
+    w.served.set('https://e.com/next.png', new Response(png(4, 4) as never));
+    const asked: string[] = [];
+    const f = w.ports.fetch;
+    // a release build: plain http refused before it connects, as expo/fetch reports it
+    w.ports.fetch = (async (url: string, init: RequestInit) => {
+      asked.push(url);
+      if (url.startsWith('http://')) throw new Error('fetch failed: java.net.UnknownServiceException: CLEARTEXT communication to e.com not permitted by network security policy');
+      return f(url, init);
+    }) as never;
+    const urls = ['http://e.com/old.png', 'http://e.com:8080/port.png', 'https://e.com/next.png'];
+    w.texts.set(h(1), urls.map((u) => `![](${u})`).join('\n\n'));
+    expect(await fetchArticleImages(w.ports, PK, h(1))).toBe(2);
+    expect(asked).toEqual(['https://e.com/old.png', 'http://e.com:8080/port.png', 'https://e.com/next.png']);
+    // kept under the address the article names
+    expect(urls.map((u) => imageState(w.db, u, w.now()))).toEqual(['here', 'failed', 'here']);
+  });
+
   test('a server choosing the format by what is asked for sends one the Reader keeps', async () => {
     const w = world();
     w.add(1);

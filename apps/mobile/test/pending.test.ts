@@ -16,7 +16,7 @@ const D = { v: 1, operator: { relay: 'ws://op', blossom: 'http://blossom', api: 
 const T = { api: D.operator.api, blossom: D.operator.blossom, mirror: D.mirrors[0] };
 const LONG = Array.from({ length: 130 }, (_, i) => `word${i}`).join(' ');
 
-type Page = { status?: number; type?: string; body?: string; finalUrl?: string; length?: number; only?: string };
+type Page = { status?: number; type?: string; body?: string; finalUrl?: string; length?: number; only?: string; location?: string };
 
 function world(pages: Record<string, Page | 'down'> = {}, parse?: (url: string) => ParserResult) {
   const db = memoryDb();
@@ -35,7 +35,7 @@ function world(pages: Record<string, Page | 'down'> = {}, parse?: (url: string) 
         const pg = pages[url];
         if (!pg || pg === 'down') throw new Error('offline');
         if (pg.only && pg.only !== ua) return Object.assign(new Response('', { status: 403 }), {});
-        const res = new Response(pg.body ?? '<html></html>', { status: pg.status ?? 200, headers: { 'content-type': pg.type ?? 'text/html; charset=utf-8', ...(pg.length ? { 'content-length': String(pg.length) } : {}) } });
+        const res = new Response(pg.body ?? '<html></html>', { status: pg.status ?? 200, headers: { 'content-type': pg.type ?? 'text/html; charset=utf-8', ...(pg.length ? { 'content-length': String(pg.length) } : {}), ...(pg.location ? { location: pg.location } : {}) } });
         Object.defineProperty(res, 'url', { value: pg.finalUrl ?? url });
         return res;
       }) as never,
@@ -54,6 +54,23 @@ function world(pages: Record<string, Page | 'down'> = {}, parse?: (url: string) 
   }, null, T);
   const outbox = () => db.all<{ op: string; subject: string; state: string }>('SELECT op, subject, state FROM outbox ORDER BY id');
   return { db, ports, uas, staged, texts, share, outbox };
+}
+
+/**
+ * The world's page fetch as a release build's: plain http refused before it connects, as expo/fetch reports OkHttp's
+ * refusal. Returns every address asked for.
+ */
+function releaseBuild(w: ReturnType<typeof world>): string[] {
+  const fetch = w.ports.page.fetch;
+  const asked: string[] = [];
+  w.ports.page.fetch = (async (url: string, init: RequestInit) => {
+    asked.push(url);
+    if (url.startsWith('http://')) {
+      throw new Error(`fetch failed: java.net.UnknownServiceException: CLEARTEXT communication to ${new URL(url).hostname} not permitted by network security policy`);
+    }
+    return fetch(url, init);
+  }) as never;
+  return asked;
 }
 
 describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
@@ -319,20 +336,49 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     expect(rows.every((r) => r.title.length <= 300)).toBe(true);
   });
 
-  test('a plain http save, which release builds can never fetch, no longer stops the saves behind it', async () => {
+  test('a plain http save whose site has no https waits as a page that can’t be had, without stopping the saves behind it', async () => {
     const w = world({ 'https://g.com/b': {} });
-    const fetch = w.ports.page.fetch;
-    // OkHttp's refusal of cleartext, which fetchPage reads as offline
-    w.ports.page.fetch = (async (url: string, init: RequestInit) => {
-      if (url.startsWith('http://')) throw new Error('CLEARTEXT communication to g.com not permitted by network security policy');
-      return fetch(url, init);
-    }) as never;
+    const asked = releaseBuild(w);
     w.share('http://g.com/a');
     w.share('https://g.com/b');
     expect(await runPendingParses(w.ports, PK)).toMatchObject({ parsed: 1, waiting: 1 });
     expect(w.db.all('SELECT url, text_state FROM items ORDER BY id')).toEqual([
       { url: 'http://g.com/a', text_state: 'queued' }, { url: 'https://g.com/b', text_state: 'cached' },
     ]);
+    // asked over https only, as the share path asks (net/http overHttps)
+    expect(asked).toEqual(['https://g.com/b', 'https://g.com/a']);
+  });
+
+  test('a plain http save made offline, or imported, is fetched over https and re-keyed by where it lands', async () => {
+    const w = world({ 'https://news.example/a': {}, 'https://old.example/post': {} });
+    const asked = releaseBuild(w);
+    w.share('http://news.example/a');
+    queueImported(w.db, PK, ['http://old.example/post'], 900, T);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 2, failed: 0, waiting: 0, xWaiting: 0 });
+    expect(asked).toEqual(['https://news.example/a', 'https://old.example/post']);
+    expect(w.db.all('SELECT hash, url, text_state FROM items ORDER BY id')).toEqual([
+      { hash: itemHash('https://news.example/a'), url: 'https://news.example/a', text_state: 'cached' },
+      { hash: itemHash('https://old.example/post'), url: 'https://old.example/post', text_state: 'cached' },
+    ]);
+  });
+
+  test('cleartext the build refuses fails the save at once, sent without its text, and the queue goes on', async () => {
+    // a port keeps its http (overHttps), and an https page can redirect to plain http: neither will ever be fetched
+    const w = world({ 'https://b.example/ok': {}, 'https://site.example/a': { status: 301, location: 'http://site.example/a' } });
+    const asked = releaseBuild(w);
+    for (const u of ['http://g.example:8080/a', 'https://site.example/a', 'https://b.example/ok']) w.share(u);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 1, failed: 2, waiting: 0, xWaiting: 0 });
+    expect(asked).toEqual(['https://site.example/a', 'http://site.example/a', 'https://b.example/ok', 'http://g.example:8080/a']);
+    expect(w.db.all('SELECT url, text_state, fail_reason FROM items ORDER BY id')).toEqual([
+      { url: 'http://g.example:8080/a', text_state: 'failed', fail_reason: 'http' },
+      { url: 'https://site.example/a', text_state: 'failed', fail_reason: 'http' },
+      { url: 'https://b.example/ok', text_state: 'cached', fail_reason: null },
+    ]);
+    // each goes out without text, its row opening the original, rather than waiting for good unpublished
+    expect(w.outbox().filter((o) => o.op === 'publish_item').map((o) => o.subject).sort()).toEqual(
+      [itemHash('http://g.example:8080/a'), itemHash('https://site.example/a'), itemHash('https://b.example/ok')].sort(),
+    );
+    expect(pendingParses(w.db, PK)).toEqual([]);
   });
 
   test('a save deleted while its page is fetched takes nothing: no upload, no sends, no text, no search entry', async () => {
