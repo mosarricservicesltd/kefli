@@ -9,11 +9,19 @@ import android.util.Log
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 // Shares waiting for JavaScript: filesDir/share-spool/<uuid>.json, written atomically and synced (mobile spec 8.5).
 object Spool {
   fun dir(context: Context): File = File(context.filesDir, "share-spool").apply { mkdirs() }
+
+  /**
+   * Shares whose spool couldn't be written (a full disk), held for their own sheet in this process, which saves them
+   * or says That didn't save, as for any share. The failure used to close the app, the share with it.
+   */
+  private val unwritten = ConcurrentHashMap<String, String>()
 
   /**
    * An extra as text. An app sharing styled text passes a CharSequence, which getStringExtra reads as null, so the
@@ -38,7 +46,12 @@ object Spool {
       .put("referrer", referrer ?: JSONObject.NULL)
       .put("receivedAt", System.currentTimeMillis())
       .toString()
-    writeSynced(dir(context), "$id.json", body)
+    try {
+      writeSynced(dir(context), "$id.json", body)
+    } catch (e: IOException) {
+      Log.w("KefliShare", "spool not written: ${e.javaClass.simpleName}")
+      unwritten[id] = body
+    }
     return id
   }
 
@@ -49,11 +62,16 @@ object Spool {
    */
   private fun writeSynced(dir: File, name: String, body: String) {
     val tmp = File(dir, "$name.tmp")
-    FileOutputStream(tmp).use { out ->
-      out.write(body.toByteArray(Charsets.UTF_8))
-      out.fd.sync()
+    try {
+      FileOutputStream(tmp).use { out ->
+        out.write(body.toByteArray(Charsets.UTF_8))
+        out.fd.sync()
+      }
+      if (!tmp.renameTo(File(dir, name))) throw IOException("rename failed")
+    } catch (e: IOException) {
+      tmp.delete()
+      throw e
     }
-    tmp.renameTo(File(dir, name))
     syncFolder(dir)
   }
 
@@ -71,9 +89,12 @@ object Spool {
     }
   }
 
-  fun read(context: Context, id: String): String? = File(dir(context), "$id.json").takeIf { it.exists() }?.readText()
+  fun read(context: Context, id: String): String? = File(dir(context), "$id.json").takeIf { it.exists() }?.readText() ?: unwritten[id]
 
-  fun delete(context: Context, id: String): Boolean = File(dir(context), "$id.json").delete()
+  fun delete(context: Context, id: String): Boolean {
+    val held = unwritten.remove(id) != null
+    return File(dir(context), "$id.json").delete() || held
+  }
 
   /** Spools left by a share that never finished, oldest first. */
   fun list(context: Context): List<String> =

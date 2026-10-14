@@ -41,4 +41,17 @@ describe("the share's spool (8.5)", () => {
     expect(folder).toContain('Os.open(dir.path, OsConstants.O_RDONLY, 0)');
     expect(folder).toMatch(/try \{\s+Os\.fsync\(fd\)\s+\} finally \{\s+Os\.close\(fd\)/);
   });
+
+  test("one that can't be written is held for its sheet, which saves it or says That didn't save, and the app stays up", () => {
+    // a full disk threw out of onCreate, closing the app with the share in it; a failed rename left no spool, so the
+    // sheet said That wasn't a link
+    expect(member('write')).toMatch(/try \{\s+writeSynced\(dir\(context\), "\$id\.json", body\)\s+\} catch \(e: IOException\) \{[\s\S]*?unwritten\[id\] = body\s+\}\s+return id/);
+    const synced = member('writeSynced');
+    expect(synced).toContain('if (!tmp.renameTo(File(dir, name))) throw IOException(');
+    expect(synced).toMatch(/catch \(e: IOException\) \{\s+tmp\.delete\(\)\s+throw e/);
+    expect(member('read')).toContain('?.readText() ?: unwritten[id]');
+    expect(member('delete')).toContain('unwritten.remove(id)');
+    // the start-up pickup lists the files alone: a held share is its own sheet's, and goes with the process
+    expect(member('list')).not.toContain('unwritten');
+  });
 });
