@@ -453,7 +453,7 @@ func TestAnUploadArrivingAfterItsAccountWent(t *testing.T) {
 	// the account deleted while the second phone's upload was arriving
 	text := []byte("a text blob from the other phone")
 	release = e.held(user, text)
-	e.clock = e.clock.Add(time.Second)
+	// the clock stays as it is while the upload is held: the server reads it
 	s, b = e.call(user, "DELETE", "/account", nil)
 	expect(t, s, 200, b)
 	if s := release(); s != 401 {
