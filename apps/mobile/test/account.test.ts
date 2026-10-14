@@ -4,7 +4,7 @@ import {
   DEFAULT_QUOTA, MB, NOTHING_WAITS, accountFigures, backupNotice, forgetFigures, readFigures, recordFigures, roomOf, shareLine,
   shareRoom, spaceOf, textsWaiting, waitsForRoom, type Waiting,
 } from '../src/data/account';
-import { notBackedUp } from '../src/data/backup';
+import { markBacked, notBackedUp } from '../src/data/backup';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { wipe } from '../src/data/settings';
@@ -25,18 +25,26 @@ function world() {
 }
 
 let n = 0;
-/** A save of the owner's whose text this phone staged, with its blob's state. */
-function save(db: ReturnType<typeof world>, blob: { last_error?: string | null; operator_at?: number | null; mirror_at?: number | null } = {}, owner = ME) {
+/**
+ * A save of the owner's whose text this phone staged, with its blob's state. Its link is backed up unless link says
+ * otherwise: never published (published false), published with no relay off Kefli's taking it (backed false), or with
+ * a change not sent yet (dirty).
+ */
+function save(
+  db: ReturnType<typeof world>, blob: { last_error?: string | null; operator_at?: number | null; mirror_at?: number | null } = {}, owner = ME,
+  link: { published?: boolean; backed?: boolean; dirty?: boolean } = {},
+) {
   n++;
   const hash = n.toString(16).padStart(64, '0');
   const sha = (n + 0x1000).toString(16).padStart(64, '0');
+  const event = link.published === false ? null : `e${n}`;
   db.run(
-    "INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, text_sha256, event_id, published, backed_event) VALUES (?, ?, ?, ?, 'unread', 'cached', 'share', ?, ?, 1, ?)",
-    owner, hash, `https://example.com/${n}`, NOW, sha, `e${n}`, `e${n}`,
+    "INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, text_sha256, event_id, published, backed_event, dirty) VALUES (?, ?, ?, ?, 'unread', 'cached', 'share', ?, ?, ?, ?, ?)",
+    owner, hash, `https://example.com/${n}`, NOW, sha, event, event ? 1 : 0, link.backed === false ? null : event, link.dirty ? 1 : 0,
   );
   db.run('INSERT INTO blobs (sha256, hash, kind, size, owner, operator_at, mirror_at, last_error) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     sha, hash, 'text', 20_000, owner, blob.operator_at ?? null, blob.mirror_at ?? null, blob.last_error ?? null);
-  return { hash, sha };
+  return { hash, sha, event };
 }
 
 describe('the figures from Kefli’s server (C§6)', () => {
@@ -168,6 +176,28 @@ describe('texts waiting on the phone (blobs.last_error)', () => {
     expect(notBackedUp(db, ME)).toBe(w.quota + w.daily + w.tooLarge);
   });
 
+  test('a save whose link no relay Kefli doesn’t run holds yet is one Kefli is still trying to back up, whatever its text waits on', () => {
+    const db = world();
+    save(db, { last_error: 'quota' }, ME, { published: false });
+    save(db, { last_error: 'too_large' }, ME, { backed: false });
+    save(db, { last_error: 'daily' }, ME, { dirty: true });
+    const w = textsWaiting(db, ME, NOW);
+    // the space and the day's uploads still read as used, for Backup space and the Saved sheet
+    expect(w).toEqual({ quota: 0, full: true, daily: 0, dailyRecent: 1, tooLarge: 0 });
+    expect(spaceOf({ quota: 50 * MB, used: 49 * MB }, w.full, 'ok', true)).toMatchObject({ level: 'full' });
+    expect(shareLine(db, ME, NOW, null)).toBe('full');
+    // so no notice says a link is backed up, or leaves "other" out of the relays' note, while one isn't
+    expect(backupNotice(w, notBackedUp(db, ME))).toEqual({ notice: { kind: 'trying', n: 3 }, trying: 3 });
+  });
+
+  test('once a relay Kefli doesn’t run takes its newest event, only its text waits', () => {
+    const db = world();
+    const s = save(db, { last_error: 'too_large' }, ME, { backed: false });
+    expect(backupNotice(textsWaiting(db, ME, NOW), notBackedUp(db, ME)).notice).toEqual({ kind: 'trying', n: 1 });
+    markBacked(db, s.event!);
+    expect(backupNotice(textsWaiting(db, ME, NOW), notBackedUp(db, ME))).toEqual({ notice: { kind: 'toolarge', n: 1 }, trying: 0 });
+  });
+
   test('a save’s own text waits for room only on a 413 quota or daily that no server has since overtaken', () => {
     const db = world();
     const q = save(db, { last_error: 'quota' });
@@ -187,6 +217,15 @@ describe('Advanced’s notice slot (FD 117)', () => {
   test('room on the space comes first, counting every text waiting for room', () => {
     expect(roomOf(W({ quota: 2, full: true, daily: 1, dailyRecent: 1 }))).toEqual({ why: 'quota', n: 3 });
     expect(backupNotice(W({ quota: 2, full: true, daily: 1, tooLarge: 1 }), 5)).toEqual({ notice: { kind: 'full', n: 3 }, trying: 1 });
+  });
+
+  test('the space reads full while any text waits on it, a text no notice counts included', () => {
+    // a move's copy a mirror holds, or a save whose link isn't backed up yet, waits on the space: it is full
+    expect(roomOf(W({ full: true, daily: 2, dailyRecent: 1 }))).toEqual({ why: 'quota', n: 2 });
+    expect(backupNotice(W({ full: true, daily: 2 }), 2)).toEqual({ notice: { kind: 'full', n: 2 }, trying: 0 });
+    // with no text whose link alone is backed up waiting, there is nothing for a room notice to count
+    expect(roomOf(W({ full: true, dailyRecent: 1 }))).toBeNull();
+    expect(backupNotice(W({ full: true, dailyRecent: 1 }), 1)).toEqual({ notice: { kind: 'trying', n: 1 }, trying: 1 });
   });
 
   test('then the day’s uploads, while one was refused for them in the last 24 hours', () => {

@@ -55,10 +55,14 @@ export function forgetFigures(db: SqlDb, owner: string): void {
 }
 
 /**
- * The live saves whose text waits on this phone after Kefli's server refused it, by the reason it gave. RULED: the
- * counts are of saves no server holds the text of (a move's copy may name a mirror that holds it under the old
- * identity), so each is a save Advanced counts as not backed up and whose text is only on this phone; full says
- * whether any text waits on the space at all, which makes Backup space read Full.
+ * The live saves whose text waits on this phone after Kefli's server refused it, by the reason it gave. RULED: quota,
+ * daily and tooLarge count the saves whose text alone isn't backed up: a relay Kefli doesn't run holds the save's
+ * newest event (data/backup.ts) and no server holds its text (a move's copy may name a mirror that holds it under the
+ * old identity). Each is a save Advanced counts as not backed up whose text is only on this phone and whose link is
+ * backed up, as the notices say; a save whose link isn't backed up yet is among those Kefli is still trying to back
+ * up, whatever its text waits on. full and dailyRecent say how the space and the day's uploads stand, from every text
+ * waiting: full while any waits on the space, which makes Backup space read Full, and dailyRecent counting those
+ * refused for the day's uploads in the last 24 hours.
  */
 export type Waiting = { quota: number; full: boolean; daily: number; dailyRecent: number; tooLarge: number };
 
@@ -66,17 +70,20 @@ export const NOTHING_WAITS: Waiting = { quota: 0, full: false, daily: 0, dailyRe
 
 type WaitingRow = { quota: number; full: number; daily: number; dailyRecent: number; tooLarge: number };
 
+/** The save's text alone isn't backed up: its newest event is on a relay Kefli doesn't run, and no server holds the text. */
+const TEXT_ALONE = 'i.dirty = 0 AND i.backed_event = i.event_id AND b.mirror_at IS NULL';
+
 /**
- * dailyRecent counts those refused for the day's uploads in the last 24 hours, by the time the refusal was written
- * (blobs.refused_at); a refusal with no time, from before it was kept, counts as recent.
+ * The refusal's time is when it was written (blobs.refused_at); a refusal with no time, from before it was kept,
+ * counts as recent.
  */
 export function textsWaiting(db: SqlDb, owner: string, now: number): Waiting {
   const r = db.get<WaitingRow>(
-    `SELECT COALESCE(SUM(b.last_error = 'quota' AND b.mirror_at IS NULL), 0) AS quota,
+    `SELECT COALESCE(SUM(b.last_error = 'quota' AND ${TEXT_ALONE}), 0) AS quota,
        COALESCE(SUM(b.last_error = 'quota'), 0) AS full,
-       COALESCE(SUM(b.last_error = 'daily' AND b.mirror_at IS NULL), 0) AS daily,
-       COALESCE(SUM(b.last_error = 'daily' AND b.mirror_at IS NULL AND (b.refused_at IS NULL OR b.refused_at > ?)), 0) AS dailyRecent,
-       COALESCE(SUM(b.last_error = 'too_large' AND b.mirror_at IS NULL), 0) AS tooLarge
+       COALESCE(SUM(b.last_error = 'daily' AND ${TEXT_ALONE}), 0) AS daily,
+       COALESCE(SUM(b.last_error = 'daily' AND (b.refused_at IS NULL OR b.refused_at > ?)), 0) AS dailyRecent,
+       COALESCE(SUM(b.last_error = 'too_large' AND ${TEXT_ALONE}), 0) AS tooLarge
      FROM items i JOIN blobs b ON b.sha256 = i.text_sha256 AND b.owner = i.owner
      WHERE i.owner = ? AND i.pending_delete_at IS NULL AND b.operator_at IS NULL AND b.last_error IS NOT NULL`,
     now - DAY, owner,
@@ -94,17 +101,20 @@ export function waitsForRoom(db: SqlDb, owner: string, hash: string): boolean {
 }
 
 /**
- * The saves whose text waits for room, and why (FD 117): 'quota' while any waits on the space, else 'daily' while one
- * waits on a refusal for the day's uploads from the last 24 hours. RULED: n counts every save whose text waits for
- * room, the ones on the day's uploads included under 'quota', since a full space holds them back too, and those
- * refused for the day's uploads more than a day ago under 'daily', whose text still waits; so no save whose text
- * alone waits is left among the saves Kefli is still trying to back up while a room notice shows.
+ * The saves whose text alone waits for room, and why (FD 117): 'quota' while any text waits on the space, else 'daily'
+ * while one waits on a refusal for the day's uploads from the last 24 hours. RULED: n counts every save whose text
+ * alone waits for room, the ones on the day's uploads included under 'quota', since a full space holds them back too,
+ * and those refused for the day's uploads more than a day ago under 'daily', whose text still waits; so no save whose
+ * text alone waits is left among the saves Kefli is still trying to back up while a room notice shows. With none, there
+ * is no room notice, though the space may read full.
  */
 export type Room = { why: 'quota' | 'daily'; n: number };
 
 export function roomOf(w: Waiting): Room | null {
-  if (w.quota > 0) return { why: 'quota', n: w.quota + w.daily };
-  return w.dailyRecent > 0 ? { why: 'daily', n: w.daily } : null;
+  const n = w.quota + w.daily;
+  if (n === 0) return null;
+  if (w.full) return { why: 'quota', n };
+  return w.dailyRecent > 0 ? { why: 'daily', n } : null;
 }
 
 /** Advanced's one notice about saves not backed up: for room on the space (adv-full) or the day's uploads (adv-daily),
