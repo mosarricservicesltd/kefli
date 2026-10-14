@@ -2,8 +2,8 @@
 // network. It sends register, upload_blob, mirror_blob, publish_item, publish_lists, delete_item, delete_blob,
 // post_device, pair_ack, delete_device, delete_wrap, copy_relay and publish_library_key.
 import {
-  DEVICES_PATH, KIND, buildDeletions, buildDevicesEvent, buildItemEvent, buildLibraryKeyEvent, buildRelayList, buildServerList, deleteBlob, httpAuth,
-  isSignerFailure, mirrorBlob, releaseTemplate, sameUrl, savedD, signStatement, uploadBlob, wrapPairAck,
+  DEVICES_PATH, EventTooLargeError, KIND, buildDeletions, buildDevicesEvent, buildItemEvent, buildLibraryKeyEvent, deleteBlob, httpAuth,
+  isSignerFailure, mirrorBlob, releaseTemplate, sameUrl, savedD, signStatement, signWithinCeiling, uploadBlob, wrapPairAck,
 } from '@kefli/protocol';
 import type { AccountFigures, BlossomOutcome, CryptoPort, NostrEvent, Signer, Statement } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
@@ -11,7 +11,9 @@ import { hasDevices, localRecord, noteRecord, pairAcked, recordCreatedAt, type D
 import { getItem, itemJson, markPublished, textServers, type ItemRow } from '../data/items';
 import { markBacked, nextForRoom, noteFreed, roomLeft, type KnownFigures } from '../data/backup';
 import { keyPublished, libraryKey, libraryKeyPublished, madeHere, makeLibraryKey } from '../data/libraryKey';
-import { indexerRelays, listServers, nextListTime, recordList, relayEntries, writeRelays } from '../data/lists';
+import {
+  indexerRelays, listEdits, listEditsSent, listServers, listsUnread, nextListTime, recordList, relayEntries, relayListTags, serverListTags, writeRelays,
+} from '../data/lists';
 import { backoff, begin, enqueue, finish, nextDue, nextWakeAt, releaseDependents, wake } from '../data/outbox';
 import type { OutboxRow, OutboxTarget, TargetResult } from '../data/outbox';
 import { namesText, queueBlobDelete, withdrawText } from '../data/saves';
@@ -387,20 +389,7 @@ async function sendDeleteItem(p: SendPorts, row: OutboxRow, signer: Signer, targ
   const after = payload.after;
   // dated after the newest version of the save it names, whatever this phone's clock says (F36)
   const events = await buildDeletions(signer, ds, Math.max(p.now(), (after ?? 0) + 1));
-  return Promise.all(
-    targets.map(async (t) => {
-      try {
-        let last: TargetResult = { target: t.target, kind: 'ok' };
-        for (const e of events) {
-          last = relayResult(t.target, await p.publish(t.target, e), e.id);
-          if (last.kind !== 'ok') return last;
-        }
-        return last;
-      } catch (e) {
-        return { target: t.target, kind: 'retry', error: err(e) } as TargetResult;
-      }
-    }),
-  );
+  return Promise.all(targets.map((t) => publishEach(p, t.target, events)));
 }
 
 /**
@@ -418,38 +407,66 @@ async function readNewerLists(p: SendPorts, owner: string): Promise<void> {
 }
 
 /**
+ * A list, signed, or null when it can't be one event within the ceiling (C§3.3), as a nostr user's list of hundreds
+ * of relays from another app can't: RULED, it is then left as it is held, since a list Kefli could send would be
+ * missing some of its entries, and Kefli's own changes stay in its tables, where the saves' sends read them.
+ */
+async function signList(signer: Signer, kind: number, tags: string[][], createdAt: number): Promise<NostrEvent | null> {
+  try {
+    return await signWithinCeiling(signer, { kind, created_at: createdAt, tags, content: '' });
+  } catch (e) {
+    if (e instanceof EventTooLargeError) return null;
+    throw e;
+  }
+}
+
+/** Events to one relay in turn, each answer read as 4.3 says, stopping at the first that isn't ok; with none, ok. */
+async function publishEach(p: SendPorts, target: string, events: NostrEvent[]): Promise<TargetResult> {
+  let last: TargetResult = { target, kind: 'ok' };
+  try {
+    for (const e of events) {
+      last = relayResult(target, await p.publish(target, e), e.id);
+      if (last.kind !== 'ok') return last;
+    }
+    return last;
+  } catch (e) {
+    return { target, kind: 'retry', error: err(e) };
+  }
+}
+
+type Lists = { relayList: NostrEvent | null; serverList: NostrEvent | null; record: NostrEvent | null; edits: string[] };
+
+/** The lists went out: each kept as the newest held (F36), the edits they showed done with, the record noted. */
+function listsSent(db: SqlDb, owner: string, l: Lists): void {
+  if (l.relayList) recordList(db, owner, l.relayList.kind, l.relayList.id, l.relayList.created_at, JSON.stringify(l.relayList));
+  if (l.relayList) listEditsSent(db, owner, l.edits);
+  if (l.serverList) recordList(db, owner, l.serverList.kind, l.serverList.id, l.serverList.created_at, JSON.stringify(l.serverList));
+  if (l.record) noteRecord(db, owner, l.record.id, l.record.created_at);
+}
+
+/**
  * The 10002 to every target; the 10063 and the connected-browsers record (C§4.9) to the write relays only (4.3).
- * All are built from the tables at send time, after any newer list on the relays is taken in; the record only once
- * there is a browser in it.
+ * The lists are those held, entry for entry, with Kefli's changes (relayListTags, serverListTags), built at send time
+ * after any newer list on the relays is taken in; a person's own list not read since sign-in waits for a read. The
+ * record goes only once there is a browser in it.
  */
 async function sendLists(p: SendPorts, row: OutboxRow, signer: Signer, targets: OutboxTarget[]): Promise<TargetResult[]> {
   await readNewerLists(p, row.signer);
+  if (listsUnread(p.db, row.signer)) return each(targets, 'retry', 'their lists not read yet');
   // after the lists already held, so a phone whose clock is behind doesn't publish lists older than its own (F36)
   const now = nextListTime(p.db, row.signer, p.now());
-  const relayList = await buildRelayList(signer, relayEntries(p.db, row.signer), now);
-  const serverList = await buildServerList(signer, listServers(p.db, row.signer), now);
-  const record = hasDevices(p.db, row.signer)
-    ? await buildDevicesEvent(signer, localRecord(p.db, row.signer), Math.max(now, recordCreatedAt(p.db, row.signer) + 1))
-    : null;
+  const l: Lists = {
+    edits: listEdits(p.db, row.signer),
+    relayList: await signList(signer, KIND.relayList, relayListTags(p.db, row.signer), now),
+    serverList: await signList(signer, KIND.serverList, serverListTags(p.db, row.signer), now),
+    record: hasDevices(p.db, row.signer)
+      ? await buildDevicesEvent(signer, localRecord(p.db, row.signer), Math.max(now, recordCreatedAt(p.db, row.signer) + 1))
+      : null,
+  };
   const indexerOnly = new Set(indexerRelays(p.db, row.signer).filter((u) => !relayEntries(p.db, row.signer).some((e) => e.url === u)));
-  const results = await Promise.all(
-    targets.map(async (t) => {
-      try {
-        let a = relayResult(t.target, await p.publish(t.target, relayList), relayList.id);
-        if (a.kind !== 'ok' || indexerOnly.has(t.target)) return a;
-        a = relayResult(t.target, await p.publish(t.target, serverList), serverList.id);
-        if (a.kind !== 'ok' || !record) return a;
-        return relayResult(t.target, await p.publish(t.target, record), record.id);
-      } catch (e) {
-        return { target: t.target, kind: 'retry', error: err(e) } as TargetResult;
-      }
-    }),
-  );
-  if (results.some((r) => r.kind === 'ok')) {
-    recordList(p.db, row.signer, relayList.kind, relayList.id, now, JSON.stringify(relayList));
-    recordList(p.db, row.signer, serverList.kind, serverList.id, now, JSON.stringify(serverList));
-    if (record) noteRecord(p.db, row.signer, record.id, record.created_at);
-  }
+  const sent = (t: OutboxTarget) => (indexerOnly.has(t.target) ? [l.relayList] : [l.relayList, l.serverList, l.record]).filter((e): e is NostrEvent => !!e);
+  const results = await Promise.all(targets.map((t) => publishEach(p, t.target, sent(t))));
+  if (results.some((r) => r.kind === 'ok')) listsSent(p.db, row.signer, l);
   return results;
 }
 
