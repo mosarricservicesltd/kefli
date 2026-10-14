@@ -142,9 +142,9 @@ function keepText(row: Row, c: Columns): Columns {
  * A kept text goes out again (C§4.1): while only this phone has it, once its upload and mirror succeed (the mirror's
  * republish, send.ts), and now when a server already holds it, the row dirty until a relay takes it, so the save names
  * the text again: the operator's, another phone's upload, or a mirror's copy from a move (C§4.8). So two phones on a
- * full library don't take turns sending the save without its text. The change is dated at the copy taken (at), not
- * now: adding the text changes nothing the person did, so a newer copy, or a deletion made after the copy, read in the
- * same sync or late from a relay that lags, still wins over it rather than being sent over.
+ * full library don't take turns sending the save without its text. The change is dated at the copy taken (at), since
+ * adding the text changes nothing the person did: a newer copy, or a deletion made after that copy, read in the same
+ * sync or late from a relay that lags, still wins over it.
  */
 function nameKeptText(db: SqlDb, now: number, owner: string, hash: string, row: Row, at: number): void {
   const blob = blobRow(db, owner, row.text_sha256!);

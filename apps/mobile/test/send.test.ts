@@ -784,6 +784,27 @@ describe('deleting makes room (C§5, v1.12)', () => {
     expect(taken).toEqual(expect.arrayContaining([a.sha, c.sha]));
   });
 
+  test('a text the room let through that meets a server error goes on its retry, and the next that fits follows it', async () => {
+    const { w, z, a, c } = await full();
+    // the operator stumbles once, on the first text the deletion lets through
+    let stumbled = false;
+    w.ports.fetch = ((orig) => (async (url: string, init: RequestInit) => {
+      if (!stumbled && init.method === 'PUT' && url === 'http://blossom/upload') {
+        stumbled = true;
+        return new Response('', { status: 503 });
+      }
+      return orig(url, init);
+    }))(w.ports.fetch) as typeof fetch;
+    commitDelete(w.db, w.signer.pubkey(), z.hash, deleteItem(w.db, w.now(), w.signer.pubkey(), z.hash).held);
+    await drain(w.ports);
+    expect(waiting(w).find((x) => x.sha256 === a.sha)).toMatchObject({ last_error: 'quota', operator_at: null });
+    // its second attempt, so a minute's backoff, not a day's
+    w.tick(60);
+    await drain(w.ports);
+    const taken = waiting(w).filter((x) => x.operator_at !== null).map((x) => x.sha256);
+    expect(taken).toEqual(expect.arrayContaining([a.sha, c.sha]));
+  });
+
   test("figures that can't be read change nothing the operator did: the delete and the upload each count as done", async () => {
     const { w, z, a } = await full();
     w.ports.figures = () => {
