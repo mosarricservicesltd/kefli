@@ -30,7 +30,28 @@ export class NotALinkError extends Error {
   }
 }
 
+/**
+ * RULED: a host written longer than this, its port included, is refused before the URL is parsed. No host that DNS
+ * can resolve comes near it (253 characters in ASCII), and UTS-46 takes time that grows with the square of a label's
+ * length: a shared link whose host was 30,000 different CJK characters held the phone's JavaScript for minutes, at
+ * every start while its share waited in the spool.
+ */
+export const MAX_HOST_CHARS = 1024;
+
+// An http(s) URL's authority as written, after what the URL Standard does first: tabs and newlines go, leading C0
+// controls and spaces are skipped, and so is any run of slashes or backslashes after the scheme. Built from strings,
+// as the code gate's parser misreads regex literals.
+const AUTHORITY = new RegExp('^[\\u0000-\\u0020]*https?:[\\\\/]*([^\\\\/?#]*)', 'i');
+const TAB_OR_NEWLINE = new RegExp('[\\t\\n\\r]', 'g');
+
+/** The host and port of an http(s) URL as written, after any user info; '' for anything else. */
+function writtenHost(input: string): string {
+  const m = AUTHORITY.exec(input.replace(TAB_OR_NEWLINE, ''));
+  return m ? m[1].slice(m[1].lastIndexOf('@') + 1) : '';
+}
+
 function parseHttp(input: string): URLRecord {
+  if (writtenHost(input).length > MAX_HOST_CHARS) throw new NotALinkError(input, 'host too long');
   const url = basicURLParse(input);
   if (!url) throw new NotALinkError(input, 'unparseable');
   if (url.scheme !== 'http' && url.scheme !== 'https') throw new NotALinkError(input, `${url.scheme}:`);
