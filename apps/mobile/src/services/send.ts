@@ -21,7 +21,7 @@ import { backoff, begin, enqueue, finish, nextDue, nextWakeAt, releaseDependents
 import type { OutboxRow, OutboxTarget, TargetResult } from '../data/outbox';
 import { fitSave, namesText, queueBlobDelete, withdrawText } from '../data/saves';
 import type { Defaults } from './config';
-import { pageStream, streamFilter, takeNewerLists, type SyncPorts } from './sync';
+import { notYet, pageStream, streamFilter, takeNewerLists, type SyncPorts } from './sync';
 
 export type RelayAnswer = { ok: true } | { ok: false; reason: string };
 
@@ -541,38 +541,72 @@ async function sendLists(p: SendPorts, row: OutboxRow, signer: Signer, targets: 
  * A relay added in Advanced gets the library as already signed (FD 113, C§3.1): the newest event of each save and
  * every deletion that the other write relays hold, paged in full and published to it unchanged, so nothing is
  * re-signed from this phone's state (F16) and a deleted save's old event can't come back through it (F35). Retried
- * until at least one other relay answers; done once the relay has answered every event, whatever it refused.
+ * until at least one other relay answers; done once the relay has answered every event, whatever it refused, and has
+ * taken each it refused only as dated ahead of its clock (copyEvents).
  */
 async function sendCopyRelay(p: SendPorts, row: OutboxRow, t: OutboxTarget): Promise<TargetResult[]> {
   if (!p.query) return [{ target: t.target, kind: 'retry', error: 'no relay reads' }];
-  const sources = writeRelays(p.db, row.signer).filter((u) => u !== t.target);
+  const events = await heldLibrary(p.db, p.query, row.signer, t.target);
+  if (!events) return [{ target: t.target, kind: 'retry', error: 'no other relay answered' }];
+  return [await copyEvents(p, t, events)];
+}
+
+/** The library as the identity's other write relays hold it, the newest event of each save then every deletion; null when none answered. */
+async function heldLibrary(db: SqlDb, query: NonNullable<SendPorts['query']>, owner: string, target: string): Promise<NostrEvent[] | null> {
+  const sources = writeRelays(db, owner).filter((u) => u !== target);
   const read = await Promise.all(sources.map(async (u) => {
     try {
-      const [items, deletions] = await Promise.all((['items', 'deletions'] as const).map((s) => pageStream(p.query!, u, streamFilter(s, row.signer, null))));
+      const [items, deletions] = await Promise.all((['items', 'deletions'] as const).map((s) => pageStream(query, u, streamFilter(s, owner, null))));
       return [...items, ...deletions];
     } catch {
       return null;
     }
   }));
-  if (!read.some((r) => r !== null)) return [{ target: t.target, kind: 'retry', error: 'no other relay answered' }];
-  const mine = read.flat().filter((e): e is NostrEvent => !!e && e.pubkey === row.signer);
-  const saves = mine.filter((e) => e.kind !== KIND.deletion);
+  if (!read.some((r) => r !== null)) return null;
+  const mine = read.flat().filter((e): e is NostrEvent => !!e && e.pubkey === owner);
+  const deletions = new Map(mine.filter((e) => e.kind === KIND.deletion).map((e) => [e.id, e]));
+  return [...newestOfEach(mine.filter((e) => e.kind !== KIND.deletion)), ...deletions.values()];
+}
+
+/** Of a save's events, by d, the newest. */
+function newestOfEach(saves: NostrEvent[]): NostrEvent[] {
   const byD = new Map<string, NostrEvent>();
   for (const e of saves) {
     const d = e.tags.find((x) => x[0] === 'd')?.[1] ?? '';
     const held = byD.get(d);
     if (!held || e.created_at > held.created_at) byD.set(d, e);
   }
-  const deletions = [...new Map(mine.filter((e) => e.kind === KIND.deletion).map((e) => [e.id, e])).values()];
+  return [...byD.values()];
+}
+
+/**
+ * The events to the added relay in turn, as already signed. A refusal stops nothing, and nor does an event refused as
+ * dated ahead of the relay's clock (CLOCK), as one signed on a phone running fast is: the rest still go, and the copy
+ * is tried again once that event's time has come, for it to go too, the relay answering duplicate for the rest.
+ * Stopping there, as any other retry does, one save dated ahead kept every save after it from the relay, for good
+ * when it was dated a year ahead. One dated more than a day past this phone's clock is passed over, as sync leaves it
+ * unread (notYet), since a try within a day changes nothing. Any other answer to retry (a relay asking to slow down,
+ * a network failure) stops the copy there, to be tried again whole.
+ */
+async function copyEvents(p: SendPorts, t: OutboxTarget, events: NostrEvent[]): Promise<TargetResult> {
+  // the latest date of those refused as ahead, and the relay's words for it
+  let aheadAt = 0;
+  let aheadError = '';
   try {
-    for (const e of [...byD.values(), ...deletions]) {
-      const a = relayResult(t.target, await p.publish(t.target, e), e.id);
-      if (a.kind === 'retry') return [a];
+    for (const e of events) {
+      const answer = await p.publish(t.target, e);
+      const r = relayResult(t.target, answer, e.id);
+      if (r.kind !== 'retry') continue;
+      if (answer.ok || !CLOCK.test(answer.reason)) return r;
+      if (notYet(e, p.now())) continue;
+      aheadAt = Math.max(aheadAt, e.created_at);
+      aheadError = answer.reason;
     }
   } catch (e) {
-    return [{ target: t.target, kind: 'retry', error: err(e) }];
+    return { target: t.target, kind: 'retry', error: err(e) };
   }
-  return [{ target: t.target, kind: 'ok' }];
+  if (!aheadError) return { target: t.target, kind: 'ok' };
+  return { target: t.target, kind: 'retry', error: aheadError, waitSec: Math.max(backoff(t.attempts + 1), aheadAt - p.now()) };
 }
 
 /** A consumed inbox wrap, deleted with a kind 5 naming it (["e", id], ["k", "1059"]) on the operator relay (C§4.4). */
