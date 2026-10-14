@@ -12,10 +12,15 @@ const COLS = 'i.id, i.hash, i.url, i.title, i.site, i.words, i.position_word, i.
  */
 export const QUERY_WORDS = 16;
 export const QUERY_WORD_CHARS = 64;
+/**
+ * How much of a query is read for its words, in UTF-16 code units: room for them all with punctuation between, about
+ * 4 KB. Search's field holds no more (maxLength), so a page pasted in isn't kept, drawn and searched whole at each key.
+ */
+export const QUERY_MAX_CHARS = QUERY_WORDS * (QUERY_WORD_CHARS + 1) * 4;
 
 /** The words of a query: letters and digits, as FTS5's unicode61 tokeniser splits them; the first QUERY_WORDS of them. */
 export function queryWords(q: string): string[] {
-  const words = q.slice(0, QUERY_WORDS * (QUERY_WORD_CHARS + 1) * 4).toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  const words = q.slice(0, QUERY_MAX_CHARS).toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
   return words.slice(0, QUERY_WORDS).map((w) => (w.length > QUERY_WORD_CHARS ? Array.from(w).slice(0, QUERY_WORD_CHARS).join('') : w));
 }
 
