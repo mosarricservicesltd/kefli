@@ -183,6 +183,45 @@ func TestRefusedWrapsCostTheSender(t *testing.T) {
 	}
 }
 
+// The relay took every event its rules allowed whatever was left on the disk it shares with keflid's database: a
+// registered author's 60 events a minute of up to 64 KB is 230 MB an hour, and strfry, once the disk is full, refuses
+// every write with "Write error: mdb_txn_commit: I/O error" (probe relayfill), while keflid's database fails beside it.
+// Below the floor every new event is refused with a prefix both clients send again later (the phone after a minute,
+// the extension with its next try), so nothing a person saves is lost; reads and the operator's imports go on.
+func TestTheRelayKeepsItsFloor(t *testing.T) {
+	p, _, _ := setup()
+	full := false
+	p.Full = func() bool { return full }
+	if v := p.Decide(line(t, Event{ID: "1", Pubkey: user, Kind: KindAppData}, 100)); v.Out.Action != "accept" {
+		t.Fatalf("with room: %+v", v)
+	}
+	full = true
+	for name, in := range map[string]Input{
+		"a save":         line(t, Event{ID: "2", Pubkey: user, Kind: KindAppData}, 100),
+		"a deletion":     line(t, Event{ID: "3", Pubkey: user, Kind: KindDeletion, Tags: [][]string{{"e", "w1"}}}, 0),
+		"a browser save": wrapFrom(t, "4", user, address, device),
+		"an Undo":        line(t, Event{ID: "5", Pubkey: throw, Kind: KindDeletion, Tags: [][]string{{"e", "w1"}}}, 0),
+	} {
+		v := p.Decide(in)
+		if v.Out.Action != "reject" || !strings.HasPrefix(v.Out.Msg, "rate-limited:") || v.Record != nil || len(v.Deletes) != 0 {
+			t.Fatalf("%s with the disk at its floor: %+v", name, v)
+		}
+	}
+	// what would be refused anyway keeps its own reason
+	if v := p.Decide(line(t, Event{ID: "6", Pubkey: nobody, Kind: KindAppData}, 100)); !strings.HasPrefix(v.Out.Msg, "blocked:") {
+		t.Fatalf("an unregistered author: %+v", v)
+	}
+	in := line(t, Event{ID: "7", Pubkey: nobody, Kind: KindAppData}, 10)
+	in.SourceType = "Import"
+	if v := p.Decide(in); v.Out.Action != "accept" {
+		t.Fatalf("an operator's import: %+v", v)
+	}
+	full = false
+	if v := p.Decide(line(t, Event{ID: "8", Pubkey: user, Kind: KindAppData}, 100)); v.Out.Action != "accept" {
+		t.Fatalf("with room again: %+v", v)
+	}
+}
+
 // F8: every address in an IPv6 /64 is one sender's for free, so the /64 is what the limits count.
 func TestAnIPv6BlockIsOneAddress(t *testing.T) {
 	p, _, _ := setup()
