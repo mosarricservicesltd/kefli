@@ -304,17 +304,40 @@ describe('connected-browsers record (C§4.9)', () => {
     expect(mergeDevices(m, m)).toEqual(m);
   });
 
+  // as a phone writes them: the device's key and a token of 32 random bytes, both hex
+  const hexEntry = (token: string, revoked_at: number | null = null) => ({ ...e(token, revoked_at), device_pubkey: 'ab'.repeat(32) });
+
   test('round trips, and revoked entries go earliest first only past the ceiling', async () => {
     const s = signer();
-    const small: DevicesRecord = { v: 1, devices: [e('t1', 5), e('t2')] };
+    const small: DevicesRecord = { v: 1, devices: [hexEntry('01'.repeat(32), 5), hexEntry('02'.repeat(32))] };
     expect(await readDevicesEvent(s, await buildDevicesEvent(s, small, NOW))).toEqual(small);
-    const big: DevicesRecord = { v: 1, devices: Array.from({ length: 120 }, (_, i) => ({ ...e(bytesToHex(nodeCrypto.randomBytes(32)), i < 100 ? 1000 - i : null), label: 'x'.repeat(40) })) };
+    const big: DevicesRecord = { v: 1, devices: Array.from({ length: 120 }, (_, i) => ({ ...hexEntry(bytesToHex(nodeCrypto.randomBytes(32)), i < 100 ? 1000 - i : null), label: 'x'.repeat(40) })) };
     const back = await readDevicesEvent(s, await buildDevicesEvent(s, big, NOW));
     expect(back.devices.length).toBeLessThan(120);
     expect(back.devices.filter((x) => x.revoked_at === null)).toHaveLength(20);
     const kept = back.devices.filter((x) => x.revoked_at !== null).map((x) => x.revoked_at!);
     const dropped = big.devices.filter((x) => x.revoked_at !== null && !kept.includes(x.revoked_at)).map((x) => x.revoked_at!);
     expect(Math.max(...dropped)).toBeLessThan(Math.min(...kept));
+  });
+
+  test('a copy another client spoilt reads as its well-formed entries only, each with its own fields alone', async () => {
+    const s = signer();
+    const good = hexEntry('03'.repeat(32));
+    const spoilt = [null, 5, 'x', { token: 1 }, { ...good, token: 'zz' }, { ...good, device_pubkey: 'p' }, { ...good, label: { a: 1 } },
+      { ...good, connected_at: 'yesterday' }, { ...good, revoked_at: 'now' }, { ...good, revoked_at: undefined }];
+    const content = await s.nip44Encrypt(s.pubkey(), JSON.stringify({ v: 1, devices: [...spoilt, { ...good, deep: [[[[]]]] }] }));
+    const event = await s.signEvent({ kind: 30078, created_at: NOW, tags: [['d', 'kefli/devices'], ['t', 'kefli']], content });
+    expect(await readDevicesEvent(s, event)).toEqual({ v: 1, devices: [good] });
+  });
+
+  test('a record over the 16 KB ceiling isn’t one Kefli made: refused before it is decrypted', async () => {
+    const s = signer();
+    const decrypt = jest.spyOn(s, 'nip44Decrypt');
+    const devices = Array.from({ length: 200 }, () => hexEntry(bytesToHex(nodeCrypto.randomBytes(32))));
+    const content = await s.nip44Encrypt(s.pubkey(), JSON.stringify({ v: 1, devices }));
+    const event = await s.signEvent({ kind: 30078, created_at: NOW, tags: [['d', 'kefli/devices'], ['t', 'kefli']], content });
+    await expect(readDevicesEvent(s, event)).rejects.toThrow(EventTooLargeError);
+    expect(decrypt).not.toHaveBeenCalled();
   });
 });
 

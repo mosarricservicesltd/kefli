@@ -567,3 +567,35 @@ describe('text fetches are bounded (F12)', () => {
     expect(pulled).toBeLessThanOrEqual(3);
   });
 });
+
+/** A kind 30078 at d as another client of the person's might publish it: any JSON, self-encrypted, signed by them. */
+async function rawEvent(w: W, d: string, json: string, createdAt: number, tags: string[][] = []) {
+  const content = await w.signer.nip44Encrypt(w.pk, json);
+  return w.signer.signEvent({ kind: 30078, created_at: createdAt, tags: [['d', d], ['t', 'kefli'], ...tags], content });
+}
+
+const itemJson = (hash: string, over: Record<string, unknown> = {}) => JSON.stringify({ ...item().item, hash, ...over });
+
+describe('events another client spoilt, or a relay sends to wear the phone out', () => {
+  test('a connected-browsers record with entries of the wrong shape can’t stop sync: its good entries are taken, the saves arrive', async () => {
+    const w = world();
+    const good = { device_pubkey: 'ab'.repeat(32), label: 'Chrome on a laptop', token: 'cd'.repeat(32), connected_at: 5, revoked_at: null };
+    w.publish(await rawEvent(w, 'kefli/devices', JSON.stringify({ v: 1, devices: [null, 5, { token: 1 }, { ...good, label: { a: 1 } }, good] }), 10));
+    w.publish(await remoteSave(w, h(1), 6000, null));
+    expect(await syncInbound(w.ports)).toMatchObject({ items: 1 });
+    expect(w.db.all('SELECT token, label FROM devices')).toEqual([{ token: good.token, label: good.label }]);
+    expect(cursors(w).length).toBeGreaterThan(0);
+  });
+
+  test('a save nested 4,500 deep, inside the 16 KB ceiling, is dropped, and the sync goes on to the rest', async () => {
+    const w = world();
+    // deep enough that writing it back (extra) overflows the stack here, small enough to pass the ceiling
+    const deep = `${'['.repeat(4_500)}${']'.repeat(4_500)}`;
+    w.publish(await rawEvent(w, `kefli/item/${h(2)}`, itemJson(h(2)).replace(/}$/, `,"later":${deep}}`), 6000));
+    w.publish(await remoteSave(w, h(3), 6001, null, { url: 'https://example.com/ok' }));
+    expect(await syncInbound(w.ports)).toMatchObject({ items: 1 });
+    expect(row(w, h(2))).toBeUndefined();
+    expect(row(w, h(3))).toMatchObject({ url: 'https://example.com/ok' });
+    expect(cursors(w).length).toBeGreaterThan(0);
+  });
+});
