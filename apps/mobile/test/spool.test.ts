@@ -51,19 +51,21 @@ describe("the share's spool (8.5)", () => {
 describe('styled text as the spool keeps it (8.5)', () => {
   const shareText = () => kotlinSource('kefli-share', 'share', 'ShareText.kt');
 
-  test('a link whose address is only in its styling is saved: its address follows the text, where the sheet reads it', () => {
+  test('a link whose address is only in its styling is saved, as its address alone, which the sheet takes exactly', () => {
     // ShareCompat's setHtmlText sends <a href="…">A story</a> as the styled text "A story", the address in its link
     // alone: spooled as plain text, the sheet found no address and said That wasn't a link
     expect(firstLink('A story')).toBeNull();
-    expect(firstLink('A story\nhttps://news.example/story')).toBe('https://news.example/story');
-    expect(firstLink('\nhttps://news.example/story')).toBe('https://news.example/story');
-    // several links: written out after the text, the last is taken, as from a plain share
-    expect(firstLink('A story via App\nhttps://news.example/story\nhttps://app.example/')).toBe('https://app.example/');
+    expect(firstLink('https://news.example/story')).toBe('https://news.example/story');
+    // alone, the link's own full stop stays; after its words, it would be read as ending their sentence
+    expect(firstLink('https://en.wikipedia.org/wiki/Washington,_D.C.')).toBe('https://en.wikipedia.org/wiki/Washington,_D.C.');
+    expect(firstLink('Washington\nhttps://en.wikipedia.org/wiki/Washington,_D.C.')).toBe('https://en.wikipedia.org/wiki/Washington,_D.C');
+    // several links, a line each: the last is taken, as from any share
+    expect(firstLink('https://news.example/story\nhttps://app.example/')).toBe('https://app.example/');
     const st = shareText();
     const of = memberOf(st, 'of');
     expect(of).toContain('if (cs !is Spanned) return cs.toString()');
     expect(of).toContain('if (text.contains("http://") || text.contains("https://")) return text');
-    expect(of).toContain('(listOf(text) + links).joinToString("\\n")');
+    expect(of).toContain('return if (links.isEmpty()) text else links.joinToString("\\n")');
     const links = memberOf(st, 'linksOf');
     const steps = ['getSpans(0, s.length, URLSpan::class.java)', '.sortedBy { s.getSpanStart(it) }', '.mapNotNull { it.url }', '.filter { it.startsWith("http://") || it.startsWith("https://") }', '.distinct()', '.takeLast(LINKS)'].map((s) => links.indexOf(s));
     expect(steps.every((at) => at >= 0)).toBe(true);
