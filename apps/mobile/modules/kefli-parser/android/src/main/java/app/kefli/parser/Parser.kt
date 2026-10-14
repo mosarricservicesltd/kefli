@@ -36,6 +36,8 @@ object Parser {
   private const val READY_MS = 20_000L
   /** How long a WebView whose job ran out of time has to answer a trivial script before its renderer is taken as stuck. */
   private const val PROBE_MS = 2_000L
+  /** How long a renderer being ended has to report itself gone before the next WebView is made anyway. */
+  private const val END_MS = 3_000L
 
   private class Job(val id: String, val input: String, val promise: Promise, val timeoutMs: Long)
 
@@ -45,6 +47,8 @@ object Parser {
   private var current: Job? = null
   private var web: WebView? = null
   private var ready = false
+  /** The WebView whose renderer is being ended after its job ran out of time; the next waits until it has gone. */
+  private var ending: WebView? = null
   private val teardown = Runnable { destroy() }
   private val notReady = Runnable { if (web != null && !ready) neverLoaded() }
   private var app: Context? = null
@@ -107,7 +111,7 @@ object Parser {
       }
 
       override fun onRenderProcessGone(v: WebView, detail: RenderProcessGoneDetail): Boolean {
-        if (v === web) gone(detail.didCrash())
+        if (v === ending) ended() else if (v === web) gone(detail.didCrash())
         return true
       }
     }
@@ -152,14 +156,30 @@ object Parser {
     var answered = false
     view.evaluateJavascript("1") { answered = true }
     main.postDelayed({
-      if (!answered) end(view)
-      if (web === view) renew()
+      if (web !== view) {
+        // already gone: its renderer went, and the jobs behind it have a new WebView
+      } else if (answered || !end(view)) {
+        renew()
+      } else {
+        // the next WebView is made once the renderer has reported itself gone, so it doesn't land on the one being
+        // ended; END_MS is the most that is waited
+        ending = view
+        main.postDelayed({ if (ending === view) ended() }, END_MS)
+      }
     }, PROBE_MS)
   }
 
-  /** Ends a renderer held by a page (Android 10 and later; before, it can't be ended, and its WebView just goes). */
-  private fun end(view: WebView) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) view.webViewRenderProcess?.terminate()
+  /**
+   * Ends a renderer held by a page, true when it could: Android 10 and later, and a WebView in its own process. On
+   * earlier versions it can't be ended, and its WebView just goes.
+   */
+  private fun end(view: WebView): Boolean =
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && view.webViewRenderProcess?.terminate() == true
+
+  /** The renderer being ended has gone, or has had its time: the WebView goes, and a new one takes the queue. */
+  private fun ended() {
+    ending = null
+    renew()
   }
 
   /** The WebView goes, and a new one is made for any job still waiting. */
