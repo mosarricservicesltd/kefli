@@ -181,17 +181,37 @@ func (a *API) mayTake(w http.ResponseWriter, r *http.Request, req *request, devi
 	case c.release && (!held || holder != c.signer):
 		fail(w, http.StatusForbidden, "release: holder")
 	default:
-		fresh, err := a.st.UseAuth(r.Context(), c.id, c.until)
-		if err != nil {
-			a.serverError(w, err)
-			return false
-		}
-		if !fresh {
-			fail(w, http.StatusForbidden, c.name()+": replayed")
-		}
-		return fresh
+		return a.roomForDevice(w, r, req.pubkey) && a.useConsent(w, r, c)
 	}
 	return false
+}
+
+// roomForDevice refuses a library that already has MaxDevices device keys authorised, before its proof or release is
+// used, so the same one works once a Disconnect makes room.
+func (a *API) roomForDevice(w http.ResponseWriter, r *http.Request, user string) bool {
+	n, err := a.st.DeviceCount(r.Context(), user)
+	if err != nil {
+		a.serverError(w, err)
+		return false
+	}
+	if n >= MaxDevices {
+		fail(w, http.StatusForbidden, "devices: too_many")
+		return false
+	}
+	return true
+}
+
+// useConsent marks a proof or release used, and refuses one used already.
+func (a *API) useConsent(w http.ResponseWriter, r *http.Request, c consented) bool {
+	fresh, err := a.st.UseAuth(r.Context(), c.id, c.until)
+	if err != nil {
+		a.serverError(w, err)
+		return false
+	}
+	if !fresh {
+		fail(w, http.StatusForbidden, c.name()+": replayed")
+	}
+	return fresh
 }
 
 // alreadyHeld answers a caller that holds the device already: 200, with a proof or release still in its life marked used

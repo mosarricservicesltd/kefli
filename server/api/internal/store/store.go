@@ -159,6 +159,13 @@ func (s *Store) DeviceHolder(ctx context.Context, device string) (string, bool, 
 	return user, err == nil, err
 }
 
+// DeviceCount is how many device keys the user has authorised.
+func (s *Store) DeviceCount(ctx context.Context, user string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM devices WHERE user_pubkey = ?`, user).Scan(&n)
+	return n, err
+}
+
 // DeviceUser is the user a device key uploads for, if it is authorised.
 func (s *Store) DeviceUser(ctx context.Context, device string) (string, bool, error) {
 	var user string

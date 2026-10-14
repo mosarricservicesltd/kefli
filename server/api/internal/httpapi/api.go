@@ -76,6 +76,11 @@ const DefaultMaxOffers = 10_000
 // worth; an IPv4 /24 has no such limit, being many people's, and each address costs its owner something.
 const MaxBlockOffers = 120
 
+// MaxDevices is how many device keys one library may have authorised at once. Each is a wrap recipient on the relay,
+// and the write policy holds every one in memory; the phone's connected-browsers record (contract 4.9) holds about 42
+// under the 16 KB ceiling, so this leaves room for rows a Disconnect hasn't reached yet.
+const MaxDevices = 64
+
 // maxOffer is the largest offer taken: a pair offer sealed as the extension makes it is under 1 KB, a phone offer
 // under 300 bytes.
 const maxOffer = 8192
