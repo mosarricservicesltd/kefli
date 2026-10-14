@@ -57,13 +57,14 @@ const err = (e: unknown) => String((e as Error)?.message ?? e);
 
 /**
  * An event dated past the relay's clock by more than it allows: strfry's "invalid: created_at too late" (15 minutes
- * ahead, for every strfry relay, Kefli's own among them), khatru's "event too much in the future". It is the phone's
- * clock running fast, not the event, so it is retried with the backoff until the clock is right or the relay's has
- * caught up; refused for good, every save made on such a phone missed every strfry relay. A refusal as too early stays
- * final: the library copied to a relay added in Advanced goes as already signed (sendCopyRelay), and an event years old
- * stays so however often it is sent.
+ * ahead, for every strfry relay, Kefli's own among them), khatru's "event too much in the future", and nostr-rs-relay's
+ * "invalid: The event created_at field is out of the acceptable range (+900sec) for this relay.", which it sends only
+ * for a date ahead. It is the phone's clock running fast, not the event, so it is retried with the backoff until the
+ * clock is right or the relay's has caught up; refused for good, every save made on such a phone missed every strfry
+ * relay. A refusal as too early stays final: the library copied to a relay added in Advanced goes as already signed
+ * (sendCopyRelay), and an event years old stays so however often it is sent.
  */
-const CLOCK = new RegExp('created_at too late|too (?:much|far) in the future', 'i');
+const CLOCK = new RegExp('created_at too late|too (?:much|far) in the future|created_at field is out of the acceptable range', 'i');
 
 /** A relay's OK prefix decides the outcome (4.3); an event refused as dated ahead of the relay's clock is tried again. */
 export function relayResult(target: string, a: RelayAnswer, eventId: string): TargetResult {

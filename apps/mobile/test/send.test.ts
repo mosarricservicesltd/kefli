@@ -269,9 +269,10 @@ describe('sending a save (mobile spec 4.3)', () => {
     [{ ok: false, reason: 'blocked: not on the list' } as RelayAnswer, 'rejected'],
     [{ ok: false, reason: 'invalid: bad' } as RelayAnswer, 'rejected'],
     [{ ok: false, reason: 'auth-required: who are you' } as RelayAnswer, 'retry'],
-    // the phone's clock ahead of the relay's: strfry's words, and khatru's
+    // the phone's clock ahead of the relay's: strfry's words, khatru's and nostr-rs-relay's
     [{ ok: false, reason: 'invalid: created_at too late' } as RelayAnswer, 'retry'],
     [{ ok: false, reason: 'blocked: event too much in the future' } as RelayAnswer, 'retry'],
+    [{ ok: false, reason: 'invalid: The event created_at field is out of the acceptable range (+900sec) for this relay.' } as RelayAnswer, 'retry'],
     [{ ok: false, reason: 'invalid: created_at too early' } as RelayAnswer, 'rejected'],
   ])('relay answer %j is %s', (a, kind) => {
     expect(relayResult('r', a, 'id').kind).toBe(kind);
