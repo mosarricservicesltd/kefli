@@ -15,8 +15,9 @@ export type Pending = { id: number; hash: string; url: string; shared_url: strin
  */
 export function pendingParses(db: SqlDb, owner: string): Pending[] {
   return db.all<Pending>(
+    // the person's own saves before an import's, which may run to thousands and take days past the day's 20 MB (FD 117)
     `SELECT id, hash, url, shared_url, published, event_id, x_state FROM items WHERE owner = ? AND text_state = 'queued' AND pending_delete_at IS NULL
-     ORDER BY COALESCE(timed_out_at, 0), saved_at, id`,
+     ORDER BY COALESCE(timed_out_at, 0), origin = 'import', saved_at, id`,
     owner,
   );
 }

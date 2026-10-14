@@ -3,6 +3,7 @@
 // 413 quota or daily gave, kept on the phone; the saves whose text waits on the phone after Kefli's server refused it,
 // read from blobs.last_error ('quota', 'daily', 'too_large', or 'http <status>' for other refusals, NULL once the
 // operator holds the blob); and what Advanced and the Saved sheet show from them. Platform-free.
+import { readFigures as figuresIn } from '@kefli/protocol';
 import type { SqlDb } from './db';
 
 /** A megabyte as Kefli's server counts it. */
@@ -15,18 +16,14 @@ const DAY = 86_400;
 /** In bytes (C§6): the library's quota and what its blobs take of it, its daily limit and its last 24 hours' uploads. */
 export type Figures = { quota: number; used: number; daily: number; today: number };
 
-const isCount = (x: unknown): x is number => typeof x === 'number' && Number.isSafeInteger(x) && x >= 0;
-
 /**
  * The figures in an answer: GET /account's, a 413 quota or daily's body, or the four figures alone. Null unless all
- * four are whole numbers of bytes; a body in a version this client doesn't know is refused (C§10).
+ * four are whole numbers of bytes (the protocol's readFigures); a body in a version this client doesn't know is
+ * refused (C§10).
  */
 export function readFigures(body: unknown): Figures | null {
-  if (!body || typeof body !== 'object') return null;
-  const b = body as Record<string, unknown>;
-  if (b.v !== undefined && b.v !== 1) return null;
-  const f = { quota: b.quota, used: b.used, daily: b.daily, today: b.today };
-  return Object.values(f).every(isCount) ? (f as Figures) : null;
+  const v = body && typeof body === 'object' ? (body as { v?: unknown }).v : undefined;
+  return v === undefined || v === 1 ? figuresIn(body) : null;
 }
 
 /**

@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"database/sql"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -143,4 +144,36 @@ func TestFiguresThatCantBeReadAre500(t *testing.T) {
 	wantError(t, s, b, 500, "server")
 	s, b = e.call(user, "GET", "/account", nil)
 	wantError(t, s, b, 500, "server")
+}
+
+// A blob's GET answers 404 only when it is gone: for a browser's capture the phone then fetches the page itself
+// (contract 4.4, v1.12), so a fault reading the store is a 500, which it tries again.
+func TestABlobsFaultIsNever404(t *testing.T) {
+	e := newEnv(t)
+	user := newKey()
+	e.registered(user)
+	blob := []byte("a saved article")
+	if s, b := e.upload(user, blob); s != 200 {
+		t.Fatalf("upload: %d %v", s, b)
+	}
+	if s, _ := e.fetch(hash(blob)); s != 200 {
+		t.Fatalf("GET: %d", s)
+	}
+	if err := os.Remove(filepath.Join(e.dir, "blobs", hash(blob)[:2], hash(blob))); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := e.fetch(hash(blob)); s != 404 {
+		t.Fatalf("a file that's gone: %d, want 404", s)
+	}
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(e.dir, "k.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`ALTER TABLE owners RENAME TO owners_away`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	if s, b := e.fetch(hash(blob)); s != 500 {
+		t.Fatalf("a store that can't be read: %d %s, want 500", s, b)
+	}
 }

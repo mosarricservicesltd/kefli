@@ -28,7 +28,7 @@ import { KefliShare } from '../../modules/kefli-share/src';
 import { shareLine } from '../data/account';
 import { drawMs } from '../data/covers';
 import { release } from '../data/outbox';
-import { undoSave } from '../data/saves';
+import { undoShare } from '../data/library';
 import { removeAllFiles, runOutbox } from '../services/runner';
 import { saveLink, type Queued } from '../services/save';
 import { store } from '../services/store';
@@ -163,7 +163,8 @@ function SavedSheet({ spoolId }: { spoolId?: string }) {
   const takeBack = () => {
     const r = result.current;
     if (!r?.hash) return;
-    const { staged } = undoSave(store(), store().get<{ pubkey: string }>("SELECT pubkey FROM identities WHERE role = 'active'")!.pubkey, r.hash, r.held, r.prior);
+    const owner = store().get<{ pubkey: string }>("SELECT pubkey FROM identities WHERE role = 'active'")!.pubkey;
+    const { staged } = undoShare(store(), Math.floor(Date.now() / 1000), owner, r.hash, r.held, r.prior);
     r.held = [];
     if (!r.prior) {
       removeAllFiles(r.hash);

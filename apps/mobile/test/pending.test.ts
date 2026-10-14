@@ -1,7 +1,7 @@
 import { itemHash } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
-import { ensureIdentityRow, queueSave } from '../src/data/saves';
+import { ensureIdentityRow, queueImported, queueSave } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
 import { pendingParses } from '../src/data/pending';
 import { DESKTOP_UA, MOBILE_UA, PAGE_MAX_BYTES, RENDER_MAX_BYTES, fetchPage, refusal, type ParserResult } from '../src/services/page';
@@ -55,6 +55,13 @@ function world(pages: Record<string, Page | 'down'> = {}, parse?: (url: string) 
 }
 
 describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
+  test("the person's own saves are parsed before an import's (FD 117)", () => {
+    const w = world();
+    queueImported(w.db, PK, ['https://i.com/1', 'https://i.com/2'], 900, T);
+    w.share('https://own.com/a');
+    expect(pendingParses(w.db, PK).map((p) => p.url)).toEqual(['https://own.com/a', 'https://i.com/1', 'https://i.com/2']);
+  });
+
   test('what a response may be', () => {
     expect(refusal(200, 'text/html; charset=utf-8', 10)).toBeNull();
     expect(refusal(200, 'application/xhtml+xml', 10)).toBeNull();

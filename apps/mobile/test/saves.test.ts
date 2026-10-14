@@ -1,6 +1,7 @@
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow, priorOf, queueSave, undoSave } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
+import { commitDelete, deleteItem, undoShare } from '../src/data/library';
 import { memoryDb } from './sqlite';
 
 const PK = 'ab'.repeat(32);
@@ -58,5 +59,54 @@ describe('Undo on the Saved sheet (mobile spec 5.4, 4.3)', () => {
     expect(w.db.get('SELECT saved_at FROM items')).toEqual({ saved_at: 100 });
     w.db.run('UPDATE items SET pending_delete_at = 5');
     expect(priorOf(w.db, PK, H)).toBeNull();
+  });
+});
+
+describe('a save shared again while its delete waits on Undo (FD 34)', () => {
+  function deleting() {
+    const w = world();
+    queueSave(w.db, 100, w.item(100), w.blob, T);
+    w.db.run("UPDATE items SET event_id = 'e1', event_created_at = 100, remote_d = 'kefli/item/x', dirty = 0");
+    w.db.run('DELETE FROM outbox');
+    const change = deleteItem(w.db, 150, PK, H);
+    return { ...w, del: change.held, change };
+  }
+
+  test("the delete's own Undo afterwards leaves the share's publish alone", () => {
+    const w = deleting();
+    const held = queueSave(w.db, 200, w.item(200), null, T);
+    w.change.revert();
+    expect(held).toHaveLength(1);
+    expect(w.db.all('SELECT op, state FROM outbox')).toEqual([{ op: 'publish_item', state: 'held' }]);
+    expect(w.db.get('SELECT state, saved_at, pending_delete_at FROM items')).toEqual({ state: 'unread', saved_at: 200, pending_delete_at: null });
+  });
+
+  test('is kept: the delete is undone and the save comes back to the top of Unread', () => {
+    const w = deleting();
+    expect(priorOf(w.db, PK, H)).toBeNull();
+    const held = queueSave(w.db, 200, w.item(200), null, T);
+    expect(held).toHaveLength(1);
+    expect(w.db.get('SELECT state, saved_at, pending_delete_at, dirty FROM items')).toEqual({ state: 'unread', saved_at: 200, pending_delete_at: null, dirty: 1 });
+    // the Saves screen's toast closes afterwards without Undo: nothing is deleted, here or on the relays
+    commitDelete(w.db, PK, H, w.del);
+    expect(w.db.get('SELECT COUNT(*) AS n FROM items')).toEqual({ n: 1 });
+    expect(w.db.all('SELECT op, state FROM outbox')).toEqual([{ op: 'publish_item', state: 'held' }]);
+  });
+
+  test("the share's Undo deletes it as Delete does, its kind 5 included", () => {
+    const w = deleting();
+    const held = queueSave(w.db, 200, w.item(200), null, T);
+    expect(undoShare(w.db, 210, PK, H, held, null)).toEqual({ staged: [] });
+    expect(w.db.all('SELECT * FROM items')).toEqual([]);
+    expect(w.db.all("SELECT op, state FROM outbox WHERE op = 'delete_item'")).toEqual([{ op: 'delete_item', state: 'queued' }]);
+    expect(w.db.all("SELECT op FROM outbox WHERE op = 'publish_item'")).toEqual([]);
+  });
+
+  test("a new save's Undo is undoSave's", () => {
+    const w = world();
+    const held = queueSave(w.db, 100, w.item(100), w.blob, T);
+    expect(undoShare(w.db, 110, PK, H, held, null)).toEqual({ staged: ['/staging/ef.bin'] });
+    expect(w.db.all('SELECT * FROM items')).toEqual([]);
+    expect(w.db.all("SELECT op FROM outbox WHERE op != 'publish_lists'")).toEqual([]);
   });
 });

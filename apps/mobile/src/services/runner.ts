@@ -13,6 +13,7 @@ import { drain, outboxWaker } from './send';
 import { syncInbound, syncOwner, type SyncPorts, type SyncResult } from './sync';
 import { runMove, type MoveOutcome } from './move';
 import { moveJob } from '../data/move';
+import { accountFigures, recordFigures } from '../data/account';
 import { deriveArticle } from '../reader/blocks';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { getNetworkStateAsync, NetworkStateType } from 'expo-network';
@@ -86,8 +87,9 @@ export function runOutbox(): Promise<number> {
         publish: (url, event) => pool.publish(url, event),
         readBlob: readStaged,
         query: (url, filters) => pool.query(url, filters),
-        // INTEGRATION (fair use, C§5 v1.12): data/account.ts's last known figures and recordFigures go here, as
-        // figures: (owner) => <its reader>(store(), owner) and onFigures: (owner, f) => recordFigures(store(), owner, f, now)
+        // the library's last known figures reckon the room a confirmed deletion leaves, and a 413's replace them (C§5)
+        figures: (owner) => accountFigures(store(), owner),
+        onFigures: (owner, f) => void recordFigures(store(), owner, f, Math.floor(Date.now() / 1000)),
       });
     } finally {
       running = null;

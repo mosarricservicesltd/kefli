@@ -414,14 +414,24 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusNotFound, "not_found")
 		return
 	}
+	// a 404 tells the phone a browser's capture is gone, so it fetches the page itself (contract 4.4, v1.12): a fault
+	// here is a 500, which it tries again, never a 404
 	ok, err := s.st.Exists(r.Context(), sha)
-	if err != nil || !ok {
+	if err != nil {
+		refuse(w, http.StatusInternalServerError, "server")
+		return
+	}
+	if !ok {
 		refuse(w, http.StatusNotFound, "not_found")
 		return
 	}
 	f, err := os.Open(s.path(sha))
-	if err != nil {
+	if errors.Is(err, fs.ErrNotExist) {
 		refuse(w, http.StatusNotFound, "not_found")
+		return
+	}
+	if err != nil {
+		refuse(w, http.StatusInternalServerError, "server")
 		return
 	}
 	defer f.Close()

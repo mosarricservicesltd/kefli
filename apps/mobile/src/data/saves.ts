@@ -35,12 +35,26 @@ export function ensureIdentityRow(db: SqlDb, now: number, pubkey: string, origin
 }
 
 /**
- * A repeat save (contract 4.1, flow decision 89): an archived save is un-archived with saved_at set to the new
- * save's time and republished; an unread one is left unchanged. The existing text is kept. Returns the held rows.
+ * A save shared again while its delete waits on Undo (FD 34): the newest wish wins, so the delete is undone, its held
+ * kind 5 going, and the save comes back as an archived one does. The share sheet counts it as absent (priorOf), and
+ * without this the share matched the hidden row, changed nothing, and was lost when the delete went through.
+ */
+function keepFromDelete(db: SqlDb, owner: string, hash: string): boolean {
+  if (!db.get('SELECT 1 FROM items WHERE owner = ? AND hash = ? AND pending_delete_at IS NOT NULL', owner, hash)) return false;
+  db.run('UPDATE items SET pending_delete_at = NULL WHERE owner = ? AND hash = ?', owner, hash);
+  undo(db, db.all<{ id: number }>("SELECT id FROM outbox WHERE op = 'delete_item' AND signer = ? AND subject = ? AND state = 'held'", owner, hash).map((r) => r.id));
+  return true;
+}
+
+/**
+ * A repeat save (contract 4.1, flow decision 89): an archived save, or one waiting on its delete's Undo, comes back
+ * to Unread with saved_at set to the new save's time and is republished; an unread one is left unchanged. The
+ * existing text is kept. Returns the held rows.
  */
 function repeatSave(db: SqlDb, now: number, item: NewItem, register: number | null): number[] {
+  const revived = keepFromDelete(db, item.owner, item.hash);
   const existing = db.get<{ state: string }>('SELECT state FROM items WHERE owner = ? AND hash = ?', item.owner, item.hash);
-  if (existing?.state !== 'archived') return [];
+  if (!revived && existing?.state !== 'archived') return [];
   db.run("UPDATE items SET state = 'unread', saved_at = ?, modified_at = ?, dirty = 1 WHERE owner = ? AND hash = ?", item.savedAt, now, item.owner, item.hash);
   return [enqueue(db, now, { op: 'publish_item', signer: item.owner, subject: item.hash, targets: writeRelays(db, item.owner), dependsOn: register, held: true })];
 }

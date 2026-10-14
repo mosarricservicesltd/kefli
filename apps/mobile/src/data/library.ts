@@ -5,7 +5,7 @@ import { progressAt } from '@kefli/protocol';
 import type { SqlDb } from './db';
 import { enqueue, release, undo } from './outbox';
 import { writeRelays } from './lists';
-import { blobDeletion, blobRow, namesText, queueBlobDelete, textHolders, withdrawText } from './saves';
+import { blobDeletion, blobRow, namesText, queueBlobDelete, textHolders, undoSave, withdrawText, type Prior } from './saves';
 
 /** Reading speed for "N min" (FD 1). */
 export const WPM = 230;
@@ -111,10 +111,19 @@ export function deleteItem(db: SqlDb, now: number, owner: string, hash: string):
       held,
       revert: () => db.tx(() => {
         db.run('UPDATE items SET pending_delete_at = NULL WHERE owner = ? AND hash = ?', owner, hash);
-        undo(db, held);
+        undo(db, ownRows(db, owner, hash, held));
       }),
     };
   });
+}
+
+/**
+ * The delete's own rows among the ids its toast holds. A share that kept the save undid them (data/saves.ts), and
+ * the outbox may since have given an id to another row, such as that share's held publish, which the toast must
+ * neither send nor undo.
+ */
+function ownRows(db: SqlDb, owner: string, hash: string, ids: number[]): number[] {
+  return ids.filter((id) => db.get("SELECT 1 FROM outbox WHERE id = ? AND op = 'delete_item' AND signer = ? AND subject = ?", id, owner, hash));
 }
 
 /**
@@ -137,7 +146,7 @@ function dropText(db: SqlDb, at: number, owner: string, hash: string, sha256: st
 /** The delete's toast closed without Undo: the row goes, with its search entry, any unsent publish, and its text. */
 export function commitDelete(db: SqlDb, owner: string, hash: string, held: number[]): void {
   db.tx(() => {
-    release(db, held);
+    release(db, ownRows(db, owner, hash, held));
     const row = db.get<{ id: number; text_sha256: string | null; text_servers: string | null; pending_delete_at: number }>(
       'SELECT id, text_sha256, text_servers, pending_delete_at FROM items WHERE owner = ? AND hash = ? AND pending_delete_at IS NOT NULL', owner, hash);
     if (!row) return;
@@ -145,6 +154,21 @@ export function commitDelete(db: SqlDb, owner: string, hash: string, held: numbe
     db.run('DELETE FROM items WHERE id = ?', row.id);
     db.run("DELETE FROM outbox WHERE op = 'publish_item' AND signer = ? AND subject = ? AND state IN ('held', 'queued')", owner, hash);
     if (row.text_sha256) dropText(db, row.pending_delete_at, owner, hash, row.text_sha256, row.text_servers);
+  });
+}
+
+/**
+ * Undo on the Saved sheet. A share that brought back a save waiting on its delete's Undo (data/saves.ts) found a save
+ * that had gone out before, so undoing the share deletes it as Delete does, its kind 5 and text included, where
+ * dropping the row would let the next sync bring it back. Any other share is undone by undoSave.
+ */
+export function undoShare(db: SqlDb, now: number, owner: string, hash: string, held: number[], prior: Prior): { staged: string[] } {
+  const revived = !prior && !!db.get('SELECT 1 FROM items WHERE owner = ? AND hash = ? AND event_id IS NOT NULL', owner, hash);
+  if (!revived) return undoSave(db, owner, hash, held, prior);
+  return db.tx(() => {
+    undo(db, held);
+    commitDelete(db, owner, hash, deleteItem(db, now, owner, hash).held);
+    return { staged: [] };
   });
 }
 
