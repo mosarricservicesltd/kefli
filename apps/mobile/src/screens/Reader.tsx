@@ -14,6 +14,7 @@ import { fontFamily, radius, reader as RT } from '@kefli/tokens';
 import { quickIn, quickOut } from '@kefli/tokens/reanimated';
 import { minutes, nextUnread, reconcileWords, rowByHash, setPosition, textLost, type LibRow } from '../data/library';
 import { blockOfWord, type Article } from '../reader/blocks';
+import { TITLE_CHARS, clip } from '../reader/clip';
 import { isDoubleTap, scrollYForWord, wordAtOffset, wordAtScroll, type Place, type Tap } from '../reader/position';
 import { readerColors, type PaletteId, type ReaderColors } from '../reader/palette';
 import { setReaderPalette, setReaderSize, useReaderPrefs } from '../reader/prefs';
@@ -373,10 +374,11 @@ function Article({ row, P, owner, article, voice, viewRange, jump, imgs }: {
               <View style={{ marginTop: -16, marginHorizontal: -20, marginBottom: 22 }}>
                 <Cover hash={row.hash} size={width / 3} cols={3} square />
               </View>
-              <T style={[ui(13, 'meta', 1.45), { color: P.muted, marginBottom: 8 }]}>{row.site ?? hostOf(row.url)}</T>
-              <T accessibilityRole="header" style={[articleTitle, { color: P.text, marginBottom: 12 }]}>{row.title ?? hostOf(row.url)}</T>
+              {/* a page's title, site and byline have no length of their own (reader/clip) */}
+              <T style={[ui(13, 'meta', 1.45), { color: P.muted, marginBottom: 8 }]}>{clip(row.site ?? hostOf(row.url), TITLE_CHARS)}</T>
+              <T accessibilityRole="header" style={[articleTitle, { color: P.text, marginBottom: 12 }]}>{clip(row.title ?? hostOf(row.url), TITLE_CHARS)}</T>
               <T style={[ui(13, 'body', 1.45), { color: P.muted, marginBottom: 24 }]}>
-                {[row.byline ?? row.site ?? hostOf(row.url), mins !== null ? S.row.mins(mins) : null, savedWhen(row.saved_at)].filter(Boolean).join(' · ')}
+                {[clip(row.byline ?? row.site ?? hostOf(row.url), TITLE_CHARS), mins !== null ? S.row.mins(mins) : null, savedWhen(row.saved_at)].filter(Boolean).join(' · ')}
               </T>
             </>
           )}
@@ -505,7 +507,7 @@ export default function Reader() {
               <View style={{ width: 48, height: 48, borderRadius: radius.button, borderWidth: 1, borderColor: alpha(P.muted, 0.3), alignItems: 'center', justifyContent: 'center' }}>
                 <Icon name="hourglass" size={22} color={P.muted} />
               </View>
-              <T style={[ui(15, 'title', 1.45), { color: P.text }]}>{row.title ?? row.url.replace(/^https?:\/\//, '')}</T>
+              <T style={[ui(15, 'title', 1.45), { color: P.text }]}>{clip(row.title ?? row.url.replace(/^https?:\/\//, ''), TITLE_CHARS)}</T>
               <T style={[ui(15, 'body', 1.45), { color: P.muted }]}>{S.reader.offlineWait}</T>
             </View>
           )}

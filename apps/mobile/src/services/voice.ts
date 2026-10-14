@@ -8,6 +8,7 @@ import { reconcileWords, rowByHash, setPosition, textLost, type LibRow } from '.
 import { LISTEN_CUED, clearCued, playFrom, readyRow, recordPlayed, setCued } from '../data/listen';
 import { getSetting, setSetting } from '../data/settings';
 import { readRate, nextRate, snapRate, wpsFor, wpsKey } from '../voice/clock';
+import { SESSION_CHARS, clip } from '../reader/clip';
 import { sessionVoice } from '../voice/choice';
 import { appState } from './app';
 import { runSync } from './runner';
@@ -106,7 +107,8 @@ export async function listen(row: Pick<LibRow, 'hash' | 'title' | 'site' | 'url'
   voiceKey = voice.voiceId ?? 'default';
   const wps = wpsAt(rate);
   const word = Math.max(0, Math.min(fromWord, totalWords - 1));
-  const title = row.title ?? row.url;
+  // the media session's metadata crosses to the system in one Binder transaction: a page's title may be a megabyte
+  const title = clip(row.title ?? row.url, SESSION_CHARS);
   if (owner) recordPlayed(store(), owner, row.hash, Math.floor(Date.now() / 1000));
   set({ hash: row.hash, title, playing: true, word, rate, wordTiming: true, wps, ended: false, totalWords, sentences: list, sentence: 0, firstWords: list.map((x) => x.firstWord) });
   let art: string | null = null;
@@ -115,7 +117,7 @@ export async function listen(row: Pick<LibRow, 'hash' | 'title' | 'site' | 'url'
   } catch {
     art = null; // the card shows without artwork rather than not at all
   }
-  await KefliVoice.start({ hash: row.hash, title, site: row.site ?? '', sentences: list, startWord: word, totalWords, rate, wps, artworkPath: art, ...voice });
+  await KefliVoice.start({ hash: row.hash, title, site: clip(row.site ?? '', SESSION_CHARS), sentences: list, startWord: word, totalWords, rate, wps, artworkPath: art, ...voice });
 }
 
 // Play all's snapshot of Listen's list, the articles still to come (FD 35).
@@ -218,7 +220,7 @@ export function readySession(row: LibRow): Session | null {
   const rate = readRate(getSetting(store(), 'voice.speed'));
   const list = article.sentences;
   return {
-    hash: row.hash, title: row.title ?? row.url, playing: false, word: Math.min(playFrom(row), article.words - 1), rate, wordTiming: true,
+    hash: row.hash, title: clip(row.title ?? row.url, SESSION_CHARS), playing: false, word: Math.min(playFrom(row), article.words - 1), rate, wordTiming: true,
     wps: wpsAt(rate), ended: false, totalWords: article.words, sentences: list, sentence: 0, firstWords: list.map((x) => x.firstWord),
   };
 }
