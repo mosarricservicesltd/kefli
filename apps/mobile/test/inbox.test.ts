@@ -31,12 +31,14 @@ function world() {
   const blobs = new Map<string, Uint8Array>();
   const texts = new Map<string, string>();
   let parses = 0;
+  // what the operator answers for a blob it isn't serving: 404 once it has none (C§4.4, v1.12), or a failure of its own
+  let missing = 404;
   const ports: InboxPorts = {
     db, now: () => clock, signer: user, crypto: nodeCrypto,
     query: async () => wraps,
     fetch: (async (url: string) => {
       const b = blobs.get(url);
-      return b ? new Response(b as never) : new Response('', { status: 404 });
+      return b ? new Response(b as never) : new Response('', { status: missing });
     }) as never,
     // kefliMarkdown: the content HTML's heading, then the words; metadata comes from the request
     markdown: async (html): Promise<ParserResult> => {
@@ -69,7 +71,10 @@ function world() {
   const ops = () => db.all<{ op: string; subject: string }>('SELECT op, subject FROM outbox ORDER BY id').map((r) => r.op);
   const item = (hash: string) => db.get<{ text_state: string; title: string; origin: string; origin_device: string; state: string; saved_at: number }>(
     'SELECT text_state, title, origin, origin_device, state, saved_at FROM items WHERE owner = ? AND hash = ?', owner, hash);
-  return { db, owner, user, userSk, device, ports, wraps, texts, request, send, withHtml, ops, item, parses: () => parses, tick: (s: number) => (clock += s) };
+  return {
+    db, owner, user, userSk, device, ports, wraps, blobs, texts, request, send, withHtml, ops, item, parses: () => parses, tick: (s: number) => (clock += s),
+    answerMissing: (status: number) => void (missing = status),
+  };
 }
 
 describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
@@ -171,8 +176,10 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     expect(await drainInbox(w.ports, w.owner)).toEqual({ ignored_token: 1 });
   });
 
-  test("a blob that can't be read is tried again at each drain, then the page is fetched once it has expired", async () => {
+  test("a blob that can't be read yet is tried again at each drain, then the page is fetched once it has expired", async () => {
     const w = world();
+    // the operator failing (Caddy's answer while keflid restarts), not saying the blob is gone
+    w.answerMissing(502);
     const blob = await w.withHtml('<h1>Later</h1>', false);
     await w.send(w.request({ html: blob.html }));
     expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_blob: 1 });
@@ -187,12 +194,76 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     expect(w.ops()).toContain('delete_wrap');
 
     const w2 = world();
-    const gone = await w2.withHtml('<h1>Gone</h1>', false);
-    await w2.send(w2.request({ html: gone.html }));
-    await drainInbox(w2.ports, w2.owner);
+    w2.answerMissing(503);
+    const late = await w2.withHtml('<h1>Late</h1>', false);
+    await w2.send(w2.request({ html: late.html }));
+    expect(await drainInbox(w2.ports, w2.owner)).toEqual({ failed_blob: 1 });
     w2.tick(INBOX_BLOB_LIFE);
     expect(await drainInbox(w2.ports, w2.owner)).toEqual({ created: 1 });
     expect(w2.item(hash)?.text_state).toBe('queued');
+  });
+
+  test('a capture the operator answers 404 for is gone: its page is fetched at once, not after 14 days (C§4.4, v1.12)', async () => {
+    const w = world();
+    const gone = await w.withHtml('<h1>Gone</h1>', false);
+    await w.send(w.request({ html: gone.html }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    const hash = itemHash('https://example.com/a');
+    // waiting for its parse as a request without HTML does, which the runner starts straight after the drain
+    expect(w.item(hash)).toMatchObject({ text_state: 'queued', title: 'From the browser', origin: 'browser', origin_device: 'Chrome on a Linux laptop' });
+    expect(pendingParses(w.db, w.owner).map((p) => p.url)).toEqual(['https://example.com/a']);
+    expect(w.parses()).toBe(0);
+    // taken, not failed_blob: its wrap is deleted, and it isn't tried again
+    expect(w.db.all('SELECT outcome, wrap_json FROM inbox_seen')).toEqual([{ outcome: 'created', wrap_json: null }]);
+    expect(w.ops()).toContain('delete_wrap');
+    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+  });
+
+  test('a blob that failed before and is then answered 404 is gone too, within its 14 days', async () => {
+    const w = world();
+    w.answerMissing(500);
+    const blob = await w.withHtml('<h1>Lost</h1>', false);
+    await w.send(w.request({ html: blob.html }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_blob: 1 });
+    w.tick(3_600);
+    w.answerMissing(404);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    expect(w.item(itemHash('https://example.com/a'))?.text_state).toBe('queued');
+    expect(pendingParses(w.db, w.owner)).toHaveLength(1);
+    expect(w.db.get("SELECT 1 AS n FROM inbox_seen WHERE outcome = 'failed_blob'")).toBeUndefined();
+    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+  });
+
+  test('only a 404 says the blob is gone: every other failure is tried again, as before', async () => {
+    const w = world();
+    const enc = await encryptText('<h1>Checked</h1>', nodeCrypto);
+    const html = { ...enc.text, server: D.operator.blossom };
+    const at = `${D.operator.blossom}/${enc.text.sha256}`;
+    for (const status of [400, 401, 403, 410, 429, 500, 502, 503, 507]) {
+      w.answerMissing(status);
+      expect([status, await readBlob(w.ports, html)]).toEqual([status, { kind: 'failed' }]);
+    }
+    w.answerMissing(404);
+    expect(await readBlob(w.ports, html)).toEqual({ kind: 'gone' });
+    // a blob that doesn't check out, served under its address
+    w.blobs.set(at, (await encryptText('<h1>Another</h1>', nodeCrypto)).blob);
+    expect(await readBlob(w.ports, html)).toEqual({ kind: 'failed' });
+    w.blobs.set(at, enc.blob);
+    expect(await readBlob(w.ports, html)).toEqual({ kind: 'html', html: '<h1>Checked</h1>' });
+    // the network failing
+    const served = w.ports.fetch;
+    w.ports.fetch = (async () => {
+      throw new TypeError('Network request failed');
+    }) as never;
+    expect(await readBlob(w.ports, html)).toEqual({ kind: 'failed' });
+    // and through a drain: failed_blob, still fetching, no parse
+    await w.send(w.request({ html }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_blob: 1 });
+    expect(w.item(itemHash('https://example.com/a'))?.text_state).toBe('fetching');
+    expect(pendingParses(w.db, w.owner)).toEqual([]);
+    w.ports.fetch = served;
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    expect(w.item(itemHash('https://example.com/a'))?.text_state).toBe('cached');
   });
 
   test('a blob server that trickles, or never ends, lets go at the deadline or the cap (F12)', async () => {
@@ -211,7 +282,7 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
       w.ports.fetch = (async () => new Response(new ReadableStream({ pull: () => new Promise(() => undefined) }), { status: 200 })) as never;
       const got = readBlob(w.ports, blob.html);
       await jest.advanceTimersByTimeAsync(INBOX_TIMEOUT_MS * 2);
-      expect(await Promise.race([got, Promise.resolve('still waiting')])).toBeNull();
+      expect(await Promise.race([got, Promise.resolve('still waiting')])).toEqual({ kind: 'failed' });
     } finally {
       jest.useRealTimers();
     }

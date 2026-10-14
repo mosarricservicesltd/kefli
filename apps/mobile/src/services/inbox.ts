@@ -7,8 +7,9 @@
 // An accepted request becomes a save. Its HTML, when there is some, comes from the operator Blossom server only,
 // capped and checked against its sha256: Readability's content HTML, which the canonical Markdown conversion
 // (kefliMarkdown) turns into the save's text, with the title and the rest as the extension read them; a blob that can't be read is failed_blob and
-// tried again from wrap_json at each drain. Only created, merged and unarchived queue delete_wrap; every other
-// wrap is left, so a phone without the record yet can't remove a save another phone still needs.
+// tried again from wrap_json at each drain, while one the operator answers 404 for is gone, and the save fetches its
+// page at once (v1.12). Only created, merged and unarchived queue delete_wrap; every other wrap is left, so a phone
+// without the record yet can't remove a save another phone still needs.
 //
 // RULED: a request naming another server for its HTML is taken without it, and the page is fetched instead, so a
 // save from a connected browser is never lost to a bad field.
@@ -87,23 +88,49 @@ export async function fromBrowser(p: Pick<InboxPorts, 'markdown'>, r: SaveReques
 export const INBOX_TIMEOUT_MS = 60_000;
 
 /**
- * The inbox blob's HTML, or null when it can't be had or doesn't check out. The deadline covers the whole body and
- * the cap is counted as it streams (net/http, F12), so a server that trickles or never ends can't hold the inbox.
+ * What reading the inbox blob gave: its HTML; gone, when the operator answers 404 for it, as for a blob that has
+ * expired, been deleted or was never taken (C§4.4, v1.12); or failed, when it can't be had now or doesn't check out.
  */
-export async function readBlob(p: Pick<InboxPorts, 'fetch' | 'crypto'>, html: NonNullable<SaveRequest['html']>): Promise<string | null> {
+export type BlobRead = { kind: 'html'; html: string } | { kind: 'gone' } | { kind: 'failed' };
+
+const GONE: BlobRead = { kind: 'gone' };
+const FAILED: BlobRead = { kind: 'failed' };
+
+/**
+ * The inbox blob's HTML. The deadline covers the whole body and the cap is counted as it streams (net/http, F12), so
+ * a server that trickles or never ends can't hold the inbox.
+ */
+export async function readBlob(p: Pick<InboxPorts, 'fetch' | 'crypto'>, html: NonNullable<SaveRequest['html']>): Promise<BlobRead> {
   try {
     const o = await open(p.fetch, `${html.server.replace(/\/+$/, '')}/${html.sha256}`, { method: 'GET' }, INBOX_TIMEOUT_MS);
-    if (!o.res.ok) return (o.done(), null);
+    if (!o.res.ok) return (o.done(), o.res.status === 404 ? GONE : FAILED);
     const blob = await o.read(INBOX_MAX_BYTES);
     const text = await decryptText(blob, { sha256: html.sha256, key: html.key, nonce: html.nonce }, p.crypto);
-    return new TextEncoder().encode(text).length > INBOX_MAX_BYTES - 16 ? null : text;
+    return new TextEncoder().encode(text).length > INBOX_MAX_BYTES - 16 ? FAILED : { kind: 'html', html: text };
   } catch {
-    return null;
+    return FAILED;
   }
 }
 
 function pendingRow(db: SqlDb, owner: string, hash: string): Pending | undefined {
   return db.get<Pending>('SELECT id, hash, url, shared_url, published, event_id, x_state FROM items WHERE owner = ? AND hash = ?', owner, hash);
+}
+
+/**
+ * The save's text from the request's inbox blob, or false when the blob can't be read yet, to be tried again at the
+ * next drain. A blob the operator no longer has is gone (v1.12): the save fetches its page at once, as a request
+ * without HTML does, rather than waiting out the blob's 14 days.
+ */
+async function textFromBlob(p: InboxPorts, owner: string, hash: string, r: SaveRequest): Promise<boolean> {
+  const read = await readBlob(p, r.html!);
+  if (read.kind === 'failed') return false;
+  if (read.kind === 'gone') {
+    giveUpBlob(p.db, owner, hash);
+    return true;
+  }
+  const item = pendingRow(p.db, owner, hash);
+  if (item) await settle(p, owner, item, await fromBrowser(p, r, read.html));
+  return true;
 }
 
 /** An accepted request, made a save; its HTML read and parsed when it brings some. */
@@ -112,14 +139,9 @@ async function take(p: InboxPorts, owner: string, wrapId: string, j: Extract<Jud
   const t: SaveTargets = await p.targets();
   const a = admit(p.db, p.now(), owner, j.request, j.label, t);
   const seen = { owner, requestD: null, device: j.token, hash: a.hash };
-  if (a.fetch) {
-    const html = await readBlob(p, j.request.html!);
-    if (!html) {
-      recordSeen(p.db, p.now(), wrapId, { ...seen, outcome: 'failed_blob', wrapJson });
-      return 'failed_blob';
-    }
-    const item = pendingRow(p.db, owner, a.hash);
-    if (item) await settle(p, owner, item, await fromBrowser(p, j.request, html));
+  if (a.fetch && !(await textFromBlob(p, owner, a.hash, j.request))) {
+    recordSeen(p.db, p.now(), wrapId, { ...seen, outcome: 'failed_blob', wrapJson });
+    return 'failed_blob';
   }
   // A retried wrap finds the save it made itself: still its creation.
   const outcome = retry && a.outcome === 'merged' ? 'created' : a.outcome;
