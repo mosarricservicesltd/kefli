@@ -1,6 +1,7 @@
 // Package blossom is the operator's blob store (contract 5, backend spec 3.2): uploads authorised by a registered user
-// or an authorised device key and counted against the user's 200 MB, device uploads kept as inbox blobs for 14 days,
-// a blob kept until its last owner deletes it, served to anyone by hash, and nothing listed. Every blob is ciphertext.
+// or an authorised device key and held to the user's fair use, by default 50 MB kept and 20 MB of new bytes a day,
+// device uploads kept as inbox blobs for 14 days, a blob kept until its last owner deletes it, served to anyone by
+// hash, and nothing listed. Every blob is ciphertext.
 package blossom
 
 import (
@@ -38,7 +39,8 @@ type Server struct {
 	Free func(dir string) (int64, error)
 	st   *store.Store
 	log  *slog.Logger
-	// commitMu makes an upload's quota check, rename and owner row one step (F2)
+	// commitMu makes an upload's check of the limits, its rename and its owner row one step (F2), and an unlink's
+	// check that no owner holds the blob and the file's removal another
 	commitMu sync.Mutex
 }
 
@@ -65,21 +67,53 @@ func (s *Server) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /{blob}", s.remove)
 }
 
-// refuse answers a Blossom error: the status, and the reason in X-Reason, where clients read it (BUD-01).
-func refuse(w http.ResponseWriter, status int, reason string) {
-	w.Header().Set("X-Reason", reason)
+// refusal is an answer refusing a request: its status, the reason for X-Reason and the body, and for the two limits'
+// 413s the library's figures (contract 5). The zero refusal refuses nothing.
+type refusal struct {
+	status  int
+	reason  string
+	figures *store.Figures
+}
+
+var (
+	serverFault   = refusal{status: http.StatusInternalServerError, reason: "server"}
+	notRegistered = refusal{status: http.StatusUnauthorized, reason: "not_registered"}
+)
+
+// refused is a refusal's body, {"v":1,"error":<reason>}, with quota, used, daily and today added for 413 quota and
+// daily, as GET /account gives them (contract 5, 6).
+type refused struct {
+	V     int    `json:"v"`
+	Error string `json:"error"`
+	*store.Figures
+}
+
+// write answers the refusal: the status, and the reason in X-Reason, where clients read it (BUD-01), and in the body.
+func (rf refusal) write(w http.ResponseWriter) {
+	w.Header().Set("X-Reason", rf.reason)
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]any{"v": 1, "error": reason})
+	w.WriteHeader(rf.status)
+	_ = json.NewEncoder(w).Encode(refused{V: 1, Error: rf.reason, Figures: rf.figures})
+}
+
+// refuse answers a Blossom error with no figures.
+func refuse(w http.ResponseWriter, status int, reason string) {
+	refusal{status: status, reason: reason}.write(w)
 }
 
 func (s *Server) path(sha string) string {
 	return filepath.Join(s.Dir, sha[:2], sha)
 }
 
-// Unlink removes a blob's file once no owner holds it.
+// Unlink removes a blob's file once no owner holds it. It checks again under the upload lock, so a blob an upload has
+// just renamed into place and recorded, between the caller's delete and this, keeps its file.
 func (s *Server) Unlink(sha string) {
 	if !auth.IsHex64(sha) {
+		return
+	}
+	s.commitMu.Lock()
+	defer s.commitMu.Unlock()
+	if held, err := s.st.Stored(context.Background(), sha); err != nil || held {
 		return
 	}
 	if err := os.Remove(s.path(sha)); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -92,75 +126,95 @@ func (s *Server) Unlink(sha string) {
 type uploader struct {
 	signer, account string
 	inbox           bool
-	quota           int64
 }
 
 func (s *Server) whoUploads(r *http.Request, signer string) (*uploader, error) {
-	if quota, ok, err := s.st.Account(r.Context(), signer); err != nil || ok {
-		return &uploader{signer: signer, account: signer, quota: quota}, err
+	if _, ok, err := s.st.Account(r.Context(), signer); err != nil || ok {
+		return &uploader{signer: signer, account: signer}, err
 	}
 	user, ok, err := s.st.DeviceUser(r.Context(), signer)
 	if err != nil || !ok {
 		return nil, err
 	}
-	quota, _, err := s.st.Account(r.Context(), user)
-	return &uploader{signer: signer, account: user, inbox: true, quota: quota}, err
+	return &uploader{signer: signer, account: user, inbox: true}, nil
 }
 
-// allowed checks one upload before its body is read: the authorisation, the uploader and the size against the quota.
-// It is BUD-06's preflight and the upload's first step; it returns the status and reason to refuse with, or 0.
-func (s *Server) allowed(r *http.Request, sha string, size int64) (*uploader, int, string) {
+// allowed checks one upload before its body is read: the authorisation, the uploader, the size and the library's
+// limits. It is BUD-06's preflight and the upload's first step; the zero refusal lets the upload go ahead.
+func (s *Server) allowed(r *http.Request, sha string, size int64) (*uploader, refusal) {
 	ev, err := auth.Blossom(r.Header.Get("Authorization"), "upload", sha, s.st.Now())
 	if err != nil {
-		return nil, http.StatusUnauthorized, "auth: " + err.Error()
+		return nil, refusal{status: http.StatusUnauthorized, reason: "auth: " + err.Error()}
 	}
 	up, err := s.whoUploads(r, ev.PubKey)
 	if err != nil {
-		return nil, http.StatusInternalServerError, "server"
+		return nil, serverFault
 	}
 	if up == nil {
-		return nil, http.StatusUnauthorized, "not_registered"
+		return nil, notRegistered
 	}
 	if size > MaxBlob {
-		return nil, http.StatusRequestEntityTooLarge, "too_large"
+		return nil, refusal{status: http.StatusRequestEntityTooLarge, reason: "too_large"}
 	}
-	if status, reason := s.room(size); status != 0 {
-		return nil, status, reason
+	if rf := s.room(size); rf.status != 0 {
+		return nil, rf
 	}
-	return s.withinQuota(r, up, sha, size)
+	return up, s.limits(r.Context(), up, sha, size)
 }
 
 // room refuses an upload that would leave less than MinFree on the disk with 507, which clients retry later, as backend
 // spec 7's disk-full drill expects.
-func (s *Server) room(size int64) (int, string) {
+func (s *Server) room(size int64) refusal {
 	if s.MinFree <= 0 {
-		return 0, ""
+		return refusal{}
 	}
 	free, err := s.Free(s.Dir)
 	if err != nil {
 		s.log.Error("free space", "err", err)
-		return http.StatusInternalServerError, "server"
+		return serverFault
 	}
 	if free-size < s.MinFree {
 		s.log.Error("uploads held: the disk is nearly full", "free", free, "floor", s.MinFree)
-		return http.StatusInsufficientStorage, "storage"
+		return refusal{status: http.StatusInsufficientStorage, reason: "storage"}
 	}
-	return 0, ""
+	return refusal{}
 }
 
-func (s *Server) withinQuota(r *http.Request, up *uploader, sha string, size int64) (*uploader, int, string) {
-	held, err := s.st.Holds(r.Context(), up.account, sha)
+// limits holds an upload to its library's fair use (contract 5, flow decision 117). Against the quota it costs its
+// size unless the library holds the blob already, each blob counting once whichever of the library's keys uploaded
+// it; against the day it costs its size unless the server stores the blob already, for this library or any other, as
+// after a move. Past the quota it gets 413 quota, which also answers an upload past both, and past the day 413 daily,
+// each with the library's figures. A library above its quota, as one lowered from 200 MB may be, keeps every blob it
+// holds and takes no new one until deleting brings it back within its quota.
+func (s *Server) limits(ctx context.Context, up *uploader, sha string, size int64) refusal {
+	f, ok, err := s.st.Figures(ctx, up.account)
 	if err != nil {
-		return nil, http.StatusInternalServerError, "server"
+		return serverFault
 	}
-	used, err := s.st.Used(r.Context(), up.account)
+	if !ok {
+		return notRegistered // the account went while its upload was on its way
+	}
+	held, stored, err := s.costs(ctx, up.account, sha)
 	if err != nil {
-		return nil, http.StatusInternalServerError, "server"
+		return serverFault
 	}
-	if !held && used+size > up.quota {
-		return nil, http.StatusRequestEntityTooLarge, "quota"
+	switch {
+	case !held && f.Used+size > f.Quota:
+		return refusal{status: http.StatusRequestEntityTooLarge, reason: "quota", figures: &f}
+	case !stored && f.Today+size > f.Daily:
+		return refusal{status: http.StatusRequestEntityTooLarge, reason: "daily", figures: &f}
 	}
-	return up, 0, ""
+	return refusal{}
+}
+
+// costs is whether the library holds the blob already, so it costs nothing against the quota, and whether the server
+// stores it, for anyone, so it costs nothing against the day.
+func (s *Server) costs(ctx context.Context, account, sha string) (held, stored bool, err error) {
+	if held, err = s.st.Holds(ctx, account, sha); err != nil || held {
+		return held, held, err
+	}
+	stored, err = s.st.Stored(ctx, sha)
+	return false, stored, err
 }
 
 // preflight is BUD-06: may this upload go ahead, without sending it.
@@ -171,8 +225,8 @@ func (s *Server) preflight(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusBadRequest, "sha256")
 		return
 	}
-	if _, status, reason := s.allowed(r, sha, size); status != 0 {
-		refuse(w, status, reason)
+	if _, rf := s.allowed(r, sha, size); rf.status != 0 {
+		rf.write(w)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -185,14 +239,14 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusBadRequest, "sha256")
 		return
 	}
-	// a body of unknown length can't be checked against the quota before it is read (F2)
+	// a body of unknown length can't be checked against the limits before it is read (F2)
 	if r.ContentLength < 0 {
 		refuse(w, http.StatusLengthRequired, "length")
 		return
 	}
-	up, status, reason := s.allowed(r, sha, r.ContentLength)
-	if status != 0 {
-		refuse(w, status, reason)
+	up, rf := s.allowed(r, sha, r.ContentLength)
+	if rf.status != 0 {
+		rf.write(w)
 		return
 	}
 	tmp, size, err := s.receive(r.Body, sha)
@@ -203,8 +257,8 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		s.refuseWrite(w, err)
 		return
 	}
-	if status, reason := s.commit(r, up, sha, size, tmp); status != 0 {
-		refuse(w, status, reason)
+	if rf := s.commit(r, up, sha, size, tmp); rf.status != 0 {
+		rf.write(w)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -255,23 +309,25 @@ func (s *Server) receive(body io.Reader, sha string) (string, int64, error) {
 	return tmp.Name(), n, nil
 }
 
-// commit checks the real size against the quota, renames the received file into place, so a reader never sees half
-// a blob, and records the owner. One at a time, so concurrent uploads can't each pass the check and together
-// overshoot the quota (F2); keflid is a single process. A blob already stored is replaced by identical bytes.
-func (s *Server) commit(r *http.Request, up *uploader, sha string, size int64, tmp string) (int, string) {
+// commit checks the real size against the library's limits again, renames the received file into place, so a reader
+// never sees half a blob, and records the owner, with the upload in the day's log when the blob is new to the disk.
+// One at a time, so concurrent uploads can't each pass the checks and together overshoot the quota or the day (F2);
+// keflid is a single process. A blob already stored is replaced by identical bytes.
+func (s *Server) commit(r *http.Request, up *uploader, sha string, size int64, tmp string) refusal {
 	s.commitMu.Lock()
 	defer s.commitMu.Unlock()
-	if _, status, reason := s.withinQuota(r, up, sha, size); status != 0 {
-		return status, reason
+	if rf := s.limits(r.Context(), up, sha, size); rf.status != 0 {
+		return rf
 	}
 	if err := os.Rename(tmp, s.path(sha)); err != nil {
 		s.log.Error("store blob", "err", err)
-		return http.StatusInternalServerError, "server"
+		return serverFault
 	}
-	if err := s.st.AddOwner(r.Context(), sha, up.signer, up.account, size, up.inbox); err != nil {
-		return http.StatusInternalServerError, "server"
+	if err := s.st.Upload(r.Context(), sha, up.signer, up.account, size, up.inbox); err != nil {
+		s.log.Error("record blob", "err", err)
+		return serverFault
 	}
-	return 0, ""
+	return refusal{}
 }
 
 // SweepFiles removes blob files no owner holds and upload temporaries, each once older than an hour so an upload
@@ -342,7 +398,8 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, "", time.Time{}, f)
 }
 
-// remove is BUD-02's DELETE: the caller's ownership goes, and the file with it once no owner remains.
+// remove is BUD-02's DELETE: the caller's ownership goes, a user's taking every upload of the blob counted against
+// them, their browsers' included (contract 5), and the file with it once no owner remains.
 func (s *Server) remove(w http.ResponseWriter, r *http.Request) {
 	sha := blobHash(r)
 	ev, err := auth.Blossom(r.Header.Get("Authorization"), "delete", sha, s.st.Now())
