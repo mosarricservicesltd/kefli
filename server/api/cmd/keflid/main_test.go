@@ -66,8 +66,18 @@ func TestSweepOnce(t *testing.T) {
 	blobs := blossom.New(filepath.Join(dir, "blobs"), "http://b", st, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	_ = os.MkdirAll(filepath.Join(dir, "blobs", "aa"), 0o750)
 	_ = os.WriteFile(filepath.Join(dir, "blobs", "aa", sha), []byte("x"), 0o600)
+	// an owner is recorded only for an account that stands, and an inbox blob only for its device
+	if err := st.Register(ctx, "user"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddDevice(ctx, "user", "device"); err != nil {
+		t.Fatal(err)
+	}
 	if err := st.AddOwner(ctx, sha, "device", "user", 1, true); err != nil {
 		t.Fatal(err)
+	}
+	if held, _ := st.Exists(ctx, sha); !held {
+		t.Fatal("the inbox blob's owner wasn't recorded")
 	}
 	clock = clock.Add(store.InboxLife)
 	if err := sweepOnce(ctx, st, blobs); err != nil {
