@@ -9,12 +9,12 @@ import (
 	"time"
 )
 
-// Blossom counted no request: any key may sign a preflight or a delete and anyone may ask for a blob, so one client
-// sending them as fast as it could held keflid's one database connection for everyone (probe preflights: one
-// library's preflights, from 32 connections, took another user's uploads from 12 ms to 4.6 s at the median). Now an
-// address (an IPv6 /64) makes MaxAddressCalls a minute of the blob store and an IPv6 /48 MaxBlockCalls, counted before
-// anything is read or verified, as the API's calls are; past them every request gets 429 rate with Retry-After, which
-// the phone and the extension send again later.
+// Blossom counted no request: any key may sign a preflight or a delete, so one client sending them as fast as it could
+// held keflid's one database connection for everyone (probe preflights: one library's preflights, from 32
+// connections, took another user's uploads from 12 ms to 4.6 s at the median). Now an address (an IPv6 /64) makes
+// MaxAddressCalls signed requests a minute of the blob store and an IPv6 /48 MaxBlockCalls, counted before anything is
+// read or verified, as the API's calls are; past them every such request gets 429 rate with Retry-After, which the
+// phone and the extension send again later.
 func TestCallsPerAddress(t *testing.T) {
 	_, _, clock, mux := testServer(t)
 	// an unsigned delete: answered 401 at its authorisation, before the database, unless the limit answers first
@@ -59,5 +59,32 @@ func TestCallsPerAddress(t *testing.T) {
 				t.Fatalf("an IPv4 address in a busy /24, call %d: %d", j, rec.Code)
 			}
 		}
+	}
+}
+
+// A mirror fetches every user's texts from one address, so the address's count of calls was one an attacker could
+// spend through the mirror itself: MaxAddressCalls copies asked of it in a minute, for blobs nobody holds, left every
+// user's next text refused to it with 429. GETs and HEADs of blobs are no address's calls: one for a blob not on the
+// disk costs a look at the disk alone, and one for a blob that is there counts against that blob's sends
+// (MaxBlobSends). The address that spent its calls on deletes is still sent a blob.
+func TestBlobReadsAreNoAddressesCalls(t *testing.T) {
+	s, _, _, mux := testServer(t)
+	get := fetcher(mux)
+	text := stored(t, s, "user", []byte("a user's new text, which the mirror copies"))
+	for i := 0; i < 2*MaxAddressCalls; i++ {
+		if d := get("GET", fmt.Sprintf("%064x", i), mirror); d.code != http.StatusNotFound {
+			t.Fatalf("a copy of a blob nobody holds, %d: %d", i, d.code)
+		}
+	}
+	if d := get("GET", text, mirror); d.code != http.StatusOK {
+		t.Fatalf("the mirror's copy of a user's text after the misses: %d", d.code)
+	}
+	for i := 0; i <= MaxAddressCalls; i++ {
+		req := httptest.NewRequest("DELETE", "/"+fmt.Sprintf("%064x", i), nil)
+		req.Header.Set("X-Forwarded-For", mirror)
+		mux.ServeHTTP(httptest.NewRecorder(), req)
+	}
+	if d := get("HEAD", text, mirror); d.code != http.StatusOK {
+		t.Fatalf("a HEAD from an address past its calls: %d", d.code)
 	}
 }

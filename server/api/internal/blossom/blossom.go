@@ -38,26 +38,27 @@ const MaxRead = MaxBlob + 1<<20
 // counted against the quota, and the phone sends one at a time.
 const MaxInFlight = 8
 
-// MaxAddressCalls is how many requests one address (an IPv6 /64) makes of the blob store a minute, counted before
-// anything is read, verified or asked of the database. Nothing bounded them: any key may sign a preflight or a delete,
-// and one client sending them as fast as it could held keflid's database connection for everyone. The phone sends one
-// request at a time, each a round trip and, for an upload or a delete, a signature, so tens a second at the most, as
-// when it fetches a whole library's texts in a restore or deletes them in Delete my data; a mirror fetches each blob it
-// is asked to copy once.
+// MaxAddressCalls is how many signed requests, uploads, preflights and deletes, one address (an IPv6 /64) makes of the
+// blob store a minute, counted before anything is read, verified or asked of the database. Nothing bounded them: any
+// key may sign a preflight or a delete, and one client sending them as fast as it could held keflid's database
+// connection for everyone. The phone sends one request at a time, each a round trip and a signature, so tens a second
+// at the most, as when it deletes a whole library's texts in Delete my data. A blob's GET or HEAD is no address's call
+// (MaxBlobSends).
 const MaxAddressCalls = 6000
 
 // MaxBlockCalls is the same a minute for one IPv6 /48, whose 65,536 /64s would otherwise each make MaxAddressCalls.
 const MaxBlockCalls = 30_000
 
-// MaxAddressDownload is how many bytes of blobs one IPv4 address is sent an hour. Anyone may fetch any blob by its
-// hash, and MaxAddressCalls counts requests, not bytes: one client asking for an 8 MB blob of its own over and over
-// could take the server's whole link, which every user's uploads and every mirror's copies share. A phone restoring a
-// full library fetches its 50 MB of texts once, and a mirror each blob it copies once.
-const MaxAddressDownload = 1 << 30
-
-// MaxBlockDownload is the same an hour for one IPv6 /48, which is counted whole and not by its /64s: a count for each
-// of a /48's 65,536 /64s, kept an hour, would let one /48 fill keflid's memory with them, 30,000 a minute.
-const MaxBlockDownload = 5 << 30
+// MaxBlobSends is how many times one blob is sent an hour, a GET or a HEAD each, whoever asks. Anyone may fetch any
+// blob by its hash, so one client asking for an 8 MB blob of its own again and again could take the server's whole
+// link, which every user's uploads and every mirror's copies share. Counted by the address that asks instead, every
+// user's texts would share the count of the one address a mirror fetches them from (contract 4.2, BUD-04), which an
+// attacker could spend through the mirror itself, and everyone behind a carrier's shared address would share one. A
+// blob is fetched once by each mirror that copies it, once by each phone that syncs or restores it and once by a
+// move's check, so a few times in an hour at the most: sixteen sends of an 8 MB blob are 128 MB, and a library's 50 MB
+// sent sixteen times an hour is 800 MB. A request for a blob whose file isn't on the disk costs a look at the disk
+// alone, and counts against nothing.
+const MaxBlobSends = 16
 
 type Server struct {
 	Dir  string
@@ -81,20 +82,18 @@ type Server struct {
 	flightMu sync.Mutex
 	inflight int64
 	flights  map[string]flight
-	// calls and blockCalls count requests per address and per IPv6 /48, MaxAddressCalls and MaxBlockCalls a minute
+	// calls and blockCalls count signed requests per address and per IPv6 /48, MaxAddressCalls and MaxBlockCalls a minute
 	calls, blockCalls *limit.Limiter
-	// downloads and blockDownloads count the bytes of blobs sent per IPv4 address and per IPv6 /48, MaxAddressDownload
-	// and MaxBlockDownload an hour
-	downloads, blockDownloads *limit.Limiter
+	// sends counts each blob's GETs and HEADs, MaxBlobSends an hour
+	sends *limit.Limiter
 }
 
 func New(dir, base string, st *store.Store, log *slog.Logger) *Server {
 	return &Server{
 		Dir: dir, Base: strings.TrimRight(base, "/"), Free: diskFree, FreeFiles: diskFiles, st: st, log: log, flights: map[string]flight{},
-		calls:          limit.New(MaxAddressCalls, time.Minute, st.Now),
-		blockCalls:     limit.New(MaxBlockCalls, time.Minute, st.Now),
-		downloads:      limit.New(MaxAddressDownload, time.Hour, st.Now),
-		blockDownloads: limit.New(MaxBlockDownload, time.Hour, st.Now),
+		calls:      limit.New(MaxAddressCalls, time.Minute, st.Now),
+		blockCalls: limit.New(MaxBlockCalls, time.Minute, st.Now),
+		sends:      limit.New(MaxBlobSends, time.Hour, st.Now),
 	}
 }
 
@@ -128,13 +127,13 @@ func diskFiles(dir string) (int64, int64, error) {
 func (s *Server) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /upload", s.limited(s.upload))
 	mux.HandleFunc("HEAD /upload", s.limited(s.preflight))
-	mux.HandleFunc("GET /{blob}", s.limited(s.get))
-	mux.HandleFunc("HEAD /{blob}", s.limited(s.get))
+	mux.HandleFunc("GET /{blob}", s.get)
+	mux.HandleFunc("HEAD /{blob}", s.get)
 	mux.HandleFunc("DELETE /{blob}", s.limited(s.remove))
 }
 
-// limited counts a request against its IPv6 /48 and then its address, an IPv6 /64, before next reads or verifies
-// anything, so a flood from one place costs a map lookup each; past either, the request gets 429 rate with
+// limited counts a signed request against its IPv6 /48 and then its address, an IPv6 /64, before next reads or
+// verifies anything, so a flood from one place costs a map lookup each; past either, the request gets 429 rate with
 // Retry-After, which the phone and the extension send again later.
 func (s *Server) limited(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -674,19 +673,14 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request) {
 
 var notFound = refusal{status: http.StatusNotFound, reason: "not_found"}
 
-// openBlob opens the blob a GET or HEAD names, once an owner holds it and its file is there, and charges what serving
-// it sends to the caller's downloads (charge). A 404 tells the phone a browser's capture is gone, so it fetches the
-// page itself (contract 4.4, v1.12): a fault here is a 500, which it tries again, never a 404.
+// openBlob opens the blob a GET or HEAD names, once its file is on the disk, it has a send left this hour and an owner
+// holds it, in that order: a request for a blob whose file isn't there is answered from the disk alone, so it costs no
+// database lookup and fills no count, and one for a blob that is there asks the database at most MaxBlobSends times an
+// hour. A 404 tells the phone a browser's capture is gone, so it fetches the page itself (contract 4.4, v1.12): a
+// fault here is a 500, which it tries again, and a blob past its sends a 429, never a 404.
 func (s *Server) openBlob(r *http.Request) (*os.File, refusal) {
 	sha := blobHash(r)
 	if sha == "" {
-		return nil, notFound
-	}
-	ok, err := s.st.Exists(r.Context(), sha)
-	if err != nil {
-		return nil, serverFault
-	}
-	if !ok {
 		return nil, notFound
 	}
 	f, err := os.Open(s.path(sha))
@@ -696,31 +690,26 @@ func (s *Server) openBlob(r *http.Request) (*os.File, refusal) {
 	if err != nil {
 		return nil, serverFault
 	}
-	if rf := s.charge(r, f); rf.status != 0 {
+	if rf := s.servable(r.Context(), sha); rf.status != 0 {
 		f.Close()
 		return nil, rf
 	}
 	return f, refusal{}
 }
 
-// charge counts what a GET sends, the whole blob even for a range, against the caller's IPv4 address or IPv6 /48 an
-// hour at a time (MaxAddressDownload, MaxBlockDownload); past it the GET gets 429 rate with Retry-After. A HEAD sends
-// no blob and costs nothing.
-func (s *Server) charge(r *http.Request, f *os.File) refusal {
-	if r.Method == http.MethodHead {
-		return refusal{}
+// servable counts a send of a blob whose file is on the disk against its MaxBlobSends an hour, the whole blob even for
+// a range, and asks whether an owner holds it, as an expired capture's file still on the disk isn't held: past its
+// sends a blob gets 429 rate with Retry-After from every address alike, before the database is asked.
+func (s *Server) servable(ctx context.Context, sha string) refusal {
+	if ok, retry := s.sends.Allow(sha); !ok {
+		return refusal{status: http.StatusTooManyRequests, reason: "rate", retry: retry}
 	}
-	info, err := f.Stat()
+	held, err := s.st.Exists(ctx, sha)
 	if err != nil {
 		return serverFault
 	}
-	ip := limit.ClientIP(r, s.TrustProxy)
-	key, sent := limit.Block(ip), s.blockDownloads
-	if !strings.Contains(key, ":") {
-		key, sent = limit.Addr(ip, 64), s.downloads
-	}
-	if ok, retry := sent.AllowN(key, int(info.Size())); !ok {
-		return refusal{status: http.StatusTooManyRequests, reason: "rate", retry: retry}
+	if !held {
+		return notFound
 	}
 	return refusal{}
 }
