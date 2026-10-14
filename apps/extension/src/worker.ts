@@ -9,7 +9,7 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { isWebAddress, type Captured } from './captured';
 import { record, type Outcome } from './debug';
 import { PerSave } from './lock';
-import { changeQueue, dequeue, enqueue, flush, queued, settle, shown, whyNot, type Settled } from './queue';
+import { changeQueue, dequeue, enqueue, flush, queued, settle, shown, whyNot, type Queued, type Settled } from './queue';
 import { AddressTooLongError, deliver, prepare, retract, type Delivery, type Net, type Pending, type SaveContext } from './save';
 import type { Store } from './store';
 import type { ToastKind, ToastState } from './toastCopy';
@@ -46,6 +46,16 @@ interface UndoKey {
   key: string;
   sha256: string | null;
   hash: string;
+}
+
+/** One Undo's save, where it is told, the session's key for it, and what retracts it, looks for it and forgets it. */
+interface UndoOf {
+  id: string;
+  where: Where;
+  kept: UndoKey | undefined;
+  retractIt(): Promise<void>;
+  collected(): Promise<boolean>;
+  forget(): Promise<void>;
 }
 
 const WAITING: Record<ReturnType<typeof whyNot>, Outcome> = { offline: 'waiting, offline', reach: 'waiting, couldn’t reach', blocked: 'waiting, blocked' };
@@ -134,11 +144,16 @@ export function background(b: Browser) {
     await b.session.set(`undo:${pending.id}`, { key: bytesToHex(wrapKey), sha256: pending.sha256, hash: pending.hash } satisfies UndoKey).catch(() => undefined);
     // into the queue inside the save's own run, so a flush already going never finds it there and not busy, and sends it
     // a second time beside this send
-    const { d, s, online } = await saves.run(pending.id, () => firstSend(pending, ctx));
+    const sent = await saves.run(pending.id, () => firstSend(pending, ctx));
+    await told(where, base, c.html === null, sent);
+  }
+
+  /** What a save's first send did, told: its history line, the badge and the alarm, and its toast. */
+  async function told(where: Where, base: Omit<ToastState, 'kind' | 'shortcut'> & { id: string }, noText: boolean, { d, s, online }: Awaited<ReturnType<typeof firstSend>>): Promise<void> {
     if (d === 'sent') {
-      await note(pending.id, c.html === null ? 'sent, no text' : 'sent', link);
+      await note(base.id, noText ? 'sent, no text' : 'sent', base.link);
       await queueChanged();
-      await toast(where, { ...base, kind: c.html === null ? 'notext' : 'saved' });
+      await toast(where, { ...base, kind: noText ? 'notext' : 'saved' });
       if (where === 'popup') await b.tick();
       return;
     }
@@ -146,11 +161,11 @@ export function background(b: Browser) {
     // taken off the queue while it was sending: Disconnect deleted it, as its confirm said
     if (s === 'gone') return toast(where, { ...base, kind: 'unqueued' });
     if (s === 'full') {
-      await note(pending.id, 'queue full', link);
+      await note(base.id, 'queue full', base.link);
       return toast(where, { ...base, kind: 'full' });
     }
     const why = whyNot(d, online);
-    await note(pending.id, WAITING[why], link);
+    await note(base.id, WAITING[why], base.link);
     await toast(where, { ...base, kind: why === 'offline' ? 'offline' : 'failed' });
     if (where === 'popup' && why === 'offline') await b.tick();
   }
@@ -168,37 +183,43 @@ export function background(b: Browser) {
       // already undone: its toast says so, and a second press changes and says nothing more
       if (undone.has(id)) return;
       const kept = await b.session.get<UndoKey>(`undo:${id}`).catch(() => undefined);
-      const forget = async () => {
-        undone.add(id);
-        await b.session.remove(`undo:${id}`).catch(() => undefined);
-      };
       const { relay, blossom } = ctx.defaults.operator;
-      const retractIt = () => (kept ? retract({ id, sha256: kept.sha256 }, hexToBytes(kept.key), blossom, relay, ctx.device, b.net, b.now()) : Promise.reject(new Error('no key')));
-      const collected = () => b.collected(relay, id, ctx.pairing.user_pubkey);
+      const u: UndoOf = {
+        id, where, kept,
+        retractIt: () => (kept ? retract({ id, sha256: kept.sha256 }, hexToBytes(kept.key), blossom, relay, ctx.device, b.net, b.now()) : Promise.reject(new Error('no key'))),
+        collected: () => b.collected(relay, id, ctx.pairing.user_pubkey),
+        forget: async () => {
+          undone.add(id);
+          await b.session.remove(`undo:${id}`).catch(() => undefined);
+        },
+      };
       const waitingSave = (await queued(b.store)).find((e) => e.id === id);
-      if (waitingSave && (await dequeue(b.store, id))) {
-        await note(id, 'undo: off the queue');
-        await queueChanged();
-        const tried = waitingSave.why !== 'offline' || waitingSave.attempts > 0;
-        const went = tried && kept ? await settleUndo(retractIt, collected, b.wait).catch(() => 'undone' as const) : 'undone';
-        if (went === 'onphone') {
-          if (kept) await b.session.remove(`undo:${id}`).catch(() => undefined);
-          await note(id, 'undo: on the phone');
-          return toast(where, { kind: 'onphone', hash: kept?.hash, title: '', host: '', link: false });
-        }
-        await forget();
-        // the title and host come from the sealed request; the queue doesn't keep them in the clear (F31)
-        const [s] = await shown([waitingSave], ctx.device);
-        return toast(where, { kind: 'unqueued', title: s.title, host: s.host, link: false });
-      }
-      const outcome = await settleUndo(retractIt, collected, b.wait).catch(() => 'failed' as const);
+      if (waitingSave && (await dequeue(b.store, id))) return unqueue(u, waitingSave, ctx.device);
+      const outcome = await settleUndo(u.retractIt, u.collected, b.wait).catch(() => 'failed' as const);
       // a failed retraction keeps the key, so Undo pressed again tries again; one found on the phone is looked for again
-      if (outcome === 'undone') await forget();
+      if (outcome === 'undone') await u.forget();
       if (outcome === 'onphone') await b.session.remove(`undo:${id}`).catch(() => undefined);
       const said: Record<typeof outcome, [Outcome, ToastKind]> = { onphone: ['undo: on the phone', 'onphone'], undone: ['undo: retracted', 'undone'], failed: ['undo: failed', 'undofailed'] };
       await note(id, said[outcome][0]);
       await toast(where, { kind: said[outcome][1], hash: kept?.hash, title: '', host: '', link: false });
     });
+  }
+
+  /** Undo of a save still in the queue: off it, and retracted as well when its send may have reached the relay. */
+  async function unqueue(u: UndoOf, waitingSave: Queued, device: SaveContext['device']): Promise<void> {
+    await note(u.id, 'undo: off the queue');
+    await queueChanged();
+    const tried = waitingSave.why !== 'offline' || waitingSave.attempts > 0;
+    const went = tried && u.kept ? await settleUndo(u.retractIt, u.collected, b.wait).catch(() => 'undone' as const) : 'undone';
+    if (went === 'onphone') {
+      if (u.kept) await b.session.remove(`undo:${u.id}`).catch(() => undefined);
+      await note(u.id, 'undo: on the phone');
+      return toast(u.where, { kind: 'onphone', hash: u.kept?.hash, title: '', host: '', link: false });
+    }
+    await u.forget();
+    // the title and host come from the sealed request; the queue doesn't keep them in the clear (F31)
+    const [s] = await shown([waitingSave], device);
+    return toast(u.where, { kind: 'unqueued', title: s.title, host: s.host, link: false });
   }
 
   /** A pass over the queue, from the alarm, the browser coming online or Retry. Quiet when not paired (F10). */
