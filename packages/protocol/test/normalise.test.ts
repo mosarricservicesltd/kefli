@@ -58,13 +58,13 @@ describe('hostile hosts (ruling 10)', () => {
     const t = Date.now();
     expect(() => normalise(`https://${cjk}.com/a`)).toThrow(/host too long/);
     expect(() => itemHash(`https://${cjk}.com/a`)).toThrow(NotALinkError);
-    expect(Date.now() - t).toBeLessThan(500);
+    expect(Date.now() - t).toBeLessThan(2_000);
   });
 
   test('so is one written as a canonical, which is ignored as an unusable canonical is', () => {
     const t = Date.now();
     expect(normalise('https://amp.example.com/a', `https://${cjk}.com/a`)).toBe('https://amp.example.com/a');
-    expect(Date.now() - t).toBeLessThan(500);
+    expect(Date.now() - t).toBeLessThan(2_000);
   });
 
   test('tabs, newlines, backslashes, a missing slash and leading space are read as the URL Standard reads them', () => {

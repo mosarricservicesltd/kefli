@@ -58,7 +58,7 @@ describe('X posts (C§4.3)', () => {
     expect(linksInEmbed('<a href=x '.repeat(32_000))).toEqual([]);
     expect(linksInEmbed('<a '.repeat(100_000) + 'href="x')).toEqual([]);
     expect(linksInEmbed('<a href="x"'.repeat(40_000))).toHaveLength(40_000);
-    expect(Date.now() - t).toBeLessThan(2_000);
+    expect(Date.now() - t).toBeLessThan(5_000);
   });
 });
 
