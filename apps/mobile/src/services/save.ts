@@ -103,6 +103,9 @@ export async function saveLink(url: string, report: (s: SaveStep) => void): Prom
     const offline = outcome.kind === 'offline';
     c.say('parse', offline ? 'offline: saved, waiting to fetch' : `failed (${outcome.reason})`, offline);
     const hash = itemHash(target);
+    // another share of this link may have saved it while this one fetched (two sheets, or the pickup and a sheet)
+    const meanwhile = priorOf(db, owner, hash);
+    if (meanwhile) return repeat(c, hash, target, meanwhile);
     const held = queueSave(db, c.now(), { ...base(c, hash, target, offline ? 'queued' : 'failed', url), failReason: offline ? null : outcome.reason }, null, c.targets);
     return { hash, held, kind: offline ? 'offline' : 'saved', prior: null, title: null, site: null };
   }
@@ -113,6 +116,11 @@ export async function saveLink(url: string, report: (s: SaveStep) => void): Prom
   const prior = priorOf(db, owner, hash);
   if (prior) return repeat(c, hash, finalUrl, prior);
   const enc = await encryptText(parsed.markdown, phoneCrypto);
+  // RULED: checked again after the last wait, with nothing awaited between it and the write. A second share of the
+  // same page that passed the first check while this one was encrypting found the first's row inside queueSave and
+  // came back as a new save with no prior, so its Undo deleted the first share's save.
+  const meanwhile = priorOf(db, owner, hash);
+  if (meanwhile) return repeat(c, hash, finalUrl, meanwhile);
   const staged = { sha256: enc.text.sha256, size: enc.blob.length, path: stageBlob(enc.text.sha256, enc.blob) };
   c.say('encrypt', `${enc.blob.length} bytes staged`);
   const held = queueSave(db, c.now(), {
