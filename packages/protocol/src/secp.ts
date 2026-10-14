@@ -69,7 +69,8 @@ export interface Bip340Vector {
 export function parseBip340(csv: string): Bip340Vector[] {
   return csv
     .trim()
-    .split(/\r?\n/)
+    .split('\n')
+    .map((line) => line.replace('\r', ''))
     .slice(1)
     .map((line) => line.split(','))
     .filter((c) => c[4].length === 64)

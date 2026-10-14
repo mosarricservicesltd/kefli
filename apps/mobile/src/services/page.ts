@@ -69,9 +69,16 @@ function get(p: PagePorts, url: string, ua: string): Promise<Opened> {
   return open(p.fetch, url, { headers }, PAGE_TIMEOUT_MS);
 }
 
-/** The cap a body is read under: a page's 5 MB, or with the pdf port a PDF's 20 MB for a body not served as a page, which may be a PDF known only by its first bytes. */
+/** A type that names something other than a PDF: a page, a picture, a film, a sound, a font, plain text, an archive. */
+const NOT_PDF = /^\s*(?:(?:text|image|video|audio|font|model|multipart)\/|application\/(?:xhtml\+xml|zip|gzip|x-tar|x-7z-compressed|vnd\.rar)\b)/i;
+
+/**
+ * The cap a body is read under: with the pdf port, a PDF's 20 MB for a body that may be one, known by its type or,
+ * served as octet-stream, a download or no type at all, only by its first bytes; a page's 5 MB for a type that names
+ * anything else, so a large picture or film fails on its declared length without being downloaded.
+ */
 export function capFor(p: Pick<PagePorts, 'pdf'>, contentType: string): number {
-  return p.pdf && !HTML_TYPE.test(contentType) ? PDF_MAX_BYTES : PAGE_MAX_BYTES;
+  return p.pdf && !NOT_PDF.test(contentType) ? PDF_MAX_BYTES : PAGE_MAX_BYTES;
 }
 
 type Answer = { res: Response; bytes: Uint8Array } | Extract<PageOutcome, { kind: 'offline' | 'failed' }>;

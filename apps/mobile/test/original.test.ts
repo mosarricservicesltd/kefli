@@ -20,18 +20,29 @@ describe('the Original view stays on the web and opens no other app (F25)', () =
     const src = readFileSync(join(__dirname, '..', 'src', 'screens', 'Original.tsx'), 'utf8');
     expect(src).toContain("originWhitelist={['*']}");
     expect(src).toContain('onShouldStartLoadWithRequest={(r) => originalMayLoad(r.url)}');
-    // incognito, and the jar emptied as the view closes (F27)
+    // incognito, and the jar held while it is open and emptied as it closes (F27)
     expect(src).toMatch(/\n\s+incognito\n/);
-    expect(src).toContain('useEffect(() => () => void clearCookies(), [])');
+    expect(src).toContain('useEffect(() => holdJar(), [])');
+    const cookies = readFileSync(join(__dirname, '..', 'src', 'net', 'cookies.ts'), 'utf8');
+    const hold = cookies.slice(cookies.indexOf('export function holdJar('), cookies.indexOf('export function clearCookies('));
+    expect(hold.indexOf('KefliParser.holdJar(true)')).toBeLessThan(hold.indexOf('return () =>'));
+    expect(hold).toMatch(/KefliParser\.holdJar\(false\);\s+void clearCookies\(\);/);
   });
 
-  test("the render WebView's cookies and storage go when each render ends (F27)", () => {
+  // Node can't run the Kotlin: these read its source, standing in for the Pixel check listed in HANDOVER
+  test("the render WebView's cookies and storage go when each render ends, or when the open Original view closes (F27)", () => {
     const kt = readFileSync(join(__dirname, '..', 'modules', 'kefli-parser', 'android', 'src', 'main', 'java', 'app', 'kefli', 'parser', 'Renderer.kt'), 'utf8');
-    const finish = kt.slice(kt.indexOf('private fun finish('));
-    expect(finish).toContain('WebStorage.getInstance().deleteAllData()');
-    expect(finish).toContain('removeAllCookies { flush() }');
-    // before the promise answers, so the next render starts with an empty jar
-    expect(finish.indexOf('removeAllCookies')).toBeLessThan(finish.indexOf('load.promise.resolve'));
+    const fn = (name: string) => {
+      const at = kt.indexOf('fun ' + name + '(');
+      return kt.slice(at, kt.indexOf('\n  }\n', at));
+    };
+    expect(fn('clearJar')).toContain('WebStorage.getInstance().deleteAllData()');
+    expect(fn('clearJar')).toContain('removeAllCookies { flush() }');
+    const finish = fn('finish');
+    // before the promise answers, so the next render starts with an empty jar, unless an Original view holds it
+    expect(finish).toContain('if (holds > 0) owed = true else clearJar()');
+    expect(finish.indexOf('clearJar()')).toBeLessThan(finish.indexOf('load.promise.resolve'));
+    expect(fn('hold')).toMatch(/--holds == 0 && owed\) \{\s+owed = false\s+clearJar\(\)/);
   });
 });
 

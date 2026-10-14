@@ -76,6 +76,26 @@ func (l *Limiter) prune(now time.Time) {
 	l.next = max(pruneAt, 2*len(l.seen))
 }
 
+// Block is the wider block an address belongs to, for limits a caller with one cheap allocation could otherwise fill
+// alone: an IPv4 address's /24 and an IPv6 address's /48, what one site or one tunnel broker's account is given (F8).
+// Anything that isn't an address is counted as it is.
+func Block(addr string) string {
+	a, err := netip.ParseAddr(strings.TrimSpace(addr))
+	if err != nil {
+		return addr
+	}
+	a = a.Unmap().WithZone("")
+	bits := 48
+	if a.Is4() {
+		bits = 24
+	}
+	p, err := a.Prefix(bits)
+	if err != nil {
+		return addr
+	}
+	return p.String()
+}
+
 // Addr is the address a client is counted as: an IPv4 address whole, and an IPv6 address by its first bits, the block
 // one line or one server is given (a /64, a home line's /56), since every address inside it is the same client's for
 // free (F8). Anything that isn't an address is counted as it is.

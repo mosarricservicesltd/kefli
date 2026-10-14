@@ -157,23 +157,33 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
   });
 
   test('one page that always times out waits without holding up the shares after it; a run of them stops the queue (F12)', async () => {
-    const w = world({ 'https://b.com/ok': {}, 'https://d.com/ok': {} });
+    const w = world({ 'https://b.com/ok': {}, 'https://d.com/ok': {}, 'https://h.com/ok': {} });
+    let clock = 5000;
+    w.ports.now = () => clock;
     const page = w.ports.page.fetch;
-    const slow = new Set(['https://a.com/slow', 'https://c.com/slow', 'https://e.com/slow', 'https://f.com/slow']);
+    const slow = new Set(['https://a.com/slow', 'https://c.com/slow', 'https://e.com/slow', 'https://f.com/slow', 'https://g.com/slow']);
+    const asked: string[] = [];
     w.ports.page.fetch = (async (url: string, init: RequestInit) => {
+      asked.push(url);
       if (slow.has(url)) throw new TimedOut();
       return page(url, init);
     }) as never;
     for (const u of ['https://a.com/slow', 'https://b.com/ok', 'https://c.com/slow', 'https://d.com/ok']) w.share(u);
     expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 2, failed: 0, waiting: 2, xWaiting: 0 });
     expect(pendingParses(w.db, PK).map((x) => x.url)).toEqual(['https://a.com/slow', 'https://c.com/slow']);
-    // three slow pages in a row read as the network: the rest wait for the next sync, unasked
-    for (const u of ['https://e.com/slow', 'https://f.com/slow', 'https://g.com/never']) w.share(u);
-    const asked: string[] = [];
-    const before = w.ports.page.fetch;
-    w.ports.page.fetch = (async (url: string, init: RequestInit) => (asked.push(url), before(url, init))) as never;
+    // three slow pages in a row read as the network: the rest wait for the next sync, unasked; the pages that timed
+    // out before go after the new shares
+    for (const u of ['https://e.com/slow', 'https://f.com/slow', 'https://g.com/slow']) w.share(u);
+    clock += 60;
+    asked.length = 0;
     expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 0, waiting: 5, xWaiting: 0 });
-    expect(asked).not.toContain('https://g.com/never');
+    expect(asked).toEqual(['https://e.com/slow', 'https://f.com/slow', 'https://g.com/slow']);
+    // five pages that always time out sit ahead of a later share by date, and still don't hold it up
+    w.share('https://h.com/ok');
+    clock += 60;
+    asked.length = 0;
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 1, failed: 0, waiting: 5, xWaiting: 0 });
+    expect(asked.slice(0, 2)).toEqual(['https://h.com/ok', 'https://a.com/slow']);
   });
 
   test("another phone's save without text keeps its address when parsed here", async () => {

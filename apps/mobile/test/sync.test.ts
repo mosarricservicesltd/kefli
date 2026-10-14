@@ -1,5 +1,5 @@
 import {
-  LocalSigner, buildDeletions, buildDevicesEvent, buildRelayList, buildItemEvent, buildServerList, encryptText, normaliseMarkdown, textHash,
+  LocalSigner, SignerSlot, buildDeletions, buildDevicesEvent, buildRelayList, buildItemEvent, buildServerList, encryptText, normaliseMarkdown, textHash,
 } from '@kefli/protocol';
 import type { Item, NostrEvent, ParsedItem, Signer } from '@kefli/protocol';
 import { commitDelete, deleteItem } from '../src/data/library';
@@ -28,7 +28,8 @@ function matches(e: NostrEvent, f: Filter) {
 function world() {
   const db = memoryDb();
   migrate(db);
-  const signer = new LocalSigner(nodeCrypto.randomBytes(32));
+  const sk = nodeCrypto.randomBytes(32);
+  const signer = new LocalSigner(sk.slice());
   const pk = signer.pubkey();
   ensureIdentityRow(db, 1, pk, 'block_store', true);
   seedGeneratedLists(db, pk, D);
@@ -70,7 +71,7 @@ function world() {
     onHeldWord: (hash, w) => held.push([hash, w]),
   };
   return {
-    db, signer, pk, ports, relays, caps, down, queries, blobs, files, removed, held, fetch,
+    db, signer, sk, pk, ports, relays, caps, down, queries, blobs, files, removed, held, fetch,
     tick: (s: number) => (clock += s), setOpen: (x: string | null) => (open = x),
     publish(e: NostrEvent, to = ['ws://op', 'ws://a', 'ws://b']) {
       for (const r of to) relays.get(r)!.push(e);
@@ -400,6 +401,34 @@ describe('cursors wait for what was collected (F14)', () => {
     expect(r.waiting).toBe(1);
   });
 
+  test('a key the slot zeroes while the run holds it waits, and a fresh key reads the rest next run', async () => {
+    const w = world();
+    for (let i = 0; 3 > i; i++) w.publish(await remoteSave(w, h(50 + i), 6000 + i, null));
+    // the phone's slot, which builds a fresh key from the key file when it is empty (identity.currentSigner)
+    const slot = new SignerSlot(10);
+    w.ports.signer = async (k) => {
+      if (k !== w.pk) return null;
+      if (!slot.get()) slot.set(new LocalSigner(w.sk.slice()));
+      return slot.get();
+    };
+    let calls = 0;
+    w.ports.openHash = () => {
+      // after the first save: six minutes away, and the return zeroes the key the run still holds (F47)
+      if (++calls === 1) {
+        slot.background(0);
+        slot.foreground(10_000);
+      }
+      return null;
+    };
+    const r = await syncInbound(w.ports);
+    expect(r).toMatchObject({ items: 1, waiting: 2 });
+    expect(cursors(w)).toEqual([]);
+    expect(slot.get()).toBeNull();
+    w.tick(60);
+    expect((await syncInbound(w.ports)).items).toBe(2);
+    expect(w.db.get('SELECT COUNT(*) AS n FROM items')).toEqual({ n: 3 });
+  });
+
   test('a run that dies part way through applying moves no cursor', async () => {
     const w = world();
     for (let i = 0; 3 > i; i++) w.publish(await remoteSave(w, h(40 + i), 6000 + i, null));
@@ -472,6 +501,16 @@ describe("the user's 10063 (F37)", () => {
     w.publish(await buildServerList(w.signer, ['http://other'], 900), ['ws://idx']);
     await syncInbound(w.ports);
     expect(w.db.all<{ url: string }>('SELECT url FROM servers ORDER BY rowid').map((r) => r.url)).toEqual(['http://blossom', 'http://m1', 'http://other']);
+  });
+
+  test('a server removed here stays removed when a newer 10063 from another app still names it, as a relay does (C§3.1)', async () => {
+    const w = world();
+    // the held 10063 named http://gone, which this phone has since removed from its table
+    const held = await buildServerList(w.signer, ['http://blossom', 'http://m1', 'http://gone'], 900);
+    w.db.run("INSERT INTO lists (owner, kind, d, event_id, created_at, raw) VALUES (?, 10063, '', ?, 900, ?)", w.pk, held.id, JSON.stringify(held));
+    w.publish(await buildServerList(w.signer, ['http://gone', 'http://new'], 950), ['ws://idx']);
+    await syncInbound(w.ports);
+    expect(w.db.all<{ url: string }>('SELECT url FROM servers ORDER BY rowid').map((r) => r.url)).toEqual(['http://blossom', 'http://m1', 'http://new']);
   });
 
   test('a 10063 held from before, whose servers no row has, is asked for a text too', async () => {

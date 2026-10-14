@@ -52,15 +52,17 @@ export function heldServerList(db: SqlDb, owner: string): string[] {
 }
 
 /**
- * A newer 10063 seen on a relay (C§8, F37): each server it names that this phone doesn't list joins, so restore and
- * the text fetch ask it and the next 10063 sent from here keeps it; a server of the person's own that it no longer
- * names was removed elsewhere. Kefli's own entries stay whatever a list says, as in the 10002.
+ * A newer 10063 seen on a relay (C§3.1, C§8, F37): each server it names that this phone doesn't list, and that the
+ * 10063 held before (before) didn't name, joins, so restore and the text fetch ask it and the next 10063 sent from
+ * here keeps it; one the held list named and the table no longer has was removed here, and stays removed. A server of
+ * the person's own that it no longer names was removed elsewhere. Kefli's own entries stay whatever a list says, as in
+ * the 10002.
  */
-export function keepListedServers(db: SqlDb, owner: string, servers: string[]): void {
+export function keepListedServers(db: SqlDb, owner: string, servers: string[], before: string[] = []): void {
   db.tx(() => {
     const held = db.all<{ url: string; role: string }>('SELECT url, role FROM servers WHERE owner = ?', owner);
     for (const url of servers) {
-      if (!held.some((h) => sameUrl(h.url, url))) {
+      if (!held.some((h) => sameUrl(h.url, url)) && !before.some((b) => sameUrl(b, url))) {
         db.run("INSERT OR IGNORE INTO servers (url, owner, role, in_10063, added_by_app) VALUES (?, ?, 'user', 1, 0)", url, owner);
       }
     }
@@ -142,10 +144,15 @@ export function confirmedAbsent(d: DefaultsLike, answered: Set<string>): boolean
  * a bare trailing / dropped. Any other scheme, credentials, a query or a fragment is refused (null). Written
  * without URL, whose parsing Hermes doesn't fully have.
  */
+// built from strings: the code gate's parser reads a regex literal's escaped slashes as a comment
+const SCHEME = new RegExp('^[a-z][a-z0-9+.-]*://', 'i');
+const WSS = new RegExp('^wss://', 'i');
+const RELAY_HOST = new RegExp('^((?:[a-z0-9-]+\\.)+[a-z0-9-]+|localhost|\\[[0-9a-f:]+\\])(:\\d{1,5})?(/[^\\s?#@]*)?$', 'i');
+
 export function relayAddress(typed: string): string | null {
   const s = typed.trim();
-  const rest = /^[a-z][a-z0-9+.-]*:\/\//i.test(s) ? (/^wss:\/\//i.test(s) ? s.slice(6) : null) : s;
-  const m = rest === null ? null : /^((?:[a-z0-9-]+\.)+[a-z0-9-]+|localhost|\[[0-9a-f:]+\])(:\d{1,5})?(\/[^\s?#@]*)?$/i.exec(rest);
+  const rest = SCHEME.test(s) ? (WSS.test(s) ? s.slice(6) : null) : s;
+  const m = rest === null ? null : RELAY_HOST.exec(rest);
   if (!m) return null;
   const path = m[3] === '/' ? '' : m[3] ?? '';
   return `wss://${m[1].toLowerCase()}${m[2] ?? ''}${path}`;

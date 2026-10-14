@@ -9,7 +9,7 @@ import { radius } from '@kefli/tokens';
 import { phoneCrypto } from '../crypto/port';
 import { answerDeleted, useApp } from '../services/app';
 import { loadDefaults, type Defaults } from '../services/config';
-import { deleteEverything, deleteTargets, signDeletion, type DelPorts, type Progress, type Result, type Target } from '../services/deleteAccount';
+import { deleteEverything, deletePorts, deleteTargets, signDeletion, type Progress, type Result, type Target } from '../services/deleteAccount';
 import { currentSigner, wipeEverything, withScreen } from '../services/identity';
 import { pool } from '../services/runner';
 import { closeVoice } from '../services/voice';
@@ -84,12 +84,7 @@ export default function Delete() {
     const signer = current && withScreen(current);
     if (!signer || !defaults) return;
     const mine = ++attempt.current;
-    const ports: DelPorts = {
-      db: store(), now: () => Math.floor(Date.now() / 1000), signer, defaults, crypto: phoneCrypto, fetch,
-      publish: (url, e) => pool.publish(url, e), sleep: (ms) => new Promise<void>((ok) => setTimeout(ok, ms)), wipePhone: wipeEverything,
-      // every save on the user's relays is named, not only those on the phone (C§4.7, F32)
-      query: (url, filters) => pool.query(url, filters as never),
-    };
+    const ports = deletePorts({ db: store(), signer, defaults, crypto: phoneCrypto, fetch, pool, wipePhone: wipeEverything });
     // a nostr user approves in their app first: every deletion is signed before anything is sent, and declining
     // deletes nothing (FD 41, prototype del-nostr, del-declined). A generated identity's signing reads the relays
     // first, some seconds, so the rows show waiting from the press (del-running)

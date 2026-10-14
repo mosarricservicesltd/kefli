@@ -18,8 +18,9 @@ func behindCaddy(c *httpapi.Config) { c.TrustProxy = true }
 // F8: every address in an IPv6 /64 is one client's for free, so a /64 gets one address's 30 offers an hour.
 func TestOffersCountAnIPv6BlockOnce(t *testing.T) {
 	e := newEnv(t, behindCaddy)
+	// spread over twenty minutes, so the block's ten misses in an offer's life aren't what stops it
 	for i := 0; i < 30; i++ {
-		e.clock = e.clock.Add(time.Second)
+		e.clock = e.clock.Add(40 * time.Second)
 		e.from = fmt.Sprintf("2001:db8:7:8::%x", i+1)
 		s, b := e.call(newKey(), "GET", "/phone-offers/"+hash([]byte{byte(i)}), nil)
 		expect(t, s, 404, b)
@@ -30,6 +31,33 @@ func TestOffersCountAnIPv6BlockOnce(t *testing.T) {
 	e.from = "2001:db8:7:9::1"
 	s, b = e.call(newKey(), "GET", "/phone-offers/"+hash([]byte("next")), nil)
 	expect(t, s, 404, b)
+}
+
+// F8: one block of addresses (a tunnel broker's free /48, an IPv4 /24) spends at most MaxBlockMisses of everyone's
+// misses in an offer's life, so it can't hold every second phone's setup up alone: its own lookups wait, and a right
+// code from elsewhere is taken.
+func TestPhoneOfferMissesFromOneBlock(t *testing.T) {
+	e := newEnv(t, behindCaddy)
+	user := newKey()
+	e.call(user, "POST", "/register", map[string]any{"v": 1})
+	lookup := hash([]byte("the right code"))
+	s, b := e.call(user, "POST", "/phone-offers", map[string]any{"v": 1, "lookup": lookup, "offer": "mnemonic"})
+	expect(t, s, 200, b)
+	for _, block := range []string{"2001:db8:5:%x::1", "198.51.100.%d"} {
+		for i := 0; i < httpapi.MaxBlockMisses; i++ {
+			e.from = fmt.Sprintf(block, i+1)
+			s, b := e.call(newKey(), "GET", "/phone-offers/"+hash([]byte(fmt.Sprint(block, i))), nil)
+			expect(t, s, 404, b)
+		}
+		e.from = fmt.Sprintf(block, 200)
+		s, b = e.call(newKey(), "GET", "/phone-offers/"+lookup, nil)
+		expect(t, s, 429, b)
+	}
+	e.from = "203.0.113.77"
+	s, b = e.call(newKey(), "GET", "/phone-offers/"+lookup, nil)
+	if s != 200 || b["offer"] != "mnemonic" {
+		t.Fatalf("a right code from another block: %d %v", s, b)
+	}
 }
 
 // F45: a request its address is refused for used to leave a window for its key, so throwaway keys grew the limiter
@@ -77,6 +105,28 @@ func TestPhoneOfferMissesFromEveryone(t *testing.T) {
 	s, b = e.call(newKey(), "GET", "/phone-offers/"+lookup, nil)
 	if s != 200 || b["offer"] != "mnemonic" {
 		t.Fatalf("the next five minutes: %d %v", s, b)
+	}
+}
+
+// F8: a tunnel broker's free /48 is 256 /56s, five accounts a day each; it is held to MaxBlockRegistrations a day, so
+// one /48 can't hold everyone's hourly limit full for hours. An IPv4 /24 has no such limit, being many people's.
+func TestRegistrationsFromOneBlock(t *testing.T) {
+	e := newEnv(t, behindCaddy)
+	for i := 0; i < httpapi.MaxBlockRegistrations; i++ {
+		e.from = fmt.Sprintf("2001:db8:6:%x00::1", i/5+1)
+		s, b := e.call(newKey(), "POST", "/register", map[string]any{"v": 1})
+		expect(t, s, 200, b)
+	}
+	e.from = "2001:db8:6:ff00::1"
+	s, b := e.call(newKey(), "POST", "/register", map[string]any{"v": 1})
+	expect(t, s, 429, b)
+	e.from = "2001:db8:7::1"
+	s, b = e.call(newKey(), "POST", "/register", map[string]any{"v": 1})
+	expect(t, s, 200, b)
+	for i := 0; i < 25; i++ {
+		e.from = fmt.Sprintf("192.0.2.%d", i+1)
+		s, b := e.call(newKey(), "POST", "/register", map[string]any{"v": 1})
+		expect(t, s, 200, b)
 	}
 }
 

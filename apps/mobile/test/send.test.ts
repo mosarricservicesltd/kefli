@@ -4,7 +4,7 @@ import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow, queueSave } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
-import { nextDue, release } from '../src/data/outbox';
+import { enqueue, nextDue, nextWakeAt, release } from '../src/data/outbox';
 import { drain, outboxWaker, relayResult, sendOne, type RelayAnswer, type SendPorts } from '../src/services/send';
 import { commitDelete, deleteItem } from '../src/data/library';
 import type { Defaults } from '../src/services/config';
@@ -54,6 +54,11 @@ function world(answers: Partial<Record<string, Answer | ((n: number) => Answer |
   };
   return { db, signer, ports, calls, published: items, all, blobs, tick: (s: number) => (clock += s), now: () => clock };
 }
+
+/** The row the last attempt touched: its state, and its target's next time and error. */
+const tried = (w: ReturnType<typeof world>) => w.db.get(
+  "SELECT o.state, t.next_at, t.last_error FROM outbox o JOIN outbox_targets t ON t.outbox_id = o.id WHERE t.attempts > 0 AND t.state = 'pending'",
+);
 
 async function save(w: ReturnType<typeof world>, withText = true) {
   ensureIdentityRow(w.db, w.now(), w.signer.pubkey(), 'early_share', true);
@@ -195,6 +200,57 @@ describe('sending a save (mobile spec 4.3)', () => {
     await sendOne(w.ports);
     expect(w.calls).toEqual([]);
     expect(nextDue(w.db, w.now())).toBeNull();
+  });
+
+  test('a signer lookup that throws puts the row back in the queue with a backoff, where the retry timer sees it', async () => {
+    const w = world();
+    const { held } = await save(w, false);
+    release(w.db, held);
+    const signer = w.ports.signer;
+    w.ports.signer = async () => {
+      throw new Error('Keystore not ready');
+    };
+    expect(await sendOne(w.ports)).toBe(true);
+    expect(w.db.all("SELECT 1 FROM outbox WHERE state = 'sending'")).toEqual([]);
+    expect(tried(w)).toEqual({ state: 'queued', next_at: w.now() + 30, last_error: 'Keystore not ready' });
+    expect(nextWakeAt(w.db)).not.toBeNull();
+    w.ports.signer = signer;
+    w.tick(30);
+    await drain(w.ports);
+    expect(w.calls).toContain('POST http://api/register');
+  });
+
+  test('a signing that fails as the signer not answering waits at least a minute (F47)', async () => {
+    const w = world();
+    const { held } = await save(w, false);
+    release(w.db, held);
+    await sendOne(w.ports);
+    expect(w.calls).toEqual(['POST http://api/register']);
+    // the save's event or the lists are signed outside any send's own catch
+    w.signer.zero();
+    await sendOne(w.ports);
+    expect(w.db.all("SELECT 1 FROM outbox WHERE state = 'sending'")).toEqual([]);
+    expect(tried(w)).toMatchObject({ state: 'queued', next_at: w.now() + 60 });
+  });
+
+  test("a consumed inbox wrap is deleted with a kind 5 naming it on the operator relay, retried when it can't be reached (C§4.4)", async () => {
+    let down = true;
+    const w = world();
+    const id = 'ef'.repeat(32);
+    enqueue(w.db, w.now(), { op: 'delete_wrap', signer: w.signer.pubkey(), subject: id, payload: { id }, targets: ['ws://op'] });
+    w.ports.publish = async (url, event) => {
+      w.all.push({ relay: url, event });
+      if (down) throw new Error('unreachable');
+      return { ok: true };
+    };
+    await sendOne(w.ports);
+    expect(tried(w)).toMatchObject({ state: 'queued', last_error: 'unreachable' });
+    down = false;
+    w.tick(60);
+    await drain(w.ports);
+    const fives = w.all.filter((p) => p.event.kind === 5);
+    expect(fives.at(-1)).toMatchObject({ relay: 'ws://op', event: { tags: [['e', id], ['k', '1059']] } });
+    expect(w.db.get("SELECT 1 FROM outbox WHERE op = 'delete_wrap'")).toBeUndefined();
   });
 
   test.each([

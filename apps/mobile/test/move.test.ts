@@ -401,6 +401,48 @@ describe('The move (contract 4.8, mobile spec 4.10)', () => {
     expect(moveJob(w.db)?.step).toBe(5);
   });
 
+  test("S's own retirement kind 5s, read back by a sync after DELETE /account failed, leave T's copies alone", async () => {
+    const w = world({ accountStatus: 500 });
+    await w.save(w.S, 1);
+    await w.save(w.S, 2);
+    expect(await runMove(w.p)).toBe('waiting');
+    expect(moveJob(w.db)).toMatchObject({ step: 5, carried: true });
+    // in a switch S is still the active identity, which the next sync syncs: its own kind 5s remove its rows
+    w.tick(30);
+    await w.p.collect(w.S.pubkey(), w.S);
+    expect(rowsOf(w, w.S.pubkey())).toEqual([]);
+    const ok = (async (url: string, init?: RequestInit) =>
+      url.endsWith('/account') ? new Response('{}', { status: 200 }) : w.p.fetch(url, init)) as typeof fetch;
+    w.tick(30);
+    expect(await runMove({ ...w.p, fetch: ok })).toBe('done');
+    expect(rowsOf(w, w.T.pubkey()).map((r) => r.hash)).toEqual([h(1), h(2)]);
+    expect(w.db.get("SELECT 1 FROM outbox WHERE signer = ? AND op IN ('delete_item', 'delete_blob')", w.T.pubkey())).toBeUndefined();
+  });
+
+  test('a move stopped after retireLocal, before it is marked done, keeps T whole when it resumes', async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    const p = { ...w.p, retireKeys: async () => { throw new Error('Keystore not ready'); } };
+    await expect(runMove(p)).rejects.toThrow('Keystore');
+    expect(moveJob(w.db)?.step).toBe(5);
+    w.tick(30);
+    expect(await runMove(w.p)).toBe('done');
+    expect(rowsOf(w, w.T.pubkey()).map((r) => r.hash)).toEqual([h(1)]);
+    expect(w.keysRetired()).toBe(true);
+  });
+
+  test("S's kind 5s are dated past its newest version, though another phone's clock ran ahead of this one (F36)", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    const S = w.S.pubkey();
+    // a newer version taken from a phone whose clock runs ten minutes fast
+    w.db.run('UPDATE items SET event_created_at = 1600 WHERE owner = ? AND hash = ?', S, h(1));
+    expect(await runMove(w.p)).toBe('done');
+    const fives = w.relays.get('ws://op')!.filter((e) => e.kind === 5 && e.pubkey === S);
+    expect(fives.length).toBeGreaterThan(0);
+    for (const e of fives) expect(e.created_at).toBeGreaterThan(1600);
+  });
+
   test('a text no server has is copied without it; servers that are down make it wait', async () => {
     const w = world();
     const sha = await w.save(w.S, 1);

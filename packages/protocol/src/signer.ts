@@ -24,6 +24,19 @@ export interface SignerProvider extends Signer {
   canActInBackground(): Promise<boolean>;
 }
 
+/**
+ * What a zeroed local key throws. It carries the code 'unavailable', so a run that still holds the key when the slot
+ * lets it go reads it as the signer not answering (isSignerFailure): sync keeps its cursors and counts the event as
+ * waiting, the inbox holds the wrap, and the next run asks the slot again, which builds a fresh key from the key file.
+ */
+export class SignerZeroedError extends Error {
+  readonly code = 'unavailable';
+  constructor() {
+    super('this signer has been zeroed');
+    this.name = 'SignerZeroedError';
+  }
+}
+
 /** The local key. Caches the self-encryption conversation key; zero() wipes the secret and the cache. */
 export class LocalSigner implements SignerProvider {
   readonly kind = 'local' as const;
@@ -74,7 +87,7 @@ export class LocalSigner implements SignerProvider {
   }
 
   #secret(): Uint8Array {
-    if (this.#zeroed) throw new Error('this signer has been zeroed');
+    if (this.#zeroed) throw new SignerZeroedError();
     return this.#sk;
   }
 

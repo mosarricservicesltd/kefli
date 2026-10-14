@@ -16,7 +16,7 @@ import {
   type CryptoPort, type NostrEvent, type Signer,
 } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
-import { deletesOwed, itemAddresses } from '../data/libraryKey';
+import { deletesOwed, itemAddresses, newestVersion } from '../data/libraryKey';
 import { relayEntries } from '../data/lists';
 import type { RelayAnswer } from './send';
 import { pageStream, type Filter } from './sync';
@@ -37,6 +37,23 @@ export type DelPorts = {
   /** Each server's minute (spec 7.2). */
   budgetMs?: number;
 };
+
+/** What the screen hands deletePorts: the relay pool among them, which both publishes and reads. */
+export type DelDeps = Omit<DelPorts, 'now' | 'publish' | 'query' | 'sleep'> & {
+  pool: { publish: DelPorts['publish']; query: (relay: string, filters: never) => Promise<NostrEvent[]> };
+};
+
+/**
+ * The Delete my data screen's ports: time in seconds, the pool's publish, and the pool's read, so every save on the
+ * user's relays is named, not only those on the phone (C§4.7, F32).
+ */
+export function deletePorts({ pool, ...d }: DelDeps): DelPorts {
+  return {
+    ...d, now: () => Math.floor(Date.now() / 1000), sleep: (ms) => new Promise<void>((ok) => setTimeout(ok, ms)),
+    publish: (url, e) => pool.publish(url, e),
+    query: (url, filters) => pool.query(url, filters as never),
+  };
+}
 
 /** own: one of the user's own servers, which only a nostr user has (FD 91 (e)). */
 export type Target = { url: string; kind: 'relay' | 'server'; host: string; own: boolean };
@@ -216,8 +233,7 @@ export async function signDeletion(p: DelPorts): Promise<Signed> {
   const remote = await onRelays(p, owner, new Set(held));
   const wraps = await wrapDeletions(p, owner);
   // dated past the newest version of anything they name, whatever this phone's clock says (F36)
-  const newest = Math.max(remote.newest, deletesOwed(p.db, owner).after,
-    p.db.get<{ at: number | null }>('SELECT MAX(event_created_at) AS at FROM items WHERE owner = ?', owner)?.at ?? 0);
+  const newest = Math.max(remote.newest, newestVersion(p.db, owner));
   const items = await buildDeletions(p.signer, [...new Set([...held, ...remote.ds])], Math.max(p.now(), newest + 1));
   const extra = { blobs: remote.blobs, nostr };
   if (nostr) return { wraps, items, lists: await listRewrites(p), ...extra };

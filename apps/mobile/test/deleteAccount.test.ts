@@ -3,18 +3,31 @@ import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
-import { deleteEverything, deleteTargets, progressOf, type DelPorts, type Progress } from '../src/services/deleteAccount';
+import { deleteEverything, deletePorts, deleteTargets, progressOf, type DelPorts, type Progress } from '../src/services/deleteAccount';
 import type { RelayAnswer } from '../src/services/send';
 import { memoryDb } from './sqlite';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 describe('the Delete my data screen’s ports', () => {
-  test('the screen passes the relay read, so saves only the relays hold are named (F32)', () => {
+  test('the ports read the relays through the pool, so saves only the relays hold are named (F32)', async () => {
+    const asked: string[] = [];
+    const e = { id: 'e' } as NostrEvent;
+    const pool = {
+      publish: async (url: string) => (asked.push(`publish ${url}`), { ok: true as const }),
+      query: async (url: string) => (asked.push(`query ${url}`), [e]),
+    };
+    const db = memoryDb();
+    const p = deletePorts({ db, signer: new LocalSigner(nodeCrypto.randomBytes(32)), defaults: D, crypto: nodeCrypto, fetch, pool, wipePhone: async () => undefined });
+    expect(await p.query!('ws://a', [{ kinds: [30078] }])).toEqual([e]);
+    expect(await p.publish('ws://b', e)).toEqual({ ok: true });
+    expect(asked).toEqual(['query ws://a', 'publish ws://b']);
+    expect(Math.abs(p.now() - Date.now() / 1000)).toBeLessThan(2);
+  });
+
+  test('signing reads the relays first, so the rows show waiting from the press, for a generated identity too', () => {
     const src = readFileSync(join(__dirname, '..', 'src', 'screens', 'Delete.tsx'), 'utf8');
-    const at = src.indexOf('const ports: DelPorts = {');
-    expect(src.slice(at, src.indexOf('};', at))).toContain('query: (url, filters) => pool.query(url, filters as never)');
-    // signing reads the relays first: the rows show waiting from the press, for a generated identity too
+    expect(src).toContain('deletePorts({');
     expect(src).toContain("setPhase(nostr ? 'approve' : 'running');");
   });
 });

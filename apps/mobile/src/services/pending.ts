@@ -3,7 +3,7 @@
 // sends queued (data/pending.ts). Ports, so this runs in tests.
 import { encryptText, isPublicWebUrl, itemHash, textHash, type CryptoPort } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
-import { applyFailed, applyParsed, pendingParses, xFound, xNoArticle, type Pending } from '../data/pending';
+import { applyFailed, applyParsed, pendingParses, timedOut, xFound, xNoArticle, type Pending } from '../data/pending';
 import { checkXPost, type XPorts } from './xpost';
 import type { SaveTargets } from '../data/saves';
 import { indexText } from '../data/sync';
@@ -58,7 +58,9 @@ export async function runPendingParses(p: PendingPorts, owner: string): Promise<
       ? { kind: 'failed' as const, reason: 'http' as const, finalUrl: item.url }
       : await fetchPage(p.page, item.url);
     if (outcome.kind === 'offline') {
-      // one page too slow waits for the next sync without holding up the rest; a run of them is the network (F12)
+      // one page too slow waits for the next sync without holding up the rest; a run of them is the network (F12).
+      // Each goes to the back of the queue, so pages that always time out can't stop the shares behind them either.
+      if (outcome.timedOut) timedOut(p.db, p.now(), item.id);
       if (outcome.timedOut && ++slow < SLOW_RUN) {
         out.waiting++;
         continue;

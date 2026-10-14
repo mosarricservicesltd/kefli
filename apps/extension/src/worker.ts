@@ -54,9 +54,13 @@ export function background(b: Browser) {
   const saves = new PerSave();
   const deliverFor = (ctx: SaveContext) => (p: Pick<Pending, 'id' | 'wrap' | 'blob' | 'sha256'>) => deliver(p, ctx.defaults.operator.blossom, ctx.defaults.operator.relay, ctx.device, b.net);
 
-  /** After the queue changes: the alarm goes once nothing waits, and the badge counts what does. */
+  /**
+   * After the queue changes: the alarm is on while anything still tries and goes once nothing does, and the badge counts
+   * what waits. Turned on here as well as at a save, since the alarm may be gone after a browser restart (Firefox keeps
+   * none) and a start-up flush that fails must still leave one to try again.
+   */
   async function queueChanged(): Promise<void> {
-    if (!(await queued(b.store)).length) await b.flushAlarm(false);
+    await b.flushAlarm((await queued(b.store)).some((e) => !e.stopped));
     await b.badge();
   }
 
@@ -85,12 +89,14 @@ export function background(b: Browser) {
     const base = { id: pending.id, hash: pending.hash, title: pending.title, host: pending.host, link };
     await b.toast(where, { ...base, kind: 'saving' });
     await b.session.set(`undo:${pending.id}`, { key: bytesToHex(wrapKey), sha256: pending.sha256, hash: pending.hash } satisfies UndoKey);
-    await enqueue(b.store, pending, 'sending');
-    await b.flushAlarm(true);
-    const online = b.online();
-    const { d, s } = await saves.run(pending.id, async () => {
+    // into the queue inside the save's own run, so a flush already going never finds it there and not busy, and sends it
+    // a second time beside this send
+    const { d, s, online } = await saves.run(pending.id, async () => {
+      await enqueue(b.store, pending, 'sending');
+      await b.flushAlarm(true);
+      const online = b.online();
       const d: Delivery = online ? await deliverFor(ctx)(pending) : 'unreachable';
-      return { d, s: await settle(b.store, pending, d, online, true) };
+      return { d, online, s: await settle(b.store, pending, d, online, true) };
     });
     if (d === 'sent') {
       await record(b.store, b.now(), pending.id, c.html === null ? 'sent, no text' : 'sent', link);
@@ -114,27 +120,34 @@ export function background(b: Browser) {
 
   /**
    * Undo: a save still waiting comes off the queue; one that went is retracted with its wrap's key, and looked for on the
-   * phone (decision 101). A retraction that fails, or a key the session no longer holds, says so (F40).
+   * phone (decision 101). A retraction that fails, or a key the session no longer holds, says so (F40). A waiting save
+   * whose send may have reached the relay all the same (an answer that timed out, a worker stopped mid-send) is retracted
+   * as well as taken off the queue; the relay refuses a retraction of a wrap it doesn't hold, which then changes nothing.
    */
   async function undo(id: string, where: Where): Promise<void> {
     const ctx = await b.context();
     if (!ctx) return b.openOptions();
     await saves.run(id, async () => {
+      const kept = await b.session.get<UndoKey>(`undo:${id}`);
+      const { relay, blossom } = ctx.defaults.operator;
+      const retractIt = () => (kept ? retract({ id, sha256: kept.sha256 }, hexToBytes(kept.key), blossom, relay, ctx.device, b.net, b.now()) : Promise.reject(new Error('no key')));
+      const collected = () => b.collected(relay, id, ctx.pairing.user_pubkey);
       const waitingSave = (await queued(b.store)).find((e) => e.id === id);
       if (waitingSave && (await dequeue(b.store, id))) {
         await record(b.store, b.now(), id, 'undo: off the queue');
         await queueChanged();
+        const tried = waitingSave.why !== 'offline' || waitingSave.attempts > 0;
+        const went = tried && kept ? await settleUndo(retractIt, collected, b.wait).catch(() => 'undone' as const) : 'undone';
+        if (kept) await b.session.remove(`undo:${id}`);
+        if (went === 'onphone') {
+          await record(b.store, b.now(), id, 'undo: on the phone');
+          return b.toast(where, { kind: 'onphone', hash: kept?.hash, title: '', host: '', link: false });
+        }
         // the title and host come from the sealed request; the queue doesn't keep them in the clear (F31)
         const [s] = await shown([waitingSave], ctx.device);
         return b.toast(where, { kind: 'unqueued', title: s.title, host: s.host, link: false });
       }
-      const kept = await b.session.get<UndoKey>(`undo:${id}`);
-      const { relay, blossom } = ctx.defaults.operator;
-      const outcome = await settleUndo(
-        () => (kept ? retract({ id, sha256: kept.sha256 }, hexToBytes(kept.key), blossom, relay, ctx.device, b.net, b.now()) : Promise.reject(new Error('no key'))),
-        () => b.collected(relay, id, ctx.pairing.user_pubkey),
-        b.wait,
-      ).catch(() => 'failed' as const);
+      const outcome = await settleUndo(retractIt, collected, b.wait).catch(() => 'failed' as const);
       // a failed retraction keeps the key, so Undo pressed again tries again
       if (outcome !== 'failed') await b.session.remove(`undo:${id}`);
       const said: Record<typeof outcome, [Outcome, ToastKind]> = { onphone: ['undo: on the phone', 'onphone'], undone: ['undo: retracted', 'undone'], failed: ['undo: failed', 'undofailed'] };

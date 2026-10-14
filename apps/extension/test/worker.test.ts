@@ -65,7 +65,7 @@ function net(o: { publish?: 'ok' | 'down'; retract?: 'ok' | 'refused'; hold?: Pr
   return { net: n, published, asked };
 }
 
-function harness(o: { paired?: boolean; online?: boolean; net?: Net; collected?: boolean[]; store?: Store; session?: Store } = {}) {
+function harness(o: { paired?: boolean; online?: boolean; net?: Net; collected?: boolean[]; store?: Store; session?: Store; alarmHold?: Promise<void> } = {}) {
   const store = o.store ?? memoryStore();
   const session = o.session ?? memoryStore();
   const toasts: Omit<ToastState, 'shortcut'>[] = [];
@@ -83,6 +83,12 @@ function harness(o: { paired?: boolean; online?: boolean; net?: Net; collected?:
     tick: async () => undefined,
     badge: async () => undefined,
     flushAlarm: async (on) => {
+      // the first turning on can be held, as chrome.alarms takes a turn or two
+      const hold = on ? o.alarmHold : undefined;
+      if (hold) {
+        o.alarmHold = undefined;
+        await hold;
+      }
       alarm.on = on;
       if (!on) alarm.cleared++;
     },
@@ -129,6 +135,31 @@ describe('a save is in the queue before it is sent (F23)', () => {
     expect(await queued(h.store)).toMatchObject([{ why: 'reach', attempts: 0, stopped: false }]);
     expect(h.alarm.on).toBe(true);
     expect(kinds(h.toasts)).toEqual(['saving', 'failed']);
+  });
+
+  test('a flush already going as a save goes in leaves it to the save’s own send, so it goes once', async () => {
+    const n = net();
+    const held = gate();
+    const h = harness({ net: n.net, alarmHold: held.p });
+    const saving = h.work.save(PAGE, 1, false);
+    await until(async () => (await queued(h.store)).length > 0);
+    // the alarm's flush reads the queue while the save waits on chrome.alarms
+    await h.work.flushQueue();
+    held.open();
+    await saving;
+    expect(n.asked.n).toBe(1);
+    expect(kinds(h.toasts)).toEqual(['saving', 'saved']);
+    expect((await history(h.store)).map((e) => e.outcome)).toEqual(['sent']);
+  });
+
+  test('after a restart, which keeps no alarm, a start-up flush that fails leaves the alarm on to try again', async () => {
+    const h = harness({ net: net({ publish: 'down' }).net });
+    await h.work.save(PAGE, 1, false);
+    expect(await queued(h.store)).toMatchObject([{ why: 'reach' }]);
+    h.alarm.on = false;
+    await h.work.flushQueue();
+    expect(await queued(h.store)).toMatchObject([{ why: 'reach', attempts: 1 }]);
+    expect(h.alarm.on).toBe(true);
   });
 
   test('a ninth is still refused, while a save on its first send isn’t counted among the eight', async () => {
@@ -223,6 +254,31 @@ describe('Undo (F24, F40)', () => {
     expect(h.toasts.at(-1)!.kind).toBe('onphone');
     await h.work.undo(id, 1);
     expect(h.toasts.at(-1)!.kind).toBe('undofailed');
+  });
+
+  test('Undo on a waiting save whose send may have reached the relay retracts it too, or finds it on the phone', async () => {
+    for (const onPhone of [false, true]) {
+      const n = net({ publish: 'down' });
+      const h = harness({ net: n.net, collected: [onPhone] });
+      await h.work.save(PAGE, 1, false);
+      // the answer timed out, though the relay may hold the wrap
+      expect(await queued(h.store)).toMatchObject([{ why: 'reach' }]);
+      const id = h.toasts[0].id!;
+      await h.work.undo(id, 1);
+      expect(await queued(h.store)).toEqual([]);
+      expect(n.published.filter((e) => e.kind === 5).map((e) => e.tags)).toEqual([[['e', id], ['k', '1059']]]);
+      expect(h.toasts.at(-1)).toMatchObject({ kind: onPhone ? 'onphone' : 'unqueued' });
+      expect(await h.session.get(`undo:${id}`)).toBeFalsy();
+    }
+  });
+
+  test('Undo on a save that never left the browser only takes it off the queue', async () => {
+    const n = net();
+    const h = harness({ online: false, net: n.net });
+    await h.work.save(PAGE, 1, false);
+    await h.work.undo(h.toasts[0].id!, 1);
+    expect(n.published).toEqual([]);
+    expect(h.toasts.at(-1)).toMatchObject({ kind: 'unqueued', title: 'A page' });
   });
 
   test('Undo on a save still waiting takes it off the queue, and the alarm goes with the last one', async () => {

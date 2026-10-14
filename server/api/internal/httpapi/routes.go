@@ -66,9 +66,10 @@ func (a *API) deleteAccount(w http.ResponseWriter, r *http.Request) {
 	reply(w, http.StatusOK, map[string]any{"v": 1, "deleted": map[string]any{"blobs": len(orphaned)}})
 }
 
-// newAccountAllowed holds new accounts to five a day per address, a home line's whole /56 counting as one, and to
-// cfg.MaxRegistrations an hour from everyone together. The hourly count is the accounts table's, so a restart
-// doesn't reset it (F8).
+// newAccountAllowed holds new accounts to five a day per address, a home line's whole /56 counting as one, to
+// MaxBlockRegistrations a day per IPv6 /48, and to cfg.MaxRegistrations an hour from everyone together. The hourly
+// count is the accounts table's, so a restart doesn't reset it (F8). The hourly limit is an availability trade-off,
+// in contract 6: past it every first launch waits, its saves kept on the phone and sent once a place frees.
 func (a *API) newAccountAllowed(w http.ResponseWriter, r *http.Request) bool {
 	recent, err := a.st.Registrations(r.Context(), a.now().Add(-time.Hour))
 	if err != nil {
@@ -80,10 +81,18 @@ func (a *API) newAccountAllowed(w http.ResponseWriter, r *http.Request) bool {
 		fail(w, http.StatusTooManyRequests, "rate")
 		return false
 	}
-	if ok, retry := a.regIP.Allow(limit.Addr(ClientIP(r, a.cfg.TrustProxy), 56)); !ok {
+	ip := ClientIP(r, a.cfg.TrustProxy)
+	if ok, retry := a.regIP.Allow(limit.Addr(ip, 56)); !ok {
 		w.Header().Set("Retry-After", retryAfter(retry))
 		fail(w, http.StatusTooManyRequests, "rate")
 		return false
+	}
+	if block := limit.Block(ip); strings.Contains(block, ":") {
+		if ok, retry := a.regBlk.Allow(block); !ok {
+			w.Header().Set("Retry-After", retryAfter(retry))
+			fail(w, http.StatusTooManyRequests, "rate")
+			return false
+		}
 	}
 	// the backend spec's alert, in the journal until monitoring reads it
 	if recent+1 == a.cfg.MaxRegistrations {
@@ -129,7 +138,8 @@ func statementIn(body map[string]any, name string) *statement {
 // addDevice authorises a device key to upload against the caller's quota (contract 4.4, 6), only with the device's
 // consent: its proof from the pairing offer, made in the last ProofLife and used once, or, for a move, a release signed
 // in the last minute by the library that holds it now (contract 4.8 step 4). A caller that holds the device already
-// changes nothing and gets 200, so a retry after a lost answer succeeds (F44).
+// changes nothing and gets 200 for any proof or release whose signature holds, however old, so a retry after a lost
+// answer succeeds (F44); the proof is used up all the same, so nobody who saw the code can take the device with it.
 func (a *API) addDevice(w http.ResponseWriter, r *http.Request) {
 	req, ok := a.authed(w, r)
 	if !ok || !a.registered(w, r, req.pubkey) {
@@ -165,7 +175,9 @@ func (a *API) mayTake(w http.ResponseWriter, r *http.Request, req *request, devi
 	case err != nil:
 		a.serverError(w, err)
 	case held && holder == req.pubkey:
-		reply(w, http.StatusOK, map[string]any{"v": 1})
+		a.alreadyHeld(w, r, c)
+	case c.stale:
+		fail(w, http.StatusForbidden, c.name()+": stale")
 	case c.release && (!held || holder != c.signer):
 		fail(w, http.StatusForbidden, "release: holder")
 	default:
@@ -182,6 +194,18 @@ func (a *API) mayTake(w http.ResponseWriter, r *http.Request, req *request, devi
 	return false
 }
 
+// alreadyHeld answers a caller that holds the device already: 200, with a proof or release still in its life marked used
+// first, so it can't move the device to anyone else while it lasts (F44).
+func (a *API) alreadyHeld(w http.ResponseWriter, r *http.Request, c consented) {
+	if !c.stale {
+		if _, err := a.st.UseAuth(r.Context(), c.id, c.until); err != nil {
+			a.serverError(w, err)
+			return
+		}
+	}
+	reply(w, http.StatusOK, map[string]any{"v": 1})
+}
+
 // refusalStatus is 400 for a request with neither proof nor release, which only a build older than contract v1.11
 // sends, and 403 for one whose proof or release doesn't hold.
 func refusalStatus(why string) int {
@@ -191,12 +215,14 @@ func refusalStatus(why string) int {
 	return http.StatusForbidden
 }
 
-// consented is a checked device proof or release: whose signature it is, its event id and how long to hold it as used.
+// consented is a device proof or release whose signature holds: whose it is, its event id, how long to hold it as used,
+// and whether it is outside its time, which only a caller already holding the device may still present.
 type consented struct {
 	release bool
 	signer  string
 	id      string
 	until   int64
+	stale   bool
 }
 
 func (c consented) name() string {
@@ -207,30 +233,27 @@ func (c consented) name() string {
 }
 
 // consent checks the device proof or the release in a POST /devices: its signature over what the request names, and
-// its time. why is the error word, empty when it holds; whether the signer may hand the device on is the caller's.
+// its time, marked stale when outside it. why is the error word, empty when the signature holds; whether the signer
+// may hand the device on, and whether a stale one will do, is the caller's.
 func (a *API) consent(req *request, device string) (consented, string) {
 	now := a.now()
 	if p := statementIn(req.body, "proof"); p != nil {
 		id, err := auth.DeviceProof(a.cfg.Base, device, p.Nonce, p.CreatedAt, p.Sig)
-		made := time.Unix(p.CreatedAt, 0)
-		switch {
-		case err != nil:
+		if err != nil {
 			return consented{}, "proof: signature"
-		case made.After(now.Add(auth.Window)) || made.Before(now.Add(-ProofLife)):
-			return consented{}, "proof: stale"
 		}
-		return consented{signer: device, id: id, until: made.Add(ProofLife + auth.Window).Unix()}, ""
+		made := time.Unix(p.CreatedAt, 0)
+		stale := made.After(now.Add(auth.Window)) || made.Before(now.Add(-ProofLife))
+		return consented{signer: device, id: id, until: made.Add(ProofLife + auth.Window).Unix(), stale: stale}, ""
 	}
 	if rel := statementIn(req.body, "release"); rel != nil {
 		id, err := auth.Release(a.cfg.Base, rel.Pubkey, device, req.pubkey, rel.CreatedAt, rel.Sig)
-		made := time.Unix(rel.CreatedAt, 0)
-		switch {
-		case err != nil:
+		if err != nil {
 			return consented{}, "release: signature"
-		case made.After(now.Add(auth.Window)) || made.Before(now.Add(-auth.Window)):
-			return consented{}, "release: stale"
 		}
-		return consented{release: true, signer: rel.Pubkey, id: id, until: made.Add(2 * auth.Window).Unix()}, ""
+		made := time.Unix(rel.CreatedAt, 0)
+		stale := made.After(now.Add(auth.Window)) || made.Before(now.Add(-auth.Window))
+		return consented{release: true, signer: rel.Pubkey, id: id, until: made.Add(2 * auth.Window).Unix(), stale: stale}, ""
 	}
 	return consented{}, "proof: missing"
 }
@@ -297,7 +320,8 @@ func (a *API) offerAllowed(w http.ResponseWriter, r *http.Request, pubkey string
 
 // getOffer returns an unexpired offer. A pair offer is read by a registered user, the phone; a phone offer by any key,
 // since the phone fetching it has no identity yet, and only once, limited to 30 an hour per address (contract 6) and
-// refused for the rest of an offer's life once MaxMisses lookups from anyone have found nothing in it (F8).
+// refused for the rest of an offer's life once MaxBlockMisses lookups from the caller's block, or MaxMisses from
+// anyone, have found nothing in it (F8).
 func (a *API) getOffer(kind string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		req, ok := a.authed(w, r)
@@ -307,7 +331,8 @@ func (a *API) getOffer(kind string) http.HandlerFunc {
 		if kind == "pair" && !a.registered(w, r, req.pubkey) {
 			return
 		}
-		if kind == "phone" && (!a.offerAllowed(w, r, req.pubkey) || !a.guessesLeft(w)) {
+		block := limit.Block(ClientIP(r, a.cfg.TrustProxy))
+		if kind == "phone" && (!a.offerAllowed(w, r, req.pubkey) || !a.guessesLeft(w, block)) {
 			return
 		}
 		lookup := r.PathValue("lookup")
@@ -318,7 +343,7 @@ func (a *API) getOffer(kind string) http.HandlerFunc {
 		}
 		if !found {
 			if kind == "phone" {
-				a.missed()
+				a.missed(block)
 			}
 			fail(w, http.StatusNotFound, "not_found")
 			return
@@ -327,19 +352,27 @@ func (a *API) getOffer(kind string) http.HandlerFunc {
 	}
 }
 
-// guessesLeft refuses a phone-offer lookup while the last five minutes' misses are at MaxMisses: past that, a
-// right code waits too, since nothing tells a right guess from a wrong one before the lookup.
-func (a *API) guessesLeft(w http.ResponseWriter) bool {
-	spent, retry := a.misses.Spent("phone")
-	if spent {
-		w.Header().Set("Retry-After", retryAfter(retry))
-		fail(w, http.StatusTooManyRequests, "rate")
+// guessesLeft refuses a phone-offer lookup while the last five minutes' misses from the caller's block are at
+// MaxBlockMisses, or from everyone at MaxMisses: past that, a right code waits too, since nothing tells a right guess
+// from a wrong one before the lookup. The shared count is an availability trade-off, in contract 6.
+func (a *API) guessesLeft(w http.ResponseWriter, block string) bool {
+	for _, spent := range []func() (bool, time.Duration){
+		func() (bool, time.Duration) { return a.blkMis.Spent(block) },
+		func() (bool, time.Duration) { return a.misses.Spent("phone") },
+	} {
+		if is, retry := spent(); is {
+			w.Header().Set("Retry-After", retryAfter(retry))
+			fail(w, http.StatusTooManyRequests, "rate")
+			return false
+		}
 	}
-	return !spent
+	return true
 }
 
-// missed counts a phone-offer lookup that found nothing, and says so in the log once the misses reach the limit.
-func (a *API) missed() {
+// missed counts a phone-offer lookup that found nothing, against its block and everyone, and says so in the log once
+// everyone's misses reach the limit.
+func (a *API) missed(block string) {
+	a.blkMis.Allow(block)
 	a.misses.Allow("phone")
 	if spent, retry := a.misses.Spent("phone"); spent {
 		a.log.Error("phone-offer lookups held: too many found nothing", "limit", MaxMisses, "for", retry.Round(time.Second))

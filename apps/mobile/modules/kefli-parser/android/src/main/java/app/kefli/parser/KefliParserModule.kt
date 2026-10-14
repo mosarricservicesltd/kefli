@@ -21,6 +21,11 @@ class KefliParserModule : Module() {
       Renderer.render(context, url, promise)
     }
 
+    // An Original view opened (true) or closed (false): a render's clear of the shared cookie jar waits while one is open.
+    Function("holdJar") { on: Boolean ->
+      Renderer.hold(on)
+    }
+
     // kefliPdf: a PDF's bytes (base64) to its text runs, which packages/protocol lays out. Resolves with JSON.
     AsyncFunction("pdf") { body: String, promise: Promise ->
       Parser.submit(context, JSONObject().put("kind", "pdf").put("body", body), promise)

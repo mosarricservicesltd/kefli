@@ -30,23 +30,24 @@ const waited = new WeakSet<AuthRelay>();
  * NIP-42 AUTH as the device key before a wrap goes out (contract 3.2, F9): the operator relay counts a wrap sent on a
  * connection AUTHed as a device the recipient authorised against that key alone, so a flood from elsewhere can't use up
  * the user's allowance. nostr-tools keeps one AUTH per connection, so a connection held between saves answers at once.
- * A fresh one is asked again every 50 ms until its challenge arrives (strfry sends it on connect), for at most waitMs.
+ * A fresh one is asked again every 50 ms until its challenge arrives (strfry sends it on connect), for at most waitMs
+ * by the clock.
  * onauth is left alone: nostr-tools rethrows a refused AUTH it started itself, which nothing could catch. True when
  * the relay took the AUTH; false stops nothing, and the wrap goes as an unAUTHed one would.
  */
 export async function authAs(relay: AuthRelay, device: LocalSigner, waitMs = AUTH_WAIT_MS): Promise<boolean> {
   const sign = (evt: Parameters<LocalSigner['signEvent']>[0]) => device.signEvent(evt) as never;
-  let left = waited.has(relay) ? 0 : waitMs;
+  // a deadline by the clock, so a busy machine's late timers don't stretch the wait past waitMs
+  const until = Date.now() + (waited.has(relay) ? 0 : waitMs);
   waited.add(relay);
   for (;;) {
     try {
       await within(relay.auth(sign), PUBLISH_TIMEOUT_MS);
       return true;
     } catch (e) {
-      if (!String(e).includes('no challenge') || left <= 0) return false;
+      if (!String(e).includes('no challenge') || Date.now() >= until) return false;
     }
-    await new Promise((later) => setTimeout(later, AUTH_POLL_MS));
-    left -= AUTH_POLL_MS;
+    await new Promise((later) => setTimeout(later, Math.min(AUTH_POLL_MS, Math.max(0, until - Date.now()))));
   }
 }
 

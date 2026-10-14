@@ -18,7 +18,8 @@ const WORDS = Array.from({ length: GUARD_WORDS + 10 }, (_, i) => `word${i}`).joi
 function world() {
   const db = memoryDb();
   migrate(db);
-  const user = new LocalSigner(nodeCrypto.randomBytes(32));
+  const userSk = nodeCrypto.randomBytes(32);
+  const user = new LocalSigner(userSk.slice());
   const device = new LocalSigner(nodeCrypto.randomBytes(32));
   const owner = user.pubkey();
   ensureIdentityRow(db, T0, owner, 'new', true);
@@ -68,7 +69,7 @@ function world() {
   const ops = () => db.all<{ op: string; subject: string }>('SELECT op, subject FROM outbox ORDER BY id').map((r) => r.op);
   const item = (hash: string) => db.get<{ text_state: string; title: string; origin: string; origin_device: string; state: string; saved_at: number }>(
     'SELECT text_state, title, origin, origin_device, state, saved_at FROM items WHERE owner = ? AND hash = ?', owner, hash);
-  return { db, owner, user, device, ports, wraps, texts, request, send, withHtml, ops, item, parses: () => parses, tick: (s: number) => (clock += s) };
+  return { db, owner, user, userSk, device, ports, wraps, texts, request, send, withHtml, ops, item, parses: () => parses, tick: (s: number) => (clock += s) };
 }
 
 describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
@@ -114,6 +115,25 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     expect(w.db.get('SELECT 1 FROM inbox_seen')).toBeUndefined();
     expect(w.db.get("SELECT 1 FROM sync_cursors WHERE stream = 'inbox'")).toBeUndefined();
     refusing = false;
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+  });
+
+  test('a key zeroed while the drain holds it leaves the wrap unrecorded for the next drain (F47, F3)', async () => {
+    const w = world();
+    await w.send(w.request());
+    // the drain took the slot's key; the person comes back after five minutes away and the slot zeroes it mid-drain
+    const held = new LocalSigner(w.userSk.slice());
+    w.ports.signer = held;
+    const query = w.ports.query;
+    w.ports.query = async (relay, filters) => {
+      held.zero();
+      return query(relay, filters);
+    };
+    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+    expect(w.db.get('SELECT 1 FROM inbox_seen')).toBeUndefined();
+    expect(w.db.get("SELECT 1 FROM sync_cursors WHERE stream = 'inbox'")).toBeUndefined();
+    w.ports.signer = w.user;
+    w.ports.query = query;
     expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
   });
 

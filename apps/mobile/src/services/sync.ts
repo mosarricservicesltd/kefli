@@ -258,8 +258,8 @@ export async function syncLists(p: SyncPorts, owner: string): Promise<void> {
  * Of the copies read, the newest of each kind, taken in when it is newer than the one held: recorded, and a 10002's or
  * a 10063's relays and servers joined, those of the person's own it no longer names removed. Sync reads them, and so
  * does the list send just before it builds its own, so a list another app published since the last sync isn't
- * overwritten. A relay joins only when the held list didn't name it: one it named that is gone from the table was
- * removed here, and stays removed.
+ * overwritten. A relay or a server joins only when the held list didn't name it: one it named that is gone from the
+ * table was removed here, and stays removed.
  */
 export function takeNewerLists(db: SqlDb, owner: string, copies: NostrEvent[], kinds: number[]): void {
   for (const kind of kinds) {
@@ -267,29 +267,32 @@ export function takeNewerLists(db: SqlDb, owner: string, copies: NostrEvent[], k
     const held = db.get<{ created_at: number; raw: string | null }>("SELECT created_at, raw FROM lists WHERE owner = ? AND kind = ? AND d = ''", owner, kind);
     if (!latest || (held && held.created_at >= latest.created_at)) continue;
     recordList(db, owner, kind, latest.id, latest.created_at, JSON.stringify(latest));
-    if (kind === KIND.serverList) keepListedServers(db, owner, readServerList(latest));
-    if (kind !== KIND.relayList) continue;
-    const entries = readRelayList(latest);
-    const before = heldRelays(held?.raw ?? null);
-    for (const e of entries) {
-      if (before.has(e.url)) continue;
-      db.run("INSERT OR IGNORE INTO relays (url, owner, read, write, source, added_by_app) VALUES (?, ?, ?, ?, 'user', 0)", e.url, owner, e.read ? 1 : 0, e.write ? 1 : 0);
-    }
-    // a relay of the person's own that the newer list dropped was removed elsewhere (FD 113), unless this phone
-    // added it after that list was made
-    const listed = new Set(entries.map((e) => e.url));
-    for (const r of db.all<{ url: string; added_at: number | null }>("SELECT url, added_at FROM relays WHERE owner = ? AND source = 'user'", owner)) {
-      if (!listed.has(r.url) && (r.added_at ?? 0) <= latest.created_at) db.run('DELETE FROM relays WHERE owner = ? AND url = ?', owner, r.url);
-    }
+    const raw = held?.raw ?? null;
+    if (kind === KIND.serverList) keepListedServers(db, owner, readServerList(latest), heldNamed(raw, readServerList));
+    if (kind === KIND.relayList) takeRelayList(db, owner, latest, heldNamed(raw, (e) => readRelayList(e).map((r) => r.url)));
   }
 }
 
-/** The relays a held 10002 names; none when there is no list or it doesn't read. */
-function heldRelays(raw: string | null): Set<string> {
+/** A newer 10002: each relay it names that the held list didn't joins as the person's own; one it dropped goes. */
+function takeRelayList(db: SqlDb, owner: string, latest: NostrEvent, before: string[]): void {
+  const entries = readRelayList(latest);
+  for (const e of entries.filter((x) => !before.includes(x.url))) {
+    db.run("INSERT OR IGNORE INTO relays (url, owner, read, write, source, added_by_app) VALUES (?, ?, ?, ?, 'user', 0)", e.url, owner, e.read ? 1 : 0, e.write ? 1 : 0);
+  }
+  // a relay of the person's own that the newer list dropped was removed elsewhere (FD 113), unless this phone
+  // added it after that list was made
+  const listed = new Set(entries.map((e) => e.url));
+  for (const r of db.all<{ url: string; added_at: number | null }>("SELECT url, added_at FROM relays WHERE owner = ? AND source = 'user'", owner)) {
+    if (!listed.has(r.url) && (r.added_at ?? 0) <= latest.created_at) db.run('DELETE FROM relays WHERE owner = ? AND url = ?', owner, r.url);
+  }
+}
+
+/** What a held list names, read as read reads it; nothing when there is no list or it doesn't read. */
+function heldNamed(raw: string | null, read: (e: NostrEvent) => string[]): string[] {
   try {
-    return new Set(raw ? readRelayList(JSON.parse(raw) as NostrEvent).map((e) => e.url) : []);
+    return raw ? read(JSON.parse(raw) as NostrEvent) : [];
   } catch {
-    return new Set();
+    return [];
   }
 }
 

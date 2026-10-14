@@ -36,9 +36,12 @@ export const IMAGE_TIMEOUT_MS = 20_000;
 
 export type Fetched = 'ok' | 'failed' | 'offline' | 'skipped';
 
+// built from a string: the code gate's parser reads a regex literal's escaped slashes as a comment
+const WEB = new RegExp('^https?://', 'i');
+
 export async function fetchImage(p: ImagePorts, owner: string, url: string, hash: string): Promise<Fetched> {
   // a page's image may name any address: only public web ones are fetched, never this phone's network (F26)
-  if (!/^https?:\/\//i.test(url) || !isPublicWebUrl(url)) return 'skipped';
+  if (!WEB.test(url) || !isPublicWebUrl(url)) return 'skipped';
   const fail = () => {
     recordFailed(p.db, url, hash, p.now());
     return 'failed' as const;

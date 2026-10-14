@@ -131,6 +131,22 @@ export function deletesOwed(db: SqlDb, owner: string): { ds: string[]; blobs: st
 }
 
 /**
+ * The newest version of anything a retirement's kind 5s name (F36): the identity's saves, those from a newer Kefli,
+ * its connected-browsers and library-key records, and the deletes it still owes. Another phone on the same library
+ * may date them by a clock ahead of this one's, so the kind 5s go past the newest of them, not past this phone's now.
+ */
+export function newestVersion(db: SqlDb, owner: string): number {
+  const at = (sql: string) => db.get<{ at: number | null }>(sql, owner)?.at ?? 0;
+  return Math.max(
+    at('SELECT MAX(event_created_at) AS at FROM items WHERE owner = ?'),
+    at('SELECT MAX(created_at) AS at FROM items_future WHERE owner = ?'),
+    at('SELECT MAX(created_at) AS at FROM lists WHERE owner = ? AND kind = 30078'),
+    at('SELECT library_key_at AS at FROM identities WHERE pubkey = ?'),
+    deletesOwed(db, owner).after,
+  );
+}
+
+/**
  * Saves still at an address other than their keyed one (unkeyed from before v1.10, or under another key) are queued
  * to be published at it, on the bulk lane; each send retires the old address (F5). Run after the key is known, at
  * every sync, so a library from before v1.10 moves whole; built at send time, so from rows this sync has updated.

@@ -106,26 +106,31 @@ function statementHolds(pubkey, tags, s) {
   return verifyEvent(ev) ? ev.id : null;
 }
 
-/** The device's proof from its offer, or the holder's release for a move, as keflid checks them (F44). */
+/** The device's proof from its offer, or the holder's release for a move, as keflid checks them (F44): stale when outside its time. */
 function consent({ proof, release }, device, caller) {
   const head = [['u', `${BASE}/devices`], ['method', 'POST']];
   if (proof) {
-    if (outside(proof.created_at, PROOF_LIFE, 60)) return { why: 'proof: stale' };
     const id = statementHolds(device, [...head, ['nonce', String(proof.nonce ?? '')]], proof);
-    return id ? { id, name: 'proof' } : { why: 'proof: signature' };
+    return id ? { id, name: 'proof', stale: outside(proof.created_at, PROOF_LIFE, 60) } : { why: 'proof: signature' };
   }
   if (release) {
-    if (outside(release.created_at, 60, 60)) return { why: 'release: stale' };
     const id = statementHolds(release.pubkey, [...head, ['device', device], ['to', caller]], release);
-    return id ? { id, name: 'release', holder: release.pubkey } : { why: 'release: signature' };
+    return id ? { id, name: 'release', holder: release.pubkey, stale: outside(release.created_at, 60, 60) } : { why: 'release: signature' };
   }
   return { why: 'proof: missing', status: 400 };
 }
 
-/** The answer when a checked consent can't move the device to caller, [200] when caller has it already, else null. */
+/**
+ * The answer when a checked consent can't move the device to caller, else null. A caller holding it already gets [200]
+ * for any whose signature holds, and a proof in its life is used up all the same, so nobody else can take the device with it.
+ */
 function refusal(c, pk, caller) {
   const held = devices.get(pk)?.user;
-  if (held === caller) return [200];
+  if (held === caller) {
+    if (!c.stale) usedConsent.add(c.id);
+    return [200];
+  }
+  if (c.stale) return [403, `${c.name}: stale`];
   if (c.holder && held !== c.holder) return [403, 'release: holder'];
   return usedConsent.has(c.id) ? [403, `${c.name}: replayed`] : null;
 }

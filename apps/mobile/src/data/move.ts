@@ -15,9 +15,12 @@ import { settleUserLists, type UserLists } from '../services/nostrSignIn';
 
 /**
  * since: when the move was queued. marks: for each save copied, the version of S's row its copy was taken from
- * (sourceMark), so a change S takes afterwards is found at retire (F20).
+ * (sourceMark), so a change S takes afterwards is found at retire (F20). carried: the changes went to T once, just
+ * before S's retirement first went out, after which a save missing from S is no longer read as deleted.
  */
-export type MoveJob = { id: string; from: string; to: string; step: number; moved: string[]; since: number; marks: Record<string, string> };
+export type MoveJob = {
+  id: string; from: string; to: string; step: number; moved: string[]; since: number; marks: Record<string, string>; carried?: boolean;
+};
 
 /** Queues a move from S to T; one per source. */
 export function queueMove(db: SqlDb, now: number, from: string, to: string): void {
@@ -41,13 +44,13 @@ export function moveJob(db: SqlDb): MoveJob | null {
   const r = db.get<{ id: string; step: number; data: string; started_at: number }>(
     "SELECT id, step, data, started_at FROM jobs WHERE kind = 'move' AND state IN ('queued', 'running') ORDER BY started_at LIMIT 1");
   if (!r) return null;
-  const d = JSON.parse(r.data) as { from: string; to: string; moved?: string[]; marks?: Record<string, string> };
-  return { id: r.id, from: d.from, to: d.to, step: r.step, moved: d.moved ?? [], since: r.started_at, marks: d.marks ?? {} };
+  const d = JSON.parse(r.data) as { from: string; to: string; moved?: string[]; marks?: Record<string, string>; carried?: boolean };
+  return { id: r.id, from: d.from, to: d.to, step: r.step, moved: d.moved ?? [], since: r.started_at, marks: d.marks ?? {}, carried: !!d.carried };
 }
 
 export function saveMove(db: SqlDb, now: number, job: MoveJob, state: 'running' | 'done' = 'running'): void {
   db.run('UPDATE jobs SET state = ?, step = ?, data = ?, updated_at = ? WHERE id = ?',
-    state, job.step, JSON.stringify({ from: job.from, to: job.to, moved: job.moved, marks: job.marks }), now, job.id);
+    state, job.step, JSON.stringify({ from: job.from, to: job.to, moved: job.moved, marks: job.marks, carried: !!job.carried }), now, job.id);
 }
 
 /** The version of a save's row: a change on the phone moves modified_at, and a newer event taken moves event_id. */
@@ -116,21 +119,37 @@ const carryRow = (db: SqlDb, owner: string, hash: string) =>
  * switch cut short resumes out of sight, so an archive, a reading position or a delete made meanwhile, or brought in
  * by a sync, lands on S's row. Before S goes, each copied save whose S row moved past its mark passes the change to
  * T's row, published as T's, Listen history with it; one S no longer holds, or holds only for a delete's Undo, is
- * deleted under T, as a delete is (C§4.1). Run again, it finds nothing more to do. Returns how many of T's saves
+ * deleted under T, as a delete is (C§4.1). The first run marks the job carried, in the same transaction. After that
+ * S's own retirement removes its rows without any delete (its kind 5s read back by a sync, or retireLocal before a
+ * failed key wipe), so a later run deletes under T only a save S holds for a delete's Undo or still owes a delete
+ * for, and nothing once S's identity has gone. Run again, it finds nothing more to do. Returns how many of T's saves
  * changed.
  */
 export function carryChanges(db: SqlDb, now: number, job: MoveJob): number {
-  return db.tx(() => [...new Set(job.moved)].filter((hash) => carryOne(db, now, job, hash)).length);
+  return db.tx(() => {
+    if (!db.get('SELECT 1 FROM identities WHERE pubkey = ?', job.from)) return 0;
+    const n = [...new Set(job.moved)].filter((hash) => carryOne(db, now, job, hash)).length;
+    job.carried = true;
+    return n;
+  });
+}
+
+/** Whether S deleted a save: held for its Undo, a kind 5 still owed, or, before the first carry, simply gone. */
+function deletedUnderS(db: SqlDb, job: MoveJob, hash: string, s: CarryRow | undefined): boolean {
+  if (s) return s.pending_delete_at !== null;
+  if (!job.carried) return true;
+  return !!db.get("SELECT 1 FROM outbox WHERE signer = ? AND op = 'delete_item' AND subject = ?", job.from, hash);
 }
 
 function carryOne(db: SqlDb, now: number, job: MoveJob, hash: string): boolean {
   const t = carryRow(db, job.to, hash);
   if (!t || t.pending_delete_at !== null) return false;
   const s = carryRow(db, job.from, hash);
-  if (!s || s.pending_delete_at !== null) {
+  if (deletedUnderS(db, job, hash, s)) {
     commitDelete(db, job.to, hash, deleteItem(db, now, job.to, hash).held);
     return true;
   }
+  if (!s) return false;
   if (job.marks[hash] === undefined || job.marks[hash] === sourceMark(db, job.from, hash)) return false;
   db.run(`INSERT INTO listen_history (item, last_played_at) SELECT ?, last_played_at FROM listen_history WHERE item = ?
     ON CONFLICT (item) DO UPDATE SET last_played_at = MAX(last_played_at, excluded.last_played_at)`, t.id, s.id);

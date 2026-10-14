@@ -74,3 +74,18 @@ func TestAddr(t *testing.T) {
 		t.Error("two /64s of one /56 counted apart")
 	}
 }
+
+func TestBlock(t *testing.T) {
+	for in, want := range map[string]string{
+		"203.0.113.9":           "203.0.113.0/24",
+		"::ffff:203.0.113.200":  "203.0.113.0/24",
+		"2a01:4f8:1c16:497a::1": "2a01:4f8:1c16::/48",
+		"2a01:4f8:1c16:ffff::":  "2a01:4f8:1c16::/48",
+		"fe80::1%eth0":          "fe80::/48",
+		"not an address":        "not an address",
+	} {
+		if got := Block(in); got != want {
+			t.Errorf("Block(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

@@ -273,3 +273,27 @@ func TestDeviceFreshProofConnectsAgain(t *testing.T) {
 		t.Fatal("a fresh offer's proof didn't connect the browser")
 	}
 }
+
+// F44 (b): a browser its library holds already shows a new code (after Disconnect, or a Connect whose answer was
+// lost): the phone's new proof is used up all the same, so anyone else who saw the code can't take the browser with
+// it; and the holder's retry after the proof's life still gets 200.
+func TestDeviceHeldProofIsUsedUp(t *testing.T) {
+	e := newEnv(t)
+	user, device, other := newKey(), newKey(), newKey()
+	e.registered(user, other)
+	expect(t, e.addDevice(user, device), 200, nil)
+	again := map[string]any{"v": 1, "device_pubkey": device.pk, "proof": e.proof(device, nonce(), e.clock)}
+	s, b := e.call(user, "POST", "/devices", again)
+	expect(t, s, 200, b)
+	e.clock = e.clock.Add(time.Second)
+	s, b = e.call(other, "POST", "/devices", again)
+	wantError(t, s, b, 403, "proof: replayed")
+	if e.holder(device) != user.pk {
+		t.Fatal("a proof the holder had sent moved the device")
+	}
+	e.clock = e.clock.Add(httpapi.ProofLife + time.Minute)
+	s, b = e.call(user, "POST", "/devices", again)
+	expect(t, s, 200, b)
+	s, b = e.call(other, "POST", "/devices", again)
+	wantError(t, s, b, 403, "proof: stale")
+}

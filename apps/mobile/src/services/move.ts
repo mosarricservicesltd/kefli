@@ -13,7 +13,7 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import { DEVICES_D, KIND, LIBRARY_KEY_D, T_TAG, buildDeletions, httpAuth, readItemEvent, type CryptoPort, type NostrEvent, type Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { enqueue } from '../data/outbox';
-import { deletesOwed, itemAddresses } from '../data/libraryKey';
+import { itemAddresses, newestVersion } from '../data/libraryKey';
 import { listServers, writeRelays } from '../data/lists';
 import { indexText } from '../data/sync';
 import { carryChanges, copySave, moveJob, newerInEither, retireLocal, saveMove, sourceMark, sourceSaves, type MoveJob } from '../data/move';
@@ -207,13 +207,13 @@ async function holdsAll(p: MovePorts, relay: string, owner: string, want: string
 async function retireRemote(p: MovePorts, job: MoveJob): Promise<boolean> {
   // each save at every address it is at, never a plain hash it wasn't published under (F5), the saves deleted while
   // the move ran whose kind 5s are still to go out (F20), and S's records
-  const owed = deletesOwed(p.db, job.from);
   const ds = [
     ...itemAddresses(p.db, job.from),
     ...p.db.all<{ d: string }>('SELECT d FROM items_future WHERE owner = ?', job.from).map((r) => r.d),
     DEVICES_D, LIBRARY_KEY_D,
   ];
-  const deletions = await buildDeletions(p.source, [...new Set(ds)], Math.max(p.now(), owed.after + 1));
+  // dated past the newest version of anything they name, whatever this phone's clock says (F36)
+  const deletions = await buildDeletions(p.source, [...new Set(ds)], Math.max(p.now(), newestVersion(p.db, job.from) + 1));
   await Promise.all(writeRelays(p.db, job.from).map(async (relay) => {
     for (const e of deletions) await p.publish(relay, e).catch(() => undefined);
   }));
@@ -229,52 +229,80 @@ async function retireRemote(p: MovePorts, job: MoveJob): Promise<boolean> {
 async function retire(p: MovePorts, job: MoveJob): Promise<'again' | boolean> {
   await p.drainSourceInbox().catch(() => undefined);
   if (sourceSaves(p.db, job.from, job.moved).length) return 'again';
-  // what changed under S since its saves were copied goes to T before S's rows go (F20)
-  carryChanges(p.db, p.now(), job);
+  // what changed under S since its saves were copied goes to T before S's rows go (F20), marked carried in the same
+  // transaction and saved before any of S's retirement goes out, so a later pass reads S's missing rows as retired
+  p.db.tx(() => {
+    carryChanges(p.db, p.now(), job);
+    saveMove(p.db, p.now(), job);
+  });
   if (!(await retireRemote(p, job))) return false;
   retireLocal(p.db, job.from, job.to);
   await p.retireKeys();
   return true;
 }
 
-/** Runs or resumes the move job, as far as it can go now. */
-export async function runMove(p: MovePorts, job: MoveJob | null = moveJob(p.db)): Promise<MoveOutcome> {
+/** One step's result: on to the next step, stay where the step itself put the job, or how this run ends. */
+type Step = 'next' | 'stay' | MoveOutcome;
+
+/** Step 1: both libraries collected in full, stopped by a save from a newer Kefli in either (C§10, FD 91 (i)). */
+async function collectBoth(p: MovePorts, job: MoveJob): Promise<Step> {
+  if (newerInEither(p.db, job.from, job.to)) return 'newer';
+  const fromAll = await p.collect(job.from, p.source);
+  const toAll = await p.collect(job.to, p.target);
+  if (!fromAll || !toAll) return 'waiting';
+  return newerInEither(p.db, job.from, job.to) ? 'newer' : 'next';
+}
+
+/** Step 3: the browsers queued with the step moved on, in one transaction, so each is paired once. */
+async function pairBrowsers(p: MovePorts, job: MoveJob): Promise<Step> {
+  const { operator } = await p.defaults();
+  job.step++;
+  p.db.tx(() => {
+    queueBrowsers(p, job, operator);
+    saveMove(p.db, p.now(), job);
+  });
+  await p.runOutbox();
+  return 'stay';
+}
+
+/** Step 5: S retired, or back to the copy for a save found at the end. */
+async function retireStep(p: MovePorts, job: MoveJob): Promise<Step> {
+  const r = await retire(p, job);
+  if (r === 'again') {
+    job.step = 2;
+    saveMove(p.db, p.now(), job);
+    return 'stay';
+  }
+  if (!r) return 'waiting';
+  saveMove(p.db, p.now(), job, 'done');
+  return 'done';
+}
+
+const STEPS: ((p: MovePorts, job: MoveJob) => Promise<Step>)[] = [
+  async (p, job) => ((await prepare(p, job)) ? 'next' : 'waiting'),
+  collectBoth,
+  async (p, job) => {
+    if (!(await copyAll(p, job))) return 'waiting';
+    await p.runOutbox();
+    return 'next';
+  },
+  pairBrowsers,
+  async (p, job) => {
+    await p.runOutbox();
+    return (await confirmed(p, job)) ? 'next' : 'waiting';
+  },
+  retireStep,
+];
+
+/** Runs or resumes the move job (the database's, unless given), as far as it can go now. */
+export async function runMove(p: MovePorts, given?: MoveJob | null): Promise<MoveOutcome> {
+  // read here, since the code gate's parser loses a function whose default parameter calls another
+  const job = given === undefined ? moveJob(p.db) : given;
   if (!job) return 'done';
   for (let guard = 0; guard < 12; guard++) {
-    if (job.step === 0) {
-      if (!(await prepare(p, job))) return 'waiting';
-    } else if (job.step === 1) {
-      if (newerInEither(p.db, job.from, job.to)) return 'newer';
-      const fromAll = await p.collect(job.from, p.source);
-      const toAll = await p.collect(job.to, p.target);
-      if (!fromAll || !toAll) return 'waiting';
-      if (newerInEither(p.db, job.from, job.to)) return 'newer';
-    } else if (job.step === 2) {
-      if (!(await copyAll(p, job))) return 'waiting';
-      await p.runOutbox();
-    } else if (job.step === 3) {
-      const { operator } = await p.defaults();
-      job.step++;
-      p.db.tx(() => {
-        queueBrowsers(p, job, operator);
-        saveMove(p.db, p.now(), job);
-      });
-      await p.runOutbox();
-      continue;
-    } else if (job.step === 4) {
-      await p.runOutbox();
-      if (!(await confirmed(p, job))) return 'waiting';
-    } else {
-      const r = await retire(p, job);
-      if (r === 'again') {
-        job.step = 2;
-        saveMove(p.db, p.now(), job);
-        continue;
-      }
-      if (!r) return 'waiting';
-      saveMove(p.db, p.now(), job, 'done');
-      return 'done';
-    }
+    const r = await STEPS[Math.min(job.step, STEPS.length - 1)](p, job);
+    if (r === 'stay') continue;
+    if (r !== 'next') return r;
     job.step++;
     saveMove(p.db, p.now(), job);
   }

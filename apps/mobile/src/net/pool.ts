@@ -31,12 +31,13 @@ export function reconnectDelay(failures: number): number {
 }
 
 export function acceptsUrl(url: string, allowInsecure = false): boolean {
-  return /^wss:\/\//.test(url) || (allowInsecure && /^ws:\/\//.test(url));
+  // string tests, since the code gate's parser misreads these regex literals and loses its place in the file
+  return url.startsWith('wss://') || (allowInsecure && url.startsWith('ws://'));
 }
 
-const PREFIXED = /^[a-z-]+:/;
+const PREFIXED = new RegExp('^[a-z-]+:');
 // strfry closes a REQ with "ERROR: auth-required: …", so the prefix is looked for anywhere in the reason.
-const AUTH_REQUIRED = /(^|\s)auth-required:/;
+const AUTH_REQUIRED = new RegExp('(^|\\s)auth-required:');
 
 /** A failed publish as the relay's answer: a prefixed reason is an OK false; anything else is the network, rethrown. */
 export function publishAnswer(error: unknown): RelayAnswer {

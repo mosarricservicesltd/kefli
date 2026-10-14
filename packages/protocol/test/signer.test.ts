@@ -1,4 +1,4 @@
-import { BACKGROUND_ZERO_MS, LocalSigner, Nip55Signer, SignerSlot, nobleSecp, signedAsAsked, type Nip55Port } from '../src';
+import { BACKGROUND_ZERO_MS, LocalSigner, Nip55Signer, SignerSlot, isSignerFailure, nobleSecp, signedAsAsked, type Nip55Port } from '../src';
 import { nodeCrypto } from '../src/node';
 
 const fresh = () => new LocalSigner(nodeCrypto.randomBytes(32));
@@ -20,6 +20,15 @@ describe('the phone’s signer slot (mobile spec 3.4, 7.1)', () => {
     slot.set(null);
     expect(await zeroed(b)).toBe(true);
     expect(slot.get()).toBeNull();
+  });
+
+  test('a zeroed key fails as a signer that is not answering, so a run that still holds it waits (F47)', async () => {
+    const s = fresh();
+    s.zero();
+    const failures = await Promise.all([
+      s.nip44Decrypt(s.pubkey(), 'x'), s.nip44Encrypt(fresh().pubkey(), 'x'), s.signEvent({ kind: 1, created_at: 1, tags: [], content: '' }),
+    ].map((p) => p.then(() => null, (e: unknown) => e)));
+    for (const e of failures) expect(isSignerFailure(e)).toBe(true);
   });
 
   test('five minutes in the background zero the local key; a shorter absence keeps it', async () => {

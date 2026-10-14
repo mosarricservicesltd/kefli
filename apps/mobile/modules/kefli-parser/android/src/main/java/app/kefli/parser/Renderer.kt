@@ -53,6 +53,26 @@ object Renderer {
   private var current: Load? = null
   private val queue = java.util.ArrayDeque<Load>()
   private lateinit var app: Context
+  /** Original views open, which share the app's one jar; while any is, a render's clear waits for the last to close. */
+  private var holds = 0
+  private var owed = false
+
+  /** An Original view opened (on) or closed: the jar is left alone while one is open, then cleared if a render ended. */
+  fun hold(on: Boolean) {
+    main.post {
+      if (on) {
+        holds++
+      } else if (holds > 0 && --holds == 0 && owed) {
+        owed = false
+        clearJar()
+      }
+    }
+  }
+
+  private fun clearJar() {
+    WebStorage.getInstance().deleteAllData()
+    CookieManager.getInstance().run { removeAllCookies { flush() } }
+  }
 
   fun render(context: Context, url: String, promise: Promise) {
     main.post {
@@ -140,9 +160,9 @@ object Renderer {
     }
     load.view = null
     // what the page set (a bot check's clearance, a site's storage) goes with it, so no later render or fetch carries
-    // it and no site can follow one person from page to page (F27)
-    WebStorage.getInstance().deleteAllData()
-    CookieManager.getInstance().run { removeAllCookies { flush() } }
+    // it and no site can follow one person from page to page (F27); while an Original view is open, whose sign-in
+    // lives in the same jar, the clear waits until it closes
+    if (holds > 0) owed = true else clearJar()
     if (current === load) current = null
     load.promise.resolve(result.toString())
     next()

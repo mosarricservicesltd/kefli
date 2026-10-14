@@ -53,6 +53,17 @@ const DefaultMaxRegistrations = 200
 // to two in ten thousand (F8, contract 2).
 const MaxMisses = 100
 
+// MaxBlockMisses is how many of those MaxMisses one block of addresses (an IPv4 /24, an IPv6 /48) may spend in an
+// offer's life: past it, that block's lookups wait, and nobody else's, so filling the shared count takes ten blocks in
+// every five minutes rather than one tunnel's addresses (F8). A person mistyping a code misses once or twice.
+const MaxBlockMisses = 10
+
+// MaxBlockRegistrations is how many new accounts a day one IPv6 /48 may make, beside the five a day per /56: a
+// tunnel broker hands out a /48 free, 256 /56s, which could otherwise hold MaxRegistrations full for hours a day.
+// IPv4 has no such limit, since a carrier's shared addresses sit many people in one /24, and each address already
+// costs its owner something.
+const MaxBlockRegistrations = 20
+
 const maxBody = 64 << 10
 
 type API struct {
@@ -63,7 +74,9 @@ type API struct {
 	calls  *limit.Limiter // per pubkey, 60 a minute (backend spec 3.3)
 	pairs  *limit.Limiter // offers, 30 an hour per key and per address (contract 6)
 	regIP  *limit.Limiter // registrations, 5 a day per address, an IPv6 line by its /56 (backend spec 5)
+	regBlk *limit.Limiter // registrations, MaxBlockRegistrations a day per IPv6 /48
 	misses *limit.Limiter // phone-offer lookups that found nothing, MaxMisses an offer's life from everyone
+	blkMis *limit.Limiter // the same, MaxBlockMisses an offer's life per block of addresses
 	// logKey keys the fingerprints the logs show for pubkeys (short)
 	logKey []byte
 }
@@ -82,7 +95,9 @@ func New(cfg Config, st *store.Store, log *slog.Logger) *API {
 		calls:  limit.New(60, time.Minute, now),
 		pairs:  limit.New(30, time.Hour, now),
 		regIP:  limit.New(5, 24*time.Hour, now),
+		regBlk: limit.New(MaxBlockRegistrations, 24*time.Hour, now),
 		misses: limit.New(MaxMisses, store.OfferLife, now),
+		blkMis: limit.New(MaxBlockMisses, store.OfferLife, now),
 	}
 }
 
