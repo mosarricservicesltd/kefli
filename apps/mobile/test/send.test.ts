@@ -862,6 +862,44 @@ describe('deleting makes room (C§5, v1.12)', () => {
   });
 });
 
+describe('a large import past the day (C§4.6, C§5, v1.12)', () => {
+  test("every save goes at once, each text is tried once a day, and the day's uploads take the rest over the days after", async () => {
+    // the operator takes ten texts a day, as 20 MB takes about 800, and refuses the rest for the day
+    let today = 10;
+    const w = world({ 'PUT http://blossom/upload': () => (today-- > 0 ? undefined : refuse('daily')) });
+    ensureIdentityRow(w.db, w.now(), w.signer.pubkey(), 'early_share', true);
+    seedGeneratedLists(w.db, w.signer.pubkey(), D);
+    w.db.run('UPDATE identities SET registered_at = 1');
+    for (let n = 0; 30 > n; n++) {
+      const md = normaliseMarkdown(`# Bookmark ${n}\n\nWords.`);
+      const enc = await encryptText(md, nodeCrypto);
+      w.blobs.set(enc.text.sha256, enc.blob);
+      // as an imported link's parse leaves it: its upload, mirror and publish queued, nothing held
+      release(w.db, queueSave(w.db, w.now(), {
+        owner: w.signer.pubkey(), hash: n.toString(16).padStart(64, '0'), url: `https://example.com/${n}`, canonical: null, title: `Bookmark ${n}`,
+        site: null, byline: null, savedAt: w.now(), words: 2, lang: 'en', hero: null, text: enc.text, textHash: textHash(md, nodeCrypto),
+        textState: 'cached', origin: 'import',
+      }, { sha256: enc.text.sha256, size: enc.blob.length, path: `/staged/${n}` }, { api: D.operator.api, blossom: D.operator.blossom, mirror: D.mirrors[0] }));
+    }
+    const uploads = () => w.calls.filter((c) => c === 'PUT http://blossom/upload').length;
+    const saves = () => new Set(w.published().map((p) => p.event.tags.find((t) => t[0] === 'd')![1])).size;
+    const day = async () => {
+      for (let i = 0; 50 > i && (await drain(w.ports)) > 0; i++);
+    };
+    await day();
+    expect([uploads(), saves(), notBackedUp(w.db, w.signer.pubkey())]).toEqual([30, 30, 20]);
+    for (const left of [10, 0]) {
+      today = 10;
+      w.tick(86_400);
+      await day();
+      expect(notBackedUp(w.db, w.signer.pubkey())).toBe(left);
+    }
+    // ten texts tried a second day, ten more a third; nothing is left to send
+    expect(uploads()).toBe(30 + 20 + 10);
+    expect(w.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM outbox')?.n).toBe(0);
+  });
+});
+
 describe('the foreground retry (4.3, F11)', () => {
   afterEach(() => jest.useRealTimers());
 
