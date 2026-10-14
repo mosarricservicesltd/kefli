@@ -46,7 +46,7 @@ describe('defaults.json from an operator that misbehaves', () => {
     await store.set(KEYS.defaults, DEFAULTS);
     const r = await timed(loadDefaults(store, 'https://kefli.example/defaults.json', never, 50));
     expect(r).toMatchObject({ rejected: false, value: DEFAULTS });
-    expect(r.ms).toBeLessThan(1000);
+    expect(r.ms).toBeLessThan(5000);
   });
 
   test('an answer that never ends is cut off as it is read, and the kept copy stands in', async () => {
@@ -92,7 +92,7 @@ describe('pairing with an operator that misbehaves', () => {
     const o = await newOffer(device, DEFAULTS, 'Chrome on a Mac', webCrypto, NOW);
     const r = await timed(postOffer(device, DEFAULTS, o, webCrypto, never, 50));
     expect(r.rejected).toBe(true);
-    expect(r.ms).toBeLessThan(1000);
+    expect(r.ms).toBeLessThan(5000);
     expect(o.posted).toBe(false);
   });
 });

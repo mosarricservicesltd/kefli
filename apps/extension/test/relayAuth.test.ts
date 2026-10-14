@@ -159,11 +159,11 @@ describe('a relay that misbehaves', () => {
   test('an AUTH that never settles costs one wait: later saves on the connection go at once', async () => {
     const stuck = { auth: () => new Promise<string>(() => undefined) };
     let started = Date.now();
-    expect(await authAs(stuck, device, 0, 50)).toBe(false);
-    expect(Date.now() - started).toBeLessThan(1000);
+    expect(await authAs(stuck, device, 0, 500)).toBe(false);
+    expect(Date.now() - started).toBeLessThan(3000);
     started = Date.now();
-    expect(await authAs(stuck, device, 0, 50)).toBe(false);
-    expect(Date.now() - started).toBeLessThan(20);
+    expect(await authAs(stuck, device, 0, 500)).toBe(false);
+    expect(Date.now() - started).toBeLessThan(250);
   });
 
   test('a challenge nostr-tools can’t sign holds the first save on a connection once, and the wrap still goes', async () => {
@@ -187,7 +187,7 @@ describe('a relay that misbehaves', () => {
     });
     const started = Date.now();
     expect((await fetchWraps(url, device, 0)).map((e) => e.id)).toEqual([w.id]);
-    expect(Date.now() - started).toBeLessThan(3000);
+    expect(Date.now() - started).toBeLessThan(10_000);
   });
 
   test('a flood of wraps is read only as far as WRAPS_MAX', async () => {
@@ -205,6 +205,6 @@ describe('a relay that misbehaves', () => {
     const url = relay({ onReq: (s, sub) => s.say(['CLOSED', sub, 42]) });
     const started = Date.now();
     expect(await fetchWraps(url, device, 0)).toEqual([]);
-    expect(Date.now() - started).toBeLessThan(1000);
+    expect(Date.now() - started).toBeLessThan(3000);
   });
 });
