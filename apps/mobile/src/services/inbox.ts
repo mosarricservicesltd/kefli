@@ -28,8 +28,7 @@ import {
 import type { Pending } from '../data/pending';
 import type { SaveTargets } from '../data/saves';
 import { getCursor, setCursor } from '../data/sync';
-import { deriveArticle } from '../reader/blocks';
-import type { PageOutcome, ParserResult } from './page';
+import { parsedOutcome, type PageOutcome, type ParserResult } from './page';
 import { settle, type PendingPorts } from './pending';
 import { PAGE, type Filter } from './sync';
 import { TooLarge, open } from '../net/http';
@@ -84,16 +83,25 @@ function readable(json: string): boolean {
   }
 }
 
+/** The parser port's answer when its WebView's renderer has gone, killed for memory or never loaded (page.ts). */
+const RENDERER_GONE = 'renderer_gone';
+
 /**
  * The save's text from the browser's content HTML (C§4.4): the canonical Markdown conversion, with the metadata the
- * extension read from the live page. The extension applied the guard before sending HTML, so it isn't applied again.
+ * extension read from the live page, then the guards a parsed page's text takes (page.ts parsedOutcome): refused past
+ * what a save keeps, its derivation never throwing, its fields fitted. The extension applied the readability guard
+ * before sending HTML, so the browser's word stands for it. A conversion the parser refused for its size is too large,
+ * as a page's is. Without them, a text too long was kept and refused at every upload, and one the derivation couldn't
+ * take held its wrap for a week, its save at "Getting the text…". When the parser's renderer has gone, nothing about
+ * the capture is known: this throws, as a part-way failure does, so the inbox reads it again at the next drain (take,
+ * retake) rather than leaving the save without its text.
  */
 export async function fromBrowser(p: Pick<InboxPorts, 'markdown'>, r: SaveRequest, contentHtml: string): Promise<Exclude<PageOutcome, { kind: 'offline' }>> {
   const m = await p.markdown(contentHtml, r.url).catch((): ParserResult => ({ ok: false, reason: 'error' }));
-  if (!m.ok) return { kind: 'failed', reason: 'not_readable', finalUrl: r.url };
-  const derived = deriveArticle(m.markdown);
-  const result = { ...m, title: r.title, byline: r.byline, site: r.site, lang: r.lang, hero: r.hero, canonical: r.canonical, readerable: true };
-  return { kind: 'parsed', finalUrl: r.url, result, words: derived.words, spoken: derived.spoken, derived };
+  if (!m.ok && m.reason === RENDERER_GONE) throw new Error('the parser’s renderer has gone');
+  if (!m.ok) return { kind: 'failed', reason: m.reason === 'too_large' ? 'too_large' : 'not_readable', finalUrl: r.url };
+  const browser = { title: r.title, byline: r.byline, site: r.site, lang: r.lang, hero: r.hero, canonical: r.canonical };
+  return parsedOutcome({ ...m, ...browser, readerable: true }, r.url);
 }
 
 /** How long the inbox blob's server has to send the whole blob, as for a text (F12). */

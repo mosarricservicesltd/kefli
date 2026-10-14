@@ -15,7 +15,8 @@ import { removeItem } from '../src/data/sync';
 import {
   INBOX_DEEP_EVERY, INBOX_MAX_BYTES, INBOX_TIMEOUT_MS, INBOX_UNWRAPS, drainInbox, judge, readBlob, unjudged, type InboxPorts,
 } from '../src/services/inbox';
-import { GUARD_WORDS, type ParserResult } from '../src/services/page';
+import { FIELD_MAX, GUARD_WORDS, TEXT_MAX_BYTES, type ParserResult } from '../src/services/page';
+import * as blocks from '../src/reader/blocks';
 import { sendOne, type SendPorts } from '../src/services/send';
 import type { Filter } from '../src/services/sync';
 import { memoryDb } from './sqlite';
@@ -1228,6 +1229,75 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     expect(browserName('Chrome on a Windows laptop')).toBe('Chrome');
     expect(browserName('Firefox on a Mac')).toBe('Firefox');
     expect(browserName('Edge')).toBe('Edge');
+  });
+});
+
+describe('the browser’s HTML takes the guards a parsed page’s text takes (C§4.2, C§4.4)', () => {
+  const hash = itemHash('https://example.com/a');
+  const parsedAs = (markdown: string, readerable = true): ParserResult =>
+    ({ ok: true, title: null, byline: null, site: null, lang: null, hero: null, canonical: null, readerable, markdown });
+  const textOf = (w: ReturnType<typeof world>) => w.db.get('SELECT text_state, fail_reason FROM items WHERE hash = ?', hash);
+
+  async function capture(w: ReturnType<typeof world>, over: Partial<SaveRequest> = {}) {
+    const { html } = await w.withHtml('<html><h1>Captured</h1><p>…</p></html>');
+    return w.send(w.request({ html, ...over }));
+  }
+
+  test('a text past what a save keeps is too large: the save keeps its link without it, and nothing waits to upload', async () => {
+    const w = world();
+    w.ports.markdown = async () => parsedAs('x'.repeat(TEXT_MAX_BYTES + 1));
+    await capture(w);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    expect(textOf(w)).toEqual({ text_state: 'failed', fail_reason: 'too_large' });
+    expect(w.texts.size).toBe(0);
+    expect(w.ops()).not.toContain('upload_blob');
+  });
+
+  test('a conversion the parser stopped for its size is too large, as a page’s is', async () => {
+    const w = world();
+    w.ports.markdown = async () => ({ ok: false, reason: 'too_large' });
+    await capture(w);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    expect(textOf(w)).toEqual({ text_state: 'failed', fail_reason: 'too_large' });
+  });
+
+  test('a derivation that throws leaves the save its link without text, and the wrap closes, rather than waiting a week', async () => {
+    const w = world();
+    const derive = jest.spyOn(blocks, 'deriveArticle').mockImplementation(() => {
+      throw new RangeError('Maximum call stack size exceeded');
+    });
+    try {
+      await capture(w);
+      expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    } finally {
+      derive.mockRestore();
+    }
+    expect(textOf(w)).toEqual({ text_state: 'failed', fail_reason: 'not_readable' });
+    expect(w.ops()).toContain('delete_wrap');
+  });
+
+  test('the browser’s fields past their lengths are fitted, as a parsed page’s are; its guard stands for a short text', async () => {
+    const w = world();
+    w.ports.markdown = async () => parsedAs('A short note.', false);
+    await capture(w, { title: 'T'.repeat(1_000), byline: 'B'.repeat(500), lang: 'x'.repeat(50) });
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    expect(w.db.get('SELECT text_state, length(title) AS title, length(byline) AS byline, lang FROM items WHERE hash = ?', hash))
+      .toEqual({ text_state: 'cached', title: FIELD_MAX.title, byline: FIELD_MAX.byline, lang: null });
+  });
+
+  test('a parser whose renderer the system killed leaves the capture to be read again at the next drain', async () => {
+    const w = world();
+    let gone = true;
+    const markdown = w.ports.markdown;
+    w.ports.markdown = async (html, url) => (gone ? { ok: false, reason: 'renderer_gone' } : markdown(html, url));
+    await capture(w);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+    expect(textOf(w)).toEqual({ text_state: 'fetching', fail_reason: null });
+    gone = false;
+    w.tick(60);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ merged: 1 });
+    expect(textOf(w)).toEqual({ text_state: 'cached', fail_reason: null });
+    expect(w.texts.get(hash)).toContain('# Captured');
   });
 });
 
