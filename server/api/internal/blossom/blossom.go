@@ -521,34 +521,53 @@ func (s *Server) commit(r *http.Request, up *uploader, sha string, size int64, t
 }
 
 // SweepFiles removes blob files no owner holds and upload temporaries, each once older than an hour so an upload
-// still between its rename and its owner row is left alone: what a refused upload left before F2's fix, or a
-// crash mid-upload. Returns how many it removed.
+// still between its rename and its owner row is left alone: what a refused upload left before F2's fix, a crash
+// mid-upload, or a capture its library's figures let go of once it expired. Returns how many it removed.
 func (s *Server) SweepFiles(ctx context.Context, now time.Time) (int, error) {
 	removed := 0
 	err := filepath.WalkDir(s.Dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || ctx.Err() != nil {
 			return ctx.Err()
 		}
-		info, err := d.Info()
-		if err != nil || now.Sub(info.ModTime()) < time.Hour {
-			return nil
-		}
-		name := d.Name()
-		if !strings.HasPrefix(name, ".upload-") {
-			if !auth.IsHex64(name) {
-				return nil
-			}
-			held, err := s.st.Exists(ctx, name)
-			if err != nil || held {
-				return err
-			}
-		}
-		if os.Remove(p) == nil {
+		gone, err := s.sweepFile(ctx, p, d, now)
+		if gone {
 			removed++
 		}
-		return nil
+		return err
 	})
 	return removed, err
+}
+
+// sweepFile removes one file the sweep finds when it is an hour old and an upload's temporary, or a blob's file no
+// owner holds.
+func (s *Server) sweepFile(ctx context.Context, p string, d fs.DirEntry, now time.Time) (bool, error) {
+	info, err := d.Info()
+	if err != nil || now.Sub(info.ModTime()) < time.Hour {
+		return false, nil
+	}
+	name := d.Name()
+	if strings.HasPrefix(name, ".upload-") {
+		return os.Remove(p) == nil, nil
+	}
+	if !auth.IsHex64(name) {
+		return false, nil
+	}
+	if held, err := s.st.Exists(ctx, name); err != nil || held {
+		return false, err
+	}
+	return s.removeUnheld(ctx, name, p)
+}
+
+// removeUnheld removes a blob's file once no owner holds it, checked again under the upload lock, as Unlink is: an
+// upload of the same blob may have renamed its file into place and recorded its owner since the sweep looked, and
+// removing the file then would leave a blob recorded, and counted, that nobody can be served.
+func (s *Server) removeUnheld(ctx context.Context, name, p string) (bool, error) {
+	s.commitMu.Lock()
+	defer s.commitMu.Unlock()
+	if held, err := s.st.Exists(ctx, name); err != nil || held {
+		return false, err
+	}
+	return os.Remove(p) == nil, nil
 }
 
 // blobHash reads /<sha256> with any file extension (BUD-01).
