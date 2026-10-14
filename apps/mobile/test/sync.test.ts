@@ -7,7 +7,7 @@ import { nodeCrypto } from '@kefli/protocol/node';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
-import { listServers, seedGeneratedLists, writeRelays } from '../src/data/lists';
+import { listServers, nextListTime, seedGeneratedLists, writeRelays } from '../src/data/lists';
 import { TEXT_SERVERS_MAX, getCursor, itemColumns, type TextJob } from '../src/data/sync';
 import { SKEW, TEXT_MAX_BYTES, TEXT_TIMEOUT_MS, fetchText, pageStream, streamFilter, syncInbound, takeNewerLists, type Filter, type SyncPorts } from '../src/services/sync';
 import { drain, sendOne, type SendPorts } from '../src/services/send';
@@ -670,6 +670,36 @@ describe('events another client spoilt, or a relay sends to wear the phone out',
     }
     expect(await syncInbound(w.ports)).toMatchObject({ items: 1 });
     expect(w.db.all('SELECT url FROM items')).toEqual([{ url: 'https://example.com/ok' }]);
+  });
+
+  test('events dated decades ahead wait for their time: a kind 5 dated 2100 deletes nothing, a version dated 2100 freezes nothing', async () => {
+    const w = world();
+    const AD2100 = 4_102_444_800;
+    w.publish(await remoteSave(w, h(1), 6000, null, { title: 'by now' }));
+    w.publish(await remoteSave(w, h(2), 6000, null, { url: 'https://example.com/b' }));
+    await syncInbound(w.ports);
+    // a version of one dated 2100, and a kind 5 of the other dated 2100, from a client whose clock was wrong
+    w.publish(await remoteSave(w, h(1), AD2100, null, { title: 'from 2100' }));
+    for (const e of await buildDeletions(w.signer, [`kefli/item/${h(2)}`], AD2100)) w.publish(e);
+    w.tick(60);
+    expect(await syncInbound(w.ports)).toMatchObject({ items: 0, deletions: 0 });
+    expect(row(w, h(1))).toMatchObject({ title: 'by now', event_created_at: 6000 });
+    expect(row(w, h(2))).toBeDefined();
+  });
+
+  test('a 10002 or a connected-browsers record dated decades ahead isn’t taken, so the lists don’t freeze', async () => {
+    const w = world();
+    const AD2100 = 4_102_444_800;
+    w.publish(await buildRelayList(w.signer, [{ url: 'wss://old.example', read: true, write: true }], AD2100), ['ws://idx']);
+    const record = { v: 1 as const, devices: [{ device_pubkey: 'ab'.repeat(32), label: 'Chrome', token: 'cd'.repeat(32), connected_at: 5, revoked_at: null }] };
+    w.publish(await buildDevicesEvent(w.signer, record, AD2100));
+    await syncInbound(w.ports);
+    w.publish(await buildRelayList(w.signer, [{ url: 'wss://new.example', read: true, write: true }], w.ports.now()), ['ws://idx']);
+    w.tick(60);
+    await syncInbound(w.ports);
+    expect(w.db.all<{ url: string }>("SELECT url FROM relays WHERE source = 'user'").map((r) => r.url)).toEqual(['wss://new.example']);
+    expect(nextListTime(w.db, w.pk, w.ports.now())).toBeLessThan(AD2100);
+    expect(w.db.get('SELECT COUNT(*) AS n FROM devices')).toEqual({ n: 0 });
   });
 
   test('a save naming hundreds of text servers is fetched from at most TEXT_SERVERS_MAX of them, each up to a minute', async () => {

@@ -10,7 +10,7 @@
 // save still held by a relay that missed its deletion can't come back in the same run. The cursors move only once
 // everything collected has been applied (F14).
 import {
-  DEVICES_D, KIND, LIBRARY_KEY_D, T_TAG, decryptText, isSignerFailure, newest, readDevicesEvent, readItemEvent, readLibraryKeyEvent,
+  DEVICES_D, KIND, LIBRARY_KEY_D, LibraryKeyVersionError, T_TAG, decryptText, isSignerFailure, newest, readDevicesEvent, readItemEvent, readLibraryKeyEvent,
   readRelayList, readServerList, replaces,
 } from '@kefli/protocol';
 import { deriveArticle, type Derived } from '../reader/blocks';
@@ -56,6 +56,15 @@ export const PAGE = 500;
  */
 export const SKEW = 86_400;
 const MAX_PAGES = 200;
+
+/**
+ * Whether an event is dated more than SKEW past this phone's clock, which it then waits for, unread. Relays refuse
+ * events that far ahead (strfry's 15 minutes), and one taken dates every later change past it, a list (nextListTime),
+ * a kind 5 (after the newest version), a save (max(now, last + 1)), which those relays refuse in turn; a kind 5 dated
+ * 2100 would also delete the save made again tomorrow. The phone's clock is near enough to go by: the operator's API
+ * takes a NIP-98 header only within 60 s of its own (C§6).
+ */
+export const notYet = (e: { created_at: number }, now: number) => e.created_at > now + SKEW;
 
 export async function pageStream(query: SyncPorts['query'], relay: string, base: Filter): Promise<NostrEvent[]> {
   const seen = new Map<string, NostrEvent>();
@@ -147,7 +156,9 @@ async function absorbRecords(p: SyncPorts, owner: string, signer: Signer, record
 }
 
 async function applyAll(p: SyncPorts, owner: string, signer: Signer, collected: Collected[]): Promise<Pick<SyncResult, 'items' | 'deletions' | 'waiting'>> {
-  const unique = (s: Stream) => [...new Map(collected.filter((c) => c.stream === s).flatMap((c) => c.events).map((e) => [e.id, e])).values()];
+  // an event dated more than a day ahead waits for its time, unread and unapplied (notYet)
+  const due = (e: NostrEvent) => !notYet(e, p.now());
+  const unique = (s: Stream) => [...new Map(collected.filter((c) => c.stream === s).flatMap((c) => c.events).filter(due).map((e) => [e.id, e])).values()];
   let items = 0;
   let waiting = 0;
   // A signer that didn't answer (out of sight, timed out, declined) says nothing about the event: it and every event
@@ -167,7 +178,7 @@ async function applyAll(p: SyncPorts, owner: string, signer: Signer, collected: 
   };
   const [, saves] = partition(unique('items'), isRecord);
   // each relay's newest copy of the record, every one merged in (C§4.9)
-  const records = [...new Map(collected.filter((c) => c.stream === 'items').flatMap((c) => newestAt(c.events.filter(isRecord))).map((e) => [e.id, e])).values()];
+  const records = [...new Map(collected.filter((c) => c.stream === 'items').flatMap((c) => newestAt(c.events.filter((e) => isRecord(e) && due(e)))).map((e) => [e.id, e])).values()];
   await absorbRecords(p, owner, signer, records, open);
   // the event a row already holds merges as keep (4.5), so the day of overlap (F36) is read without asking the signer
   const held = new Set(p.db.all<{ event_id: string }>('SELECT event_id FROM items WHERE owner = ? AND event_id IS NOT NULL', owner).map((r) => r.event_id));
@@ -280,7 +291,7 @@ export async function syncLists(p: SyncPorts, owner: string): Promise<void> {
   const nostr = (p.db.get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local') !== 'local';
   const kinds = nostr ? [KIND.relayList, KIND.serverList, KIND.metadata] : [KIND.relayList, KIND.serverList];
   const copies = (await Promise.all(relays.map((r) => p.query(r, [{ kinds, authors: [owner] }]).catch(() => [])))).flat();
-  takeNewerLists(p.db, owner, copies, kinds);
+  takeNewerLists(p.db, owner, copies, kinds, p.now());
 }
 
 /**
@@ -288,11 +299,12 @@ export async function syncLists(p: SyncPorts, owner: string): Promise<void> {
  * a 10063's relays and servers joined, those of the person's own it no longer names removed. Sync reads them, and so
  * does the list send just before it builds its own, so a list another app published since the last sync isn't
  * overwritten. A relay or a server joins only when the held list didn't name it: one it named that is gone from the
- * table was removed here, and stays removed.
+ * table was removed here, and stays removed. Given now, a copy dated more than a day past it waits for its time
+ * (notYet): taken, it froze the lists, every later one being older and every one sent from here dated after it.
  */
-export function takeNewerLists(db: SqlDb, owner: string, copies: NostrEvent[], kinds: number[]): void {
+export function takeNewerLists(db: SqlDb, owner: string, copies: NostrEvent[], kinds: number[], now = Infinity): void {
   for (const kind of kinds) {
-    const latest = newest(copies.filter((e) => e.kind === kind && e.pubkey === owner));
+    const latest = newest(copies.filter((e) => e.kind === kind && e.pubkey === owner && !notYet(e, now)));
     const held = db.get<{ created_at: number; raw: string | null }>("SELECT created_at, raw FROM lists WHERE owner = ? AND kind = ? AND d = ''", owner, kind);
     if (!latest || (held && held.created_at >= latest.created_at)) continue;
     recordList(db, owner, kind, latest.id, latest.created_at, JSON.stringify(latest));
@@ -344,18 +356,30 @@ export async function syncLibraryKey(p: SyncPorts, owner: string): Promise<void>
       // unreachable: no say in whether a key exists
     }
   }));
-  const latest = newest(found.filter((e) => e.pubkey === owner && e.tags.some((t) => t[0] === 'd' && t[1] === LIBRARY_KEY_D)));
-  if (latest) {
-    try {
-      adoptLibraryKey(p.db, p.now(), owner, await readLibraryKeyEvent(signer, latest), latest.created_at);
-    } catch {
-      // a record that doesn't open, or a version this phone doesn't read: as if absent, and nothing is made over it
-    }
-  } else if (!libraryKey(p.db, owner) && answered === relays.length) {
-    makeLibraryKey(p.db, p.now(), owner, p.crypto.randomBytes);
-  }
+  const records = [...new Map(found.filter((e) => e.pubkey === owner && e.tags.some((t) => t[0] === 'd' && t[1] === LIBRARY_KEY_D)).map((e) => [e.id, e])).values()];
+  if (records.length) await takeLibraryKey(p, owner, signer, records);
+  else if (!libraryKey(p.db, owner) && answered === relays.length) makeLibraryKey(p.db, p.now(), owner, p.crypto.randomBytes);
   // with the key known, any save still at another address (a library from before v1.10) is queued to move
   moveToKeyedAddresses(p.db, p.now(), owner);
+}
+
+/**
+ * The newest record that reads is taken (F5): one another client spoilt (no JSON object, no 64-hex key) gives way to
+ * the one before it, which other relays may still hold; taking the newest alone, a restored phone never learnt the key,
+ * and held every save it made, unsent, for good. A record dated more than a day ahead waits for its time (notYet);
+ * one of a version this phone doesn't read, or a signer that doesn't answer, stops it there, as before. Whatever
+ * stops it, no key is made over a record the relays hold.
+ */
+async function takeLibraryKey(p: SyncPorts, owner: string, signer: Signer, records: NostrEvent[]): Promise<void> {
+  const due = records.filter((e) => !notYet(e, p.now())).sort((a, b) => (replaces(a, b) ? -1 : replaces(b, a) ? 1 : 0));
+  for (const e of due) {
+    try {
+      adoptLibraryKey(p.db, p.now(), owner, await readLibraryKeyEvent(signer, e), e.created_at);
+      return;
+    } catch (err) {
+      if (isSignerFailure(err) || err instanceof LibraryKeyVersionError) return;
+    }
+  }
 }
 
 /**

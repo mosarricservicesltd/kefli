@@ -148,6 +148,34 @@ describe('the library key (contract 4.3, F5)', () => {
     expect(w.db.get("SELECT 1 FROM outbox WHERE op = 'publish_item'")).toBeUndefined();
   });
 
+  test('a newest record another client spoilt gives way to the one before it, so a restored phone still learns the key', async () => {
+    const good = nodeCrypto.randomBytes(32);
+    const record = async (w: ReturnType<typeof world>, json: string, at: number) =>
+      w.s.signEvent({ kind: 30078, created_at: at, tags: [['d', LIBRARY_KEY_D], ['t', 'kefli']], content: await w.s.nip44Encrypt(w.pk, json) });
+    for (const junk of ['{"v":1,"key":"zz"}', 'null', '[]', '{"key":"aa"}', 'not json']) {
+      const w = world('recovery_code');
+      await w.send.publish('ws://a', await buildLibraryKeyEvent(w.s, good, 800));
+      await w.send.publish('ws://op', await record(w, junk, 900));
+      await syncLibraryKey(w.sync, w.pk);
+      expect(libraryKey(w.db, w.pk)).toEqual(good);
+    }
+    // a later version, which a newer Kefli wrote, stops it: nothing taken, nothing made over it
+    const w = world('recovery_code');
+    await w.send.publish('ws://a', await buildLibraryKeyEvent(w.s, good, 800));
+    await w.send.publish('ws://op', await record(w, `{"v":2,"key":"${'a'.repeat(64)}"}`, 900));
+    await syncLibraryKey(w.sync, w.pk);
+    expect(libraryKey(w.db, w.pk)).toBeNull();
+    expect(w.db.get("SELECT 1 FROM outbox WHERE op = 'publish_library_key'")).toBeUndefined();
+  });
+
+  test('a record dated decades ahead isn’t taken, and no key is made over it', async () => {
+    const w = world('recovery_code');
+    await w.send.publish('ws://op', await buildLibraryKeyEvent(w.s, nodeCrypto.randomBytes(32), 4_102_444_800));
+    await syncLibraryKey(w.sync, w.pk);
+    expect(libraryKey(w.db, w.pk)).toBeNull();
+    expect(w.db.get("SELECT 1 FROM outbox WHERE op = 'publish_library_key'")).toBeUndefined();
+  });
+
   test('a deletion finds a save by its keyed address, and one naming an address it has left takes nothing', async () => {
     const w = world('new');
     const key = makeLibraryKey(w.db, 900, w.pk, nodeCrypto.randomBytes);

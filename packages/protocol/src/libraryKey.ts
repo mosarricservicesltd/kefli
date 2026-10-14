@@ -20,15 +20,25 @@ export async function buildLibraryKeyEvent(signer: Signer, key: Uint8Array, crea
   return signWithinCeiling(signer, { kind: KIND.appData, created_at: createdAt, tags: [['d', LIBRARY_KEY_D], ['t', T_TAG]], content });
 }
 
+/** A record of a later version than this client reads (C§10): one a newer Kefli wrote, which nothing older replaces. */
+export class LibraryKeyVersionError extends Error {
+  constructor(readonly v: number) {
+    super(`library key record version ${v} not understood`);
+    this.name = 'LibraryKeyVersionError';
+  }
+}
+
 /**
- * The key in this identity's record. Throws for anything else, or a version this client doesn't read; a record over
- * the 16 KB ceiling (C§3.3), which no Kefli client makes, is refused before it is decrypted.
+ * The key in this identity's record. Throws for anything else: LibraryKeyVersionError for a later version this client
+ * doesn't read, a plain Error for a record that isn't one (no JSON object, or no 64-hex key); a record over the 16 KB
+ * ceiling (C§3.3), which no Kefli client makes, is refused before it is decrypted.
  */
 export async function readLibraryKeyEvent(signer: Signer, event: NostrEvent): Promise<Uint8Array> {
   if (event.kind !== KIND.appData || event.pubkey !== signer.pubkey()) throw new Error('not this identity’s record');
   if (event.tags.find((t) => t[0] === 'd')?.[1] !== LIBRARY_KEY_D) throw new Error('not the library key record');
   if (overCeiling(event)) throw new EventTooLargeError(eventBytes(event));
   const r = JSON.parse(await signer.nip44Decrypt(signer.pubkey(), event.content)) as { v?: unknown; key?: unknown };
+  if (typeof r?.v === 'number' && r.v > 1) throw new LibraryKeyVersionError(r.v);
   if (r?.v !== 1 || typeof r.key !== 'string' || !HEX64.test(r.key)) throw new Error('library key record not understood');
   return hexToBytes(r.key);
 }
