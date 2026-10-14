@@ -358,14 +358,14 @@ describe("a text's blob servers, the inbox's and Kefli's API take the hops too (
   const INSIDE = ['http://192.168.1.1/', 'http://10.0.0.5/', 'http://127.0.0.1:8080/', 'http://localhost/', 'http://[::1]/', 'http://169.254.169.254/'];
 
   /** A save whose text is on servers, as another phone's arrives, and sync's ports for its text over a web of routes. */
-  async function textWorld(servers: string[], routes: (sha: string, blob: Uint8Array) => Record<string, Hop>, localStack?: boolean) {
+  async function textWorld(servers: string[], routes: (sha: string, blob: Uint8Array<ArrayBuffer>) => Record<string, Hop>, localStack?: boolean) {
     const db = memoryDb();
     migrate(db);
     ensureIdentityRow(db, 1, PK, 'new', true);
     const enc = await encryptText(normaliseMarkdown('# A text\n\nA few words of it.\n'), nodeCrypto);
     db.run(`INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, text_sha256, text_key, text_nonce, text_servers)
       VALUES (?, ?, 'https://e.com/a', 1, 'unread', 'remote', 'sync', ?, ?, ?, ?)`, PK, HASH, enc.text.sha256, enc.text.key, enc.text.nonce, JSON.stringify(servers));
-    const w = web(routes(enc.text.sha256, enc.blob));
+    const w = web(routes(enc.text.sha256, new Uint8Array(enc.blob)));
     const written: string[] = [];
     const ports: SyncPorts = {
       db, now: () => 1_000, signer: async () => null, query: async () => [], fetch: w.f, crypto: nodeCrypto,
@@ -413,7 +413,7 @@ describe("a text's blob servers, the inbox's and Kefli's API take the hops too (
     }));
     expect(await fetchText(cdn.ports, cdn.job)).toBe('ok');
     expect(cdn.written).toEqual([HASH]);
-    const routes = (sha: string, blob: Uint8Array): Record<string, Hop> => ({
+    const routes = (sha: string, blob: Uint8Array<ArrayBuffer>): Record<string, Hop> => ({
       [`http://localhost:3447/${sha}`]: { status: 302, location: `http://127.0.0.1:3448/${sha}` }, [`http://127.0.0.1:3448/${sha}`]: { body: blob },
     });
     const local = await textWorld(['http://localhost:3447'], routes, true);
@@ -429,12 +429,12 @@ describe("a text's blob servers, the inbox's and Kefli's API take the hops too (
     const enc = await encryptText('<h1>Captured</h1>', nodeCrypto);
     const html = { ...enc.text, server: 'https://blossom.example' };
     for (const inside of INSIDE) {
-      const w = web({ [`https://blossom.example/${enc.text.sha256}`]: { status: 307, location: `${inside}x` }, [`${inside}x`]: { body: enc.blob } });
+      const w = web({ [`https://blossom.example/${enc.text.sha256}`]: { status: 307, location: `${inside}x` }, [`${inside}x`]: { body: new Uint8Array(enc.blob) } });
       expect([inside, await readBlob({ fetch: w.f, crypto: nodeCrypto }, html)]).toEqual([inside, { kind: 'failed', down: true }]);
       expect(w.urls()).toEqual([`https://blossom.example/${enc.text.sha256}`]);
     }
     const local = { ...enc.text, server: 'http://localhost:3447' };
-    const routes = { [`http://localhost:3447/${enc.text.sha256}`]: { status: 302, location: 'http://localhost:3449/x' }, 'http://localhost:3449/x': { body: enc.blob } };
+    const routes = { [`http://localhost:3447/${enc.text.sha256}`]: { status: 302, location: 'http://localhost:3449/x' }, 'http://localhost:3449/x': { body: new Uint8Array(enc.blob) } };
     expect(await readBlob({ fetch: web(routes).f, crypto: nodeCrypto, localStack: true }, local)).toEqual({ kind: 'html', html: '<h1>Captured</h1>', size: enc.blob.length });
     expect(await readBlob({ fetch: web(routes).f, crypto: nodeCrypto }, local)).toEqual({ kind: 'failed', down: true });
   });
