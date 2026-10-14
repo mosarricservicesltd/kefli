@@ -1,5 +1,5 @@
 import {
-  LocalSigner, SignerSlot, buildDeletions, buildDevicesEvent, buildRelayList, buildItemEvent, buildServerList, encryptText, normaliseMarkdown, savedD, textHash,
+  LocalSigner, SignerSlot, buildDeletions, buildDevicesEvent, buildRelayList, buildItemEvent, buildServerList, encryptText, LIST_MAX, normaliseMarkdown, savedD, textHash,
 } from '@kefli/protocol';
 import type { Item, NostrEvent, ParsedItem, Signer } from '@kefli/protocol';
 import { commitDelete, deleteItem } from '../src/data/library';
@@ -7,9 +7,9 @@ import { nodeCrypto } from '@kefli/protocol/node';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
-import { seedGeneratedLists } from '../src/data/lists';
+import { listServers, seedGeneratedLists, writeRelays } from '../src/data/lists';
 import { TEXT_SERVERS_MAX, getCursor, itemColumns, type TextJob } from '../src/data/sync';
-import { SKEW, TEXT_MAX_BYTES, TEXT_TIMEOUT_MS, fetchText, pageStream, streamFilter, syncInbound, type Filter, type SyncPorts } from '../src/services/sync';
+import { SKEW, TEXT_MAX_BYTES, TEXT_TIMEOUT_MS, fetchText, pageStream, streamFilter, syncInbound, takeNewerLists, type Filter, type SyncPorts } from '../src/services/sync';
 import { drain, sendOne, type SendPorts } from '../src/services/send';
 import { memoryDb } from './sqlite';
 
@@ -628,6 +628,21 @@ describe('events another client spoilt, or a relay sends to wear the phone out',
     w.publish(await rawEvent(w, d, itemJson(h(2), { url: 'https://two.example' }), 6001), ['ws://b']);
     expect(await syncInbound(w.ports)).toMatchObject({ items: 1 });
     expect(w.db.all('SELECT hash, url FROM items')).toEqual([{ hash: h(2), url: 'https://two.example' }]);
+  });
+
+  test('a 10002 of 10,000 relays and a 10063 of 10,000 servers from another app: sync asks at most LIST_MAX more of them', async () => {
+    const w = world();
+    const relays = Array.from({ length: 10_000 }, (_, i) => ({ url: `wss://r${i}.example`, read: true, write: true }));
+    const big = { ...(await buildRelayList(w.signer, relays.slice(0, 2), 9_000)), tags: relays.map((r) => ['r', r.url]) };
+    const servers = { ...(await buildServerList(w.signer, ['https://s.example'], 9_000)), tags: Array.from({ length: 10_000 }, (_, i) => ['server', `https://s${i}.example`]) };
+    takeNewerLists(w.db, w.pk, [big, servers], [10002, 10063]);
+    const asked = new Set<string>();
+    const query = w.ports.query;
+    w.ports.query = (r, f) => (asked.add(r), query(r, f));
+    await syncInbound(w.ports);
+    expect(asked.size).toBeLessThanOrEqual(4 + LIST_MAX);
+    expect(writeRelays(w.db, w.pk).length).toBeLessThanOrEqual(3 + LIST_MAX);
+    expect(listServers(w.db, w.pk).length).toBeLessThanOrEqual(2 + LIST_MAX);
   });
 
   test('a save naming hundreds of text servers is fetched from at most TEXT_SERVERS_MAX of them, each up to a minute', async () => {

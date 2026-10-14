@@ -4,7 +4,7 @@
 // RULED: an event with v above 1 that is newer than the local row goes to items_future and the local row is
 // removed with its pending sends, since this phone may not write over a version it doesn't understand (C§10);
 // an older one is ignored. A save with no text arrives as text_state 'queued', so this phone tries the parse.
-import { ITEM_D_PREFIX, deletedDs, deletionRemoves, mergeItem, wordReached } from '@kefli/protocol';
+import { ITEM_D_PREFIX, deletedDs, deletionRemoves, isServerUrl, mergeItem, wordReached } from '@kefli/protocol';
 import { addressIndex } from './libraryKey';
 import type { LocalVersion, MergeOutcome, NostrEvent, ParsedItem } from '@kefli/protocol';
 import type { SqlDb } from './db';
@@ -43,14 +43,12 @@ const STRINGS = ['canonical', 'title', 'site', 'byline', 'lang', 'hero', 'source
  */
 export const TEXT_SERVERS_MAX = 10;
 
-const HTTP = new RegExp('^https?://[^\\s/?#@]+', 'i');
-
 /** Blob servers as a fetch can use them: http(s) addresses only, without a trailing slash, each once, at most n. */
 export function blobServers(servers: unknown[], n = TEXT_SERVERS_MAX): string[] {
   const out = new Set<string>();
   for (const s of servers) {
     if (out.size >= n) break;
-    if (typeof s === 'string' && s.length <= 2048 && HTTP.test(s)) out.add(s.replace(/\/+$/, ''));
+    if (isServerUrl(s)) out.add(s.replace(/\/+$/, ''));
   }
   return [...out];
 }
