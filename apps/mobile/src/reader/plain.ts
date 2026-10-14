@@ -6,6 +6,7 @@
 // linear whatever the Markdown holds. Words are the spoken text's whitespace-separated runs, as in C§7.
 import type { Sentence } from '@kefli/protocol';
 import type { Block } from './blocks';
+import { LIMITS } from './limits';
 
 type Shown = Block extends infer B ? (B extends unknown ? Omit<B, 'firstWord' | 'words'> : never) : never;
 
@@ -150,12 +151,12 @@ function sentencesOf(said: string, starts: number[], firstWord: number, out: Sen
 
 /**
  * A plain block's characters at most (no more than the voice takes in a sentence, VOICE_CHARS, should one word fill
- * it), and an article's blocks: a longer paragraph is cut between words and a longer
- * code block between lines, and past PLAIN_BLOCKS short paragraphs run together, so the Reader never lays out one
- * text of a megabyte or mounts a hundred thousand. Text of more than PLAIN_BLOCKS times PLAIN_CHARS takes longer blocks.
+ * it), and an article's blocks (as many as the parse takes, LIMITS.blocks): a longer paragraph is cut between words
+ * and a longer code block between lines, and past PLAIN_BLOCKS neighbouring paragraphs run together (headings too,
+ * if that isn't enough), so the Reader never lays out one text of a megabyte or mounts a hundred thousand.
  */
 export const PLAIN_CHARS = 3_000;
-export const PLAIN_BLOCKS = 4_000;
+export const PLAIN_BLOCKS = LIMITS.blocks;
 
 /** A part as it shows and says: its text collapsed (code keeps its lines), and a heading's spoken full stop. */
 type Piece = { part: Part; shown: string; said: string };
@@ -188,12 +189,15 @@ function cut(piece: Piece, cap: number, out: Piece[]): void {
   if (rest) out.push({ part: piece.part, shown: rest, said: code ? collapse(rest) : rest });
 }
 
-/** Paragraphs and headings next to each other, run into paragraphs of up to cap characters, a blank line between. */
-function runTogether(pieces: Piece[], cap: number): Piece[] {
+/** Whether a piece can run into a paragraph: a paragraph, or a heading when they go too. */
+const joinable = (x: Piece, headings: boolean) => x.part.kind === 'p' || (headings && x.part.kind === 'h');
+
+/** Paragraphs next to each other (and headings, when they go too) run into paragraphs of up to cap characters. */
+function runTogether(pieces: Piece[], cap: number, headings: boolean): Piece[] {
   const out: Piece[] = [];
   for (const x of pieces) {
     const prev = out[out.length - 1];
-    const joins = prev && prev.part.kind !== 'code' && prev.part.kind !== 'img' && x.part.kind !== 'code' && x.part.kind !== 'img';
+    const joins = prev && joinable(prev, headings) && joinable(x, headings);
     if (joins && prev.shown.length + x.shown.length + 2 <= cap) {
       out[out.length - 1] = { part: { ...prev.part, kind: 'p' } as Part, shown: `${prev.shown}\n\n${x.shown}`, said: `${prev.said} ${x.said}` };
     } else out.push(x);
@@ -210,7 +214,10 @@ function pieces(md: string): Piece[] {
     if (x && x.shown.length > cap) cut(x, cap, out);
     else if (x) out.push(x);
   }
-  return out.length > PLAIN_BLOCKS ? runTogether(out, cap) : out;
+  if (out.length <= PLAIN_BLOCKS) return out;
+  // paragraphs first, between the headings; headings too only if that isn't enough
+  const fewer = runTogether(out, cap, false);
+  return fewer.length <= PLAIN_BLOCKS ? fewer : runTogether(fewer, cap, true);
 }
 
 /** What a piece shows, as a block before its words are counted. */

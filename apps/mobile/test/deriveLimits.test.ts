@@ -136,6 +136,18 @@ describe('deriveArticle on hostile Markdown (mobile spec 6.7)', () => {
     whole(code);
   });
 
+  test('ordinary Markdown of several megabytes, as a synced text may be, is read plain in a second', () => {
+    const part = (i: number) => `## Part ${i}\n\nThe quiet _river_ ran past the **stone** wall, and [a link](https://e.com/${i}) led on. ${'saving reading later quiet stone. Heather '.repeat(20)}`;
+    const md = `${Array.from({ length: 6_000 }, (_, i) => part(i)).join('\n\n')}\n`;
+    expect(md.length).toBeGreaterThan(5_000_000);
+    const [d, ms] = timed(md);
+    expect(ms).toBeLessThan(QUICK_MS);
+    // headings stay headings; the styling and the link's address go
+    expect(d.blocks.filter((b) => b.kind === 'h')).toHaveLength(6_000);
+    expect(spans(d)).toContain('The quiet _river_ ran past the **stone** wall, and [a link](https://e.com/0) led on.');
+    whole(d);
+  });
+
   test('text dense with escapes, as Turndown writes a page of literal stars, is read plain', () => {
     // each escape is a token of its own to the parse: 16 paragraphs of 20,000 escaped stars took several seconds
     const md = `${'\\* \\_ '.repeat(5_000)}\n\n`.repeat(16);

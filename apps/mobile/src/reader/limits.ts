@@ -9,12 +9,18 @@
 //   ones that never match cost the square of their number. '*a_ ' 4,000 times took 3.7 s and 10,000 times over a
 //   minute; 10,000 '<!--' in a paragraph, literal text that Turndown leaves as it is, took 17 s.
 // - blocks: about 6 KB of parse state each. 100,000 short paragraphs, under a megabyte, took 800 MB.
+// - length: ordinary Markdown parses at about 4 s a megabyte and 300 MB, on desktop V8.
 // Real pages sit far inside: the page fixtures' deepest prefix is 8 characters, their most marked block 158 marks.
 // Fenced code is code to the parse, so its marks don't count. The scan opens a fence only where CommonMark surely
 // would (at a block's start, after no ordered marker, never inside raw html) and leaves it wherever CommonMark might,
 // so a fence the parse doesn't see can't hide marks from it.
 
 export const LIMITS = {
+  /**
+   * Characters in all: a megabyte of ordinary Markdown took 4 s to parse and project (and 300 MB) where reading it
+   * plain took a third of a second, a phone is slower still, and a synced text may be 20 MB. About 150,000 words.
+   */
+  length: 1_048_576,
   /** Characters of a line's container prefix: its indentation, quote markers and list markers. */
   prefix: 64,
   /** Characters in one block: a paragraph, a list item's text, a heading or a code block. */
@@ -264,6 +270,7 @@ function textLine(md: string, i: number, end: number, p: Prefix, s: Scan): boole
  * too marked, too many blocks, or too many marks in all. One pass over the characters.
  */
 export function beyondLimits(md: string): boolean {
+  if (md.length > LIMITS.length) return true;
   const s: Scan = { fence: '', fenceWidth: 0, fenceQuotes: 0, html: null, itemCol: 0, len: 0, marks: 0, blocks: 0, squares: 0, cost: 0, tokens: 0 };
   for (let i = 0; i < md.length; ) {
     let end = md.indexOf('\n', i);
