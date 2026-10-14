@@ -136,6 +136,11 @@ func (s *Server) Unlink(sha string) {
 	}
 	s.commitMu.Lock()
 	defer s.commitMu.Unlock()
+	s.unlinkLocked(sha)
+}
+
+// unlinkLocked is Unlink for a caller holding commitMu.
+func (s *Server) unlinkLocked(sha string) {
 	if held, err := s.st.Stored(context.Background(), sha); err != nil || held {
 		return
 	}
@@ -335,7 +340,8 @@ func (s *Server) receive(body io.Reader, sha string) (string, int64, error) {
 // commit checks the real size against the library's limits again, renames the received file into place, so a reader
 // never sees half a blob, and records the owner, with the upload in the day's log when the blob is new to the disk.
 // One at a time, so concurrent uploads can't each pass the checks and together overshoot the quota or the day (F2);
-// keflid is a single process. A blob already stored is replaced by identical bytes.
+// keflid is a single process. A blob already stored is replaced by identical bytes. A record refused, as when the
+// account went between the check and the record, takes back the file it put in place unless another owner holds it.
 func (s *Server) commit(r *http.Request, up *uploader, sha string, size int64, tmp string) refusal {
 	s.commitMu.Lock()
 	defer s.commitMu.Unlock()
@@ -346,11 +352,16 @@ func (s *Server) commit(r *http.Request, up *uploader, sha string, size int64, t
 		s.log.Error("store blob", "err", err)
 		return serverFault
 	}
-	if err := s.st.Upload(r.Context(), sha, up.signer, up.account, size, up.inbox); err != nil {
-		s.log.Error("record blob", "err", err)
-		return serverFault
+	err := s.st.Upload(r.Context(), sha, up.signer, up.account, size, up.inbox)
+	if err == nil {
+		return refusal{}
 	}
-	return refusal{}
+	s.unlinkLocked(sha)
+	if errors.Is(err, store.ErrNoAccount) {
+		return notRegistered
+	}
+	s.log.Error("record blob", "err", err)
+	return serverFault
 }
 
 // SweepFiles removes blob files no owner holds and upload temporaries, each once older than an hour so an upload

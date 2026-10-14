@@ -36,6 +36,9 @@ const GoneLife = 60 * 24 * time.Hour
 
 var ErrTaken = errors.New("lookup taken")
 
+// ErrNoAccount is an upload's record refused because its library's account has gone (Upload).
+var ErrNoAccount = errors.New("no account")
+
 const schema = `
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;

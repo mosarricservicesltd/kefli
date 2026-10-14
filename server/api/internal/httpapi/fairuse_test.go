@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -284,6 +285,69 @@ func TestTheLimitsAreCheckedAgainAtCommit(t *testing.T) {
 				t.Fatalf("a refused upload left %v", e.files())
 			}
 		})
+	}
+}
+
+// DELETE /account leaves no row or file for the key (backend spec 10), even when it lands while an upload is between
+// its check at commit and its record: the record is refused, the file it put in place goes, and the upload gets 401
+// not_registered. A trigger deleting the account as the owner row is written stands in for that deletion, which
+// otherwise comes too quickly to catch.
+func TestAnAccountDeletedAsAnUploadIsRecordedLeavesNothing(t *testing.T) {
+	e := newEnv(t)
+	user := newKey()
+	e.registered(user)
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(e.dir, "k.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TRIGGER gone_mid_upload BEFORE INSERT ON owners BEGIN DELETE FROM accounts WHERE pubkey = NEW.account; END`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	blob := []byte("a text uploaded as its library goes")
+	s, reason, b := e.put(user, blob)
+	if s != 401 || reason != "not_registered" {
+		t.Fatalf("the upload recorded as its account went: %d %q %v", s, reason, b)
+	}
+	if s, _ := e.fetch(hash(blob)); s != 404 {
+		t.Fatal("the upload is served")
+	}
+	if len(e.files()) != 0 {
+		t.Fatalf("files left behind: %v", e.files())
+	}
+	if held, err := e.st.Holds(t.Context(), user.pk, hash(blob)); err != nil || held {
+		t.Fatalf("an owner row was left: %v %v", held, err)
+	}
+}
+
+// An upload whose record the database refuses is answered 500, which the client tries again, and takes back the file
+// it put in place, which no owner holds; a blob another library holds keeps its file.
+func TestARecordRefusedTakesBackItsFile(t *testing.T) {
+	e := newEnv(t)
+	user, other := newKey(), newKey()
+	e.registered(user, other)
+	shared := []byte("a blob another library holds")
+	if s, _, b := e.put(other, shared); s != 200 {
+		t.Fatalf("upload %d %v", s, b)
+	}
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(e.dir, "k.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE TRIGGER refuse_owner BEFORE INSERT ON owners BEGIN SELECT RAISE(ABORT, 'refused'); END`); err != nil {
+		t.Fatal(err)
+	}
+	for _, blob := range [][]byte{[]byte("a text new to the disk"), shared} {
+		if s, reason, b := e.put(user, blob); s != 500 || reason != "server" {
+			t.Fatalf("a record refused: %d %q %v", s, reason, b)
+		}
+	}
+	if got := e.files(); len(got) != 1 || got[0] != hash(shared) {
+		t.Fatalf("files %v: only the other library's blob should be left", got)
+	}
+	if s, _ := e.fetch(hash(shared)); s != 200 {
+		t.Fatal("the other library's blob went")
 	}
 }
 

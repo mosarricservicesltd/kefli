@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -384,6 +385,61 @@ func TestRefusedWritesAreReported(t *testing.T) {
 	})
 	if _, err := Open(filepath.Join(t.TempDir(), "missing", "k.db")); err == nil {
 		t.Fatal("opened a database in a folder that isn't there")
+	}
+}
+
+// An upload is recorded only for a library that still has an account: one deleted while the upload was on its way
+// gets ErrNoAccount, and neither an owner row nor a line of its day is left, so nothing counts against a key that has
+// gone, or against the library it may register again later.
+func TestAnUploadForAnAccountThatWentIsNotRecorded(t *testing.T) {
+	st, _ := open(t)
+	ctx := context.Background()
+	registered(t, st, "user")
+	if _, err := st.DeleteAccount(ctx, "user"); err != nil {
+		t.Fatal(err)
+	}
+	sha := strings.Repeat("c", 64)
+	if err := st.Upload(ctx, sha, "user", "user", 10, false); !errors.Is(err, ErrNoAccount) {
+		t.Fatalf("an upload for an account that went: %v", err)
+	}
+	if stored, err := st.Stored(ctx, sha); err != nil || stored {
+		t.Fatalf("an owner row was left: %v %v", stored, err)
+	}
+	if n := uploadRows(t, st); n != 0 {
+		t.Fatalf("%d lines of the day were left", n)
+	}
+}
+
+// DELETE /account is one step: a deletion that fails part way changes nothing, so trying again finds the account and
+// finishes, and an upload can't be recorded between its parts (the upload's own check then sees the account either
+// still whole or gone).
+func TestDeleteAccountIsAllOrNothing(t *testing.T) {
+	ctx := context.Background()
+	for _, table := range []string{"accounts", "devices"} {
+		t.Run(table, func(t *testing.T) {
+			st, _ := open(t)
+			registered(t, st, "user")
+			if err := st.AddDevice(ctx, "user", "device"); err != nil {
+				t.Fatal(err)
+			}
+			sha := strings.Repeat("d", 64)
+			if err := st.Upload(ctx, sha, "user", "user", 10, false); err != nil {
+				t.Fatal(err)
+			}
+			failing(t, st, "DELETE", table)
+			if _, err := st.DeleteAccount(ctx, "user"); err == nil {
+				t.Fatal("a refused write was taken for done")
+			}
+			if held, err := st.Holds(ctx, "user", sha); err != nil || !held {
+				t.Fatalf("the blobs went with a deletion that failed: %v %v", held, err)
+			}
+			if gone, _ := st.Gone(ctx, 0); len(gone) != 0 {
+				t.Fatalf("listed as gone by a deletion that failed: %v", gone)
+			}
+			if today(t, st, "user") != 10 {
+				t.Fatal("the day's log went with a deletion that failed")
+			}
+		})
 	}
 }
 

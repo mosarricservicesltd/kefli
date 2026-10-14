@@ -61,20 +61,36 @@ func (s *Store) Holds(ctx context.Context, account, sha string) (bool, error) {
 	return err == nil, err
 }
 
+// querier is the database or a transaction.
+type querier interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
 // Stored is whether any owner holds the blob, an expired inbox row the sweep hasn't reached yet included: its file is
 // on the disk, so an upload of it adds nothing to a library's day (contract 5).
 func (s *Store) Stored(ctx context.Context, sha string) (bool, error) {
+	return stored(ctx, s.db, sha)
+}
+
+func stored(ctx context.Context, q querier, sha string) (bool, error) {
 	var one int
-	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM owners WHERE sha256 = ? LIMIT 1`, sha).Scan(&one)
+	err := q.QueryRowContext(ctx, `SELECT 1 FROM owners WHERE sha256 = ? LIMIT 1`, sha).Scan(&one)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
 	return err == nil, err
 }
 
-// execer is the database or a transaction.
-type execer interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+// hasAccount is nil while the key has an account, ErrNoAccount once it hasn't.
+func hasAccount(ctx context.Context, q querier, pubkey string) error {
+	var one int
+	err := q.QueryRowContext(ctx, `SELECT 1 FROM accounts WHERE pubkey = ?`, pubkey).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNoAccount
+	}
+	return err
 }
 
 // AddOwner records an owner of a blob without logging it against a day. inbox marks a device's blob, which expires
@@ -83,7 +99,7 @@ func (s *Store) AddOwner(ctx context.Context, sha, owner, account string, size i
 	return s.addOwner(ctx, s.db, sha, owner, account, size, inbox)
 }
 
-func (s *Store) addOwner(ctx context.Context, db execer, sha, owner, account string, size int64, inbox bool) error {
+func (s *Store) addOwner(ctx context.Context, db querier, sha, owner, account string, size int64, inbox bool) error {
 	var expires any
 	if inbox {
 		expires = s.Now().Add(InboxLife).Unix()
@@ -96,7 +112,9 @@ func (s *Store) addOwner(ctx context.Context, db execer, sha, owner, account str
 // Upload records an upload as AddOwner does and, when no owner held the blob before, logs its size against the
 // library's day (contract 5): a blob the server already stores, for this library or any other, adds nothing, so a
 // repeat upload and a move's re-uploads cost no part of the day. One transaction, so the owner row and the log can't
-// part.
+// part, which records nothing and gives ErrNoAccount once the library's account has gone: checked last, in the same
+// transaction, so a DELETE /account, one transaction itself, falls wholly before the record, which it then finds, or
+// after it, which it then refuses, and never leaves a row for a key that has gone.
 func (s *Store) Upload(ctx context.Context, sha, owner, account string, size int64, inbox bool) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -108,6 +126,9 @@ func (s *Store) Upload(ctx context.Context, sha, owner, account string, size int
 		return err
 	}
 	if err := s.addOwner(ctx, tx, sha, owner, account, size, inbox); err != nil {
+		return err
+	}
+	if err := hasAccount(ctx, tx, account); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -133,15 +154,15 @@ func (s *Store) RemoveOwner(ctx context.Context, sha, signer string) (found bool
 		return false, nil, err
 	}
 	n, _ := res.RowsAffected()
-	orphaned, err = s.orphans(ctx, []string{sha})
+	orphaned, err = orphans(ctx, s.db, []string{sha})
 	return n > 0, orphaned, err
 }
 
 // orphans keeps those of the hashes no owner holds any longer.
-func (s *Store) orphans(ctx context.Context, shas []string) ([]string, error) {
+func orphans(ctx context.Context, q querier, shas []string) ([]string, error) {
 	var out []string
 	for _, sha := range shas {
-		held, err := s.Stored(ctx, sha)
+		held, err := stored(ctx, q, sha)
 		if err != nil {
 			return nil, err
 		}
@@ -153,8 +174,8 @@ func (s *Store) orphans(ctx context.Context, shas []string) ([]string, error) {
 }
 
 // deleteOwned removes the rows a query selects and returns the blobs left with no owner.
-func (s *Store) deleteOwned(ctx context.Context, where string, args ...any) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT sha256 FROM owners WHERE `+where, args...)
+func deleteOwned(ctx context.Context, q querier, where string, args ...any) ([]string, error) {
+	rows, err := q.QueryContext(ctx, `SELECT DISTINCT sha256 FROM owners WHERE `+where, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -168,10 +189,10 @@ func (s *Store) deleteOwned(ctx context.Context, where string, args ...any) ([]s
 		shas = append(shas, sha)
 	}
 	rows.Close()
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM owners WHERE `+where, args...); err != nil {
+	if _, err := q.ExecContext(ctx, `DELETE FROM owners WHERE `+where, args...); err != nil {
 		return nil, err
 	}
-	return s.orphans(ctx, shas)
+	return orphans(ctx, q, shas)
 }
 
 // RemoveDevice revokes a device the user authorised and deletes its unexpired inbox blobs that count against the user
@@ -185,36 +206,54 @@ func (s *Store) RemoveDevice(ctx context.Context, user, device string) (found bo
 	if n, _ := res.RowsAffected(); n == 0 {
 		return false, nil, nil
 	}
-	if orphaned, err = s.deleteOwned(ctx, `owner = ? AND account = ?`, device, user); err != nil {
+	if orphaned, err = deleteOwned(ctx, s.db, `owner = ? AND account = ?`, device, user); err != nil {
 		return true, nil, err
 	}
-	return true, orphaned, s.markGone(ctx, []string{device})
+	return true, orphaned, s.markGone(ctx, s.db, []string{device})
 }
 
 // DeleteAccount removes the user's and their devices' ownership of blobs, their devices, their uploads log and their
-// allowlist entry (contract 6), and lists the user and the devices as gone for the relay's sweep. Running it again does
-// nothing more, and a key that never had an account, which the relay holds nothing for, isn't listed: any fresh key
-// may call it, and each row would cost every nightly sweep (F45).
-func (s *Store) DeleteAccount(ctx context.Context, user string) (orphaned []string, err error) {
-	var one int
-	switch err := s.db.QueryRowContext(ctx, `SELECT 1 FROM accounts WHERE pubkey = ?`, user).Scan(&one); {
-	case errors.Is(err, sql.ErrNoRows):
-		return nil, nil
-	case err != nil:
-		return nil, err
-	}
-	devices, err := s.userDevices(ctx, user)
+// allowlist entry (contract 6), and lists the user and the devices as gone for the relay's sweep, in one transaction:
+// a deletion that fails part way changes nothing, and an upload's record, which checks for the account in its own
+// transaction, falls wholly before or after it (Upload). Running it again does nothing more, and a key that never had
+// an account, which the relay holds nothing for, isn't listed: any fresh key may call it, and each row would cost every
+// nightly sweep (F45).
+func (s *Store) DeleteAccount(ctx context.Context, user string) ([]string, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
-	if orphaned, err = s.deleteOwned(ctx, `account = ?`, user); err != nil {
+	defer tx.Rollback()
+	orphaned, err := s.deleteAccount(ctx, tx, user)
+	if err == nil {
+		err = tx.Commit()
+	}
+	if err != nil {
 		return nil, err
 	}
-	if err := s.markGone(ctx, append(devices, user)); err != nil {
+	return orphaned, nil
+}
+
+func (s *Store) deleteAccount(ctx context.Context, q querier, user string) ([]string, error) {
+	if err := hasAccount(ctx, q, user); err != nil {
+		if errors.Is(err, ErrNoAccount) {
+			err = nil
+		}
 		return nil, err
 	}
-	for _, q := range []string{`DELETE FROM uploads WHERE account = ?`, `DELETE FROM devices WHERE user_pubkey = ?`, `DELETE FROM accounts WHERE pubkey = ?`} {
-		if _, err := s.db.ExecContext(ctx, q, user); err != nil {
+	devices, err := userDevices(ctx, q, user)
+	if err != nil {
+		return nil, err
+	}
+	orphaned, err := deleteOwned(ctx, q, `account = ?`, user)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.markGone(ctx, q, append(devices, user)); err != nil {
+		return nil, err
+	}
+	for _, del := range []string{`DELETE FROM uploads WHERE account = ?`, `DELETE FROM devices WHERE user_pubkey = ?`, `DELETE FROM accounts WHERE pubkey = ?`} {
+		if _, err := q.ExecContext(ctx, del, user); err != nil {
 			return nil, err
 		}
 	}
@@ -222,17 +261,17 @@ func (s *Store) DeleteAccount(ctx context.Context, user string) (orphaned []stri
 }
 
 // markGone lists keys as gone for the relay's sweep (contract 3.2), as of now.
-func (s *Store) markGone(ctx context.Context, keys []string) error {
+func (s *Store) markGone(ctx context.Context, q querier, keys []string) error {
 	for _, k := range keys {
-		if _, err := s.db.ExecContext(ctx, `INSERT INTO gone(pubkey, at) VALUES(?, ?) ON CONFLICT(pubkey) DO UPDATE SET at = excluded.at`, k, s.unix()); err != nil {
+		if _, err := q.ExecContext(ctx, `INSERT INTO gone(pubkey, at) VALUES(?, ?) ON CONFLICT(pubkey) DO UPDATE SET at = excluded.at`, k, s.unix()); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *Store) userDevices(ctx context.Context, user string) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT device_pubkey FROM devices WHERE user_pubkey = ?`, user)
+func userDevices(ctx context.Context, q querier, user string) ([]string, error) {
+	rows, err := q.QueryContext(ctx, `SELECT device_pubkey FROM devices WHERE user_pubkey = ?`, user)
 	if err != nil {
 		return nil, err
 	}
@@ -250,5 +289,5 @@ func (s *Store) userDevices(ctx context.Context, user string) ([]string, error) 
 
 // ExpireInbox drops device inbox blobs past their 14 days (contract 5) and returns those left with no owner.
 func (s *Store) ExpireInbox(ctx context.Context) ([]string, error) {
-	return s.deleteOwned(ctx, `expires_at IS NOT NULL AND expires_at <= ?`, s.unix())
+	return deleteOwned(ctx, s.db, `expires_at IS NOT NULL AND expires_at <= ?`, s.unix())
 }
