@@ -172,10 +172,23 @@ export function shareRoom(held: Pick<Figures, 'used' | 'quota'> | null, w: Waiti
 }
 
 /**
+ * The figures held, while their use reaching the quota may still stand. RULED: Kefli's server takes no upload past the
+ * quota (but one of a blob the library holds already), so once one of this phone's uploads has gone through since they
+ * came, a library they show at or over its quota has been brought back within it by deleting, and they no longer tell
+ * a share that its text stays here; Backup space shows them as they came until the next answer, and the next text
+ * refused for the space makes the sheet say so again.
+ */
+function standingFigures(db: SqlDb, owner: string): (Figures & { at: number }) | null {
+  const held = accountFigures(db, owner);
+  if (!held || held.used < held.quota) return held;
+  return db.get('SELECT 1 FROM blobs WHERE owner = ? AND operator_at > ?', owner, held.at) ? null : held;
+}
+
+/**
  * The line for a share: the library's, as shareRoom. RULED: a save brought back from Archive keeps the text it had, so
  * it takes a room line only while its own text waits for room; one whose text Kefli's server holds has the usual line.
  */
 export function shareLine(db: SqlDb, owner: string, now: number, unarchived: string | null): 'full' | 'daily' | null {
-  const room = shareRoom(accountFigures(db, owner), textsWaiting(db, owner, now));
+  const room = shareRoom(standingFigures(db, owner), textsWaiting(db, owner, now));
   return room && unarchived && !waitsForRoom(db, owner, unarchived) ? null : room;
 }

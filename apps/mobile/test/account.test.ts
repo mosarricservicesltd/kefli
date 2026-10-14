@@ -299,6 +299,21 @@ describe('the Saved sheet’s line (share-full, share-daily)', () => {
     expect(shareLine(db, ME, NOW, null)).toBe('full');
   });
 
+  test('a library over its quota stops telling the sheet it is full once one of its uploads goes through', () => {
+    const db = world();
+    ensureIdentityRow(db, NOW, OTHER, 'new', true);
+    recordFigures(db, ME, { ...FIGURES, used: Math.round(120.3 * MB) }, NOW - 60);
+    save(db, { operator_at: NOW - 120, mirror_at: NOW - 120 });
+    save(db, { operator_at: NOW - 10 }, OTHER);
+    expect(shareLine(db, ME, NOW, null)).toBe('full');
+    // Kefli's server takes no upload past the quota, so one taken since the figures came shows deleting made room
+    save(db, { operator_at: NOW - 10 });
+    expect(shareLine(db, ME, NOW, null)).toBeNull();
+    // a text refused for the space since says so again
+    save(db, { last_error: 'quota' });
+    expect(shareLine(db, ME, NOW, null)).toBe('full');
+  });
+
   test('a save brought back from Archive takes the line only while its own text waits for room', () => {
     const db = world();
     const waiting = save(db, { last_error: 'quota' });
