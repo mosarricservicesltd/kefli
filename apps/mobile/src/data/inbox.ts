@@ -42,6 +42,25 @@ export function recordSeen(db: SqlDb, now: number, wrapId: string, s: Seen): voi
   );
 }
 
+/**
+ * How long the outcome of a wrap nothing was taken from is kept: two weeks, the week a wrap may hold the cursor
+ * (WRAP_PATIENCE) and the two days a drain reads back past it (WRAP_LOOKBACK), with days to spare. Older, the wrap
+ * is outside every drain's window, so its row only grew the table: by up to 28,800 rows a day under the most the
+ * relay lets everyone together send one person (C§3.2), and a kind 5 for each 50 of them at Delete my data.
+ */
+export const SEEN_KEEP = 14 * 86_400;
+
+/**
+ * Forgets the outcomes kept longer than SEEN_KEEP of wraps nothing was taken from. A save's (created, merged,
+ * un-archived), a blob still waited for and a wrap still waiting stay: a replay of a taken wrap must stay a repeat.
+ */
+export function forgetIgnored(db: SqlDb, now: number, owner: string): void {
+  db.run(
+    "DELETE FROM inbox_seen WHERE owner = ? AND seen_at < ? AND outcome IN ('ignored_foreign', 'ignored_token', 'ignored_version', 'failed_parse')",
+    owner, now - SEEN_KEEP,
+  );
+}
+
 /** Wraps whose blob couldn't be read yet, with the rumor and seal kept for the retry. */
 export function failedBlobs(db: SqlDb, owner: string): { wrap_id: string; wrap_json: string }[] {
   return db.all("SELECT wrap_id, wrap_json FROM inbox_seen WHERE owner = ? AND outcome = 'failed_blob' AND wrap_json IS NOT NULL ORDER BY seen_at", owner);

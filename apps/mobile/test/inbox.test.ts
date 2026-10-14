@@ -7,7 +7,7 @@ import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
 import { absorbRecord } from '../src/data/devices';
-import { browserName, INBOX_BLOB_LIFE } from '../src/data/inbox';
+import { SEEN_KEEP, browserName, INBOX_BLOB_LIFE } from '../src/data/inbox';
 import { pendingParses } from '../src/data/pending';
 import {
   INBOX_DEEP_EVERY, INBOX_MAX_BYTES, INBOX_TIMEOUT_MS, INBOX_UNWRAPS, drainInbox, judge, readBlob, type InboxPorts,
@@ -293,6 +293,18 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     w.tick(INBOX_DEEP_EVERY);
     await drainInbox(w.ports, w.owner);
     expect(queries).toBeGreaterThan(1);
+  });
+
+  test('outcomes of wraps nothing was taken from are forgotten after two weeks; a save’s are kept, so a replay stays a repeat', async () => {
+    const w = world();
+    w.junk(300);
+    await w.send(w.request());
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ ignored_foreign: 300, created: 1 });
+    w.tick(SEEN_KEEP + 3 * 86_400);
+    // the flood's wraps have long left the relay's window, but the save's stays recorded
+    w.wraps.length = 0;
+    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+    expect(w.db.all('SELECT outcome FROM inbox_seen')).toEqual([{ outcome: 'created' }]);
   });
 
   test("other apps' messages, unknown tokens, other keys and other versions are left alone", async () => {

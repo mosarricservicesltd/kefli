@@ -18,7 +18,8 @@ import {
 import type { SqlDb } from '../data/db';
 import { localRecord } from '../data/devices';
 import {
-  INBOX_BLOB_LIFE, admit, failedBlobs, giveUpBlob, noteDeviceSave, queueDeleteWrap, recordSeen, seenOutcome, waitingSince, type Outcome,
+  INBOX_BLOB_LIFE, admit, failedBlobs, forgetIgnored, giveUpBlob, noteDeviceSave, queueDeleteWrap, recordSeen, seenOutcome, waitingSince,
+  type Outcome,
 } from '../data/inbox';
 import type { Pending } from '../data/pending';
 import type { SaveTargets } from '../data/saves';
@@ -310,6 +311,10 @@ export async function drainInbox(p: InboxPorts, owner: string): Promise<InboxRes
     }
     out[o] = (out[o] ?? 0) + 1;
   }
-  if (!held) setCursor(p.db, startedAt, relay, 'inbox', owner, startedAt);
+  if (!held) {
+    setCursor(p.db, startedAt, relay, 'inbox', owner, startedAt);
+    // with the window two days back from here, outcomes from two weeks ago are of wraps no drain reads again
+    forgetIgnored(p.db, p.now(), owner);
+  }
   return out;
 }
