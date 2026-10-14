@@ -1,6 +1,6 @@
 // A sentence longer than the system voice takes at a time (mobile spec 8.1): Android's engine speaks at most
-// getMaxSpeechInputLength (4,000) characters a call. Node can't run the Kotlin: the second test reads its source,
-// standing in for the check on the phone listed in HANDOVER.
+// getMaxSpeechInputLength (4,000) characters a call. Node can't run the Kotlin: the tests after the first read its
+// source, standing in for the check on the phone listed in HANDOVER.
 import { deriveArticle } from '../src/reader/blocks';
 import { kotlinSource, member } from './kotlin';
 
@@ -38,5 +38,17 @@ describe('a sentence longer than the engine takes (8.1)', () => {
     expect(pieces).toContain('object Pieces {');
     expect(member(pieces, 'end')).toMatch(/for \(k in limit - 1 downTo from \+ max \/ 2\) if \(breaksAfter\(text\[k\]\)\) return k \+ 1/);
     expect(member(pieces, 'end')).toContain('isHighSurrogate()');
+  });
+
+  test("a piece inside one long word, which holds no word start, leaves the engine's word timing on", () => {
+    // any file with no word ranges turned the highlight to whole sentences, for every article after it
+    const engine = voiceSource('VoiceEngine.kt');
+    const written = member(engine, 'written');
+    expect(written).not.toContain('wordTiming = false');
+    expect(written).toContain('noteTiming(s, ranges)');
+    const note = member(engine, 'noteTiming');
+    expect(note).toContain('Timing.startsWithin(sentences[s.sentence].wordStarts, s.offset, s.offset + s.text.length)');
+    expect(note).toContain('if (ranges.isEmpty() && holdsAWordStart) wordTiming = false');
+    expect(member(voiceSource('VoiceAudio.kt'), 'startsWithin')).toMatch(/lastAtOrBelow\(xs, until - 1\)\s+return k >= 0 && xs\[k\] >= from/);
   });
 });

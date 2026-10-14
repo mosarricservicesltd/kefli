@@ -82,6 +82,12 @@ object Timing {
     return best
   }
 
+  /** Whether any of sorted xs lies in from until (until itself not included). */
+  fun startsWithin(xs: IntArray, from: Int, until: Int): Boolean {
+    val k = lastAtOrBelow(xs, until - 1)
+    return k >= 0 && xs[k] >= from
+  }
+
   /**
    * The word a segment is on at a frame within it: the last range whose frame has passed, its character mapped to a
    * word by the sentence's word starts. With no ranges (an engine without word timing) it is the segment's first word.

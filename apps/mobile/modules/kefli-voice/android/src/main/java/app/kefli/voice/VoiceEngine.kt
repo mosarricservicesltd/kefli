@@ -390,10 +390,26 @@ object VoiceEngine {
     if (pcm == null || pcm.frames == 0) return writeAhead()
     val t = track ?: newTrack(pcm) ?: return emit(Event.Error(hash, "audio_track"))
     val ranges = s.ranges.sortedBy { it[1] }
-    if (ranges.isEmpty()) wordTiming = false
+    noteTiming(s, ranges)
     learn(ranges, pcm)
     segments.add(Segment(s.sentence, s.offset, framesWritten, pcm.frames.toLong(), pcm.sampleRate, ranges))
     framesWritten += pcm.frames
+    feed(t, pcm)
+    if (playing && t.playState != AudioTrack.PLAYSTATE_PLAYING) t.play()
+    writeAhead()
+  }
+
+  /**
+   * An engine that reports no word ranges makes the sentence the unit (FD 91 (h)), from then on. A piece inside one
+   * long word (Pieces) holds no word start for the engine to report, so its having none says nothing of the engine.
+   */
+  private fun noteTiming(s: Synth, ranges: List<IntArray>) {
+    val holdsAWordStart = Timing.startsWithin(sentences[s.sentence].wordStarts, s.offset, s.offset + s.text.length)
+    if (ranges.isEmpty() && holdsAWordStart) wordTiming = false
+  }
+
+  /** A file's audio to the track, on the writer's thread, until it is all written or a newer run has begun. */
+  private fun feed(t: AudioTrack, pcm: Pcm) {
     val gen = generation
     writer.post {
       var at = 0
@@ -403,8 +419,6 @@ object VoiceEngine {
         at += n
       }
     }
-    if (playing && t.playState != AudioTrack.PLAYSTATE_PLAYING) t.play()
-    writeAhead()
   }
 
   private fun newTrack(pcm: Pcm): AudioTrack? {
