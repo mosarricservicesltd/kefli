@@ -148,17 +148,76 @@ function sentencesOf(said: string, starts: number[], firstWord: number, out: Sen
   }
 }
 
-/** What a part shows, as a block before its words are counted. */
-function blockOf(p: Part, shown: string): Shown {
-  if (p.kind === 'code') return { kind: 'code', start: p.start, text: p.text };
+/**
+ * A plain block's characters at most, and an article's blocks: a longer paragraph is cut between words and a longer
+ * code block between lines, and past PLAIN_BLOCKS short paragraphs run together, so the Reader never lays out one
+ * text of a megabyte or mounts a hundred thousand. Text of more than PLAIN_BLOCKS times PLAIN_CHARS takes longer blocks.
+ */
+export const PLAIN_CHARS = 4_000;
+export const PLAIN_BLOCKS = 4_000;
+
+/** A part as it shows and says: its text collapsed (code keeps its lines), and a heading's spoken full stop. */
+type Piece = { part: Part; shown: string; said: string };
+
+function pieceOf(p: Part): Piece | null {
+  if (p.kind === 'img') return { part: p, shown: '', said: '' };
+  const shown = collapse(p.text);
+  if (!shown) return null;
+  const said = p.kind === 'h' && !terminal(shown, 0, shown.length) ? `${shown}.` : shown;
+  return { part: p, shown: p.kind === 'code' ? p.text : shown, said };
+}
+
+/** Where to cut text of more than cap characters: the last space (or line end, for code) before cap, else cap. */
+function cutAt(text: string, cap: number, code: boolean): number {
+  const k = text.lastIndexOf(code ? '\n' : ' ', cap);
+  return k > cap / 2 ? k : cap;
+}
+
+/** A piece over cap, cut into pieces of at most cap characters. */
+function cut(piece: Piece, cap: number, out: Piece[]): void {
+  const code = piece.part.kind === 'code';
+  let rest = piece.shown;
+  while (rest.length > cap) {
+    const k = cutAt(rest, cap, code);
+    const head = rest.slice(0, k);
+    out.push({ part: piece.part, shown: head, said: code ? collapse(head) : head });
+    // a cut at a line's end or a space drops it; a cut inside a word or a line keeps every character
+    rest = code && rest[k] === '\n' ? rest.slice(k + 1) : code ? rest.slice(k) : rest.slice(k).trimStart();
+  }
+  if (rest) out.push({ part: piece.part, shown: rest, said: code ? collapse(rest) : rest });
+}
+
+/** Paragraphs and headings next to each other, run into paragraphs of up to cap characters, a blank line between. */
+function runTogether(pieces: Piece[], cap: number): Piece[] {
+  const out: Piece[] = [];
+  for (const x of pieces) {
+    const prev = out[out.length - 1];
+    const joins = prev && prev.part.kind !== 'code' && prev.part.kind !== 'img' && x.part.kind !== 'code' && x.part.kind !== 'img';
+    if (joins && prev.shown.length + x.shown.length + 2 <= cap) {
+      out[out.length - 1] = { part: { ...prev.part, kind: 'p' } as Part, shown: `${prev.shown}\n\n${x.shown}`, said: `${prev.said} ${x.said}` };
+    } else out.push(x);
+  }
+  return out;
+}
+
+/** The parts as pieces of bounded size, run together when there are more than PLAIN_BLOCKS. */
+function pieces(md: string): Piece[] {
+  const cap = Math.max(PLAIN_CHARS, Math.ceil(md.length / PLAIN_BLOCKS) * 2);
+  const out: Piece[] = [];
+  for (const p of parts(md)) {
+    const x = pieceOf(p);
+    if (x && x.shown.length > cap) cut(x, cap, out);
+    else if (x) out.push(x);
+  }
+  return out.length > PLAIN_BLOCKS ? runTogether(out, cap) : out;
+}
+
+/** What a piece shows, as a block before its words are counted. */
+function blockOf({ part: p, shown }: Piece): Shown {
+  if (p.kind === 'code') return { kind: 'code', start: p.start, text: shown };
   if (p.kind === 'img') return { kind: 'img', start: p.start, src: p.src, alt: p.alt };
   if (p.kind === 'h') return { kind: 'h', start: p.start, level: p.level, spans: [{ text: shown }] };
   return { kind: 'p', start: p.start, spans: [{ text: shown }] };
-}
-
-/** What a part says: its text collapsed, and a heading ends with a full stop, as in the projection. Images say nothing. */
-function saidOf(p: Part, shown: string): string {
-  return p.kind === 'h' && !terminal(shown, 0, shown.length) ? `${shown}.` : shown;
 }
 
 /** The article read plain: its blocks, words, sentences and spoken text (spoken blocks a blank line apart). */
@@ -167,15 +226,12 @@ export function plainArticle(md: string): { blocks: Block[]; words: number; sent
   const sentences: Sentence[] = [];
   const spoken: string[] = [];
   let words = 0;
-  for (const p of parts(md)) {
-    const shown = p.kind === 'img' ? '' : collapse(p.text);
-    if (!shown && p.kind !== 'img') continue;
-    const said = shown && saidOf(p, shown);
-    const starts = wordStarts(said);
-    blocks.push({ ...blockOf(p, shown), firstWord: words, words: starts.length } as Block);
-    if (!said) continue;
-    sentencesOf(said, starts, words, sentences);
-    spoken.push(said);
+  for (const x of pieces(md)) {
+    const starts = wordStarts(x.said);
+    blocks.push({ ...blockOf(x), firstWord: words, words: starts.length } as Block);
+    if (!x.said) continue;
+    sentencesOf(x.said, starts, words, sentences);
+    spoken.push(x.said);
     words += starts.length;
   }
   return { blocks, words, sentences, spoken: spoken.join('\n\n') };

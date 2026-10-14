@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { VOICE_CHARS, deriveArticle, type Derived } from '../src/reader/blocks';
 import { LIMITS, beyondLimits } from '../src/reader/limits';
+import { PLAIN_BLOCKS, PLAIN_CHARS } from '../src/reader/plain';
 
 /** The derive's result and how long it took, in ms. */
 function timed(md: string): [Derived, number] {
@@ -84,16 +85,19 @@ describe('deriveArticle on hostile Markdown (mobile spec 6.7)', () => {
     expect(ms).toBeLessThan(QUICK_MS);
     expect(d.words).toBe(50_000);
     whole(d);
+    // a word longer than a block is cut into pieces of one, every character kept
     const [w] = timed(`Start ${'x'.repeat(1_000_000)} end.\n`);
-    expect(w.words).toBe(3);
+    expect(spans(w).replace(/ /g, '')).toBe(`Start${'x'.repeat(1_000_000)}end.`);
+    expect(w.words).toBeGreaterThanOrEqual(3);
     whole(w);
   });
 
-  test('a code block of 20,000 lines stays a code block', () => {
+  test('a code block of 20,000 lines stays code, cut between lines', () => {
     const [d, ms] = timed(`Before.\n\n\`\`\`\n${'line of code\n'.repeat(20_000)}\`\`\`\n\nAfter.\n`);
     expect(ms).toBeLessThan(QUICK_MS);
-    expect(d.blocks.map((b) => b.kind)).toEqual(['p', 'code', 'p']);
-    expect((d.blocks[1] as { text: string }).text.split('\n')).toHaveLength(20_000);
+    const kinds = d.blocks.map((b) => b.kind);
+    expect([kinds[0], kinds[kinds.length - 1], new Set(kinds.slice(1, -1))]).toEqual(['p', 'p', new Set(['code'])]);
+    expect(d.blocks.slice(1, -1).map((b) => (b as { text: string }).text).join('\n')).toBe('line of code\n'.repeat(20_000).slice(0, -1));
     expect(d.words).toBe(2 + 60_000);
     whole(d);
   });
@@ -108,6 +112,28 @@ describe('deriveArticle on hostile Markdown (mobile spec 6.7)', () => {
     whole(d);
     // each piece is its stretch of the spoken text
     for (const s of d.sentences) expect(d.spoken.startsWith(s.text, d.spoken.split(' ').slice(0, s.firstWord).join(' ').length + (s.firstWord ? 1 : 0))).toBe(true);
+  });
+
+  test('read plain, no block is a huge text and there are never a hundred thousand of them', () => {
+    // one paragraph of a megabyte would be one Text of a megabyte, and the voice's highlight re-renders its block
+    const para = Array.from({ length: 150_000 }, (_, i) => ['saving', 'reading', 'later', 'quiet'][i % 4]).join(' ');
+    const big = deriveArticle(`${para}\n`);
+    expect(Math.max(...big.blocks.map((b) => (b as { spans: { text: string }[] }).spans[0].text.length))).toBeLessThanOrEqual(PLAIN_CHARS);
+    expect(big.blocks.map((b) => (b as { spans: { text: string }[] }).spans[0].text).join(' ')).toBe(para);
+    expect(big.words).toBe(150_000);
+    whole(big);
+    // 100,000 short paragraphs (past the parse's block limit) run together into at most PLAIN_BLOCKS
+    const many = deriveArticle('line one\n\nline two\n\n'.repeat(50_000));
+    expect(many.blocks.length).toBeLessThanOrEqual(PLAIN_BLOCKS);
+    expect(many.words).toBe(200_000);
+    expect((many.blocks[0] as { spans: { text: string }[] }).spans[0].text.startsWith('line one\n\nline two\n\nline one')).toBe(true);
+    whole(many);
+    // a code block of a megabyte is cut between lines, every line kept
+    const lines = Array.from({ length: 80_000 }, (_, i) => `let line${i} = ${i};`);
+    const code = deriveArticle(`\`\`\`\n${lines.join('\n')}\n\`\`\`\n`);
+    expect(code.blocks.every((b) => b.kind === 'code' && b.text.length <= PLAIN_CHARS * 2)).toBe(true);
+    expect(code.blocks.map((b) => (b as { text: string }).text).join('\n')).toBe(lines.join('\n'));
+    whole(code);
   });
 
   test('read plain, escapes are taken out and headings stay headings', () => {
