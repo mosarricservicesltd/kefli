@@ -1,4 +1,4 @@
-// The backend's contract tests (backend spec 7, contract v1.5 sections 3.2, 5 and 6), against a running stack: the
+// The backend's contract tests (backend spec 7, contract v1.12 sections 3.2, 5 and 6), against a running stack: the
 // operator relay with its write policy and keflid. Fresh keys each run, so it can run against staging repeatedly.
 //   npx tsx server/staging/contract.ts [http://localhost:8447]
 import { Relay } from 'nostr-tools/relay';
@@ -26,6 +26,18 @@ async function api(signer: LocalSigner, method: 'GET' | 'POST' | 'DELETE', path:
   const url = `${API}${path}`;
   const res = await fetch(url, { method, body: raw ?? undefined, headers: { Authorization: await httpAuth(signer, url, method, raw, nodeCrypto), 'Content-Type': 'application/json' } });
   return { status: res.status, body: (await res.json().catch(() => null)) as Record<string, unknown> | null };
+}
+
+// fair use's figures for a new library (contract 5): 50 MB kept, 20 MB of new bytes a day
+const QUOTA = 52_428_800;
+const DAILY = 20_971_520;
+
+let lastAsked = 0;
+/** GET /account as signer, a second after the last ask, so asking twice isn't a replay of the same signed request. */
+async function accountOf(signer: LocalSigner) {
+  while (now() <= lastAsked) await new Promise((r) => setTimeout(r, 100));
+  lastAsked = now();
+  return api(signer, 'GET', '/account');
 }
 
 async function publish(relay: Relay, ev: NostrEvent): Promise<string> {
@@ -66,6 +78,14 @@ async function main() {
   const user = key(), device = key(), stranger = key();
   const reg = await api(user, 'POST', '/register', { v: 1 });
   check('POST /register', reg.status === 200 && reg.body?.v === 1, JSON.stringify(reg));
+  check("POST /register answers the library's own quota and use", reg.body?.quota === QUOTA && reg.body?.used === 0, JSON.stringify(reg.body));
+  const fresh = await accountOf(user);
+  const figures: Record<string, unknown> = fresh.body ?? {};
+  const shaped = fresh.status === 200 && figures.v === 1 && ['quota', 'used', 'daily', 'today'].every((k) => typeof figures[k] === 'number');
+  check('GET /account answers v, quota, used, daily and today', shaped, JSON.stringify(fresh));
+  check("a new library's figures", figures.quota === QUOTA && figures.used === 0 && figures.daily === DAILY && figures.today === 0, JSON.stringify(figures));
+  const unknown = await accountOf(stranger);
+  check('GET /account refused to an unregistered key', unknown.status === 403 && unknown.body?.error === 'not_registered', JSON.stringify(unknown));
   const nonce = bytesToHex(nodeCrypto.randomBytes(16));
   const proof = { nonce, ...(await signStatement(device, deviceProofTemplate(API, nonce, now()))) };
   const bare = await api(user, 'POST', '/devices', { v: 1, device_pubkey: device.pubkey() });
@@ -130,6 +150,20 @@ async function main() {
   check('an authorised device uploads an inbox blob', devUp.ok, JSON.stringify(devUp));
   const strangerUp = await uploadBlob(blossom, inbox.blob, inbox.text.sha256, stranger);
   check('an unregistered key may not upload', !strangerUp.ok && strangerUp.status === 401, JSON.stringify(strangerUp));
+
+  // fair use (contract 1.12): the library's figures count its browser's captures, and the phone deletes a capture once
+  // it has made the save (contract 4.4), which gives back its room but none of the day
+  const taken = await encryptText('<p>a page the phone has taken</p>', nodeCrypto);
+  const takenUp = await uploadBlob(blossom, taken.blob, taken.text.sha256, device);
+  check('the device uploads a second inbox blob', takenUp.ok, JSON.stringify(takenUp));
+  const sizes = own.blob.length + inbox.blob.length + taken.blob.length;
+  const counted = (await accountOf(user)).body;
+  check("GET /account counts the library's blobs and the day's uploads, its browser's included", counted?.used === sizes && counted?.today === sizes, JSON.stringify(counted));
+  check("the user deletes its browser's inbox blob", (await deleteBlob(blossom, taken.text.sha256, user)).ok);
+  check('and the capture is no longer served', (await fetch(`${blossom}/${taken.text.sha256}`)).status === 404);
+  const freed = (await accountOf(user)).body;
+  check('which gives back its room and none of the day', freed?.used === sizes - taken.blob.length && freed?.today === sizes, JSON.stringify(freed));
+
   check('the owner deletes its blob', (await deleteBlob(blossom, own.text.sha256, user)).ok);
   check('and it is no longer served', (await fetch(`${blossom}/${own.text.sha256}`)).status === 404);
 
@@ -137,6 +171,7 @@ async function main() {
   const del = await api(user, 'DELETE', '/account');
   check('DELETE /account', del.status === 200, JSON.stringify(del));
   check('the inbox blob went with the account', (await fetch(`${blossom}/${inbox.text.sha256}`)).status === 404);
+  check('and GET /account no longer answers its figures', (await accountOf(user)).status === 403);
   await new Promise((r) => setTimeout(r, 6000));
   const after = await Relay.connect(relayUrl);
   const gone = await user.signEvent({ kind: 30078, created_at: now(), tags: [['d', 'kefli/item/after']], content: 'x' });
