@@ -567,6 +567,35 @@ describe('text fetches are bounded (F12)', () => {
     expect(await fetchText(w.ports, job(w, h(71)))).toBe('missing');
     expect(pulled).toBeLessThanOrEqual(3);
   });
+
+  test('a server that never answers holds one sync a minute once, not a minute a text', async () => {
+    const w = world();
+    w.tick(2 * SKEW);
+    for (let i = 1; i <= 30; i++) w.publish(await remoteSave(w, h(i), 6000 + i, `# T${i}\n\nwords ${i}`, { url: `https://example.com/${i}` }));
+    // the operator's server down, and the mirror one that accepts and never answers
+    let silent = 0;
+    w.ports.fetch = ((url: string, init?: RequestInit) => {
+      if (url.startsWith('http://blossom/')) return Promise.reject(new TypeError('Network request failed'));
+      silent++;
+      return new Promise((_, fail) => init?.signal?.addEventListener('abort', () => fail(new DOMException('aborted', 'AbortError'))));
+    }) as unknown as typeof fetch;
+    jest.useFakeTimers();
+    try {
+      const started = Date.now();
+      let done = false;
+      const run = syncInbound(w.ports).then((r) => ((done = true), r));
+      while (!done && Date.now() - started < 2 * 3600_000) await jest.advanceTimersByTimeAsync(1_000);
+      expect(await run).toMatchObject({ items: 30, texts: 0, missing: 0 });
+      expect(Date.now() - started).toBeLessThanOrEqual(TEXT_TIMEOUT_MS + 5_000);
+      expect(silent).toBe(1);
+    } finally {
+      jest.useRealTimers();
+    }
+    // every text waits for the next sync, when the servers are asked again
+    expect(w.db.get("SELECT COUNT(*) AS n FROM items WHERE text_state = 'remote'")).toEqual({ n: 30 });
+    w.ports.fetch = w.fetch;
+    expect(await syncInbound(w.ports)).toMatchObject({ texts: 30 });
+  });
 });
 
 /** A kind 30078 at d as another client of the person's might publish it: any JSON, self-encrypted, signed by them. */

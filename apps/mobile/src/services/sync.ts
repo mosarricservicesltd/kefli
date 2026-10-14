@@ -237,27 +237,37 @@ function namedServers(job: TextJob): unknown[] {
 }
 
 /**
- * One text from its servers, then the identity's 10063 servers: 'ok', 'missing' everywhere, or 'offline'. At most
- * TEXT_SERVERS_MAX of them, http(s) only (blobServers), however many the save or the lists name.
+ * One server's copy of a text's blob: its bytes; 'lacks', not there, or larger than any text; or 'down', not reached,
+ * no whole answer within TEXT_TIMEOUT_MS, or 5xx or 429, after which the rest of the sync doesn't ask it (down).
  */
-export async function fetchText(p: SyncPorts, job: TextJob): Promise<'ok' | 'missing' | 'offline'> {
+async function fromServer(p: SyncPorts, server: string, sha256: string, down: Set<string>): Promise<Uint8Array | 'lacks' | 'down'> {
+  if (down.has(server)) return 'down';
+  try {
+    const got = await getBlob(p, `${server}/${sha256}`);
+    if (got.status >= 200 && got.status <= 299) return got.bytes ?? 'lacks';
+    if (got.status < 500 && got.status !== 429) return 'lacks';
+  } catch {
+    // not reached, or not finished in time
+  }
+  down.add(server);
+  return 'down';
+}
+
+/**
+ * One text from its servers, then the identity's 10063 servers: 'ok', 'missing' everywhere, or 'offline'. At most
+ * TEXT_SERVERS_MAX of them, http(s) only (blobServers), however many the save or the lists name. down is the servers
+ * a sync has found not answering: asked again for each text, one that accepts and never answers held a sync a minute
+ * a text, 30 minutes for 30 and hours for a restored library, while every later sync waited on it. A text whose
+ * servers are all down is 'offline', and asked for at the next sync.
+ */
+export async function fetchText(p: SyncPorts, job: TextJob, down = new Set<string>()): Promise<'ok' | 'missing' | 'offline'> {
   // the 10063 as published is asked as well as the rows kept from it (C§8, F37); each server once, slash or not
   const servers = blobServers([...namedServers(job), ...listServers(p.db, job.owner), ...heldServerList(p.db, job.owner)]);
   let unreachable = 0;
   for (const server of servers) {
-    let bytes: Uint8Array;
-    try {
-      const got = await getBlob(p, `${server}/${job.text_sha256}`);
-      if (got.status < 200 || got.status > 299) {
-        if (got.status >= 500 || got.status === 429) unreachable++;
-        continue;
-      }
-      if (!got.bytes) continue; // larger than any text: as if this server lacked it
-      bytes = got.bytes;
-    } catch {
-      unreachable++;
-      continue;
-    }
+    const bytes = await fromServer(p, server, job.text_sha256, down);
+    if (bytes === 'down') unreachable++;
+    if (typeof bytes === 'string') continue;
     let markdown: string;
     try {
       markdown = await decryptText(bytes, { sha256: job.text_sha256, key: job.text_key, nonce: job.text_nonce }, p.crypto);
@@ -406,8 +416,9 @@ export async function syncOwner(p: SyncPorts, owner: string, signer: Signer): Pr
   for (const c of collected) if (c.stream === 'items' && c.relay !== operator) for (const e of c.events) markBacked(p.db, e.id);
   let texts = 0;
   let missing = 0;
+  const down = new Set<string>();
   for (const job of textQueue(p.db, owner, p.openHash?.())) {
-    const r = await fetchText(p, job);
+    const r = await fetchText(p, job, down);
     if (r === 'ok') texts++;
     if (r === 'missing') missing++;
   }
