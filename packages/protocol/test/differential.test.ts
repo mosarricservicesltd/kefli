@@ -115,6 +115,19 @@ test('a run of emphasis 1,000 deep around a link, silent or read, projects as it
   }
 });
 
+test('a code block holding a character outside the BMP differs only in the offsets the old code dropped', () => {
+  // the old map of a code block counted characters, so each emoji dropped an offset: the one deliberate difference
+  const emoji = String.fromCodePoint(0x1f600);
+  const md = normaliseMarkdown(`Before.\n\n${TICKS}\nlet face = '${emoji}';\nnext(${emoji}${emoji});\n${TICKS}\n\nAfter it.`);
+  const tree = fromMarkdown(md);
+  const p = projectTree(md, tree);
+  const q = old.projectTree(md, tree);
+  expect({ ...p, offsets: null, s: sentences(p) }).toEqual({ ...q, offsets: null, s: oldSentences(q) });
+  expect(q.offsets.slice(0, 24)).toEqual(p.offsets.slice(0, 24));
+  expect(q.offsets.some((o) => o === undefined)).toBe(true);
+  expect(p.offsets.every((o, i) => /\s/.test(p.text[i]) || md[o] === p.text[i] || p.text[i] === '.')).toBe(true);
+});
+
 test('trees of shapes the parse never makes project as they did', () => {
   // projectTree takes any tree: empty emphasis, nodes without positions, strikethrough, a node type of its own
   const md = 'a[*x*]b [1](#cite_note-1) ~~[2](#fn2)~~ c\n\n``` x ```\n';

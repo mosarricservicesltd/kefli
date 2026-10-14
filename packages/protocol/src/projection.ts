@@ -329,7 +329,8 @@ function codeBlock(b: Builder, node: Code): void {
     if (lineEnd === -1) lineEnd = b.src.length;
     const srcLine = b.src.slice(lineStart, lineEnd);
     const at = lineStart + Math.max(0, srcLine.length - line.length);
-    b.push(line, Array.from(line, (_, k) => at + k));
+    // one offset a UTF-16 unit, as the text counts them: a character outside the BMP is two
+    b.push(line, Array.from({ length: line.length }, (_, k) => at + k));
     if (n < lines.length - 1) b.push('\n', [lineEnd]);
     lineStart = lineEnd + 1;
   });

@@ -76,6 +76,20 @@ describe('spoken projection (C§4.2)', () => {
     for (let i = 1; i < p.offsets.length; i++) expect(p.offsets[i]).toBeGreaterThanOrEqual(p.offsets[i - 1]);
   });
 
+  test('a code block holding characters outside the BMP maps every character to itself', () => {
+    // its map was counted in characters where its text counts UTF-16 units, so each emoji dropped an offset: the rest of
+    // the block mapped to the wrong place, and its last characters and the blank line after it to none
+    const emoji = String.fromCodePoint(0x1f600);
+    const fence = '`'.repeat(3);
+    const blocks = [`${fence}\na${emoji}b c\nnext ${emoji}${emoji} line\n${fence}\n\nafter it`, `    a${emoji}b c\n    next line\n\nafter it`];
+    for (const md of blocks.map(normaliseMarkdown)) {
+      const p = project(md);
+      expect(p.offsets.length).toBe(p.text.length);
+      for (let i = 0; i < p.text.length; i++) if (!/\s/.test(p.text[i])) expect([i, md[p.offsets[i]]]).toEqual([i, p.text[i]]);
+      for (let i = 1; i < p.offsets.length; i++) expect(p.offsets[i]).toBeGreaterThanOrEqual(p.offsets[i - 1]);
+    }
+  });
+
   test('indented and quoted code blocks map inside the source', () => {
     for (const md of ['para\n\n    code here\n', '> ```\n> quoted code\n> ```\n']) {
       const p = project(md);

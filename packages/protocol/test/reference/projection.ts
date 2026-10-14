@@ -1,7 +1,9 @@
 // THE ORACLE, not the projection: src/projection.ts as it stood at contract 1.12, before its walk took a stack of its
 // own, copied unchanged below this paragraph. It walks the tree by recursion, so deep nesting overflows the engine's
 // stack, and decides a run of nested emphasis afresh at every level. differential.test.ts holds the projection to it
-// on every input it can take: the two must agree exactly, so a rule change goes into both or the test is retired.
+// on every input it can take: the two must agree exactly, so a rule change goes into both or the test is retired. One
+// difference is deliberate: in a code block this counts its map in characters where the text counts UTF-16 units, so a
+// character outside the BMP drops an offset (codeBlock below), and the test compares such a block without its offsets.
 //
 // The spoken projection (contract 4.2): what a voice reads and what words counts, with each spoken
 // character mapped to its offset in the normalised Markdown for word highlighting (contract 7).
