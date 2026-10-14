@@ -2,14 +2,15 @@
 // target T on this phone. A copy is a new row under T, every field kept, sent through the outbox under T: its blob
 // uploaded and mirrored as T's, then the save published, signed by T. A save T already holds keeps T's copy, and is
 // only brought back from Archive when S's copy is unread, as a repeated save is (C§4.1). Listen history follows.
-import { savedD } from '@kefli/protocol';
+import { sameUrl, savedD } from '@kefli/protocol';
 import type { Param, SqlDb } from './db';
 import { enqueue } from './outbox';
-import { queueSends, type SaveTargets, type StagedBlob } from './saves';
+import { blobRow, queueSends, type SaveTargets, type StagedBlob } from './saves';
 import { writeRelays, type DefaultsLike } from './lists';
 import { ensureIdentityRow } from './saves';
 import { commitDelete, deleteItem } from './library';
 import { libraryKey } from './libraryKey';
+import { forgetFreed } from './backup';
 import { KEEP_COPIES, setSetting } from './settings';
 import { settleUserLists, type UserLists } from '../services/nostrSignIn';
 
@@ -81,8 +82,24 @@ function columns(db: SqlDb): string[] {
 export type Copied = 'copied' | 'kept' | 'unarchived';
 
 /**
+ * The mirror holding S's blob of a save (C§4.8 step 3, v1.12), which T's copy names while the operator refuses T's
+ * upload, so a text backed up under S stays backed up under T: the one this phone's upload under S reached, or, for a
+ * text another phone uploaded, the first server other than the operator that S's newest event names. Null when no
+ * mirror holds it, as for a text that waited on the phone under S too.
+ */
+function sourceMirror(db: SqlDb, from: string, hash: string, operator: string): string | null {
+  const s = db.get<{ text_sha256: string | null; text_servers: string | null }>('SELECT text_sha256, text_servers FROM items WHERE owner = ? AND hash = ?', from, hash);
+  if (!s?.text_sha256) return null;
+  const mine = blobRow(db, from, s.text_sha256);
+  if (mine) return mine.mirror_at && mine.mirror_url ? mine.mirror_url : null;
+  const named = s.text_servers ? (JSON.parse(s.text_servers) as string[]) : [];
+  return named.find((u) => !sameUrl(u, operator)) ?? null;
+}
+
+/**
  * One save from S to T (C§4.8 step 3). blob is S's staged ciphertext, or null for a save without text (or one whose
- * blob T must fetch first, which the caller stages). Returns what happened.
+ * blob T must fetch first, which the caller stages); T's blob records the mirror that holds S's, if one does. Returns
+ * what happened.
  */
 export function copySave(db: SqlDb, now: number, job: MoveJob, hash: string, blob: StagedBlob | null, t: SaveTargets): Copied {
   return db.tx(() => {
@@ -95,13 +112,14 @@ export function copySave(db: SqlDb, now: number, job: MoveJob, hash: string, blo
       enqueue(db, now, { op: 'publish_item', signer: job.to, subject: hash, targets: writeRelays(db, job.to) });
       return 'unarchived';
     }
+    const mirror = blob ? sourceMirror(db, job.from, hash, t.blossom) : null;
     const cols = columns(db);
     const r = db.run(
       `INSERT INTO items (owner, ${cols.join(', ')}, modified_at, dirty, published) SELECT ?, ${cols.join(', ')}, ?, 1, 0 FROM items WHERE id = ?`,
       job.to, now, s.id,
     );
     db.run('INSERT OR IGNORE INTO listen_history (item, last_played_at) SELECT ?, last_played_at FROM listen_history WHERE item = ?', r.lastInsertRowId, s.id);
-    queueSends(db, now, job.to, hash, blob, t, false, null);
+    queueSends(db, now, job.to, hash, blob && { ...blob, mirror }, t, false, null);
     return 'copied';
   });
 }
@@ -170,6 +188,7 @@ export function retireLocal(db: SqlDb, from: string, to: string | null): void {
     for (const t of ['relays', 'servers', 'lists', 'devices', 'sync_cursors', 'inbox_seen']) db.run(`DELETE FROM ${t} WHERE owner = ?`, from);
     db.run('DELETE FROM outbox WHERE signer = ?', from);
     db.run('DELETE FROM blobs WHERE owner = ?', from);
+    forgetFreed(db, from);
     db.run('DELETE FROM identities WHERE pubkey = ?', from);
     if (to) db.run("UPDATE identities SET role = 'active' WHERE pubkey = ?", to);
   });

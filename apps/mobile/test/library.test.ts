@@ -113,7 +113,8 @@ describe('the library (mobile spec 5.6)', () => {
     w.db.run("INSERT INTO blobs (sha256, hash, kind, owner, operator_at) VALUES (?, ?, 'text', ?, 1)", 'ab'.repeat(32), h(1), w.pk);
     const c = deleteItem(w.db, 2000, w.pk, h(1));
     expect(listRows(w.db, w.pk, 'unread')).toEqual([]);
-    expect(w.outbox().map((o) => [o.op, o.state])).toEqual([['delete_item', 'held'], ['delete_blob', 'held']]);
+    // the blob's deletion is worked out once the delete goes through, from where its text is then
+    expect(w.outbox().map((o) => [o.op, o.state])).toEqual([['delete_item', 'held']]);
     c.revert();
     expect(listRows(w.db, w.pk, 'unread')).toHaveLength(1);
     expect(w.outbox()).toEqual([]);

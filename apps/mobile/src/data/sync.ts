@@ -3,13 +3,15 @@
 //
 // RULED: an event with v above 1 that is newer than the local row goes to items_future and the local row is
 // removed with its pending sends, since this phone may not write over a version it doesn't understand (C§10);
-// an older one is ignored. A save with no text arrives as text_state 'queued', so this phone tries the parse.
+// an older one is ignored. A save with no text arrives as text_state 'queued', so this phone tries the parse,
+// unless this phone holds the save's text, which it keeps (C§4.1, v1.12).
 import { ITEM_D_PREFIX, deletedDs, deletionRemoves, mergeItem, wordReached } from '@kefli/protocol';
 import { savesAt } from './libraryKey';
 import type { LocalVersion, MergeOutcome, NostrEvent, ParsedItem } from '@kefli/protocol';
 import type { SqlDb } from './db';
 import { enqueue } from './outbox';
 import { writeRelays } from './lists';
+import { blobDeletion, blobRow, queueBlobDelete, textHolders, withdrawText } from './saves';
 
 export type Stream = 'items' | 'deletions';
 /** The cursor streams: saves and deletions per read relay, and the inbox on the operator relay (4.7). */
@@ -17,7 +19,8 @@ export type CursorStream = Stream | 'inbox';
 
 type Row = {
   id: number; event_id: string | null; event_created_at: number | null; dirty: number; modified_at: number | null;
-  text_sha256: string | null; text_servers: string | null; text_state: string; position_word: number;
+  text_sha256: string | null; text_key: string | null; text_nonce: string | null; text_hash: string | null; text_servers: string | null;
+  text_state: string; position_word: number; words: number | null;
 };
 
 export type Applied = {
@@ -46,7 +49,8 @@ function textOf(t: unknown) {
   return { text_sha256: sha256, text_key: key, text_nonce: nonce, text_servers: JSON.stringify(servers) };
 }
 
-const NO_TEXT = { text_sha256: null, text_key: null, text_nonce: null, text_servers: null };
+type TextColumns = { text_sha256: string | null; text_key: string | null; text_nonce: string | null; text_servers: string | null };
+const NO_TEXT: TextColumns = { text_sha256: null, text_key: null, text_nonce: null, text_servers: null };
 
 /** The row's columns from item JSON, each field checked, since another client wrote it (C§10). */
 export function itemColumns({ item, extra }: ParsedItem, event: NostrEvent) {
@@ -93,12 +97,18 @@ export function hashInUse(db: SqlDb, hash: string): boolean {
   return !!db.get('SELECT 1 FROM items WHERE hash = ?', hash);
 }
 
-/** The losing text's blob, if this phone uploaded it and no row names it any more, is deleted from its servers (4.5). */
+/**
+ * A text no row names any more, its save deleted or its text replaced by another phone's (4.5, C§4.1, v1.12): this
+ * phone's waiting upload of it and the mirror after it go, so no upload is left that no save names, and a blob this
+ * phone uploaded is deleted from the servers the save named and the mirror its upload reached. Its staged file goes
+ * with the blob's row (orphanBlobs).
+ */
 function retireBlob(db: SqlDb, now: number, owner: string, sha256: string, servers: string | null) {
-  const mine = db.get<{ operator_at: number | null }>('SELECT operator_at FROM blobs WHERE sha256 = ? AND owner = ?', sha256, owner);
-  if (!mine?.operator_at || db.get('SELECT 1 FROM items WHERE text_sha256 = ?', sha256)) return;
-  const targets = servers ? (JSON.parse(servers) as string[]) : [];
-  if (targets.length) enqueue(db, now, { op: 'delete_blob', signer: owner, subject: sha256, payload: { sha256 }, targets, lane: 'bulk' });
+  if (db.get('SELECT 1 FROM items WHERE text_sha256 = ?', sha256)) return;
+  withdrawText(db, owner, sha256);
+  const mine = blobRow(db, owner, sha256);
+  const targets = mine?.operator_at ? textHolders(servers, mine) : [];
+  if (targets.length) queueBlobDelete(db, now, owner, sha256, targets, blobDeletion(sha256, mine));
 }
 
 function insertRemote(db: SqlDb, now: number, owner: string, hash: string, c: ReturnType<typeof itemColumns>, event: NostrEvent) {
@@ -109,17 +119,58 @@ function insertRemote(db: SqlDb, now: number, owner: string, hash: string, c: Re
   writeColumns(db, id, c, event);
 }
 
-function takeRemote(db: SqlDb, now: number, owner: string, row: Row, c: ReturnType<typeof itemColumns>, event: NostrEvent, open: boolean): Applied {
-  const textReplaced = !!row.text_sha256 && row.text_sha256 !== c.text_sha256;
+type Columns = ReturnType<typeof itemColumns>;
+
+/**
+ * Whether this phone holds the text a newer copy without text leaves out (C§4.1, v1.12): on the phone, or staged here
+ * to upload. Such a copy comes from a phone whose own text the operator refused, or one that never had it.
+ */
+function holdsText(db: SqlDb, owner: string, row: Row, c: Columns): boolean {
+  if (c.text_sha256 || !row.text_sha256) return false;
+  return row.text_state === 'cached' || !!blobRow(db, owner, row.text_sha256);
+}
+
+/** The text this phone holds, kept under the newer copy's other fields: its words with it, the position read anew. */
+function keepText(row: Row, c: Columns): Columns {
+  return {
+    ...c, text_sha256: row.text_sha256, text_key: row.text_key, text_nonce: row.text_nonce, text_servers: row.text_servers,
+    text_hash: row.text_hash, words: row.words, position_word: wordReached({ progress: c.progress, words: row.words }),
+  };
+}
+
+/**
+ * A kept text goes out again (C§4.1): while only this phone has it, once its upload and mirror succeed (the mirror's
+ * republish, send.ts), and now when a server already holds it, the row dirty until a relay takes it, so the save names
+ * the text again: the operator's, another phone's upload, or a mirror's copy from a move (C§4.8). So two phones on a
+ * full library don't take turns sending the save without its text. The change is dated at the copy taken (at), since
+ * adding the text changes nothing the person did: a newer copy, or a deletion made after that copy, read in the same
+ * sync or late from a relay that lags, still wins over it.
+ */
+function nameKeptText(db: SqlDb, now: number, owner: string, hash: string, row: Row, at: number): void {
+  const blob = blobRow(db, owner, row.text_sha256!);
+  if (blob && blob.operator_at === null && blob.mirror_at === null) return;
+  db.run('UPDATE items SET dirty = 1, modified_at = ? WHERE id = ?', at, row.id);
+  enqueue(db, now, { op: 'publish_item', signer: owner, subject: hash, targets: writeRelays(db, owner) });
+}
+
+/** The row's text after taking a newer copy: fetched if it names another, and the one it replaced retired. */
+function textChanged(db: SqlDb, now: number, owner: string, row: Row, c: Columns): boolean {
+  if (row.text_sha256 === c.text_sha256) return false;
+  db.run('UPDATE items SET text_state = ?, fail_reason = NULL WHERE id = ?', c.text_sha256 ? 'remote' : 'queued', row.id);
+  if (!row.text_sha256) return false;
+  db.run('DELETE FROM items_fts WHERE rowid = ?', row.id);
+  // taking a copy that names another text cancels this phone's waiting upload of its own (C§4.1)
+  retireBlob(db, now, owner, row.text_sha256, row.text_servers);
+  return true;
+}
+
+function takeRemote(db: SqlDb, now: number, owner: string, hash: string, row: Row, remote: Columns, event: NostrEvent, open: boolean): Applied {
+  const kept = holdsText(db, owner, row, remote);
+  const c = kept ? keepText(row, remote) : remote;
   const heldWord = open && c.position_word !== row.position_word ? c.position_word : undefined;
   writeColumns(db, row.id, open ? { ...c, position_word: row.position_word } : c, event);
-  if (row.text_sha256 !== c.text_sha256) {
-    db.run('UPDATE items SET text_state = ?, fail_reason = NULL WHERE id = ?', c.text_sha256 ? 'remote' : 'queued', row.id);
-    if (textReplaced) {
-      db.run('DELETE FROM items_fts WHERE rowid = ?', row.id);
-      retireBlob(db, now, owner, row.text_sha256!, row.text_servers);
-    }
-  }
+  const textReplaced = textChanged(db, now, owner, row, c);
+  if (kept) nameKeptText(db, now, owner, hash, row, event.created_at);
   return { outcome: 'take', textReplaced, heldWord };
 }
 
@@ -137,7 +188,7 @@ export function applyItem(db: SqlDb, now: number, owner: string, hash: string, e
     if (outcome === 'insert' && deletionWaiting(db, owner, hash)) return { outcome: 'ignored' };
     const c = itemColumns(parsed, event);
     if (outcome === 'insert') insertRemote(db, now, owner, hash, c, event);
-    if (outcome === 'take') return takeRemote(db, now, owner, row!, c, event, hash === openHash);
+    if (outcome === 'take') return takeRemote(db, now, owner, hash, row!, c, event, hash === openHash);
     if (outcome === 'republish') {
       // The local change goes out above the remote: the publish is built at send time with created_at > this.
       db.run('UPDATE items SET event_created_at = MAX(COALESCE(event_created_at, 0), ?) WHERE id = ?', event.created_at, row!.id);
@@ -172,6 +223,9 @@ export function applyDeletion(db: SqlDb, owner: string, event: NostrEvent): stri
       const row = db.get<Row>('SELECT * FROM items WHERE owner = ? AND hash = ?', owner, hash);
       if (!row || !deletionRemoves(version(row)!, event.created_at)) continue;
       removeItem(db, row.id, owner, hash);
+      // deleted on another phone while its text waits here: the upload goes, and so does this phone's copy (C§4.1),
+      // queued at the deletion's time, since applying one reads no clock
+      if (row.text_sha256) retireBlob(db, event.created_at, owner, row.text_sha256, row.text_servers);
       removed.push(hash);
     }
     return removed;

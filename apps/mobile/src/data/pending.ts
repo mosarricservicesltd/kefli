@@ -4,7 +4,7 @@
 // then its text and save go out. A page that definitely can't be read is published without text.
 import type { SqlDb } from './db';
 import { enqueue } from './outbox';
-import { registerFirst, queueSends, type SaveTargets, type StagedBlob } from './saves';
+import { registerFirst, queueSends, queueText, type SaveTargets, type StagedBlob } from './saves';
 import { writeRelays } from './lists';
 
 export type Pending = { id: number; hash: string; url: string; shared_url: string | null; published: number; event_id: string | null; x_state: string | null };
@@ -56,7 +56,14 @@ function rekey(db: SqlDb, now: number, owner: string, from: Pending, to: string)
   return { hash: to, merged: true };
 }
 
-/** A parse that succeeded: the row takes the article and its text goes out (upload, mirror, publish). */
+/**
+ * A parse that succeeded: the row takes the article and its text goes out. A save not yet published goes with it
+ * (upload, mirror, publish), the publish going without the text if the operator refuses it (send.ts). For a save
+ * already published, as one another phone sent without text (C§4.1), the text is its only change: it is uploaded and
+ * mirrored, and the save is published again naming it only once the operator and a mirror hold it, through the
+ * mirror's republish (send.ts), since a refusal leaves it nothing new to send (C§4.2, v1.12). The row stays clean, so
+ * a newer copy from another phone is taken over it, the text kept by the merge (data/sync.ts).
+ */
 export function applyParsed(db: SqlDb, now: number, owner: string, p: Pending, parsed: Parsed, blob: StagedBlob, t: SaveTargets): Applied {
   return db.tx(() => {
     const unpublished = !p.published && !p.event_id;
@@ -64,18 +71,29 @@ export function applyParsed(db: SqlDb, now: number, owner: string, p: Pending, p
     if (where.merged) return where;
     db.run(
       `UPDATE items SET url = ?, canonical = ?, title = ?, site = ?, byline = ?, lang = ?, hero = ?, words = ?, text_sha256 = ?,
-        text_key = ?, text_nonce = ?, text_hash = ?, text_state = 'cached', fail_reason = NULL, modified_at = ?, dirty = 1 WHERE id = ?`,
+        text_key = ?, text_nonce = ?, text_hash = ?, text_state = 'cached', fail_reason = NULL,
+        modified_at = CASE WHEN ? THEN ? ELSE modified_at END, dirty = CASE WHEN ? THEN 1 ELSE dirty END WHERE id = ?`,
       unpublished ? parsed.url : p.url, parsed.canonical, parsed.title, parsed.site, parsed.byline, parsed.lang, parsed.hero, parsed.words,
-      parsed.text.sha256, parsed.text.key, parsed.text.nonce, parsed.textHash, now, p.id,
+      parsed.text.sha256, parsed.text.key, parsed.text.nonce, parsed.textHash, unpublished ? 1 : 0, now, unpublished ? 1 : 0, p.id,
     );
-    queueSends(db, now, owner, where.hash, blob, t, false, registerFirst(db, now, owner, t));
+    const register = registerFirst(db, now, owner, t);
+    if (unpublished) queueSends(db, now, owner, where.hash, blob, t, false, register);
+    else queueText(db, now, owner, where.hash, blob, t, false, register);
     return where;
   });
 }
 
-/** A page that can't be read (an HTTP error, not HTML, too large, not readable): the save goes out without text. */
+/**
+ * A page that can't be read (an HTTP error, not HTML, too large, not readable): the save goes out without text. One
+ * already published, as another phone's without text, has nothing new to send, its text still null (C§4.2, v1.12):
+ * only this phone notes that the page couldn't be read, so a phone that holds the text isn't asked to send it again.
+ */
 export function applyFailed(db: SqlDb, now: number, owner: string, p: Pending, reason: string, t: SaveTargets): void {
   db.tx(() => {
+    if (p.published || p.event_id) {
+      db.run("UPDATE items SET text_state = 'failed', fail_reason = ? WHERE id = ?", reason, p.id);
+      return;
+    }
     db.run("UPDATE items SET text_state = 'failed', fail_reason = ?, modified_at = ?, dirty = 1 WHERE id = ?", reason, now, p.id);
     queueSends(db, now, owner, p.hash, null, t, false, registerFirst(db, now, owner, t));
   });

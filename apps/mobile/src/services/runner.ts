@@ -23,14 +23,14 @@ import { pickUpSpools } from '../share/pickup';
 import { xRetryDelay } from './xpost';
 import { KefliParser } from '../../modules/kefli-parser/src';
 import type { ParserResult } from './page';
-import { stageBlob } from './staging';
+import { stageBlob, sweepStaged } from './staging';
 import { File } from 'expo-file-system';
 import { imageFiles, textFiles } from './textFiles';
 import { readStaged } from './staging';
 import { store } from './store';
 import { activeOwner } from '../data/library';
 import { beginRestore, settleRestore } from '../data/restore';
-import { interimRelays, queueImported } from '../data/saves';
+import { interimRelays, queueImported, reviveRefused } from '../data/saves';
 import { takeImport } from './nostrSignIn';
 import { disconnect } from '../data/devices';
 import type { ConnectPorts } from './connect';
@@ -42,6 +42,8 @@ import { KefliVoice } from '../../modules/kefli-voice/src';
 
 let running: Promise<number> | null = null;
 let defaults: Defaults | null = null;
+/** Whether this process has put back the saves a refusal held back before v1.12 (data/saves reviveRefused). */
+let revived = false;
 
 // One pool per process (mobile spec 4.4). ws:// only while the defaults point at the local stack.
 export const pool = new RelayPool({
@@ -65,6 +67,14 @@ export function runOutbox(): Promise<number> {
     try {
       defaults = await loadDefaults();
       const d = defaults;
+      if (!revived) {
+        revived = true;
+        try {
+          reviveRefused(store(), Math.floor(Date.now() / 1000));
+        } catch {
+          // left for the next start; the outbox sends what it has meanwhile
+        }
+      }
       return await drain({
         db: store(),
         now: () => Math.floor(Date.now() / 1000),
@@ -76,9 +86,13 @@ export function runOutbox(): Promise<number> {
         publish: (url, event) => pool.publish(url, event),
         readBlob: readStaged,
         query: (url, filters) => pool.query(url, filters),
+        // INTEGRATION (fair use, C§5 v1.12): data/account.ts's last known figures and recordFigures go here, as
+        // figures: (owner) => <its reader>(store(), owner) and onFigures: (owner, f) => recordFigures(store(), owner, f, now)
       });
     } finally {
       running = null;
+      // texts no save names any more, a deleted save's or one another phone's replaced, leave the phone (C§4.1)
+      sweep();
       waker.arm();
     }
   })();
@@ -129,6 +143,8 @@ export function runSync(): Promise<SyncResult> {
       if (owner) await parsePending(owner).catch(() => undefined);
       return r;
     } finally {
+      // the staged texts of the saves this sync deleted, or whose text it replaced, in one sweep
+      sweep();
       syncing = null;
       syncListeners.forEach((l) => l());
     }
@@ -279,10 +295,23 @@ export function imagePorts(): ImagePorts {
   };
 }
 
-/** Everything a save holds on the phone: its text, blocks and images (4.5: a deletion removes them all). */
+/**
+ * Everything a save holds on the phone: its text, blocks and images (4.5: a deletion removes them all). The staged
+ * ciphertext of a text no save names any more, as a deleted save's waiting upload (C§4.1, v1.12), goes in one sweep
+ * after the outbox's run or the sync's, rather than once for each of the many saves a sync can delete.
+ */
 export function removeAllFiles(hash: string): void {
   textFiles.removeAll(hash);
   removeImages(imagePorts(), hash);
+}
+
+/** The staged texts no save names any more leave the phone (C§4.1); a sweep that fails is left for the next. */
+function sweep(): void {
+  try {
+    sweepStaged(store());
+  } catch {
+    // the next run sweeps them
+  }
 }
 
 /** Phase 6 on an unmetered network only (4.5); metered networks fetch an article's images when it opens. */

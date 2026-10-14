@@ -141,6 +141,19 @@ export function nextWakeAt(db: SqlDb): number | null {
   return r?.at ?? null;
 }
 
+/**
+ * The rows of op waiting on row id go without it, and so never die with it: a save's publish once the operator refuses
+ * the text it waited for (4.3, C§4.2, v1.12).
+ */
+export function releaseDependents(db: SqlDb, id: number, op: string): void {
+  db.run("UPDATE outbox SET depends_on = NULL WHERE depends_on = ? AND op = ? AND state != 'dead'", id, op);
+}
+
+/** A row's waiting targets fall due now, as a text that fits the room a deletion made does (C§5). */
+export function wake(db: SqlDb, id: number, now: number): void {
+  db.run("UPDATE outbox_targets SET next_at = ? WHERE outbox_id = ? AND state = 'pending'", now, id);
+}
+
 export function begin(db: SqlDb, id: number): void {
   db.run("UPDATE outbox SET state = 'sending' WHERE id = ? AND state = 'queued'", id);
 }
