@@ -44,6 +44,12 @@ const publicOnly = (url: string): string => {
 
 export type XPorts = { fetch: typeof fetch };
 
+/**
+ * The time in milliseconds, Date.now unless a test says otherwise. A type of its own: the code gate's parser loses a
+ * function whose parameter list holds an arrow type, so resolveTco and checkXPost went unscored.
+ */
+type Clock = () => number;
+
 export type XCheck =
   | { kind: 'article'; url: string }
   | { kind: 'none'; why: 'no-link' | 'article' }
@@ -62,7 +68,7 @@ function timed(p: XPorts, url: string, init: RequestInit = {}): Promise<Opened> 
  * inside what is left until `until`. A hop to a private, loopback or link-local address isn't asked for: a post's
  * author chooses where its links lead, and a GET to the phone's own network is not theirs to send.
  */
-export async function resolveTco(p: XPorts, link: string, until = Infinity, now: () => number = Date.now): Promise<string> {
+export async function resolveTco(p: XPorts, link: string, until = Infinity, now: Clock = Date.now): Promise<string> {
   let url = link;
   for (let hop = 0; MAX_HOPS > hop; hop++) {
     publicOnly(url);
@@ -110,7 +116,7 @@ async function embedOf(p: XPorts, post: string): Promise<Embed> {
   }
 }
 
-export async function checkXPost(p: XPorts, post: string, now: () => number = Date.now): Promise<XCheck> {
+export async function checkXPost(p: XPorts, post: string, now: Clock = Date.now): Promise<XCheck> {
   const e = await embedOf(p, post);
   if (e.kind !== 'embed') return e;
   const until = now() + X_LINKS_MS;
