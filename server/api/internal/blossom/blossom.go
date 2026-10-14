@@ -225,8 +225,9 @@ func (s *Server) allowed(r *http.Request, sha string, size int64) (*uploader, re
 
 // room refuses an upload that would leave less than MinFree on the disk with 507, which clients retry later, as backend
 // spec 7's disk-full drill expects; and so one that would leave less than a tenth of the disk's files free, since every
-// blob is a file and the quota counts only bytes, so tiny blobs could use up the inodes every writer on the disk needs.
-// The bytes of uploads in flight count as used.
+// blob is a file: each library's blobs count as a disk block at least (store.Cost), which bounds the files one library
+// holds, and this bounds what every library together can take of the inodes every writer on the disk needs. The bytes
+// of uploads in flight count as used.
 func (s *Server) room(size int64) refusal {
 	s.flightMu.Lock()
 	defer s.flightMu.Unlock()
@@ -290,12 +291,13 @@ func (s *Server) land(account string, size int64) {
 	}
 }
 
-// limits holds an upload to its library's fair use (contract 5, flow decision 117). Against the quota it costs its
-// size unless the library holds the blob already, each blob counting once whichever of the library's keys uploaded
-// it; against the day it costs its size unless the server stores the blob already, for this library or any other, as
-// after a move. Past the quota it gets 413 quota, which also answers an upload past both, and past the day 413 daily,
-// each with the library's figures. A library above its quota, as one lowered from 200 MB may be, keeps every blob it
-// holds and takes no new one until deleting brings it back within its quota.
+// limits holds an upload to its library's fair use (contract 5, flow decision 117). It costs its size, and never less
+// than a disk block (store.Cost), since its file takes one however small it is. Against the quota it costs that
+// unless the library holds the blob already, each blob counting once whichever of the library's keys uploaded it;
+// against the day, unless the server stores the blob already, for this library or any other, as after a move. Past the
+// quota it gets 413 quota, which also answers an upload past both, and past the day 413 daily, each with the library's
+// figures. A library above its quota, as one lowered from 200 MB may be, keeps every blob it holds and takes no new one
+// until deleting brings it back within its quota.
 func (s *Server) limits(ctx context.Context, up *uploader, sha string, size int64) refusal {
 	f, ok, err := s.st.Figures(ctx, up.account)
 	if err != nil {
@@ -308,10 +310,11 @@ func (s *Server) limits(ctx context.Context, up *uploader, sha string, size int6
 	if err != nil {
 		return serverFault
 	}
+	cost := store.Cost(size)
 	switch {
-	case !held && f.Used+size > f.Quota:
+	case !held && f.Used+cost > f.Quota:
 		return refusal{status: http.StatusRequestEntityTooLarge, reason: "quota", figures: &f}
-	case !stored && f.Today+size > f.Daily:
+	case !stored && f.Today+cost > f.Daily:
 		return refusal{status: http.StatusRequestEntityTooLarge, reason: "daily", figures: &f}
 	}
 	return refusal{}

@@ -23,6 +23,19 @@ const DailyLimit int64 = 20 << 20
 // Day is the window DailyLimit counts over, and how long the uploads log keeps a row.
 const Day = 24 * time.Hour
 
+// BlockSize is the least a blob counts for against its library's quota and day (contract 5): a disk block, which every
+// blob's file takes however few bytes it holds. Counting bytes alone, one library's one-byte blobs could fill the
+// server's files for everyone while using next to none of its 50 MB. Counted this way a library at the default quota
+// holds at most 12,800 blobs and adds at most 5,120 a day, and a text of 4,096 bytes or more counts exactly as before.
+const BlockSize int64 = 4096
+
+// Cost is what a blob of size bytes counts for against its library's quota and day: its size, and never less than a
+// disk block. The owner rows and the uploads log keep it, so what a library uses, its day and the figures that report
+// them all count each blob this way.
+func Cost(size int64) int64 {
+	return max(size, BlockSize)
+}
+
 // InboxLife is how long a device's inbox blob is kept (contract 5: 14 days).
 const InboxLife = 14 * 24 * time.Hour
 
@@ -57,8 +70,9 @@ CREATE TABLE IF NOT EXISTS devices (
   created_at    INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS devices_user ON devices(user_pubkey);
--- One row per blob and uploader. account is whose quota it counts against: the uploader, or a device's user.
--- expires_at is set for a device's inbox blob; a user's own blob lives until its owner deletes it.
+-- One row per blob and uploader. account is whose quota it counts against: the uploader, or a device's user. size is
+-- what the blob counts for there, its bytes and never less than a disk block (Cost). expires_at is set for a device's
+-- inbox blob; a user's own blob lives until its owner deletes it.
 CREATE TABLE IF NOT EXISTS owners (
   sha256     TEXT NOT NULL,
   owner      TEXT NOT NULL,
@@ -88,8 +102,8 @@ CREATE TABLE IF NOT EXISTS gone (
   at     INTEGER NOT NULL
 );
 -- One row per upload that added a blob to the disk, against the library it counts for: what DailyLimit counts (contract
--- 5). A blob the server already stores, for anyone, adds no row, and rows go only once a day old, so deleting a blob
--- gives none of the day back. No hash is kept.
+-- 5), its size the blob's Cost. A blob the server already stores, for anyone, adds no row, and rows go only once a day
+-- old, so deleting a blob gives none of the day back. No hash is kept.
 CREATE TABLE IF NOT EXISTS uploads (
   account TEXT NOT NULL,
   size    INTEGER NOT NULL,
@@ -107,6 +121,10 @@ var steps = []string{
 	// 1, contract 1.12 (flow decision 117): libraries still at the old default of 200 MB (209,715,200 bytes) fall to the
 	// new 50 MB (52,428,800). A quota set to any other figure is kept, and so is one set to 200 MB after this has run.
 	`UPDATE accounts SET quota_bytes = 52428800 WHERE quota_bytes = 209715200`,
+	// 2: every blob counts for at least a disk block, 4,096 bytes (BlockSize), against its library's quota and day, so
+	// the blobs and the day's uploads recorded before count that way too, from the first figures this keflid reports.
+	`UPDATE owners SET size = 4096 WHERE size < 4096;
+	UPDATE uploads SET size = 4096 WHERE size < 4096`,
 }
 
 type Store struct {

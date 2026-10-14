@@ -36,14 +36,16 @@ func (s *Store) Figures(ctx context.Context, account string) (Figures, bool, err
 // 4.4, 5), from the moment it expires, though the hourly sweep may not have removed it yet.
 const live = `(expires_at IS NULL OR expires_at > ?)`
 
-// Used is the bytes counted against the user's quota: each blob once, whether the user or one of their devices holds it.
+// Used is the bytes counted against the user's quota: each blob once, whether the user or one of their devices holds it,
+// at its Cost.
 func (s *Store) Used(ctx context.Context, account string) (int64, error) {
 	var n int64
 	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(size), 0) FROM (SELECT sha256, MAX(size) AS size FROM owners WHERE account = ? AND `+live+` GROUP BY sha256)`, account, s.unix()).Scan(&n)
 	return n, err
 }
 
-// Today is what the library's uploads added to the disk in the last 24 hours, from the uploads log (contract 5).
+// Today is what the library's uploads added to the disk in the last 24 hours, from the uploads log (contract 5), each
+// at its Cost.
 func (s *Store) Today(ctx context.Context, account string) (int64, error) {
 	var n int64
 	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(size), 0) FROM uploads WHERE account = ? AND at > ?`, account, s.Now().Add(-Day).Unix()).Scan(&n)
@@ -93,8 +95,9 @@ func hasAccount(ctx context.Context, q querier, pubkey string) error {
 	return err
 }
 
-// AddOwner records an owner of a blob without logging it against a day. inbox marks a device's blob, which expires
-// after InboxLife (contract 5); uploading the same blob again keeps the row and, for an inbox blob, its first expiry.
+// AddOwner records an owner of a blob without logging it against a day, the blob counting for its Cost. inbox marks a
+// device's blob, which expires after InboxLife (contract 5); uploading the same blob again keeps the row and, for an
+// inbox blob, its first expiry.
 // Nothing is recorded once the account is deleted or disabled, or, for an inbox blob, once the browser Blossom found
 // to be the account's has since been disconnected or connected to another library: an upload still arriving then
 // leaves no owner that nothing would ever delete. A browser the account holds is recorded even while the gone list
@@ -113,11 +116,11 @@ func (s *Store) addOwner(ctx context.Context, db querier, sha, owner, account st
 		WHERE EXISTS (SELECT 1 FROM accounts WHERE pubkey = ? AND disabled = 0)
 		AND (? = 0 OR EXISTS (SELECT 1 FROM devices WHERE device_pubkey = ? AND user_pubkey = ?)
 			OR (NOT EXISTS (SELECT 1 FROM devices WHERE device_pubkey = ?) AND NOT EXISTS (SELECT 1 FROM gone WHERE pubkey = ?)))
-		ON CONFLICT(sha256, owner) DO NOTHING`, sha, owner, account, size, s.unix(), expires, account, inbox, owner, account, owner, owner)
+		ON CONFLICT(sha256, owner) DO NOTHING`, sha, owner, account, Cost(size), s.unix(), expires, account, inbox, owner, account, owner, owner)
 	return err
 }
 
-// Upload records an upload as AddOwner does and, when no owner held the blob before, logs its size against the
+// Upload records an upload as AddOwner does and, when no owner held the blob before, logs its Cost against the
 // library's day (contract 5): a blob the server already stores, for this library or any other, adds nothing, so a
 // repeat upload and a move's re-uploads cost no part of the day. One transaction, so the owner row and the log can't
 // part, which records nothing and gives ErrNoAccount once the library's account has gone or been disabled, or the
@@ -131,7 +134,7 @@ func (s *Store) Upload(ctx context.Context, sha, owner, account string, size int
 	}
 	defer tx.Rollback()
 	if _, err := tx.ExecContext(ctx, `INSERT INTO uploads(account, size, at) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM owners WHERE sha256 = ?)`,
-		account, size, s.unix(), sha); err != nil {
+		account, Cost(size), s.unix(), sha); err != nil {
 		return err
 	}
 	if err := s.addOwner(ctx, tx, sha, owner, account, size, inbox); err != nil {

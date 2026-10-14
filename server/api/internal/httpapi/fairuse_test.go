@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -65,6 +66,16 @@ func (e *env) figures(k key) store.Figures {
 	return f
 }
 
+// costs is what blobs count for against their library's quota and day: each its bytes, and a disk block at least
+// (contract 5).
+func costs(blobs ...[]byte) int64 {
+	var n int64
+	for _, b := range blobs {
+		n += store.Cost(int64(len(b)))
+	}
+	return n
+}
+
 // seed records an upload of size bytes for k's library without sending one, as if made earlier: it counts against
 // the quota and, unless the blob is already stored, against the day.
 func (e *env) seed(k key, name string, size int64) {
@@ -92,15 +103,16 @@ func TestQuotaRefusalCarriesTheFigures(t *testing.T) {
 	e := newEnv(t)
 	user := newKey()
 	e.registered(user)
-	if err := e.st.AddOwner(t.Context(), hash([]byte("big")), user.pk, user.pk, store.DefaultQuota-10, false); err != nil {
+	if err := e.st.AddOwner(t.Context(), hash([]byte("big")), user.pk, user.pk, store.DefaultQuota-5000, false); err != nil {
 		t.Fatal(err)
 	}
-	s, reason, b := e.put(user, []byte("eleven byte"))
-	refusedFor(t, s, reason, b, "quota", store.Figures{Quota: store.DefaultQuota, Used: store.DefaultQuota - 10, Daily: store.DailyLimit})
-	if s, reason := e.ask(user, hash([]byte("eleven byte")), 11); s != 413 || reason != "quota" {
+	over := bytes.Repeat([]byte("o"), 5001)
+	s, reason, b := e.put(user, over)
+	refusedFor(t, s, reason, b, "quota", store.Figures{Quota: store.DefaultQuota, Used: store.DefaultQuota - 5000, Daily: store.DailyLimit})
+	if s, reason := e.ask(user, hash(over), 5001); s != 413 || reason != "quota" {
 		t.Fatalf("preflight %d %q", s, reason)
 	}
-	s, _, b = e.put(user, []byte("ten bytes!"))
+	s, _, b = e.put(user, bytes.Repeat([]byte("f"), 5000))
 	expect(t, s, 200, b)
 	// any other refusal carries its reason alone
 	s, reason, b = e.put(newKey(), []byte("from nobody"))
@@ -116,8 +128,9 @@ func TestUploadsPastTheDay(t *testing.T) {
 	e := newEnv(t)
 	user, other := newKey(), newKey()
 	e.registered(user, other)
-	e.seed(user, "this morning's uploads", store.DailyLimit-10)
-	s, _, b := e.put(user, []byte("ten bytes!"))
+	e.seed(user, "this morning's uploads", store.DailyLimit-5000)
+	fits := bytes.Repeat([]byte("f"), 5000)
+	s, _, b := e.put(user, fits)
 	expect(t, s, 200, b)
 	s, reason, b := e.put(user, []byte("one more"))
 	refusedFor(t, s, reason, b, "daily", store.Figures{Quota: store.DefaultQuota, Used: store.DailyLimit, Daily: store.DailyLimit, Today: store.DailyLimit})
@@ -128,14 +141,14 @@ func TestUploadsPastTheDay(t *testing.T) {
 	shared := []byte("stored by another library")
 	s, _, b = e.put(other, shared)
 	expect(t, s, 200, b)
-	for _, blob := range [][]byte{shared, []byte("ten bytes!")} {
+	for _, blob := range [][]byte{shared, fits} {
 		s, _, b = e.put(user, blob)
 		expect(t, s, 200, b)
 	}
-	if f := e.figures(user); f.Today != store.DailyLimit || f.Used != store.DailyLimit+int64(len(shared)) {
+	if f := e.figures(user); f.Today != store.DailyLimit || f.Used != store.DailyLimit+costs(shared) {
 		t.Fatalf("figures %+v: a stored blob counts against the quota, never the day", f)
 	}
-	if s := e.remove(user, hash([]byte("ten bytes!"))); s != 200 {
+	if s := e.remove(user, hash(fits)); s != 200 {
 		t.Fatalf("delete %d", s)
 	}
 	s, reason, b = e.put(user, []byte("one more"))
@@ -145,6 +158,104 @@ func TestUploadsPastTheDay(t *testing.T) {
 	e.clock = e.clock.Add(store.Day)
 	s, _, b = e.put(user, []byte("one more"))
 	expect(t, s, 200, b)
+}
+
+// One library could fill the server's files for everyone with one-byte blobs: the quota and the day counted bytes, so
+// its 50 MB held fifty million blobs, each a file, and its day's 20 MB took twenty million more, where a disk has a few
+// million files in all. Each blob now counts as a disk block at least, 4,096 bytes, which its file takes anyway, so a
+// library holds at most 12,800 blobs and adds at most 5,120 a day: a flood of tiny blobs stops at the quota, or at the
+// day, as soon as another block would pass it, and the 413's figures and GET /account's count each blob that way.
+func TestAFloodOfTinyBlobsStopsAtTheQuotaAndTheDay(t *testing.T) {
+	if store.DefaultQuota/store.BlockSize != 12_800 || store.DailyLimit/store.BlockSize != 5_120 {
+		t.Fatalf("a library holds %d blobs and adds %d a day", store.DefaultQuota/store.BlockSize, store.DailyLimit/store.BlockSize)
+	}
+	room := 11*store.BlockSize - 1 // ten blocks, and a byte short of an eleventh
+	for _, c := range []struct {
+		name, reason string
+		fill         func(e *env, k key)
+		figures      func(flood int64) store.Figures
+	}{
+		{"the quota", "quota", func(e *env, k key) {
+			if found, err := e.st.SetQuota(e.t.Context(), k.pk, room); err != nil || !found {
+				e.t.Fatalf("set quota %v %v", found, err)
+			}
+		}, func(flood int64) store.Figures {
+			return store.Figures{Quota: room, Used: flood, Daily: store.DailyLimit, Today: flood}
+		}},
+		{"the day", "daily", func(e *env, k key) { e.seed(k, "the day so far", store.DailyLimit-room) }, func(flood int64) store.Figures {
+			before := store.DailyLimit - room
+			return store.Figures{Quota: store.DefaultQuota, Used: before + flood, Daily: store.DailyLimit, Today: before + flood}
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newEnv(t)
+			user := newKey()
+			e.registered(user)
+			c.fill(e, user)
+			taken := 0
+			for i := range 50 {
+				s, reason, b := e.put(user, []byte{byte(i)})
+				if s != 200 {
+					refusedFor(t, s, reason, b, c.reason, c.figures(int64(taken)*store.BlockSize))
+					break
+				}
+				taken++
+			}
+			if taken != 10 || len(e.files()) != 10 {
+				t.Fatalf("%d one-byte blobs taken into ten blocks' room, %d files", taken, len(e.files()))
+			}
+			s, b := e.account(user)
+			wantAccount(t, s, b, c.figures(10*store.BlockSize))
+		})
+	}
+}
+
+// Counting a blob as a disk block at least moves a library's figures only for a text under 4 KB. The twelve real pages
+// of the shared fixtures (contract 9, shared/fixtures/pages/SOURCES.md), uploaded as their texts' blobs are (the
+// Markdown and AES-GCM's 16-byte tag, contract 4.2), count for under 1% more than their bytes: only the shortest, under
+// a kilobyte, counts for more than it holds.
+func TestRealTextsCountAsTheyAre(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "shared", "fixtures", "expected.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixtures struct {
+		Pages []struct {
+			ID       string  `json:"id"`
+			Markdown *string `json:"markdown"`
+		} `json:"pages"`
+	}
+	if err := json.Unmarshal(raw, &fixtures); err != nil {
+		t.Fatal(err)
+	}
+	real := []string{"wikipedia-en", "wikipedia-de", "wikipedia-fr", "wikipedia-ja", "wikipedia-ar", "wikipedia-ru",
+		"wikipedia-el", "wikipedia-zh", "wikipedia-simple", "wikisource-story", "mdn-article", "govuk-standards"}
+	e := newEnv(t)
+	user := newKey()
+	e.registered(user)
+	var texts [][]byte
+	for _, p := range fixtures.Pages {
+		if slices.Contains(real, p.ID) && p.Markdown != nil {
+			texts = append(texts, append([]byte(*p.Markdown), make([]byte, 16)...))
+		}
+	}
+	if len(texts) != len(real) {
+		t.Fatalf("%d of the %d real pages have a text", len(texts), len(real))
+	}
+	var held int64
+	for _, text := range texts {
+		if s, _, b := e.put(user, text); s != 200 {
+			t.Fatalf("upload %d %v", s, b)
+		}
+		held += int64(len(text))
+	}
+	f := e.figures(user)
+	if f.Used != costs(texts...) || f.Today != f.Used {
+		t.Fatalf("figures %+v, want each text at its cost, %d", f, costs(texts...))
+	}
+	if over := float64(f.Used-held) / float64(held); over >= 0.01 {
+		t.Fatalf("%d bytes of real texts count for %d, %.2f%% more", held, f.Used, 100*over)
+	}
 }
 
 // Contract 5: an upload past both limits is answered quota.
@@ -160,13 +271,13 @@ func TestQuotaAnswersAnUploadPastBoth(t *testing.T) {
 	refusedFor(t, s, reason, b, "quota", store.Figures{Quota: store.DefaultQuota, Used: store.DefaultQuota - 5, Daily: store.DailyLimit, Today: store.DailyLimit - 5})
 }
 
-// F2 and contract 5: the day is checked again at commit, one upload at a time, so uploads racing for the last of it
-// can't together pass it.
+// F2 and contract 5: the day is checked again at commit, one upload at a time, so uploads racing for the last of it,
+// room for one tiny blob's block, can't together pass it.
 func TestUploadsRacingForTheDay(t *testing.T) {
 	e := newEnv(t)
 	user := newKey()
 	e.registered(user)
-	e.seed(user, "the day so far", store.DailyLimit-10)
+	e.seed(user, "the day so far", store.DailyLimit-store.BlockSize-10)
 	var wg sync.WaitGroup
 	accepted := make(chan struct{}, 20)
 	for i := range 20 {
@@ -181,7 +292,7 @@ func TestUploadsRacingForTheDay(t *testing.T) {
 	wg.Wait()
 	close(accepted)
 	if n := len(accepted); n != 1 || len(e.files()) != 1 {
-		t.Fatalf("%d of 20 eight-byte uploads accepted into ten bytes of the day, %d files", n, len(e.files()))
+		t.Fatalf("%d of 20 eight-byte uploads accepted into a block and ten bytes of the day, %d files", n, len(e.files()))
 	}
 	if f := e.figures(user); f.Today > store.DailyLimit {
 		t.Fatalf("today %d past the daily limit", f.Today)
@@ -205,6 +316,9 @@ func (e *env) waiting(k key, body []byte) (send func() answered) {
 	req.Header.Set("Authorization", e.blossomAuth(k, "upload", sha))
 	req.Header.Set("X-SHA-256", sha)
 	done := make(chan answered, 1)
+	// an upload refused before its body has the server waiting for that body: a test that fails here must still let the
+	// server close
+	e.t.Cleanup(func() { pw.CloseWithError(io.ErrUnexpectedEOF) })
 	go func() {
 		res, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -252,11 +366,11 @@ func TestTheLimitsAreCheckedAgainAtCommit(t *testing.T) {
 		fill         func(e *env, k key)
 	}{
 		{"the quota", "quota", 413, func(e *env, k key) {
-			if err := e.st.AddOwner(e.t.Context(), hash([]byte("older")), k.pk, k.pk, store.DefaultQuota-10, false); err != nil {
+			if err := e.st.AddOwner(e.t.Context(), hash([]byte("older")), k.pk, k.pk, store.DefaultQuota-store.BlockSize-10, false); err != nil {
 				e.t.Fatal(err)
 			}
 		}},
-		{"the day", "daily", 413, func(e *env, k key) { e.seed(k, "the day so far", store.DailyLimit-10) }},
+		{"the day", "daily", 413, func(e *env, k key) { e.seed(k, "the day so far", store.DailyLimit-store.BlockSize-10) }},
 		{"the account", "not_registered", 401, nil},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -357,13 +471,14 @@ func TestALibraryAboveItsQuotaKeepsItsBlobs(t *testing.T) {
 	e := newEnv(t)
 	user := newKey()
 	e.registered(user)
-	first, second := bytes.Repeat([]byte("a"), 30), bytes.Repeat([]byte("b"), 30)
+	first, second := bytes.Repeat([]byte("a"), 6000), bytes.Repeat([]byte("b"), 6000)
 	for _, blob := range [][]byte{first, second} {
 		if s, _, b := e.put(user, blob); s != 200 {
 			t.Fatalf("upload %d %v", s, b)
 		}
 	}
-	if found, err := e.st.SetQuota(t.Context(), user.pk, 40); err != nil || !found {
+	// above it with both, and room for a tiny blob's block once one goes
+	if found, err := e.st.SetQuota(t.Context(), user.pk, 10_100); err != nil || !found {
 		t.Fatalf("set quota %v %v", found, err)
 	}
 	for _, blob := range [][]byte{first, second} {
@@ -372,7 +487,7 @@ func TestALibraryAboveItsQuotaKeepsItsBlobs(t *testing.T) {
 		}
 	}
 	s, reason, b := e.put(user, []byte("c"))
-	refusedFor(t, s, reason, b, "quota", store.Figures{Quota: 40, Used: 60, Daily: store.DailyLimit, Today: 60})
+	refusedFor(t, s, reason, b, "quota", store.Figures{Quota: 10_100, Used: 12_000, Daily: store.DailyLimit, Today: 12_000})
 	s, _, b = e.put(user, first)
 	expect(t, s, 200, b)
 	if s := e.remove(user, hash(first)); s != 200 {
@@ -395,7 +510,7 @@ func TestAMovesUploadsCostNothingAgainstTheDay(t *testing.T) {
 	e.seed(to, "the new library's day", store.DailyLimit)
 	s, _, b := e.put(to, text)
 	expect(t, s, 200, b)
-	if f := e.figures(to); f.Today != store.DailyLimit || f.Used != store.DailyLimit+int64(len(text)) {
+	if f := e.figures(to); f.Today != store.DailyLimit || f.Used != store.DailyLimit+costs(text) {
 		t.Fatalf("figures %+v", f)
 	}
 	if s := e.remove(from, hash(text)); s != 200 {
@@ -431,7 +546,7 @@ func TestAUserDeletesItsBrowsersCapture(t *testing.T) {
 	if s, _ := e.fetch(hash(capture)); s != 404 {
 		t.Fatal("the capture is still served")
 	}
-	if f := e.figures(user); f.Used != 0 || f.Today != int64(len(capture)) {
+	if f := e.figures(user); f.Used != 0 || f.Today != costs(capture) {
 		t.Fatalf("figures %+v: the room comes back, the day doesn't", f)
 	}
 	// held by the user and its browser both: the user's delete takes both
@@ -472,11 +587,11 @@ func TestAnExpiredCaptureGivesBackItsRoom(t *testing.T) {
 	user, device := newKey(), newKey()
 	e.registered(user)
 	expect(t, e.addDevice(user, device), 200, nil)
-	capture, text := bytes.Repeat([]byte("c"), 40), bytes.Repeat([]byte("t"), 20)
+	capture, text := bytes.Repeat([]byte("c"), 6000), bytes.Repeat([]byte("t"), 5000)
 	if s, _, b := e.put(device, capture); s != 200 {
 		t.Fatalf("the capture %d %v", s, b)
 	}
-	if found, err := e.st.SetQuota(t.Context(), user.pk, 50); err != nil || !found {
+	if found, err := e.st.SetQuota(t.Context(), user.pk, 10_000); err != nil || !found {
 		t.Fatalf("set quota %v %v", found, err)
 	}
 	if s, reason, _ := e.put(user, text); s != 413 || reason != "quota" {
@@ -487,7 +602,7 @@ func TestAnExpiredCaptureGivesBackItsRoom(t *testing.T) {
 	expect(t, s, 200, b)
 	s, b = e.account(user)
 	// the capture's upload is 14 days old, so only the text counts against the day
-	wantAccount(t, s, b, store.Figures{Quota: 50, Used: int64(len(text)), Daily: store.DailyLimit, Today: int64(len(text))})
+	wantAccount(t, s, b, store.Figures{Quota: 10_000, Used: int64(len(text)), Daily: store.DailyLimit, Today: int64(len(text))})
 }
 
 // After a move (contract 4.8 step 4), a capture the browser sent while the old library held it stays that library's:

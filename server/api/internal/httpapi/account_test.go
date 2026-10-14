@@ -52,7 +52,7 @@ func TestGetAccount(t *testing.T) {
 			t.Fatalf("upload %d %v", s, b)
 		}
 	}
-	both := int64(len(own) + len(capture))
+	both := costs(own, capture)
 	s, b = e.account(user)
 	wantAccount(t, s, b, store.Figures{Quota: store.DefaultQuota, Used: both, Daily: store.DailyLimit, Today: both})
 	if s := e.remove(user, hash(capture)); s != 200 {
@@ -62,7 +62,7 @@ func TestGetAccount(t *testing.T) {
 		t.Fatalf("set quota %v %v", found, err)
 	}
 	s, b = e.account(user)
-	wantAccount(t, s, b, store.Figures{Quota: 100 << 20, Used: int64(len(own)), Daily: store.DailyLimit, Today: both})
+	wantAccount(t, s, b, store.Figures{Quota: 100 << 20, Used: costs(own), Daily: store.DailyLimit, Today: both})
 	// a device key, and a disabled library, aren't registered users
 	s, b = e.account(device)
 	wantError(t, s, b, 403, "not_registered")
@@ -120,7 +120,7 @@ func TestRegisterAnswersTheLibrarysOwnFigures(t *testing.T) {
 	}
 	e.clock = e.clock.Add(time.Second)
 	s, b = e.call(user, "POST", "/register", map[string]any{"v": 1})
-	if s != 200 || b["quota"] != float64(100<<20) || b["used"] != float64(len(blob)) {
+	if s != 200 || b["quota"] != float64(100<<20) || b["used"] != float64(costs(blob)) {
 		t.Fatalf("registering again: %d %v", s, b)
 	}
 }
