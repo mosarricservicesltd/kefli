@@ -215,9 +215,15 @@ func (s *Store) Close() error { return s.db.Close() }
 func (s *Store) unix() int64 { return s.Now().Unix() }
 
 // Register adds the pubkey with the default quota; registering again changes nothing (contract 6: idempotent). A key
-// registered again after deleting its account is taken off the gone list.
+// registered again after deleting its account is taken off the gone list. A new account's running totals (schema step
+// 3) start from the rows that count against its key already, every one of them, as the triggers and Figures' letting
+// go will take each off in turn: an upload recorded as its account was deleted left such rows before F2's fix, and
+// from nothing, deleting one took the library below nothing.
 func (s *Store) Register(ctx context.Context, pubkey string) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO accounts(pubkey, quota_bytes, created_at) VALUES(?, ?, ?) ON CONFLICT(pubkey) DO NOTHING`, pubkey, DefaultQuota, s.unix())
+	_, err := s.db.ExecContext(ctx, `INSERT INTO accounts(pubkey, quota_bytes, created_at, used_bytes, day_bytes) VALUES(?, ?, ?,
+		(SELECT COALESCE(SUM(size), 0) FROM (SELECT MAX(size) AS size FROM owners WHERE account = ? GROUP BY sha256)),
+		(SELECT COALESCE(SUM(size), 0) FROM uploads WHERE account = ?))
+		ON CONFLICT(pubkey) DO NOTHING`, pubkey, DefaultQuota, s.unix(), pubkey, pubkey)
 	if err == nil {
 		_, err = s.db.ExecContext(ctx, `DELETE FROM gone WHERE pubkey = ?`, pubkey)
 	}

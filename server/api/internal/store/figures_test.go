@@ -209,6 +209,49 @@ func TestOpenMakesTheRunningTotals(t *testing.T) {
 	}
 }
 
+// Rows can be left counted against a key that has no account: before F2's fix an upload recorded as its account was
+// deleted left one, and a database from those builds keeps it. The running totals of an account start at nothing, so
+// once that key registered its figures left those blobs out, and deleting one took the library below nothing, used
+// -4,096, which the phone reads as no figures at all. An account is now made with its totals summed from the rows
+// that count against its key already, and its figures are the sums from then on.
+func TestAnAccountMadeOverRowsLeftForItsKey(t *testing.T) {
+	st, clock := open(t)
+	ctx := context.Background()
+	left, capture := strings.Repeat("a", 64), strings.Repeat("b", 64)
+	for _, q := range []struct {
+		query string
+		args  []any
+	}{
+		{`INSERT INTO owners(sha256, owner, account, size, created_at, expires_at) VALUES (?, 'user', 'user', 4096, 1, NULL),
+			(?, 'device', 'user', 30000, 1, ?), (?, 'user', 'user', 30000, 1, NULL)`, []any{left, capture, clock.Add(InboxLife).Unix(), capture}},
+		{`INSERT INTO uploads(account, size, at) VALUES ('user', 30000, ?), ('user', 4096, ?)`, []any{clock.Unix() - 60, clock.Add(-Day).Unix() - 60}},
+	} {
+		if _, err := st.db.Exec(q.query, q.args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	registered(t, st, "user")
+	same := func(when string) {
+		t.Helper()
+		want, _ := exact(t, st, "user")
+		if got, ok, err := st.Figures(ctx, "user"); err != nil || !ok || got != want {
+			t.Fatalf("%s: figures %+v %v %v, the sums %+v", when, got, ok, err, want)
+		}
+	}
+	same("made over the rows")
+	if found, _, err := st.RemoveOwner(ctx, left, "user"); err != nil || !found {
+		t.Fatalf("delete %v %v", found, err)
+	}
+	same("a blob left deleted")
+	if found, _, err := st.RemoveOwner(ctx, capture, "device"); err != nil || !found {
+		t.Fatalf("delete %v %v", found, err)
+	}
+	same("the browser's row of a blob the user holds deleted")
+	// registering again changes nothing
+	registered(t, st, "user")
+	same("registered again")
+}
+
 // median is the middle of a run of timings.
 func median(d []time.Duration) time.Duration {
 	s := slices.Clone(d)
