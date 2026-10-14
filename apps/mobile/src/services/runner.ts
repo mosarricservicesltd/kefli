@@ -23,7 +23,7 @@ import { pickUpSpools } from '../share/pickup';
 import { xRetryDelay } from './xpost';
 import { KefliParser } from '../../modules/kefli-parser/src';
 import type { ParserResult } from './page';
-import { stageBlob } from './staging';
+import { stageBlob, sweepStaged } from './staging';
 import { File } from 'expo-file-system';
 import { imageFiles, textFiles } from './textFiles';
 import { readStaged } from './staging';
@@ -76,9 +76,17 @@ export function runOutbox(): Promise<number> {
         publish: (url, event) => pool.publish(url, event),
         readBlob: readStaged,
         query: (url, filters) => pool.query(url, filters),
+        // INTEGRATION (fair use, C§5 v1.12): data/account.ts's last known figures and recordFigures go here, as
+        // figures: (owner) => <its reader>(store(), owner) and onFigures: (owner, f) => recordFigures(store(), owner, f, now)
       });
     } finally {
       running = null;
+      // texts no save names any more, a deleted save's or one another phone's replaced, leave the phone (C§4.1)
+      try {
+        sweepStaged(store());
+      } catch {
+        // the next run sweeps them
+      }
       waker.arm();
     }
   })();
@@ -279,10 +287,18 @@ export function imagePorts(): ImagePorts {
   };
 }
 
-/** Everything a save holds on the phone: its text, blocks and images (4.5: a deletion removes them all). */
+/**
+ * Everything a save holds on the phone: its text, blocks and images (4.5: a deletion removes them all), and the staged
+ * ciphertext of a text no save names any more, as a deleted save's waiting upload (C§4.1, v1.12).
+ */
 export function removeAllFiles(hash: string): void {
   textFiles.removeAll(hash);
   removeImages(imagePorts(), hash);
+  try {
+    sweepStaged(store());
+  } catch {
+    // the outbox's next run sweeps them
+  }
 }
 
 /** Phase 6 on an unmetered network only (4.5); metered networks fetch an article's images when it opens. */

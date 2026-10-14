@@ -11,7 +11,7 @@ import type { LocalVersion, MergeOutcome, NostrEvent, ParsedItem } from '@kefli/
 import type { SqlDb } from './db';
 import { enqueue } from './outbox';
 import { writeRelays } from './lists';
-import { blobDeletion, blobRow, textHolders, withdrawText } from './saves';
+import { blobDeletion, blobRow, queueBlobDelete, textHolders, withdrawText } from './saves';
 
 export type Stream = 'items' | 'deletions';
 /** The cursor streams: saves and deletions per read relay, and the inbox on the operator relay (4.7). */
@@ -108,7 +108,7 @@ function retireBlob(db: SqlDb, now: number, owner: string, sha256: string, serve
   withdrawText(db, owner, sha256);
   const mine = blobRow(db, owner, sha256);
   const targets = mine?.operator_at ? textHolders(servers, mine) : [];
-  if (targets.length) enqueue(db, now, { op: 'delete_blob', signer: owner, subject: sha256, payload: blobDeletion(sha256, mine), targets, lane: 'bulk' });
+  if (targets.length) queueBlobDelete(db, now, owner, sha256, targets, blobDeletion(sha256, mine));
 }
 
 function insertRemote(db: SqlDb, now: number, owner: string, hash: string, c: ReturnType<typeof itemColumns>, event: NostrEvent) {

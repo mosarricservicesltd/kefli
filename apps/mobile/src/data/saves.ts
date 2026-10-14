@@ -107,6 +107,34 @@ export function blobDeletion(sha256: string, blob: BlobRow | undefined): { sha25
   return { sha256, ...(blob?.size ? { size: blob.size } : {}), ...(blob?.operator_at ? { up: blob.operator_at } : {}) };
 }
 
+/**
+ * A blob's deletion from these servers (4.3), after the row dependsOn names if any. It joins one still waiting for the
+ * same blob, so a deletion queued for one server never drops another's, as when a mirror's copy lands after the save
+ * went (C§4.1); a deletion already under way takes this one's servers when it ends (finish's supersede).
+ */
+export function queueBlobDelete(db: SqlDb, now: number, owner: string, sha256: string, targets: string[], payload: unknown, dependsOn: number | null = null): void {
+  const waiting = db.get<{ id: number }>("SELECT id FROM outbox WHERE op = 'delete_blob' AND signer = ? AND subject = ? AND state IN ('held', 'queued')", owner, sha256);
+  if (!waiting) {
+    enqueue(db, now, { op: 'delete_blob', signer: owner, subject: sha256, payload, targets, dependsOn, lane: 'bulk' });
+    return;
+  }
+  for (const t of targets) db.run("INSERT OR IGNORE INTO outbox_targets (outbox_id, target, state, attempts, next_at) VALUES (?, ?, 'pending', 0, ?)", waiting.id, t, now);
+}
+
+/**
+ * Blobs no save names any more, a deleted save's or one whose text another phone's replaced: their rows go, and the
+ * staged files they kept are returned for the caller to remove (4.1). An upload still under way for one finds no save
+ * naming it and deletes it from the server it reached (send.ts).
+ */
+export function orphanBlobs(db: SqlDb): string[] {
+  return db.tx(() => {
+    const rows = db.all<{ sha256: string; staged_path: string | null }>(
+      "SELECT sha256, staged_path FROM blobs b WHERE kind = 'text' AND NOT EXISTS (SELECT 1 FROM items i WHERE i.text_sha256 = b.sha256)");
+    for (const r of rows) db.run('DELETE FROM blobs WHERE sha256 = ?', r.sha256);
+    return rows.map((r) => r.staged_path).filter((p): p is string => !!p);
+  });
+}
+
 
 /**
  * Returns the held outbox rows, for release when the sheet closes (or undo). A save whose page couldn't be fetched

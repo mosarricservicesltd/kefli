@@ -2,7 +2,7 @@ import { LocalSigner, encryptText, normaliseMarkdown, readItemEvent, textHash } 
 import type { NostrEvent } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
-import { ensureIdentityRow, queueSave } from '../src/data/saves';
+import { ensureIdentityRow, orphanBlobs, queueSave } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
 import { enqueue, nextDue, nextWakeAt, release } from '../src/data/outbox';
 import { drain, outboxWaker, refusalOf, relayResult, sendOne, type RelayAnswer, type SendPorts } from '../src/services/send';
@@ -506,6 +506,193 @@ describe('fair use: a refused text holds back only itself (C§4.2, C§5, v1.12)'
     [{ status: 502, reason: 'descriptor names another blob', permanent: false }, null],
   ])('%j is refused as %s', (r, why) => {
     expect(refusalOf(r)).toBe(why);
+  });
+});
+
+describe('deleting a save whose text waits (C§4.1, v1.12)', () => {
+  const deleteNow = (w: W, hash = HASH) => commitDelete(w.db, w.signer.pubkey(), hash, deleteItem(w.db, w.now(), w.signer.pubkey(), hash).held);
+  const deletes = (w: W) => w.db.all<{ target: string; payload: string }>(
+    "SELECT t.target, o.payload FROM outbox o JOIN outbox_targets t ON t.outbox_id = o.id WHERE o.op = 'delete_blob' ORDER BY t.target");
+
+  test('cancels its upload and mirror; nothing reached a server, so nothing is deleted there, and its staged text goes', async () => {
+    const w = world({ 'PUT http://blossom/upload': refuse('quota') });
+    const { held } = await save(w);
+    release(w.db, held);
+    await drain(w.ports);
+    // Undo keeps everything: nothing is cancelled before the delete goes through
+    const c = deleteItem(w.db, w.now(), w.signer.pubkey(), HASH);
+    c.revert();
+    expect(ops(w)).toEqual([{ op: 'upload_blob', state: 'queued' }, { op: 'mirror_blob', state: 'queued' }]);
+    deleteNow(w);
+    expect(ops(w).filter((o) => o.op !== 'delete_item')).toEqual([]);
+    expect(deletes(w)).toEqual([]);
+    expect(orphanBlobs(w.db)).toEqual(['/staged']);
+    w.tick(2 * 86_400);
+    await drain(w.ports);
+    expect(puts(w)).toEqual(['PUT http://blossom/upload']);
+  });
+
+  test('a blob another save of the owner names keeps its upload', async () => {
+    const w = world({ 'PUT http://blossom/upload': refuse('quota') });
+    const { held, sha } = await save(w);
+    release(w.db, held);
+    await drain(w.ports);
+    w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, text_sha256) VALUES (?, ?, 'https://e.com/b', 1, 'unread', 'cached', 'share', ?)", w.signer.pubkey(), 'ef'.repeat(32), sha!);
+    deleteNow(w);
+    expect(ops(w).map((o) => o.op)).toEqual(['upload_blob', 'mirror_blob', 'delete_item']);
+    expect(orphanBlobs(w.db)).toEqual([]);
+  });
+
+  test('an upload under way when the delete goes through is deleted from the operator once it lands, its mirror cancelled', async () => {
+    let w: W;
+    // the person deletes the save while the upload is on the wire
+    w = world({ 'PUT http://blossom/upload': () => (deleteNow(w), undefined) });
+    const { held, sha } = await save(w);
+    release(w.db, held);
+    await drain(w.ports);
+    expect(puts(w)).toEqual(['PUT http://blossom/upload']);
+    expect(w.calls.filter((c) => c.startsWith('DELETE'))).toEqual([`DELETE http://blossom/${sha}`]);
+    expect(ops(w)).toEqual([]);
+    expect(w.published()).toHaveLength(0);
+  });
+
+  test("a mirror under way when the delete goes through deletes the mirror's copy", async () => {
+    let w: W;
+    w = world({ 'PUT http://m1/mirror': () => (deleteNow(w), undefined) });
+    const { held, sha } = await save(w);
+    release(w.db, held);
+    await drain(w.ports);
+    expect(w.calls.filter((c) => c.startsWith('DELETE')).sort()).toEqual([`DELETE http://blossom/${sha}`, `DELETE http://m1/${sha}`]);
+  });
+
+  test("a text the operator took during the delete's Undo window is deleted from it once the delete goes through", async () => {
+    const w = world({ 'PUT http://blossom/upload': (n) => (n === 1 ? refuse('quota') : undefined) });
+    const { held, sha } = await save(w);
+    release(w.db, held);
+    await drain(w.ports);
+    const c = deleteItem(w.db, w.now(), w.signer.pubkey(), HASH);
+    // the text's day came while the toast was up: it went to the operator, and the mirror after it
+    w.tick(86_400);
+    await drain(w.ports);
+    commitDelete(w.db, w.signer.pubkey(), HASH, c.held);
+    expect(deletes(w).map((d) => d.target)).toEqual(['http://blossom', 'http://m1']);
+    expect(JSON.parse(deletes(w)[0].payload)).toMatchObject({ sha256: sha, size: expect.any(Number), up: w.now() });
+  });
+});
+
+describe('deleting makes room (C§5, v1.12)', () => {
+  /** A save with a text of a given size, as the reckoning counts it; its rows released at once. */
+  async function sized(w: W, n: number, size: number) {
+    const md = normaliseMarkdown(`# Save ${n}\n\nWords.`);
+    const enc = await encryptText(md, nodeCrypto);
+    w.blobs.set(enc.text.sha256, enc.blob);
+    const hash = n.toString(16).padStart(64, '0');
+    release(w.db, queueSave(w.db, w.now(), {
+      owner: w.signer.pubkey(), hash, url: `https://example.com/${n}`, canonical: null, title: `Save ${n}`, site: null, byline: null,
+      savedAt: w.now(), words: 2, lang: 'en', hero: null, text: enc.text, textHash: textHash(md, nodeCrypto), textState: 'cached', origin: 'share',
+    }, { sha256: enc.text.sha256, size, path: `/staged/${n}` }, { api: D.operator.api, blossom: D.operator.blossom, mirror: D.mirrors[0] }));
+    w.tick(1);
+    return { hash, sha: enc.text.sha256 };
+  }
+
+  /**
+   * One save on the operator (z, 1,000 bytes), then three texts refused for room, oldest first: a (300), b (900) and
+   * c (200). The figures the refusals brought say 100 bytes are left. refuseAfter: how many uploads the operator
+   * takes once room is back before refusing again.
+   */
+  async function full(o: { refuseAfter?: number; figures?: boolean } = {}) {
+    const state = { full: false, allowed: Infinity };
+    const w = world({
+      'PUT http://blossom/upload': () => {
+        if (!state.full) return undefined;
+        if (state.allowed-- > 0) return undefined;
+        return refuse('quota');
+      },
+    });
+    ensureIdentityRow(w.db, w.now(), w.signer.pubkey(), 'early_share', true);
+    seedGeneratedLists(w.db, w.signer.pubkey(), D);
+    const z = await sized(w, 9, 1000);
+    await drain(w.ports);
+    state.full = true;
+    state.allowed = 0;
+    const [a, b, c] = [await sized(w, 1, 300), await sized(w, 2, 900), await sized(w, 3, 200)];
+    await drain(w.ports);
+    const at = w.now();
+    if (o.figures !== false) w.ports.figures = () => ({ quota: 10_000, used: 9_900, daily: 20_971_520, today: 0, at });
+    w.tick(60);
+    state.allowed = o.refuseAfter ?? Infinity;
+    return { w, z, a, b, c, state, at };
+  }
+
+  const tries = (w: W, from: number) => w.calls.slice(from).filter((c) => c === 'PUT http://blossom/upload').length;
+  const waiting = (w: W) => w.db.all<{ sha256: string; last_error: string | null; operator_at: number | null }>('SELECT sha256, last_error, operator_at FROM blobs ORDER BY rowid');
+
+  test('the operator confirming a deletion tries at once the oldest waiting texts that fit, until one is refused', async () => {
+    const { w, z, a, b, c } = await full({ refuseAfter: 1 });
+    expect(waiting(w).map((x) => x.last_error)).toEqual([null, 'quota', 'quota', 'quota']);
+    const before = w.calls.length;
+    commitDelete(w.db, w.signer.pubkey(), z.hash, deleteItem(w.db, w.now(), w.signer.pubkey(), z.hash).held);
+    await drain(w.ports);
+    // 1,100 bytes of room: a (300) goes; then 800: b (900) doesn't fit and keeps its day, c (200) is tried and refused
+    expect(tries(w, before)).toBe(2);
+    const by = new Map(waiting(w).map((x) => [x.sha256, x]));
+    expect(by.get(a.sha)).toMatchObject({ last_error: null, operator_at: expect.any(Number) });
+    expect(by.get(b.sha)).toMatchObject({ last_error: 'quota', operator_at: null });
+    expect(by.get(c.sha)).toMatchObject({ last_error: 'quota', operator_at: null });
+    // a went out again with its text; b and c wait for their day
+    expect(nextDue(w.db, w.now() + 86_000)).toBeNull();
+    expect(w.calls.slice(before).filter((x) => x.startsWith('PUT http://m1'))).toHaveLength(1);
+  });
+
+  test('every text that fits goes when none is refused, oldest first', async () => {
+    const { w, z, a, c } = await full();
+    const before = w.calls.length;
+    commitDelete(w.db, w.signer.pubkey(), z.hash, deleteItem(w.db, w.now(), w.signer.pubkey(), z.hash).held);
+    await drain(w.ports);
+    expect(tries(w, before)).toBe(2);
+    const taken = waiting(w).filter((x) => x.operator_at !== null).map((x) => x.sha256);
+    expect(taken).toEqual(expect.arrayContaining([a.sha, c.sha]));
+  });
+
+  test('without known figures, or for texts waiting on the day, a deletion tries nothing at once', async () => {
+    const one = await full({ figures: false });
+    let before = one.w.calls.length;
+    commitDelete(one.w.db, one.w.signer.pubkey(), one.z.hash, deleteItem(one.w.db, one.w.now(), one.w.signer.pubkey(), one.z.hash).held);
+    await drain(one.w.ports);
+    expect(tries(one.w, before)).toBe(0);
+
+    const two = await full();
+    two.w.db.run("UPDATE blobs SET last_error = 'daily' WHERE last_error = 'quota'");
+    before = two.w.calls.length;
+    commitDelete(two.w.db, two.w.signer.pubkey(), two.z.hash, deleteItem(two.w.db, two.w.now(), two.w.signer.pubkey(), two.z.hash).held);
+    await drain(two.w.ports);
+    expect(tries(two.w, before)).toBe(0);
+  });
+
+  test("a mirror's confirmation makes no room; only the operator's does", async () => {
+    const { w, z } = await full();
+    // the operator is down for deletes; the mirror deletes its copy
+    w.ports.fetch = ((orig) => (async (url: string, init: RequestInit) =>
+      init.method === 'DELETE' && url.startsWith('http://blossom') ? new Response('', { status: 503 }) : orig(url, init)))(w.ports.fetch) as typeof fetch;
+    const before = w.calls.length;
+    commitDelete(w.db, w.signer.pubkey(), z.hash, deleteItem(w.db, w.now(), w.signer.pubkey(), z.hash).held);
+    await drain(w.ports);
+    expect(w.calls.slice(before)).toContain(`DELETE http://m1/${z.sha}`);
+    expect(tries(w, before)).toBe(0);
+  });
+
+  test("a deletion of a text the operator took after the figures gives back nothing they counted", async () => {
+    const { w, a } = await full({ refuseAfter: 1 });
+    // a gets through on its day, after the figures: then it is deleted
+    w.db.run("UPDATE outbox_targets SET next_at = 0 WHERE outbox_id = (SELECT id FROM outbox WHERE op = 'upload_blob' AND subject = ?)", a.sha);
+    await drain(w.ports);
+    const before = w.calls.length;
+    commitDelete(w.db, w.signer.pubkey(), a.hash, deleteItem(w.db, w.now(), w.signer.pubkey(), a.hash).held);
+    // its blob's row gone with the staged text, as the outbox's sweep leaves it
+    orphanBlobs(w.db);
+    await drain(w.ports);
+    // 100 bytes left by the figures, and a's own 300 back: c (200) doesn't fit in what they counted
+    expect(tries(w, before)).toBe(0);
   });
 });
 

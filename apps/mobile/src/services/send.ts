@@ -3,18 +3,18 @@
 // post_device, pair_ack, delete_device, delete_wrap, copy_relay and publish_library_key.
 import {
   DEVICES_PATH, KIND, buildDeletions, buildDevicesEvent, buildItemEvent, buildLibraryKeyEvent, buildRelayList, buildServerList, deleteBlob, httpAuth,
-  isSignerFailure, mirrorBlob, releaseTemplate, savedD, signStatement, uploadBlob, wrapPairAck,
+  isSignerFailure, mirrorBlob, releaseTemplate, sameUrl, savedD, signStatement, uploadBlob, wrapPairAck,
 } from '@kefli/protocol';
 import type { AccountFigures, BlossomOutcome, CryptoPort, NostrEvent, Signer, Statement } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { hasDevices, localRecord, noteRecord, pairAcked, recordCreatedAt, type DeviceProof, type PairPayload } from '../data/devices';
 import { getItem, itemJson, markPublished, textServers, type ItemRow } from '../data/items';
-import { markBacked } from '../data/backup';
+import { markBacked, nextForRoom, noteFreed, roomLeft, type KnownFigures } from '../data/backup';
 import { keyPublished, libraryKey, libraryKeyPublished, madeHere, makeLibraryKey } from '../data/libraryKey';
 import { indexerRelays, listServers, nextListTime, recordList, relayEntries, writeRelays } from '../data/lists';
-import { backoff, begin, enqueue, finish, nextDue, nextWakeAt, releaseDependents } from '../data/outbox';
+import { backoff, begin, enqueue, finish, nextDue, nextWakeAt, releaseDependents, wake } from '../data/outbox';
 import type { OutboxRow, OutboxTarget, TargetResult } from '../data/outbox';
-import { namesText, withdrawText } from '../data/saves';
+import { namesText, queueBlobDelete, withdrawText } from '../data/saves';
 import type { Defaults } from './config';
 import { pageStream, streamFilter, takeNewerLists, type SyncPorts } from './sync';
 
@@ -33,6 +33,11 @@ export type SendPorts = {
   readBlob: (sha256: string) => Promise<Uint8Array | null>;
   /** The events matching filters until EOSE, for copying the library to an added relay; throws when unreachable. */
   query?: SyncPorts['query'];
+  /**
+   * The library's last known figures (C§5, C§6; v1.12) and when they were had, from data/account.ts, for the room a
+   * deletion the operator confirms leaves. Without them a text waiting for room waits for its day.
+   */
+  figures?: (owner: string) => KnownFigures | null;
   /** A 413 quota or daily brought the library's figures (C§5): kept as the last known, by data/account.ts recordFigures. */
   onFigures?: (owner: string, figures: AccountFigures) => void;
 };
@@ -153,16 +158,23 @@ async function sendUpload(p: SendPorts, row: OutboxRow, signer: Signer, t: Outbo
   if (!blob) return [{ target: t.target, kind: 'rejected', error: 'staged blob missing' }];
   try {
     const r = await uploadBlob(t.target, blob, sha256, signer, p.fetch);
-    return r.ok ? uploaded(p, row.signer, t.target, sha256) : refused(p, row, t.target, sha256, r);
+    return r.ok ? uploaded(p, row.signer, t.target, sha256, blob.length) : refused(p, row, t.target, sha256, r);
   } catch (e) {
     return [{ target: t.target, kind: 'retry', error: err(e) }];
   }
 }
 
-/** The operator took the text (4.3): its blob records it, and its saves name the operator (textTaken). */
-function uploaded(p: SendPorts, owner: string, target: string, sha256: string): TargetResult[] {
+/**
+ * The operator took the text (4.3): its blob records it and its saves name the operator (textTaken). A save deleted
+ * while the upload was under way has the blob deleted again from the operator (C§4.1). A text that waited for room
+ * tries the next that fits, so the texts a deletion made room for go one after another until one is refused (C§5).
+ */
+function uploaded(p: SendPorts, owner: string, target: string, sha256: string, size: number): TargetResult[] {
+  const waited = p.db.get<{ last_error: string | null }>('SELECT last_error FROM blobs WHERE sha256 = ? AND owner = ?', sha256, owner)?.last_error;
   p.db.run('UPDATE blobs SET operator_at = ?, last_error = NULL WHERE sha256 = ? AND owner = ?', p.now(), sha256, owner);
   textTaken(p.db, p.now(), owner, sha256, target);
+  if (!namesText(p.db, owner, sha256)) queueBlobDelete(p.db, p.now(), owner, sha256, [target], { sha256, size, up: p.now() });
+  if (waited === 'quota') tryRoom(p, owner);
   return [{ target, kind: 'ok' }];
 }
 
@@ -200,6 +212,18 @@ function refused(p: SendPorts, row: OutboxRow, target: string, sha256: string, r
   return [{ target, kind: 'retry', error, ...(r.status === 507 ? {} : { waitSec: DAY }) }];
 }
 
+/**
+ * Room the operator made, by confirming a deletion, or that a text waiting for room found (C§5): the oldest text
+ * waiting on quota that fits what the last known figures leave goes now. Its own success tries the next; a refusal
+ * stops there, so a deletion asks for no signing for texts that can't fit. A text waiting on the day's uploads waits
+ * for its day, since deleting gives none of the day back.
+ */
+function tryRoom(p: SendPorts, owner: string): void {
+  const f = p.figures?.(owner);
+  const next = f ? nextForRoom(p.db, owner, roomLeft(p.db, owner, f)) : null;
+  if (next !== null) wake(p.db, next, p.now());
+}
+
 /** The mirror after this one in defaults, or the first again after a day once every entry has refused (4.2). */
 function nextMirror(p: SendPorts, current: string): { next: string; delaySec: number } {
   const mirrors = p.defaults().mirrors;
@@ -216,6 +240,8 @@ async function sendMirror(p: SendPorts, row: OutboxRow, signer: Signer, t: Outbo
     if (r.ok) {
       p.db.run('UPDATE blobs SET mirror_at = ?, mirror_url = ?, last_error = NULL WHERE sha256 = ? AND owner = ?', p.now(), t.target, sha256, row.signer);
       republishNaming(p.db, p.now(), row.signer, sha256, t.target, p.defaults().operator.blossom);
+      // a save deleted while the mirror was copying: the copy goes too (C§4.1)
+      if (!namesText(p.db, row.signer, sha256)) queueBlobDelete(p.db, p.now(), row.signer, sha256, [t.target], { sha256 });
       return [{ target: t.target, kind: 'ok' }];
     }
     // A mirror refuses with any 4xx but 401 and 429, a 413 included: move to the next entry, never dead.
@@ -242,13 +268,20 @@ function republishNaming(db: SqlDb, now: number, owner: string, sha256: string, 
   for (const { hash } of stale) enqueue(db, now, { op: 'publish_item', signer: owner, subject: hash, targets: writeRelays(db, owner) });
 }
 
-/** A blob no save names any more, on each server that held it; a 404 counts as done (4.3). */
+/**
+ * A blob no save names any more, on each server that held it; a 404 counts as done (4.3). The operator's confirmation
+ * gives back room (C§5): it is noted with the blob's size, and a text waiting for room that now fits goes at once.
+ */
 async function sendDeleteBlob(p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
-  const { sha256 } = JSON.parse(row.payload ?? '{}') as { sha256: string };
+  const { sha256, size, up } = JSON.parse(row.payload ?? '{}') as { sha256: string; size?: number; up?: number };
   try {
     const r = await deleteBlob(t.target, sha256, signer, p.fetch);
-    if (r.ok) return [{ target: t.target, kind: 'ok' }];
-    return [httpResult(t.target, r, r.permanent)];
+    if (!r.ok) return [httpResult(t.target, r, r.permanent)];
+    if (sameUrl(t.target, p.defaults().operator.blossom)) {
+      if (size) noteFreed(p.db, row.signer, { at: p.now(), size, up: up ?? null });
+      tryRoom(p, row.signer);
+    }
+    return [{ target: t.target, kind: 'ok' }];
   } catch (e) {
     return [{ target: t.target, kind: 'retry', error: err(e) }];
   }

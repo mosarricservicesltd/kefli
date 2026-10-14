@@ -149,6 +149,11 @@ export function releaseDependents(db: SqlDb, id: number, op: string): void {
   db.run("UPDATE outbox SET depends_on = NULL WHERE depends_on = ? AND op = ? AND state != 'dead'", id, op);
 }
 
+/** A row's waiting targets fall due now, as a text that fits the room a deletion made does (C§5). */
+export function wake(db: SqlDb, id: number, now: number): void {
+  db.run("UPDATE outbox_targets SET next_at = ? WHERE outbox_id = ? AND state = 'pending'", now, id);
+}
+
 export function begin(db: SqlDb, id: number): void {
   db.run("UPDATE outbox SET state = 'sending' WHERE id = ? AND state = 'queued'", id);
 }
