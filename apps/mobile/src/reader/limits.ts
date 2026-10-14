@@ -10,7 +10,9 @@
 //   minute; 10,000 '<!--' in a paragraph, literal text that Turndown leaves as it is, took 17 s.
 // - blocks: about 6 KB of parse state each. 100,000 short paragraphs, under a megabyte, took 800 MB.
 // - length: ordinary Markdown parses at about 4 s a megabyte and 300 MB, on desktop V8.
-// Real pages sit far inside: the page fixtures' deepest prefix is 8 characters, their most marked block 158 marks.
+// Real pages sit far inside. The page fixtures, measured as the scan measures: the deepest prefix 8 characters, the
+// longest block 4,103, the most marks in a block 69 (marks times length 283,107), the most blocks 278, escapes and
+// references under 0.7% of the text, the longest article 163 KB.
 // Fenced code is code to the parse, so its marks don't count. The scan opens a fence only where CommonMark surely
 // would (at a block's start, after no ordered marker, never inside raw html) and leaves it wherever CommonMark might,
 // so a fence the parse doesn't see can't hide marks from it.
