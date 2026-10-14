@@ -116,8 +116,8 @@ func hasAccount(ctx context.Context, q querier, pubkey string) error {
 // device's blob, which expires after InboxLife (contract 5); uploading the same blob again keeps the row and, for an
 // inbox blob, its first expiry. A browser's copy of a blob its library holds already, through any of its keys, adds no
 // row: what counts is the library's holding, and a row for each key would let a library's 64 browsers multiply its rows
-// sixty-fold at no cost against its fair use (rows that every figure, deletion and sweep then reads). A user's own
-// upload is always recorded, so a blob the library holds only as a capture stays once the capture expires.
+// sixty-fold at no cost against its fair use (rows that every deletion and sweep then reads). A user's own upload is
+// always recorded, so a blob the library holds only as a capture stays once the capture expires.
 // Nothing is recorded, and ErrNoAccount given, once the account is deleted or disabled, or, for an inbox blob, once the
 // browser Blossom found to be the account's has since been disconnected or connected to another library: an upload
 // still arriving then leaves no owner that nothing would ever delete.

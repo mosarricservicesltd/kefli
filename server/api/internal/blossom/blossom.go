@@ -447,7 +447,7 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer s.land(up.account, r.ContentLength)
-	tmp, size, err := s.receive(r.Body, sha)
+	tmp, size, err := s.receive(r.Body, sha, s.onDisk(r.Context(), sha))
 	if tmp != "" {
 		defer os.Remove(tmp) // gone once renamed; otherwise a refused upload leaves nothing behind (F2)
 	}
@@ -482,7 +482,11 @@ func (s *Server) refuseWrite(w http.ResponseWriter, err error) {
 
 // receive reads the body into a temporary file beside where the blob will live, and returns its path (for the caller
 // to remove) and size. The body's hash must be sha.
-func (s *Server) receive(body io.Reader, sha string) (string, int64, error) {
+func (s *Server) receive(body io.Reader, sha string, onDisk bool) (string, int64, error) {
+	if onDisk {
+		n, err := copyChecked(io.Discard, body, sha)
+		return "", n, err
+	}
 	dir := filepath.Dir(s.path(sha))
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return "", 0, err
@@ -491,20 +495,41 @@ func (s *Server) receive(body io.Reader, sha string) (string, int64, error) {
 	if err != nil {
 		return "", 0, err
 	}
-	h := sha256.New()
-	n, err := io.Copy(io.MultiWriter(tmp, h), io.LimitReader(body, MaxBlob+1))
+	n, err := copyChecked(tmp, body, sha)
 	if cerr := tmp.Close(); err == nil {
 		err = cerr
 	}
-	switch {
-	case err != nil:
+	if err != nil {
 		return tmp.Name(), 0, err
-	case n > MaxBlob:
-		return tmp.Name(), 0, errTooLarge
-	case hex.EncodeToString(h.Sum(nil)) != sha:
-		return tmp.Name(), 0, errHash
 	}
 	return tmp.Name(), n, nil
+}
+
+// copyChecked copies a body of at most MaxBlob to w and checks that it hashes to sha.
+func copyChecked(w io.Writer, body io.Reader, sha string) (int64, error) {
+	h := sha256.New()
+	n, err := io.Copy(io.MultiWriter(w, h), io.LimitReader(body, MaxBlob+1))
+	switch {
+	case err != nil:
+		return 0, err
+	case n > MaxBlob:
+		return 0, errTooLarge
+	case hex.EncodeToString(h.Sum(nil)) != sha:
+		return 0, errHash
+	}
+	return n, nil
+}
+
+// onDisk is whether the blob's file is on the disk for an owner already, as for a repeat upload, a move's or a
+// browser's copy of a blob its library holds: its body is then checked against the hash and not written again. A
+// copy costs no fair use, and each was written whole and renamed over identical bytes, so one address could keep the
+// disk writing at the link's rate, 8 MB a request.
+func (s *Server) onDisk(ctx context.Context, sha string) bool {
+	if held, err := s.st.Stored(ctx, sha); err != nil || !held {
+		return false
+	}
+	_, err := os.Stat(s.path(sha))
+	return err == nil
 }
 
 // commit checks the real size against the library's limits again, renames the received file into place, so a reader
@@ -529,9 +554,8 @@ func (s *Server) commit(r *http.Request, up *uploader, sha string, size int64, t
 	if rf := s.limits(r.Context(), now, sha, size); rf.status != 0 {
 		return rf
 	}
-	if err := os.Rename(tmp, s.path(sha)); err != nil {
-		s.log.Error("store blob", "err", err)
-		return serverFault
+	if rf := s.place(sha, tmp); rf.status != 0 {
+		return rf
 	}
 	err = s.st.Upload(r.Context(), sha, now.signer, now.account, size, now.inbox)
 	if err == nil {
@@ -543,6 +567,25 @@ func (s *Server) commit(r *http.Request, up *uploader, sha string, size int64, t
 	}
 	s.log.Error("record blob", "err", err)
 	return serverFault
+}
+
+// place puts a received blob where it is served, for a caller holding commitMu: its file renamed into place, so a reader
+// never sees half a blob, or, for a body that wasn't written (onDisk), the file found there still. One that went while
+// the body arrived, its last owner having deleted it, answers 500, which the client sends again, and then it is
+// written.
+func (s *Server) place(sha, tmp string) refusal {
+	if tmp == "" {
+		if _, err := os.Stat(s.path(sha)); err != nil {
+			s.log.Info("a stored blob's file went as a copy of it arrived", "err", err)
+			return serverFault
+		}
+		return refusal{}
+	}
+	if err := os.Rename(tmp, s.path(sha)); err != nil {
+		s.log.Error("store blob", "err", err)
+		return serverFault
+	}
+	return refusal{}
 }
 
 // SweepFiles removes blob files no owner holds and upload temporaries, each once older than an hour so an upload
