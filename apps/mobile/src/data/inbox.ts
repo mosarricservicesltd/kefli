@@ -47,6 +47,16 @@ export function savedState(db: SqlDb, owner: string, hash: string): Found | unde
   return db.get<Found>('SELECT text_state, pending_delete_at FROM items WHERE owner = ? AND hash = ?', owner, hash);
 }
 
+/** Whether the save at this hash waits on its delete's Undo (4.3), which a request for it waits for too. */
+export function waitsOnDelete(db: SqlDb, owner: string, hash: string): boolean {
+  return (savedState(db, owner, hash)?.pending_delete_at ?? null) !== null;
+}
+
+/** A request's save (C§4.3): an X post's by its own address, which is checked first, any other's by its address and canonical. */
+export function requestHash(r: SaveRequest): string {
+  return isXPost(r.url) ? itemHash(r.url) : itemHash(r.url, r.canonical);
+}
+
 /** The browser's name for the row: the brand before " on " in its label ("Chrome on a Windows laptop"). */
 export function browserName(label: string): string {
   return label.split(/\s+on\s+/)[0].trim() || label;
@@ -66,7 +76,7 @@ export type Admitted = { outcome: 'created' | 'merged' | 'unarchived'; hash: str
 export function admit(db: SqlDb, now: number, owner: string, r: SaveRequest, label: string, t: SaveTargets): Admitted {
   return db.tx(() => {
     const x = isXPost(r.url);
-    const hash = x ? itemHash(r.url) : itemHash(r.url, r.canonical);
+    const hash = requestHash(r);
     const blob = usesBlob(r, now);
     const existing = db.get<{ state: string; text_state: string }>('SELECT state, text_state FROM items WHERE owner = ? AND hash = ?', owner, hash);
     // The extension's metadata stands until the parse; an X post is checked first, as a shared one is (5.4).

@@ -350,6 +350,44 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     expect(w.deletes().map((d) => d.subject)).toEqual([blob.html.sha256]);
   });
 
+  test('a browser save of a save whose delete waits on Undo waits too: deleted, it is a new save; shown again, it matches (RULED)', async () => {
+    const hash = itemHash('https://example.com/a');
+    /** A save from the browser, deleted on the phone, then saved again from the browser inside the delete's Undo. */
+    const again = async () => {
+      const w = world();
+      await w.send(w.request());
+      expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+      const del = deleteItem(w.db, w.ports.now(), w.owner, hash);
+      w.tick(5);
+      const blob = await w.withHtml('<h1>Again</h1>');
+      const id = await w.send(w.request({ captured_at: w.ports.now(), html: blob.html }));
+      // held: unrecorded, the cursor where it was, nothing read or deleted
+      expect(await drainInbox(w.ports, w.owner)).toEqual({});
+      expect(w.db.get('SELECT 1 FROM inbox_seen WHERE wrap_id = ?', id)).toBeUndefined();
+      expect(w.db.get("SELECT since FROM sync_cursors WHERE stream = 'inbox'")).toEqual({ since: T0 });
+      expect([w.parses(), w.deletes()]).toEqual([0, []]);
+      return { w, del, blob };
+    };
+    // the delete goes through: the save from the browser is a new one, its text read from its capture
+    const done = await again();
+    commitDelete(done.w.db, done.w.owner, hash, done.del.held);
+    expect(await drainInbox(done.w.ports, done.w.owner)).toEqual({ created: 1 });
+    expect(done.w.item(hash)).toMatchObject({ text_state: 'cached', saved_at: T0 + 5 });
+    expect(done.w.texts.get(hash)).toContain('# Again');
+    expect(done.w.deletes().map((d) => d.subject)).toEqual([done.blob.html.sha256]);
+    // Undo: the save is shown again, and the browser's save is a repeat of it
+    const undone = await again();
+    undone.del.revert();
+    expect(await drainInbox(undone.w.ports, undone.w.owner)).toEqual({ merged: 1 });
+    expect(undone.w.item(hash)).toMatchObject({ text_state: 'queued', saved_at: T0 - 60 });
+    expect(undone.w.deletes().map((d) => d.subject)).toEqual([undone.blob.html.sha256]);
+    // a delete whose Undo is somehow still open a week on no longer holds the inbox's cursor (F3)
+    const late = await again();
+    late.w.tick(8 * 86_400);
+    expect(await drainInbox(late.w.ports, late.w.owner)).toEqual({ merged: 1 });
+    expect(late.w.db.get("SELECT since FROM sync_cursors WHERE stream = 'inbox'")).toEqual({ since: T0 + 5 + 8 * 86_400 });
+  });
+
   test('a browser disconnected after its capture failed leaves its save to finish, not waiting for its text for ever', async () => {
     // Disconnect has Kefli's server delete the browser's captures (C§6), so the retry meets a 404
     const { w, hash } = await failedCapture();
