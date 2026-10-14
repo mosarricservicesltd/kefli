@@ -18,8 +18,8 @@ export type Outcome =
 export const INBOX_BLOB_LIFE = 14 * 86_400;
 
 /**
- * A wrap's standing: its outcome, which it is acted on once by; 'waiting' for one a drain tried and couldn't open or
- * take yet, which the next drain tries again; null for one never tried.
+ * A wrap's standing: the outcome it was given, so it is acted on once; 'waiting' for one a drain tried and couldn't
+ * open or take yet, which the next drain tries again; null for one never tried.
  */
 export function seenState(db: SqlDb, wrapId: string): Outcome | 'waiting' | null {
   return db.get<{ outcome: Outcome | 'waiting' }>('SELECT outcome FROM inbox_seen WHERE wrap_id = ?', wrapId)?.outcome ?? null;

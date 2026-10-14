@@ -219,10 +219,10 @@ async function retryBlobs(p: InboxPorts, owner: string, blossom: string, out: In
 }
 
 /**
- * How many of the relay's answers a drain reads back through its window. The relay sends the newest wraps first, at
- * most PAGE an answer, and anyone can send wraps nobody takes, which stay on it: read in one answer, as it was, 500
- * newer ones hid every browser save beneath them for good. Ten answers reach beneath 5,000, more than a day and a
- * half of the most one address may send one person (C§3.2: 120 an hour).
+ * How many of the relay's answers a deep read takes. The relay sends the newest wraps first, at most PAGE an answer,
+ * and anyone can send wraps nobody takes, which stay on it: read in one answer, as it was, 500 newer ones hid every
+ * browser save beneath them for good. A deep read takes the newest answer and nine more down the window, from where
+ * the last deep read stopped (InboxScan), so a window of any depth is read through in turn, 4,500 wraps a deep read.
  */
 export const INBOX_PAGES = 10;
 /**
@@ -276,7 +276,9 @@ async function readWindow(p: InboxPorts, relay: string, owner: string, since: nu
   read.take(first);
   const whole = first.length < PAGE;
   if (whole) endInboxScan(p.db, relay, owner);
-  if (!first.length || now - (readDeep.get(key) ?? -Infinity) < INBOX_DEEP_EVERY) return done(whole ? now : null, whole ? null : inboxScan(p.db, relay, owner));
+  if (!first.length || now - (readDeep.get(key) ?? -Infinity) < INBOX_DEEP_EVERY) {
+    return done(whole ? now : null, whole ? null : inboxScan(p.db, relay, owner));
+  }
   readDeep.set(key, now);
   const held = inboxScan(p.db, relay, owner);
   // a scan goes on beneath the newest answer, which this read has just had
