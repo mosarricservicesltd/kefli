@@ -1,6 +1,6 @@
 // What a page itself can do to a save: be too large to read in good time, keep its thread busy or never finish loading,
 // or name a javascript: base for its links.
-import { linkOnly, orAfter, PAGE_LIMITS, tooLargeToRead, unread, type PageSize } from '../src/captured';
+import { GUARD_SAMPLE_CHARS, keepHtml, linkOnly, orAfter, PAGE_LIMITS, tooLargeToRead, unread, type PageSize } from '../src/captured';
 import { baseOf } from '../src/capture';
 
 describe('a page too large to read in good time (PAGE_LIMITS)', () => {
@@ -42,6 +42,36 @@ describe('a page too large to read in good time (PAGE_LIMITS)', () => {
   test('a page saved unread keeps its address and title, and the phone fetches its text', () => {
     expect(unread('https://example.com/a', '  The HTML Standard \n')).toEqual({ ...linkOnly('https://example.com/a'), title: 'The HTML Standard' });
     expect(unread('https://example.com/a', '   ').title).toBeNull();
+  });
+});
+
+describe('the guard on a page that isn’t readerable (contract 4.2)', () => {
+  /** keepHtml's answer for a page that isn’t readerable, and how long it took, or what it threw. */
+  const guard = (markdown: string) => {
+    const started = Date.now();
+    try {
+      return { kept: keepHtml({ ok: true, readerable: false, markdown }, '<p>x</p>') !== null, ms: Date.now() - started };
+    } catch (e) {
+      return { threw: String(e) };
+    }
+  };
+  // each of these, counted whole, overflowed the stack or ran for minutes in the page’s own thread
+  test.each([
+    ['3 MB of prose', 'The quick brown fox jumps over the lazy dog. '.repeat(70_000), true],
+    ['16,384 quotes inside quotes', '>'.repeat(16_384), false],
+    ['32 KB of * and _', '*_'.repeat(16_384), false],
+  ])('%s is judged from its opening, in good time', (_name, markdown, kept) => {
+    const r = guard(markdown);
+    expect(r).toMatchObject({ kept });
+    // counted whole, the * and _ took over a minute here; a busy machine still gets well under
+    expect(r.ms).toBeLessThan(30_000);
+  }, 60_000);
+
+  test('a page whose opening holds 120 words keeps its text; one whose opening holds none is taken as no article', () => {
+    const words = (n: number) => Array.from({ length: n }, () => 'word').join(' ');
+    expect(guard(words(120) + '\n\n' + ','.repeat(3_000_000))).toMatchObject({ kept: true });
+    // the words come after the opening: the phone fetches this page itself
+    expect(guard(','.repeat(GUARD_SAMPLE_CHARS) + '\n\n' + words(500))).toMatchObject({ kept: false });
   });
 });
 

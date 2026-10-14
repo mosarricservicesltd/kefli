@@ -39,10 +39,28 @@ export function pageUrl(href: string): string {
   return u.href;
 }
 
+/**
+ * How much of a page's Markdown the guard counts words in, when the page isn't readerable. 120 words of prose take a
+ * kilobyte, of links several; the spoken projection of more ran in the page's own thread for as long as the page liked:
+ * 3 MB of prose overflowed the stack, 3 MB of one list ran the heap out after three minutes, and runs of * and _ cost
+ * a quarter of a second a kilobyte, rising (64 KB took five minutes). A page whose opening 4 KB holds fewer than 120
+ * words is taken as no article, and the phone fetches it itself; a page of links still holds 150 or so there.
+ */
+export const GUARD_SAMPLE_CHARS = 4_096;
+
+/** At least GUARD_WORDS spoken words in the Markdown's opening, or false when they can't be counted. */
+function enoughWords(markdown: string): boolean {
+  try {
+    return countWords(markdown.slice(0, GUARD_SAMPLE_CHARS)) >= GUARD_WORDS;
+  } catch {
+    return false;
+  }
+}
+
 /** The guard (contract 4.2): readerable, or at least 120 spoken words; and the HTML no more than 2 MB as UTF-8. */
 export function keepHtml(parsed: Parsed, content: string | undefined): string | null {
   if (!parsed.ok || !content || !parsed.markdown) return null;
-  if (!parsed.readerable && countWords(parsed.markdown) < GUARD_WORDS) return null;
+  if (!parsed.readerable && !enoughWords(parsed.markdown)) return null;
   return new TextEncoder().encode(content).length <= HTML_MAX_BYTES ? content : null;
 }
 
