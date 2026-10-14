@@ -7,7 +7,7 @@
 // the hold a refusal for room or the day puts on the library's other texts until its retry.
 import type { AccountFigures } from '@kefli/protocol';
 import type { SqlDb } from './db';
-import { releaseDependents } from './outbox';
+import { releaseDependents, releaseDependentsIn } from './outbox';
 import { getSetting, setSetting } from './settings';
 
 /** A relay off the operator accepted this event: if it is still the save's newest, the save is backed up. */
@@ -96,6 +96,10 @@ export function releaseHold(db: SqlDb, owner: string): void {
   db.run('DELETE FROM settings WHERE key = ?', heldKey(owner));
 }
 
+/** The library's uploads waiting for the operator but one (holdUploads), as rows o of the outbox with their blobs b. */
+const WAITING = `FROM outbox o JOIN blobs b ON b.sha256 = o.subject AND b.owner = o.signer
+  WHERE o.op = 'upload_blob' AND o.signer = ? AND o.state = 'queued' AND o.id != ? AND b.operator_at IS NULL`;
+
 /**
  * Kefli's server refused one of the library's texts for room or the day (C§5): every other text waiting to upload to it
  * would be sent whole only to be refused the same way, every day, tens of megabytes for an import past the day. So the
@@ -103,23 +107,15 @@ export function releaseHold(db: SqlDb, owner: string): void {
  * that fits (send.ts, tryRoom): each one's save goes now without its text, as a refusal sends it (C§4.2), and its blob
  * takes the refusal's reason, so Backup space counts it; a text refused for another reason keeps that one. A text that
  * comes to upload while the hold stands waits with it, unsent (send.ts). except: the upload refused, which waits a day
- * of its own.
+ * of its own. A statement for each of the three, however many texts wait.
  */
 export function holdUploads(db: SqlDb, owner: string, held: Held, except: number): void {
   db.tx(() => {
     setSetting(db, heldKey(owner), JSON.stringify(held));
-    const waiting = db.all<{ id: number }>(
-      `SELECT o.id FROM outbox o JOIN blobs b ON b.sha256 = o.subject AND b.owner = o.signer
-       WHERE o.op = 'upload_blob' AND o.signer = ? AND o.state = 'queued' AND o.id != ? AND b.operator_at IS NULL`, owner, except);
-    for (const { id } of waiting) {
-      db.run("UPDATE outbox_targets SET next_at = MAX(next_at, ?) WHERE outbox_id = ? AND state = 'pending'", held.until, id);
-      releaseDependents(db, id, 'publish_item');
-    }
-    db.run(
-      `UPDATE blobs SET last_error = ? WHERE owner = ? AND operator_at IS NULL AND (last_error IS NULL OR last_error IN ('quota', 'daily'))
-       AND sha256 IN (SELECT subject FROM outbox WHERE op = 'upload_blob' AND signer = ? AND state = 'queued' AND id != ?)`,
-      held.reason, owner, owner, except,
-    );
+    db.run(`UPDATE outbox_targets SET next_at = MAX(next_at, ?) WHERE state = 'pending' AND outbox_id IN (SELECT o.id ${WAITING})`, held.until, owner, except);
+    releaseDependentsIn(db, `SELECT o.id ${WAITING}`, [owner, except], 'publish_item');
+    db.run(`UPDATE blobs SET last_error = ? WHERE (last_error IS NULL OR last_error IN ('quota', 'daily')) AND sha256 IN (SELECT o.subject ${WAITING})`,
+      held.reason, owner, except);
   });
 }
 
