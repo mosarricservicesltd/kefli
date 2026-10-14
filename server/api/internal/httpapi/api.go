@@ -76,6 +76,15 @@ const DefaultMaxOffers = 10_000
 // worth; an IPv4 /24 has no such limit, being many people's, and each address costs its owner something.
 const MaxBlockOffers = 120
 
+// MaxAddressCalls is how many API requests one address (an IPv6 /64) makes a minute, counted before anything is read
+// or verified: any key may call DELETE /account or DELETE /devices, so a fresh key per request goes round every limit
+// per key. The phone calls the API a handful of times in its life (registration, each Connect and Disconnect, a second
+// phone), so a carrier's address shared by thousands stays far below it.
+const MaxAddressCalls = 600
+
+// MaxBlockCalls is the same a minute for one IPv6 /48, whose 65,536 /64s would otherwise each make MaxAddressCalls.
+const MaxBlockCalls = 3000
+
 // MaxDevices is how many device keys one library may have authorised at once. Each is a wrap recipient on the relay,
 // and the write policy holds every one in memory; the phone's connected-browsers record (contract 4.9) holds about 42
 // under the 16 KB ceiling, so this leaves room for rows a Disconnect hasn't reached yet.
@@ -99,6 +108,8 @@ type API struct {
 	misses *limit.Limiter // phone-offer lookups that found nothing, MaxMisses an offer's life from everyone
 	blkMis *limit.Limiter // the same, MaxBlockMisses an offer's life per block of addresses
 	offBlk *limit.Limiter // offers posted, MaxBlockOffers an hour per IPv6 /48
+	adrCal *limit.Limiter // requests, MaxAddressCalls a minute per address, before anything is read
+	blkCal *limit.Limiter // the same, MaxBlockCalls a minute per IPv6 /48
 	// logKey keys the fingerprints the logs show for pubkeys (short)
 	logKey []byte
 }
@@ -124,6 +135,8 @@ func New(cfg Config, st *store.Store, log *slog.Logger) *API {
 		misses: limit.New(MaxMisses, store.OfferLife, now),
 		blkMis: limit.New(MaxBlockMisses, store.OfferLife, now),
 		offBlk: limit.New(MaxBlockOffers, time.Hour, now),
+		adrCal: limit.New(MaxAddressCalls, time.Minute, now),
+		blkCal: limit.New(MaxBlockCalls, time.Minute, now),
 	}
 }
 
@@ -194,6 +207,9 @@ type request struct {
 }
 
 func (a *API) authed(w http.ResponseWriter, r *http.Request) (*request, bool) {
+	if !a.callAllowed(w, r) {
+		return nil, false
+	}
 	raw, err := io.ReadAll(io.LimitReader(r.Body, maxBody+1))
 	if err != nil || len(raw) > maxBody {
 		fail(w, http.StatusRequestEntityTooLarge, "too_large")
@@ -213,6 +229,25 @@ func (a *API) authed(w http.ResponseWriter, r *http.Request) (*request, bool) {
 		return nil, false
 	}
 	return a.parsed(w, ev, raw)
+}
+
+// callAllowed counts a request against its IPv6 /48, then its address, before its body is read or its signature
+// checked, so a flood from one place costs a map lookup each.
+func (a *API) callAllowed(w http.ResponseWriter, r *http.Request) bool {
+	ip := ClientIP(r, a.cfg.TrustProxy)
+	var counts []func() (bool, time.Duration)
+	if block := limit.Block(ip); strings.Contains(block, ":") {
+		counts = append(counts, func() (bool, time.Duration) { return a.blkCal.Allow(block) })
+	}
+	counts = append(counts, func() (bool, time.Duration) { return a.adrCal.Allow(limit.Addr(ip, 64)) })
+	for _, allow := range counts {
+		if ok, retry := allow(); !ok {
+			w.Header().Set("Retry-After", retryAfter(retry))
+			fail(w, http.StatusTooManyRequests, "rate")
+			return false
+		}
+	}
+	return true
 }
 
 func (a *API) fresh(ctx context.Context, ev *nostr.Event) bool {

@@ -203,6 +203,53 @@ func TestGoneRowsAreForAccountsAndEnd(t *testing.T) {
 	}
 }
 
+// Any key may DELETE /account or DELETE /devices/<x>, so a fresh key for each request went round every limit, and each
+// was read, verified and written to the replay table before anything counted it: 20,000 from one address took 72
+// seconds, all answered, and a registered user's own calls meanwhile took 82 ms at the median and 747 ms at worst
+// (probe keyflood). Now an address (an IPv6 /64) makes MaxAddressCalls a minute and an IPv6 /48 MaxBlockCalls, counted
+// before the body is read or the signature checked; the phone calls the API a handful of times in its life.
+func TestCallsPerAddress(t *testing.T) {
+	e := newEnv(t, behindCaddy)
+	unsigned := func(from string) int {
+		req := mustReq("DELETE", e.api.URL+"/account")
+		req.Header.Set("X-Forwarded-For", from)
+		s, _ := send(t, req)
+		return s
+	}
+	for i := 0; i < httpapi.MaxAddressCalls; i++ {
+		if s := unsigned("198.51.100.9"); s != 401 {
+			t.Fatalf("call %d: %d", i, s)
+		}
+	}
+	if s := unsigned("198.51.100.9"); s != 429 {
+		t.Fatalf("past the address's calls: %d", s)
+	}
+	user := newKey()
+	e.from = "198.51.100.9"
+	if s, b := e.call(user, "POST", "/register", map[string]any{"v": 1}); s != 429 || b["error"] != "rate" {
+		t.Fatalf("a signed call from the same address: %d %v", s, b)
+	}
+	e.from = "198.51.100.10"
+	s, b := e.call(user, "POST", "/register", map[string]any{"v": 1})
+	expect(t, s, 200, b)
+	e.clock = e.clock.Add(time.Minute)
+	if s := unsigned("198.51.100.9"); s != 401 {
+		t.Fatalf("a minute later: %d", s)
+	}
+	// a /48 is 65,536 /64s, and makes MaxBlockCalls a minute between them
+	for i := 0; i < httpapi.MaxBlockCalls; i++ {
+		if s := unsigned(fmt.Sprintf("2001:db8:77:%x::1", i/100)); s != 401 {
+			t.Fatalf("block call %d: %d", i, s)
+		}
+	}
+	if s := unsigned("2001:db8:77:ffff::1"); s != 429 {
+		t.Fatalf("past the block's calls: %d", s)
+	}
+	if s := unsigned("2001:db8:78::1"); s != 401 {
+		t.Fatalf("the next /48: %d", s)
+	}
+}
+
 // Offers held were limited per /64 and per key only, and kept an hour, until the sweep: one IPv6 /48's 65,536 /64s at
 // 30 each could post two million 8 KB offers an hour, 16 GB of database, from fresh keys (probe offerflood: 20,000
 // taken from one /48 in two and a half minutes, 182 MB). Now one /48 posts MaxBlockOffers an hour, an IPv4 /24 being
