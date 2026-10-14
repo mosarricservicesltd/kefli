@@ -106,11 +106,12 @@ export function background(b: Browser) {
   /**
    * The save under a new wrap: the wrap, its key and its id take the old one's place in the queue, with what else
    * changed, and in Undo's key before it is sent, so a worker stopped meanwhile leaves the new wrap for the next flush,
-   * and the new id is busy for as long as this send runs, as the old one is.
+   * and the new id is busy for as long as this send runs, as the old one is. A mark that it goes without text follows it.
    */
   async function takePlace(p: Delivered, again: Again, changed: Partial<Queued>): Promise<void> {
     const was = p.id;
     Object.assign(p, { id: again.wrap.id, wrap: again.wrap, sealed: again.sealed, wrapped_at: b.now() });
+    if (textless.delete(was)) textless.add(p.id);
     saves.follow(was, p.id);
     await replaceWrap(b.store, was, { ...changed, id: p.id, wrap: p.wrap, sealed: p.sealed, wrapped_at: p.wrapped_at });
     await moveUndoKey(was, p.id, again.wrapKey, p.sha256);

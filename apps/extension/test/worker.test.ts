@@ -808,6 +808,27 @@ describe('a wrap that waited (contract 4.4: the phone reads its inbox from two d
     expect(n.published.find((e) => e.kind === 5)).toMatchObject({ pubkey: w.pubkey, tags: [['e', w.id], ['k', '1059']] });
   });
 
+  test('one sent without its HTML that waited, then made again, is still recorded as sent with no text', async () => {
+    const quota = (async () => new Response('{"v":1,"error":"quota"}', { status: 413, headers: { 'X-Reason': 'quota' } })) as unknown as typeof fetch;
+    for (const same of [true, false]) {
+      const o: Parameters<typeof net>[0] = { blossom: quota, publish: 'down' };
+      const h = harness({ net: net(o).net });
+      at(h, NOW);
+      await h.work.save(PAGE, 1, false);
+      const [e] = await queued(h.store);
+      expect(e.textless).toBe(true);
+      // ten minutes on the relay is back, and the wrap that waited is made again as it goes
+      o.publish = 'ok';
+      const flusher = same ? h : harness({ store: h.store, session: h.session, net: net(o).net });
+      at(flusher, NOW + 600);
+      await flusher.work.flushQueue();
+      expect(await queued(h.store)).toEqual([]);
+      const [last] = await history(h.store);
+      expect(last.outcome).toBe('sent, no text');
+      expect(last.id).not.toBe(e.id.slice(0, 8));
+    }
+  });
+
   test('a move wraps the queue again from the time of the move', async () => {
     const h = harness({ online: false });
     at(h, NOW);
