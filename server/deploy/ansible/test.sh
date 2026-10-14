@@ -93,6 +93,21 @@ check "the journal holds no request's address or query" \
 check 'the journal keeps seven days' 'grep -qx "MaxRetentionSec=7day" <<<"$(box cat /etc/systemd/journald.conf.d/10-kefli.conf)"'
 check 'SSH takes keys only' 'grep -qx "passwordauthentication no" <<<"$(box sshd -T)"'
 check 'the firewall is loaded' 'grep -qF 198.51.100.7 <<<"$(box nft list set inet filter ssh_allow4)"'
+# The firewall's limit on web connections one client holds: from outside the container, at its bridge address (the
+# rules let loopback through first), 520 connections at once open 512 and the rest are reset, and once they are let go
+# a request from outside is answered.
+ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$name")
+held() {
+  local open=0 fds=() fd
+  for _ in $(seq "$1"); do
+    if exec {fd}<>"/dev/tcp/$ip/443"; then fds+=("$fd"); open=$((open + 1)); fi
+  done 2>/dev/null
+  for fd in "${fds[@]}"; do exec {fd}>&-; done
+  echo "$open"
+}
+check 'one client holds at most 512 web connections at once' '[ "$(held 520)" = 512 ]'
+check 'and a request from outside is answered once they are let go' \
+  'sleep 1; curl -sfk --max-time 5 --resolve "api.kefli.app:443:$ip" https://api.kefli.app/defaults.json'
 
 echo "${failures} failed"
 exit $((failures > 0))

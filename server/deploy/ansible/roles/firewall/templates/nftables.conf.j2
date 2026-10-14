@@ -15,6 +15,18 @@ table inet filter {
     elements = { {{ kefli_ssh_allow6 | join(', ') }} }
 {% endif %}
   }
+  # The web connections each client holds open, an IPv4 address or an IPv6 /64: Caddy holds about 60 KB for each
+  # connection to the relay, so one machine opening tens of thousands would take the 2 GB box's memory.
+  set web4 {
+    type ipv4_addr
+    size 65535
+    flags dynamic
+  }
+  set web6 {
+    type ipv6_addr
+    size 65535
+    flags dynamic
+  }
   chain input {
     type filter hook input priority 0; policy drop;
     ct state established,related accept
@@ -24,6 +36,8 @@ table inet filter {
     ip6 nexthdr icmpv6 accept
     tcp dport 22 ip saddr @ssh_allow4 accept
     tcp dport 22 ip6 saddr @ssh_allow6 accept
+    tcp dport { 80, 443 } ct state new add @web4 { ip saddr ct count over {{ kefli_web_conns }} } reject with tcp reset
+    tcp dport { 80, 443 } ct state new add @web6 { ip6 saddr & ffff:ffff:ffff:ffff:: ct count over {{ kefli_web_conns }} } reject with tcp reset
     tcp dport { 80, 443 } accept
   }
   chain forward { type filter hook forward priority 0; policy drop; }

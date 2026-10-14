@@ -15,7 +15,7 @@ The box is smaller than the spec's CCX23 because on-device speech (flow decision
 ## Host
 
 - `ansible/roles/base/templates/sshd-10-kefli.conf.j2` goes to `/etc/ssh/sshd_config.d/10-kefli.conf`.
-- `ansible/roles/firewall/templates/nftables.conf.j2` goes to `/etc/nftables.conf`. It allows SSH from the addresses in `ssh_allow4` (`kefli_ssh_allow4` in the inventory) only, plus 80 and 443 from anywhere. When the home address changes, log in through the Hetzner console, add the new address to the set, and run `sudo nft -f /etc/nftables.conf`. Change the Hetzner Cloud firewall to match.
+- `ansible/roles/firewall/templates/nftables.conf.j2` goes to `/etc/nftables.conf`. It allows SSH from the addresses in `ssh_allow4` (`kefli_ssh_allow4` in the inventory) only, plus 80 and 443 from anywhere, where one client (an IPv4 address, an IPv6 /64) holds at most `kefli_web_conns` (512) connections at once and one more is reset: Caddy holds about 60 KB for each connection to the relay, so one machine opening tens of thousands would otherwise take the 2 GB box's memory. When the home address changes, log in through the Hetzner console, add the new address to the set, and run `sudo nft -f /etc/nftables.conf`. Change the Hetzner Cloud firewall to match.
 - Unattended upgrades are on for Debian security updates.
 
 ## Caddy

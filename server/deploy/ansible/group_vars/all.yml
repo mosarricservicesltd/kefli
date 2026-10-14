@@ -8,6 +8,9 @@ kefli_admin_keys: []
 # Addresses (or, for IPv6, prefixes) allowed to reach SSH. Everything else gets 80 and 443 only.
 kefli_ssh_allow4: []
 kefli_ssh_allow6: []
+# Web connections (80 and 443) one client may hold open at once, an IPv4 address or an IPv6 /64; one more is reset.
+# A phone or a browser holds two or three, so a home or office behind one address has room for a crowd.
+kefli_web_conns: 512
 kefli_swap_mb: 2048
 # Only for a test host with no public name: Caddy signs its own certificates instead of asking Let's Encrypt.
 kefli_tls_internal: false
