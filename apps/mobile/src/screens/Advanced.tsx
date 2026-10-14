@@ -153,9 +153,9 @@ export default function Advanced() {
   const notBacked = useLive(() => (owner ? notBackedUp(store(), owner) : 0), ['items', 'blobs', 'outbox'], [owner]);
   const waiting = useLive(() => (owner ? textsWaiting(store(), owner, nowSec()) : NOTHING_WAITS), ['items', 'blobs'], [owner]);
   const figures = useLive(() => (owner ? accountFigures(store(), owner) : null), ['account_figures'], [owner]);
-  const check = useAccountCheck(owner, online);
+  const checked = useAccountCheck(owner, online);
   const { notice, trying } = backupNotice(waiting, notBacked);
-  const space = spaceOf(figures, waiting.full, check, online);
+  const space = spaceOf(figures, waiting.full, checked, online);
 
   useEffect(() => {
     loadDefaults().then((d) => setOperator(d.operator.relay), () => undefined);
