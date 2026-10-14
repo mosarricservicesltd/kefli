@@ -8,8 +8,8 @@
 // It works on the Standard's URL record (basicURLParse, serializeURL) rather than the package's URL class,
 // whose webidl-conversions reads SharedArrayBuffer at load, which Hermes doesn't have.
 //
-// Where the contract text leaves a choice open, the choice is marked RULED: settled with contract 1.4
-// (section 11.9) and listed in the fixtures' rulings.
+// Where the contract text leaves a choice open, the choice is marked RULED and listed in the fixtures' rulings: settled
+// with contract 1.4 (section 11.9), and rulings 8 and 11 as they now stand with contract 1.12 (section 11.1).
 
 /// <reference path="./whatwg-url-state-machine.d.ts" />
 import type { URLRecord } from 'whatwg-url';
@@ -105,7 +105,7 @@ function cleanQuery(search: string, xHost: boolean): string {
   return kept.length ? `?${kept.map(({ pair }) => pair).join('&')}` : '';
 }
 
-// The leading label of the mobile and AMP forms that the canonical link replaces (contract 4.3), and a leading www.
+// A host's leading m. or amp. label, the mobile and AMP forms', and its leading www.
 const ALTERNATE_LABEL = /^(m|amp)\./;
 const WWW_LABEL = /^www\./;
 
@@ -190,7 +190,7 @@ function address(url: URLRecord): string {
   const query = cleanQuery(url.query ? `?${url.query}` : '', isXHost(hostOf(url)));
   url.fragment = null;
   url.query = null;
-  // RULED (ruling 8): a user name and password are no part of a save's address, so the same page saved with them and
+  // RULED: a user name and password are no part of a save's address (ruling 8), so the same page saved with them and
   // without them is one save, and no address or hash holds a password
   url.username = '';
   url.password = '';

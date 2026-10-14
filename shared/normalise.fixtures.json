@@ -1,6 +1,6 @@
 {
   "v": 1,
-  "contract": "1.4",
+  "contract": "1.12",
   "about": "normalise(url, canonical?) from contract section 4.3. Every port must produce expect exactly; expect null means the input is refused as not a link. d is kefli/item/ followed by the lowercase hex sha256 of the UTF-8 of expect.",
   "rulings": [
     "Settled on 6 October 2026 with contract 1.4 (section 11.9), Richard having left these to the engineer's judgement. These cases pin choices the contract text leaves open:",
