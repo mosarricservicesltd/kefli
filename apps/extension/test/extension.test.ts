@@ -15,7 +15,7 @@ import { loadDefaults, type Defaults } from '../src/defaults';
 import { deviceSigner } from '../src/device';
 import { ackFor, browserLabel, formatCode, newOffer, OFFER_LIFE, OFFER_REUSE_MIN, pairingFrom, postOffer, tryPairing, type Offer } from '../src/pair';
 import { ATTEMPTS_MAX, BLOB_KEEP_MAX, dequeue, enqueue, failed, flush, QUEUE_MAX, queued, shown, waiting, whyNot } from '../src/queue';
-import { deliver, prepare, retract, type Net, type Pending } from '../src/save';
+import { deliver, prepare, retract, withoutText, type Delivered, type Net, type Pending } from '../src/save';
 import { KEYS, memoryStore, type Pairing } from '../src/store';
 import { applyMove, followMoves } from '../src/move';
 import { SECOND_LOOK_MS, settleUndo } from '../src/undo';
@@ -210,6 +210,42 @@ describe('a save (contract 4.4)', () => {
   });
 });
 
+describe('a request sent again without its HTML (contract 4.4, v1.12)', () => {
+  const ctx = { device, defaults: DEFAULTS, pairing: PAIRING, crypto: webCrypto, now: NOW };
+  const open = async (w: NostrEvent) => {
+    const { rumor, seal } = await unwrap(user, w);
+    return { rumor, seal, req: JSON.parse(rumor.content) as SaveRequest };
+  };
+
+  test('is the same save request, its uuid kept, with html null, under a new wrap and key, signed again by the device', async () => {
+    const { pending, wrapKey } = await prepare(PAGE, ctx);
+    const again = (await withoutText(pending, device, NOW + 60))!;
+    expect(again.wrap.id).not.toBe(pending.wrap.id);
+    expect(again.wrap.pubkey).not.toBe(pending.wrap.pubkey);
+    expect(again.wrapKey).not.toEqual(wrapKey);
+    expect(again.wrap.tags).toEqual([['p', user.pubkey()]]);
+    const before = await open(pending.wrap);
+    const after = await open(again.wrap);
+    expect(after.rumor.tags).toEqual(before.rumor.tags);
+    expect(before.req.html).not.toBeNull();
+    expect(after.req).toEqual({ ...before.req, html: null });
+    expect(after.rumor.created_at).toBe(NOW + 60);
+    expect(after.seal.pubkey).toBe(device.pubkey());
+    // the copy sealed to the device says the same, so a move wraps the request without its HTML too
+    expect(JSON.parse(await device.nip44Decrypt(device.pubkey(), again.sealed))).toEqual({ uuid: before.rumor.tags[0][1].split('/').pop(), request: after.req });
+    // and the phone takes it from a connected browser, a request without HTML naming no server
+    const devices = { v: 1 as const, devices: [{ device_pubkey: device.pubkey(), label: 'x', token: PAIRING.token, connected_at: NOW, revoked_at: null }] };
+    expect(acceptSaveRequest(after.rumor, after.seal, devices, DEFAULTS.operator.blossom)).toMatchObject({ ok: true, request: { html: null } });
+  });
+
+  test('can’t be made from a sealed copy that doesn’t open, or a wrap that names no recipient', async () => {
+    const { pending } = await prepare(PAGE, ctx);
+    expect(await withoutText({ ...pending, sealed: 'not a sealed request' }, device, NOW)).toBeNull();
+    expect(await withoutText({ ...pending, wrap: { ...pending.wrap, tags: [] } }, device, NOW)).toBeNull();
+    expect(await withoutText({ ...pending, wrap: { id: pending.id } as NostrEvent }, device, NOW)).toBeNull();
+  });
+});
+
 function fakeNet(o: { upload?: 'ok' | 'down' | 'refused'; publish?: 'ok' | 'down' | 'blocked' } = {}) {
   const calls: string[] = [];
   const published: NostrEvent[] = [];
@@ -235,10 +271,11 @@ function fakeNet(o: { upload?: 'ok' | 'down' | 'refused'; publish?: 'ok' | 'down
 
 describe('delivery', () => {
   const ctx = { device, defaults: DEFAULTS, pairing: PAIRING, crypto: webCrypto, now: NOW };
-  const send = async (o: Parameters<typeof fakeNet>[0]) => {
+  /** A delivery whose refusal, unless the test says otherwise, is only noted among the network's calls. */
+  const send = async (o: Parameters<typeof fakeNet>[0], refused?: (p: Delivered) => Promise<void>) => {
     const { pending } = await prepare(PAGE, ctx);
     const f = fakeNet(o);
-    return { d: await deliver(pending, 'b', 'r', device, f.net), pending, ...f };
+    return { d: await deliver(pending, 'b', 'r', device, f.net, refused ?? (async () => void f.calls.push('refused'))), pending, ...f };
   };
 
   test('the blob goes up before the wrap, and is then dropped', async () => {
@@ -254,8 +291,23 @@ describe('delivery', () => {
     expect(r.calls).toEqual(['upload']);
     expect(r.pending.blob).not.toBeNull();
   });
-  test('a blob refused for good is dropped and the request still goes, for the phone to fetch the page', async () => {
-    expect((await send({ upload: 'refused' })).d).toBe('sent');
+  test('a blob refused for good isn’t sent again, and the wrap that refused leaves in its place goes (v1.12)', async () => {
+    const other = (await prepare(linkOnly(PAGE.url), ctx)).pending.wrap;
+    const seen: string[] = [];
+    const r = await send({ upload: 'refused' }, async (p) => {
+      seen.push(`refused, blob ${p.blob === null ? 'gone' : 'kept'}`);
+      p.wrap = other;
+    });
+    expect(r.d).toBe('sent');
+    expect(seen).toEqual(['refused, blob gone']);
+    expect(r.calls).toEqual(['upload', `publish 1059 as ${device.pubkey().slice(0, 4)}`]);
+    expect(r.published.map((w) => w.id)).toEqual([other.id]);
+  });
+  test('a save with no blob, or one already uploaded, is only published', async () => {
+    const { pending } = await prepare(linkOnly(PAGE.url), ctx);
+    const f = fakeNet({ upload: 'refused' });
+    expect(await deliver(pending, 'b', 'r', device, f.net, async () => void f.calls.push('refused'))).toBe('sent');
+    expect(f.calls).toEqual([`publish 1059 as ${device.pubkey().slice(0, 4)}`]);
   });
   test("a relay that times out, and one that refuses", async () => {
     expect((await send({ publish: 'down' })).d).toBe('unreachable');

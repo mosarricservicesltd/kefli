@@ -4,13 +4,14 @@
 // A save goes into the queue before its first send, so a worker stopped or a browser closed mid-send leaves it there
 // for the next flush (F23). A save's send and its Undo run one at a time, so Undo pressed while a send is under way waits
 // for it and then retracts what went or takes back what didn't (F40). Undo isn't timed here: it can only be pressed on a
-// toast or popup still showing it, whose countdown pauses while the pointer or focus is on it (decision 38, F24).
+// toast or popup still showing it, whose countdown pauses while the pointer or focus is on it (decision 38, F24). A save
+// whose upload the operator refuses for good goes without its HTML, under a new wrap that Undo then names (v1.12).
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { isWebAddress, type Captured } from './captured';
 import { record, type Outcome } from './debug';
 import { PerSave } from './lock';
-import { changeQueue, dequeue, enqueue, flush, queued, settle, shown, whyNot } from './queue';
-import { AddressTooLongError, deliver, prepare, retract, type Delivery, type Net, type Pending, type SaveContext } from './save';
+import { changeQueue, dequeue, enqueue, flush, queued, replaceWrap, settle, shown, whyNot, type Settled } from './queue';
+import { AddressTooLongError, deliver, prepare, retract, withoutText, type Delivered, type Delivery, type Net, type Pending, type SaveContext } from './save';
 import type { Store } from './store';
 import type { ToastKind, ToastState } from './toastCopy';
 import { settleUndo } from './undo';
@@ -50,9 +51,44 @@ interface UndoKey {
 
 const WAITING: Record<ReturnType<typeof whyNot>, Outcome> = { offline: 'waiting, offline', reach: 'waiting, couldn’t reach', blocked: 'waiting, blocked' };
 
+/** What the toast shows of a save, under the id its wrap has now, which Undo names. */
+const toasted = (p: Pending, link: boolean) => ({ id: p.id, hash: p.hash, title: p.title, host: p.host, link });
+
 export function background(b: Browser) {
   const saves = new PerSave();
-  const deliverFor = (ctx: SaveContext) => (p: Pick<Pending, 'id' | 'wrap' | 'blob' | 'sha256'>) => deliver(p, ctx.defaults.operator.blossom, ctx.defaults.operator.relay, ctx.device, b.net);
+  /**
+   * Saves whose request went, or waits to go, without the HTML the operator refused (v1.12), by their wrap's id, until the
+   * toast or Copy debug info says so. Kept in this background only: one started since records such a save as any other.
+   */
+  const textless = new Set<string>();
+  const deliverFor = (ctx: SaveContext) => (p: Delivered) => deliver(p, ctx.defaults.operator.blossom, ctx.defaults.operator.relay, ctx.device, b.net, (q) => withoutHtml(q, ctx));
+
+  /** Undo's key moved to a save's new wrap: the key that alone retracts it, and no inbox blob left to delete. */
+  async function moveUndoKey(was: string, to: string, wrapKey: Uint8Array): Promise<void> {
+    const kept = await b.session.get<UndoKey>(`undo:${was}`);
+    if (!kept) return;
+    await b.session.set(`undo:${to}`, { key: bytesToHex(wrapKey), sha256: null, hash: kept.hash } satisfies UndoKey);
+    await b.session.remove(`undo:${was}`);
+  }
+
+  /**
+   * The operator refused the save's upload for good (contract 4.4 and 5, v1.12), and the extension doesn't wait for room:
+   * the request goes with `html` null, rebuilt and signed again with the same uuid. The new wrap, its key and its id take
+   * the old one's place in the queue and in Undo's key before it is sent, so a worker stopped meanwhile leaves the new
+   * wrap for the next flush. A request that can't be rebuilt goes as it was, and the phone, finding no blob, fetches the
+   * page at once.
+   */
+  async function withoutHtml(p: Delivered, ctx: SaveContext): Promise<void> {
+    const was = p.id;
+    p.sha256 = null;
+    const again = await withoutText(p, ctx.device, b.now());
+    if (again) {
+      Object.assign(p, { id: again.wrap.id, wrap: again.wrap, sealed: again.sealed });
+      await replaceWrap(b.store, was, p);
+      await moveUndoKey(was, p.id, again.wrapKey);
+    }
+    textless.add(p.id);
+  }
 
   /**
    * After the queue changes: the alarm is on while anything still tries and goes once nothing does, and the badge counts
@@ -86,8 +122,7 @@ export function background(b: Browser) {
     const p = await prepared(c, ctx, where);
     if (!p) return;
     const { pending, wrapKey } = p;
-    const base = { id: pending.id, hash: pending.hash, title: pending.title, host: pending.host, link };
-    await b.toast(where, { ...base, kind: 'saving' });
+    await b.toast(where, { ...toasted(pending, link), kind: 'saving' });
     await b.session.set(`undo:${pending.id}`, { key: bytesToHex(wrapKey), sha256: pending.sha256, hash: pending.hash } satisfies UndoKey);
     // into the queue inside the save's own run, so a flush already going never finds it there and not busy, and sends it
     // a second time beside this send
@@ -98,21 +133,31 @@ export function background(b: Browser) {
       const d: Delivery = online ? await deliverFor(ctx)(pending) : 'unreachable';
       return { d, online, s: await settle(b.store, pending, d, online, true) };
     });
-    if (d === 'sent') {
-      await record(b.store, b.now(), pending.id, c.html === null ? 'sent, no text' : 'sent', link);
-      await queueChanged();
-      await b.toast(where, { ...base, kind: c.html === null ? 'notext' : 'saved' });
-      if (where === 'popup') await b.tick();
-      return;
-    }
+    // from here the toast names the wrap the save has now, a new one if its HTML was refused, so Undo retracts that
+    if (d === 'sent') return sentNow(c, pending, where, link);
+    await waits(pending, where, link, { d, s, online });
+  }
+
+  /** Saved, or, for a save that went without its text, the toast saying the phone will fetch it. */
+  async function sentNow(c: Captured, pending: Pending, where: Where, link: boolean): Promise<void> {
+    const noText = textless.delete(pending.id) || c.html === null;
+    await record(b.store, b.now(), pending.id, noText ? 'sent, no text' : 'sent', link);
     await queueChanged();
+    await b.toast(where, { ...toasted(pending, link), kind: noText ? 'notext' : 'saved' });
+    if (where === 'popup') await b.tick();
+  }
+
+  /** A save that didn't go at once: taken off the queue meanwhile, refused as the ninth, or waiting, and why. */
+  async function waits(pending: Pending, where: Where, link: boolean, r: { d: Exclude<Delivery, 'sent'>; s: Settled; online: boolean }): Promise<void> {
+    await queueChanged();
+    const base = toasted(pending, link);
     // taken off the queue while it was sending: Disconnect deleted it, as its confirm said
-    if (s === 'gone') return b.toast(where, { ...base, kind: 'unqueued' });
-    if (s === 'full') {
+    if (r.s === 'gone') return b.toast(where, { ...base, kind: 'unqueued' });
+    if (r.s === 'full') {
       await record(b.store, b.now(), pending.id, 'queue full', link);
       return b.toast(where, { ...base, kind: 'full' });
     }
-    const why = whyNot(d, online);
+    const why = whyNot(r.d, r.online);
     await record(b.store, b.now(), pending.id, WAITING[why], link);
     await b.toast(where, { ...base, kind: why === 'offline' ? 'offline' : 'failed' });
     if (where === 'popup' && why === 'offline') await b.tick();
@@ -165,7 +210,7 @@ export function background(b: Browser) {
     if (!ctx) return b.flushAlarm(false);
     const stoppedBefore = new Set((await queued(b.store)).filter((e) => e.stopped).map((e) => e.id));
     const sent = await flush(b.store, deliverFor(ctx), b.online(), { all, only, saves });
-    for (const id of sent) await record(b.store, b.now(), id, 'sent from queue');
+    for (const id of sent) await record(b.store, b.now(), id, textless.delete(id) ? 'sent, no text' : 'sent from queue');
     for (const e of await queued(b.store)) if (e.stopped && !stoppedBefore.has(e.id)) await record(b.store, b.now(), e.id, 'stopped');
     await queueChanged();
   }

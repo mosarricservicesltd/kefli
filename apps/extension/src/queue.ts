@@ -84,6 +84,19 @@ export async function enqueue(store: Store, p: Pending, why: Queued['why']): Pro
   });
 }
 
+/**
+ * A save wrapped again under a new id, its request sent without the HTML the operator refused (contract 4.4, v1.12): the
+ * entry takes the new wrap and sealed request in the old one's place, with no blob left to upload. False when the entry
+ * had already left the queue.
+ */
+export async function replaceWrap(store: Store, was: string, next: Pick<Queued, 'id' | 'wrap' | 'sealed'>): Promise<boolean> {
+  return changeQueue(store, (q) => {
+    const i = q.findIndex((e) => e.id === was);
+    if (i >= 0) q[i] = { ...q[i], id: next.id, wrap: next.wrap, sealed: next.sealed, blob: null, sha256: null };
+    return i >= 0;
+  });
+}
+
 export async function dequeue(store: Store, id: string): Promise<boolean> {
   return changeQueue(store, (q) => {
     const i = q.findIndex((e) => e.id === id);
@@ -129,6 +142,9 @@ export function whyNot(d: Exclude<Delivery, 'sent'>, online: boolean): Exclude<Q
   return online ? 'reach' : 'offline';
 }
 
+/** One entry's delivery, which may put a new wrap in the entry's place (v1.12). */
+export type Send = (p: Queued) => Promise<Delivery>;
+
 export interface FlushOptions {
   /** Stopped entries too (Retry). */
   all?: boolean;
@@ -139,21 +155,30 @@ export interface FlushOptions {
 }
 
 /**
- * One pass over the queue: each entry still trying (or every entry, or the one named, for Retry) is delivered; a sent one
- * leaves, the others count an attempt and stop at 200. A save whose send is already under way is left to it, and each
- * entry is read again as its turn comes, so one undone or moved meanwhile isn't sent (F40). Returns the ids that were sent.
+ * One entry's turn: read again, so one undone or moved meanwhile isn't sent (F40), then delivered and settled. The id it
+ * was sent under, which is its new wrap's when the send put one in its place (v1.12), or null.
  */
-export async function flush(store: Store, send: (p: Queued) => Promise<Delivery>, online: boolean, o: FlushOptions = {}): Promise<string[]> {
+async function flushOne(store: Store, id: string, send: Send, online: boolean, all: boolean): Promise<string | null> {
+  // read on its own line: lizard, which the code gate uses, ends the function at a find called on a bracketed await
+  const q = await queued(store);
+  const e = q.find((x) => x.id === id);
+  if (!e || (e.stopped && !all)) return null;
+  const d = await send(e);
+  return (await settle(store, e, d, online)) === 'sent' ? e.id : null;
+}
+
+/**
+ * One pass over the queue: each entry still trying (or every entry, or the one named, for Retry) is delivered; a sent one
+ * leaves, the others count an attempt and stop at 200. A save whose send is already under way is left to it. Returns the
+ * ids that were sent, each the id it went under.
+ */
+export async function flush(store: Store, send: Send, online: boolean, o: FlushOptions = {}): Promise<string[]> {
   const saves = o.saves ?? new PerSave();
   const sent: string[] = [];
   for (const { id } of await queued(store)) {
     if ((o.only !== undefined && id !== o.only) || saves.busy(id)) continue;
-    const went = await saves.run(id, async () => {
-      const e = (await queued(store)).find((x) => x.id === id);
-      if (!e || (e.stopped && !o.all)) return false;
-      return (await settle(store, e, await send(e), online)) === 'sent';
-    });
-    if (went) sent.push(id);
+    const went = await saves.run(id, () => flushOne(store, id, send, online, o.all === true));
+    if (went) sent.push(went);
   }
   return sent;
 }

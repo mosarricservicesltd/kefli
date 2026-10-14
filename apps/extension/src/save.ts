@@ -1,7 +1,7 @@
 // A browser save (contract 4.4): the captured HTML encrypted into an inbox blob for the operator Blossom server, then a
 // save request wrapped to the user, rumor and seal by the device key, the wrap by a fresh key kept for Undo. Delivery
-// uploads the blob, then publishes the wrap to the operator relay only. Network calls come through Net, so the tests can
-// play the relay and the server.
+// uploads the blob, then publishes the wrap to the operator relay only; an upload the operator refuses for good sends the
+// request again without its HTML (v1.12). Network calls come through Net, so the tests can play the relay and the server.
 import { base64 } from '@scure/base';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { finalizeEvent } from 'nostr-tools/pure';
@@ -134,25 +134,88 @@ export async function prepare(c: Captured, ctx: SaveContext): Promise<Prepared> 
   }
 }
 
-export type Delivery = 'sent' | 'unreachable' | 'blocked';
+/** A request wrapped again: the new wrap, the key that alone can retract it, and the request sealed to the device. */
+export interface Again {
+  wrap: NostrEvent;
+  wrapKey: Uint8Array;
+  sealed: string;
+}
+
+/** What a request wrapped again changes: its token in a move, its HTML when the operator refused the upload. */
+export type Change = (request: SaveRequest) => SaveRequest;
 
 /**
- * Uploads the blob if it is still here, then publishes the wrap. The blob going first means the phone finds the HTML
- * when the request arrives; a blob the server refuses for good is dropped, and the phone fetches the page itself
- * (contract 4.4). 'blocked' is a relay that answered and refused, which the options page names.
+ * A save's request read back from its copy sealed to the device, changed, and wrapped again for `to` with the same uuid,
+ * so the phone reads the same save request under a new wrap, key and id. Null when the sealed copy can't be read, as for
+ * a save queued before requests were kept.
  */
-export async function deliver(p: Pick<Pending, 'id' | 'wrap' | 'blob' | 'sha256'>, server: string, relay: string, device: LocalSigner, net: Net): Promise<Delivery> {
-  if (p.blob !== null && p.sha256 !== null) {
-    const up = await net.upload(server, base64.decode(p.blob), p.sha256, device).catch(() => null);
-    if (!up || (!up.ok && !up.permanent)) return 'unreachable';
-    p.blob = null;
+export async function wrapAgain(sealed: string, device: LocalSigner, to: string, change: Change, now: number): Promise<Again | null> {
+  let kept: { uuid: string; request: SaveRequest };
+  try {
+    kept = JSON.parse(await device.nip44Decrypt(device.pubkey(), sealed));
+  } catch {
+    return null;
   }
+  const request = change(kept.request);
+  const { wrap, wrapKey } = await wrapSaveRequest(device, to, kept.uuid, request, now);
+  return { wrap, wrapKey, sealed: await device.nip44Encrypt(device.pubkey(), JSON.stringify({ uuid: kept.uuid, request })) };
+}
+
+/**
+ * The request with `html` null (contract 4.4, v1.12), signed again and wrapped for the recipient of the wrap it replaces.
+ * Null when that can't be done; the old wrap then goes as it was, and the phone, finding no blob, fetches the page.
+ */
+export async function withoutText(p: Pick<Pending, 'wrap' | 'sealed'>, device: LocalSigner, now: number): Promise<Again | null> {
+  try {
+    const to = p.wrap.tags.find((t) => t[0] === 'p')?.[1];
+    return to ? await wrapAgain(p.sealed, device, to, (r) => ({ ...r, html: null }), now) : null;
+  } catch {
+    return null;
+  }
+}
+
+export type Delivery = 'sent' | 'unreachable' | 'blocked';
+
+/** What delivery reads of a save, and may change: its blob goes once uploaded, and a refusal can put another wrap in place. */
+export type Delivered = Pick<Pending, 'id' | 'wrap' | 'sealed' | 'blob' | 'sha256'>;
+
+/** What a refused upload leaves to its caller: the save's request put in the wrap's place without its HTML. */
+export type Refused = (p: Delivered) => Promise<void>;
+
+/**
+ * The inbox blob's upload, while the save still has one: 'done' once the operator holds it, or when there is none to
+ * send; 'refused' for any 4xx answer but 401 and 429 (contract 4.4 and 5), never tried again; and 'unreachable' for
+ * anything else, a 5xx, a 507, a 401, a 429 or no answer, which the queue tries again.
+ */
+async function uploadInbox(p: Delivered, server: string, device: LocalSigner, net: Net): Promise<'done' | 'refused' | 'unreachable'> {
+  if (p.blob === null || p.sha256 === null) return 'done';
+  const up = await net.upload(server, base64.decode(p.blob), p.sha256, device).catch(() => null);
+  if (!up || (!up.ok && !up.permanent)) return 'unreachable';
+  p.blob = null;
+  return up.ok ? 'done' : 'refused';
+}
+
+/** The wrap published; 'blocked' is a relay that answered and refused, which the options page names. */
+async function publishWrap(p: Delivered, relay: string, device: LocalSigner, net: Net): Promise<Delivery> {
   try {
     await net.publish(relay, p.wrap, device);
     return 'sent';
   } catch (e) {
     return String(e).includes('blocked') || String(e).includes('restricted') ? 'blocked' : 'unreachable';
   }
+}
+
+/**
+ * Uploads the blob if it is still here, then publishes the wrap. The blob going first means the phone finds the HTML
+ * when the request arrives. When the operator refuses the upload for good, a 413 for room or size among the reasons,
+ * the extension doesn't wait (contract 4.4 and 5, v1.12): `refused` puts the request without its HTML in the wrap's
+ * place, and that wrap goes, so the phone fetches the page itself.
+ */
+export async function deliver(p: Delivered, server: string, relay: string, device: LocalSigner, net: Net, refused: Refused): Promise<Delivery> {
+  const up = await uploadInbox(p, server, device, net);
+  if (up === 'unreachable') return up;
+  if (up === 'refused') await refused(p);
+  return publishWrap(p, relay, device, net);
 }
 
 /** Undo after the wrap reached the relay: a kind 5 signed by the wrap's key, and the inbox blob removed (contract 4.4). */
