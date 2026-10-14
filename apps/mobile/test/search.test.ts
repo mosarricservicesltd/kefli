@@ -1,8 +1,8 @@
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
-import { indexText } from '../src/data/sync';
+import { INDEX_CHARS, indexText } from '../src/data/sync';
 import { deleteItem } from '../src/data/library';
-import { matchExpression, queryWords, search } from '../src/data/search';
+import { QUERY_WORDS, QUERY_WORD_CHARS, matchExpression, queryWords, search } from '../src/data/search';
 import { memoryDb } from './sqlite';
 
 const PK = 'ab'.repeat(32);
@@ -45,6 +45,31 @@ describe('search (mobile spec 4.9, 5.6)', () => {
     expect(search(w.db, PK, 'waiti').map((r) => r.hash)).toEqual([h(4)]);
     expect(search(w.db, PK, 'news').map((r) => r.hash)).toEqual([h(4)]);
     expect(search(w.db, PK, 'aiting')).toEqual([]);
+  });
+
+  test('a query pasted whole, of thousands of words or one endless one, searches without throwing', () => {
+    const w = world();
+    w.add(1, 'Bookmarks are a graveyard', 'Most people never return to what they save.');
+    w.add(2, 'Waiting for its text', null);
+    // past 1,000 words the GLOB fallback's AND chain is deeper than SQLite parses, and FTS5's is deeper still
+    const pasted = `most people ${'never return to what they save '.repeat(400)}`;
+    expect(() => search(w.db, PK, pasted)).not.toThrow();
+    expect(search(w.db, PK, pasted).map((r) => r.hash)).toEqual([h(1)]);
+    expect(search(w.db, PK, `waiting ${'x'.repeat(200_000)}`)).toEqual([]);
+    expect(queryWords(pasted).length).toBeLessThanOrEqual(QUERY_WORDS);
+    expect(queryWords('x'.repeat(5_000))[0]).toHaveLength(QUERY_WORD_CHARS);
+  });
+
+  test("a book-length text is indexed up to INDEX_CHARS, its title and opening found, in a bounded time", () => {
+    const w = world();
+    const filler = 'saving reading later quiet stone heather river winter '.repeat(Math.ceil((INDEX_CHARS * 2.5) / 55));
+    const t = Date.now();
+    w.add(1, 'A very long book', `opening words ${filler} closingword`);
+    // before, all five megabytes went into the index in one transaction on the JS thread (generous: suites run at once)
+    expect(Date.now() - t).toBeLessThan(15_000);
+    expect(search(w.db, PK, 'opening').map((r) => r.hash)).toEqual([h(1)]);
+    expect(search(w.db, PK, 'book').map((r) => r.hash)).toEqual([h(1)]);
+    expect(search(w.db, PK, 'closingword')).toEqual([]);
   });
 
   test('a save waiting on a delete is not found', () => {

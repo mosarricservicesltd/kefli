@@ -273,11 +273,19 @@ export function textQueue(db: SqlDb, owner: string, first?: string | null): Text
   );
 }
 
+/**
+ * The spoken text a search entry holds at most: about 300,000 words. Indexing ran at about 0.2 s a megabyte on a
+ * desktop, in one transaction on the JS thread, and a synced text may be 20 MB; words past this aren't found.
+ */
+export const INDEX_CHARS = 2_000_000;
+
 /** A save's search entry: title, site, address and its spoken words (4.9), rowid = items.id. */
 export function indexText(db: SqlDb, row: { id: number; title: string | null; site: string | null; url: string }, spoken: string): void {
+  const cut = spoken.length > INDEX_CHARS ? spoken.lastIndexOf(' ', INDEX_CHARS) : -1;
+  const body = spoken.length > INDEX_CHARS ? spoken.slice(0, cut > 0 ? cut : INDEX_CHARS) : spoken;
   db.tx(() => {
     db.run('DELETE FROM items_fts WHERE rowid = ?', row.id);
-    db.run('INSERT INTO items_fts (rowid, title, site, url, body) VALUES (?, ?, ?, ?, ?)', row.id, row.title ?? '', row.site ?? '', row.url, spoken);
+    db.run('INSERT INTO items_fts (rowid, title, site, url, body) VALUES (?, ?, ?, ?, ?)', row.id, row.title ?? '', row.site ?? '', row.url, body);
   });
 }
 

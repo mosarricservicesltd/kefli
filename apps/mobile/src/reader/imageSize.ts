@@ -57,3 +57,16 @@ export function imageSize(b: Uint8Array): Size | null {
   })();
   return size && size.w > 0 && size.h > 0 ? size : null;
 }
+
+/**
+ * Past these an image is left out, as one that isn't an image is: no phone lays out a side longer, and an image of
+ * more pixels is a decompression bomb or a raw scan, which decoding at the column's width would still have to
+ * inflate whole (and which expo-image's own guard, multiplying sides as 32-bit integers, can't measure).
+ */
+export const MAX_SIDE = 32_768;
+export const MAX_PIXELS = 100_000_000;
+
+/** Whether an image of this size can be drawn; one of unknown size is drawn as it comes, in a 3:2 place until then. */
+export function drawable(size: Size | null): boolean {
+  return !size || (size.w <= MAX_SIDE && size.h <= MAX_SIDE && size.w * size.h <= MAX_PIXELS);
+}
