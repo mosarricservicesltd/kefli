@@ -29,6 +29,10 @@ import (
 // MaxBlob caps one upload (backend spec 3.2: 8 MB); a page's HTML is at most 2 MB before encryption (contract 4.4).
 const MaxBlob = 8 << 20
 
+// MaxRead is the most of a refused upload's body read before its refusal is answered (writeBeforeBody): MaxBlob and
+// the megabyte more that Caddy in front lets through (9 MB).
+const MaxRead = MaxBlob + 1<<20
+
 type Server struct {
 	Dir  string
 	Base string // public address blobs are served from, such as https://blossom.kefli.app
@@ -99,6 +103,25 @@ func (rf refusal) write(w http.ResponseWriter) {
 // refuse answers a Blossom error with no figures.
 func refuse(w http.ResponseWriter, status int, reason string) {
 	refusal{status: status, reason: reason}.write(w)
+}
+
+// actedOn is whether the client must read this refusal to act on it (contract 4.2, 5): 413 for room or size and 507
+// for a full disk, after which the phone sends the save without its text. To any other it answers as to a network
+// failure, by trying again.
+func (rf refusal) actedOn() bool {
+	return rf.status == http.StatusRequestEntityTooLarge || rf.status == http.StatusInsufficientStorage
+}
+
+// writeBeforeBody answers a refusal reached before the upload's body is read. One the client acts on waits for the
+// rest of the body, up to MaxRead: a client that sends its whole body before it reads, as the phone's HTTP client
+// (OkHttp 4.9.2) does, otherwise meets a connection the server closes under it once more than 256 KB is left unread,
+// and gets a reset in place of the answer. A client that asked to be told first (Expect: 100-continue) hasn't sent its
+// body, and is answered at once.
+func writeBeforeBody(w http.ResponseWriter, r *http.Request, rf refusal) {
+	if rf.actedOn() && !strings.EqualFold(r.Header.Get("Expect"), "100-continue") {
+		_, _ = io.CopyN(io.Discard, r.Body, MaxRead)
+	}
+	rf.write(w)
 }
 
 func (s *Server) path(sha string) string {
@@ -246,7 +269,7 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 	}
 	up, rf := s.allowed(r, sha, r.ContentLength)
 	if rf.status != 0 {
-		rf.write(w)
+		writeBeforeBody(w, r, rf)
 		return
 	}
 	tmp, size, err := s.receive(r.Body, sha)
