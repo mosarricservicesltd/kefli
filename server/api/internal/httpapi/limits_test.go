@@ -431,6 +431,33 @@ func TestUploadsInFlightPerAccount(t *testing.T) {
 	expect(t, s, 200, b)
 }
 
+// Each upload in flight holds its size against the disk's floor until it lands, and a library could have eight going:
+// eight slow 8 MB bodies held 64 MB of the floor for each library, though at most a day's 20 MB of them could be
+// taken. Now a library's uploads in flight come to a day's in bytes at most, and one more waits with 429, which the
+// phone and the extension send again later; the phone sends one at a time.
+func TestUploadsInFlightPerAccountInBytes(t *testing.T) {
+	e := newEnv(t)
+	user, other := newKey(), newKey()
+	e.registered(user, other)
+	big := func(c byte) []byte { return bytes.Repeat([]byte{c}, blossom.MaxBlob) }
+	first, second := e.held(user, big('a')), e.held(user, big('b'))
+	// 16 MB in flight: another 8 MB would pass a day's 20 MB, and 4 MB fits
+	s, b := e.upload(user, big('c'))
+	expect(t, s, 429, b)
+	s, b = e.upload(user, bytes.Repeat([]byte("d"), 4<<20))
+	expect(t, s, 200, b)
+	s, b = e.upload(other, big('e'))
+	expect(t, s, 200, b)
+	for _, release := range []func() int{first, second} {
+		if s := release(); s != 200 {
+			t.Fatalf("a held upload: %d", s)
+		}
+	}
+	if f := e.figures(user); f.Today != store.DailyLimit {
+		t.Fatalf("figures %+v: the day's 20 MB taken", f)
+	}
+}
+
 // An upload checked who sent it before its body was read, and recorded its owner after, so one still arriving when its
 // account or browser was deleted was kept: a blob owned by an account that no longer exists, served to anyone, counted
 // against nobody and deleted by nothing, after Delete my data said the library had left Kefli's server. Now it is

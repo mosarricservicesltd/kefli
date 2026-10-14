@@ -76,10 +76,10 @@ type Server struct {
 	// check that no owner holds the blob and the file's removal another
 	commitMu sync.Mutex
 	// flightMu guards the uploads in flight: their bytes, which count against MinFree until they finish, and how many
-	// each account has going
+	// each account has going, and their bytes
 	flightMu sync.Mutex
 	inflight int64
-	flights  map[string]int
+	flights  map[string]flight
 	// calls and blockCalls count requests per address and per IPv6 /48, MaxAddressCalls and MaxBlockCalls a minute
 	calls, blockCalls *limit.Limiter
 	// downloads and blockDownloads count the bytes of blobs sent, MaxAddressDownload and MaxBlockDownload an hour
@@ -88,7 +88,7 @@ type Server struct {
 
 func New(dir, base string, st *store.Store, log *slog.Logger) *Server {
 	return &Server{
-		Dir: dir, Base: strings.TrimRight(base, "/"), Free: diskFree, FreeFiles: diskFiles, st: st, log: log, flights: map[string]int{},
+		Dir: dir, Base: strings.TrimRight(base, "/"), Free: diskFree, FreeFiles: diskFiles, st: st, log: log, flights: map[string]flight{},
 		calls:          limit.New(MaxAddressCalls, time.Minute, st.Now),
 		blockCalls:     limit.New(MaxBlockCalls, time.Minute, st.Now),
 		downloads:      limit.New(MaxAddressDownload, time.Hour, st.Now),
@@ -334,20 +334,29 @@ func (s *Server) roomForFile() refusal {
 	return refusal{}
 }
 
-// takeOff counts an upload as in flight, once its account has fewer than MaxInFlight going (429 otherwise) and the
-// disk has room for it beside the others in flight (507), in one step so uploads at once can't each pass alone;
-// land, deferred, ends it.
+// flight is an account's uploads in flight: how many, and the bytes they said they would send.
+type flight struct {
+	n     int
+	bytes int64
+}
+
+// takeOff counts an upload as in flight, once its account has fewer than MaxInFlight going and no more than a day's
+// uploads in bytes with it (429 otherwise), and the disk has room for it beside the others in flight (507), in one
+// step so uploads at once can't each pass alone; land, deferred, ends it. Each in flight holds its size against the
+// floor until it lands, and of a library's uploads at most a day's can be taken, so the rest would only hold the
+// floor: eight slow 8 MB bodies held 64 MB of it for each library, for as long as they took to arrive.
 func (s *Server) takeOff(account string, size int64) refusal {
 	s.flightMu.Lock()
 	defer s.flightMu.Unlock()
-	if s.flights[account] >= MaxInFlight {
+	f := s.flights[account]
+	if f.n >= MaxInFlight || f.bytes+size > store.DailyLimit {
 		return tooMany
 	}
 	if rf := s.roomLocked(size); rf.status != 0 {
 		return rf
 	}
 	s.inflight += size
-	s.flights[account]++
+	s.flights[account] = flight{n: f.n + 1, bytes: f.bytes + size}
 	return refusal{}
 }
 
@@ -355,9 +364,12 @@ func (s *Server) land(account string, size int64) {
 	s.flightMu.Lock()
 	defer s.flightMu.Unlock()
 	s.inflight -= size
-	if s.flights[account]--; s.flights[account] <= 0 {
+	f := s.flights[account]
+	if f.n <= 1 {
 		delete(s.flights, account)
+		return
 	}
+	s.flights[account] = flight{n: f.n - 1, bytes: f.bytes - size}
 }
 
 // limits holds an upload to its library's fair use (contract 5, flow decision 117). It costs its size, and never less
