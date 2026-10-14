@@ -2,21 +2,26 @@
 // network. It sends register, upload_blob, mirror_blob, publish_item, publish_lists, delete_item, delete_blob,
 // post_device, pair_ack, delete_device, delete_wrap, copy_relay and publish_library_key.
 import {
-  DEVICES_PATH, KIND, buildDeletions, buildDevicesEvent, buildItemEvent, buildLibraryKeyEvent, buildRelayList, buildServerList, deleteBlob, httpAuth,
-  isSignerFailure, mirrorBlob, releaseTemplate, sameUrl, savedD, signStatement, uploadBlob, wrapPairAck,
+  DEVICES_PATH, EventTooLargeError, KIND, buildDeletions, buildDevicesEvent, buildItemEvent, buildLibraryKeyEvent, deleteBlob, httpAuth,
+  isSignerFailure, mirrorBlob, releaseTemplate, sameUrl, savedD, signStatement, signWithinCeiling, uploadBlob, wrapPairAck,
 } from '@kefli/protocol';
 import type { AccountFigures, BlossomOutcome, CryptoPort, NostrEvent, Signer, Statement } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { hasDevices, localRecord, noteRecord, pairAcked, recordCreatedAt, type DeviceProof, type PairPayload } from '../data/devices';
 import { getItem, itemJson, markPublished, textServers, type ItemRow } from '../data/items';
-import { markBacked, nextForRoom, noteFreed, roomLeft, type KnownFigures } from '../data/backup';
+import {
+  heldFor, holdOn, holdUpload, holdUploads, markBacked, nextForRoom, noteFreed, releaseHold, roomLeft, type KnownFigures,
+} from '../data/backup';
 import { keyPublished, libraryKey, libraryKeyPublished, madeHere, makeLibraryKey } from '../data/libraryKey';
-import { indexerRelays, listServers, nextListTime, recordList, relayEntries, writeRelays } from '../data/lists';
+import {
+  confirmedAbsent, indexerRelays, listEdits, listEditsSent, listServers, listsUnread, nextListTime, recordList, relayEntries, relayListTags,
+  serverListTags, writeRelays,
+} from '../data/lists';
 import { backoff, begin, enqueue, finish, nextDue, nextWakeAt, releaseDependents, wake } from '../data/outbox';
 import type { OutboxRow, OutboxTarget, TargetResult } from '../data/outbox';
-import { namesText, queueBlobDelete, withdrawText } from '../data/saves';
+import { fitSave, namesText, queueBlobDelete, withdrawText } from '../data/saves';
 import type { Defaults } from './config';
-import { pageStream, streamFilter, takeNewerLists, type SyncPorts } from './sync';
+import { notYet, pageStream, streamFilter, takeNewerLists, type SyncPorts } from './sync';
 
 export type RelayAnswer = { ok: true } | { ok: false; reason: string };
 
@@ -50,12 +55,24 @@ const DAY = 86_400;
 const UNDO_WAIT = 15;
 const err = (e: unknown) => String((e as Error)?.message ?? e);
 
-/** A relay's OK prefix decides the outcome (4.3). */
+/**
+ * An event dated past the relay's clock by more than it allows: strfry's "invalid: created_at too late" (15 minutes
+ * ahead, for every strfry relay, Kefli's own among them), khatru's "event too much in the future", and nostr-rs-relay's
+ * "invalid: The event created_at field is out of the acceptable range (+900sec) for this relay.", which it sends only
+ * for a date ahead. It is the phone's clock running fast, not the event, so it is retried with the backoff until the
+ * clock is right or the relay's has caught up; refused for good, every save made on such a phone missed every strfry
+ * relay. A refusal as too early stays final: the library copied to a relay added in Advanced goes as already signed
+ * (sendCopyRelay), and an event years old stays so however often it is sent.
+ */
+const CLOCK = new RegExp('created_at too late|too (?:much|far) in the future|created_at field is out of the acceptable range', 'i');
+
+/** A relay's OK prefix decides the outcome (4.3); an event refused as dated ahead of the relay's clock is tried again. */
 export function relayResult(target: string, a: RelayAnswer, eventId: string): TargetResult {
   if (a.ok) return { target, kind: 'ok', eventId };
   const reason = a.reason;
   if (/^duplicate:/.test(reason)) return { target, kind: 'ok', eventId };
   if (/^rate-limited:/.test(reason)) return { target, kind: 'retry', error: reason, waitSec: 60 };
+  if (CLOCK.test(reason)) return { target, kind: 'retry', error: reason };
   if (/^(invalid|blocked|pow|restricted|error):/.test(reason)) return { target, kind: 'rejected', error: reason };
   return { target, kind: 'retry', error: reason };
 }
@@ -154,6 +171,12 @@ async function sendUpload(p: SendPorts, row: OutboxRow, signer: Signer, t: Outbo
   const { sha256 } = JSON.parse(row.payload ?? '{}') as { sha256: string };
   // its save has gone, or took another phone's text, since this was queued: no save would name the blob (C§4.1)
   if (!namesText(p.db, row.signer, sha256)) return (withdrawText(p.db, row.signer, sha256), []);
+  // a refusal for room or the day holds the library's texts until its retry: this one would be sent only to be refused
+  const held = holdOn(p.db, row.signer, sha256, p.now(), t.target);
+  if (held) {
+    holdUpload(p.db, row.signer, row.id, sha256, held);
+    return [{ target: t.target, kind: 'retry', error: `held: ${held.reason}`, waitSec: held.until - p.now() }];
+  }
   const blob = await p.readBlob(sha256);
   // the staged text is gone, so it can never be sent: the save goes without it rather than with it (C§4.2)
   if (!blob) return (releaseDependents(p.db, row.id, 'publish_item'), [{ target: t.target, kind: 'rejected', error: 'staged blob missing' }]);
@@ -173,6 +196,10 @@ async function sendUpload(p: SendPorts, row: OutboxRow, signer: Signer, t: Outbo
 function uploaded(p: SendPorts, owner: string, target: string, sha256: string, size: number): TargetResult[] {
   const waited = p.db.get<{ last_error: string | null }>('SELECT last_error FROM blobs WHERE sha256 = ? AND owner = ?', sha256, owner)?.last_error;
   p.db.run('UPDATE blobs SET operator_at = ?, last_error = NULL WHERE sha256 = ? AND owner = ?', p.now(), sha256, owner);
+  // the operator has taken a text, so the library had the room and the day for it: no refusal holds the rest back. One
+  // taken while a refusal for the day holds them was a text the operator holds already (holdOn), which says nothing of
+  // the day, so the rest wait for its retry
+  if (heldFor(p.db, owner, p.now())?.reason !== 'daily') releaseHold(p.db, owner);
   textTaken(p.db, p.now(), owner, sha256, target);
   if (!namesText(p.db, owner, sha256)) queueBlobDelete(p.db, p.now(), owner, sha256, [target], { sha256, size, up: p.now() });
   if (waited === 'quota') tryRoom(p, owner);
@@ -200,7 +227,7 @@ function textTaken(db: SqlDb, now: number, owner: string, sha256: string, operat
  * The operator refused the text (C§5, v1.12): its reason is kept on the blob, a refusal for room brings the library's
  * figures, and the save's publish goes now without the text, which stays on the phone (C§4.2). A text over 8 MB is never
  * sent again; one refused for room, the day's uploads or any other 4xx is tried again a day later, and a full disk
- * (507) as any server error is.
+ * (507) as any server error is. A refusal for room or the day holds the library's other texts with it (roomRefused).
  */
 function refused(p: SendPorts, row: OutboxRow, target: string, sha256: string, r: Refusal): TargetResult[] {
   const why = refusalOf(r);
@@ -208,11 +235,20 @@ function refused(p: SendPorts, row: OutboxRow, target: string, sha256: string, r
   // the save goes now, before anything else this refusal brings is kept (C§4.2)
   releaseDependents(p.db, row.id, 'publish_item');
   p.db.run('UPDATE blobs SET last_error = ? WHERE sha256 = ? AND owner = ?', why, sha256, row.signer);
-  const figures = r.figures;
-  if (figures && (why === 'quota' || why === 'daily')) quietly(() => p.onFigures?.(row.signer, figures));
+  if (why === 'quota' || why === 'daily') roomRefused(p, row, target, why, r.figures);
   const error = `HTTP ${r.status} ${r.reason}`;
   if (why === 'too_large') return [{ target, kind: 'rejected', error }];
   return [{ target, kind: 'retry', error, ...(r.status === 507 ? {} : { waitSec: DAY }) }];
+}
+
+/**
+ * A refusal for room or the day (C§5): its figures kept, and the library's other texts held until its retry a day
+ * from now, or for room until a confirmed deletion wakes one (holdUploads), rather than each sent whole to be refused.
+ * For the day, a text the operator holds already for another library on the phone still goes (holdOn).
+ */
+function roomRefused(p: SendPorts, row: OutboxRow, operator: string, why: 'quota' | 'daily', figures: AccountFigures | undefined): void {
+  if (figures) quietly(() => p.onFigures?.(row.signer, figures));
+  holdUploads(p.db, row.signer, { reason: why, until: p.now() + DAY }, row.id, operator);
 }
 
 /**
@@ -229,15 +265,19 @@ function quietly(f: () => void): void {
 
 /**
  * Room the operator made, by confirming a deletion, or that a text waiting for room found (C§5): the oldest text
- * waiting on quota that fits what the last known figures leave goes now. Its own success tries the next; a refusal
- * stops there, so a deletion asks for no signing for texts that can't fit. A text waiting on the day's uploads waits
- * for its day, since deleting gives none of the day back.
+ * waiting on quota that fits what the last known figures leave goes now, and the refusal's hold on the rest is lifted
+ * for it. Its own success tries the next; a refusal stops there, holding the rest again, so a deletion asks for no
+ * signing for texts that can't fit. While a refusal for the day's uploads holds the texts, they wait for its retry,
+ * since deleting gives none of the day back.
  */
 function tryRoom(p: SendPorts, owner: string): void {
   quietly(() => {
+    if (heldFor(p.db, owner, p.now())?.reason === 'daily') return;
     const f = p.figures?.(owner);
     const next = f ? nextForRoom(p.db, owner, roomLeft(p.db, owner, f)) : null;
-    if (next !== null) wake(p.db, next, p.now());
+    if (next === null) return;
+    releaseHold(p.db, owner);
+    wake(p.db, next, p.now());
   });
 }
 
@@ -332,23 +372,48 @@ function published(p: SendPorts, owner: string, item: ItemRow, event: NostrEvent
   retireAddress(p.db, p.now(), owner, item.hash, item.remote_d, d, item.event_created_at ?? 0);
 }
 
+/**
+ * A save's event, built at send time (4.3), created_at = max(now, last + 1), so a newer state always replaces the old
+ * one. Its page's fields are fitted under the event ceiling (C§3.3) with the fitter a save made today has (data/saves
+ * fitSave): a save made before that, its title or picture address too long, was refused by buildItemEvent at every
+ * send and never left the phone. Null when even fitted it is over the ceiling, as with an address too long for any
+ * event, which no later try changes: the save stays on the phone, counted as not backed up.
+ */
+async function saveEvent(p: SendPorts, signer: Signer, item: ItemRow, servers: string[] | null, key: Uint8Array): Promise<NostrEvent | null> {
+  const fitted = fitSave(item);
+  if (!fitted) return null;
+  const createdAt = Math.max(p.now(), (item.event_created_at ?? 0) + 1);
+  try {
+    return (await buildItemEvent(signer, item.hash, itemJson(fitted, servers), createdAt, key)).event;
+  } catch (e) {
+    if (e instanceof EventTooLargeError) return null;
+    throw e;
+  }
+}
+
+/**
+ * The library key a save's address is keyed by (F5), or why the save waits for it: an identity made here makes its
+ * key now; any other waits until sync has learnt it. The key's record reaches a relay before any save it addresses,
+ * so another phone finding the saves finds the key.
+ */
+async function addressKey(p: SendPorts, row: OutboxRow, signer: Signer, targets: OutboxTarget[]): Promise<Uint8Array | string> {
+  const key = libraryKey(p.db, row.signer) ?? (madeHere(p.db, row.signer) ? makeLibraryKey(p.db, p.now(), row.signer, p.crypto.randomBytes) : null);
+  if (!key) return 'library key not known yet';
+  if (!keyPublished(p.db, row.signer) && !(await sendLibraryKey(p, row, signer, targets)).some((r) => r.kind === 'ok')) return 'library key record not sent yet';
+  return key;
+}
+
 async function sendPublish(p: SendPorts, row: OutboxRow, signer: Signer, targets: OutboxTarget[]): Promise<TargetResult[]> {
   const item = getItem(p.db, row.signer, row.subject);
   if (!item) return each(targets, 'rejected', 'item gone');
   // a save waiting on its delete's Undo isn't published: one that went out after its kind 5 would bring it back (F38)
   if (item.pending_delete_at !== null) return each(targets, 'retry', 'waiting on a delete', UNDO_WAIT);
-  // the address is keyed (F5): an identity made here makes its key now; any other waits until sync has learnt it
-  const key = libraryKey(p.db, row.signer) ?? (madeHere(p.db, row.signer) ? makeLibraryKey(p.db, p.now(), row.signer, p.crypto.randomBytes) : null);
-  if (!key) return each(targets, 'retry', 'library key not known yet');
-  // the key's record reaches a relay before any save it addresses, so another phone finding the saves finds the key
-  if (!keyPublished(p.db, row.signer) && !(await sendLibraryKey(p, row, signer, targets)).some((r) => r.kind === 'ok')) {
-    return each(targets, 'retry', 'library key record not sent yet');
-  }
+  const key = await addressKey(p, row, signer, targets);
+  if (typeof key === 'string') return each(targets, 'retry', key);
   // text.servers never lists the operator alone (contract 4.2), and names no server while the operator lacks the text
   const servers = textServers(p.db, item, p.defaults().operator.blossom, p.defaults().mirrors[0]);
-  // Built at send time, created_at = max(now, last + 1), so a newer state always replaces the old one.
-  const createdAt = Math.max(p.now(), (item.event_created_at ?? 0) + 1);
-  const { event } = await buildItemEvent(signer, item.hash, itemJson(item, servers), createdAt, key);
+  const event = await saveEvent(p, signer, item, servers, key);
+  if (!event) return each(targets, 'rejected', 'too large for its event');
   const results = await publishTo(p, targets, event);
   if (results.some((r) => r.kind === 'ok')) published(p, row.signer, item, event, servers, savedD(key, item.hash));
   // backed up once a relay the operator doesn't run holds it (FD 93)
@@ -387,69 +452,91 @@ async function sendDeleteItem(p: SendPorts, row: OutboxRow, signer: Signer, targ
   const after = payload.after;
   // dated after the newest version of the save it names, whatever this phone's clock says (F36)
   const events = await buildDeletions(signer, ds, Math.max(p.now(), (after ?? 0) + 1));
-  return Promise.all(
-    targets.map(async (t) => {
-      try {
-        let last: TargetResult = { target: t.target, kind: 'ok' };
-        for (const e of events) {
-          last = relayResult(t.target, await p.publish(t.target, e), e.id);
-          if (last.kind !== 'ok') return last;
-        }
-        return last;
-      } catch (e) {
-        return { target: t.target, kind: 'retry', error: err(e) } as TargetResult;
-      }
-    }),
-  );
+  return Promise.all(targets.map((t) => publishEach(p, t.target, events)));
 }
 
 /**
- * The newest 10002 and 10063 on the indexer and the identity's relays, taken in as sync takes them, just before the
- * lists are built: one another app published since the last sync joins this phone's rather than being overwritten.
- * A relay that doesn't answer adds nothing.
+ * The newest 10002 and 10063 on the indexer, the default relays (as a sign-in reads them) and the identity's relays,
+ * taken in as sync takes them, just before the lists are built: one another app published since the last sync joins
+ * this phone's rather than being overwritten. A relay that doesn't answer adds nothing. A copy dated more than a day
+ * past this phone's clock waits for its time, as sync's read leaves it: taken here, it froze the lists, every list
+ * sent from here being dated after it and every later one from another app being older. Returns the relays that
+ * answered, for whether a list not held is confirmed absent (C§3.1).
  */
-async function readNewerLists(p: SendPorts, owner: string): Promise<void> {
+async function readNewerLists(p: SendPorts, owner: string): Promise<Set<string>> {
+  const answered = new Set<string>();
   const query = p.query;
-  if (!query) return;
-  const relays = [...new Set([...indexerRelays(p.db, owner), ...relayEntries(p.db, owner).map((r) => r.url)])];
+  if (!query) return answered;
+  const d = p.defaults();
+  const relays = [...new Set([...indexerRelays(p.db, owner), ...d.indexer, ...d.relays, ...relayEntries(p.db, owner).map((r) => r.url)])];
   const kinds = [KIND.relayList, KIND.serverList];
-  const copies = (await Promise.all(relays.map((r) => query(r, [{ kinds, authors: [owner] }]).catch(() => [])))).flat();
-  takeNewerLists(p.db, owner, copies, kinds);
+  const ask = (r: string) => query(r, [{ kinds, authors: [owner] }]).then((e) => (answered.add(r), e), (): NostrEvent[] => []);
+  takeNewerLists(p.db, owner, (await Promise.all(relays.map(ask))).flat(), kinds, p.now());
+  return answered;
+}
+
+/**
+ * A list, signed, or null when it can't be one event within the ceiling (C§3.3), as a nostr user's list of hundreds
+ * of relays from another app can't: RULED, it is then left as it is held, since a list Kefli could send would be
+ * missing some of its entries, and Kefli's own changes stay in its tables, where the saves' sends read them.
+ */
+async function signList(signer: Signer, kind: number, tags: string[][], createdAt: number): Promise<NostrEvent | null> {
+  try {
+    return await signWithinCeiling(signer, { kind, created_at: createdAt, tags, content: '' });
+  } catch (e) {
+    if (e instanceof EventTooLargeError) return null;
+    throw e;
+  }
+}
+
+/** Events to one relay in turn, each answer read as 4.3 says, stopping at the first that isn't ok; with none, ok. */
+async function publishEach(p: SendPorts, target: string, events: NostrEvent[]): Promise<TargetResult> {
+  let last: TargetResult = { target, kind: 'ok' };
+  try {
+    for (const e of events) {
+      last = relayResult(target, await p.publish(target, e), e.id);
+      if (last.kind !== 'ok') return last;
+    }
+    return last;
+  } catch (e) {
+    return { target, kind: 'retry', error: err(e) };
+  }
+}
+
+type Lists = { relayList: NostrEvent | null; serverList: NostrEvent | null; record: NostrEvent | null; edits: string[] };
+
+/** The lists went out: each kept as the newest held (F36), the edits they showed done with, the record noted. */
+function listsSent(db: SqlDb, owner: string, l: Lists): void {
+  if (l.relayList) recordList(db, owner, l.relayList.kind, l.relayList.id, l.relayList.created_at, JSON.stringify(l.relayList));
+  if (l.relayList) listEditsSent(db, owner, l.edits);
+  if (l.serverList) recordList(db, owner, l.serverList.kind, l.serverList.id, l.serverList.created_at, JSON.stringify(l.serverList));
+  if (l.record) noteRecord(db, owner, l.record.id, l.record.created_at);
 }
 
 /**
  * The 10002 to every target; the 10063 and the connected-browsers record (C§4.9) to the write relays only (4.3).
- * All are built from the tables at send time, after any newer list on the relays is taken in; the record only once
- * there is a browser in it.
+ * The lists are those held, entry for entry, with Kefli's changes (relayListTags, serverListTags), built at send time
+ * after any newer list on the relays is taken in. A person's own list not read since sign-in waits for a read, unless
+ * the read confirms it gone from every relay (C§3.1), when the tables are all there is of it. The record goes only
+ * once there is a browser in it.
  */
 async function sendLists(p: SendPorts, row: OutboxRow, signer: Signer, targets: OutboxTarget[]): Promise<TargetResult[]> {
-  await readNewerLists(p, row.signer);
+  const answered = await readNewerLists(p, row.signer);
+  if (listsUnread(p.db, row.signer) && !confirmedAbsent(p.defaults(), answered)) return each(targets, 'retry', 'their lists not read yet');
   // after the lists already held, so a phone whose clock is behind doesn't publish lists older than its own (F36)
   const now = nextListTime(p.db, row.signer, p.now());
-  const relayList = await buildRelayList(signer, relayEntries(p.db, row.signer), now);
-  const serverList = await buildServerList(signer, listServers(p.db, row.signer), now);
-  const record = hasDevices(p.db, row.signer)
-    ? await buildDevicesEvent(signer, localRecord(p.db, row.signer), Math.max(now, recordCreatedAt(p.db, row.signer) + 1))
-    : null;
+  const l: Lists = {
+    edits: listEdits(p.db, row.signer),
+    relayList: await signList(signer, KIND.relayList, relayListTags(p.db, row.signer), now),
+    serverList: await signList(signer, KIND.serverList, serverListTags(p.db, row.signer), now),
+    record: hasDevices(p.db, row.signer)
+      ? await buildDevicesEvent(signer, localRecord(p.db, row.signer), Math.max(now, recordCreatedAt(p.db, row.signer) + 1))
+      : null,
+  };
   const indexerOnly = new Set(indexerRelays(p.db, row.signer).filter((u) => !relayEntries(p.db, row.signer).some((e) => e.url === u)));
-  const results = await Promise.all(
-    targets.map(async (t) => {
-      try {
-        let a = relayResult(t.target, await p.publish(t.target, relayList), relayList.id);
-        if (a.kind !== 'ok' || indexerOnly.has(t.target)) return a;
-        a = relayResult(t.target, await p.publish(t.target, serverList), serverList.id);
-        if (a.kind !== 'ok' || !record) return a;
-        return relayResult(t.target, await p.publish(t.target, record), record.id);
-      } catch (e) {
-        return { target: t.target, kind: 'retry', error: err(e) } as TargetResult;
-      }
-    }),
-  );
-  if (results.some((r) => r.kind === 'ok')) {
-    recordList(p.db, row.signer, relayList.kind, relayList.id, now, JSON.stringify(relayList));
-    recordList(p.db, row.signer, serverList.kind, serverList.id, now, JSON.stringify(serverList));
-    if (record) noteRecord(p.db, row.signer, record.id, record.created_at);
-  }
+  const sent = (t: OutboxTarget) => (indexerOnly.has(t.target) ? [l.relayList] : [l.relayList, l.serverList, l.record]).filter((e): e is NostrEvent => !!e);
+  const results = await Promise.all(targets.map((t) => publishEach(p, t.target, sent(t))));
+  if (results.some((r) => r.kind === 'ok')) listsSent(p.db, row.signer, l);
   return results;
 }
 
@@ -457,38 +544,75 @@ async function sendLists(p: SendPorts, row: OutboxRow, signer: Signer, targets: 
  * A relay added in Advanced gets the library as already signed (FD 113, C§3.1): the newest event of each save and
  * every deletion that the other write relays hold, paged in full and published to it unchanged, so nothing is
  * re-signed from this phone's state (F16) and a deleted save's old event can't come back through it (F35). Retried
- * until at least one other relay answers; done once the relay has answered every event, whatever it refused.
+ * until at least one other relay answers; done once the relay has answered every event, whatever it refused, and has
+ * taken each it refused only as dated ahead of its clock (copyEvents).
  */
 async function sendCopyRelay(p: SendPorts, row: OutboxRow, t: OutboxTarget): Promise<TargetResult[]> {
   if (!p.query) return [{ target: t.target, kind: 'retry', error: 'no relay reads' }];
-  const sources = writeRelays(p.db, row.signer).filter((u) => u !== t.target);
+  const events = await heldLibrary(p.db, p.query, row.signer, t.target);
+  if (!events) return [{ target: t.target, kind: 'retry', error: 'no other relay answered' }];
+  return [await copyEvents(p, t, events)];
+}
+
+/**
+ * The library as the identity's other write relays hold it: the newest event of each save, then every deletion. Null
+ * when none of them answered.
+ */
+async function heldLibrary(db: SqlDb, query: NonNullable<SendPorts['query']>, owner: string, target: string): Promise<NostrEvent[] | null> {
+  const sources = writeRelays(db, owner).filter((u) => u !== target);
   const read = await Promise.all(sources.map(async (u) => {
     try {
-      const [items, deletions] = await Promise.all((['items', 'deletions'] as const).map((s) => pageStream(p.query!, u, streamFilter(s, row.signer, null))));
+      const [items, deletions] = await Promise.all((['items', 'deletions'] as const).map((s) => pageStream(query, u, streamFilter(s, owner, null))));
       return [...items, ...deletions];
     } catch {
       return null;
     }
   }));
-  if (!read.some((r) => r !== null)) return [{ target: t.target, kind: 'retry', error: 'no other relay answered' }];
-  const mine = read.flat().filter((e): e is NostrEvent => !!e && e.pubkey === row.signer);
-  const saves = mine.filter((e) => e.kind !== KIND.deletion);
+  if (!read.some((r) => r !== null)) return null;
+  const mine = read.flat().filter((e): e is NostrEvent => !!e && e.pubkey === owner);
+  const deletions = new Map(mine.filter((e) => e.kind === KIND.deletion).map((e) => [e.id, e]));
+  return [...newestOfEach(mine.filter((e) => e.kind !== KIND.deletion)), ...deletions.values()];
+}
+
+/** Of a save's events, by d, the newest. */
+function newestOfEach(saves: NostrEvent[]): NostrEvent[] {
   const byD = new Map<string, NostrEvent>();
   for (const e of saves) {
     const d = e.tags.find((x) => x[0] === 'd')?.[1] ?? '';
     const held = byD.get(d);
     if (!held || e.created_at > held.created_at) byD.set(d, e);
   }
-  const deletions = [...new Map(mine.filter((e) => e.kind === KIND.deletion).map((e) => [e.id, e])).values()];
+  return [...byD.values()];
+}
+
+/**
+ * The events to the added relay in turn, as already signed. A refusal stops nothing, and nor does an event refused as
+ * dated ahead of the relay's clock (CLOCK), as one signed on a phone running fast is: the rest still go, and the copy
+ * is tried again once that event's time has come, for it to go too, the relay answering duplicate for the rest.
+ * Stopping there, as any other retry does, one save dated ahead kept every save after it from the relay, for good
+ * when it was dated a year ahead. One dated more than a day past this phone's clock is passed over, as sync leaves it
+ * unread (notYet), since a try within a day changes nothing. Any other answer to retry (a relay asking to slow down,
+ * a network failure) stops the copy there, to be tried again whole.
+ */
+async function copyEvents(p: SendPorts, t: OutboxTarget, events: NostrEvent[]): Promise<TargetResult> {
+  // the latest date of those refused as ahead, and the relay's words for it
+  let aheadAt = 0;
+  let aheadError = '';
   try {
-    for (const e of [...byD.values(), ...deletions]) {
-      const a = relayResult(t.target, await p.publish(t.target, e), e.id);
-      if (a.kind === 'retry') return [a];
+    for (const e of events) {
+      const answer = await p.publish(t.target, e);
+      const r = relayResult(t.target, answer, e.id);
+      if (r.kind !== 'retry') continue;
+      if (answer.ok || !CLOCK.test(answer.reason)) return r;
+      if (notYet(e, p.now())) continue;
+      aheadAt = Math.max(aheadAt, e.created_at);
+      aheadError = answer.reason;
     }
   } catch (e) {
-    return [{ target: t.target, kind: 'retry', error: err(e) }];
+    return { target: t.target, kind: 'retry', error: err(e) };
   }
-  return [{ target: t.target, kind: 'ok' }];
+  if (!aheadError) return { target: t.target, kind: 'ok' };
+  return { target: t.target, kind: 'retry', error: aheadError, waitSec: Math.max(backoff(t.attempts + 1), aheadAt - p.now()) };
 }
 
 /** A consumed inbox wrap, deleted with a kind 5 naming it (["e", id], ["k", "1059"]) on the operator relay (C§4.4). */

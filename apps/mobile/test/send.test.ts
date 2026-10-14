@@ -2,13 +2,14 @@ import { LocalSigner, encryptText, normaliseMarkdown, readItemEvent, textHash } 
 import type { NostrEvent } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
-import { ensureIdentityRow, orphanBlobs, queueSave, reviveRefused } from '../src/data/saves';
+import { ensureIdentityRow, fitSave, orphanBlobs, queueSave, reviveRefused, type PageFields } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
 import { enqueue, nextDue, nextWakeAt, release } from '../src/data/outbox';
 import { drain, outboxWaker, refusalOf, relayResult, sendOne, type RelayAnswer, type SendPorts } from '../src/services/send';
 import { commitDelete, deleteItem, setArchived } from '../src/data/library';
 import type { Defaults } from '../src/services/config';
-import { notBackedUp } from '../src/data/backup';
+import { heldFor, notBackedUp } from '../src/data/backup';
+import { textsWaiting } from '../src/data/account';
 import { memoryDb } from './sqlite';
 
 const D: Defaults = {
@@ -268,8 +269,49 @@ describe('sending a save (mobile spec 4.3)', () => {
     [{ ok: false, reason: 'blocked: not on the list' } as RelayAnswer, 'rejected'],
     [{ ok: false, reason: 'invalid: bad' } as RelayAnswer, 'rejected'],
     [{ ok: false, reason: 'auth-required: who are you' } as RelayAnswer, 'retry'],
+    // the phone's clock ahead of the relay's: strfry's words, khatru's and nostr-rs-relay's
+    [{ ok: false, reason: 'invalid: created_at too late' } as RelayAnswer, 'retry'],
+    [{ ok: false, reason: 'blocked: event too much in the future' } as RelayAnswer, 'retry'],
+    [{ ok: false, reason: 'invalid: The event created_at field is out of the acceptable range (+900sec) for this relay.' } as RelayAnswer, 'retry'],
+    [{ ok: false, reason: 'invalid: created_at too early' } as RelayAnswer, 'rejected'],
   ])('relay answer %j is %s', (a, kind) => {
     expect(relayResult('r', a, 'id').kind).toBe(kind);
+  });
+
+  test('a clock 20 minutes fast: strfry’s “created_at too late” waits on the backoff, and the change goes once the clock is right', async () => {
+    const w = world();
+    // every relay here is strfry, which takes an event dated no more than 15 minutes past its own clock
+    let relayNow = w.now();
+    w.ports.publish = async (url, event) => {
+      w.all.push({ relay: url, event });
+      return event.created_at > relayNow + 900 ? { ok: false, reason: 'invalid: created_at too late' } : { ok: true };
+    };
+    release(w.db, (await save(w, false)).held);
+    await drain(w.ports);
+    expect(w.published()).toHaveLength(3);
+    // the phone's clock jumps 20 minutes ahead, and the save is archived
+    w.tick(1200);
+    release(w.db, setArchived(w.db, w.now(), w.signer.pubkey(), HASH, true).held);
+    await drain(w.ports);
+    const waiting = () => w.db.all<{ state: string; target: string; next_at: number; last_error: string }>(
+      "SELECT o.state, t.target, t.next_at, t.last_error FROM outbox o JOIN outbox_targets t ON t.outbox_id = o.id WHERE o.op = 'publish_item' ORDER BY t.target");
+    expect(waiting()).toEqual(['ws://a', 'ws://b', 'ws://op'].map((target) => ({ state: 'queued', target, next_at: w.now() + 30, last_error: 'invalid: created_at too late' })));
+    // still fast half a minute later: the next wait is longer
+    relayNow += 30;
+    w.tick(30);
+    await drain(w.ports);
+    expect(waiting().map((t) => t.next_at)).toEqual([w.now() + 60, w.now() + 60, w.now() + 60]);
+    // the phone's clock is put right; the retry, timed by the clock as it was, comes due 20 minutes and its wait on
+    w.tick(-1200);
+    await drain(w.ports);
+    expect(waiting()).toHaveLength(3);
+    w.tick(1200 + 60);
+    relayNow += 1200 + 60;
+    await drain(w.ports);
+    expect(waiting()).toEqual([]);
+    const last = w.published().slice(-3);
+    expect(last.map((p) => p.relay).sort()).toEqual(['ws://a', 'ws://b', 'ws://op']);
+    expect((await readItemEvent(w.signer, last[0].event)).item.item.state).toBe('archived');
   });
 
   test('backed up only once a relay the operator doesn’t run holds the newest event and a mirror holds the text (FD 93)', async () => {
@@ -814,7 +856,7 @@ describe('deleting makes room (C§5, v1.12)', () => {
     await drain(w.ports);
     expect(w.db.get("SELECT 1 AS n FROM outbox WHERE op = 'delete_blob'")).toBeUndefined();
     // a text that waited for room is taken on its day, and its mirror and publish follow
-    w.db.run("UPDATE outbox_targets SET next_at = 0 WHERE outbox_id = (SELECT id FROM outbox WHERE op = 'upload_blob' AND subject = ?)", a.sha);
+    w.tick(86_400);
     await drain(w.ports);
     expect(w.db.get("SELECT 1 AS n FROM outbox WHERE op IN ('upload_blob', 'mirror_blob') AND subject = ?", a.sha)).toBeUndefined();
     expect(waiting(w).find((x) => x.sha256 === a.sha)).toMatchObject({ operator_at: expect.any(Number), last_error: null });
@@ -849,9 +891,10 @@ describe('deleting makes room (C§5, v1.12)', () => {
 
   test("a deletion of a text the operator took after the figures gives back nothing they counted", async () => {
     const { w, a } = await full({ refuseAfter: 1 });
-    // a gets through on its day, after the figures: then it is deleted
-    w.db.run("UPDATE outbox_targets SET next_at = 0 WHERE outbox_id = (SELECT id FROM outbox WHERE op = 'upload_blob' AND subject = ?)", a.sha);
+    // a gets through on its day, after the figures, and b, refused, holds c again: then a is deleted
+    w.tick(86_400);
     await drain(w.ports);
+    expect(waiting(w).find((x) => x.sha256 === a.sha)?.operator_at).toEqual(expect.any(Number));
     const before = w.calls.length;
     commitDelete(w.db, w.signer.pubkey(), a.hash, deleteItem(w.db, w.now(), w.signer.pubkey(), a.hash).held);
     // its blob's row gone with the staged text, as the outbox's sweep leaves it
@@ -862,41 +905,257 @@ describe('deleting makes room (C§5, v1.12)', () => {
   });
 });
 
-describe('a large import past the day (C§4.6, C§5, v1.12)', () => {
-  test("every save goes at once, each text is tried once a day, and the day's uploads take the rest over the days after", async () => {
-    // the operator takes ten texts a day, as 20 MB takes about 800, and refuses the rest for the day
-    let today = 10;
+describe('a refusal for room or the day holds the library’s other texts (C§5, v1.12)', () => {
+  /** A save with text n, its sends queued as an imported link's parse leaves them; returns its blob's size. */
+  async function texted(w: W, n: number, owner = w.signer.pubkey()) {
+    const md = normaliseMarkdown(`# Bookmark ${n}\n\nWords.`);
+    const enc = await encryptText(md, nodeCrypto);
+    w.blobs.set(enc.text.sha256, enc.blob);
+    release(w.db, queueSave(w.db, w.now(), {
+      owner, hash: n.toString(16).padStart(64, '0'), url: `https://example.com/${n}`, canonical: null, title: `Bookmark ${n}`,
+      site: null, byline: null, savedAt: w.now(), words: 2, lang: 'en', hero: null, text: enc.text, textHash: textHash(md, nodeCrypto),
+      textState: 'cached', origin: 'import',
+    }, { sha256: enc.text.sha256, size: enc.blob.length, path: `/staged/${n}` }, { api: D.operator.api, blossom: D.operator.blossom, mirror: D.mirrors[0] }));
+    return enc.blob.length;
+  }
+
+  function library(w: W, owner = w.signer.pubkey()) {
+    ensureIdentityRow(w.db, w.now(), owner, 'early_share', true);
+    seedGeneratedLists(w.db, owner, D);
+    w.db.run('UPDATE identities SET registered_at = 1 WHERE pubkey = ?', owner);
+  }
+
+  const uploads = (w: W) => w.calls.filter((c) => c === 'PUT http://blossom/upload').length;
+  const saves = (w: W) => new Set(w.published().map((p) => p.event.tags.find((t) => t[0] === 'd')![1])).size;
+  const reasons = (w: W) => w.db.all<{ last_error: string | null }>('SELECT last_error FROM blobs ORDER BY rowid').map((b) => b.last_error);
+  const settle = async (w: W) => {
+    for (let i = 0; 50 > i && (await drain(w.ports)) > 0; i++);
+  };
+  const deleteSave = (w: W, n: number) => {
+    const hash = n.toString(16).padStart(64, '0');
+    commitDelete(w.db, w.signer.pubkey(), hash, deleteItem(w.db, w.now(), w.signer.pubkey(), hash).held);
+  };
+
+  test('for the day: the others wait unsent until its retry, their saves going at once without them, counted in Backup space', async () => {
+    let refusing = true;
+    const w = world({ 'PUT http://blossom/upload': () => (refusing ? refuse('daily') : undefined) });
+    library(w);
+    for (let n = 0; 5 > n; n++) await texted(w, n);
+    const refusedAt = w.now();
+    await settle(w);
+    expect(uploads(w)).toBe(1);
+    expect(saves(w)).toBe(5);
+    for (const p of w.published()) expect((await readItemEvent(w.signer, p.event)).item.item.text).toBeNull();
+    expect(reasons(w)).toEqual(['daily', 'daily', 'daily', 'daily', 'daily']);
+    expect(textsWaiting(w.db, w.signer.pubkey(), w.now())).toMatchObject({ daily: 5, dailyRecent: 5 });
+    // a text that comes to upload while the hold stands, as a parse ending an hour on, waits with it, unsent
+    w.tick(3600);
+    await texted(w, 5);
+    await settle(w);
+    expect([uploads(w), saves(w), reasons(w)[5]]).toEqual([1, 6, 'daily']);
+    // nothing to upload falls due before the refusal's retry, a day after it
+    expect(nextDue(w.db, refusedAt + 86_399)).toBeNull();
+    expect(nextDue(w.db, refusedAt + 86_400)?.row.op).toBe('upload_blob');
+    // the next day the operator takes them all, each sent once more, and every save goes again naming its text
+    refusing = false;
+    w.tick(refusedAt + 86_400 - w.now());
+    await settle(w);
+    expect(uploads(w)).toBe(1 + 6);
+    expect(notBackedUp(w.db, w.signer.pubkey())).toBe(0);
+    expect(w.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM outbox')?.n).toBe(0);
+  });
+
+  test('for room: the others wait unsent, and a deletion the operator confirms still wakes the oldest that fits', async () => {
+    let taking = 1;
+    const w = world({ 'PUT http://blossom/upload': () => (taking-- > 0 ? undefined : refuse('quota')) });
+    library(w);
+    await texted(w, 0);
+    await settle(w);
+    for (let n = 1; 4 > n; n++) await texted(w, n);
+    await settle(w);
+    expect(uploads(w)).toBe(2);
+    expect(reasons(w)).toEqual([null, 'quota', 'quota', 'quota']);
+    expect(textsWaiting(w.db, w.signer.pubkey(), w.now()).full).toBe(true);
+    // the library at its quota, known before the deletion: deleting the first save's text leaves room for one more
+    const at = w.now();
+    w.ports.figures = () => ({ quota: 10_000, used: 10_000, daily: 20_971_520, today: 0, at });
+    w.tick(1);
+    taking = 1;
+    deleteSave(w, 0);
+    const before = uploads(w);
+    await settle(w);
+    expect(uploads(w) - before).toBe(1);
+    expect(reasons(w)).toEqual([null, null, 'quota', 'quota']);
+  });
+
+  test('while the day holds the texts, a confirmed deletion wakes none, though it leaves room', async () => {
+    const w = world({ 'PUT http://blossom/upload': (n) => (n === 1 ? undefined : refuse('daily')) });
+    library(w);
+    for (let n = 0; 3 > n; n++) await texted(w, n);
+    await settle(w);
+    // a text refused for room before the day's refusal held it
+    w.db.run("UPDATE blobs SET last_error = 'quota' WHERE rowid = 3");
+    const at = w.now();
+    w.ports.figures = () => ({ quota: 52_428_800, used: 0, daily: 20_971_520, today: 0, at });
+    w.tick(1);
+    deleteSave(w, 0);
+    const before = uploads(w);
+    await settle(w);
+    expect(w.calls.filter((c) => c.startsWith('DELETE http://blossom/'))).toHaveLength(1);
+    expect(uploads(w)).toBe(before);
+  });
+
+  test('one library’s hold is its own: another identity on the phone still sends its texts', async () => {
+    const w = world({ 'PUT http://blossom/upload': (n) => (n === 1 ? refuse('daily') : undefined) });
+    const other = new LocalSigner(nodeCrypto.randomBytes(32));
+    const signer = w.ports.signer;
+    w.ports.signer = async (pk) => (pk === other.pubkey() ? other : signer(pk));
+    library(w);
+    library(w, other.pubkey());
+    await texted(w, 0);
+    await settle(w);
+    await texted(w, 1, other.pubkey());
+    await texted(w, 2);
+    await settle(w);
+    expect(uploads(w)).toBe(2);
+    expect(w.db.all('SELECT owner, operator_at IS NOT NULL AS taken, last_error FROM blobs ORDER BY rowid')).toEqual([
+      { owner: w.signer.pubkey(), taken: 0, last_error: 'daily' },
+      { owner: other.pubkey(), taken: 1, last_error: null },
+      { owner: w.signer.pubkey(), taken: 0, last_error: 'daily' },
+    ]);
+  });
+
+  test('for the day: a text the operator holds for another library here still goes, and the library’s others still wait', async () => {
+    // the operator: one more text for the day, and a blob it stores already adds nothing to the day (C§5)
+    const stored = new Set<string>();
+    let dayLeft = 1;
+    const sent: string[] = [];
+    const w = world();
+    const fetch = w.ports.fetch;
+    w.ports.fetch = (async (url: string, init: RequestInit) => {
+      const sha = (init.headers as Record<string, string> | undefined)?.['X-SHA-256'];
+      if (url === 'http://blossom/upload' && sha) {
+        sent.push(sha);
+        if (!stored.has(sha) && dayLeft-- <= 0) return new Response(JSON.stringify({ v: 1, error: 'daily', ...FIGURES }), { status: 413, headers: { 'X-Reason': 'daily' } });
+        stored.add(sha);
+      }
+      return fetch(url, init);
+    }) as typeof globalThis.fetch;
+    const source = new LocalSigner(nodeCrypto.randomBytes(32));
+    const signer = w.ports.signer;
+    w.ports.signer = async (pk) => (pk === source.pubkey() ? source : signer(pk));
+    library(w, source.pubkey());
+    library(w);
+    // a text the source library had the operator take, and this library's copy of it, as a move makes one (C§4.8)
+    const md = normaliseMarkdown('# Moved\n\nWords.');
+    const enc = await encryptText(md, nodeCrypto);
+    w.blobs.set(enc.text.sha256, enc.blob);
+    const saveOf = (owner: string) => release(w.db, queueSave(w.db, w.now(), {
+      owner, hash: 'ab'.repeat(32), url: 'https://example.com/moved', canonical: null, title: 'Moved', site: null, byline: null, savedAt: w.now(),
+      words: 2, lang: 'en', hero: null, text: enc.text, textHash: textHash(md, nodeCrypto), textState: 'cached', origin: 'share',
+    }, { sha256: enc.text.sha256, size: enc.blob.length, path: '/staged/moved' }, { api: D.operator.api, blossom: D.operator.blossom, mirror: D.mirrors[0] }));
+    saveOf(source.pubkey());
+    await settle(w);
+    // this library's own text is refused for the day, holding the rest; then the copy comes, and one more text
+    await texted(w, 1);
+    await settle(w);
+    saveOf(w.signer.pubkey());
+    await texted(w, 2);
+    await settle(w);
+    // the copy went, at no cost to the day, and the other text waits unsent for the refusal's retry
+    expect(w.db.get('SELECT owner, operator_at IS NOT NULL AS taken FROM blobs WHERE sha256 = ?', enc.text.sha256)).toEqual({ owner: w.signer.pubkey(), taken: 1 });
+    expect(sent).toEqual([enc.text.sha256, expect.any(String), enc.text.sha256]);
+    expect(heldFor(w.db, w.signer.pubkey(), w.now())?.reason).toBe('daily');
+  });
+
+  test('a hold from a clock since put back holds nothing, and a text taken lifts it for good', async () => {
+    const w = world({ 'PUT http://blossom/upload': (n) => (n === 1 ? refuse('daily') : undefined) });
+    library(w);
+    // the refusal came while the phone's clock was two days ahead
+    w.tick(2 * 86_400);
+    await texted(w, 0);
+    await settle(w);
+    w.tick(-2 * 86_400);
+    expect(heldFor(w.db, w.signer.pubkey(), w.now())).toBeNull();
+    await texted(w, 1);
+    await settle(w);
+    expect(uploads(w)).toBe(2);
+    // two days on, the old hold would stand again had the text taken not lifted it
+    w.tick(2 * 86_400);
+    expect(heldFor(w.db, w.signer.pubkey(), w.now())).toBeNull();
+  });
+
+  test('an import past the day: every save goes at once; each day its texts go until the first refusal, the rest unsent', async () => {
+    // the operator takes forty texts a day, as 20 MB takes about 800, and refuses the rest for the day
+    let today = 40;
     const w = world({ 'PUT http://blossom/upload': () => (today-- > 0 ? undefined : refuse('daily')) });
+    let sent = 0;
+    const fetch = w.ports.fetch;
+    w.ports.fetch = (async (url: string, init: RequestInit) => {
+      if (init.method === 'PUT' && url === 'http://blossom/upload') sent += (init.body as Uint8Array).length;
+      return fetch(url, init);
+    }) as typeof globalThis.fetch;
+    library(w);
+    // two hundred links, parsed two at a time through the first day, each parse's sends queued as it ends
+    const sizes: number[] = [];
+    for (let n = 0; 200 > n; n += 2) {
+      sizes.push(await texted(w, n), await texted(w, n + 1));
+      await settle(w);
+      w.tick(60);
+    }
+    // forty texts taken and one refused: the other 159 never sent
+    expect([uploads(w), saves(w), notBackedUp(w.db, w.signer.pubkey())]).toEqual([41, 200, 160]);
+    expect(sent).toBe(sizes.slice(0, 41).reduce((a, b) => a + b, 0));
+    expect(textsWaiting(w.db, w.signer.pubkey(), w.now())).toMatchObject({ daily: 160 });
+    for (const left of [120, 80, 40, 0]) {
+      today = 40;
+      w.tick(86_400);
+      await settle(w);
+      expect(notBackedUp(w.db, w.signer.pubkey())).toBe(left);
+    }
+    // each text sent once when taken, and one more a day for the day's one refusal
+    expect(uploads(w)).toBe(200 + 4);
+    expect(w.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM outbox')?.n).toBe(0);
+  }, 60_000);
+});
+
+describe('a save from before its page’s fields were fitted (C§3.3)', () => {
+  /** A save as the code before the fitting stored it: its page's fields as the page gave them. */
+  function oldSave(w: W, fields: Partial<PageFields>) {
     ensureIdentityRow(w.db, w.now(), w.signer.pubkey(), 'early_share', true);
     seedGeneratedLists(w.db, w.signer.pubkey(), D);
     w.db.run('UPDATE identities SET registered_at = 1');
-    for (let n = 0; 30 > n; n++) {
-      const md = normaliseMarkdown(`# Bookmark ${n}\n\nWords.`);
-      const enc = await encryptText(md, nodeCrypto);
-      w.blobs.set(enc.text.sha256, enc.blob);
-      // as an imported link's parse leaves it: its upload, mirror and publish queued, nothing held
-      release(w.db, queueSave(w.db, w.now(), {
-        owner: w.signer.pubkey(), hash: n.toString(16).padStart(64, '0'), url: `https://example.com/${n}`, canonical: null, title: `Bookmark ${n}`,
-        site: null, byline: null, savedAt: w.now(), words: 2, lang: 'en', hero: null, text: enc.text, textHash: textHash(md, nodeCrypto),
-        textState: 'cached', origin: 'import',
-      }, { sha256: enc.text.sha256, size: enc.blob.length, path: `/staged/${n}` }, { api: D.operator.api, blossom: D.operator.blossom, mirror: D.mirrors[0] }));
-    }
-    const uploads = () => w.calls.filter((c) => c === 'PUT http://blossom/upload').length;
-    const saves = () => new Set(w.published().map((p) => p.event.tags.find((t) => t[0] === 'd')![1])).size;
-    const day = async () => {
-      for (let i = 0; 50 > i && (await drain(w.ports)) > 0; i++);
+    release(w.db, queueSave(w.db, w.now(), {
+      owner: w.signer.pubkey(), hash: HASH, url: 'https://example.com/a', canonical: null, title: 'Title', site: 'example.com', byline: null,
+      savedAt: w.now(), words: 2, lang: 'en', hero: null, text: null, textHash: null, textState: 'failed', origin: 'share', ...fields,
+    }, null, { api: D.operator.api, blossom: D.operator.blossom, mirror: D.mirrors[0] }));
+  }
+
+  test('one whose event would pass 16 KB is fitted as a save made today is, and goes out', async () => {
+    const w = world();
+    const huge = {
+      title: 'T'.repeat(20_000), byline: 'B'.repeat(5_000), hero: `https://cdn.example/${'h'.repeat(10_000)}`,
+      canonical: `https://example.com/a?${'c'.repeat(3_000)}`,
     };
-    await day();
-    expect([uploads(), saves(), notBackedUp(w.db, w.signer.pubkey())]).toEqual([30, 30, 20]);
-    for (const left of [10, 0]) {
-      today = 10;
-      w.tick(86_400);
-      await day();
-      expect(notBackedUp(w.db, w.signer.pubkey())).toBe(left);
-    }
-    // ten texts tried a second day, ten more a third; nothing is left to send
-    expect(uploads()).toBe(30 + 20 + 10);
+    oldSave(w, huge);
+    await drain(w.ports);
+    expect(w.published().map((p) => p.relay).sort()).toEqual(['ws://a', 'ws://b', 'ws://op']);
+    const item = await lastItem(w);
+    const fitted = fitSave({ url: 'https://example.com/a', site: 'example.com', lang: 'en', ...huge })!;
+    expect([item.title, item.byline, item.hero, item.canonical, item.site]).toEqual([fitted.title, fitted.byline, null, null, 'example.com']);
     expect(w.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM outbox')?.n).toBe(0);
+    expect(notBackedUp(w.db, w.signer.pubkey())).toBe(0);
+  });
+
+  test('one whose address alone is too long for any event stays on the phone, counted, and isn’t tried for ever', async () => {
+    const w = world();
+    oldSave(w, { url: `https://example.com/?q=${'x'.repeat(10_000)}` });
+    await drain(w.ports);
+    expect(w.published()).toEqual([]);
+    expect(w.db.get("SELECT o.state, t.last_error FROM outbox o JOIN outbox_targets t ON t.outbox_id = o.id WHERE o.op = 'publish_item' LIMIT 1"))
+      .toEqual({ state: 'dead', last_error: 'too large for its event' });
+    expect(w.db.get('SELECT 1 AS kept FROM items')).toEqual({ kept: 1 });
+    expect(notBackedUp(w.db, w.signer.pubkey())).toBe(1);
   });
 });
 

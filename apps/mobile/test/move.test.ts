@@ -34,7 +34,7 @@ function matches(e: NostrEvent, f: Filter): boolean {
   return true;
 }
 
-function world(o: { down?: Set<string>; accountStatus?: number; refuse?: (author: string) => boolean } = {}) {
+function world(o: { down?: Set<string>; accountStatus?: number; refuse?: (author: string) => boolean; dayUsed?: (author: string) => boolean } = {}) {
   const db = memoryDb();
   migrate(db);
   const S = new LocalSigner(nodeCrypto.randomBytes(32));
@@ -60,6 +60,10 @@ function world(o: { down?: Set<string>; accountStatus?: number; refuse?: (author
     // the operator refusing an author's texts for room (C§5): 413 quota with the library's figures
     if (url.endsWith('/upload') && o.refuse?.(authorOf(init))) {
       return new Response(JSON.stringify({ v: 1, error: 'quota', quota: 100, used: 100, daily: 100, today: 0 }), { status: 413, headers: { 'X-Reason': 'quota' } });
+    }
+    // an author's day of uploads used (C§5): a blob the server stores already adds nothing to the day, and is taken
+    if (url.endsWith('/upload') && o.dayUsed?.(authorOf(init)) && !blossom.has(bytesToHex(nodeCrypto.sha256(new Uint8Array(init.body as ArrayBuffer))))) {
+      return new Response(JSON.stringify({ v: 1, error: 'daily', quota: 52_428_800, used: 0, daily: 100, today: 100 }), { status: 413, headers: { 'X-Reason': 'daily' } });
     }
     if (url.endsWith('/upload')) {
       const bytes = new Uint8Array(init.body as ArrayBuffer);
@@ -505,6 +509,27 @@ describe('The move (contract 4.8, mobile spec 4.10)', () => {
     expect((await tCopy(w, h(1))).text).toMatchObject({ sha256: sha, servers: ['http://blossom', 'http://m1'] });
     expect(w.blossom.get(sha)!.owners.has(T)).toBe(true);
     expect(notBackedUp(w.db, T)).toBe(0);
+  });
+
+  test("T's day used: its copies of texts the operator holds under S still go, costing nothing against the day, and stay T's", async () => {
+    let dayUsed = '';
+    const w = world({ dayUsed: (author) => author === dayUsed });
+    const T = w.T.pubkey();
+    // S's later save is on the operator under S; its first waits on the phone, refused for S's day
+    const taken = await w.save(w.S, 2);
+    dayUsed = w.S.pubkey();
+    const waiting = await w.save(w.S, 1, { stagedOnly: true });
+    await w.p.runOutbox();
+    expect([w.blossom.get(taken)?.owners.has(w.S.pubkey()), w.blossom.has(waiting)]).toEqual([true, false]);
+    // T's day is used too: the first copy's text, which only the phone has, is refused for it
+    dayUsed = T;
+    expect(await runMove(w.p)).toBe('done');
+    expect(w.blossom.has(waiting)).toBe(false);
+    expect(w.db.get('SELECT owner, last_error FROM blobs WHERE sha256 = ?', waiting)).toEqual({ owner: T, last_error: 'daily' });
+    // the text the operator held under S went under T all the same, so S's retirement leaves it there
+    expect(w.blossom.get(taken)!.owners.has(T)).toBe(true);
+    expect((await tCopy(w, h(2))).text).toMatchObject({ sha256: taken, servers: ['http://blossom', 'http://m1'] });
+    expect(notBackedUp(w.db, T)).toBe(1);
   });
 
   test('a text that waited on the phone under S goes under T without text, and waits there', async () => {

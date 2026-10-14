@@ -3,9 +3,11 @@
 // names it (C§4.2, F18). A change still queued, retrying or dead leaves it not backed up, and so does a text the
 // operator hasn't taken (C§1, v1.12): its blob has no mirror. Advanced counts the rest.
 //
-// The backup space (C§5, FD 117): the room the library's last known figures leave, for the texts waiting on it.
+// The backup space (C§5, FD 117): the room the library's last known figures leave, for the texts waiting on it, and
+// the hold a refusal for room or the day puts on the library's other texts until its retry.
 import type { AccountFigures } from '@kefli/protocol';
 import type { SqlDb } from './db';
+import { releaseDependents, releaseDependentsIn } from './outbox';
 import { getSetting, setSetting } from './settings';
 
 /** A relay off the operator accepted this event: if it is still the save's newest, the save is backed up. */
@@ -44,7 +46,9 @@ export type KnownFigures = AccountFigures & { at: number };
 export type Freed = { at: number; size: number; up: number | null };
 
 const FREED_KEPT = 200;
+const DAY = 86_400;
 const freedKey = (owner: string) => `space.freed.${owner}`;
+const heldKey = (owner: string) => `space.held.${owner}`;
 const isFreed = (e: unknown): e is Freed => !!e && typeof (e as Freed).at === 'number' && typeof (e as Freed).size === 'number';
 
 function freedLog(db: SqlDb, owner: string): Freed[] {
@@ -61,9 +65,97 @@ export function noteFreed(db: SqlDb, owner: string, e: Freed): void {
   setSetting(db, freedKey(owner), JSON.stringify([...freedLog(db, owner), e].slice(-FREED_KEPT)));
 }
 
-/** A library that leaves the phone, as a move's source does, takes its deletions with it. */
+/** A library that leaves the phone, as a move's source does, takes its deletions and any hold on its texts with it. */
 export function forgetFreed(db: SqlDb, owner: string): void {
-  db.run('DELETE FROM settings WHERE key = ?', freedKey(owner));
+  db.run('DELETE FROM settings WHERE key IN (?, ?)', freedKey(owner), heldKey(owner));
+}
+
+/** A refusal for room (413 quota) or the day's uploads (413 daily), and when the texts it holds are tried again. */
+export type Held = { reason: 'quota' | 'daily'; until: number };
+
+function readHeld(raw: string | null): Held | null {
+  try {
+    const h = JSON.parse(raw ?? 'null') as Partial<Held> | null;
+    return h && (h.reason === 'quota' || h.reason === 'daily') && Number.isFinite(h.until) ? { reason: h.reason, until: h.until! } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The refusal holding the library's texts back (holdUploads), while it does: until its retry time, at most a day off.
+ * One further off was had by a clock since put back, and holds nothing.
+ */
+export function heldFor(db: SqlDb, owner: string, now: number): Held | null {
+  const h = readHeld(getSetting(db, heldKey(owner)));
+  return h && h.until > now && h.until - now <= DAY ? h : null;
+}
+
+/** Room was made (a confirmed deletion), or a text taken: nothing holds the library's texts back any more. */
+export function releaseHold(db: SqlDb, owner: string): void {
+  db.run('DELETE FROM settings WHERE key = ?', heldKey(owner));
+}
+
+/**
+ * The texts the operator (the second parameter, its address) holds for libraries on this phone other than the first
+ * parameter's, as for a move's copies of the texts its source had taken there (C§4.8): a save of such a library names
+ * the text on the operator. Read once for a statement, not once for each text it holds: correlated, a refusal for the
+ * day over an import's 2,000 texts read every save once for each of them, two seconds on a desktop.
+ */
+const STORED_ELSEWHERE = `SELECT s.text_sha256 FROM items s, json_each(COALESCE(s.text_servers, '[]')) j
+  WHERE s.owner != ? AND s.text_sha256 IS NOT NULL AND rtrim(j.value, '/') = rtrim(?, '/')`;
+
+/**
+ * The refusal holding this text back (holdUploads), or null. One for the day's uploads doesn't hold a text the operator
+ * already holds for another library on the phone: an upload of a blob the server stores adds nothing to the day (C§5),
+ * so it is taken. Held, a move's copies of the texts its source had there went as refused, the move carried on, and
+ * the source's retirement deleted them from the operator, to be uploaded again under the new library against its day.
+ */
+export function holdOn(db: SqlDb, owner: string, sha256: string, now: number, operator: string): Held | null {
+  const h = heldFor(db, owner, now);
+  if (h?.reason !== 'daily') return h;
+  return db.get(`SELECT 1 AS stored WHERE ? IN (${STORED_ELSEWHERE})`, sha256, owner, operator) ? null : h;
+}
+
+/**
+ * The library's uploads waiting for the operator but one (holdUploads), as rows o of the outbox with their blobs b,
+ * less, for a refusal for the day, those of texts the operator holds already (holdOn). Its parameters: the owner, the
+ * row left out, the refusal's reason, the owner again and the operator's address.
+ */
+const WAITING = `FROM outbox o JOIN blobs b ON b.sha256 = o.subject AND b.owner = o.signer
+  WHERE o.op = 'upload_blob' AND o.signer = ? AND o.state = 'queued' AND o.id != ? AND b.operator_at IS NULL
+    AND NOT (? = 'daily' AND b.sha256 IN (${STORED_ELSEWHERE}))`;
+
+/**
+ * Kefli's server (operator) refused one of the library's texts for room or the day (C§5): every other text waiting to
+ * upload to it would be sent whole only to be refused the same way, every day, tens of megabytes for an import past the
+ * day. So the refusal holds them all until its retry time (held.until), or for room until a confirmed deletion wakes
+ * the oldest that fits (send.ts, tryRoom): each one's save goes now without its text, as a refusal sends it (C§4.2),
+ * and its blob takes the refusal's reason, so Backup space counts it; a text refused for another reason keeps that
+ * one. A text that comes to upload while the hold stands waits with it, unsent (send.ts), unless the operator holds it
+ * already (holdOn). except: the upload refused, which waits a day of its own. A statement for each of the three,
+ * however many texts wait.
+ */
+export function holdUploads(db: SqlDb, owner: string, held: Held, except: number, operator: string): void {
+  const waiting = [owner, except, held.reason, owner, operator];
+  db.tx(() => {
+    setSetting(db, heldKey(owner), JSON.stringify(held));
+    db.run(`UPDATE outbox_targets SET next_at = MAX(next_at, ?) WHERE state = 'pending' AND outbox_id IN (SELECT o.id ${WAITING})`, held.until, ...waiting);
+    releaseDependentsIn(db, `SELECT o.id ${WAITING}`, waiting, 'publish_item');
+    db.run(`UPDATE blobs SET last_error = ? WHERE (last_error IS NULL OR last_error IN ('quota', 'daily')) AND sha256 IN (SELECT o.subject ${WAITING})`,
+      held.reason, ...waiting);
+  });
+}
+
+/**
+ * A text that came to upload while a refusal holds the library's texts (holdUploads): it waits with them, unsent, its
+ * save going without it, and its blob takes the refusal's reason, unless it was refused for another of its own.
+ */
+export function holdUpload(db: SqlDb, owner: string, id: number, sha256: string, held: Held): void {
+  db.tx(() => {
+    releaseDependents(db, id, 'publish_item');
+    db.run("UPDATE blobs SET last_error = ? WHERE sha256 = ? AND owner = ? AND (last_error IS NULL OR last_error IN ('quota', 'daily'))", held.reason, sha256, owner);
+  });
 }
 
 /** Whether a deletion gave back room the figures counted: made after them, of a blob the operator had before them. */

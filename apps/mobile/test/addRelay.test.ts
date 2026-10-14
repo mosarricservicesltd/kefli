@@ -162,6 +162,36 @@ describe('sending what adding a relay queues (FD 113)', () => {
     expect(w.db.get("SELECT 1 FROM outbox WHERE op = 'copy_relay'")).toBeUndefined();
   });
 
+  test('a save dated ahead of the added relay’s clock keeps no other from it: the rest go now, it once its time comes', async () => {
+    const w = world();
+    seedGeneratedLists(w.db, w.pk, D);
+    item(w.db, w.pk, 'h1');
+    // signed on a phone running 20 minutes fast, and on one a year ahead
+    const ahead = await save(w, 'h1', 1000 + 1200, 'archived while fast');
+    const far = await save(w, 'h2', 1000 + 365 * 86_400, 'a clock a year ahead');
+    const rest = await Promise.all(['h3', 'h4'].map((h, i) => save(w, h, 500 + i, 'unread')));
+    const { p, sent, setClock } = ports(w, { [D.relays[0]]: [far, ahead, ...rest] });
+    // the added relay is strfry, which takes an event dated no more than 15 minutes past its own clock
+    let relayClock = 1000;
+    p.publish = async (url, event) => {
+      if (url === MINE && event.created_at > relayClock + 900) return { ok: false, reason: 'invalid: created_at too late' };
+      sent.push({ url, event });
+      return { ok: true };
+    };
+    addRelay(w.db, 10, w.pk, MINE, D);
+    await drain(p);
+    const copied = () => sent.filter((s) => s.url === MINE && s.event.kind === 30078).map((s) => s.event.id);
+    expect(copied().sort()).toEqual(rest.map((e) => e.id).sort());
+    expect(w.db.get("SELECT t.next_at FROM outbox o JOIN outbox_targets t ON t.outbox_id = o.id WHERE o.op = 'copy_relay'")).toEqual({ next_at: 1000 + 1200 });
+    // its time comes: it goes too, and the copy is done; the one a year ahead is passed over
+    setClock(1000 + 1200);
+    relayClock = 1000 + 1200;
+    await drain(p);
+    expect(copied()).toContain(ahead.id);
+    expect(copied()).not.toContain(far.id);
+    expect(w.db.get("SELECT 1 FROM outbox WHERE op = 'copy_relay'")).toBeUndefined();
+  });
+
   test('waits while no other relay answers', async () => {
     const w = world();
     seedGeneratedLists(w.db, w.pk, D);
