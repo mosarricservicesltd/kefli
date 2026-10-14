@@ -340,20 +340,47 @@ func (s *Server) receive(body io.Reader, sha string) (string, int64, error) {
 // commit checks the real size against the quota, renames the received file into place, so a reader never sees half
 // a blob, and records the owner. One at a time, so concurrent uploads can't each pass the check and together
 // overshoot the quota (F2); keflid is a single process. A blob already stored is replaced by identical bytes.
+//
+// Who sent it is asked again first, since a browser can be disconnected or an account deleted while its body arrives;
+// and the owner row is written only while that account (and browser) still stands, so a deletion between the two
+// leaves no blob behind it either.
 func (s *Server) commit(r *http.Request, up *uploader, sha string, size int64, tmp string) (int, string) {
 	s.commitMu.Lock()
 	defer s.commitMu.Unlock()
-	if _, status, reason := s.withinQuota(r, up, sha, size); status != 0 {
+	now, err := s.whoUploads(r, up.signer)
+	switch {
+	case err != nil:
+		return http.StatusInternalServerError, "server"
+	case now == nil || now.account != up.account:
+		return http.StatusUnauthorized, "not_registered"
+	}
+	if _, status, reason := s.withinQuota(r, now, sha, size); status != 0 {
 		return status, reason
 	}
 	if err := os.Rename(tmp, s.path(sha)); err != nil {
 		s.log.Error("store blob", "err", err)
 		return http.StatusInternalServerError, "server"
 	}
-	if err := s.st.AddOwner(r.Context(), sha, up.signer, up.account, size, up.inbox); err != nil {
+	if err := s.st.AddOwner(r.Context(), sha, now.signer, now.account, size, now.inbox); err != nil {
 		return http.StatusInternalServerError, "server"
 	}
-	return 0, ""
+	return s.recorded(r, now.account, sha)
+}
+
+// recorded checks the owner row is there, and otherwise, the account having gone after all, removes the file unless
+// someone else owns it too.
+func (s *Server) recorded(r *http.Request, account, sha string) (int, string) {
+	held, err := s.st.Holds(r.Context(), account, sha)
+	if err != nil {
+		return http.StatusInternalServerError, "server"
+	}
+	if held {
+		return 0, ""
+	}
+	if owned, err := s.st.Exists(r.Context(), sha); err == nil && !owned {
+		s.Unlink(sha)
+	}
+	return http.StatusUnauthorized, "not_registered"
 }
 
 // SweepFiles removes blob files no owner holds and upload temporaries, each once older than an hour so an upload

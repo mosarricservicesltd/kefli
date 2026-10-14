@@ -383,6 +383,50 @@ func TestUploadsInFlightPerAccount(t *testing.T) {
 	expect(t, s, 200, b)
 }
 
+// An upload checked who sent it before its body was read, and recorded its owner after, so one still arriving when its
+// account or browser was deleted was kept: a blob owned by an account that no longer exists, served to anyone, counted
+// against nobody and deleted by nothing, after Delete my data said the library had left Kefli's server. Now it is
+// refused once it has arrived, and nothing of it stays.
+func TestAnUploadArrivingAfterItsAccountWent(t *testing.T) {
+	e := newEnv(t)
+	user, device := newKey(), newKey()
+	e.registered(user)
+	expect(t, e.addDevice(user, device), 200, nil)
+	// the browser disconnected while its save's blob was still arriving
+	inbox := []byte("a browser save still arriving")
+	release := e.held(device, inbox)
+	s, b := e.call(user, "DELETE", "/devices/"+device.pk, nil)
+	expect(t, s, 200, b)
+	if s := release(); s != 401 {
+		t.Fatalf("an upload by a disconnected browser: %d", s)
+	}
+	if s, _ := e.fetch(hash(inbox)); s != 404 {
+		t.Fatal("the disconnected browser's blob is served")
+	}
+	// the account deleted while the second phone's upload was arriving
+	text := []byte("a text blob from the other phone")
+	release = e.held(user, text)
+	e.clock = e.clock.Add(time.Second)
+	s, b = e.call(user, "DELETE", "/account", nil)
+	expect(t, s, 200, b)
+	if s := release(); s != 401 {
+		t.Fatalf("an upload by a deleted account: %d", s)
+	}
+	if s, _ := e.fetch(hash(text)); s != 404 {
+		t.Fatal("the deleted account's blob is served")
+	}
+	if f := e.files(); len(f) != 0 {
+		t.Fatalf("left on disk: %v", f)
+	}
+	// and an owner can't be recorded for an account that has gone, however late
+	if err := e.st.AddOwner(t.Context(), hash(text), user.pk, user.pk, int64(len(text)), false); err != nil {
+		t.Fatal(err)
+	}
+	if held, _ := e.st.Exists(t.Context(), hash(text)); held {
+		t.Fatal("an owner row for a deleted account")
+	}
+}
+
 // Every blob is a file, and the quota counts bytes: one account's 4-byte blobs used up a disk's inodes long before its
 // quota or the floor on free space (probe tinyblobs: on a disk of 1,500 inodes, the 1,242nd upload and every one after
 // it, anyone's, failed with 500, and so did every other writer on that disk). Uploads now keep a tenth of the disk's

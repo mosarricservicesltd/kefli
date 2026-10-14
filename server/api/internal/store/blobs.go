@@ -24,14 +24,18 @@ func (s *Store) Holds(ctx context.Context, account, sha string) (bool, error) {
 }
 
 // AddOwner records an upload. inbox marks a device's blob, which expires after InboxLife (contract 5); uploading the
-// same blob again keeps the row and, for an inbox blob, its first expiry.
+// same blob again keeps the row and, for an inbox blob, its first expiry. Nothing is recorded once the account is
+// deleted or disabled, or, for an inbox blob, once the device isn't the account's: an upload still arriving then
+// leaves no owner that nothing would ever delete.
 func (s *Store) AddOwner(ctx context.Context, sha, owner, account string, size int64, inbox bool) error {
 	var expires any
 	if inbox {
 		expires = s.Now().Add(InboxLife).Unix()
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO owners(sha256, owner, account, size, created_at, expires_at) VALUES(?, ?, ?, ?, ?, ?)
-		ON CONFLICT(sha256, owner) DO NOTHING`, sha, owner, account, size, s.unix(), expires)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO owners(sha256, owner, account, size, created_at, expires_at) SELECT ?, ?, ?, ?, ?, ?
+		WHERE EXISTS (SELECT 1 FROM accounts WHERE pubkey = ? AND disabled = 0)
+		AND (? = 0 OR EXISTS (SELECT 1 FROM devices WHERE device_pubkey = ? AND user_pubkey = ?))
+		ON CONFLICT(sha256, owner) DO NOTHING`, sha, owner, account, size, s.unix(), expires, account, inbox, owner, account)
 	return err
 }
 
@@ -138,8 +142,13 @@ func (s *Store) DeleteAccount(ctx context.Context, user string) (orphaned []stri
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM devices WHERE user_pubkey = ?`, user); err != nil {
 		return nil, err
 	}
-	_, err = s.db.ExecContext(ctx, `DELETE FROM accounts WHERE pubkey = ?`, user)
-	return orphaned, err
+	if _, err = s.db.ExecContext(ctx, `DELETE FROM accounts WHERE pubkey = ?`, user); err != nil {
+		return nil, err
+	}
+	// an upload that finished while this ran recorded its owner before the account went: it goes too, and none can
+	// be recorded after (AddOwner)
+	late, err := s.deleteOwned(ctx, `account = ?`, user)
+	return append(orphaned, late...), err
 }
 
 func (s *Store) userDevices(ctx context.Context, user string) ([]string, error) {
