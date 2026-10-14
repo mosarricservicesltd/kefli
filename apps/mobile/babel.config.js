@@ -22,10 +22,26 @@ function stripConsole({ types: t }) {
   };
 }
 
+// The build's variant, written into the bundle as a literal wherever process.env.KEFLI_VARIANT is read, so Metro's
+// constant folding drops what only the other variant uses before it collects dependencies: the development gates and
+// their fixtures stay out of a release bundle (gates.tsx, F51). Metro's own cache doesn't know the variant, so a
+// checkout that switches between the two clears it (expo start --clear); EAS builds start without one.
+function inlineVariant(variant) {
+  return ({ types: t }) => ({
+    visitor: {
+      MemberExpression(path) {
+        if (path.matchesPattern('process.env.KEFLI_VARIANT')) path.replaceWith(t.stringLiteral(variant));
+      },
+    },
+  });
+}
+
 module.exports = function config(api) {
-  const keep = process.env.KEFLI_VARIANT === 'local';
-  api.cache.using(() => String(keep));
-  return { presets: ['babel-preset-expo'], plugins: keep ? [] : [stripConsole] };
+  const variant = process.env.KEFLI_VARIANT === 'local' ? 'local' : 'release';
+  api.cache.using(() => variant);
+  const keep = variant === 'local';
+  return { presets: ['babel-preset-expo'], plugins: [inlineVariant(variant), ...(keep ? [] : [stripConsole])] };
 };
 
 module.exports.stripConsole = stripConsole;
+module.exports.inlineVariant = inlineVariant;
