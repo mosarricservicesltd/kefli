@@ -55,10 +55,11 @@ type Judged = { outcome: Exclude<Outcome, 'created' | 'merged' | 'unarchived' | 
 
 /**
  * The rules of 4.7's steps 1 and 2 for an opened wrap. A request whose address isn't a link is failed_parse: no save
- * can be made from it, and taking it would fail the same way at every drain. devices is the connected-browsers
- * record, read once a drain rather than once a wrap.
+ * can be made from it, and taking it would fail the same way at every drain. record, when given, is the
+ * connected-browsers record, read once a drain rather than once a wrap.
  */
-export function judge(db: SqlDb, owner: string, rumor: Rumor, seal: NostrEvent, operatorBlossom: string, devices = localRecord(db, owner)): Judged {
+export function judge(db: SqlDb, owner: string, rumor: Rumor, seal: NostrEvent, operatorBlossom: string, record?: DevicesRecord): Judged {
+  const devices = record ?? localRecord(db, owner);
   let v = acceptSaveRequest(rumor, seal, devices, operatorBlossom);
   if (!v.ok && v.reason === 'server') {
     const r = JSON.parse(rumor.content) as SaveRequest;

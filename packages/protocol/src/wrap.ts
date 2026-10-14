@@ -147,10 +147,10 @@ const PROBE = 'kefli-wrap-probe';
  * sight), this tells a signer that isn't answering, whose other wraps would fail the same way, from one that only
  * won't open that wrap, which anyone can send to look like a signer that isn't answering.
  */
-export async function opensWraps(recipient: Signer, pubkey = recipient.pubkey(), secp: SecpPort = nobleSecp): Promise<boolean> {
-  const key = generateSecretKey();
-  const content = nip44.encrypt(PROBE, conversationKey(secp, key, pubkey));
+export async function opensWraps(recipient: Signer, pubkey?: string, secp: SecpPort = nobleSecp): Promise<boolean> {
   try {
+    const key = generateSecretKey();
+    const content = nip44.encrypt(PROBE, conversationKey(secp, key, pubkey ?? recipient.pubkey()));
     return (await recipient.nip44Decrypt(secp.publicKey(key), content)) === PROBE;
   } catch {
     return false;

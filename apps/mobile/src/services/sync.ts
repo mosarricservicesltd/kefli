@@ -259,18 +259,28 @@ export type Strikes = Map<string, number>;
 const WRONG_BYTES_MAX = 2;
 
 /**
- * One server's copy of a text's blob: its bytes, which are the blob asked for (its sha256); 'lacks', not there, larger
- * than any text, or other bytes; or 'down', not reached, no whole answer within TEXT_TIMEOUT_MS, 5xx or 429. Once one
- * is down, or has sent other bytes WRONG_BYTES_MAX times, the rest of the sync doesn't ask it.
+ * What a server's answer for a blob is: the blob asked for (its sha256); another's bytes; 'lacks', not there or larger
+ * than any text; or 'down', not reached or not finished in time (status 0), 5xx or 429.
+ */
+function answerOf(got: Got, sha256: string, crypto: CryptoPort): 'blob' | 'other' | 'lacks' | 'down' {
+  if (got.status === 0 || got.status >= 500 || got.status === 429) return 'down';
+  if (got.status < 200 || got.status > 299 || !got.bytes) return 'lacks';
+  return bytesToHex(crypto.sha256(got.bytes)) === sha256 ? 'blob' : 'other';
+}
+
+/**
+ * One server's copy of a text's blob: its bytes, which are the blob asked for; 'lacks', not there, larger than any
+ * text, or other bytes; or 'down' (answerOf). Once one is down, or has sent other bytes WRONG_BYTES_MAX times, the rest
+ * of the sync doesn't ask it.
  */
 async function fromServer(p: SyncPorts, server: string, sha256: string, strikes: Strikes): Promise<Uint8Array | 'lacks' | 'down'> {
-  if ((strikes.get(server) ?? 0) >= WRONG_BYTES_MAX) return 'down';
-  // status 0: not reached, or not finished in time
+  const struck = strikes.get(server) ?? 0;
+  if (struck >= WRONG_BYTES_MAX) return 'down';
   const got = await getBlob(p, `${server}/${sha256}`).catch((): Got => ({ status: 0, bytes: null }));
-  const ok = got.status >= 200 && got.status <= 299;
-  if (ok && got.bytes && bytesToHex(p.crypto.sha256(got.bytes)) === sha256) return got.bytes;
-  if (ok && got.bytes) strikes.set(server, (strikes.get(server) ?? 0) + 1);
-  if (ok || (got.status > 0 && got.status < 500 && got.status !== 429)) return 'lacks';
+  const answer = answerOf(got, sha256, p.crypto);
+  if (answer === 'blob') return got.bytes!;
+  if (answer === 'other') strikes.set(server, struck + 1);
+  if (answer !== 'down') return 'lacks';
   strikes.set(server, Infinity);
   return 'down';
 }
@@ -284,12 +294,13 @@ async function fromServer(p: SyncPorts, server: string, sha256: string, strikes:
  * 'offline', and asked for at the next sync. The blob asked for whose key doesn't open it is 'missing' at once: every
  * server holding it holds the same bytes, which were fetched again from each.
  */
-export async function fetchText(p: SyncPorts, job: TextJob, strikes: Strikes = new Map()): Promise<'ok' | 'missing' | 'offline'> {
+export async function fetchText(p: SyncPorts, job: TextJob, strikes?: Strikes): Promise<'ok' | 'missing' | 'offline'> {
+  const struck: Strikes = strikes ?? new Map();
   // the 10063 as published is asked as well as the rows kept from it (C§8, F37); each server once, slash or not
   const servers = blobServers([...namedServers(job), ...listServers(p.db, job.owner), ...heldServerList(p.db, job.owner)]);
   let unreachable = 0;
   for (const server of servers) {
-    const bytes = await fromServer(p, server, job.text_sha256, strikes);
+    const bytes = await fromServer(p, server, job.text_sha256, struck);
     if (bytes === 'down') unreachable++;
     if (typeof bytes === 'string') continue;
     let markdown: string;

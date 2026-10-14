@@ -17,18 +17,17 @@ export type Outcome =
 /** An inbox blob expires 14 days after capture (C§4.4); the page is fetched instead. */
 export const INBOX_BLOB_LIFE = 14 * 86_400;
 
-export function seenOutcome(db: SqlDb, wrapId: string): Outcome | null {
-  return db.get<{ outcome: Outcome }>("SELECT outcome FROM inbox_seen WHERE wrap_id = ? AND outcome != 'waiting'", wrapId)?.outcome ?? null;
-}
-
-/** A wrap's standing: its outcome, 'waiting' for one a drain tried and couldn't open or take yet, null for one never tried. */
+/**
+ * A wrap's standing: its outcome, which it is acted on once by; 'waiting' for one a drain tried and couldn't open or
+ * take yet, which the next drain tries again; null for one never tried.
+ */
 export function seenState(db: SqlDb, wrapId: string): Outcome | 'waiting' | null {
   return db.get<{ outcome: Outcome | 'waiting' }>('SELECT outcome FROM inbox_seen WHERE wrap_id = ?', wrapId)?.outcome ?? null;
 }
 
 /**
  * A wrap the phone couldn't open or take yet (F3) is noted as waiting, with when a drain first tried it, and is no
- * outcome: seenOutcome passes it by, and the next drain tries it again. Returns when the first try was, from which the
+ * outcome (seenState): the next drain tries it again. Returns when the first try was, from which the
  * week it is waited for runs. Counted from its created_at, as it was, a wrap the phone first saw a week late (NIP-59
  * backdates it two days; a phone off for five) was filed as not ours at the first signer out of sight, and the save lost.
  */
