@@ -81,12 +81,35 @@ export class UnwrapError extends Error {
   }
 }
 
-/** Open a wrap addressed to recipient. Checks both signatures, the rumor's id, and that the rumor's author is the seal's signer. */
+const isRecord = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
+
+/** The fields NIP-01 gives every event, typed as it types them; a rumor shaped otherwise can't be hashed or read. */
+function isRumorShape(r: unknown): r is Rumor {
+  if (!isRecord(r) || !Array.isArray(r.tags)) return false;
+  const typed = typeof r.id === 'string' && typeof r.pubkey === 'string' && typeof r.kind === 'number' && typeof r.created_at === 'number';
+  return typed && typeof r.content === 'string' && r.tags.every((t) => Array.isArray(t) && t.every((x) => typeof x === 'string'));
+}
+
+/** verifyEventWith, false for an event it can't serialise (a field of the wrong type), which it would throw for. */
+function verifies(secp: SecpPort, event: unknown): boolean {
+  try {
+    return isRecord(event) && verifyEventWith(secp, event as unknown as NostrEvent);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Open a wrap addressed to recipient. Checks both signatures, the rumor's id, and that the rumor's author is the seal's
+ * signer. Anyone can send a wrap, so whatever it holds that isn't a seal around a rumor of NIP-01's shape (null, a
+ * number, an array, a tag that isn't strings) is an UnwrapError too, never a TypeError a caller would take for the
+ * signer not answering and wait on.
+ */
 export async function unwrap(recipient: Signer, wrap: NostrEvent, secp: SecpPort = nobleSecp): Promise<{ rumor: Rumor; seal: NostrEvent }> {
   if (wrap.kind !== KIND.giftWrap) throw new UnwrapError('not kind 1059');
-  if (!verifyEventWith(secp, wrap)) throw new UnwrapError('wrap signature');
+  if (!verifies(secp, wrap)) throw new UnwrapError('wrap signature');
   let seal: NostrEvent;
-  let rumor: Rumor;
+  let rumor: unknown;
   // a signer that couldn't answer (out of sight, timed out, declined) says nothing about the wrap: its error goes
   // through as it is, so the caller can wait and ask again rather than file the wrap as not ours (F3)
   try {
@@ -95,14 +118,41 @@ export async function unwrap(recipient: Signer, wrap: NostrEvent, secp: SecpPort
     if (isSignerFailure(e)) throw e;
     throw new UnwrapError('wrap does not decrypt');
   }
-  if (seal.kind !== KIND.seal || !verifyEventWith(secp, seal)) throw new UnwrapError('seal');
+  if (!isRecord(seal) || seal.kind !== KIND.seal || !verifies(secp, seal)) throw new UnwrapError('seal');
   try {
     rumor = JSON.parse(await recipient.nip44Decrypt(seal.pubkey, seal.content));
   } catch (e) {
     if (isSignerFailure(e)) throw e;
     throw new UnwrapError('seal does not decrypt');
   }
+  if (!isRumorShape(rumor)) throw new UnwrapError('rumor');
   if (rumor.pubkey !== seal.pubkey) throw new UnwrapError('rumor author is not the seal signer');
-  if (getEventHash(rumor) !== rumor.id) throw new UnwrapError('rumor id');
+  if (!hashes(rumor)) throw new UnwrapError('rumor id');
   return { rumor, seal };
+}
+
+function hashes(rumor: Rumor): boolean {
+  try {
+    return getEventHash(rumor) === rumor.id;
+  } catch {
+    return false;
+  }
+}
+
+const PROBE = 'kefli-wrap-probe';
+
+/**
+ * Whether the recipient's signer opens a wrap's outer layer now: a ciphertext made here to its key from a fresh one,
+ * as any wrap is, which it is asked to decrypt. After a wrap the signer didn't open (it timed out, or declined out of
+ * sight), this tells a signer that isn't answering, whose other wraps would fail the same way, from one that only
+ * won't open that wrap, which anyone can send to look like a signer that isn't answering.
+ */
+export async function opensWraps(recipient: Signer, pubkey?: string, secp: SecpPort = nobleSecp): Promise<boolean> {
+  try {
+    const key = generateSecretKey();
+    const content = nip44.encrypt(PROBE, conversationKey(secp, key, pubkey ?? recipient.pubkey()));
+    return (await recipient.nip44Decrypt(secp.publicKey(key), content)) === PROBE;
+  } catch {
+    return false;
+  }
 }

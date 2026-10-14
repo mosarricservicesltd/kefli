@@ -72,21 +72,23 @@ export function adoptLibraryKey(db: SqlDb, now: number, owner: string, key: Uint
 }
 
 /**
- * Where a deletion naming these addresses finds saves (F5): the address each save was last published or seen at,
- * and its address under the current key. An older address of a save since moved never matches, so retiring it can't
- * take the save with it. Returns address → hash.
+ * Where a deletion naming an address finds saves (F5): the address each save was last published or seen at, and its
+ * address under the current key. An older address of a save since moved never matches, so retiring it can't take the
+ * save with it. Returns address → the hashes there (two, if another client put two saves at one address). Keying an
+ * address is an HMAC, so the index is made once for a run of deletions: made once a kind 5, 400 of them against a
+ * library of 3,000 saves took over three minutes.
  */
-export function savesAt(db: SqlDb, owner: string, ds: string[]): Map<string, string> {
-  const want = new Set(ds);
-  const out = new Map<string, string>();
-  if (!want.size) return out;
+export function addressIndex(db: SqlDb, owner: string): Map<string, string[]> {
   const key = libraryKey(db, owner);
+  const out = new Map<string, string[]>();
+  const add = (d: string, hash: string) => {
+    const at = out.get(d);
+    if (!at) out.set(d, [hash]);
+    else if (!at.includes(hash)) at.push(hash);
+  };
   for (const it of db.all<{ hash: string; remote_d: string | null }>('SELECT hash, remote_d FROM items WHERE owner = ?', owner)) {
-    if (it.remote_d && want.has(it.remote_d)) out.set(it.remote_d, it.hash);
-    if (key) {
-      const d = savedD(key, it.hash);
-      if (want.has(d)) out.set(d, it.hash);
-    }
+    if (it.remote_d) add(it.remote_d, it.hash);
+    if (key) add(savedD(key, it.hash), it.hash);
   }
   return out;
 }

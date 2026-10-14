@@ -26,6 +26,19 @@ export function signedSize(template: EventTemplate): number {
   return utf8ToBytes(JSON.stringify(placeholder)).length;
 }
 
+/** Bytes of an event as it was received, serialised as signedSize measures it. */
+export function eventBytes(event: NostrEvent): number {
+  return utf8ToBytes(JSON.stringify(event)).length;
+}
+
+/**
+ * Whether an event is over the 16 KB ceiling no Kefli client passes (C§3.3), so it isn't one Kefli made: a save,
+ * a connected-browsers record or a library key that large is refused before it is decrypted.
+ */
+export function overCeiling(event: NostrEvent): boolean {
+  return event.content.length > MAX_EVENT_BYTES || eventBytes(event) > MAX_EVENT_BYTES;
+}
+
 /** Signs only events within the ceiling, so nothing over 16 KB is ever signed or sent. */
 export async function signWithinCeiling(signer: Signer, template: EventTemplate): Promise<NostrEvent> {
   const bytes = signedSize(template);
@@ -56,7 +69,8 @@ export async function buildItemEvent(signer: Signer, hash: string, item: ParsedI
 
 /**
  * The hash, address and decrypted item of a save event. The hash is the one the item carries (C§4.1); a save from
- * before v1.10 has none, and its unkeyed d is its hash. Throws for anything that isn't the signer's own save.
+ * before v1.10 has none, and its unkeyed d is its hash. Throws for anything that isn't the signer's own save, one
+ * over the 16 KB ceiling among them (C§3.3), which is refused before it is decrypted.
  * Takes verified events only: the relay pool's verifier checks signatures before this runs (mobile spec 4.4).
  */
 export async function readItemEvent(signer: Signer, event: NostrEvent): Promise<{ hash: string; d: string; item: ParsedItem }> {
@@ -65,6 +79,7 @@ export async function readItemEvent(signer: Signer, event: NostrEvent): Promise<
   const d = event.tags.find((t) => t[0] === 'd')?.[1] ?? '';
   if (!isItemD(d)) throw new Error('not a save');
   if (!event.tags.some((t) => t[0] === 't' && t[1] === T_TAG)) throw new Error(`no t tag ${T_TAG}`);
+  if (overCeiling(event)) throw new EventTooLargeError(eventBytes(event));
   const item = parseItem(await signer.nip44Decrypt(signer.pubkey(), event.content));
   const carried = item.item.hash;
   const hash = typeof carried === 'string' && isItemD(ITEM_D_PREFIX + carried) ? carried : d.slice(ITEM_D_PREFIX.length);

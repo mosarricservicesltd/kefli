@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   EventTooLargeError, KIND, LocalSigner, MAX_EVENT_BYTES, buildItemEvent, cleanMnemonic, decryptText,
-  encryptText, newMnemonic, normaliseMarkdown, parseItem, readItemEvent, secretKeyFromMnemonic, signedSize, textHash,
+  encryptText, newMnemonic, normaliseMarkdown, parseItem, readItemEvent, readLibraryKeyEvent, secretKeyFromMnemonic, signedSize, textHash,
 } from '../src';
 import { nodeCrypto } from '../src/node';
 
@@ -137,6 +137,17 @@ describe('save events (C§4.1, C§3.3)', () => {
     const built = await buildItemEvent(s, HASH, item({ later: 'x'.repeat(4_000) }), 1);
     expect(built.overTarget).toBe(true);
     expect(signedSize({ ...built.event })).toBeLessThanOrEqual(MAX_EVENT_BYTES);
+  });
+
+  test('a save, or a library key record, over 16 KB isn’t one Kefli made: refused before it is decrypted', async () => {
+    const s = new LocalSigner(nodeCrypto.randomBytes(32));
+    const decrypt = jest.spyOn(s, 'nip44Decrypt');
+    const content = await s.nip44Encrypt(s.pubkey(), JSON.stringify({ ...item().item, later: 'x'.repeat(20_000) }));
+    const big = await s.signEvent({ kind: 30078, created_at: 1, tags: [['d', `kefli/item/${HASH}`], ['t', 'kefli']], content });
+    await expect(readItemEvent(s, big)).rejects.toThrow(EventTooLargeError);
+    const key = await s.signEvent({ kind: 30078, created_at: 1, tags: [['d', 'kefli/library-key'], ['t', 'kefli']], content });
+    await expect(readLibraryKeyEvent(s, key)).rejects.toThrow(EventTooLargeError);
+    expect(decrypt).not.toHaveBeenCalled();
   });
 
   test('another identity’s event or a non-save is refused', async () => {
