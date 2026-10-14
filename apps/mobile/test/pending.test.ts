@@ -6,7 +6,7 @@ import { seedGeneratedLists } from '../src/data/lists';
 import * as pendingData from '../src/data/pending';
 import { pendingParses } from '../src/data/pending';
 import { DESKTOP_UA, MOBILE_UA, PAGE_MAX_BYTES, RENDER_MAX_BYTES, fetchPage, refusal, type ParserResult } from '../src/services/page';
-import { runPendingParses, type PendingPorts } from '../src/services/pending';
+import { runPendingParses, settle, type PendingPorts } from '../src/services/pending';
 import { TimedOut } from '../src/net/http';
 import { memoryDb } from './sqlite';
 
@@ -229,6 +229,44 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     // only the parsed save's blob is staged; the one whose save couldn't take it went
     expect(w.staged.size).toBe(1);
     expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 1, failed: 0, waiting: 0, xWaiting: 0 });
+  });
+
+  test('two runs at once (a sync and the inbox) parse each save once, and keep it', async () => {
+    // the inbox runs pending parses when it saves something, whatever a sync is doing: before, both read the same
+    // queue, and the second to apply its parse re-keyed a save the first had already re-keyed, found it already
+    // there, and deleted it as a duplicate
+    const w = world({ 'https://t.co/x': { finalUrl: 'https://news.com/story' }, 'https://t.co/y': { finalUrl: 'https://news.com/other' } });
+    w.share('https://t.co/x');
+    w.share('https://t.co/y');
+    const page = w.ports.page.fetch;
+    let fetches = 0;
+    w.ports.page.fetch = (async (url: string, init: RequestInit) => {
+      fetches++;
+      await new Promise((r) => setTimeout(r, 5));
+      return page(url, init);
+    }) as never;
+    const [a, b] = await Promise.all([runPendingParses(w.ports, PK), runPendingParses(w.ports, PK)]);
+    expect(a.parsed + b.parsed).toBeGreaterThanOrEqual(2);
+    expect(w.db.all<{ hash: string; text_state: string }>('SELECT hash, text_state FROM items ORDER BY hash')).toEqual(
+      [itemHash('https://news.com/other'), itemHash('https://news.com/story')].sort().map((hash) => ({ hash, text_state: 'cached' })),
+    );
+    expect(fetches).toBe(2);
+    expect(w.staged.size).toBe(2);
+  });
+
+  test('a parse applied to a save another path has settled meanwhile is dropped, not applied over it', async () => {
+    const w = world({ 'https://t.co/z': { finalUrl: 'https://news.com/z' } });
+    w.share('https://t.co/z');
+    const [item] = pendingParses(w.db, PK);
+    const outcome = await fetchPage(w.ports.page, item.url);
+    if (outcome.kind === 'offline') throw new Error('offline');
+    // the same save settled twice at once, as the inbox and a pending parse could before
+    expect(await Promise.all([settle(w.ports, PK, item, outcome), settle(w.ports, PK, item, outcome)])).toEqual(['parsed', 'parsed']);
+    expect(w.db.all('SELECT hash, text_state FROM items')).toEqual([{ hash: itemHash('https://news.com/z'), text_state: 'cached' }]);
+    expect(w.staged.size).toBe(1);
+    // nor does a failure land on a save that has its text
+    await settle(w.ports, PK, item, { kind: 'failed', reason: 'http', finalUrl: item.url });
+    expect(w.db.get('SELECT text_state FROM items')).toEqual({ text_state: 'cached' });
   });
 
   test("another phone's save without text keeps its address when parsed here", async () => {

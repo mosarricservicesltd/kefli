@@ -56,7 +56,40 @@ async function step(p: PendingPorts, owner: string, queued: Pending): Promise<St
   return settle(p, owner, item, outcome);
 }
 
-export async function runPendingParses(p: PendingPorts, owner: string): Promise<PendingResult> {
+/** The run going for each owner, and whether another was asked for while it went. */
+const runs = new Map<string, { run: Promise<PendingResult>; again: boolean }>();
+
+/**
+ * The pending parses for owner, one run at a time. A sync's phase 7 and the inbox, which parses what it has just
+ * saved, can ask at once, and two runs over one queue applied each parse twice: the second re-keyed a save the first
+ * had re-keyed already, found it there, and deleted it as its own duplicate. A call while a run goes gets that run's
+ * result, and one more pass follows it for anything queued meanwhile.
+ */
+export function runPendingParses(p: PendingPorts, owner: string): Promise<PendingResult> {
+  const going = runs.get(owner);
+  if (going) {
+    going.again = true;
+    return going.run;
+  }
+  const entry = { run: Promise.resolve<PendingResult>({ parsed: 0, failed: 0, waiting: 0, xWaiting: 0 }), again: false };
+  entry.run = (async () => {
+    try {
+      let out = await pass(p, owner);
+      while (entry.again) {
+        entry.again = false;
+        const more = await pass(p, owner);
+        out = { parsed: out.parsed + more.parsed, failed: out.failed + more.failed, waiting: more.waiting, xWaiting: more.xWaiting };
+      }
+      return out;
+    } finally {
+      runs.delete(owner);
+    }
+  })();
+  runs.set(owner, entry);
+  return entry.run;
+}
+
+async function pass(p: PendingPorts, owner: string): Promise<PendingResult> {
   const out: PendingResult = { parsed: 0, failed: 0, waiting: 0, xWaiting: 0 };
   const queue = pendingParses(p.db, owner);
   let unreached = 0;
@@ -86,6 +119,15 @@ export async function runPendingParses(p: PendingPorts, owner: string): Promise<
 }
 
 /**
+ * Whether a save is still waiting for the parse it was taken for: at the same hash, its text queued (pending parses)
+ * or fetching (the inbox). A parse that another path settled first, or re-keyed, is dropped rather than applied over it.
+ */
+function waiting(db: SqlDb, item: Pending): boolean {
+  const row = db.get<{ hash: string; text_state: string }>('SELECT hash, text_state FROM items WHERE id = ?', item.id);
+  return !!row && row.hash === item.hash && (row.text_state === 'queued' || row.text_state === 'fetching');
+}
+
+/**
  * A parse's result applied to a waiting save, for pending parses and the inbox (4.7): failed goes out without
  * text; parsed has its text encrypted under a fresh key, staged, written and indexed, unless it joined a save
  * already here, which keeps its own text.
@@ -96,11 +138,13 @@ export async function settle(
 ): Promise<'parsed' | 'failed'> {
   const t = await p.targets();
   if (outcome.kind === 'failed') {
-    applyFailed(p.db, p.now(), owner, item, outcome.reason, t);
+    if (waiting(p.db, item)) applyFailed(p.db, p.now(), owner, item, outcome.reason, t);
     return 'failed';
   }
   const { result } = outcome;
   const enc = await encryptText(result.markdown, p.crypto);
+  // the last wait: from here the parse is applied in one go, and only to a save still as it was when its parse began
+  if (!waiting(p.db, item)) return 'parsed';
   const path = p.stage(enc.text.sha256, enc.blob);
   let applied: ReturnType<typeof applyParsed>;
   try {
