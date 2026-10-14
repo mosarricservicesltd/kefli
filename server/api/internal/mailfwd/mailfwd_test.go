@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -61,6 +62,11 @@ type fakeResend struct {
 	keys      []string
 	sendFails bool
 	srv       *httptest.Server
+	// block, when set, holds the attachment download until it is closed; started counts downloads begun
+	block   chan struct{}
+	started atomic.Int64
+	// raw is the last send's body as it came
+	raw string
 }
 
 func newFake(t *testing.T) *fakeResend {
@@ -75,6 +81,10 @@ func (f *fakeResend) serve(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "" {
 			http.Error(w, "the key went to the file store", http.StatusBadRequest)
 			return
+		}
+		f.started.Add(1)
+		if f.block != nil {
+			<-f.block
 		}
 		io.WriteString(w, "%PDF")
 		return
@@ -101,23 +111,33 @@ func (f *fakeResend) send(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "down", http.StatusServiceUnavailable)
 		return
 	}
+	raw, _ := io.ReadAll(r.Body)
 	var out outgoing
-	json.NewDecoder(r.Body).Decode(&out)
+	json.Unmarshal(raw, &out)
 	f.mu.Lock()
 	f.sent = append(f.sent, out)
 	f.keys = append(f.keys, r.Header.Get("Idempotency-Key"))
+	f.raw = string(raw)
 	f.mu.Unlock()
 	io.WriteString(w, `{"id":"sent_1"}`)
 }
 
 func post(t *testing.T, f *fakeResend, body string) int {
-	cfg := Config{APIKey: "re_test", WebhookSecret: secret, From: "Kefli privacy <privacy@kefli.app>",
+	return postWith(t, f, body, 0)
+}
+
+// handlers are one per fake, as the forwarder serves with one handler for its life.
+var handlers sync.Map
+
+// postWith posts body to the fake's forwarder, which waits busy for a forward already running.
+func postWith(t *testing.T, f *fakeResend, body string, busy time.Duration) int {
+	h, _ := handlers.LoadOrStore(f, Handler(Config{APIKey: "re_test", WebhookSecret: secret, From: "Kefli privacy <privacy@kefli.app>",
 		To: "inbox@example.com", Accept: []string{"privacy@kefli.app"}, APIBase: f.srv.URL,
-		Client: f.srv.Client(), Now: func() time.Time { return now }}
+		Client: f.srv.Client(), Now: func() time.Time { return now }, Busy: busy}))
 	req := httptest.NewRequest(http.MethodPost, "/hooks/resend", strings.NewReader(body))
 	req.Header = sign("msg_1", now, body)
 	rec := httptest.NewRecorder()
-	Handler(cfg).ServeHTTP(rec, req)
+	h.(http.Handler).ServeHTTP(rec, req)
 	return rec.Code
 }
 
@@ -169,6 +189,40 @@ func TestSendFailureRetries(t *testing.T) {
 	body := `{"type":"email.received","data":{"email_id":"em_1","cc":["privacy@kefli.app"]}}`
 	if code := post(t, f, body); code != http.StatusBadGateway {
 		t.Fatalf("status %d", code)
+	}
+}
+
+// The forwarder held each message whole in memory several times over, and forwarded every webhook at once: one mail of
+// a 20 MB HTML body and 27 MB of attachments took it to 657 MB, six at once to 2.8 GB (probe mailmem), on a 2 GB box
+// that keeps the relay and the API. Anyone can send mail to the address. Now one is forwarded at a time, a webhook that
+// finds it busy waits a while and is then answered 503, which Resend sends again later, and the HTML goes out as it
+// came rather than with every < escaped to six bytes.
+func TestOneForwardAtATime(t *testing.T) {
+	f := newFake(t)
+	gate := make(chan struct{})
+	f.block = gate
+	// without the guard the second webhook would wait on the gate too: open it after a while, so the test fails rather
+	// than hangs
+	open := sync.OnceFunc(func() { close(gate) })
+	time.AfterFunc(2*time.Second, open)
+	body := `{"type":"email.received","data":{"email_id":"em_1","to":["privacy@kefli.app"]}}`
+	first := make(chan int, 1)
+	go func() { first <- postWith(t, f, body, 20*time.Millisecond) }()
+	for f.started.Load() == 0 {
+		time.Sleep(time.Millisecond)
+	}
+	if code := postWith(t, f, body, 20*time.Millisecond); code != http.StatusServiceUnavailable {
+		t.Fatalf("a webhook while one forwards: %d", code)
+	}
+	open()
+	if code := <-first; code != http.StatusOK {
+		t.Fatalf("the first: %d", code)
+	}
+	if code := postWith(t, f, body, 20*time.Millisecond); code != http.StatusOK {
+		t.Fatalf("sent again once free: %d", code)
+	}
+	if !strings.Contains(f.raw, "<p>Please</p>") {
+		t.Fatalf("the HTML went out escaped: %.200s", f.raw)
 	}
 }
 

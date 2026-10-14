@@ -40,7 +40,7 @@ import { Icon } from '../ui/Icon';
 import { S } from '../ui/strings';
 import { T, ui } from '../ui/text';
 import { useTheme } from '../ui/theme';
-import { activeSpools, firstLink } from './pickup';
+import { activeSpools, firstLink, readSpool } from './pickup';
 import { hostOf } from '../screens/SaveRow';
 
 type Mode = 'saving' | 'checking' | 'saved' | 'again' | 'offline' | 'xwait' | 'noarticle' | 'nolink' | 'failed' | 'removed';
@@ -102,8 +102,10 @@ export default function ShareRoot({ spoolId }: { spoolId?: string }) {
 function SavedSheet({ spoolId }: { spoolId?: string }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
-  const entry = useMemo(() => (spoolId ? KefliShare.read(spoolId) : null), [spoolId]);
-  const url = firstLink(entry?.text ?? null);
+  // a spool that can't be read is no share: Not a link, rather than a sheet that throws while it draws
+  const entry = useMemo(() => (spoolId ? readSpool(spoolId) : null), [spoolId]);
+  // once, not at every render: each address tried is normalised
+  const url = useMemo(() => firstLink(entry?.text ?? null), [entry]);
   const first = useMemo(() => {
     try {
       return url ? itemHash(url) : null;

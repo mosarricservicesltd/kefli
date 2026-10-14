@@ -189,9 +189,16 @@ export function commitOrphans(db: SqlDb): string[] {
   return hashes.filter((h) => !hashInUseAfterDelete(db, h));
 }
 
-/** Archive and next's next: the first Unread row in list order whose text is here, other than this one (5.6). */
+/**
+ * Archive and next's next: the first Unread row in list order whose text is here, other than this one (5.6). One row
+ * read: the Reader asks on every render, and reading the whole list there stalled it in a library of thousands.
+ */
 export function nextUnread(db: SqlDb, owner: string, hash: string): LibRow | undefined {
-  return listRows(db, owner, 'unread').find((r) => r.hash !== hash && r.text_state === 'cached');
+  return db.get<LibRow>(
+    `SELECT ${LIB_COLS} FROM items WHERE owner = ? AND state = 'unread' AND pending_delete_at IS NULL AND text_state = 'cached' AND hash != ?
+     ORDER BY saved_at DESC, id DESC LIMIT 1`,
+    owner, hash,
+  );
 }
 
 /**
@@ -199,6 +206,8 @@ export function nextUnread(db: SqlDb, owner: string, hash: string): LibRow | und
  * while reading (4.5). publish false only stores it.
  */
 export function setPosition(db: SqlDb, now: number, owner: string, hash: string, word: number, publish: boolean): void {
+  // a position from layout or the voice that isn't a number would be stored as NULL, and published as one
+  if (!Number.isFinite(word)) return;
   db.tx(() => {
     const r = db.get<{ words: number | null; position_word: number }>('SELECT words, position_word FROM items WHERE owner = ? AND hash = ?', owner, hash);
     if (!r) return;

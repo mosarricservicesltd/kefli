@@ -1,5 +1,0 @@
-#!/bin/sh
-# strfry runs this as relay.writePolicy.plugin (contract 3.2). The plugin reads keflid's database read-only and keeps
-# its own record of the wraps the relay holds next to strfry's database.
-exec /usr/local/lib/kefli/kefli-writepolicy -db /var/lib/kefli/keflid.db -wraps /var/lib/strfry/wraps.db \
-    -strfry /usr/local/bin/strfry -config /etc/strfry.conf

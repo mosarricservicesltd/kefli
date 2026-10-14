@@ -62,8 +62,10 @@ async function restore() {
   beginRestore(db, 101, pk);
 
   const texts = new Map<string, string>();
+  // the phone's clock as a phone's is: after the fixture's events (3 October 2026), since one dated more than a day
+  // past it waits for its time
   const ports: SyncPorts = {
-    db, now: () => 200, signer: async (k) => (k === pk ? signer : null), query, fetch, crypto: nodeCrypto, defaults,
+    db, now: () => 1_791_100_000, signer: async (k) => (k === pk ? signer : null), query, fetch, crypto: nodeCrypto, defaults,
     files: { writeText: (hash, md) => texts.set(hash, md), removeText: (hash) => texts.delete(hash), removeAll: (hash) => texts.delete(hash) },
   };
   const result = await syncInbound(ports);

@@ -10,9 +10,10 @@
 // save still held by a relay that missed its deletion can't come back in the same run. The cursors move only once
 // everything collected has been applied (F14).
 import {
-  DEVICES_D, KIND, LIBRARY_KEY_D, T_TAG, decryptText, isSignerFailure, newest, readDevicesEvent, readItemEvent, readLibraryKeyEvent,
-  readRelayList, readServerList,
+  DEVICES_D, KIND, LIBRARY_KEY_D, LibraryKeyVersionError, T_TAG, decryptText, isSignerFailure, newest, readDevicesEvent, readItemEvent, readLibraryKeyEvent,
+  readRelayList, readServerList, replaces,
 } from '@kefli/protocol';
+import { bytesToHex } from '@noble/hashes/utils.js';
 import { deriveArticle, type Derived } from '../reader/blocks';
 import type { CryptoPort, NostrEvent, Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
@@ -26,7 +27,7 @@ import {
 } from '../data/lists';
 import { adoptLibraryKey, libraryKey, makeLibraryKey, moveToKeyedAddresses } from '../data/libraryKey';
 import {
-  applyDeletion, applyItem, getCursor, hashInUse, readRelays, setCursor, textCached, textMissing, textQueue,
+  applyDeletions, applyItem, blobServers, getCursor, hashInUse, readRelays, setCursor, textCached, textMissing, textQueue,
   type Stream, type TextJob,
 } from '../data/sync';
 
@@ -57,25 +58,47 @@ export const PAGE = 500;
 export const SKEW = 86_400;
 const MAX_PAGES = 200;
 
-export async function pageStream(query: SyncPorts['query'], relay: string, base: Filter): Promise<NostrEvent[]> {
-  const seen = new Map<string, NostrEvent>();
+/**
+ * Whether an event is dated more than SKEW past this phone's clock, which it then waits for, unread. Relays refuse
+ * events that far ahead (strfry's 15 minutes), and one taken dates every later change past it, a list (nextListTime),
+ * a kind 5 (after the newest version), a save (max(now, last + 1)), which those relays refuse in turn; a kind 5 dated
+ * 2100 would also delete the save made again tomorrow. The phone's clock is near enough to go by: the operator's API
+ * takes a NIP-98 header only within 60 s of its own (C§6).
+ */
+export const notYet = (e: { created_at: number }, now: number) => e.created_at > now + SKEW;
+
+/** An addressable event's address (NIP-01: kinds 30000 to 39999, by author and d), at which only the newest counts. */
+const addressOf = (e: NostrEvent) => (e.kind >= 30_000 && e.kind < 40_000 ? `${e.kind}:${e.pubkey}:${e.tags.find((t) => t[0] === 'd')?.[1] ?? ''}` : null);
+
+/**
+ * A relay's events for base, paged back by until. Of an addressable event, only the newest version read is kept
+ * (replaces), which is all any reader of these uses: an archival relay, or a hostile one that kept everything, answered
+ * a first read with every version of every save, 30,000 events (57 MB) for 300 saves of 100 versions each, and up to
+ * MAX_PAGES answers a relay, all held at once. Every id read is still counted, so paging goes on as before. Given now,
+ * an event dated past it by more than SKEW is left out (notYet), so the newest version kept is one that is due.
+ */
+export async function pageStream(query: SyncPorts['query'], relay: string, base: Filter, now = Infinity): Promise<NostrEvent[]> {
+  const ids = new Set<string>();
+  const kept = new Map<string, NostrEvent>();
   let until: number | undefined;
   for (let i = 0; MAX_PAGES > i; i++) {
     const page = await query(relay, [{ ...base, limit: PAGE, ...(until === undefined ? {} : { until }) }]);
     let fresh = 0;
     let oldest = until ?? Infinity;
     for (const e of page) {
-      if (!seen.has(e.id)) {
-        seen.set(e.id, e);
-        fresh++;
-      }
       oldest = Math.min(oldest, e.created_at);
+      if (ids.has(e.id)) continue;
+      ids.add(e.id);
+      fresh++;
+      const at = addressOf(e) ?? e.id;
+      const held = kept.get(at);
+      if (!notYet(e, now) && (!held || replaces(e, held))) kept.set(at, e);
     }
     if (fresh === 0) break;
     // The next page's until is the oldest seen, inclusive: events sharing that second aren't skipped.
     until = oldest;
   }
-  return [...seen.values()];
+  return [...kept.values()];
 }
 
 export function streamFilter(stream: Stream, owner: string, since: number | null): Filter {
@@ -97,7 +120,7 @@ async function collect(p: SyncPorts, owner: string): Promise<Collected[]> {
     jobs.map(async ({ relay, stream }) => {
       try {
         const since = stream === 'deletions' && backfilling ? null : getCursor(p.db, relay, stream, owner)?.since ?? null;
-        const events = await pageStream(p.query, relay, streamFilter(stream, owner, since));
+        const events = await pageStream(p.query, relay, streamFilter(stream, owner, since), p.now());
         return { relay, stream, events };
       } catch {
         return null; // unreachable: its cursor stays, and the next trigger asks again
@@ -117,6 +140,24 @@ function partition<T>(xs: T[], test: (x: T) => boolean): [T[], T[]] {
   return [xs.filter(test), xs.filter((x) => !test(x))];
 }
 
+/**
+ * The newest event at each address (NIP-01: the later created_at, a tie to the lower id), the only one of an address's
+ * versions that can win, so the only one opened (4.5, C§8): an archival relay replaying every old version of a save,
+ * or one that ignores since, would otherwise ask the signer once a version at every sync, and two saves another client
+ * put at one address would both become rows.
+ */
+function newestAt(events: NostrEvent[]): NostrEvent[] {
+  const best = new Map<string, NostrEvent>();
+  for (const e of events) {
+    const d = e.tags.find((t) => t[0] === 'd')?.[1] ?? '';
+    const held = best.get(d);
+    if (!held || replaces(e, held)) best.set(d, e);
+  }
+  return [...best.values()];
+}
+
+const isRecord = (e: NostrEvent) => e.tags.some((t) => t[0] === 'd' && t[1] === DEVICES_D);
+
 /** Copies of the connected-browsers record (C§4.9), merged in by token; republished when this phone holds more. */
 async function absorbRecords(p: SyncPorts, owner: string, signer: Signer, records: NostrEvent[], open: Open): Promise<void> {
   let republish = false;
@@ -129,7 +170,9 @@ async function absorbRecords(p: SyncPorts, owner: string, signer: Signer, record
 }
 
 async function applyAll(p: SyncPorts, owner: string, signer: Signer, collected: Collected[]): Promise<Pick<SyncResult, 'items' | 'deletions' | 'waiting'>> {
-  const unique = (s: Stream) => [...new Map(collected.filter((c) => c.stream === s).flatMap((c) => c.events).map((e) => [e.id, e])).values()];
+  // an event dated more than a day ahead waits for its time, unread and unapplied (notYet)
+  const due = (e: NostrEvent) => !notYet(e, p.now());
+  const unique = (s: Stream) => [...new Map(collected.filter((c) => c.stream === s).flatMap((c) => c.events).filter(due).map((e) => [e.id, e])).values()];
   let items = 0;
   let waiting = 0;
   // A signer that didn't answer (out of sight, timed out, declined) says nothing about the event: it and every event
@@ -147,11 +190,13 @@ async function applyAll(p: SyncPorts, owner: string, signer: Signer, collected: 
       return null;
     }
   };
-  const [records, saves] = partition(unique('items'), (e) => e.tags.some((t) => t[0] === 'd' && t[1] === DEVICES_D));
+  const [, saves] = partition(unique('items'), isRecord);
+  // each relay's newest copy of the record, every one merged in (C§4.9)
+  const records = [...new Map(collected.filter((c) => c.stream === 'items').flatMap((c) => newestAt(c.events.filter((e) => isRecord(e) && due(e)))).map((e) => [e.id, e])).values()];
   await absorbRecords(p, owner, signer, records, open);
   // the event a row already holds merges as keep (4.5), so the day of overlap (F36) is read without asking the signer
   const held = new Set(p.db.all<{ event_id: string }>('SELECT event_id FROM items WHERE owner = ? AND event_id IS NOT NULL', owner).map((r) => r.event_id));
-  for (const e of saves.filter((x) => !held.has(x.id)).sort((a, b) => a.created_at - b.created_at)) {
+  for (const e of newestAt(saves).filter((x) => !held.has(x.id)).sort((a, b) => a.created_at - b.created_at)) {
     const read = await open(() => readItemEvent(signer, e));
     if (!read) continue;
     const a = applyItem(p.db, p.now(), owner, read.hash, e, read.item, p.openHash?.());
@@ -162,11 +207,9 @@ async function applyAll(p: SyncPorts, owner: string, signer: Signer, collected: 
   }
   // deletions need no signer; with the cursors kept they are read again alongside the saves that wait
   let deletions = 0;
-  for (const e of unique('deletions')) {
-    for (const hash of applyDeletion(p.db, owner, e)) {
-      deletions++;
-      if (!hashInUse(p.db, hash)) p.files.removeAll(hash);
-    }
+  for (const hash of applyDeletions(p.db, owner, unique('deletions'))) {
+    deletions++;
+    if (!hashInUse(p.db, hash)) p.files.removeAll(hash);
   }
   return { items, deletions, waiting };
 }
@@ -197,32 +240,76 @@ async function getBlob(p: SyncPorts, url: string): Promise<Got> {
   }
 }
 
-/** One text from its servers, then the identity's 10063 servers: 'ok', 'missing' everywhere, or 'offline'. */
-export async function fetchText(p: SyncPorts, job: TextJob): Promise<'ok' | 'missing' | 'offline'> {
-  const named = job.text_servers ? (JSON.parse(job.text_servers) as string[]) : [];
+/** A row's text servers as written, or none if they don't read. */
+function namedServers(job: TextJob): unknown[] {
+  try {
+    const named: unknown = job.text_servers ? JSON.parse(job.text_servers) : [];
+    return Array.isArray(named) ? named : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * What one sync has found of the blob servers: one not answering (Infinity), or how many times one sent bytes that
+ * weren't the blob asked for. Kept a sync, so a server can't cost it once a text (fetchText).
+ */
+export type Strikes = Map<string, number>;
+/** How many blobs a server may answer with other bytes before the rest of the sync stops asking it. */
+const WRONG_BYTES_MAX = 2;
+
+/**
+ * What a server's answer for a blob is: the blob asked for (its sha256); another's bytes; 'lacks', not there or larger
+ * than any text; or 'down', not reached or not finished in time (status 0), 5xx or 429.
+ */
+function answerOf(got: Got, sha256: string, crypto: CryptoPort): 'blob' | 'other' | 'lacks' | 'down' {
+  if (got.status === 0 || got.status >= 500 || got.status === 429) return 'down';
+  if (got.status < 200 || got.status > 299 || !got.bytes) return 'lacks';
+  return bytesToHex(crypto.sha256(got.bytes)) === sha256 ? 'blob' : 'other';
+}
+
+/**
+ * One server's copy of a text's blob: its bytes, which are the blob asked for; 'lacks', not there, larger than any
+ * text, or other bytes; or 'down' (answerOf). Once one is down, or has sent other bytes WRONG_BYTES_MAX times, the rest
+ * of the sync doesn't ask it.
+ */
+async function fromServer(p: SyncPorts, server: string, sha256: string, strikes: Strikes): Promise<Uint8Array | 'lacks' | 'down'> {
+  const struck = strikes.get(server) ?? 0;
+  if (struck >= WRONG_BYTES_MAX) return 'down';
+  const got = await getBlob(p, `${server}/${sha256}`).catch((): Got => ({ status: 0, bytes: null }));
+  const answer = answerOf(got, sha256, p.crypto);
+  if (answer === 'blob') return got.bytes!;
+  if (answer === 'other') strikes.set(server, struck + 1);
+  if (answer !== 'down') return 'lacks';
+  strikes.set(server, Infinity);
+  return 'down';
+}
+
+/**
+ * One text from its servers, then the identity's 10063 servers: 'ok', 'missing' everywhere, or 'offline'. At most
+ * TEXT_SERVERS_MAX of them, http(s) only (blobServers), however many the save or the lists name. strikes is what the
+ * sync has found of the servers (Strikes): asked again for each text, one that accepts and never answers held a sync a
+ * minute a text, 30 minutes for 30 and hours for a restored library, while every later sync waited on it, and one
+ * sending up to 20 MB of other bytes, as a mirror gone bad can, cost that much a text. A text whose servers are down is
+ * 'offline', and asked for at the next sync. The blob asked for whose key doesn't open it is 'missing' at once: every
+ * server holding it holds the same bytes, which were fetched again from each.
+ */
+export async function fetchText(p: SyncPorts, job: TextJob, strikes?: Strikes): Promise<'ok' | 'missing' | 'offline'> {
+  const struck: Strikes = strikes ?? new Map();
   // the 10063 as published is asked as well as the rows kept from it (C§8, F37); each server once, slash or not
-  const listed = [...named, ...listServers(p.db, job.owner), ...heldServerList(p.db, job.owner)];
-  const servers = [...new Set(listed.map((s) => s.replace(/\/+$/, '')))];
+  const servers = blobServers([...namedServers(job), ...listServers(p.db, job.owner), ...heldServerList(p.db, job.owner)]);
   let unreachable = 0;
   for (const server of servers) {
-    let bytes: Uint8Array;
-    try {
-      const got = await getBlob(p, `${server}/${job.text_sha256}`);
-      if (got.status < 200 || got.status > 299) {
-        if (got.status >= 500 || got.status === 429) unreachable++;
-        continue;
-      }
-      if (!got.bytes) continue; // larger than any text: as if this server lacked it
-      bytes = got.bytes;
-    } catch {
-      unreachable++;
-      continue;
-    }
+    const bytes = await fromServer(p, server, job.text_sha256, struck);
+    if (bytes === 'down') unreachable++;
+    if (typeof bytes === 'string') continue;
     let markdown: string;
     try {
       markdown = await decryptText(bytes, { sha256: job.text_sha256, key: job.text_key, nonce: job.text_nonce }, p.crypto);
     } catch {
-      continue; // the wrong bytes, or a key that doesn't open them: as if this server lacked it
+      // the blob named, which its key doesn't open: no other server's copy would open either
+      unreachable = 0;
+      break;
     }
     const derived = deriveArticle(markdown);
     p.files.writeText(job.hash, markdown, derived);
@@ -251,7 +338,7 @@ export async function syncLists(p: SyncPorts, owner: string): Promise<void> {
   const nostr = (p.db.get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local') !== 'local';
   const kinds = nostr ? [KIND.relayList, KIND.serverList, KIND.metadata] : [KIND.relayList, KIND.serverList];
   const copies = (await Promise.all(relays.map((r) => p.query(r, [{ kinds, authors: [owner] }]).catch(() => [])))).flat();
-  takeNewerLists(p.db, owner, copies, kinds);
+  takeNewerLists(p.db, owner, copies, kinds, p.now());
 }
 
 /**
@@ -259,11 +346,12 @@ export async function syncLists(p: SyncPorts, owner: string): Promise<void> {
  * a 10063's relays and servers joined, those of the person's own it no longer names removed. Sync reads them, and so
  * does the list send just before it builds its own, so a list another app published since the last sync isn't
  * overwritten. A relay or a server joins only when the held list didn't name it: one it named that is gone from the
- * table was removed here, and stays removed.
+ * table was removed here, and stays removed. Given now, a copy dated more than a day past it waits for its time
+ * (notYet): taken, it froze the lists, every later one being older and every one sent from here dated after it.
  */
-export function takeNewerLists(db: SqlDb, owner: string, copies: NostrEvent[], kinds: number[]): void {
+export function takeNewerLists(db: SqlDb, owner: string, copies: NostrEvent[], kinds: number[], now = Infinity): void {
   for (const kind of kinds) {
-    const latest = newest(copies.filter((e) => e.kind === kind && e.pubkey === owner));
+    const latest = newest(copies.filter((e) => e.kind === kind && e.pubkey === owner && !notYet(e, now)));
     const held = db.get<{ created_at: number; raw: string | null }>("SELECT created_at, raw FROM lists WHERE owner = ? AND kind = ? AND d = ''", owner, kind);
     if (!latest || (held && held.created_at >= latest.created_at)) continue;
     recordList(db, owner, kind, latest.id, latest.created_at, JSON.stringify(latest));
@@ -315,18 +403,30 @@ export async function syncLibraryKey(p: SyncPorts, owner: string): Promise<void>
       // unreachable: no say in whether a key exists
     }
   }));
-  const latest = newest(found.filter((e) => e.pubkey === owner && e.tags.some((t) => t[0] === 'd' && t[1] === LIBRARY_KEY_D)));
-  if (latest) {
-    try {
-      adoptLibraryKey(p.db, p.now(), owner, await readLibraryKeyEvent(signer, latest), latest.created_at);
-    } catch {
-      // a record that doesn't open, or a version this phone doesn't read: as if absent, and nothing is made over it
-    }
-  } else if (!libraryKey(p.db, owner) && answered === relays.length) {
-    makeLibraryKey(p.db, p.now(), owner, p.crypto.randomBytes);
-  }
+  const records = [...new Map(found.filter((e) => e.pubkey === owner && e.tags.some((t) => t[0] === 'd' && t[1] === LIBRARY_KEY_D)).map((e) => [e.id, e])).values()];
+  if (records.length) await takeLibraryKey(p, owner, signer, records);
+  else if (!libraryKey(p.db, owner) && answered === relays.length) makeLibraryKey(p.db, p.now(), owner, p.crypto.randomBytes);
   // with the key known, any save still at another address (a library from before v1.10) is queued to move
   moveToKeyedAddresses(p.db, p.now(), owner);
+}
+
+/**
+ * The newest record that reads is taken (F5): one another client spoilt (no JSON object, no 64-hex key) gives way to
+ * the one before it, which other relays may still hold; taking the newest alone, a restored phone never learnt the key,
+ * and held every save it made, unsent, for good. A record dated more than a day ahead waits for its time (notYet);
+ * one of a version this phone doesn't read, or a signer that doesn't answer, stops it there, as before. Whatever
+ * stops it, no key is made over a record the relays hold.
+ */
+async function takeLibraryKey(p: SyncPorts, owner: string, signer: Signer, records: NostrEvent[]): Promise<void> {
+  const due = records.filter((e) => !notYet(e, p.now())).sort((a, b) => (replaces(a, b) ? -1 : replaces(b, a) ? 1 : 0));
+  for (const e of due) {
+    try {
+      adoptLibraryKey(p.db, p.now(), owner, await readLibraryKeyEvent(signer, e), e.created_at);
+      return;
+    } catch (err) {
+      if (isSignerFailure(err) || err instanceof LibraryKeyVersionError) return;
+    }
+  }
 }
 
 /**
@@ -353,8 +453,9 @@ export async function syncOwner(p: SyncPorts, owner: string, signer: Signer): Pr
   for (const c of collected) if (c.stream === 'items' && c.relay !== operator) for (const e of c.events) markBacked(p.db, e.id);
   let texts = 0;
   let missing = 0;
+  const strikes: Strikes = new Map();
   for (const job of textQueue(p.db, owner, p.openHash?.())) {
-    const r = await fetchText(p, job);
+    const r = await fetchText(p, job, strikes);
     if (r === 'ok') texts++;
     if (r === 'missing') missing++;
   }

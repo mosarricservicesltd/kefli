@@ -1,7 +1,7 @@
 import {
   LocalSigner, Nip46Signer, Nip55Signer, TimeoutError, bookmarkLinks, failureOf, isSignerFailure, nip46Perms, nip55Permissions, probeSigner, readBunkerLink,
   type BunkerLike, type Nip55Port, type NostrEvent,
-  BACKGROUND_KINDS, probeEvent,
+  BACKGROUND_KINDS, bookmarkSaves, itemHash, probeEvent,
 } from '../src';
 import { nodeCrypto } from '../src/node';
 
@@ -228,5 +228,35 @@ describe('the user’s own nostr app (contract 2)', () => {
       ev(30003, [['d', 'reading'], ['r', 'https://example.org/c'], ['r', 'not a url']]),
       ev(10003, [['r', 'https://someone.else/x']], 'ff'.repeat(32)),
     ], PK)).toEqual(['https://example.com/a', 'https://example.com/b', 'https://example.org/c']);
+  });
+
+  const ev = (tags: string[][]) => ({ kind: 10003, tags, pubkey: PK, content: '', created_at: 1, id: '', sig: '' }) as NostrEvent;
+
+  test('bookmarks: only links normalise takes, and each save once, however its address is dressed', () => {
+    expect(bookmarkLinks([ev([
+      ['r', `https://${'a'.repeat(2000)}.example/x`], ['r', 'https://example.com/a?utm_source=feed'], ['r', 'https://example.com/a#top'],
+      ['r', 'https://EXAMPLE.com/a/'], ['r', 'https://example.com/b'],
+    ])], PK)).toEqual(['https://example.com/a?utm_source=feed', 'https://example.com/b']);
+  });
+
+  test("bookmarks on the phone's URL, which takes hosts normalise refuses", () => {
+    const real = globalThis.URL;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    globalThis.URL = require('whatwg-url-minimum').URL;
+    try {
+      expect(bookmarkLinks([ev([['r', 'https://a‍b.example/'], ['r', 'https://aאb.example/'], ['r', 'https://example.org/c']])], PK)).toEqual(['https://example.org/c']);
+    } finally {
+      globalThis.URL = real;
+    }
+  });
+
+  // The time it saves (30 s for 40,000 links, 4.6 s now, on Node) is measured by a probe, not here: a bound on time
+  // here failed under the whole suite's load.
+  test('bookmarks: every link once across many lists, each found in a set rather than a list', () => {
+    const tags = Array.from({ length: 2_000 }, (_, i) => ['r', `https://example.com/page/${i}`]);
+    const out = bookmarkSaves([ev(tags), ev(tags), { ...ev(tags), kind: 30003 }], PK);
+    expect(out).toHaveLength(2_000);
+    expect(new Set(out.map((b) => b.hash)).size).toBe(2_000);
+    expect(out[1999]).toEqual({ url: 'https://example.com/page/1999', hash: itemHash('https://example.com/page/1999') });
   });
 });

@@ -48,3 +48,30 @@ describe('agreement with the cover fixtures', () => {
     expect(itemHash(c.input!)).toBe(c.hash);
   });
 });
+
+describe('hostile hosts (ruling 10)', () => {
+  // 20,000 different CJK characters in one label: UTS-46's Punycode step is quadratic in them, and took about 3 s here
+  // and minutes on the phone, every time a spooled share holding it was picked up.
+  const cjk = Array.from({ length: 20_000 }, (_, i) => String.fromCodePoint(0x4e00 + i)).join('');
+
+  test('a host written too long is refused before it is parsed', () => {
+    const t = Date.now();
+    expect(() => normalise(`https://${cjk}.com/a`)).toThrow(/host too long/);
+    expect(() => itemHash(`https://${cjk}.com/a`)).toThrow(NotALinkError);
+    expect(Date.now() - t).toBeLessThan(2_000);
+  });
+
+  test('so is one written as a canonical, which is ignored as an unusable canonical is', () => {
+    const t = Date.now();
+    expect(normalise('https://amp.example.com/a', `https://${cjk}.com/a`)).toBe('https://amp.example.com/a');
+    expect(Date.now() - t).toBeLessThan(2_000);
+  });
+
+  test('tabs, newlines, backslashes, a missing slash and leading space are read as the URL Standard reads them', () => {
+    const long = 'a'.repeat(1021) + '.com';
+    for (const u of [`\t https://${long}/`, `https:${long}/`, `https:\\\\${long}/`, `HTTPS://${long}/`, `https://x@y@${long}/`, `https://${long.slice(0, 600)}\n${long.slice(600)}/`]) {
+      expect(() => normalise(u)).toThrow(/host too long/);
+    }
+    expect(normalise(`https://${'a'.repeat(1020)}.com?x=${'q'.repeat(5000)}`)).toBe(`https://${'a'.repeat(1020)}.com/?x=${'q'.repeat(5000)}`);
+  });
+});

@@ -1,14 +1,15 @@
 import {
-  LocalSigner, SignerSlot, buildDeletions, buildDevicesEvent, buildRelayList, buildItemEvent, buildServerList, encryptText, normaliseMarkdown, textHash,
+  LocalSigner, SignerSlot, buildDeletions, buildDevicesEvent, buildRelayList, buildItemEvent, buildServerList, encryptText, LIST_MAX, normaliseMarkdown, savedD, textHash,
 } from '@kefli/protocol';
 import type { Item, NostrEvent, ParsedItem, Signer } from '@kefli/protocol';
 import { commitDelete, deleteItem } from '../src/data/library';
 import { nodeCrypto } from '@kefli/protocol/node';
+import { bytesToHex } from '@noble/hashes/utils.js';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
-import { seedGeneratedLists } from '../src/data/lists';
-import { getCursor, itemColumns, type TextJob } from '../src/data/sync';
-import { SKEW, TEXT_MAX_BYTES, TEXT_TIMEOUT_MS, fetchText, pageStream, streamFilter, syncInbound, type Filter, type SyncPorts } from '../src/services/sync';
+import { listServers, nextListTime, seedGeneratedLists, writeRelays } from '../src/data/lists';
+import { TEXT_SERVERS_MAX, getCursor, itemColumns, type TextJob } from '../src/data/sync';
+import { SKEW, TEXT_MAX_BYTES, TEXT_TIMEOUT_MS, fetchText, pageStream, streamFilter, syncInbound, takeNewerLists, type Filter, type SyncPorts } from '../src/services/sync';
 import { drain, sendOne, type SendPorts } from '../src/services/send';
 import { memoryDb } from './sqlite';
 
@@ -329,8 +330,8 @@ describe('inbound sync (mobile spec 4.5)', () => {
     const c = itemColumns(bad, { created_at: 77 } as NostrEvent);
     expect(c).toMatchObject({ title: null, site: null, state: 'unread', words: null, progress: 0, saved_at: 77, text_sha256: null,
       text_hash: null, source_kind: 'web', hero: 'https://e.com/h.jpg', extra: '{"later":1}', position_word: 0 });
-    const good = itemColumns({ item: { ...item().item, words: 9.6, text: { sha256: 'aa', key: 'bb', nonce: 'cc', servers: ['s', 4] } } as never, extra: {} }, { created_at: 1 } as NostrEvent);
-    expect(good).toMatchObject({ words: 10, text_servers: '["s"]', extra: null, position_word: 5 });
+    const good = itemColumns({ item: { ...item().item, words: 9.6, text: { sha256: 'aa'.repeat(32), key: 'bb', nonce: 'cc', servers: ['https://s.example/', 4, 'javascript:x'] } } as never, extra: {} }, { created_at: 1 } as NostrEvent);
+    expect(good).toMatchObject({ words: 10, text_servers: '["https://s.example"]', extra: null, position_word: 5 });
   });
 
   test('no active identity or no signer: nothing to do', async () => {
@@ -566,5 +567,264 @@ describe('text fetches are bounded (F12)', () => {
     serving(w, endless, { 'content-length': String(TEXT_MAX_BYTES + 1) });
     expect(await fetchText(w.ports, job(w, h(71)))).toBe('missing');
     expect(pulled).toBeLessThanOrEqual(3);
+  });
+
+  test('a server that never answers holds one sync a minute once, not a minute a text', async () => {
+    const w = world();
+    w.tick(2 * SKEW);
+    for (let i = 1; i <= 30; i++) w.publish(await remoteSave(w, h(i), 6000 + i, `# T${i}\n\nwords ${i}`, { url: `https://example.com/${i}` }));
+    // the operator's server down, and the mirror one that accepts and never answers
+    let silent = 0;
+    w.ports.fetch = ((url: string, init?: RequestInit) => {
+      if (url.startsWith('http://blossom/')) return Promise.reject(new TypeError('Network request failed'));
+      silent++;
+      return new Promise((_, fail) => init?.signal?.addEventListener('abort', () => fail(new DOMException('aborted', 'AbortError'))));
+    }) as unknown as typeof fetch;
+    jest.useFakeTimers();
+    try {
+      const started = Date.now();
+      let done = false;
+      const run = syncInbound(w.ports).then((r) => ((done = true), r));
+      while (!done && Date.now() - started < 2 * 3600_000) await jest.advanceTimersByTimeAsync(1_000);
+      expect(await run).toMatchObject({ items: 30, texts: 0, missing: 0 });
+      expect(Date.now() - started).toBeLessThanOrEqual(TEXT_TIMEOUT_MS + 5_000);
+      expect(silent).toBe(1);
+    } finally {
+      jest.useRealTimers();
+    }
+    // every text waits for the next sync, when the servers are asked again
+    expect(w.db.get("SELECT COUNT(*) AS n FROM items WHERE text_state = 'remote'")).toEqual({ n: 30 });
+    w.ports.fetch = w.fetch;
+    expect(await syncInbound(w.ports)).toMatchObject({ texts: 30 });
+  });
+
+  test('a server sending other bytes for every blob is asked twice a sync, not once a text', async () => {
+    const w = world();
+    w.tick(2 * SKEW);
+    for (let i = 1; i <= 20; i++) w.publish(await remoteSave(w, h(i), 6000 + i, `# T${i}\n\nwords ${i}`, { url: `https://example.com/${i}` }));
+    // the operator's server down, and the mirror answering each blob with a megabyte of something else
+    let sent = 0;
+    w.ports.fetch = (async (url: string) => {
+      if (url.startsWith('http://blossom/')) throw new TypeError('Network request failed');
+      sent++;
+      return new Response(new Uint8Array(1024 * 1024) as never, { status: 200 });
+    }) as unknown as typeof fetch;
+    expect(await syncInbound(w.ports)).toMatchObject({ items: 20, texts: 0, missing: 0 });
+    expect(sent).toBe(2);
+    // with the operator down, every text is asked for again at the next sync
+    expect(w.db.get("SELECT COUNT(*) AS n FROM items WHERE text_state = 'remote'")).toEqual({ n: 20 });
+    w.ports.fetch = w.fetch;
+    expect(await syncInbound(w.ports)).toMatchObject({ texts: 20 });
+  });
+
+  test('a text whose key doesn’t open its blob is missing at once, its blob fetched from one server, not every one', async () => {
+    const w = world();
+    w.tick(2 * SKEW);
+    const e = await remoteSave(w, h(1), 6000, '# A\n\nwords', { url: 'https://example.com/a' });
+    w.publish(e);
+    await syncInbound(w.ports);
+    // the row's key spoilt, as another client could write it
+    w.db.run("UPDATE items SET text_key = ?, text_state = 'remote' WHERE hash = ?", Buffer.from(new Uint8Array(32).fill(9)).toString('base64'), h(1));
+    let asked = 0;
+    const f = w.fetch;
+    w.ports.fetch = (async (u: string, i?: RequestInit) => (asked++, f(u, i))) as typeof fetch;
+    expect(await fetchText(w.ports, job(w, h(1)))).toBe('missing');
+    expect(asked).toBe(1);
+    expect(row(w, h(1))).toMatchObject({ text_state: 'failed', fail_reason: 'blob_missing' });
+  });
+});
+
+/** A kind 30078 at d as another client of the person's might publish it: any JSON, self-encrypted, signed by them. */
+async function rawEvent(w: W, d: string, json: string, createdAt: number, tags: string[][] = []) {
+  const content = await w.signer.nip44Encrypt(w.pk, json);
+  return w.signer.signEvent({ kind: 30078, created_at: createdAt, tags: [['d', d], ['t', 'kefli'], ...tags], content });
+}
+
+const itemJson = (hash: string, over: Record<string, unknown> = {}) => JSON.stringify({ ...item().item, hash, ...over });
+
+describe('events another client spoilt, or a relay sends to wear the phone out', () => {
+  test('a connected-browsers record with entries of the wrong shape can’t stop sync: its good entries are taken, the saves arrive', async () => {
+    const w = world();
+    const good = { device_pubkey: 'ab'.repeat(32), label: 'Chrome on a laptop', token: 'cd'.repeat(32), connected_at: 5, revoked_at: null };
+    w.publish(await rawEvent(w, 'kefli/devices', JSON.stringify({ v: 1, devices: [null, 5, { token: 1 }, { ...good, label: { a: 1 } }, good] }), 10));
+    w.publish(await remoteSave(w, h(1), 6000, null));
+    expect(await syncInbound(w.ports)).toMatchObject({ items: 1 });
+    expect(w.db.all('SELECT token, label FROM devices')).toEqual([{ token: good.token, label: good.label }]);
+    expect(cursors(w).length).toBeGreaterThan(0);
+  });
+
+  test('a flood of kind 5s works out the library’s addresses once, not once a kind 5 (an HMAC a save each time)', async () => {
+    const w = world();
+    const key = new Uint8Array(32).fill(7);
+    w.db.run('UPDATE identities SET library_key = ?, library_key_at = 1 WHERE pubkey = ?', bytesToHex(key), w.pk);
+    w.db.tx(() => {
+      for (let i = 0; i < 500; i++) {
+        w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, event_id, event_created_at, published, remote_d) VALUES (?, ?, ?, 1, 'unread', 'queued', 'sync', ?, 100, 1, ?)",
+          w.pk, h(i), `https://e.com/${i}`, `ev${i}`, savedD(key, h(i)));
+      }
+    });
+    // 20 kind 5s of 50 addresses each, for saves long gone, and one naming a save the phone holds
+    const gone = Array.from({ length: 1_000 }, (_, i) => `kefli/item/${h(1_000_000 + i)}`);
+    for (const e of [...await buildDeletions(w.signer, gone, 500), ...await buildDeletions(w.signer, [savedD(key, h(7))], 500)]) w.publish(e, ['ws://a']);
+    // 400 kind 5s against 3,000 saves took over three minutes when each kind 5 keyed every save's address again
+    let reads = 0;
+    const all = w.db.all;
+    w.db.all = ((sql: string, ...params: never[]) => (sql === 'SELECT hash, remote_d FROM items WHERE owner = ?' && reads++, all(sql, ...params))) as typeof all;
+    expect(await syncInbound(w.ports)).toMatchObject({ deletions: 1 });
+    expect(reads).toBe(1);
+    expect(row(w, h(7))).toBeUndefined();
+    expect(w.db.get('SELECT COUNT(*) AS n FROM items')).toEqual({ n: 499 });
+  }, 120_000);
+
+  test('an archival relay’s every version of every save: paging keeps the newest at each address, and every kind 5', async () => {
+    const w = world();
+    // 20 saves of 25 versions each, each version a second apart, a page of 7 at a time, and their kind 5s
+    for (let v = 0; v < 25; v++) for (let s = 1; s <= 20; s++) w.relays.get('ws://a')!.push(await remoteSave(w, h(s), 6000 + v * 20 + s, null, { progress: v / 25 }));
+    for (const e of await buildDeletions(w.signer, Array.from({ length: 120 }, (_, i) => `kefli/item/${h(1000 + i)}`), 7000)) w.relays.get('ws://a')!.push(e);
+    w.caps.set('ws://a', 7);
+    const items = await pageStream(w.ports.query, 'ws://a', streamFilter('items', w.pk, null));
+    expect(items.map((e) => e.created_at).sort((a, b) => a - b)).toEqual(Array.from({ length: 20 }, (_, s) => 6000 + 24 * 20 + s + 1));
+    expect(await pageStream(w.ports.query, 'ws://a', streamFilter('deletions', w.pk, null))).toHaveLength(3);
+  });
+
+  test('a version dated more than a day ahead doesn’t hide the one before it from a restore', async () => {
+    const w = world();
+    w.tick(2 * SKEW);
+    w.publish(await remoteSave(w, h(1), 6000, null, { title: 'now' }));
+    w.publish(await remoteSave(w, h(1), w.ports.now() + 3 * SKEW, null, { title: 'from a clock days ahead' }));
+    expect(await syncInbound(w.ports)).toMatchObject({ items: 1 });
+    expect(row(w, h(1))).toMatchObject({ title: 'now', event_created_at: 6000 });
+  });
+
+  test('an archival relay replaying every version of a save asks the signer once, not once a version', async () => {
+    const w = world();
+    const r = refusing(w);
+    r.refusing = null;
+    for (let i = 0; i < 50; i++) w.publish(await remoteSave(w, h(1), 6000 + i, null, { progress: i / 50 }), ['ws://a']);
+    expect(await syncInbound(w.ports)).toMatchObject({ items: 1 });
+    expect(r.asked).toBe(1);
+    expect(row(w, h(1))).toMatchObject({ event_created_at: 6049, progress: 49 / 50 });
+  });
+
+  test('two saves another client put at one address: only the newest becomes a row, as for any address (C§8)', async () => {
+    const w = world();
+    const d = `kefli/item/${h(9)}`;
+    w.publish(await rawEvent(w, d, itemJson(h(1), { url: 'https://one.example' }), 6000), ['ws://a']);
+    w.publish(await rawEvent(w, d, itemJson(h(2), { url: 'https://two.example' }), 6001), ['ws://b']);
+    expect(await syncInbound(w.ports)).toMatchObject({ items: 1 });
+    expect(w.db.all('SELECT hash, url FROM items')).toEqual([{ hash: h(2), url: 'https://two.example' }]);
+  });
+
+  test('a 10002 of 10,000 relays and a 10063 of 10,000 servers from another app: sync asks at most LIST_MAX more of them', async () => {
+    const w = world();
+    const relays = Array.from({ length: 10_000 }, (_, i) => ({ url: `wss://r${i}.example`, read: true, write: true }));
+    const big = { ...(await buildRelayList(w.signer, relays.slice(0, 2), 9_000)), tags: relays.map((r) => ['r', r.url]) };
+    const servers = { ...(await buildServerList(w.signer, ['https://s.example'], 9_000)), tags: Array.from({ length: 10_000 }, (_, i) => ['server', `https://s${i}.example`]) };
+    takeNewerLists(w.db, w.pk, [big, servers], [10002, 10063]);
+    const asked = new Set<string>();
+    const query = w.ports.query;
+    w.ports.query = (r, f) => (asked.add(r), query(r, f));
+    await syncInbound(w.ports);
+    expect(asked.size).toBeLessThanOrEqual(4 + LIST_MAX);
+    expect(writeRelays(w.db, w.pk).length).toBeLessThanOrEqual(3 + LIST_MAX);
+    expect(listServers(w.db, w.pk).length).toBeLessThanOrEqual(2 + LIST_MAX);
+  });
+
+  test('numbers out of range are brought within it: progress 0 to 1, words to MAX_WORDS, saved_at no later than its event allows', async () => {
+    const cases: [Record<string, unknown>, Record<string, unknown>][] = [
+      [{ progress: 1e300, words: 10 }, { progress: 1, position_word: 10 }],
+      [{ progress: -5 }, { progress: 0, position_word: 0 }],
+      [{ words: 1e300, progress: 0.5 }, { words: null, position_word: 0 }],
+      [{ saved_at: 1e300 }, { saved_at: 6000 }],
+      [{ saved_at: -1e300 }, { saved_at: 6000 }],
+      [{ saved_at: 5000.7 }, { saved_at: 5000 }],
+      [{ hero: 'javascript:alert(1)' }, { hero: null }],
+    ];
+    for (const [over, want] of cases) {
+      const w = world();
+      w.publish(await rawEvent(w, `kefli/item/${h(1)}`, itemJson(h(1), over), 6000));
+      await syncInbound(w.ports);
+      expect(row(w, h(1))).toMatchObject(want);
+    }
+  });
+
+  test('a save whose address isn’t a page on the web isn’t taken', async () => {
+    const w = world();
+    for (const [n, url] of [[1, 'javascript:alert(1)'], [2, 'file:///data/data/app.kefli/files/key'], [3, 'content://x'], [4, 'https://example.com/ok']] as const) {
+      w.publish(await rawEvent(w, `kefli/item/${h(n)}`, itemJson(h(n), { url }), 6000 + n));
+    }
+    expect(await syncInbound(w.ports)).toMatchObject({ items: 1 });
+    expect(w.db.all('SELECT url FROM items')).toEqual([{ url: 'https://example.com/ok' }]);
+  });
+
+  test('events dated decades ahead wait for their time: a kind 5 dated 2100 deletes nothing, a version dated 2100 freezes nothing', async () => {
+    const w = world();
+    const AD2100 = 4_102_444_800;
+    w.publish(await remoteSave(w, h(1), 6000, null, { title: 'by now' }));
+    w.publish(await remoteSave(w, h(2), 6000, null, { url: 'https://example.com/b' }));
+    await syncInbound(w.ports);
+    // a version of one dated 2100, and a kind 5 of the other dated 2100, from a client whose clock was wrong
+    w.publish(await remoteSave(w, h(1), AD2100, null, { title: 'from 2100' }));
+    for (const e of await buildDeletions(w.signer, [`kefli/item/${h(2)}`], AD2100)) w.publish(e);
+    w.tick(60);
+    expect(await syncInbound(w.ports)).toMatchObject({ items: 0, deletions: 0 });
+    expect(row(w, h(1))).toMatchObject({ title: 'by now', event_created_at: 6000 });
+    expect(row(w, h(2))).toBeDefined();
+  });
+
+  test('a 10002 or a connected-browsers record dated decades ahead isn’t taken, so the lists don’t freeze', async () => {
+    const w = world();
+    const AD2100 = 4_102_444_800;
+    w.publish(await buildRelayList(w.signer, [{ url: 'wss://old.example', read: true, write: true }], AD2100), ['ws://idx']);
+    const record = { v: 1 as const, devices: [{ device_pubkey: 'ab'.repeat(32), label: 'Chrome', token: 'cd'.repeat(32), connected_at: 5, revoked_at: null }] };
+    w.publish(await buildDevicesEvent(w.signer, record, AD2100));
+    await syncInbound(w.ports);
+    w.publish(await buildRelayList(w.signer, [{ url: 'wss://new.example', read: true, write: true }], w.ports.now()), ['ws://idx']);
+    w.tick(60);
+    await syncInbound(w.ports);
+    expect(w.db.all<{ url: string }>("SELECT url FROM relays WHERE source = 'user'").map((r) => r.url)).toEqual(['wss://new.example']);
+    expect(nextListTime(w.db, w.pk, w.ports.now())).toBeLessThan(AD2100);
+    expect(w.db.get('SELECT COUNT(*) AS n FROM devices')).toEqual({ n: 0 });
+  });
+
+  test('a save naming hundreds of text servers is fetched from at most TEXT_SERVERS_MAX of them, each up to a minute', async () => {
+    const w = world();
+    const enc = await encryptText(normaliseMarkdown('# A\n\nwords'), nodeCrypto);
+    const servers = Array.from({ length: 300 }, (_, i) => `https://d${i}.example`);
+    w.publish(await rawEvent(w, `kefli/item/${h(1)}`, itemJson(h(1), { text: { ...enc.text, servers } }), 6000));
+    let fetches = 0;
+    const f = w.ports.fetch;
+    w.ports.fetch = (async (u: string, i?: RequestInit) => (fetches++, f(u, i))) as typeof fetch;
+    await syncInbound(w.ports);
+    expect(row(w, h(1))).toMatchObject({ text_state: 'remote' });
+    expect(fetches).toBe(TEXT_SERVERS_MAX);
+  });
+
+  test('a text whose sha256 isn’t one is never asked for, and servers that aren’t http(s) never asked', async () => {
+    const w = world();
+    const enc = await encryptText(normaliseMarkdown('# A\n\nwords'), nodeCrypto);
+    const urls: string[] = [];
+    const f = w.ports.fetch;
+    w.ports.fetch = (async (u: string, i?: RequestInit) => (urls.push(u), f(u, i))) as typeof fetch;
+    w.publish(await rawEvent(w, `kefli/item/${h(1)}`, itemJson(h(1), { text: { ...enc.text, sha256: '../../admin?x=', servers: ['http://blossom'] } }), 6000));
+    const odd = ['javascript:alert(1)', 'file:///data/data/app.kefli/x', 'content://x', 'http://blossom'];
+    w.publish(await rawEvent(w, `kefli/item/${h(2)}`, itemJson(h(2), { url: 'https://example.com/b', text: { ...enc.text, servers: odd } }), 6001));
+    await syncInbound(w.ports);
+    // with no text to fetch, its page is parsed here, as for a save that has none
+    expect(row(w, h(1))).toMatchObject({ text_sha256: null, text_state: 'queued' });
+    expect(urls.length).toBeGreaterThan(0);
+    expect(urls.filter((u) => !u.startsWith('http://blossom/') && !u.startsWith('http://m1/'))).toEqual([]);
+  });
+
+  test('a save nested 4,500 deep, inside the 16 KB ceiling, is dropped, and the sync goes on to the rest', async () => {
+    const w = world();
+    // deep enough that writing it back (extra) overflows the stack here, small enough to pass the ceiling
+    const deep = `${'['.repeat(4_500)}${']'.repeat(4_500)}`;
+    w.publish(await rawEvent(w, `kefli/item/${h(2)}`, itemJson(h(2)).replace(/}$/, `,"later":${deep}}`), 6000));
+    w.publish(await remoteSave(w, h(3), 6001, null, { url: 'https://example.com/ok' }));
+    expect(await syncInbound(w.ports)).toMatchObject({ items: 1 });
+    expect(row(w, h(2))).toBeUndefined();
+    expect(row(w, h(3))).toMatchObject({ url: 'https://example.com/ok' });
+    expect(cursors(w).length).toBeGreaterThan(0);
   });
 });

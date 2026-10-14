@@ -10,6 +10,7 @@ import { ambient } from '@kefli/tokens/reanimated';
 import type { ImageRow } from '../data/images';
 import { fontFamily, radius, reader as R } from '@kefli/tokens';
 import type { Block, Span } from './blocks';
+import { litPieces, type Lit } from './lit';
 import type { ReaderColors } from './palette';
 import { alpha } from '../ui/theme';
 
@@ -17,31 +18,19 @@ const face = (s: Span, bold = false): TextStyle => ({
   fontFamily: s.code ? fontFamily.mono : s.strong || bold ? fontFamily.reader.bold : s.em ? fontFamily.reader.italic : fontFamily.reader.regular,
 });
 
-/** The words the voice is on, as indices of the block's whitespace-separated words (one, or a whole sentence). */
-export type Lit = { from: number; to: number };
+export type { Lit } from './lit';
 
 /**
- * The playing block's text, split into its words so the spoken one takes the highlight wash (6.7: only the
- * playing paragraph splits). Words are counted across the spans, as the spoken projection counts them.
+ * The playing block's text, its spoken word (or sentence) split out to take the highlight wash (6.7: only the
+ * playing paragraph splits); the text around it stays whole (./lit).
  */
 function LitSpans({ spans, P, size, bold, lit }: { spans: Span[]; P: ReaderColors; size: number; bold?: boolean; lit: Lit }) {
-  let k = -1;
-  let wasSpace = true;
+  const pieces = litPieces(spans, lit);
   return (
     <>
       {spans.map((s, i) => (
         <Text key={i} style={[face(s, bold), s.code && { fontSize: size * 0.85 }, s.href && { textDecorationLine: 'underline', textDecorationColor: P.ink }]}>
-          {s.text.split(/(\s+)/).map((piece, j) => {
-            if (piece === '') return null;
-            if (/^\s+$/.test(piece)) {
-              wasSpace = true;
-              return piece;
-            }
-            if (wasSpace) k++;
-            wasSpace = false;
-            const on = k >= lit.from && lit.to >= k;
-            return on ? <Text key={j} style={{ backgroundColor: P.hl }}>{piece}</Text> : piece;
-          })}
+          {pieces[i].map((p, j) => (p.on ? <Text key={j} style={{ backgroundColor: P.hl }}>{p.text}</Text> : p.text))}
         </Text>
       ))}
     </>

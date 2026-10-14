@@ -211,17 +211,37 @@ func (a *API) mayTake(w http.ResponseWriter, r *http.Request, req *request, devi
 	case c.release && (!held || holder != c.signer):
 		fail(w, http.StatusForbidden, "release: holder")
 	default:
-		fresh, err := a.st.UseAuth(r.Context(), c.id, c.until)
-		if err != nil {
-			a.serverError(w, err)
-			return false
-		}
-		if !fresh {
-			fail(w, http.StatusForbidden, c.name()+": replayed")
-		}
-		return fresh
+		return a.roomForDevice(w, r, req.pubkey) && a.useConsent(w, r, c)
 	}
 	return false
+}
+
+// roomForDevice refuses a library that already has MaxDevices device keys authorised, before its proof or release is
+// used, so the same one works once a Disconnect makes room.
+func (a *API) roomForDevice(w http.ResponseWriter, r *http.Request, user string) bool {
+	n, err := a.st.DeviceCount(r.Context(), user)
+	if err != nil {
+		a.serverError(w, err)
+		return false
+	}
+	if n >= MaxDevices {
+		fail(w, http.StatusForbidden, "devices: too_many")
+		return false
+	}
+	return true
+}
+
+// useConsent marks a proof or release used, and refuses one used already.
+func (a *API) useConsent(w http.ResponseWriter, r *http.Request, c consented) bool {
+	fresh, err := a.st.UseAuth(r.Context(), c.id, c.until)
+	if err != nil {
+		a.serverError(w, err)
+		return false
+	}
+	if !fresh {
+		fail(w, http.StatusForbidden, c.name()+": replayed")
+	}
+	return fresh
 }
 
 // alreadyHeld answers a caller that holds the device already: 200, with a proof or release still in its life marked used
@@ -309,17 +329,20 @@ func (a *API) removeDevice(w http.ResponseWriter, r *http.Request) {
 
 // postOffer holds a pairing offer for five minutes (contract 6). A pair offer comes from an extension's device key,
 // which needn't be authorised yet; a phone offer comes from a registered user. Both are limited to 30 an hour per key
-// and per address.
+// and per address, MaxBlockOffers an hour per IPv6 /48, and cfg.MaxOffers held at once.
 func (a *API) postOffer(kind string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		req, ok := a.authed(w, r)
-		if !ok || (kind == "phone" && !a.registered(w, r, req.pubkey)) || !a.offerAllowed(w, r, req.pubkey) {
+		if !ok || (kind == "phone" && !a.registered(w, r, req.pubkey)) || !a.blockMayOffer(w, r) || !a.offerAllowed(w, r, req.pubkey) {
 			return
 		}
 		lookup, _ := req.body["lookup"].(string)
 		offer, _ := req.body["offer"].(string)
-		if !auth.IsHex64(lookup) || offer == "" || len(offer) > 8192 {
+		if !auth.IsHex64(lookup) || offer == "" || len(offer) > maxOffer {
 			fail(w, http.StatusBadRequest, "offer")
+			return
+		}
+		if !a.roomForOffer(w, r) {
 			return
 		}
 		err := a.st.PutOffer(r.Context(), kind, lookup, offer)
@@ -333,6 +356,40 @@ func (a *API) postOffer(kind string) http.HandlerFunc {
 		}
 		reply(w, http.StatusOK, map[string]any{"v": 1})
 	}
+}
+
+// blockMayOffer holds an IPv6 caller's /48 to MaxBlockOffers posted an hour, counted before its /64 and its key, so an
+// offer the block is refused leaves no window behind for either (F45).
+func (a *API) blockMayOffer(w http.ResponseWriter, r *http.Request) bool {
+	block := limit.Block(ClientIP(r, a.cfg.TrustProxy))
+	if !strings.Contains(block, ":") {
+		return true
+	}
+	if ok, retry := a.offBlk.Allow(block); !ok {
+		w.Header().Set("Retry-After", retryAfter(retry))
+		fail(w, http.StatusTooManyRequests, "rate")
+		return false
+	}
+	return true
+}
+
+// roomForOffer refuses a new offer while cfg.MaxOffers are held, until one expires: a trade of availability for a
+// bound on the disk, like the hourly limit on registrations, and said in the journal as it is reached.
+func (a *API) roomForOffer(w http.ResponseWriter, r *http.Request) bool {
+	held, err := a.st.LiveOffers(r.Context())
+	if err != nil {
+		a.serverError(w, err)
+		return false
+	}
+	if held >= a.cfg.MaxOffers {
+		w.Header().Set("Retry-After", retryAfter(time.Minute))
+		fail(w, http.StatusTooManyRequests, "rate")
+		return false
+	}
+	if held+1 == a.cfg.MaxOffers {
+		a.log.Error("pairing offers held: the limit on offers held at once is reached", "limit", a.cfg.MaxOffers)
+	}
+	return true
 }
 
 // offerAllowed counts an offer request against its address and then its key: the address first, so a request the

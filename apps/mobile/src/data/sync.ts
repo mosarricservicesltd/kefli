@@ -5,8 +5,8 @@
 // removed with its pending sends, since this phone may not write over a version it doesn't understand (C§10);
 // an older one is ignored. A save with no text arrives as text_state 'queued', so this phone tries the parse,
 // unless this phone holds the save's text, which it keeps (C§4.1, v1.12).
-import { ITEM_D_PREFIX, deletedDs, deletionRemoves, mergeItem, wordReached } from '@kefli/protocol';
-import { savesAt } from './libraryKey';
+import { ITEM_D_PREFIX, deletedDs, deletionRemoves, isServerUrl, mergeItem, wordReached } from '@kefli/protocol';
+import { addressIndex } from './libraryKey';
 import type { LocalVersion, MergeOutcome, NostrEvent, ParsedItem } from '@kefli/protocol';
 import type { SqlDb } from './db';
 import { enqueue } from './outbox';
@@ -40,29 +40,75 @@ function version(r: Row | undefined): LocalVersion | null {
 
 const STRINGS = ['canonical', 'title', 'site', 'byline', 'lang', 'hero', 'source_ref', 'audio_pref'] as const;
 
-/** text, only when its sha256, key and nonce are all strings; servers kept as the strings listed. */
+const WEB = new RegExp('^https?://', 'i');
+
+/**
+ * Whether a save's address is one the phone can open, fetch and share: a page on the web (C§4.1). One another client
+ * wrote as javascript:, file: or content: would otherwise be a row the Reader's original view loads.
+ */
+export const isWebAddress = (url: string) => WEB.test(url);
+
+/**
+ * The most servers a text is fetched from: its own (the operator's and a mirror, C§4.2, a move's target's too) and
+ * then the 10063's. Each may take a minute to fail, and a save from another client named 10,000.
+ */
+export const TEXT_SERVERS_MAX = 10;
+
+/** Blob servers as a fetch can use them: http(s) addresses only, without a trailing slash, each once, at most n. */
+export function blobServers(servers: unknown[], n = TEXT_SERVERS_MAX): string[] {
+  const out = new Set<string>();
+  for (const s of servers) {
+    if (out.size >= n) break;
+    if (isServerUrl(s)) out.add(s.replace(/\/+$/, ''));
+  }
+  return [...out];
+}
+
+/**
+ * text, only when its sha256 is 64 hex, the address every server is asked at (one that isn't would be asked for as a
+ * path on each server), and its key and nonce are strings; servers kept as blobServers reads them.
+ */
 function textOf(t: unknown) {
   const o = (t && typeof t === 'object' ? t : {}) as Record<string, unknown>;
   const [sha256, key, nonce] = [str(o.sha256), str(o.key), str(o.nonce)];
-  if (!sha256 || !key || !nonce) return null;
-  const servers = Array.isArray(o.servers) ? o.servers.filter((s): s is string => typeof s === 'string') : [];
+  if (!sha256 || !/^[0-9a-f]{64}$/.test(sha256) || !key || !nonce) return null;
+  const servers = Array.isArray(o.servers) ? blobServers(o.servers) : [];
   return { text_sha256: sha256, text_key: key, text_nonce: nonce, text_servers: JSON.stringify(servers) };
 }
 
 type TextColumns = { text_sha256: string | null; text_key: string | null; text_nonce: string | null; text_servers: string | null };
 const NO_TEXT: TextColumns = { text_sha256: null, text_key: null, text_nonce: null, text_servers: null };
 
-/** The row's columns from item JSON, each field checked, since another client wrote it (C§10). */
+/** More words than any text has: a 20 MB PDF, the largest file one is made from (4.2), holds about four million. */
+export const MAX_WORDS = 10_000_000;
+/** How far past the event that carries it a save's own time may be: another device's clock a day ahead (F36). */
+const SAVED_AHEAD = 86_400;
+
+/**
+ * saved_at as a time the save could have been made: no later than a day past the event carrying it, which can't be
+ * older than the save it publishes, and not before 1970; otherwise the event's time. One 1e300 years ahead sorted the
+ * save to the top of Saves for good, and gave no date the phone could show.
+ */
+function savedAtOf(v: unknown, createdAt: number): number {
+  const t = num(v);
+  return t !== null && t >= 0 && t <= createdAt + SAVED_AHEAD ? Math.floor(t) : createdAt;
+}
+
+/**
+ * The row's columns from item JSON, each field checked, since another client wrote it (C§10): progress within 0 to 1
+ * (C§4.1), so the word reached is within the text; words no more than MAX_WORDS; hero an http(s) address, since the
+ * phone fetches it.
+ */
 export function itemColumns({ item, extra }: ParsedItem, event: NostrEvent) {
   const o = item as unknown as Record<string, unknown>;
   const strings = Object.fromEntries(STRINGS.map((k) => [k, str(o[k])])) as Record<(typeof STRINGS)[number], string | null>;
   const raw = num(item.words);
-  const words = raw !== null && raw >= 0 ? Math.round(raw) : null;
-  const progress = num(item.progress) ?? 0;
+  const words = raw !== null && raw >= 0 && raw <= MAX_WORDS ? Math.round(raw) : null;
+  const progress = Math.min(1, Math.max(0, num(item.progress) ?? 0));
   const text = textOf(item.text);
   return {
-    ...strings, ...(text ?? NO_TEXT),
-    url: item.url, saved_at: num(item.saved_at) ?? event.created_at, state: item.state === 'archived' ? 'archived' : 'unread',
+    ...strings, ...(text ?? NO_TEXT), hero: strings.hero && WEB.test(strings.hero) ? strings.hero : null,
+    url: item.url, saved_at: savedAtOf(item.saved_at, event.created_at), state: item.state === 'archived' ? 'archived' : 'unread',
     progress, words, title: strings.title, text_hash: text ? str(item.text_hash) : null, source_kind: str(item.source_kind) ?? 'web',
     extra: Object.keys(extra).length ? JSON.stringify(extra) : null,
     position_word: wordReached({ progress, words }),
@@ -182,6 +228,7 @@ export function applyItem(db: SqlDb, now: number, owner: string, hash: string, e
   return db.tx(() => {
     const row = db.get<Row>('SELECT * FROM items WHERE owner = ? AND hash = ?', owner, hash);
     if (parsed.item.v !== 1) return future(db, owner, hash, event, row, parsed.item.v);
+    if (!isWebAddress(parsed.item.url)) return { outcome: 'ignored' };
     const outcome = mergeItem(version(row), event);
     // a save deleted here stays deleted while its kind 5 waits to go out, which a read reaching back a day (F36) would
     // otherwise undo from a relay the kind 5 hasn't reached; once it is out, whatever the relays still hold is read again
@@ -214,19 +261,35 @@ function future(db: SqlDb, owner: string, hash: string, event: NostrEvent, row: 
 
 /** Applies a verified kind 5 of owner's; returns the hashes removed, whose files go once no row holds them. */
 export function applyDeletion(db: SqlDb, owner: string, event: NostrEvent): string[] {
+  return applyDeletions(db, owner, [event]);
+}
+
+/**
+ * Applies verified kind 5s of owner's together; returns the hashes removed. A kind 5 removes what any older one
+ * naming the same address does (deletionRemoves), so each address is applied once, at the newest kind 5 naming it,
+ * and the saves' addresses are worked out once (addressIndex): the work grows with the addresses named and the saves
+ * held, not with their product, so thousands of kind 5s can't hold the sync.
+ */
+export function applyDeletions(db: SqlDb, owner: string, events: NostrEvent[]): string[] {
+  const named = new Map<string, number>();
+  for (const e of events) for (const d of deletedDs(e, owner)) named.set(d, Math.max(named.get(d) ?? -Infinity, e.created_at));
+  if (!named.size) return [];
   return db.tx(() => {
     const removed: string[] = [];
+    const future = new Set(db.all<{ d: string }>('SELECT d FROM items_future WHERE owner = ?', owner).map((r) => r.d));
     // addresses are keyed from v1.10 (F5): each is found through the address a save is known at
-    const ds = deletedDs(event, owner);
-    for (const d of ds) db.run('DELETE FROM items_future WHERE owner = ? AND d = ? AND created_at <= ?', owner, d, event.created_at);
-    for (const hash of new Set(savesAt(db, owner, ds).values())) {
-      const row = db.get<Row>('SELECT * FROM items WHERE owner = ? AND hash = ?', owner, hash);
-      if (!row || !deletionRemoves(version(row)!, event.created_at)) continue;
-      removeItem(db, row.id, owner, hash);
-      // deleted on another phone while its text waits here: the upload goes, and so does this phone's copy (C§4.1),
-      // queued at the deletion's time, since applying one reads no clock
-      if (row.text_sha256) retireBlob(db, event.created_at, owner, row.text_sha256, row.text_servers);
-      removed.push(hash);
+    const at = addressIndex(db, owner);
+    for (const [d, deletedAt] of named) {
+      if (future.has(d)) db.run('DELETE FROM items_future WHERE owner = ? AND d = ? AND created_at <= ?', owner, d, deletedAt);
+      for (const hash of at.get(d) ?? []) {
+        const row = db.get<Row>('SELECT * FROM items WHERE owner = ? AND hash = ?', owner, hash);
+        if (!row || !deletionRemoves(version(row)!, deletedAt)) continue;
+        removeItem(db, row.id, owner, hash);
+        // deleted on another phone while its text waits here: the upload goes, and so does this phone's copy (C§4.1),
+        // queued at the deletion's time, since applying one reads no clock
+        if (row.text_sha256) retireBlob(db, deletedAt, owner, row.text_sha256, row.text_servers);
+        removed.push(hash);
+      }
     }
     return removed;
   });
@@ -264,11 +327,19 @@ export function textQueue(db: SqlDb, owner: string, first?: string | null): Text
   );
 }
 
+/**
+ * The spoken text a search entry holds at most: about 300,000 words. Indexing ran at about 0.2 s a megabyte on a
+ * desktop, in one transaction on the JS thread, and a synced text may be 20 MB; words past this aren't found.
+ */
+export const INDEX_CHARS = 2_000_000;
+
 /** A save's search entry: title, site, address and its spoken words (4.9), rowid = items.id. */
 export function indexText(db: SqlDb, row: { id: number; title: string | null; site: string | null; url: string }, spoken: string): void {
+  const cut = spoken.length > INDEX_CHARS ? spoken.lastIndexOf(' ', INDEX_CHARS) : -1;
+  const body = spoken.length > INDEX_CHARS ? spoken.slice(0, cut > 0 ? cut : INDEX_CHARS) : spoken;
   db.tx(() => {
     db.run('DELETE FROM items_fts WHERE rowid = ?', row.id);
-    db.run('INSERT INTO items_fts (rowid, title, site, url, body) VALUES (?, ?, ?, ?, ?)', row.id, row.title ?? '', row.site ?? '', row.url, spoken);
+    db.run('INSERT INTO items_fts (rowid, title, site, url, body) VALUES (?, ?, ?, ?, ?)', row.id, row.title ?? '', row.site ?? '', row.url, body);
   });
 }
 

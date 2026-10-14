@@ -1,6 +1,6 @@
 import { verifyEvent } from 'nostr-tools/pure';
 import {
-  EventTooLargeError, LocalSigner, buildRelayList, buildServerList, newest, readRelayList, readServerList, withBackupRelays, withBackupServers,
+  EventTooLargeError, LIST_MAX, LocalSigner, buildRelayList, buildServerList, newest, readRelayList, readServerList, withBackupRelays, withBackupServers,
 } from '../src';
 import { nodeCrypto } from '../src/node';
 
@@ -40,6 +40,19 @@ describe('relay and server lists (contract 3.1, mobile spec 4.6)', () => {
   test('readers ignore tags they don’t understand', () => {
     expect(readRelayList({ tags: [['r'], ['x', 'wss://a'], ['r', 'wss://b']] })).toEqual([{ url: 'wss://b', read: true, write: true }]);
     expect(readServerList({ tags: [['server'], ['server', 'https://s'], ['r', 'https://t']] })).toEqual(['https://s']);
+  });
+
+  test('a list of 10,000 reads as its first LIST_MAX usable entries; other schemes, credentials and repeats are left out', () => {
+    const relays = Array.from({ length: 10_000 }, (_, i) => ['r', `wss://r${i}.example`]);
+    expect(readRelayList({ tags: relays })).toHaveLength(LIST_MAX);
+    expect(readRelayList({ tags: relays })[LIST_MAX - 1].url).toBe(`wss://r${LIST_MAX - 1}.example`);
+    const odd = [['r', 'javascript:alert(1)'], ['r', 'https://r.example'], ['r', 'wss://user:pw@r.example'], ['r', 'wss://'], ['r', 'wss://a b'],
+      ['r', `wss://${'x'.repeat(3000)}.example`], ['r', 'wss://ok.example'], ['r', 'wss://ok.example/'], ['r', 'ws://localhost:4869']];
+    expect(readRelayList({ tags: odd }).map((e) => e.url)).toEqual(['wss://ok.example', 'ws://localhost:4869']);
+    const servers = [...Array.from({ length: 10_000 }, (_, i) => ['server', `https://s${i}.example`])];
+    expect(readServerList({ tags: servers })).toHaveLength(LIST_MAX);
+    expect(readServerList({ tags: [['server', 'file:///etc'], ['server', 'content://x'], ['server', 'http://192.168.1.2:3000'], ['server', 'https://s/']] }))
+      .toEqual(['http://192.168.1.2:3000', 'https://s/']);
   });
 
   test('an edit starts from the newest copy seen', () => {

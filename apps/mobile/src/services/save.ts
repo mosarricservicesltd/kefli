@@ -2,12 +2,12 @@
 // stage the text, record the item, and queue its outbox rows held, to be released when the share sheet closes
 // without Undo. The outbox sends them (send.ts, runner.ts). What happened comes back as a kind, which picks the
 // Saved sheet's state.
-import { encryptText, isXPost, itemHash, textHash } from '@kefli/protocol';
+import { encryptText, isPublicWebUrl, isXPost, itemHash, textHash, urlParts } from '@kefli/protocol';
 import { phonePagePorts } from './pagePorts';
 import { phoneCrypto } from '../crypto/port';
 import type { SqlDb } from '../data/db';
 import { getItem } from '../data/items';
-import { interimRelays, priorOf, queueSave, type Prior, type SaveTargets } from '../data/saves';
+import { addressFits, fitSave, interimRelays, priorOf, queueSave, type Prior, type SaveTargets } from '../data/saves';
 import type { NewItem } from '../data/items';
 import { indexText } from '../data/sync';
 import { seedGeneratedLists } from '../data/lists';
@@ -57,7 +57,8 @@ async function xRoute(c: Ctx, url: string): Promise<Queued | string> {
     return { hash: null, held: [], kind: 'noarticle', prior: null, title: null, site: null };
   }
   if (x.kind === 'article') {
-    c.say('x', `the post links to ${new URL(x.url).hostname}`);
+    // the protocol's parser, which took the link: the phone's URL refuses a few hosts it takes, and this is a log line
+    c.say('x', `the post links to ${urlParts(x.url)?.hostname}`);
     return x.url;
   }
   // Offline, or X's service failing: the post waits as a pending save (G3).
@@ -69,7 +70,22 @@ async function xRoute(c: Ctx, url: string): Promise<Queued | string> {
   return { hash, held, kind: x.kind === 'offline' ? 'offline' : 'xwait', prior: null, title: null, site: null };
 }
 
-export async function saveLink(url: string, report: (s: SaveStep) => void): Promise<Queued> {
+// an http address's host and port as written, with no user info: a string, as the code gate misreads regex literals
+const PLAIN_HOST = new RegExp('^http://(?:[^@/?#]*@)?([^/?#]*)', 'i');
+
+/**
+ * RULED: a public http:// page is fetched over https, as browsers now try first. Release builds allow no cleartext,
+ * so an http fetch fails before it starts, which reads as offline: the sheet said Saved, will fetch when you're
+ * online, and the save waited for good. A page with no https still fails that way. An address with a port, and a
+ * local one (the local stack's own pages), keep their http; the save's address is the shared one until its page parses.
+ */
+export function overHttps(url: string): string {
+  const host = PLAIN_HOST.exec(url)?.[1];
+  return host && !host.includes(':') && isPublicWebUrl(url) ? `https://${url.slice('http://'.length)}` : url;
+}
+
+/** The identity, the store and the targets a save needs. */
+async function context(report: (s: SaveStep) => void): Promise<Ctx> {
   const defaults = await loadDefaults();
   const signer = await ensureSigner();
   const db = store();
@@ -83,17 +99,44 @@ export async function saveLink(url: string, report: (s: SaveStep) => void): Prom
     say: (step, detail, ok = true) => report({ step, ok, detail }),
   };
   c.say('identity', `${owner.slice(0, 12)}…`);
+  return c;
+}
+
+/**
+ * A share saved as an offline share is (share-offline), with nothing fetched: keyed by its address, an X post marked
+ * for its check, and parsed by the pending queue (4.5 phase 7) under that queue's timeouts. The start-up pickup saves
+ * spools this way (8.5), since the sync it runs ahead of used to wait for each spool's fetch, the X check and the
+ * page's second try and its browser engine among them, before it could start.
+ */
+export async function saveLater(url: string, report: (s: SaveStep) => void): Promise<Queued> {
+  const c = await context(report);
+  if (!addressFits(url)) throw new Error('address too long to save');
+  const hash = itemHash(url);
+  const prior = priorOf(c.db, c.owner, hash);
+  if (prior) return repeat(c, hash, url, prior);
+  const held = queueSave(c.db, c.now(), { ...base(c, hash, url, 'queued'), xState: isXPost(url) ? 'pending' : null }, null, c.targets);
+  c.say('queued', 'saved, waiting to fetch');
+  return { hash, held, kind: 'offline', prior: null, title: null, site: null };
+}
+
+export async function saveLink(url: string, report: (s: SaveStep) => void): Promise<Queued> {
+  const c = await context(report);
+  const { db, owner } = c;
+  // a share's link is one that fits its event (firstLink passes over those that don't), so this doesn't happen
+  if (!addressFits(url)) throw new Error('address too long to save');
 
   let target = url;
   if (isXPost(url)) {
     const x = await xRoute(c, url);
     if (typeof x !== 'string') return x;
+    // an article address too long to save is no article Kefli can keep
+    if (!addressFits(x)) return { hash: null, held: [], kind: 'noarticle', prior: null, title: null, site: null };
     target = x;
   }
   const early = priorOf(db, owner, itemHash(target));
   if (early) return repeat(c, itemHash(target), target, early);
 
-  const outcome = await fetchPage(phonePagePorts(), target);
+  const outcome = await fetchPage(phonePagePorts(), overHttps(target));
   if (outcome.kind !== 'parsed') {
     // Offline, the save waits on the phone keyed by the shared address, to be parsed when online (share-offline);
     // a page that can't be read is saved without text, and its row opens the original.
@@ -103,21 +146,35 @@ export async function saveLink(url: string, report: (s: SaveStep) => void): Prom
     const offline = outcome.kind === 'offline';
     c.say('parse', offline ? 'offline: saved, waiting to fetch' : `failed (${outcome.reason})`, offline);
     const hash = itemHash(target);
+    // another share of this link may have saved it while this one fetched (two sheets, or the pickup and a sheet)
+    const meanwhile = priorOf(db, owner, hash);
+    if (meanwhile) return repeat(c, hash, target, meanwhile);
     const held = queueSave(db, c.now(), { ...base(c, hash, target, offline ? 'queued' : 'failed', url), failReason: offline ? null : outcome.reason }, null, c.targets);
     return { hash, held, kind: offline ? 'offline' : 'saved', prior: null, title: null, site: null };
   }
   const { result: parsed, finalUrl, words } = outcome;
   c.say('parse', `“${parsed.title}”, ${words} words`);
-  const hash = itemHash(finalUrl, parsed.canonical);
+  // RULED: the page's fields are fitted under the event ceiling (C§3.3, data/saves fitSave). A final address too long
+  // for the event isn't adopted: the save keeps the shared one, with the text, as a failed parse keeps it.
+  const fields = { canonical: parsed.canonical, title: parsed.title, site: parsed.site, byline: parsed.byline, lang: parsed.lang, hero: parsed.hero };
+  const adopted = fitSave({ url: finalUrl, ...fields });
+  const page = adopted ?? fitSave({ url: target, ...fields, canonical: null });
+  if (!page) throw new Error('address too long to save');
+  const hash = adopted ? itemHash(finalUrl, parsed.canonical) : itemHash(target);
   // The page's own address may name a save already here (a redirect, a canonical): the repeat-save rule again.
   const prior = priorOf(db, owner, hash);
-  if (prior) return repeat(c, hash, finalUrl, prior);
+  if (prior) return repeat(c, hash, page.url, prior);
   const enc = await encryptText(parsed.markdown, phoneCrypto);
+  // RULED: checked again after the last wait, with nothing awaited between it and the write. A second share of the
+  // same page that passed the first check while this one was encrypting found the first's row inside queueSave and
+  // came back as a new save with no prior, so its Undo deleted the first share's save.
+  const meanwhile = priorOf(db, owner, hash);
+  if (meanwhile) return repeat(c, hash, page.url, meanwhile);
   const staged = { sha256: enc.text.sha256, size: enc.blob.length, path: stageBlob(enc.text.sha256, enc.blob) };
   c.say('encrypt', `${enc.blob.length} bytes staged`);
   const held = queueSave(db, c.now(), {
-    ...base(c, hash, finalUrl, 'cached', url), canonical: parsed.canonical, title: parsed.title, site: parsed.site, byline: parsed.byline,
-    words, lang: parsed.lang, hero: parsed.hero, text: enc.text, textHash: textHash(parsed.markdown, phoneCrypto),
+    ...base(c, hash, page.url, 'cached', url), canonical: page.canonical, title: page.title, site: page.site, byline: page.byline,
+    words, lang: page.lang, hero: page.hero, text: enc.text, textHash: textHash(parsed.markdown, phoneCrypto),
   }, staged, c.targets);
   // The text is on the phone from the start, and searchable (4.1, 4.9).
   const row = getItem(db, owner, hash);
@@ -126,5 +183,5 @@ export async function saveLink(url: string, report: (s: SaveStep) => void): Prom
     indexText(db, row, outcome.spoken);
   }
   c.say('queued', `${held.length} rows held until the sheet closes`);
-  return { hash, held, kind: 'saved', prior: null, title: parsed.title, site: parsed.site };
+  return { hash, held, kind: 'saved', prior: null, title: page.title, site: page.site };
 }

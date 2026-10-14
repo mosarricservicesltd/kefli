@@ -41,6 +41,25 @@ describe('X posts (C§4.3)', () => {
     };
     expect(await pickXLink(['https://t.co/A', 'https://t.co/B'], resolve)).toEqual({ save: 'https://example.com/b' });
   });
+
+  test('the embed is read as the old pattern read it: case, odd spacing, either quote, a ">" inside a value, nested tags', () => {
+    expect(linksInEmbed(`<A\tclass="x" HREF = 'https://t.co/A'>a</A><a\nhref="https://t.co/B?a=1&gt;2">b</a>`)).toEqual(['https://t.co/A', 'https://t.co/B?a=1>2']);
+    expect(linksInEmbed('<a title="x>y" href="https://t.co/C">')).toEqual([]);
+    expect(linksInEmbed('<a <a href="https://t.co/D">')).toEqual(['https://t.co/D']);
+    expect(linksInEmbed('<a href=unquoted href="https://t.co/E">')).toEqual(['https://t.co/E']);
+    expect(linksInEmbed('<a href="https://t.co/F>">x')).toEqual(['https://t.co/F>']);
+    expect(linksInEmbed('<a href="unclosed>')).toEqual([]);
+    expect(linksInEmbed('<ab href="https://t.co/G"><a href="">')).toEqual(['']);
+  });
+
+  test('an answer of "<a " with no ">" is read in one pass (512 KB of it took three minutes)', () => {
+    const t = Date.now();
+    expect(linksInEmbed('<a '.repeat(174_762))).toEqual([]);
+    expect(linksInEmbed('<a href=x '.repeat(32_000))).toEqual([]);
+    expect(linksInEmbed('<a '.repeat(100_000) + 'href="x')).toEqual([]);
+    expect(linksInEmbed('<a href="x"'.repeat(40_000))).toHaveLength(40_000);
+    expect(Date.now() - t).toBeLessThan(5_000);
+  });
 });
 
 describe('deletions (C§4.1)', () => {

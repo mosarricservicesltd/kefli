@@ -14,7 +14,8 @@ export type PdfRuns = { title: string | null; author: string | null; pages: PdfP
 export type PdfArticle = { title: string | null; byline: string | null; markdown: string };
 
 type Line = { page: number; x: number; y: number; right: number; size: number; text: string };
-type Block = { kind: 'p' | 'h' | 'li'; level?: number; size: number; page: number; y: number; lines: Line[] };
+/** left and right: the least x and the greatest right of its lines, kept as lines join so a long block stays linear. */
+type Block = { kind: 'p' | 'h' | 'li'; level?: number; size: number; page: number; y: number; lines: Line[]; left: number; right: number };
 
 /** A line that ends a sentence: a stop, optionally closed by a quote or bracket. */
 const TERMINAL = /[.!?:;]["”’)\]]?$/;
@@ -49,11 +50,16 @@ function startsLine(run: PdfRun, line: Line | null): boolean {
   return run[1] < line.right - size * 2;
 }
 
-function append(line: Line, run: PdfRun): void {
+/**
+ * A run added to the open line, whose text so far is parts (never empty, the last one a run's): only the last part is
+ * read, since reading the end of a string grown run by run copies it whole each time, and a line can hold many runs.
+ */
+function append(line: Line, parts: string[], run: PdfRun): void {
   const gap = run[1] - line.right;
   const text = clean(run[0]);
-  const spaced = gap > line.size * 0.2 && !line.text.endsWith(' ') && !text.startsWith(' ');
-  line.text += (spaced ? ' ' : '') + text;
+  const spaced = gap > line.size * 0.2 && !parts[parts.length - 1].endsWith(' ') && !text.startsWith(' ');
+  if (spaced) parts.push(' ');
+  parts.push(text);
   line.right = Math.max(line.right, run[1] + run[4]);
 }
 
@@ -61,17 +67,24 @@ function append(line: Line, run: PdfRun): void {
 function pageLines(page: PdfPage, n: number): Line[] {
   const lines: Line[] = [];
   let line: Line | null = null;
+  let parts: string[] = [];
+  const close = () => {
+    if (line) line.text = parts.join('');
+  };
   for (const run of page.runs) {
     if (Math.abs(run[5]) > 2 || run[0].trim() === '') continue;
     if (line && isMark(run, line)) continue;
     if (startsLine(run, line)) {
-      line = { page: n, x: run[1], y: run[2], right: run[1] + run[4], size: run[3], text: clean(run[0]) };
+      close();
+      line = { page: n, x: run[1], y: run[2], right: run[1] + run[4], size: run[3], text: '' };
+      parts = [clean(run[0])];
       lines.push(line);
     } else {
-      append(line!, run);
+      append(line!, parts, run);
       if (run[3] > line!.size) line!.size = run[3];
     }
   }
+  close();
   return lines.map((l) => ({ ...l, text: l.text.trim() })).filter((l) => l.text !== '');
 }
 
@@ -146,11 +159,9 @@ function breaksBefore(prev: Line, cur: Line, block: Block, c: Ctx): boolean {
   // a new page or column: the paragraph goes on unless the last line finished a sentence
   if (cur.page !== prev.page || cur.y < prev.y) return ends(prev.text);
   if (cur.y - prev.y > c.lead * 1.5) return true;
-  const left = Math.min(...block.lines.map((l) => l.x));
-  const right = Math.max(...block.lines.map((l) => l.right));
-  if (TERMINAL.test(prev.text) && cur.x > left + cur.size * 1.2) return true; // an indented first line
+  if (TERMINAL.test(prev.text) && cur.x > block.left + cur.size * 1.2) return true; // an indented first line
   if (ends(prev.text) && prev.x > cur.x + cur.size * 2) return true; // after a centred line
-  return TERMINAL.test(prev.text) && block.lines.length > 1 && prev.right < right - cur.size * 4; // a short last line
+  return TERMINAL.test(prev.text) && block.lines.length > 1 && prev.right < block.right - cur.size * 4; // a short last line
 }
 
 function blocksOf(lines: Line[], c: Ctx): Block[] {
@@ -158,23 +169,33 @@ function blocksOf(lines: Line[], c: Ctx): Block[] {
   let block: Block | null = null;
   lines.forEach((l, i) => {
     if (!block || breaksBefore(lines[i - 1], l, block, c)) {
-      block = { kind: isHeadingSize(l, c) ? 'h' : BULLET.test(l.text) ? 'li' : 'p', size: l.size, page: l.page, y: l.y, lines: [] };
+      block = { kind: isHeadingSize(l, c) ? 'h' : BULLET.test(l.text) ? 'li' : 'p', size: l.size, page: l.page, y: l.y, lines: [], left: l.x, right: l.right };
       blocks.push(block);
     }
     block.lines.push(l);
+    // as Math.min and Math.max over the block's lines, a NaN included
+    block.left = Math.min(block.left, l.x);
+    block.right = Math.max(block.right, l.right);
   });
   return blocks;
 }
 
 // ---- joining lines and what's left out
 
+/**
+ * A block's lines as one string: a word broken by a hyphen at a line's end is joined. Only the last line is looked at,
+ * whose end is the end of the text so far (lines are trimmed and never empty), so a block of many lines stays linear.
+ */
 function joinLines(lines: Line[]): string {
-  let out = '';
+  const out: string[] = [];
+  let last = '';
   for (const l of lines) {
-    if (/\p{L}-$/u.test(out) && /^\p{Ll}/u.test(l.text)) out = out.slice(0, -1) + l.text;
-    else out = out ? `${out} ${l.text}` : l.text;
+    if (/\p{L}-$/u.test(last.slice(-3)) && /^\p{Ll}/u.test(l.text)) out[out.length - 1] = last.slice(0, -1);
+    else if (out.length) out.push(' ');
+    out.push(l.text);
+    last = l.text;
   }
-  return out.replace(/\s+/g, ' ').trim();
+  return out.join('').replace(/\s+/g, ' ').trim();
 }
 
 const onMargin = (l: Line, c: Ctx) => c.margins.some((m) => l.x >= m - 4 && l.x <= m + l.size * 3);

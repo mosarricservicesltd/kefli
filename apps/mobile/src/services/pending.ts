@@ -25,57 +25,106 @@ export type PendingPorts = {
 /** waiting: left for want of a network; xWaiting: X posts whose check X didn't answer (retried, G3). */
 export type PendingResult = { parsed: number; failed: number; waiting: number; xWaiting: number };
 
-/** Pages in a row that time out before the rest of the queue waits too, the network being slow rather than one site. */
+/**
+ * Pages in a row that can't be had before the rest of the queue waits too, the network being down or slow rather
+ * than one site: each times out, or doesn't answer at all (a dead domain, a broken certificate, a redirect loop).
+ */
 export const SLOW_RUN = 3;
 
-export async function runPendingParses(p: PendingPorts, owner: string): Promise<PendingResult> {
+/** One pending parse taken as far as it goes; unreached: its page, or its X post's check, couldn't be had at all. */
+type Step = 'parsed' | 'failed' | 'xWaiting' | 'unreached';
+
+async function step(p: PendingPorts, owner: string, queued: Pending): Promise<Step> {
+  let item = queued;
+  // A shared X post is checked first: its article, if it has one, is what gets parsed (5.4).
+  if (item.x_state === 'pending') {
+    const x = await checkXPost(p.x, item.url);
+    if (x.kind === 'offline') return 'unreached';
+    if (x.kind === 'xfail') return 'xWaiting';
+    if (x.kind === 'none') {
+      xNoArticle(p.db, p.now(), owner, item, await p.targets());
+      return 'failed';
+    }
+    item = xFound(p.db, item, x.url);
+  }
+  // a page a browser asked for is never fetched from a private, loopback or link-local address (7.1)
+  const fromBrowser = p.db.get<{ origin: string }>('SELECT origin FROM items WHERE id = ?', item.id)?.origin === 'browser';
+  const outcome = fromBrowser && !isPublicWebUrl(item.url)
+    ? { kind: 'failed' as const, reason: 'http' as const, finalUrl: item.url }
+    : await fetchPage(p.page, item.url);
+  if (outcome.kind === 'offline') return 'unreached';
+  return settle(p, owner, item, outcome);
+}
+
+/** The run going for each owner, and whether another was asked for while it went. */
+const runs = new Map<string, { run: Promise<PendingResult>; again: boolean }>();
+
+/**
+ * The pending parses for owner, one run at a time. A sync's phase 7 and the inbox, which parses what it has just
+ * saved, can ask at once, and two runs over one queue applied each parse twice: the second re-keyed a save the first
+ * had re-keyed already, found it there, and deleted it as its own duplicate. A call while a run goes gets that run's
+ * result, and one more pass follows it for anything queued meanwhile.
+ */
+export function runPendingParses(p: PendingPorts, owner: string): Promise<PendingResult> {
+  const going = runs.get(owner);
+  if (going) {
+    going.again = true;
+    return going.run;
+  }
+  const entry = { run: Promise.resolve<PendingResult>({ parsed: 0, failed: 0, waiting: 0, xWaiting: 0 }), again: false };
+  entry.run = (async () => {
+    try {
+      let out = await pass(p, owner);
+      while (entry.again) {
+        entry.again = false;
+        const more = await pass(p, owner);
+        out = { parsed: out.parsed + more.parsed, failed: out.failed + more.failed, waiting: more.waiting, xWaiting: more.xWaiting };
+      }
+      return out;
+    } finally {
+      runs.delete(owner);
+    }
+  })();
+  runs.set(owner, entry);
+  return entry.run;
+}
+
+async function pass(p: PendingPorts, owner: string): Promise<PendingResult> {
   const out: PendingResult = { parsed: 0, failed: 0, waiting: 0, xWaiting: 0 };
   const queue = pendingParses(p.db, owner);
-  let slow = 0;
+  let unreached = 0;
   for (let i = 0; queue.length > i; i++) {
-    let item: Pending = queue[i];
-    // A shared X post is checked first: its article, if it has one, is what gets parsed (5.4).
-    if (item.x_state === 'pending') {
-      const x = await checkXPost(p.x, item.url);
-      if (x.kind === 'offline') {
-        out.waiting += queue.length - i;
-        break;
-      }
-      if (x.kind === 'xfail') {
-        out.xWaiting++;
-        continue;
-      }
-      if (x.kind === 'none') {
-        xNoArticle(p.db, p.now(), owner, item, await p.targets());
-        out.failed++;
-        continue;
-      }
-      item = xFound(p.db, item, x.url);
-    }
-    // a page a browser asked for is never fetched from a private, loopback or link-local address (7.1)
-    const fromBrowser = p.db.get<{ origin: string }>('SELECT origin FROM items WHERE id = ?', item.id)?.origin === 'browser';
-    const outcome = fromBrowser && !isPublicWebUrl(item.url)
-      ? { kind: 'failed' as const, reason: 'http' as const, finalUrl: item.url }
-      : await fetchPage(p.page, item.url);
-    if (outcome.kind === 'offline') {
-      // one page too slow waits for the next sync without holding up the rest; a run of them is the network (F12).
-      // Each goes to the back of the queue, so pages that always time out can't stop the shares behind them either.
-      if (outcome.timedOut) timedOut(p.db, p.now(), item.id);
-      if (outcome.timedOut && ++slow < SLOW_RUN) {
+    // a save whose parse threw (what its page held, or applying it) waits like one that couldn't be had, rather
+    // than stopping the queue at it on every sync
+    const s = await step(p, owner, queue[i]).catch((e: unknown): Step => {
+      console.log(`[kefli-pending] ${JSON.stringify({ threw: (e as Error)?.name ?? 'unknown' })}`);
+      return 'unreached';
+    });
+    if (s === 'unreached') {
+      // one page that can't be had waits for the next sync without holding up the rest; a run of them is the
+      // network (F12). Each goes to the back of the queue, so pages that never answer can't stop the shares behind
+      // them either: a dead link shared offline once stopped every pending parse at every sync.
+      timedOut(p.db, p.now(), queue[i].id);
+      if (++unreached < SLOW_RUN) {
         out.waiting++;
         continue;
       }
       out.waiting += queue.length - i;
       break;
     }
-    slow = 0;
-    if ((await settle(p, owner, item, outcome)) === 'failed') {
-      out.failed++;
-      continue;
-    }
-    out.parsed++;
+    if (s !== 'xWaiting') unreached = 0;
+    out[s]++;
   }
   return out;
+}
+
+/**
+ * Whether a save is still waiting for the parse it was taken for: at the same hash, its text queued (pending parses)
+ * or fetching (the inbox). A parse that another path settled first, or re-keyed, is dropped rather than applied over it.
+ */
+function waiting(db: SqlDb, item: Pending): boolean {
+  const row = db.get<{ hash: string; text_state: string }>('SELECT hash, text_state FROM items WHERE id = ?', item.id);
+  return !!row && row.hash === item.hash && (row.text_state === 'queued' || row.text_state === 'fetching');
 }
 
 /**
@@ -89,17 +138,26 @@ export async function settle(
 ): Promise<'parsed' | 'failed'> {
   const t = await p.targets();
   if (outcome.kind === 'failed') {
-    applyFailed(p.db, p.now(), owner, item, outcome.reason, t);
+    if (waiting(p.db, item)) applyFailed(p.db, p.now(), owner, item, outcome.reason, t);
     return 'failed';
   }
   const { result } = outcome;
   const enc = await encryptText(result.markdown, p.crypto);
+  // the last wait: from here the parse is applied in one go, and only to a save still as it was when its parse began
+  if (!waiting(p.db, item)) return 'parsed';
   const path = p.stage(enc.text.sha256, enc.blob);
-  const applied = applyParsed(p.db, p.now(), owner, item, {
-    hash: itemHash(outcome.finalUrl, result.canonical), url: outcome.finalUrl, canonical: result.canonical, title: result.title,
-    site: result.site, byline: result.byline, lang: result.lang, hero: result.hero, words: outcome.words,
-    text: enc.text, textHash: textHash(result.markdown, p.crypto),
-  }, { sha256: enc.text.sha256, size: enc.blob.length, path }, t);
+  let applied: ReturnType<typeof applyParsed>;
+  try {
+    applied = applyParsed(p.db, p.now(), owner, item, {
+      hash: itemHash(outcome.finalUrl, result.canonical), url: outcome.finalUrl, canonical: result.canonical, title: result.title,
+      site: result.site, byline: result.byline, lang: result.lang, hero: result.hero, words: outcome.words,
+      text: enc.text, textHash: textHash(result.markdown, p.crypto),
+    }, { sha256: enc.text.sha256, size: enc.blob.length, path }, t);
+  } catch (e) {
+    // nothing names the staged blob, so it goes, rather than a new one staying behind at each try
+    p.unstage(path);
+    throw e;
+  }
   if (applied.merged) {
     p.unstage(path);
   } else {

@@ -261,6 +261,53 @@ func TestDeviceMoveTakesARelease(t *testing.T) {
 	}
 }
 
+// A library could authorise device keys without end, 60 a minute: each is a wrap recipient on the relay, and the write
+// policy loads every one into memory every five seconds (probe plugindevices: a million devices, 470 MB and answers held
+// up to five seconds at each reload). The phone's connected-browsers record holds about 42 browsers under the 16 KB
+// ceiling, so MaxDevices a library is room enough; past it Connect shows Can't connect, and a move leaves the browser
+// with its old library, as for any refusal.
+func TestDevicesPerLibrary(t *testing.T) {
+	e := newEnv(t)
+	user, T := newKey(), newKey()
+	e.registered(user, T)
+	var first key
+	for i := 0; i < httpapi.MaxDevices; i++ {
+		e.clock = e.clock.Add(time.Second)
+		d := newKey()
+		if i == 0 {
+			first = d
+		}
+		if s := e.addDevice(user, d); s != 200 {
+			t.Fatalf("device %d: %d", i, s)
+		}
+	}
+	e.clock = e.clock.Add(time.Second)
+	extra := newKey()
+	s, b := e.call(user, "POST", "/devices", map[string]any{"v": 1, "device_pubkey": extra.pk, "proof": e.proof(extra, nonce(), e.clock)})
+	wantError(t, s, b, 403, "devices: too_many")
+	if e.holder(extra) != "" {
+		t.Fatal("a device past the limit was authorised")
+	}
+	// one it holds already is still a 200, as after a lost answer
+	e.clock = e.clock.Add(time.Second)
+	s, b = e.call(user, "POST", "/devices", map[string]any{"v": 1, "device_pubkey": first.pk, "proof": e.proof(first, nonce(), e.clock)})
+	expect(t, s, 200, b)
+	// a move into a full library is refused the same way, and the browser stays where it was
+	expect(t, e.addDevice(T, extra), 200, nil)
+	e.clock = e.clock.Add(time.Second)
+	s, b = e.call(user, "POST", "/devices", map[string]any{"v": 1, "device_pubkey": extra.pk, "release": e.release(T, extra.pk, user.pk, e.clock)})
+	wantError(t, s, b, 403, "devices: too_many")
+	if e.holder(extra) != T.pk {
+		t.Fatal("the browser left its library")
+	}
+	// Disconnect makes room
+	s, b = e.call(user, "DELETE", "/devices/"+first.pk, nil)
+	expect(t, s, 200, b)
+	e.clock = e.clock.Add(time.Second)
+	s, b = e.call(user, "POST", "/devices", map[string]any{"v": 1, "device_pubkey": extra.pk, "release": e.release(T, extra.pk, user.pk, e.clock)})
+	expect(t, s, 200, b)
+}
+
 // A browser that shows a new code consents afresh: its proof connects it to whichever library uses it first.
 func TestDeviceFreshProofConnectsAgain(t *testing.T) {
 	e := newEnv(t)

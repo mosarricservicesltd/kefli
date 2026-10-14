@@ -95,6 +95,11 @@ func hasAccount(ctx context.Context, q querier, pubkey string) error {
 
 // AddOwner records an owner of a blob without logging it against a day. inbox marks a device's blob, which expires
 // after InboxLife (contract 5); uploading the same blob again keeps the row and, for an inbox blob, its first expiry.
+// Nothing is recorded once the account is deleted or disabled, or, for an inbox blob, once the browser Blossom found
+// to be the account's has since been disconnected or connected to another library: an upload still arriving then
+// leaves no owner that nothing would ever delete. A browser the account holds is recorded even while the gone list
+// still names it, as AddDevice's second write can leave it; a key with no browser row, which only a test uploads
+// with, is recorded unless the gone list names it, as Disconnect does.
 func (s *Store) AddOwner(ctx context.Context, sha, owner, account string, size int64, inbox bool) error {
 	return s.addOwner(ctx, s.db, sha, owner, account, size, inbox)
 }
@@ -104,17 +109,21 @@ func (s *Store) addOwner(ctx context.Context, db querier, sha, owner, account st
 	if inbox {
 		expires = s.Now().Add(InboxLife).Unix()
 	}
-	_, err := db.ExecContext(ctx, `INSERT INTO owners(sha256, owner, account, size, created_at, expires_at) VALUES(?, ?, ?, ?, ?, ?)
-		ON CONFLICT(sha256, owner) DO NOTHING`, sha, owner, account, size, s.unix(), expires)
+	_, err := db.ExecContext(ctx, `INSERT INTO owners(sha256, owner, account, size, created_at, expires_at) SELECT ?, ?, ?, ?, ?, ?
+		WHERE EXISTS (SELECT 1 FROM accounts WHERE pubkey = ? AND disabled = 0)
+		AND (? = 0 OR EXISTS (SELECT 1 FROM devices WHERE device_pubkey = ? AND user_pubkey = ?)
+			OR (NOT EXISTS (SELECT 1 FROM devices WHERE device_pubkey = ?) AND NOT EXISTS (SELECT 1 FROM gone WHERE pubkey = ?)))
+		ON CONFLICT(sha256, owner) DO NOTHING`, sha, owner, account, size, s.unix(), expires, account, inbox, owner, account, owner, owner)
 	return err
 }
 
 // Upload records an upload as AddOwner does and, when no owner held the blob before, logs its size against the
 // library's day (contract 5): a blob the server already stores, for this library or any other, adds nothing, so a
 // repeat upload and a move's re-uploads cost no part of the day. One transaction, so the owner row and the log can't
-// part, which records nothing and gives ErrNoAccount once the library's account has gone: checked last, in the same
-// transaction, so a DELETE /account, one transaction itself, falls wholly before the record, which it then finds, or
-// after it, which it then refuses, and never leaves a row for a key that has gone.
+// part, which records nothing and gives ErrNoAccount once the library's account has gone or been disabled, or the
+// browser uploading is no longer the library's: checked last, in the same transaction, so a DELETE /account or a
+// Disconnect, each one transaction itself, falls wholly before the record, which it then finds, or after it, which it
+// then refuses, and never leaves a row for a key that has gone.
 func (s *Store) Upload(ctx context.Context, sha, owner, account string, size int64, inbox bool) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -128,10 +137,23 @@ func (s *Store) Upload(ctx context.Context, sha, owner, account string, size int
 	if err := s.addOwner(ctx, tx, sha, owner, account, size, inbox); err != nil {
 		return err
 	}
-	if err := hasAccount(ctx, tx, account); err != nil {
+	if err := recorded(ctx, tx, sha, owner, account); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+// recorded is nil once the upload's owner row is in place and its library's account is still there, ErrNoAccount
+// otherwise: addOwner writes no row for an account that has gone or been disabled, or for a browser no longer the
+// library's.
+func recorded(ctx context.Context, q querier, sha, owner, account string) error {
+	var one int
+	err := q.QueryRowContext(ctx, `SELECT 1 FROM owners WHERE sha256 = ? AND owner = ? AND EXISTS (SELECT 1 FROM accounts WHERE pubkey = ?)`,
+		sha, owner, account).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNoAccount
+	}
+	return err
 }
 
 // Exists is whether any pubkey owns the blob, so it is served.
@@ -197,27 +219,47 @@ func deleteOwned(ctx context.Context, q querier, where string, args ...any) ([]s
 
 // RemoveDevice revokes a device the user authorised and deletes its unexpired inbox blobs that count against the user
 // (contract 6). found is false when the device isn't the user's. A blob the device sent while another library held it
-// stays that library's, to expire or go with its account (F44).
+// stays that library's, to expire or go with its account (F44). In one transaction, as DeleteAccount is: a revocation
+// that fails part way changes nothing, and an upload's record falls wholly before it, and goes with the device's
+// other blobs, or after it, when the device is listed as gone and the record is refused (Upload).
 func (s *Store) RemoveDevice(ctx context.Context, user, device string) (found bool, orphaned []string, err error) {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM devices WHERE device_pubkey = ? AND user_pubkey = ?`, device, user)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, nil, err
+	}
+	defer tx.Rollback()
+	found, orphaned, err = s.removeDevice(ctx, tx, user, device)
+	if err == nil {
+		err = tx.Commit()
+	}
+	if err != nil {
+		return false, nil, err
+	}
+	return found, orphaned, nil
+}
+
+func (s *Store) removeDevice(ctx context.Context, q querier, user, device string) (bool, []string, error) {
+	res, err := q.ExecContext(ctx, `DELETE FROM devices WHERE device_pubkey = ? AND user_pubkey = ?`, device, user)
 	if err != nil {
 		return false, nil, err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return false, nil, nil
 	}
-	if orphaned, err = deleteOwned(ctx, s.db, `owner = ? AND account = ?`, device, user); err != nil {
-		return true, nil, err
+	orphaned, err := deleteOwned(ctx, q, `owner = ? AND account = ?`, device, user)
+	if err != nil {
+		return false, nil, err
 	}
-	return true, orphaned, s.markGone(ctx, s.db, []string{device})
+	return true, orphaned, s.markGone(ctx, q, []string{device})
 }
 
 // DeleteAccount removes the user's and their devices' ownership of blobs, their devices, their uploads log and their
 // allowlist entry (contract 6), and lists the user and the devices as gone for the relay's sweep, in one transaction:
 // a deletion that fails part way changes nothing, and an upload's record, which checks for the account in its own
-// transaction, falls wholly before or after it (Upload). Running it again does nothing more, and a key that never had
-// an account, which the relay holds nothing for, isn't listed: any fresh key may call it, and each row would cost every
-// nightly sweep (F45).
+// transaction, falls wholly before it, and goes with the rest, or after it, and is refused (Upload), so no upload
+// landing as it runs leaves an owner behind. Running it again does nothing more, and a key that never had an account,
+// which the relay holds nothing for, isn't listed: any fresh key may call it, and each row would cost every nightly
+// sweep (F45).
 func (s *Store) DeleteAccount(ctx context.Context, user string) ([]string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

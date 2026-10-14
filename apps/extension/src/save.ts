@@ -9,7 +9,7 @@ import { finalizeEvent } from 'nostr-tools/pure';
 import { uploadBlob, deleteBlob, type BlossomOutcome } from '../../../packages/protocol/src/blossom';
 import { EventTooLargeError } from '../../../packages/protocol/src/events';
 import { itemHash } from '../../../packages/protocol/src/normalise';
-import { wrapSaveRequest, type SaveRequest } from '../../../packages/protocol/src/pairing';
+import { SAVE_REQUEST_MAX_BYTES, wrapSaveRequest, type SaveRequest } from '../../../packages/protocol/src/pairing';
 import type { CryptoPort } from '../../../packages/protocol/src/ports';
 import type { LocalSigner, NostrEvent } from '../../../packages/protocol/src/signer';
 import { encryptText } from '../../../packages/protocol/src/text';
@@ -36,14 +36,52 @@ export function uploadTimeoutMs(bytes: number): number {
   return 20_000 + Math.ceil(bytes / 32_768) * 1000;
 }
 
-/** fetch with a time limit: past it, the request is aborted and the call rejects. */
+/**
+ * fetch with a time limit: past it, the request is aborted and the call rejects, even from a fetch that pays the signal no
+ * heed. The signal aborts reading the body too.
+ */
 export function timed(ms: number, get: typeof fetch = fetch): typeof fetch {
-  return (input, init) => get(input, { ...init, signal: AbortSignal.timeout(ms) });
+  return (input, init) => {
+    const signal = AbortSignal.timeout(ms);
+    const gone = new Promise<never>((_ok, fail) => signal.addEventListener('abort', () => fail(signal.reason), { once: true }));
+    return Promise.race([get(input, { ...init, signal }), gone]);
+  };
 }
 
+/**
+ * The most of an answer from Kefli's servers that is read: every answer the extension reads (a Blossom descriptor or
+ * refusal, defaults.json, the pair-offers reply) is a few hundred bytes, and one far longer would otherwise be held
+ * whole in the worker's memory before it could be refused.
+ */
+export const ANSWER_MAX_BYTES = 65_536;
+
+/** fetch whose answer is cut off past max bytes: reading further fails, so a huge answer is never held whole. */
+export function capped(max: number, get: typeof fetch = fetch): typeof fetch {
+  return async (input, init) => {
+    const res = await get(input, init);
+    if (Number(res.headers?.get('content-length') ?? 0) > max) {
+      void res.body?.cancel().catch(() => undefined);
+      throw new Error('answer too large');
+    }
+    if (!res.body || res.status < 200 || res.status > 599) return res;
+    let seen = 0;
+    const body = res.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, out) {
+        seen += chunk.byteLength;
+        if (seen > max) out.error(new Error('answer too large'));
+        else out.enqueue(chunk);
+      },
+    }));
+    return new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers });
+  };
+}
+
+/** How long Undo's removal of the inbox blob may take: past it Undo goes on, as it does when the removal fails. */
+export const REMOVE_TIMEOUT_MS = 10_000;
+
 export const fetchNet = (publish: Net['publish'], get: typeof fetch = fetch): Net => ({
-  upload: (server, blob, sha, signer) => uploadBlob(server, blob, sha, signer, timed(uploadTimeoutMs(blob.length), get)),
-  remove: (server, sha, signer) => deleteBlob(server, sha, signer, get),
+  upload: (server, blob, sha, signer) => uploadBlob(server, blob, sha, signer, timed(uploadTimeoutMs(blob.length), capped(ANSWER_MAX_BYTES, get))),
+  remove: (server, sha, signer) => deleteBlob(server, sha, signer, timed(REMOVE_TIMEOUT_MS, capped(ANSWER_MAX_BYTES, get))),
   publish,
 });
 
@@ -129,13 +167,22 @@ function pendingOf(wrap: NostrEvent, sealed: string, request: SaveRequest, enc: 
 }
 
 /**
+ * A field longer than a whole wrap's limit, which could never go in one: it is left out before the first try rather than
+ * after a try for each field spared before it. A page's 1 MB title cost five wraps of a megabyte each, seven seconds of
+ * the worker's time, and a 2 MB link address eight, fourteen seconds, before it was refused.
+ */
+const unwrappable = (s: string | null) => s !== null && s.length > SAVE_REQUEST_MAX_BYTES;
+const fitting = (s: string | null) => (unwrappable(s) ? null : s);
+
+/**
  * The request and its wrap, the HTML encrypted with a fresh key; nothing is sent yet. A wrap has to stay under 8 KB, so a
  * page with a long address or hero loses what it can spare until it fits; one that still doesn't is AddressTooLongError.
  */
 export async function prepare(c: Captured, ctx: SaveContext): Promise<Prepared> {
+  if (unwrappable(c.url)) throw new AddressTooLongError();
   const enc = c.html === null ? null : await encryptText(c.html, ctx.crypto);
   let request: SaveRequest = {
-    v: 1, url: c.url, canonical: c.canonical, title: c.title, site: c.site, byline: c.byline, lang: c.lang, hero: c.hero,
+    v: 1, url: c.url, canonical: fitting(c.canonical), title: fitting(c.title), site: fitting(c.site), byline: fitting(c.byline), lang: fitting(c.lang), hero: fitting(c.hero),
     captured_at: ctx.now, token: ctx.pairing.token,
     html: enc ? { ...enc.text, server: ctx.defaults.operator.blossom } : null,
   };

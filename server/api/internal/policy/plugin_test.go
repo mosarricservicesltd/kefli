@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -178,6 +179,32 @@ func TestPruneWraps(t *testing.T) {
 	rows.Close()
 	if len(left) != 1 || left[0] != "kept" {
 		t.Fatalf("left %v, want only the wrap the relay still holds", left)
+	}
+}
+
+// The floor reads the disk at most once a second, and a reading that fails counts as room.
+func TestFloor(t *testing.T) {
+	now := time.Unix(1_791_600_000, 0)
+	free, reads := int64(10<<20), 0
+	var fail error
+	full := policy.Floor("/x", 5<<20, func(string) (int64, error) { reads++; return free, fail }, func() time.Time { return now })
+	if full() {
+		t.Fatal("10 MB free, floor 5 MB")
+	}
+	free = 1 << 20
+	if full() || reads != 1 {
+		t.Fatalf("read again within the second (%d reads)", reads)
+	}
+	now = now.Add(time.Second)
+	if !full() {
+		t.Fatal("1 MB free, floor 5 MB")
+	}
+	now, fail = now.Add(time.Second), errors.New("statfs failed")
+	if full() {
+		t.Fatal("a failed reading stopped the relay")
+	}
+	if free, _ := policy.DiskFree(t.TempDir()); free <= 0 {
+		t.Fatalf("free %d", free)
 	}
 }
 

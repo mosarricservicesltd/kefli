@@ -30,8 +30,14 @@ func main() {
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/hooks/resend", mailfwd.Handler(cfg))
-	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
-	log.Fatal(srv.ListenAndServe())
+	log.Fatal(server(addr, mux).ListenAndServe())
+}
+
+// server bounds what one connection may hold: a webhook's body is under a megabyte, sent at once, where with no read
+// timeout a body sent a byte at a time held its connection for ever, and anyone may connect.
+func server(addr string, h http.Handler) *http.Server {
+	return &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second,
+		WriteTimeout: 2 * time.Minute, IdleTimeout: 2 * time.Minute, MaxHeaderBytes: 64 << 10}
 }
 
 func config(env func(string) string) (mailfwd.Config, string, error) {

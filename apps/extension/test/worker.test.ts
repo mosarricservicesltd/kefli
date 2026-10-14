@@ -13,7 +13,7 @@ import { relayRows, type Defaults } from '../src/defaults';
 import { deviceSigner } from '../src/device';
 import { PerSave } from '../src/lock';
 import { applyMove, followMoves } from '../src/move';
-import { changeQueue, dequeue, enqueue, flush, queued, settle } from '../src/queue';
+import { ATTEMPTS_MAX, BLOB_KEEP_MAX, BLOBS_KEEP_MAX, changeQueue, dequeue, enqueue, ENTRIES_MAX, flush, QUEUE_MAX, queued, settle } from '../src/queue';
 import { AddressTooLongError, fetchNet, prepare, timed, uploadTimeoutMs, WRAP_FRESH_FOR, type Net, type Pending } from '../src/save';
 import { KEYS, memoryStore, type Pairing, type Store } from '../src/store';
 import { toastCopy, type ToastState } from '../src/toastCopy';
@@ -71,7 +71,9 @@ function net(o: { publish?: 'ok' | 'down'; retract?: 'ok' | 'refused'; hold?: Pr
   return { net: n, published, asked };
 }
 
-function harness(o: { paired?: boolean; pairing?: Pairing; online?: boolean; net?: Net; collected?: boolean[]; store?: Store; session?: Store; alarmHold?: Promise<void> } = {}) {
+function harness(
+  o: { paired?: boolean; pairing?: Pairing; online?: boolean; net?: Net; collected?: boolean[]; store?: Store; session?: Store; alarmHold?: Promise<void>; toast?: Browser['toast']; checkMovesSoon?: Browser['checkMovesSoon'] } = {},
+) {
   const store = o.store ?? memoryStore();
   const session = o.session ?? memoryStore();
   const toasts: Omit<ToastState, 'shortcut'>[] = [];
@@ -85,7 +87,7 @@ function harness(o: { paired?: boolean; pairing?: Pairing; online?: boolean; net
     online: () => o.online ?? true,
     context: async () => ((o.paired ?? true) ? { ...ctx, pairing: o.pairing ?? ctx.pairing, now: clock.now } : null),
     openOptions: () => void opened.n++,
-    toast: async (_w, s) => void toasts.push(s),
+    toast: o.toast ?? (async (_w, s) => void toasts.push(s)),
     tick: async () => undefined,
     badge: async () => undefined,
     flushAlarm: async (on) => {
@@ -98,7 +100,7 @@ function harness(o: { paired?: boolean; pairing?: Pairing; online?: boolean; net
       alarm.on = on;
       if (!on) alarm.cleared++;
     },
-    checkMovesSoon: async () => undefined,
+    checkMovesSoon: o.checkMovesSoon ?? (async () => undefined),
     collected: async () => answers.shift() ?? false,
     wait: async () => undefined,
   };
@@ -681,6 +683,73 @@ describe('a capture the operator refuses (contract 4.4 and 5, v1.12)', () => {
     expect(await queued(h.store)).toEqual([]);
     expect((await history(h.store))[0]).toMatchObject({ outcome: 'sent, no text', id: q[0].id.slice(0, 8) });
   });
+
+  describe('with the browser’s own storage letting it down', () => {
+    test('a queue that won’t take the new wrap: the save goes under the wrap the queue still names, and nothing is left to go again', async () => {
+      // the save goes into the queue, the write putting the new wrap in its place is refused, and the settle after it is taken
+      const store = refusingWrites(KEYS.queue, (k) => k === 2);
+      const n = net({ blossom: operator(413, 'quota') });
+      const h = harness({ store, net: n.net, collected: [false, false] });
+      expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+      expect(kinds(h.toasts)).toEqual(['saving', 'notext']);
+      const [saving, done] = h.toasts;
+      // the wrap built before the upload goes, as one that can't be rebuilt does, and the phone fetches the page itself
+      expect(n.published.map((w) => w.id)).toEqual([saving.id]);
+      expect(done.id).toBe(saving.id);
+      expect(await queued(store)).toEqual([]);
+      expect((await history(store))[0]).toMatchObject({ outcome: 'sent, no text', id: saving.id!.slice(0, 8) });
+      // Undo retracts the wrap that went, and no copy left in the queue sends the save again afterwards
+      await h.work.undo(done.id!, 1);
+      expect(h.toasts.at(-1)!.kind).toBe('undone');
+      expect(n.published.filter((e) => e.kind === 5).map((e) => e.tags)).toEqual([[['e', saving.id], ['k', '1059']]]);
+      const later = net();
+      await harness({ store, net: later.net }).work.flushQueue();
+      expect(later.published).toEqual([]);
+    });
+
+    test('a queue that won’t keep the save before its send, which then can’t reach the relay, keeps it smaller with its mark', async () => {
+      // the first write, the save going in with its text, is refused; the smaller one after the send is taken
+      const store = refusing(KEYS.queue, 1);
+      const h = harness({ store, net: net({ blossom: operator(413, 'daily'), publish: 'down' }).net });
+      expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+      expect(kinds(h.toasts)).toEqual(['saving', 'failed']);
+      const [e] = await queued(store);
+      expect(e).toMatchObject({ id: h.toasts[1].id, textless: true, blob: null, sha256: null, why: 'reach' });
+      expect(e.id).not.toBe(h.toasts[0].id);
+      expect((await open(e.wrap)).req.html).toBeNull();
+      // a background started since sends it, and Copy debug info says it went with no text
+      const later = net();
+      await harness({ store, net: later.net }).work.flushQueue();
+      expect(later.published.map((w) => w.id)).toEqual([e.id]);
+      expect((await history(store))[0]).toMatchObject({ outcome: 'sent, no text', id: e.id.slice(0, 8) });
+    });
+
+    test('a session that won’t keep the new wrap’s key doesn’t stop the save; Undo then says it couldn’t', async () => {
+      // the save's own key is kept, and every write after it is refused
+      const session = refusingWrites('undo:', (k) => k > 1);
+      const n = net({ blossom: operator(413, 'quota') });
+      const h = harness({ session, net: n.net, collected: [false, false] });
+      expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+      expect(kinds(h.toasts)).toEqual(['saving', 'notext']);
+      const [w] = n.published;
+      expect(w.id).toBe(h.toasts[1].id);
+      expect((await open(w)).req.html).toBeNull();
+      await h.work.undo(h.toasts[1].id!, 1);
+      expect(h.toasts.at(-1)!.kind).toBe('undofailed');
+    });
+
+    test('a history storage won’t write doesn’t stop a refused save, sent at once or from the queue', async () => {
+      const store = refusing(KEYS.history);
+      const h = harness({ store, net: net({ blossom: operator(413, 'too_large') }).net });
+      expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+      expect(kinds(h.toasts)).toEqual(['saving', 'notext']);
+      await harness({ store, online: false }).work.save({ ...PAGE, url: 'https://example.com/b' }, 1, false);
+      const n = net({ blossom: operator(413, 'quota') });
+      expect(await ends(harness({ store, net: n.net }).work.flushQueue())).toBe('ended');
+      expect((await open(n.published[0])).req.html).toBeNull();
+      expect(await queued(store)).toEqual([]);
+    });
+  });
 });
 
 /** A store whose every call takes a while, as chrome.storage does, so changes that aren't locked interleave. */
@@ -923,5 +992,397 @@ describe('hardening (F52)', () => {
     const [a, b] = await Promise.all([deviceSigner(store, webCrypto), deviceSigner(store, webCrypto)]);
     expect(a.pubkey()).toBe(b.pubkey());
     expect((await deviceSigner(store, webCrypto)).pubkey()).toBe(a.pubkey());
+  });
+
+  test('a move whose token comes as a list of one keeps it as a string, in the pairing and in the saves wrapped again for it', async () => {
+    const h = harness({ online: false });
+    await h.work.save(PAGE, 1, false);
+    await h.store.set(KEYS.pairing, PAIRING);
+    // the pair-ack's shape check reads the token through String(), so a list holding one token passes it
+    const listed = { ...ackTo(T, user.pubkey(), 'cd'.repeat(32)), token: ['cd'.repeat(32)] as unknown as string };
+    const ack = await followMoves(device, [(await wrapPairAck(user, device.pubkey(), listed, NOW)).wrap], user.pubkey());
+    expect(ack?.token).toEqual(['cd'.repeat(32)]);
+    const moved = await applyMove(h.store, device, ack!, NOW);
+    expect(moved.token).toBe('cd'.repeat(32));
+    expect((await h.store.get<Pairing>(KEYS.pairing))?.token).toBe('cd'.repeat(32));
+    const [e] = await queued(h.store);
+    expect((JSON.parse((await unwrap(T, e.wrap)).rumor.content) as SaveRequest).token).toBe('cd'.repeat(32));
+  });
+});
+
+/** Whether a promise ends within ms, and how: the saves below otherwise never end, or end in a rejection nobody hears. */
+function ends(p: Promise<unknown>, ms = 15_000): Promise<string> {
+  let t: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<string>((r) => (t = setTimeout(() => r('still pending'), ms)));
+  return Promise.race([p.then(() => 'ended', (e: unknown) => `rejected: ${String(e)}`), late]).finally(() => clearTimeout(t));
+}
+
+/** A store whose writes to one key are refused, as chrome.storage refuses a write past its quota. */
+function refusing(key: string, times = Infinity): Store & { data: Map<string, unknown> } {
+  const store = memoryStore();
+  const set = store.set.bind(store);
+  let left = times;
+  store.set = async (k, v) => {
+    if (k === key && left-- > 0) throw new Error('QUOTA_BYTES quota exceeded');
+    return set(k, v);
+  };
+  return store;
+}
+
+/** A store that refuses the writes `refused` names, counted from one among the writes to keys starting with `prefix`. */
+function refusingWrites(prefix: string, refused: (n: number) => boolean): Store & { data: Map<string, unknown> } {
+  const store = memoryStore();
+  const set = store.set.bind(store);
+  let n = 0;
+  store.set = async (k, v) => {
+    if (k.startsWith(prefix) && refused(++n)) throw new Error('QUOTA_BYTES quota exceeded');
+    return set(k, v);
+  };
+  return store;
+}
+
+describe('a save the browser’s own parts let down', () => {
+  test('a toast the page never lets show doesn’t hold the save: it is sent, and nothing is left at Saving…', async () => {
+    const n = net();
+    const h = harness({ net: n.net, toast: () => new Promise<void>(() => undefined) });
+    expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+    expect(n.published.map((e) => e.kind)).toEqual([1059]);
+    expect(await queued(h.store)).toEqual([]);
+    expect((await history(h.store))[0]).toMatchObject({ outcome: 'sent' });
+  });
+
+  test('a toast slow to show still lands before the one that replaces it', async () => {
+    const shown: string[] = [];
+    const slow = gate();
+    const h = harness({
+      toast: async (_w, s) => {
+        if (s.kind === 'saving') await slow.p;
+        shown.push(s.kind);
+      },
+    });
+    expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+    slow.open();
+    await until(() => shown.length === 2);
+    expect(shown).toEqual(['saving', 'saved']);
+  });
+
+  test('a look for a move that fails leaves the key as it was: the save and the queue’s flush still go', async () => {
+    const n = net();
+    const failing = async () => {
+      throw new Error('storage gone');
+    };
+    const h = harness({ net: n.net, online: false, checkMovesSoon: failing });
+    expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+    expect(kinds(h.toasts)).toEqual(['saving', 'offline']);
+    const online = harness({ store: h.store, net: n.net, checkMovesSoon: failing });
+    expect(await ends(online.work.flushQueue())).toBe('ended');
+    expect(n.published.map((e) => e.kind)).toEqual([1059]);
+    expect(await queued(h.store)).toEqual([]);
+  });
+
+  test('a session that can’t keep the Undo key doesn’t stop the save; Undo then says it couldn’t', async () => {
+    const session = refusing('undo:', 0);
+    session.set = async () => {
+      throw new Error('QUOTA_BYTES quota exceeded');
+    };
+    const h = harness({ session, collected: [false, false] });
+    expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+    expect(kinds(h.toasts)).toEqual(['saving', 'saved']);
+    await h.work.undo(h.toasts[0].id!, 1);
+    expect(h.toasts.at(-1)!.kind).toBe('undofailed');
+  });
+
+  test('a queue storage.local won’t write: the save is still sent, and one that can’t be sent is refused out loud', async () => {
+    const n = net();
+    const h = harness({ store: refusing(KEYS.queue), net: n.net });
+    expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+    expect(kinds(h.toasts)).toEqual(['saving', 'saved']);
+    expect(n.published).toHaveLength(1);
+    const down = harness({ store: refusing(KEYS.queue), net: net({ publish: 'down' }).net });
+    expect(await ends(down.work.save(PAGE, 1, false))).toBe('ended');
+    expect(kinds(down.toasts)).toEqual(['saving', 'full']);
+    expect((await history(down.store))[0]).toMatchObject({ outcome: 'queue full' });
+  });
+
+  test('a save refused by storage before its send, and not sent, is kept without its text when it can be', async () => {
+    // the first write, the save going in with its text, is refused; the smaller one after the send is taken
+    const store = refusing(KEYS.queue, 1);
+    const h = harness({ store, net: net({ publish: 'down' }).net });
+    expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+    expect(kinds(h.toasts)).toEqual(['saving', 'failed']);
+    expect(await queued(store)).toMatchObject([{ why: 'reach', blob: null, attempts: 0, stopped: false }]);
+  });
+
+  test('a history storage won’t write doesn’t stop a save, its toast or the queue’s flush', async () => {
+    const store = refusing(KEYS.history);
+    const h = harness({ store, online: false });
+    expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+    expect(kinds(h.toasts)).toEqual(['saving', 'offline']);
+    const online = harness({ store });
+    expect(await ends(online.work.flushQueue())).toBe('ended');
+    expect(await queued(store)).toEqual([]);
+  });
+
+  test('a toast the page never lets show holds neither a save that waits nor its Undo', async () => {
+    const h = harness({ online: false, toast: () => new Promise<void>(() => undefined) });
+    expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+    const [e] = await queued(h.store);
+    expect(e).toMatchObject({ why: 'offline' });
+    expect(await ends(h.work.undo(e.id, 1))).toBe('ended');
+    expect(await queued(h.store)).toEqual([]);
+  });
+
+  test('a session that can’t be read still lets Undo take a waiting save off the queue', async () => {
+    const h = harness({ online: false });
+    await h.work.save(PAGE, 1, false);
+    // Undo looks first for a wrap that took the toast's place, then for the key
+    h.session.get = async () => {
+      throw new Error('storage gone');
+    };
+    expect(await ends(h.work.undo(h.toasts[0].id!, 1))).toBe('ended');
+    expect(h.toasts.at(-1)).toMatchObject({ kind: 'unqueued', title: 'A page' });
+    expect(await queued(h.store)).toEqual([]);
+  });
+
+  test('a toast the page never lets show holds no Undo of a save that went, under the wrap it went by', async () => {
+    const named: string[] = [];
+    const n = net({ blossom: (async () => new Response('', { status: 413 })) as unknown as typeof fetch });
+    const h = harness({ net: n.net, collected: [false, false], toast: (_w, s) => (named.push(s.id!), new Promise<void>(() => undefined)) });
+    expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+    // only the Saving… toast reaches the page, naming the wrap built before the refused upload; a new one went
+    const [w] = n.published;
+    expect(w.id).not.toBe(named[0]);
+    expect(await ends(h.work.undo(named[0], 1))).toBe('ended');
+    expect(n.published.filter((e) => e.kind === 5).map((e) => e.tags)).toEqual([[['e', w.id], ['k', '1059']]]);
+    expect((await history(h.store))[0]).toMatchObject({ outcome: 'undo: retracted' });
+  });
+
+  test('a page that can’t be saved isn’t held by a toast the page never lets show either', async () => {
+    const h = harness({ toast: () => new Promise<void>(() => undefined) });
+    expect(await ends(h.work.save({ ...PAGE, url: 'file:///home/a.html' }, 1, false))).toBe('ended');
+    expect(await queued(h.store)).toEqual([]);
+  });
+
+  test('a settle storage won’t write leaves the save queued under the wrap it went by, for the next flush to send', async () => {
+    // the save goes in, the new wrap its refused HTML gave it takes the old one's place, and the write settling it is refused
+    const store = refusingWrites(KEYS.queue, (k) => k === 3);
+    const n = net({ blossom: (async () => new Response('', { status: 413 })) as unknown as typeof fetch });
+    const h = harness({ store, net: n.net });
+    expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+    expect(kinds(h.toasts)).toEqual(['saving', 'notext']);
+    const [w] = n.published;
+    expect(await queued(store)).toMatchObject([{ id: w.id, why: 'sending', blob: null, textless: true }]);
+    // the next flush sends that wrap again, which the relay already holds, and the queue empties
+    const later = net();
+    await harness({ store, net: later.net }).work.flushQueue();
+    expect(later.published.map((e) => e.id)).toEqual([w.id]);
+    expect(await queued(store)).toEqual([]);
+  });
+
+  test('a save storage won’t keep before its send, which then goes, leaves nothing in the queue to go again', async () => {
+    for (const blossom of [undefined, (async () => new Response('', { status: 413 })) as unknown as typeof fetch]) {
+      // the first write, the save going in, is refused; every write after it is taken
+      const store = refusing(KEYS.queue, 1);
+      const h = harness({ store, net: net({ blossom }).net });
+      expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+      expect(kinds(h.toasts)).toEqual(['saving', blossom ? 'notext' : 'saved']);
+      expect(await queued(store)).toEqual([]);
+      const later = net();
+      await harness({ store, net: later.net }).work.flushQueue();
+      expect(later.published).toEqual([]);
+    }
+  });
+
+  test('a session that won’t let Undo’s keys go doesn’t stop Undo, whether the save is removed or found on the phone', async () => {
+    const stuck = () => {
+      const session = memoryStore();
+      session.remove = async () => {
+        throw new Error('storage gone');
+      };
+      return session;
+    };
+    // sent, then retracted; the key stays, and a second press says nothing over it
+    const n = net();
+    const sent = harness({ net: n.net, session: stuck(), collected: [false, false] });
+    await sent.work.save(PAGE, 1, false);
+    expect(await ends(sent.work.undo(sent.toasts[0].id!, 1))).toBe('ended');
+    expect(await ends(sent.work.undo(sent.toasts[0].id!, 1))).toBe('ended');
+    expect(kinds(sent.toasts)).toEqual(['saving', 'saved', 'undone']);
+    expect(n.published.filter((e) => e.kind === 5)).toHaveLength(1);
+    // sent, and already on the phone
+    const collected = harness({ session: stuck(), collected: [true] });
+    await collected.work.save(PAGE, 1, false);
+    expect(await ends(collected.work.undo(collected.toasts[0].id!, 1))).toBe('ended');
+    expect(collected.toasts.at(-1)!.kind).toBe('onphone');
+    // waiting after a send that may have reached the relay, and found on the phone
+    const reached = harness({ net: net({ publish: 'down' }).net, session: stuck(), collected: [true] });
+    await reached.work.save(PAGE, 1, false);
+    expect(await ends(reached.work.undo(reached.toasts[0].id!, 1))).toBe('ended');
+    expect(reached.toasts.at(-1)!.kind).toBe('onphone');
+    expect(await queued(reached.store)).toEqual([]);
+    // waiting, never sent: off the queue
+    const offline = harness({ online: false, session: stuck() });
+    await offline.work.save(PAGE, 1, false);
+    expect(await ends(offline.work.undo(offline.toasts[0].id!, 1))).toBe('ended');
+    expect(offline.toasts.at(-1)!.kind).toBe('unqueued');
+  });
+
+  test('a history storage won’t write doesn’t stop Undo, of a save that went, one found on the phone or one still waiting', async () => {
+    const went = harness({ store: refusing(KEYS.history), collected: [false, false] });
+    await went.work.save(PAGE, 1, false);
+    expect(await ends(went.work.undo(went.toasts[0].id!, 1))).toBe('ended');
+    expect(went.toasts.at(-1)!.kind).toBe('undone');
+    const onPhone = harness({ store: refusing(KEYS.history), net: net({ publish: 'down' }).net, collected: [true] });
+    await onPhone.work.save(PAGE, 1, false);
+    expect(await ends(onPhone.work.undo(onPhone.toasts[0].id!, 1))).toBe('ended');
+    expect(onPhone.toasts.at(-1)!.kind).toBe('onphone');
+    const waiting = harness({ store: refusing(KEYS.history), online: false });
+    await waiting.work.save(PAGE, 1, false);
+    expect(await ends(waiting.work.undo(waiting.toasts[0].id!, 1))).toBe('ended');
+    expect(waiting.toasts.at(-1)!.kind).toBe('unqueued');
+  });
+
+  test('a history storage won’t write doesn’t stop a ninth save being refused, or a save stopping at its last try', async () => {
+    const store = refusing(KEYS.history);
+    for (let i = 0; i < QUEUE_MAX; i++) await enqueue(store, entry(`w${i}`), 'offline');
+    const h = harness({ store, online: false });
+    expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+    expect(h.toasts.at(-1)!.kind).toBe('full');
+    // one at its last try, sent again and not taken, stops
+    await changeQueue(store, (q) => void q.splice(0, q.length, { ...q[0], attempts: ATTEMPTS_MAX - 1, why: 'reach' }));
+    expect(await ends(harness({ store, net: net({ publish: 'down' }).net }).work.flushQueue())).toBe('ended');
+    expect(await queued(store)).toMatchObject([{ stopped: true, attempts: ATTEMPTS_MAX }]);
+  });
+});
+
+/** chrome.storage.local's 10 MB (QUOTA_BYTES), counted as Chrome counts it: a write that would go past it is refused. */
+function quotaStore(quota = 10_485_760): Store & { bytes(): number } {
+  const kept = new Map<string, string>();
+  const bytes = () => [...kept].reduce((n, [k, v]) => n + k.length + v.length, 0);
+  return {
+    async get<T>(k: string) {
+      const v = kept.get(k);
+      return v === undefined ? undefined : (JSON.parse(v) as T);
+    },
+    async set(k, v) {
+      const s = JSON.stringify(v);
+      if (bytes() - (kept.has(k) ? k.length + kept.get(k)!.length : 0) + k.length + s.length > quota) throw new Error('QUOTA_BYTES quota exceeded');
+      kept.set(k, s);
+    },
+    async remove(k) {
+      kept.delete(k);
+    },
+    bytes,
+  };
+}
+
+describe('the queue in storage.local’s 10 MB', () => {
+  const blobbed = (id: string, chars: number): Pending => ({ ...entry(id), blob: 'b'.repeat(chars), sha256: 's' });
+
+  test('blobs are kept only while there is room for them: eight of the largest', async () => {
+    const store = memoryStore();
+    for (let i = 0; i < QUEUE_MAX; i++) await enqueue(store, blobbed(`w${i}`, BLOB_KEEP_MAX), 'offline');
+    await enqueue(store, blobbed('first send', BLOB_KEEP_MAX), 'sending');
+    const q = await queued(store);
+    expect(q.map((e) => e.blob === null)).toEqual([...Array(QUEUE_MAX).fill(false), true]);
+    expect(q.reduce((n, e) => n + (e.blob?.length ?? 0), 0)).toBeLessThanOrEqual(BLOBS_KEEP_MAX);
+  });
+
+  test('a save on its first send past ENTRIES_MAX isn’t kept first', async () => {
+    const store = memoryStore();
+    for (let i = 0; i < ENTRIES_MAX; i++) expect(await enqueue(store, entry(`s${i}`), 'sending')).toBe('queued');
+    expect(await enqueue(store, entry('one more'), 'sending')).toBe('full');
+  });
+
+  test('a dozen big pages on their first send at once are all kept as they send, with room left for the rest', async () => {
+    const store = quotaStore();
+    // a big page's blob, under BLOB_KEEP_MAX: twelve of them are over the 10 MB
+    const sends = Array.from({ length: 12 }, (_, i) => ({ ...blobbed(`big${i}`, 893_000), wrap: { id: `big${i}`, content: 'w'.repeat(8_000) } as NostrEvent, sealed: 's'.repeat(6_000) }));
+    for (const p of sends) expect(await enqueue(store, p, 'sending')).toBe('queued');
+    // every one is in storage while it sends, so a worker stopped now loses none (F23), and the pairing, the defaults
+    // and the history still have room
+    expect(await queued(store)).toHaveLength(12);
+    await expect(store.set('room', 'r'.repeat(1_000_000))).resolves.toBeUndefined();
+    await store.remove('room');
+    // none could send: eight wait, with what room there is for their blobs, and four are refused as ninths (decision 31)
+    const settled = [];
+    for (const p of sends) settled.push(await settle(store, p, 'unreachable', true, true));
+    expect(settled.sort()).toEqual([...Array(4).fill('full'), ...Array(8).fill('queued')]);
+    expect(await queued(store)).toHaveLength(QUEUE_MAX);
+    expect(store.bytes()).toBeLessThan(BLOBS_KEEP_MAX + 1_000_000);
+  });
+
+  test('a queue storage holds that no version wrote is read as empty, and saves go on', async () => {
+    const store = memoryStore();
+    await store.set(KEYS.queue, { not: 'a list' });
+    expect(await queued(store)).toEqual([]);
+    await store.set(KEYS.queue, [null, 7, { id: 'kept', wrap: {}, sealed: '', why: 'offline', stopped: false, attempts: 0 }]);
+    expect((await queued(store)).map((e) => e.id)).toEqual(['kept']);
+    await store.set(KEYS.queue, 'junk');
+    const h = harness({ store });
+    expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+    expect(kinds(h.toasts)).toEqual(['saving', 'saved']);
+  });
+});
+
+describe('Undo pressed twice (a double click, Enter twice on the toast’s button)', () => {
+  test('a sent save is retracted once, and the second press says nothing over Removed from Kefli', async () => {
+    const n = net();
+    const h = harness({ net: n.net });
+    await h.work.save(PAGE, 1, false);
+    const id = h.toasts[0].id!;
+    await Promise.all([h.work.undo(id, 1), h.work.undo(id, 1)]);
+    expect(kinds(h.toasts)).toEqual(['saving', 'saved', 'undone']);
+    expect(n.published.filter((e) => e.kind === 5)).toHaveLength(1);
+    expect((await history(h.store)).map((e) => e.outcome)).toEqual(['undo: retracted', 'sent']);
+  });
+
+  test('a waiting save comes off the queue once, and the second press says nothing over it', async () => {
+    const h = harness({ online: false });
+    await h.work.save(PAGE, 1, false);
+    const id = h.toasts[0].id!;
+    await Promise.all([h.work.undo(id, 1), h.work.undo(id, 1)]);
+    expect(kinds(h.toasts)).toEqual(['saving', 'offline', 'unqueued']);
+  });
+
+  test('an Undo that couldn’t retract can still be pressed again', async () => {
+    const h = harness({ net: net({ retract: 'refused' }).net, collected: [false, false, false, false] });
+    await h.work.save(PAGE, 1, false);
+    const id = h.toasts[0].id!;
+    await h.work.undo(id, 1);
+    await h.work.undo(id, 1);
+    expect(kinds(h.toasts)).toEqual(['saving', 'saved', 'undofailed', 'undofailed']);
+  });
+
+  test('on the offline toast of a save that went since under a new wrap, the second press says nothing over it either', async () => {
+    const h = harness({ online: false });
+    await h.work.save(PAGE, 1, false);
+    const offline = h.toasts.at(-1)!;
+    // the queue sends it without the HTML the operator refused, under a new wrap, while the offline toast still shows
+    const n = net({ blossom: (async () => new Response('', { status: 413 })) as unknown as typeof fetch });
+    const online = harness({ store: h.store, session: h.session, net: n.net, collected: [false, false] });
+    await online.work.flushQueue();
+    const [w] = n.published;
+    await Promise.all([online.work.undo(offline.id!, 1), online.work.undo(offline.id!, 1)]);
+    expect(kinds(online.toasts)).toEqual(['undone']);
+    expect(n.published.filter((e) => e.kind === 5).map((e) => e.tags)).toEqual([[['e', w.id], ['k', '1059']]]);
+  });
+});
+
+describe('a field no wrap could ever hold (F39, faster)', () => {
+  test('is left out at once, and the page’s other details stay', async () => {
+    const started = Date.now();
+    const { pending } = await prepare({ ...PAGE, title: 'T'.repeat(1_000_000), byline: 'A writer', site: `S${'😀'.repeat(300_000)}` }, ctx);
+    const req = JSON.parse((await unwrap(user, pending.wrap)).rumor.content) as SaveRequest;
+    expect(req).toMatchObject({ title: null, site: null, byline: 'A writer', lang: 'en' });
+    expect(req.html).not.toBeNull();
+    expect(pending.title).toBe('example.com');
+    expect(Date.now() - started).toBeLessThan(10_000);
+  });
+
+  test('an address no wrap could hold is refused at once', async () => {
+    const started = Date.now();
+    await expect(prepare(linkOnly(`https://example.com/?q=${'x'.repeat(2_000_000)}`), ctx)).rejects.toBeInstanceOf(AddressTooLongError);
+    expect(Date.now() - started).toBeLessThan(10_000);
   });
 });

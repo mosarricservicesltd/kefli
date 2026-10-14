@@ -83,4 +83,43 @@ describe('signing in with a nostr app (mobile spec 4.6, 5.3)', () => {
     ]);
     expect(queueImported(w.db, w.s.pubkey(), job.links, job.at, T)).toBe(0);
   });
+
+  test('a bookmark normalise refuses is passed over, not thrown at the sign-in every time', async () => {
+    const long = `https://${'a'.repeat(2000)}.example/x`;
+    // and one too long for its save's event (C§3.3), which could never be published: not counted, not brought in
+    const tooLong = `https://example.net/?q=${'x'.repeat(10_000)}`;
+    const w = await world({
+      'ws://a': async (s) => [await s.signEvent({ kind: 10003, created_at: 1, tags: [['r', long], ['r', tooLong], ['r', 'https://example.org/b']], content: '' })],
+    });
+    const c = await checkSignIn(w.p, w.s);
+    expect(c.ok && c.links).toEqual(['https://example.org/b']);
+    expect(queueImported(w.db, w.s.pubkey(), [tooLong, long], 50, T)).toBe(0);
+    // the phone's URL (Expo's, with no Unicode step) takes a host with a joiner, which normalise refuses (CheckJoiners)
+    const real = globalThis.URL;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    globalThis.URL = require('whatwg-url-minimum').URL;
+    try {
+      const phone = await world({
+        'ws://a': async (s) => [await s.signEvent({ kind: 10003, created_at: 1, tags: [['r', 'https://a‍b.example/'], ['r', 'https://example.org/b']], content: '' })],
+      });
+      const p = await checkSignIn(phone.p, phone.s);
+      expect(p.ok && p.links).toEqual(['https://example.org/b']);
+    } finally {
+      globalThis.URL = real;
+    }
+  });
+
+  test('an import is one transaction, not a commit for each link', async () => {
+    const w = await world();
+    let begins = 0;
+    const exec = w.db.exec.bind(w.db);
+    w.db.exec = (sql: string) => {
+      if (/^BEGIN/.test(sql)) begins++;
+      exec(sql);
+    };
+    const links = Array.from({ length: 500 }, (_, i) => `https://example.com/p/${i}`);
+    expect(queueImported(w.db, w.s.pubkey(), links, 50, T)).toBe(500);
+    expect(begins).toBe(1);
+    expect(w.db.get<{ n: number }>("SELECT COUNT(*) AS n FROM items WHERE origin = 'import'")!.n).toBe(500);
+  });
 });

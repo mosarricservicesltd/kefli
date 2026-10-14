@@ -50,4 +50,14 @@ describe('Speed read (mobile spec 5.6, FD 21)', () => {
     expect(minLeft(s, 11, 300)).toBe(1);
     expect(minLeft({ tokens: Array(1000).fill({ w: 'x', paraEnd: false }), starts: [0] }, 0, 300)).toBe(4);
   });
+
+  test('an article with no words (a page of images) plays to its end instead of throwing', () => {
+    // Speed read opens on any article with its text here; Play asks the time of the word it stands on
+    const empty = stream([], [{ firstWord: 0, words: 0 }]);
+    expect(empty.tokens).toEqual([]);
+    expect(delay(empty.tokens[0], 0, 300)).toBe(0);
+    expect(sentenceAt(empty, 0)).toEqual([0, 0]);
+    expect(moveSentence(empty, 0, 1)).toBe(0);
+    expect(minLeft(empty, 0, 300)).toBe(1);
+  });
 });

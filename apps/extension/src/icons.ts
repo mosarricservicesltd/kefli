@@ -19,6 +19,14 @@ const PATHS = {
 
 export type IconName = keyof typeof PATHS;
 
-export function icon(name: IconName, size = 20, extra = ''): string {
-  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" ${extra}>${PATHS[name]}</svg>`;
+/**
+ * An icon's SVG, with its stroke once. A second stroke-width after the first, as the toast's marks had, is dropped by
+ * the HTML parser (the first wins, so the marks drew at 1.75 rather than the mockup's heavier strokes), and refused by
+ * the XML one: on a page served as XHTML the Saved toast threw and stayed at Saving….
+ */
+export function icon(name: IconName, size = 20, stroke = 1.75): string {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${PATHS[name]}</svg>`;
 }
+
+/** The marks on a toast's or popup's cover: 12 px glyphs on a 20 px disc, heavier than 1.75 so they hold at that size. */
+export const MARKS = { ok: icon('check', 12, 3), bad: icon('bang', 12, 3), off: icon('wifioff', 12, 2.25) };

@@ -3,9 +3,11 @@ import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow, queueImported, queueSave } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
+import * as pendingData from '../src/data/pending';
 import { pendingParses } from '../src/data/pending';
+import { commitDelete, deleteItem } from '../src/data/library';
 import { DESKTOP_UA, MOBILE_UA, PAGE_MAX_BYTES, RENDER_MAX_BYTES, fetchPage, refusal, type ParserResult } from '../src/services/page';
-import { runPendingParses, type PendingPorts } from '../src/services/pending';
+import { runPendingParses, settle, type PendingPorts } from '../src/services/pending';
 import { TimedOut } from '../src/net/http';
 import { memoryDb } from './sqlite';
 
@@ -193,6 +195,88 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     expect(asked.slice(0, 2)).toEqual(['https://h.com/ok', 'https://a.com/slow']);
   });
 
+  test('a dead link shared offline waits at the back without holding up the shares behind it', async () => {
+    // fetch rejecting, as for a domain that is gone, a broken certificate or a redirect loop: before, the first such
+    // page stopped the queue, and it came first again at every sync, so nothing behind it was ever parsed
+    const w = world({ 'https://b.com/ok': {}, 'https://c.com/ok': {}, 'https://gone.example/a': 'down' });
+    for (const u of ['https://gone.example/a', 'https://b.com/ok', 'https://c.com/ok']) w.share(u);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 2, failed: 0, waiting: 1, xWaiting: 0 });
+    expect(pendingParses(w.db, PK).map((x) => x.url)).toEqual(['https://gone.example/a']);
+    w.share('https://d.com/new');
+    expect(pendingParses(w.db, PK).map((x) => x.url)).toEqual(['https://d.com/new', 'https://gone.example/a']);
+  });
+
+  test('three in a row that cannot be had are the network: the rest wait for the next sync, unasked', async () => {
+    const w = world({ 'https://e.com/ok': {} });
+    for (const u of ['https://a.com/x', 'https://b.com/x', 'https://c.com/x', 'https://e.com/ok']) w.share(u);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 0, waiting: 4, xWaiting: 0 });
+    expect(w.uas).toHaveLength(3);
+  });
+
+  test('an X post whose check cannot reach X waits at the back without holding up the rest', async () => {
+    const w = world({ 'https://b.com/ok': {} });
+    w.share('https://x.com/someone/status/1');
+    w.db.run("UPDATE items SET x_state = 'pending' WHERE url = 'https://x.com/someone/status/1'");
+    w.share('https://b.com/ok');
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 1, failed: 0, waiting: 1, xWaiting: 0 });
+    expect(pendingParses(w.db, PK).map((x) => x.url)).toEqual(['https://x.com/someone/status/1']);
+  });
+
+  test('a save whose parse throws waits at the back and the rest go on, with no staged blob left behind', async () => {
+    const w = world({ 'https://a.com/one': {}, 'https://b.com/two': {} });
+    for (const u of ['https://a.com/one', 'https://b.com/two']) w.share(u);
+    const apply = jest.spyOn(pendingData, 'applyParsed').mockImplementationOnce(() => {
+      throw new Error('database disk image is malformed');
+    });
+    try {
+      expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 1, failed: 0, waiting: 1, xWaiting: 0 });
+    } finally {
+      apply.mockRestore();
+    }
+    expect(pendingParses(w.db, PK).map((x) => x.url)).toEqual(['https://a.com/one']);
+    // only the parsed save's blob is staged; the one whose save couldn't take it went
+    expect(w.staged.size).toBe(1);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 1, failed: 0, waiting: 0, xWaiting: 0 });
+  });
+
+  test('two runs at once (a sync and the inbox) parse each save once, and keep it', async () => {
+    // the inbox runs pending parses when it saves something, whatever a sync is doing: before, both read the same
+    // queue, and the second to apply its parse re-keyed a save the first had already re-keyed, found it already
+    // there, and deleted it as a duplicate
+    const w = world({ 'https://t.co/x': { finalUrl: 'https://news.com/story' }, 'https://t.co/y': { finalUrl: 'https://news.com/other' } });
+    w.share('https://t.co/x');
+    w.share('https://t.co/y');
+    const page = w.ports.page.fetch;
+    let fetches = 0;
+    w.ports.page.fetch = (async (url: string, init: RequestInit) => {
+      fetches++;
+      await new Promise((r) => setTimeout(r, 5));
+      return page(url, init);
+    }) as never;
+    const [a, b] = await Promise.all([runPendingParses(w.ports, PK), runPendingParses(w.ports, PK)]);
+    expect(a.parsed + b.parsed).toBeGreaterThanOrEqual(2);
+    expect(w.db.all<{ hash: string; text_state: string }>('SELECT hash, text_state FROM items ORDER BY hash')).toEqual(
+      [itemHash('https://news.com/other'), itemHash('https://news.com/story')].sort().map((hash) => ({ hash, text_state: 'cached' })),
+    );
+    expect(fetches).toBe(2);
+    expect(w.staged.size).toBe(2);
+  });
+
+  test('a parse applied to a save another path has settled meanwhile is dropped, not applied over it', async () => {
+    const w = world({ 'https://t.co/z': { finalUrl: 'https://news.com/z' } });
+    w.share('https://t.co/z');
+    const [item] = pendingParses(w.db, PK);
+    const outcome = await fetchPage(w.ports.page, item.url);
+    if (outcome.kind === 'offline') throw new Error('offline');
+    // the same save settled twice at once, as the inbox and a pending parse could before
+    expect(await Promise.all([settle(w.ports, PK, item, outcome), settle(w.ports, PK, item, outcome)])).toEqual(['parsed', 'parsed']);
+    expect(w.db.all('SELECT hash, text_state FROM items')).toEqual([{ hash: itemHash('https://news.com/z'), text_state: 'cached' }]);
+    expect(w.staged.size).toBe(1);
+    // nor does a failure land on a save that has its text
+    await settle(w.ports, PK, item, { kind: 'failed', reason: 'http', finalUrl: item.url });
+    expect(w.db.get('SELECT text_state FROM items')).toEqual({ text_state: 'cached' });
+  });
+
   test("another phone's save without text keeps its address when parsed here", async () => {
     const w = world({ 'https://c.com/a': { finalUrl: 'https://c.com/b' } });
     w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, published, event_id) VALUES (?, ?, 'https://c.com/a', 10, 'unread', 'queued', 'sync', 1, 'e1')", PK, itemHash('https://c.com/a'));
@@ -215,5 +299,93 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     expect(w.outbox().filter((o) => o.op !== 'register').map((o) => o.op)).toEqual(['upload_blob', 'mirror_blob']);
     // the row stays clean, so a newer copy from another phone is still taken over it (data/sync.ts keeps the text)
     expect(w.db.get('SELECT dirty, modified_at, text_servers FROM items')).toEqual({ dirty: 0, modified_at: 7, text_servers: null });
+  });
+
+  test('a waiting share whose page is too large for its event is fitted, and keeps an address it can publish (C§3.3)', async () => {
+    const far = `https://d.com/landing?${'x'.repeat(12_000)}`;
+    const huge = (url: string): ParserResult => ({
+      ok: true, title: 'T'.repeat(50_000), byline: 'B'.repeat(9_000), site: 'S', lang: 'en', hero: `https://cdn.d.com/${'h'.repeat(9_000)}`,
+      canonical: url === far ? null : `https://d.com/b?${'c'.repeat(9_000)}`, readerable: true, markdown: `${LONG}\n`,
+    });
+    const w = world({ 'https://d.com/a': {}, 'https://d.com/r': { finalUrl: far } }, huge);
+    w.share('https://d.com/a');
+    w.share('https://d.com/r');
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ parsed: 2 });
+    const rows = w.db.all<{ hash: string; url: string; canonical: string | null; hero: string | null; title: string }>('SELECT hash, url, canonical, hero, title FROM items ORDER BY id');
+    expect(rows.map((r) => [r.hash, r.url, r.canonical, r.hero])).toEqual([
+      [itemHash('https://d.com/a', `https://d.com/b?${'c'.repeat(9_000)}`), 'https://d.com/a', null, null],
+      [itemHash('https://d.com/r'), 'https://d.com/r', null, null],
+    ]);
+    expect(rows.every((r) => r.title.length <= 300)).toBe(true);
+  });
+
+  test('a plain http save, which release builds can never fetch, no longer stops the saves behind it', async () => {
+    const w = world({ 'https://g.com/b': {} });
+    const fetch = w.ports.page.fetch;
+    // OkHttp's refusal of cleartext, which fetchPage reads as offline
+    w.ports.page.fetch = (async (url: string, init: RequestInit) => {
+      if (url.startsWith('http://')) throw new Error('CLEARTEXT communication to g.com not permitted by network security policy');
+      return fetch(url, init);
+    }) as never;
+    w.share('http://g.com/a');
+    w.share('https://g.com/b');
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ parsed: 1, waiting: 1 });
+    expect(w.db.all('SELECT url, text_state FROM items ORDER BY id')).toEqual([
+      { url: 'http://g.com/a', text_state: 'queued' }, { url: 'https://g.com/b', text_state: 'cached' },
+    ]);
+  });
+
+  test('a save deleted while its page is fetched takes nothing: no upload, no sends, no text, no search entry', async () => {
+    const w = world({ 'https://f.com/a': {}, 'https://f.com/b': { status: 404 } });
+    w.share('https://f.com/a');
+    w.share('https://f.com/b');
+    const fetch = w.ports.page.fetch;
+    let open!: () => void;
+    const gate = new Promise<void>((r) => (open = r));
+    w.ports.page.fetch = (async (url: string, init: RequestInit) => (await gate, fetch(url, init))) as never;
+    const run = runPendingParses(w.ports, PK);
+    await new Promise((r) => setTimeout(r, 20));
+    // while the first is fetched: it is deleted for good, and the second is deleted and waits on its Undo
+    const a = deleteItem(w.db, 6000, PK, itemHash('https://f.com/a'));
+    commitDelete(w.db, PK, itemHash('https://f.com/a'), a.held);
+    deleteItem(w.db, 6000, PK, itemHash('https://f.com/b'));
+    open();
+    await run;
+    expect(w.outbox().filter((r) => ['upload_blob', 'mirror_blob', 'publish_item'].includes(r.op))).toEqual([]);
+    expect(w.db.all('SELECT sha256 FROM blobs')).toEqual([]);
+    expect([w.staged.size, w.texts.size]).toEqual([0, 0]);
+    expect(w.db.get('SELECT COUNT(*) AS n FROM items_fts')).toEqual({ n: 0 });
+    // the second, if its delete is undone, is still waiting for its parse
+    expect(w.db.all('SELECT url, text_state FROM items')).toEqual([{ url: 'https://f.com/b', text_state: 'queued' }]);
+  });
+
+  test("a save whose delete waits on Undo while its page is parsed takes nothing, another phone's included: shown again, it is parsed then", async () => {
+    const w = world({ 'https://f.com/new': {}, 'https://f.com/out': {} });
+    w.share('https://f.com/new');
+    // another phone's save without text, whose text is its only change once parsed here (C§4.2)
+    w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, published, event_id, modified_at) VALUES (?, ?, 'https://f.com/out', 10, 'unread', 'queued', 'sync', 1, 'e1', 7)", PK, itemHash('https://f.com/out'));
+    const fetch = w.ports.page.fetch;
+    const undos = new Map<string, () => void>();
+    // each deleted as its page arrives, its delete waiting on Undo
+    w.ports.page.fetch = (async (url: string, init: RequestInit) => {
+      if (!undos.has(url)) undos.set(url, deleteItem(w.db, 6000, PK, itemHash(url)).revert);
+      return fetch(url, init);
+    }) as never;
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ parsed: 2 });
+    expect(w.outbox().filter((r) => ['upload_blob', 'mirror_blob', 'publish_item'].includes(r.op))).toEqual([]);
+    expect([w.staged.size, w.texts.size, w.db.get('SELECT COUNT(*) AS n FROM items_fts')]).toEqual([0, 0, { n: 0 }]);
+    expect(w.db.all('SELECT url, text_state, modified_at FROM items ORDER BY id')).toEqual([
+      { url: 'https://f.com/new', text_state: 'queued', modified_at: expect.any(Number) }, { url: 'https://f.com/out', text_state: 'queued', modified_at: 7 },
+    ]);
+    // Undo: each is parsed at the next run, the new one sent with its text, the other phone's given only its text
+    for (const undo of undos.values()) undo();
+    w.ports.page.fetch = fetch;
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ parsed: 2 });
+    expect(w.db.all('SELECT url, text_state FROM items ORDER BY id')).toEqual([
+      { url: 'https://f.com/new', text_state: 'cached' }, { url: 'https://f.com/out', text_state: 'cached' },
+    ]);
+    const sends = w.outbox().filter((r) => ['upload_blob', 'mirror_blob', 'publish_item'].includes(r.op));
+    expect(sends.map((r) => r.op).sort()).toEqual(['mirror_blob', 'mirror_blob', 'publish_item', 'upload_blob', 'upload_blob']);
+    expect(sends.filter((r) => r.op === 'publish_item').map((r) => r.subject)).toEqual([itemHash('https://f.com/new')]);
   });
 });

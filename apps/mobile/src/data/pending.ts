@@ -4,20 +4,22 @@
 // then its text and save go out. A page that definitely can't be read is published without text.
 import type { SqlDb } from './db';
 import { enqueue } from './outbox';
-import { registerFirst, queueSends, queueText, type SaveTargets, type StagedBlob } from './saves';
+import { addressFits, fitSave, registerFirst, queueSends, queueText, type PageFields, type SaveTargets, type StagedBlob } from './saves';
 import { writeRelays } from './lists';
 
 export type Pending = { id: number; hash: string; url: string; shared_url: string | null; published: number; event_id: string | null; x_state: string | null };
 
 /**
  * Saves waiting for their parse: those that haven't timed out first, oldest first, then those that have, the one
- * that timed out longest ago first (F12).
+ * that timed out longest ago first (F12). RULED: plain http pages come after all the rest. Release builds allow no
+ * cleartext, so such a fetch fails at once, and that reads as offline, which stops the queue: one http save, first in
+ * line, held every save behind it at every sync, for good.
  */
 export function pendingParses(db: SqlDb, owner: string): Pending[] {
   return db.all<Pending>(
     // the person's own saves before an import's, which may run to thousands and take days past the day's 20 MB (FD 117)
     `SELECT id, hash, url, shared_url, published, event_id, x_state FROM items WHERE owner = ? AND text_state = 'queued' AND pending_delete_at IS NULL
-     ORDER BY COALESCE(timed_out_at, 0), origin = 'import', saved_at, id`,
+     ORDER BY lower(substr(url, 1, 7)) = 'http://', COALESCE(timed_out_at, 0), origin = 'import', saved_at, id`,
     owner,
   );
 }
@@ -58,24 +60,48 @@ function rekey(db: SqlDb, now: number, owner: string, from: Pending, to: string)
 }
 
 /**
+ * RULED: a waiting save is still the one its parse began for: its row is there, under the same hash, and not waiting
+ * on a delete's Undo. A save deleted while its page was fetched had its text uploaded anyway, to servers no delete
+ * would ever clear, its sends queued for a row that was gone, and its search entry written for it.
+ */
+function live(db: SqlDb, p: Pending): boolean {
+  return !!db.get('SELECT 1 FROM items WHERE id = ? AND hash = ? AND pending_delete_at IS NULL', p.id, p.hash);
+}
+
+/** The page's fields fitted under the event ceiling (C§3.3) at this address; with every one shed if even that fails. */
+function fittedAt(url: string, parsed: Parsed): PageFields {
+  const fields = { url, canonical: parsed.canonical, title: parsed.title, site: parsed.site, byline: parsed.byline, lang: parsed.lang, hero: parsed.hero };
+  return fitSave(fields) ?? { url, canonical: null, title: null, site: null, byline: null, lang: null, hero: null };
+}
+
+/**
  * A parse that succeeded: the row takes the article and its text goes out. A save not yet published goes with it
  * (upload, mirror, publish), the publish going without the text if the operator refuses it (send.ts). For a save
  * already published, as one another phone sent without text (C§4.1), the text is its only change: it is uploaded and
  * mirrored, and the save is published again naming it only once the operator and a mirror hold it, through the
  * mirror's republish (send.ts), since a refusal leaves it nothing new to send (C§4.2, v1.12). The row stays clean, so
- * a newer copy from another phone is taken over it, the text kept by the merge (data/sync.ts).
+ * a newer copy from another phone is taken over it, the text kept by the merge (data/sync.ts). RULED: the page's
+ * fields are fitted under the event ceiling (data/saves fitSave), and a final address too long for the event isn't
+ * adopted, so the save keeps the address it has, and its hash, with the text.
  */
 export function applyParsed(db: SqlDb, now: number, owner: string, p: Pending, parsed: Parsed, blob: StagedBlob, t: SaveTargets): Applied {
   return db.tx(() => {
+    // deleted while its page was fetched, or waiting on its delete's Undo: the row takes nothing, as one that joined
+    // another save takes nothing, so the caller drops the staged text
+    if (!live(db, p)) return { hash: p.hash, merged: true };
     const unpublished = !p.published && !p.event_id;
-    const where = unpublished && parsed.hash !== p.hash ? rekey(db, now, owner, p, parsed.hash) : { hash: p.hash, merged: false };
+    const adopted = unpublished && addressFits(parsed.url);
+    const page = fittedAt(adopted ? parsed.url : p.url, parsed);
+    const where = adopted && parsed.hash !== p.hash ? rekey(db, now, owner, p, parsed.hash) : { hash: p.hash, merged: false };
     if (where.merged) return where;
+    // a save not yet published is marked changed for its sends; one already out stays clean (above)
+    const changed = Number(unpublished);
     db.run(
       `UPDATE items SET url = ?, canonical = ?, title = ?, site = ?, byline = ?, lang = ?, hero = ?, words = ?, text_sha256 = ?,
         text_key = ?, text_nonce = ?, text_hash = ?, text_state = 'cached', fail_reason = NULL,
         modified_at = CASE WHEN ? THEN ? ELSE modified_at END, dirty = CASE WHEN ? THEN 1 ELSE dirty END WHERE id = ?`,
-      unpublished ? parsed.url : p.url, parsed.canonical, parsed.title, parsed.site, parsed.byline, parsed.lang, parsed.hero, parsed.words,
-      parsed.text.sha256, parsed.text.key, parsed.text.nonce, parsed.textHash, unpublished ? 1 : 0, now, unpublished ? 1 : 0, p.id,
+      page.url, page.canonical, page.title, page.site, page.byline, page.lang, page.hero, parsed.words,
+      parsed.text.sha256, parsed.text.key, parsed.text.nonce, parsed.textHash, changed, now, changed, p.id,
     );
     const register = registerFirst(db, now, owner, t);
     if (unpublished) queueSends(db, now, owner, where.hash, blob, t, false, register);
@@ -91,6 +117,7 @@ export function applyParsed(db: SqlDb, now: number, owner: string, p: Pending, p
  */
 export function applyFailed(db: SqlDb, now: number, owner: string, p: Pending, reason: string, t: SaveTargets): void {
   db.tx(() => {
+    if (!live(db, p)) return;
     if (p.published || p.event_id) {
       db.run("UPDATE items SET text_state = 'failed', fail_reason = ? WHERE id = ?", reason, p.id);
       return;
@@ -100,8 +127,16 @@ export function applyFailed(db: SqlDb, now: number, owner: string, p: Pending, r
   });
 }
 
-/** An X post's check found its article (5.4): the save now parses that address, and is re-keyed by it (FD 80). */
+/**
+ * An X post's check found its article (5.4): the save now parses that address, and is re-keyed by it (FD 80). RULED:
+ * an article address too long for the save's event (data/saves addressFits) is no article Kefli can keep, as on the
+ * sheet: the save keeps the post's address and is read as the post, so it is never left at one it can't publish.
+ */
 export function xFound(db: SqlDb, p: Pending, article: string): Pending {
+  if (!addressFits(article)) {
+    db.run("UPDATE items SET x_state = 'none' WHERE id = ?", p.id);
+    return { ...p, x_state: 'none' };
+  }
   db.run('UPDATE items SET url = ?, x_state = NULL WHERE id = ?', article, p.id);
   return { ...p, url: article, x_state: null };
 }

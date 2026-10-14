@@ -1,5 +1,7 @@
+import { EventTooLargeError, LocalSigner, buildItemEvent } from '@kefli/protocol';
+import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
-import { ensureIdentityRow, priorOf, queueSave, undoSave } from '../src/data/saves';
+import { PAGE_FIELDS_BYTES, addressFits, ensureIdentityRow, fitSave, priorOf, queueSave, undoSave, type PageFields } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
 import { commitDelete, deleteItem, undoShare } from '../src/data/library';
 import { memoryDb } from './sqlite';
@@ -108,5 +110,52 @@ describe('a save shared again while its delete waits on Undo (FD 34)', () => {
     expect(undoShare(w.db, 110, PK, H, held, null)).toEqual({ staged: ['/staging/ef.bin'] });
     expect(w.db.all('SELECT * FROM items')).toEqual([]);
     expect(w.db.all("SELECT op FROM outbox WHERE op != 'publish_lists'")).toEqual([]);
+  });
+});
+
+describe('a save fitted under the 16 KB ceiling (C§3.3)', () => {
+  const signer = new LocalSigner(nodeCrypto.randomBytes(32));
+  const key = nodeCrypto.randomBytes(32);
+  const page = (o: Partial<PageFields> = {}): PageFields => ({
+    url: 'https://news.example/2026/10/a-story', canonical: 'https://news.example/2026/10/a-story', title: 'A story of an ordinary length',
+    site: 'News', byline: 'A. Writer', lang: 'en', hero: 'https://cdn.news.example/a.jpg', ...o,
+  });
+  /** The event the outbox would build, with the most the rest of the item can take: archived, a long position, long servers. */
+  const publish = (f: PageFields) => buildItemEvent(signer, H, {
+    item: {
+      v: 1, ...f, saved_at: 1_760_000_000, state: 'archived', progress: 0.12345678901234568, words: 1_234_567,
+      text: { sha256: 'ef'.repeat(32), key: 'K'.repeat(43) + '=', nonce: 'N'.repeat(16), servers: [`https://blossom.${'o'.repeat(60)}.example`, `https://mirror.${'m'.repeat(60)}.example`] },
+      text_hash: 'ab'.repeat(32), source_kind: 'web', audio_pref: null,
+    },
+    extra: {},
+  }, 1_760_000_000, key);
+
+  test('an ordinary page is left as it is', () => expect(fitSave(page())).toEqual(page()));
+
+  test('a page with fields of any size still publishes: the picture goes, then the canonical, then the words are cut', async () => {
+    const huge = page({ title: 'T'.repeat(50_000), byline: 'B'.repeat(20_000), site: 'S'.repeat(20_000), lang: 'x'.repeat(5_000), hero: `https://cdn.example/${'h'.repeat(20_000)}`, canonical: `https://news.example/a?${'c'.repeat(20_000)}` });
+    await expect(publish(huge)).rejects.toThrow(EventTooLargeError);
+    const fitted = fitSave(huge)!;
+    expect(fitted).toMatchObject({ url: huge.url, hero: null, canonical: null });
+    expect(fitted.title!.length).toBeLessThanOrEqual(300);
+    expect(fitted.title!.endsWith('…')).toBe(true);
+    await expect(publish(fitted)).resolves.toBeDefined();
+  });
+
+  test('only as much goes as must: a long hero alone costs the hero, and a title of 4-byte characters is cut whole', async () => {
+    expect(fitSave(page({ hero: `https://cdn.example/${'h'.repeat(9_500)}` }))).toEqual(page({ hero: null }));
+    const emoji = fitSave(page({ title: '😀'.repeat(5_000), hero: null, canonical: null }))!;
+    expect(emoji.title).toBe(`${'😀'.repeat(149)}…`);
+    await expect(publish(emoji)).resolves.toBeDefined();
+  });
+
+  test('an address too long to publish alone is refused, at the edge exactly', async () => {
+    const at = (n: number) => `https://example.com/?q=${'a'.repeat(n - 23)}`;
+    expect(addressFits(at(PAGE_FIELDS_BYTES - 2 - 24))).toBe(true);
+    expect(addressFits(at(PAGE_FIELDS_BYTES - 2 - 24 + 1))).toBe(false);
+    const longest = fitSave(page({ url: at(PAGE_FIELDS_BYTES - 2 - 24), title: 'T'.repeat(1_000) }))!;
+    expect(longest).toMatchObject({ canonical: null, title: null, site: null, byline: null, lang: null, hero: null });
+    await expect(publish(longest)).resolves.toBeDefined();
+    expect(fitSave(page({ url: at(12_000) }))).toBeNull();
   });
 });

@@ -20,8 +20,23 @@ export type Outcome =
 /** An inbox blob expires 14 days after capture (C§4.4); the page is fetched instead. */
 export const INBOX_BLOB_LIFE = 14 * 86_400;
 
-export function seenOutcome(db: SqlDb, wrapId: string): Outcome | null {
-  return db.get<{ outcome: Outcome }>('SELECT outcome FROM inbox_seen WHERE wrap_id = ?', wrapId)?.outcome ?? null;
+/**
+ * A wrap's standing: the outcome it was given, so it is acted on once; 'waiting' for one a drain tried and couldn't
+ * open or take yet, which the next drain tries again; null for one never tried.
+ */
+export function seenState(db: SqlDb, wrapId: string): Outcome | 'waiting' | null {
+  return db.get<{ outcome: Outcome | 'waiting' }>('SELECT outcome FROM inbox_seen WHERE wrap_id = ?', wrapId)?.outcome ?? null;
+}
+
+/**
+ * A wrap the phone couldn't open or take yet (F3) is noted as waiting, with when a drain first tried it, and is no
+ * outcome (seenState): the next drain tries it again. Returns when the first try was, from which the
+ * week it is waited for runs. Counted from its created_at, as it was, a wrap the phone first saw a week late (NIP-59
+ * backdates it two days; a phone off for five) was filed as not ours at the first signer out of sight, and the save lost.
+ */
+export function waitingSince(db: SqlDb, now: number, wrapId: string, owner: string): number {
+  db.run("INSERT INTO inbox_seen (wrap_id, owner, seen_at, outcome) VALUES (?, ?, ?, 'waiting') ON CONFLICT (wrap_id) DO NOTHING", wrapId, owner, now);
+  return db.get<{ seen_at: number }>("SELECT seen_at FROM inbox_seen WHERE wrap_id = ? AND outcome = 'waiting'", wrapId)?.seen_at ?? now;
 }
 
 export type Seen = { owner: string; outcome: Outcome; requestD?: string | null; device?: string | null; hash?: string | null; wrapJson?: string | null };
@@ -32,6 +47,53 @@ export function recordSeen(db: SqlDb, now: number, wrapId: string, s: Seen): voi
      ON CONFLICT (wrap_id) DO UPDATE SET seen_at = excluded.seen_at, hash = COALESCE(excluded.hash, hash), wrap_json = excluded.wrap_json, outcome = excluded.outcome`,
     wrapId, s.owner, now, s.requestD ?? null, s.device ?? null, s.hash ?? null, s.wrapJson ?? null, s.outcome,
   );
+}
+
+/**
+ * How long the outcome of a wrap nothing was taken from is kept: two weeks, the week a wrap may hold the cursor
+ * (WRAP_PATIENCE) and the two days a drain reads back past it (WRAP_LOOKBACK), with days to spare. Older, the wrap
+ * is outside every drain's window, so its row only grew the table: by up to 28,800 rows a day under the most the
+ * relay lets everyone together send one person (C§3.2), and a kind 5 for each 50 of them at Delete my data.
+ */
+export const SEEN_KEEP = 14 * 86_400;
+
+/**
+ * Forgets the outcomes kept longer than SEEN_KEEP of wraps nothing was taken from. A save's (created, merged,
+ * un-archived), a blob still waited for and a wrap still waiting stay: a replay of a taken wrap must stay a repeat.
+ */
+export function forgetIgnored(db: SqlDb, now: number, owner: string): void {
+  db.run(
+    "DELETE FROM inbox_seen WHERE owner = ? AND seen_at < ? AND outcome IN ('ignored_foreign', 'ignored_token', 'ignored_version', 'failed_parse')",
+    owner, now - SEEN_KEEP,
+  );
+}
+
+/**
+ * A deep read part way down an inbox window too large for one (services/inbox.ts): the until its next answer starts
+ * at, when it began, and whether a wrap read since was left unopened. Kept with the settings, so a scan goes on where
+ * it stopped after the app is closed: begun again at each open, one in a window too large for one open's reads never
+ * ended, and the cursor never moved again.
+ */
+export type InboxScan = { until: number; startedAt: number; left: boolean };
+
+const scanKey = (relay: string, owner: string) => `inbox.scan ${owner} ${relay}`;
+
+export function inboxScan(db: SqlDb, relay: string, owner: string): InboxScan | null {
+  const raw = db.get<{ value: string }>('SELECT value FROM settings WHERE key = ?', scanKey(relay, owner))?.value;
+  try {
+    const s = JSON.parse(raw ?? 'null') as Partial<InboxScan> | null;
+    return s && Number.isFinite(s.until) && Number.isFinite(s.startedAt) ? { until: s.until!, startedAt: s.startedAt!, left: s.left === true } : null;
+  } catch {
+    return null;
+  }
+}
+
+export function keepInboxScan(db: SqlDb, relay: string, owner: string, scan: InboxScan): void {
+  db.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', scanKey(relay, owner), JSON.stringify(scan));
+}
+
+export function endInboxScan(db: SqlDb, relay: string, owner: string): void {
+  db.run('DELETE FROM settings WHERE key = ?', scanKey(relay, owner));
 }
 
 /** A wrap whose blob couldn't be read yet: the rumor and seal kept for the retry, and the save its drain made or matched. */

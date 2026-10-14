@@ -66,10 +66,28 @@ interface Renamed {
  */
 const RENAMED_MAX = 64;
 
+/** One Undo's save, where it is told, the session's key for it, and what retracts it, looks for it and forgets it. */
+interface UndoOf {
+  id: string;
+  where: Where;
+  kept: UndoKey | undefined;
+  retractIt(): Promise<void>;
+  collected(): Promise<boolean>;
+  forget(): Promise<void>;
+}
+
 const WAITING: Record<ReturnType<typeof whyNot>, Outcome> = { offline: 'waiting, offline', reach: 'waiting, couldn’t reach', blocked: 'waiting, blocked' };
 
 /** What the toast shows of a save, under the id its wrap has now, which Undo names. */
 const toasted = (p: Pending, link: boolean) => ({ id: p.id, hash: p.hash, title: p.title, host: p.host, link });
+
+/**
+ * How long a save waits on a toast before going on. A page can keep a toast from showing for as long as it likes (a
+ * main thread kept busy, a custom element of the toast's name that never returns, a page that never finishes loading),
+ * and a save held before it is queued is lost when the browser stops the worker. Past this the save goes on; the toast
+ * still shows if the page ever lets it, after the ones before it.
+ */
+export const TOAST_WAIT_MS = 2_000;
 
 export function background(b: Browser) {
   const saves = new PerSave();
@@ -79,8 +97,25 @@ export function background(b: Browser) {
    * before this one is recorded as sent with no text too.
    */
   const textless = new Set<string>();
+  /**
+   * Saves Undo has removed, by the wrap each went by then. A second Undo on the same toast (a double click, Enter pressed
+   * twice) found no key and no waiting save, and said "Couldn't undo this save" over "Removed from Kefli".
+   */
+  const undone = new Set<string>();
   const deliverFor = (ctx: SaveContext) => (p: Delivered) =>
     deliver(p, ctx.defaults.operator.blossom, ctx.defaults.operator.relay, ctx.device, b.net, (q, refused) => (refused ? withoutHtml(q, ctx) : freshen(q, ctx)));
+
+  /** Each tab's toasts, one after another, so Saved never lands before the Saving… it replaces. */
+  const showing = new Map<Where, Promise<void>>();
+  function toast(where: Where, s: Omit<ToastState, 'shortcut'>): Promise<void> {
+    const shown = (showing.get(where) ?? Promise.resolve()).then(() => b.toast(where, s)).catch(() => undefined);
+    showing.set(where, shown);
+    void shown.then(() => showing.get(where) === shown && showing.delete(where));
+    return Promise.race([shown, b.wait(TOAST_WAIT_MS)]);
+  }
+
+  /** What became of a save, for Copy debug info: storage that refuses it mustn't stop the save it describes. */
+  const note = (id: string, outcome: Outcome, link?: boolean) => record(b.store, b.now(), id, outcome, link).catch(() => undefined);
 
   /**
    * Undo's key moved to a save's new wrap: the key that alone retracts it, and the inbox blob it deletes, if the operator
@@ -93,10 +128,13 @@ export function background(b: Browser) {
     await b.session.set(`undo:${was}`, { to } satisfies Renamed);
   }
 
-  /** The wrap a save goes by now: the last of those that took the named wrap's place, if it went again under another. */
+  /**
+   * The wrap a save goes by now: the last of those that took the named wrap's place, if it went again under another. A
+   * session that can't be read leaves Undo with the last wrap it found, which then says if it couldn't undo.
+   */
   async function goesBy(id: string): Promise<string> {
     for (let hops = 0; hops < RENAMED_MAX; hops++) {
-      const kept = await b.session.get<UndoKey | Renamed>(`undo:${id}`);
+      const kept = await b.session.get<UndoKey | Renamed>(`undo:${id}`).catch(() => undefined);
       if (!kept || !('to' in kept)) break;
       id = kept.to;
     }
@@ -107,14 +145,19 @@ export function background(b: Browser) {
    * The save under a new wrap: the wrap, its key and its id take the old one's place in the queue, with what else
    * changed, and in Undo's key before it is sent, so a worker stopped meanwhile leaves the new wrap for the next flush,
    * and the new id is busy for as long as this send runs, as the old one is. A mark that it goes without text follows it.
+   * Storage that won't take the change doesn't stop the save: a queue that can't be written leaves it under the wrap the
+   * queue still names, so a later send and Undo agree with what went, and a session that can't keep the new key leaves
+   * Undo saying it couldn't undo, rather than holding the save.
    */
   async function takePlace(p: Delivered, again: Again, changed: Partial<Queued>): Promise<void> {
     const was = p.id;
-    Object.assign(p, { id: again.wrap.id, wrap: again.wrap, sealed: again.sealed, wrapped_at: b.now() });
+    const next = { id: again.wrap.id, wrap: again.wrap, sealed: again.sealed, wrapped_at: b.now() };
+    saves.follow(was, next.id);
+    const placed = await replaceWrap(b.store, was, { ...changed, ...next }).then(() => true, () => false);
+    if (!placed) return;
+    Object.assign(p, next);
     if (textless.delete(was)) textless.add(p.id);
-    saves.follow(was, p.id);
-    await replaceWrap(b.store, was, { ...changed, id: p.id, wrap: p.wrap, sealed: p.sealed, wrapped_at: p.wrapped_at });
-    await moveUndoKey(was, p.id, again.wrapKey, p.sha256);
+    await moveUndoKey(was, p.id, again.wrapKey, p.sha256).catch(() => undefined);
   }
 
   /**
@@ -159,29 +202,43 @@ export function background(b: Browser) {
       if (!(e instanceof AddressTooLongError)) throw e;
       refused = 'toolong';
     }
-    await b.toast(where, { kind: refused, title: '', host: '', link: true });
+    await toast(where, { kind: refused, title: '', host: '', link: true });
     return null;
   }
 
+  /**
+   * A save's first send, from the queue (F23). Storage that won't take the save (storage.local full, or broken) doesn't
+   * stop it: it is sent all the same, and one that can't be sent is kept smaller if it can be, else refused as the ninth
+   * is, so it never sits at Saving… unkept. A settle that can't be written leaves the save queued as sending, for the
+   * next flush to send. The send may put the save under a new wrap (takePlace), which is the one kept.
+   */
+  async function firstSend(pending: Pending, ctx: SaveContext): Promise<{ d: Delivery; s: Settled; online: boolean }> {
+    const kept = await enqueue(b.store, pending, 'sending').then((r) => r === 'queued', () => false);
+    await b.flushAlarm(true);
+    const online = b.online();
+    const d: Delivery = online ? await deliverFor(ctx)(pending) : 'unreachable';
+    if (kept) return { d, online, s: await settle(b.store, pending, d, online, true).catch((): Settled => 'queued') };
+    if (d === 'sent') return { d, online, s: 'sent' };
+    // with the mark a save whose HTML the operator refused carries in the queue, for whichever background sends it
+    const smaller = { ...pending, blob: null, ...(textless.has(pending.id) ? { textless: true as const } : {}) };
+    const s = await enqueue(b.store, smaller, whyNot(d, online)).catch((): Settled => 'full');
+    return { d, online, s };
+  }
+
   async function save(c: Captured, where: Where, link: boolean): Promise<void> {
-    // a move found now means this save is wrapped for the new key from the start
-    await b.checkMovesSoon();
+    // a move found now means this save is wrapped for the new key from the start; a look that fails leaves the key as it was
+    await b.checkMovesSoon().catch(() => undefined);
     const ctx = await b.context();
     if (!ctx) return b.openOptions();
     const p = await prepared(c, ctx, where);
     if (!p) return;
     const { pending, wrapKey } = p;
-    await b.toast(where, { ...toasted(pending, link), kind: 'saving' });
-    await b.session.set(`undo:${pending.id}`, { key: bytesToHex(wrapKey), sha256: pending.sha256, hash: pending.hash } satisfies UndoKey);
+    await toast(where, { ...toasted(pending, link), kind: 'saving' });
+    // a session that can't keep the key leaves Undo saying it couldn't undo, rather than losing the save
+    await b.session.set(`undo:${pending.id}`, { key: bytesToHex(wrapKey), sha256: pending.sha256, hash: pending.hash } satisfies UndoKey).catch(() => undefined);
     // into the queue inside the save's own run, so a flush already going never finds it there and not busy, and sends it
     // a second time beside this send
-    const { d, s, online } = await saves.run(pending.id, async () => {
-      await enqueue(b.store, pending, 'sending');
-      await b.flushAlarm(true);
-      const online = b.online();
-      const d: Delivery = online ? await deliverFor(ctx)(pending) : 'unreachable';
-      return { d, online, s: await settle(b.store, pending, d, online, true) };
-    });
+    const { d, s, online } = await saves.run(pending.id, () => firstSend(pending, ctx));
     // from here the toast names the wrap the save has now, a new one if its HTML was refused, so Undo retracts that
     if (d === 'sent') return sentNow(c, pending, where, link);
     await waits(pending, where, link, { d, s, online });
@@ -190,9 +247,9 @@ export function background(b: Browser) {
   /** Saved, or, for a save that went without its text, the toast saying the phone will fetch it. */
   async function sentNow(c: Captured, pending: Pending, where: Where, link: boolean): Promise<void> {
     const noText = textless.delete(pending.id) || c.html === null;
-    await record(b.store, b.now(), pending.id, noText ? 'sent, no text' : 'sent', link);
+    await note(pending.id, noText ? 'sent, no text' : 'sent', link);
     await queueChanged();
-    await b.toast(where, { ...toasted(pending, link), kind: noText ? 'notext' : 'saved' });
+    await toast(where, { ...toasted(pending, link), kind: noText ? 'notext' : 'saved' });
     if (where === 'popup') await b.tick();
   }
 
@@ -201,14 +258,14 @@ export function background(b: Browser) {
     await queueChanged();
     const base = toasted(pending, link);
     // taken off the queue while it was sending: Disconnect deleted it, as its confirm said
-    if (r.s === 'gone') return b.toast(where, { ...base, kind: 'unqueued' });
+    if (r.s === 'gone') return toast(where, { ...base, kind: 'unqueued' });
     if (r.s === 'full') {
-      await record(b.store, b.now(), pending.id, 'queue full', link);
-      return b.toast(where, { ...base, kind: 'full' });
+      await note(pending.id, 'queue full', link);
+      return toast(where, { ...base, kind: 'full' });
     }
     const why = whyNot(r.d, r.online);
-    await record(b.store, b.now(), pending.id, WAITING[why], link);
-    await b.toast(where, { ...base, kind: why === 'offline' ? 'offline' : 'failed' });
+    await note(pending.id, WAITING[why], link);
+    await toast(where, { ...base, kind: why === 'offline' ? 'offline' : 'failed' });
     if (where === 'popup' && why === 'offline') await b.tick();
   }
 
@@ -219,6 +276,7 @@ export function background(b: Browser) {
    * as well as taken off the queue; the relay refuses a retraction of a wrap it doesn't hold, which then changes nothing.
    * Undo first waits for a send of the save under way, which may put it under a new wrap when the operator refuses its
    * HTML (v1.12), and then undoes it under the wrap it has now, so a toast that still names the old wrap undoes it too.
+   * A second Undo of a save already undone, such as a double click, changes and says nothing more.
    */
   async function undo(id: string, where: Where): Promise<void> {
     const ctx = await b.context();
@@ -227,45 +285,56 @@ export function background(b: Browser) {
     await saves.run(now, () => undoNow(now, where, ctx));
   }
 
-  /** What Undo asks of the network: the wrap retracted with its own key, and whether the phone has collected it. */
-  function asks(id: string, kept: UndoKey | undefined, ctx: SaveContext) {
+  /**
+   * One Undo of the save under the wrap it goes by now: its wrap retracted with its own key, the look for it on the
+   * phone, and its key forgotten once it is undone, so a second press says nothing more.
+   */
+  function undoOf(id: string, where: Where, kept: UndoKey | undefined, ctx: SaveContext): UndoOf {
     const { relay, blossom } = ctx.defaults.operator;
     return {
+      id, where, kept,
       retractIt: () => (kept ? retract({ id, sha256: kept.sha256 }, hexToBytes(kept.key), blossom, relay, ctx.device, b.net, b.now()) : Promise.reject(new Error('no key'))),
       collected: () => b.collected(relay, id, ctx.pairing.user_pubkey),
+      forget: async () => {
+        undone.add(id);
+        await b.session.remove(`undo:${id}`).catch(() => undefined);
+      },
     };
   }
 
   async function undoNow(id: string, where: Where, ctx: SaveContext): Promise<void> {
-    const kept = await b.session.get<UndoKey>(`undo:${id}`);
+    // already undone: its toast says so, and a second press changes and says nothing more
+    if (undone.has(id)) return;
+    const kept = await b.session.get<UndoKey>(`undo:${id}`).catch(() => undefined);
+    const u = undoOf(id, where, kept, ctx);
     // read on its own line: lizard, which the code gate uses, ends the function at a find called on a bracketed await
     const q = await queued(b.store);
     const waitingSave = q.find((e) => e.id === id);
-    if (waitingSave && (await dequeue(b.store, id))) return offTheQueue(waitingSave, kept, where, ctx);
-    const { retractIt, collected } = asks(id, kept, ctx);
-    const outcome = await settleUndo(retractIt, collected, b.wait).catch(() => 'failed' as const);
-    // a failed retraction keeps the key, so Undo pressed again tries again
-    if (outcome !== 'failed') await b.session.remove(`undo:${id}`);
+    if (waitingSave && (await dequeue(b.store, id))) return unqueue(u, waitingSave, ctx.device);
+    const outcome = await settleUndo(u.retractIt, u.collected, b.wait).catch(() => 'failed' as const);
+    // a failed retraction keeps the key, so Undo pressed again tries again; one found on the phone is looked for again
+    if (outcome === 'undone') await u.forget();
+    if (outcome === 'onphone') await b.session.remove(`undo:${id}`).catch(() => undefined);
     const said: Record<typeof outcome, [Outcome, ToastKind]> = { onphone: ['undo: on the phone', 'onphone'], undone: ['undo: retracted', 'undone'], failed: ['undo: failed', 'undofailed'] };
-    await record(b.store, b.now(), id, said[outcome][0]);
-    await b.toast(where, { kind: said[outcome][1], hash: kept?.hash, title: '', host: '', link: false });
+    await note(id, said[outcome][0]);
+    await toast(where, { kind: said[outcome][1], hash: kept?.hash, title: '', host: '', link: false });
   }
 
-  /** Undo on a save taken off the queue: retracted too when its send may have reached the relay all the same. */
-  async function offTheQueue(e: Queued, kept: UndoKey | undefined, where: Where, ctx: SaveContext): Promise<void> {
-    await record(b.store, b.now(), e.id, 'undo: off the queue');
+  /** Undo of a save still in the queue: off it, and retracted as well when its send may have reached the relay. */
+  async function unqueue(u: UndoOf, waitingSave: Queued, device: SaveContext['device']): Promise<void> {
+    await note(u.id, 'undo: off the queue');
     await queueChanged();
-    const { retractIt, collected } = asks(e.id, kept, ctx);
-    const tried = e.why !== 'offline' || e.attempts > 0;
-    const went = tried && kept ? await settleUndo(retractIt, collected, b.wait).catch(() => 'undone' as const) : 'undone';
-    if (kept) await b.session.remove(`undo:${e.id}`);
+    const tried = waitingSave.why !== 'offline' || waitingSave.attempts > 0;
+    const went = tried && u.kept ? await settleUndo(u.retractIt, u.collected, b.wait).catch(() => 'undone' as const) : 'undone';
     if (went === 'onphone') {
-      await record(b.store, b.now(), e.id, 'undo: on the phone');
-      return b.toast(where, { kind: 'onphone', hash: kept?.hash, title: '', host: '', link: false });
+      if (u.kept) await b.session.remove(`undo:${u.id}`).catch(() => undefined);
+      await note(u.id, 'undo: on the phone');
+      return toast(u.where, { kind: 'onphone', hash: u.kept?.hash, title: '', host: '', link: false });
     }
+    await u.forget();
     // the title and host come from the sealed request; the queue doesn't keep them in the clear (F31)
-    const [s] = await shown([e], ctx.device);
-    return b.toast(where, { kind: 'unqueued', title: s.title, host: s.host, link: false });
+    const [s] = await shown([waitingSave], device);
+    return toast(u.where, { kind: 'unqueued', title: s.title, host: s.host, link: false });
   }
 
   /**
@@ -274,7 +343,7 @@ export function background(b: Browser) {
    */
   async function flushQueue(all = false, only?: string): Promise<string[]> {
     // a save queued before a move must go to the new key, so a waiting queue looks for one first
-    await b.checkMovesSoon();
+    await b.checkMovesSoon().catch(() => undefined);
     const ctx = await b.context();
     // nothing to send to, and nobody asked: the alarm goes rather than opening the options page every minute
     if (!ctx) {
@@ -285,8 +354,8 @@ export function background(b: Browser) {
     const stoppedBefore = new Set(before.filter((e) => e.stopped).map((e) => e.id));
     for (const e of before) if (e.textless) textless.add(e.id);
     const sent = await flush(b.store, deliverFor(ctx), b.online(), { all, only, saves });
-    for (const id of sent) await record(b.store, b.now(), id, textless.delete(id) ? 'sent, no text' : 'sent from queue');
-    for (const e of await queued(b.store)) if (e.stopped && !stoppedBefore.has(e.id)) await record(b.store, b.now(), e.id, 'stopped');
+    for (const id of sent) await note(id, textless.delete(id) ? 'sent, no text' : 'sent from queue');
+    for (const e of await queued(b.store)) if (e.stopped && !stoppedBefore.has(e.id)) await note(e.id, 'stopped');
     await queueChanged();
     return sent;
   }
