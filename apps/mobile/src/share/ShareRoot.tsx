@@ -85,7 +85,8 @@ function SavedSheet({ spoolId }: { spoolId?: string }) {
   const insets = useSafeAreaInsets();
   // a spool that can't be read is no share: Not a link, rather than a sheet that throws while it draws
   const entry = useMemo(() => (spoolId ? readSpool(spoolId) : null), [spoolId]);
-  const url = firstLink(entry?.text ?? null);
+  // once, not at every render: each address tried is normalised
+  const url = useMemo(() => firstLink(entry?.text ?? null), [entry]);
   const first = useMemo(() => {
     try {
       return url ? itemHash(url) : null;

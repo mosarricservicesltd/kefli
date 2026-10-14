@@ -2,7 +2,7 @@
 // that can't be read or saved must not stop the shares behind it, at this start or any other.
 import { memoryDb } from './sqlite';
 import { migrate } from '../src/data/schema';
-import { SHARE_MAX_CHARS, activeSpools, firstLink, pickUpSpools, readSpool } from '../src/share/pickup';
+import { SHARE_MAX_CHARS, SHARE_MAX_TRIES, activeSpools, firstLink, pickUpSpools, readSpool } from '../src/share/pickup';
 
 const mockSpools = new Map<string, string>();
 const mockSaved: string[] = [];
@@ -43,6 +43,28 @@ describe('the link a share carries (5.4)', () => {
     expect(firstLink('Read https://a.example/x via http://[::1')).toBe('https://a.example/x');
     expect(firstLink(`https://${'a'.repeat(2000)}.example/`)).toBeNull();
     expect(firstLink('https://example.com:99999/a')).toBeNull();
+  });
+
+  test('a link inside a sentence is read as it was written: its punctuation, an unopened bracket and invisible marks go', () => {
+    expect(firstLink('Read this: https://example.com/a.')).toBe('https://example.com/a');
+    expect(firstLink('(see https://example.com/a).')).toBe('https://example.com/a');
+    expect(firstLink('Look: https://en.wikipedia.org/wiki/Foo_(bar).')).toBe('https://en.wikipedia.org/wiki/Foo_(bar)');
+    expect(firstLink('[notes](https://en.wikipedia.org/wiki/Foo_(bar))')).toBe('https://en.wikipedia.org/wiki/Foo_(bar)');
+    expect(firstLink('see https://example.com/?q=a,b, then the rest')).toBe('https://example.com/?q=a,b');
+    expect(firstLink('a link‏ https://example.com/a‏​')).toBe('https://example.com/a');
+    expect(firstLink('[x] https://example.com/a]')).toBe('https://example.com/a');
+  });
+
+  test('a link that is the whole share, as a browser shares a page, is taken as it is, but for invisible marks', () => {
+    expect(firstLink('https://en.wikipedia.org/wiki/Washington,_D.C.')).toBe('https://en.wikipedia.org/wiki/Washington,_D.C.');
+    expect(firstLink('  https://en.wikipedia.org/wiki/Foo_(bar)\n')).toBe('https://en.wikipedia.org/wiki/Foo_(bar)');
+    expect(firstLink('https://example.com/a​')).toBe('https://example.com/a');
+  });
+
+  test('at most the last 16 addresses are tried', () => {
+    const bad = (n: number) => 'http://[ '.repeat(n);
+    expect(firstLink(`https://good.example/ ${bad(10)}`)).toBe('https://good.example/');
+    expect(firstLink(`https://good.example/ ${bad(SHARE_MAX_TRIES)}`)).toBeNull();
   });
 
   test('so is one too long for its save to be published (C§3.3), which would never leave the phone', () => {
