@@ -5,7 +5,7 @@
 import { signedAsAsked, type EventTemplate, type NostrEvent, type Signer, type SignerProvider } from './signer';
 import { isXOnlyPubkey } from './pairing';
 import { nobleSecp } from './secp';
-import { itemHash } from './normalise';
+import { itemHash, withoutUserInfo } from './normalise';
 
 /** The kinds Kefli signs (C§2): saves, deletions, seals, the two lists, AUTH, NIP-98, Blossom and kind 39701. */
 export const SIGNED_KINDS = [30078, 5, 13, 10002, 10063, 22242, 27235, 24242, 39701] as const;
@@ -282,7 +282,8 @@ export class Nip46Signer implements SignerProvider {
  * The web links an import brings in (C§4.6, FD 82): kind 39701 bookmarks (d is the URL without its scheme, imported
  * as https://<d>) and the r tags of the user's kind 10003 and every kind 30003 set. Private entries in content, e and
  * a tags aren't read. Only the user's own events count; each save once, by its hash, in the order found, its link as
- * the platform's URL writes it.
+ * the platform's URL writes it, or as withoutUserInfo writes it without the user name and password it holds (ruling 8),
+ * which the save would otherwise carry to every relay as its address.
  *
  * A link is one normalise takes, as well as the platform's URL: the phone's URL (Expo's, with no Unicode step) takes
  * hosts normalise refuses, such as one with a joiner or a mixed-direction label, and one such bookmark made the
@@ -292,28 +293,42 @@ export class Nip46Signer implements SignerProvider {
 export function bookmarkSaves(events: NostrEvent[], pubkey: string): { url: string; hash: string }[] {
   const out: { url: string; hash: string }[] = [];
   const seen = new Set<string>();
-  const add = (u: string) => {
-    try {
-      const url = new URL(u);
-      if (url.protocol !== 'https:' && url.protocol !== 'http:') return;
-      const hash = itemHash(url.href);
-      if (seen.has(hash)) return;
-      seen.add(hash);
-      out.push({ url: url.href, hash });
-    } catch {
-      // not a link
-    }
-  };
   for (const e of events) {
     if (e.pubkey !== pubkey) continue;
-    if (e.kind === 39701) {
-      const d = e.tags.find((t) => t[0] === 'd')?.[1];
-      if (d) add(`https://${d.replace(/^https?:\/\//, '')}`);
-    } else if (e.kind === 10003 || e.kind === 30003) {
-      for (const t of e.tags) if (t[0] === 'r' && t[1]) add(t[1]);
+    for (const u of eventLinks(e)) {
+      const saved = bookmarkSave(u);
+      if (!saved || seen.has(saved.hash)) continue;
+      seen.add(saved.hash);
+      out.push(saved);
     }
   }
   return out;
+}
+
+// built from a string: the code gate's parser reads a regex literal's escaped slashes as a comment
+const WEB_SCHEME = new RegExp('^https?://');
+
+/** The links one event names, in its order: a 39701's d as https://<d>, the r tags of a 10003 or a 30003. */
+function eventLinks(e: NostrEvent): string[] {
+  if (e.kind === 39701) {
+    const d = e.tags.find((t) => t[0] === 'd')?.[1];
+    return d ? [`https://${d.replace(WEB_SCHEME, '')}`] : [];
+  }
+  if (e.kind !== 10003 && e.kind !== 30003) return [];
+  return e.tags.filter((t) => t[0] === 'r' && t[1]).map((t) => t[1]);
+}
+
+/** A bookmarked link as its save keeps it, with its hash; null for one that isn't a link. */
+function bookmarkSave(u: string): { url: string; hash: string } | null {
+  try {
+    const url = new URL(u);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+    // only an address holding them is read again: whatwg-url's parse would near treble an import's time
+    const link = url.username || url.password ? withoutUserInfo(url.href) : url.href;
+    return { url: link, hash: itemHash(link) };
+  } catch {
+    return null;
+  }
 }
 
 /** The links alone, in bookmarkSaves' order. */
