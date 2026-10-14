@@ -10,7 +10,7 @@ import type { SqlDb } from '../data/db';
 import { hasDevices, localRecord, noteRecord, pairAcked, recordCreatedAt, type DeviceProof, type PairPayload } from '../data/devices';
 import { getItem, itemJson, markPublished, textServers, type ItemRow } from '../data/items';
 import {
-  heldFor, holdUpload, holdUploads, markBacked, nextForRoom, noteFreed, releaseHold, roomLeft, type KnownFigures,
+  heldFor, holdOn, holdUpload, holdUploads, markBacked, nextForRoom, noteFreed, releaseHold, roomLeft, type KnownFigures,
 } from '../data/backup';
 import { keyPublished, libraryKey, libraryKeyPublished, madeHere, makeLibraryKey } from '../data/libraryKey';
 import {
@@ -172,7 +172,7 @@ async function sendUpload(p: SendPorts, row: OutboxRow, signer: Signer, t: Outbo
   // its save has gone, or took another phone's text, since this was queued: no save would name the blob (C§4.1)
   if (!namesText(p.db, row.signer, sha256)) return (withdrawText(p.db, row.signer, sha256), []);
   // a refusal for room or the day holds the library's texts until its retry: this one would be sent only to be refused
-  const held = heldFor(p.db, row.signer, p.now());
+  const held = holdOn(p.db, row.signer, sha256, p.now(), t.target);
   if (held) {
     holdUpload(p.db, row.signer, row.id, sha256, held);
     return [{ target: t.target, kind: 'retry', error: `held: ${held.reason}`, waitSec: held.until - p.now() }];
@@ -196,8 +196,10 @@ async function sendUpload(p: SendPorts, row: OutboxRow, signer: Signer, t: Outbo
 function uploaded(p: SendPorts, owner: string, target: string, sha256: string, size: number): TargetResult[] {
   const waited = p.db.get<{ last_error: string | null }>('SELECT last_error FROM blobs WHERE sha256 = ? AND owner = ?', sha256, owner)?.last_error;
   p.db.run('UPDATE blobs SET operator_at = ?, last_error = NULL WHERE sha256 = ? AND owner = ?', p.now(), sha256, owner);
-  // the operator has taken a text, so the library had the room and the day for it: no refusal holds the rest back
-  releaseHold(p.db, owner);
+  // the operator has taken a text, so the library had the room and the day for it: no refusal holds the rest back. One
+  // taken while a refusal for the day holds them was a text the operator holds already (holdOn), which says nothing of
+  // the day, so the rest wait for its retry
+  if (heldFor(p.db, owner, p.now())?.reason !== 'daily') releaseHold(p.db, owner);
   textTaken(p.db, p.now(), owner, sha256, target);
   if (!namesText(p.db, owner, sha256)) queueBlobDelete(p.db, p.now(), owner, sha256, [target], { sha256, size, up: p.now() });
   if (waited === 'quota') tryRoom(p, owner);
@@ -233,7 +235,7 @@ function refused(p: SendPorts, row: OutboxRow, target: string, sha256: string, r
   // the save goes now, before anything else this refusal brings is kept (C§4.2)
   releaseDependents(p.db, row.id, 'publish_item');
   p.db.run('UPDATE blobs SET last_error = ? WHERE sha256 = ? AND owner = ?', why, sha256, row.signer);
-  if (why === 'quota' || why === 'daily') roomRefused(p, row, why, r.figures);
+  if (why === 'quota' || why === 'daily') roomRefused(p, row, target, why, r.figures);
   const error = `HTTP ${r.status} ${r.reason}`;
   if (why === 'too_large') return [{ target, kind: 'rejected', error }];
   return [{ target, kind: 'retry', error, ...(r.status === 507 ? {} : { waitSec: DAY }) }];
@@ -242,10 +244,11 @@ function refused(p: SendPorts, row: OutboxRow, target: string, sha256: string, r
 /**
  * A refusal for room or the day (C§5): its figures kept, and the library's other texts held until its retry a day
  * from now, or for room until a confirmed deletion wakes one (holdUploads), rather than each sent whole to be refused.
+ * For the day, a text the operator holds already for another library on the phone still goes (holdOn).
  */
-function roomRefused(p: SendPorts, row: OutboxRow, why: 'quota' | 'daily', figures: AccountFigures | undefined): void {
+function roomRefused(p: SendPorts, row: OutboxRow, operator: string, why: 'quota' | 'daily', figures: AccountFigures | undefined): void {
   if (figures) quietly(() => p.onFigures?.(row.signer, figures));
-  holdUploads(p.db, row.signer, { reason: why, until: p.now() + DAY }, row.id);
+  holdUploads(p.db, row.signer, { reason: why, until: p.now() + DAY }, row.id, operator);
 }
 
 /**

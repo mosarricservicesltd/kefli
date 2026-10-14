@@ -1025,6 +1025,49 @@ describe('a refusal for room or the day holds the library’s other texts (C§5,
     ]);
   });
 
+  test('for the day: a text the operator holds for another library here still goes, and the library’s others still wait', async () => {
+    // the operator: one more text for the day, and a blob it stores already adds nothing to the day (C§5)
+    const stored = new Set<string>();
+    let dayLeft = 1;
+    const sent: string[] = [];
+    const w = world();
+    const fetch = w.ports.fetch;
+    w.ports.fetch = (async (url: string, init: RequestInit) => {
+      const sha = (init.headers as Record<string, string> | undefined)?.['X-SHA-256'];
+      if (url === 'http://blossom/upload' && sha) {
+        sent.push(sha);
+        if (!stored.has(sha) && dayLeft-- <= 0) return new Response(JSON.stringify({ v: 1, error: 'daily', ...FIGURES }), { status: 413, headers: { 'X-Reason': 'daily' } });
+        stored.add(sha);
+      }
+      return fetch(url, init);
+    }) as typeof globalThis.fetch;
+    const source = new LocalSigner(nodeCrypto.randomBytes(32));
+    const signer = w.ports.signer;
+    w.ports.signer = async (pk) => (pk === source.pubkey() ? source : signer(pk));
+    library(w, source.pubkey());
+    library(w);
+    // a text the source library had the operator take, and this library's copy of it, as a move makes one (C§4.8)
+    const md = normaliseMarkdown('# Moved\n\nWords.');
+    const enc = await encryptText(md, nodeCrypto);
+    w.blobs.set(enc.text.sha256, enc.blob);
+    const saveOf = (owner: string) => release(w.db, queueSave(w.db, w.now(), {
+      owner, hash: 'ab'.repeat(32), url: 'https://example.com/moved', canonical: null, title: 'Moved', site: null, byline: null, savedAt: w.now(),
+      words: 2, lang: 'en', hero: null, text: enc.text, textHash: textHash(md, nodeCrypto), textState: 'cached', origin: 'share',
+    }, { sha256: enc.text.sha256, size: enc.blob.length, path: '/staged/moved' }, { api: D.operator.api, blossom: D.operator.blossom, mirror: D.mirrors[0] }));
+    saveOf(source.pubkey());
+    await settle(w);
+    // this library's own text is refused for the day, holding the rest; then the copy comes, and one more text
+    await texted(w, 1);
+    await settle(w);
+    saveOf(w.signer.pubkey());
+    await texted(w, 2);
+    await settle(w);
+    // the copy went, at no cost to the day, and the other text waits unsent for the refusal's retry
+    expect(w.db.get('SELECT owner, operator_at IS NOT NULL AS taken FROM blobs WHERE sha256 = ?', enc.text.sha256)).toEqual({ owner: w.signer.pubkey(), taken: 1 });
+    expect(sent).toEqual([enc.text.sha256, expect.any(String), enc.text.sha256]);
+    expect(heldFor(w.db, w.signer.pubkey(), w.now())?.reason).toBe('daily');
+  });
+
   test('a hold from a clock since put back holds nothing, and a text taken lifts it for good', async () => {
     const w = world({ 'PUT http://blossom/upload': (n) => (n === 1 ? refuse('daily') : undefined) });
     library(w);

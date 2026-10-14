@@ -96,26 +96,54 @@ export function releaseHold(db: SqlDb, owner: string): void {
   db.run('DELETE FROM settings WHERE key = ?', heldKey(owner));
 }
 
-/** The library's uploads waiting for the operator but one (holdUploads), as rows o of the outbox with their blobs b. */
-const WAITING = `FROM outbox o JOIN blobs b ON b.sha256 = o.subject AND b.owner = o.signer
-  WHERE o.op = 'upload_blob' AND o.signer = ? AND o.state = 'queued' AND o.id != ? AND b.operator_at IS NULL`;
+/**
+ * The texts the operator (the second parameter, its address) holds for libraries on this phone other than the first
+ * parameter's, as for a move's copies of the texts its source had taken there (C§4.8): a save of such a library names
+ * the text on the operator. Read once for a statement, not once for each text it holds: correlated, a refusal for the
+ * day over an import's 2,000 texts read every save once for each of them, two seconds on a desktop.
+ */
+const STORED_ELSEWHERE = `SELECT s.text_sha256 FROM items s, json_each(COALESCE(s.text_servers, '[]')) j
+  WHERE s.owner != ? AND s.text_sha256 IS NOT NULL AND rtrim(j.value, '/') = rtrim(?, '/')`;
 
 /**
- * Kefli's server refused one of the library's texts for room or the day (C§5): every other text waiting to upload to it
- * would be sent whole only to be refused the same way, every day, tens of megabytes for an import past the day. So the
- * refusal holds them all until its retry time (held.until), or for room until a confirmed deletion wakes the oldest
- * that fits (send.ts, tryRoom): each one's save goes now without its text, as a refusal sends it (C§4.2), and its blob
- * takes the refusal's reason, so Backup space counts it; a text refused for another reason keeps that one. A text that
- * comes to upload while the hold stands waits with it, unsent (send.ts). except: the upload refused, which waits a day
- * of its own. A statement for each of the three, however many texts wait.
+ * The refusal holding this text back (holdUploads), or null. One for the day's uploads doesn't hold a text the operator
+ * already holds for another library on the phone: an upload of a blob the server stores adds nothing to the day (C§5),
+ * so it is taken. Held, a move's copies of the texts its source had there went as refused, the move carried on, and
+ * the source's retirement deleted them from the operator, to be uploaded again under the new library against its day.
  */
-export function holdUploads(db: SqlDb, owner: string, held: Held, except: number): void {
+export function holdOn(db: SqlDb, owner: string, sha256: string, now: number, operator: string): Held | null {
+  const h = heldFor(db, owner, now);
+  if (h?.reason !== 'daily') return h;
+  return db.get(`SELECT 1 AS stored WHERE ? IN (${STORED_ELSEWHERE})`, sha256, owner, operator) ? null : h;
+}
+
+/**
+ * The library's uploads waiting for the operator but one (holdUploads), as rows o of the outbox with their blobs b,
+ * less, for a refusal for the day, those of texts the operator holds already (holdOn). Its parameters: the owner, the
+ * row left out, the refusal's reason, the owner again and the operator's address.
+ */
+const WAITING = `FROM outbox o JOIN blobs b ON b.sha256 = o.subject AND b.owner = o.signer
+  WHERE o.op = 'upload_blob' AND o.signer = ? AND o.state = 'queued' AND o.id != ? AND b.operator_at IS NULL
+    AND NOT (? = 'daily' AND b.sha256 IN (${STORED_ELSEWHERE}))`;
+
+/**
+ * Kefli's server (operator) refused one of the library's texts for room or the day (C§5): every other text waiting to
+ * upload to it would be sent whole only to be refused the same way, every day, tens of megabytes for an import past the
+ * day. So the refusal holds them all until its retry time (held.until), or for room until a confirmed deletion wakes
+ * the oldest that fits (send.ts, tryRoom): each one's save goes now without its text, as a refusal sends it (C§4.2),
+ * and its blob takes the refusal's reason, so Backup space counts it; a text refused for another reason keeps that
+ * one. A text that comes to upload while the hold stands waits with it, unsent (send.ts), unless the operator holds it
+ * already (holdOn). except: the upload refused, which waits a day of its own. A statement for each of the three,
+ * however many texts wait.
+ */
+export function holdUploads(db: SqlDb, owner: string, held: Held, except: number, operator: string): void {
+  const waiting = [owner, except, held.reason, owner, operator];
   db.tx(() => {
     setSetting(db, heldKey(owner), JSON.stringify(held));
-    db.run(`UPDATE outbox_targets SET next_at = MAX(next_at, ?) WHERE state = 'pending' AND outbox_id IN (SELECT o.id ${WAITING})`, held.until, owner, except);
-    releaseDependentsIn(db, `SELECT o.id ${WAITING}`, [owner, except], 'publish_item');
+    db.run(`UPDATE outbox_targets SET next_at = MAX(next_at, ?) WHERE state = 'pending' AND outbox_id IN (SELECT o.id ${WAITING})`, held.until, ...waiting);
+    releaseDependentsIn(db, `SELECT o.id ${WAITING}`, waiting, 'publish_item');
     db.run(`UPDATE blobs SET last_error = ? WHERE (last_error IS NULL OR last_error IN ('quota', 'daily')) AND sha256 IN (SELECT o.subject ${WAITING})`,
-      held.reason, owner, except);
+      held.reason, ...waiting);
   });
 }
 
