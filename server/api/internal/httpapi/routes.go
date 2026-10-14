@@ -31,8 +31,9 @@ func (a *API) nip05(w http.ResponseWriter, r *http.Request) {
 	reply(w, http.StatusOK, map[string]any{"names": names, "relays": relays})
 }
 
-// register adds the caller to the allowlist with the default quota; idempotent (contract 6). Five a day per address,
-// and cfg.MaxRegistrations an hour from everyone.
+// register adds the caller to the allowlist with the default quota; idempotent (contract 6). It answers the library's
+// own quota, the default or one set for it, and what its blobs take of it. Five a day per address, and
+// cfg.MaxRegistrations an hour from everyone.
 func (a *API) register(w http.ResponseWriter, r *http.Request) {
 	req, ok := a.authed(w, r)
 	if !ok {
@@ -45,9 +46,38 @@ func (a *API) register(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, err)
 		return
 	}
-	used, _ := a.st.Used(r.Context(), req.pubkey)
+	f, ok := a.figures(w, r, req.pubkey)
+	if !ok {
+		return
+	}
 	a.log.Info("registered", "user", a.short(req.pubkey))
-	reply(w, http.StatusOK, map[string]any{"v": 1, "quota": store.DefaultQuota, "used": used})
+	reply(w, http.StatusOK, map[string]any{"v": 1, "quota": f.Quota, "used": f.Used})
+}
+
+// account answers a registered library's figures under fair use (contract 5, 6), in bytes: its quota and what its
+// blobs take of it, the most its uploads may add to the disk in any 24 hours and what they added in the last 24. The
+// phone asks when Advanced opens. Any other key gets 403 not_registered.
+func (a *API) account(w http.ResponseWriter, r *http.Request) {
+	req, ok := a.authed(w, r)
+	if !ok || !a.registered(w, r, req.pubkey) {
+		return
+	}
+	if f, ok := a.figures(w, r, req.pubkey); ok {
+		reply(w, http.StatusOK, map[string]any{"v": 1, "quota": f.Quota, "used": f.Used, "daily": f.Daily, "today": f.Today})
+	}
+}
+
+// figures reads the caller's library's figures, answering the request itself when it can't: 500 when the database
+// fails, and 403 not_registered when the account has gone.
+func (a *API) figures(w http.ResponseWriter, r *http.Request, pubkey string) (store.Figures, bool) {
+	f, ok, err := a.st.Figures(r.Context(), pubkey)
+	switch {
+	case err != nil:
+		a.serverError(w, err)
+	case !ok:
+		fail(w, http.StatusForbidden, "not_registered")
+	}
+	return f, err == nil && ok
 }
 
 // deleteAccount is idempotent: a caller with no account still gets 200, so a retry after a lost answer succeeds.
