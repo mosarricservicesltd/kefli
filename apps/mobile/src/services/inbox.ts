@@ -32,8 +32,10 @@ export const INBOX_MAX_BYTES = 2 * 1_048_576 + 16;
 export const WRAP_LOOKBACK = 172_800 + 300;
 /** How long a wrap the signer can't open, or that can't be taken, keeps the inbox's cursor waiting for it (F3). */
 export const WRAP_PATIENCE = 7 * 86_400;
-// a wrap's created_at is up to two days early (NIP-59), so a week past it is at least five days of trying
-const stale = (p: InboxPorts, w: NostrEvent) => p.now() - w.created_at > WRAP_PATIENCE;
+// a wrap's created_at is up to two days early (NIP-59), so a week past it is at least five days of trying; NIP-59
+// never dates one later, so one dated more than a week ahead is no wrap of the browser's, and can't hold the cursor
+// for as long as its date says
+const stale = (p: InboxPorts, w: NostrEvent) => Math.abs(p.now() - w.created_at) > WRAP_PATIENCE;
 
 export type InboxPorts = Pick<PendingPorts, 'db' | 'now' | 'crypto' | 'stage' | 'unstage' | 'writeText' | 'targets'> & {
   signer: Signer;
@@ -168,17 +170,27 @@ export async function drainInbox(p: InboxPorts, owner: string): Promise<InboxRes
     return out; // unreachable: the cursor stays
   }
   let held = false;
+  // once the signer hasn't answered, the rest of this drain's wraps wait for the next one unasked, since they would
+  // fail the same way, two minutes each for a bunker, as sync's do (F14)
+  let waiting = false;
   for (const w of wraps.sort((a, b) => a.created_at - b.created_at)) {
     if (w.kind !== KIND.giftWrap || seenOutcome(p.db, w.id)) continue;
+    if (waiting) {
+      held = true;
+      continue;
+    }
     let opened: Awaited<ReturnType<typeof unwrap>>;
     try {
       opened = await unwrap(p.signer, w);
     } catch (e) {
       // the signer couldn't answer (out of sight, timed out, declined): the wrap waits for the next drain, unrecorded,
       // and the cursor stays so it is fetched again (F3); one still failing after a week is filed as not ours
-      if (!(e instanceof UnwrapError) && !stale(p, w)) {
-        held = true;
-        continue;
+      if (!(e instanceof UnwrapError)) {
+        waiting = true;
+        if (!stale(p, w)) {
+          held = true;
+          continue;
+        }
       }
       // not a wrap this key opens: someone else's message sharing the p tag
       recordSeen(p.db, p.now(), w.id, { owner, outcome: 'ignored_foreign' });

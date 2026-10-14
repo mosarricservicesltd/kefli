@@ -1,5 +1,7 @@
 import { LocalSigner, encryptText, giftWrap, itemHash, wrapSaveRequest, type NostrEvent, type SaveRequest } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
+import { finalizeEvent, generateSecretKey } from 'nostr-tools/pure';
+import { v2 as nip44 } from 'nostr-tools/nip44';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
@@ -60,6 +62,16 @@ function world() {
     wraps.push(wrap);
     return wrap.id;
   };
+  /** A wrap anyone could send, whose content decrypts to sealJson exactly as given. */
+  const sendRawSeal = (sealJson: string, createdAt = clock) => {
+    const k = generateSecretKey();
+    const wrap = finalizeEvent({ kind: 1059, created_at: createdAt, tags: [['p', owner]], content: nip44.encrypt(sealJson, nip44.utils.getConversationKey(k, owner)) }, k);
+    wraps.push(wrap as NostrEvent);
+    return wrap.id;
+  };
+  /** A wrap whose seal, signed by the device, holds rumorJson exactly as given. */
+  const sendRawRumor = async (rumorJson: string) =>
+    sendRawSeal(JSON.stringify(await device.signEvent({ kind: 13, created_at: clock, tags: [], content: await device.nip44Encrypt(owner, rumorJson) })));
   /** The extension's inbox blob: the HTML encrypted and served by the operator. */
   const withHtml = async (html: string, served = true) => {
     const enc = await encryptText(html, nodeCrypto);
@@ -69,7 +81,22 @@ function world() {
   const ops = () => db.all<{ op: string; subject: string }>('SELECT op, subject FROM outbox ORDER BY id').map((r) => r.op);
   const item = (hash: string) => db.get<{ text_state: string; title: string; origin: string; origin_device: string; state: string; saved_at: number }>(
     'SELECT text_state, title, origin, origin_device, state, saved_at FROM items WHERE owner = ? AND hash = ?', owner, hash);
-  return { db, owner, user, userSk, device, ports, wraps, texts, request, send, withHtml, ops, item, parses: () => parses, tick: (s: number) => (clock += s) };
+  const cursor = () => db.get<{ since: number }>("SELECT since FROM sync_cursors WHERE stream = 'inbox'")?.since ?? null;
+  return {
+    db, owner, user, userSk, device, ports, wraps, texts, request, send, sendRawSeal, sendRawRumor, withHtml, ops, item, cursor,
+    parses: () => parses, tick: (s: number) => (clock += s), now: () => clock,
+  };
+}
+
+/** The user's key, counting what the drain asks of it; failing as a signer that doesn't answer while refusing. */
+function countingSigner(user: LocalSigner, refuse = () => false) {
+  const asked = { decrypts: 0 };
+  const signer = new Proxy(user, {
+    get: (t, k) => (k === 'nip44Decrypt'
+      ? (peer: string, c: string) => (asked.decrypts++, refuse() ? Promise.reject(Object.assign(new Error('timeout'), { code: 'timeout' })) : user.nip44Decrypt(peer, c))
+      : Reflect.get(t, k)),
+  });
+  return { signer, asked };
 }
 
 describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
@@ -147,6 +174,45 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     w.tick(8 * 86_400);
     expect(await drainInbox(w.ports, w.owner)).toEqual({ ignored_foreign: 1 });
     expect(w.db.get("SELECT 1 AS n FROM sync_cursors WHERE stream = 'inbox'")).toEqual({ n: 1 });
+  });
+
+  test('a wrap anyone can send, holding no seal or rumor of NIP-01’s shape, is filed at once and the cursor moves on', async () => {
+    const w = world();
+    const { signer, asked } = countingSigner(w.user);
+    w.ports.signer = signer;
+    for (const s of ['null', '5', '[]', JSON.stringify({ kind: 13, id: '0'.repeat(64), sig: '0'.repeat(128), pubkey: w.device.pubkey(), created_at: 1, tags: [[1]], content: 'c' })]) w.sendRawSeal(s);
+    const rumor = { pubkey: w.device.pubkey(), created_at: 1, kind: 30078, tags: [['d', 'kefli/save-request/x']], content: '{}', id: '0'.repeat(64) };
+    for (const r of ['null', JSON.stringify({ ...rumor, tags: 'd' }), JSON.stringify({ ...rumor, content: 5 }), JSON.stringify({ ...rumor, created_at: undefined })]) await w.sendRawRumor(r);
+    await w.send(w.request());
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ ignored_foreign: 8, created: 1 });
+    expect(w.cursor()).toBe(w.now());
+    // the next drain opens none of them again
+    const before = asked.decrypts;
+    w.tick(60);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+    expect(asked.decrypts).toBe(before);
+  });
+
+  test('once the signer doesn’t answer, the rest of the drain waits unasked: one timeout, not one per wrap (F3)', async () => {
+    const w = world();
+    let refusing = true;
+    const { signer, asked } = countingSigner(w.user, () => refusing);
+    w.ports.signer = signer;
+    for (let i = 0; i < 40; i++) await w.send(w.request({ url: `https://example.com/${i}` }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+    // a bunker takes two minutes to time out: asked once, not forty times
+    expect(asked.decrypts).toBe(1);
+    expect(w.cursor()).toBeNull();
+    refusing = false;
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 40 });
+  });
+
+  test('a wrap dated more than a week ahead, which the signer can’t open, doesn’t hold the cursor for as long as its date says', async () => {
+    const w = world();
+    w.ports.signer = countingSigner(w.user, () => true).signer;
+    w.sendRawSeal('null', w.now() + 30 * 86_400);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ ignored_foreign: 1 });
+    expect(w.cursor()).toBe(w.now());
   });
 
   test("other apps' messages, unknown tokens, other keys and other versions are left alone", async () => {
