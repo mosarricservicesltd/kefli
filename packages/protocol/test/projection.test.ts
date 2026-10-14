@@ -1,4 +1,5 @@
-import { countWords, normaliseMarkdown, project } from '../src';
+import type { PhrasingContent, Root } from 'mdast';
+import { countWords, normaliseMarkdown, project, projectTree } from '../src';
 
 const spoken = (md: string) => project(normaliseMarkdown(md)).text;
 
@@ -109,5 +110,88 @@ describe('blocks of any length (a long <pre>, a PDF paragraph that never ends a 
     const md = normaliseMarkdown('```\n' + 'x'.repeat(400_000) + '\n```');
     expect(countWords(md)).toBe(1);
     expect(project(md).offsets.length).toBe(400_000);
+  });
+
+  // The cases the hardening named, each past the stack or quadratic before the commit above
+  test('a paragraph that is one word of a million characters', () => {
+    const md = normaliseMarkdown('x'.repeat(1_000_000));
+    const p = project(md);
+    expect(p.wordStarts).toEqual([0]);
+    expect(p.offsets[999_999]).toBe(999_999);
+  });
+
+  test('20,000 links in one paragraph, every one read', () => {
+    const md = normaliseMarkdown(Array.from({ length: 20_000 }, (_, i) => `[l${i}](https://e.example/${i})`).join(' '));
+    const p = project(md);
+    expect(p.wordStarts.length).toBe(20_000);
+    expect(p.text.slice(-13)).toBe('l19998 l19999');
+    const last = p.offsets[p.text.length - 6];
+    expect(md.slice(last - 1, last + 7)).toBe('[l19999]');
+  });
+
+  test('a code block of 16,000 lines is read in linear time', () => {
+    const lines = Array.from({ length: 16_000 }, (_, i) => `line ${i} = value;`);
+    const md = normaliseMarkdown('```\n' + lines.join('\n') + '\n```');
+    const started = Date.now();
+    const p = project(md);
+    expect(Date.now() - started).toBeLessThan(15_000);
+    expect(p.text).toBe(lines.join(' '));
+    expect(p.offsets.length).toBe(p.text.length);
+  });
+});
+
+const at = (from: number, to: number) => ({ start: { line: 1, column: from + 1, offset: from }, end: { line: 1, column: to + 1, offset: to } });
+
+/** Text as written in the Markdown and as the parse decodes it. */
+type Piece = { md: string; value: string };
+
+/**
+ * A paragraph of before, then inner inside emphasis nested depth deep, then after, as a tree with the positions the
+ * parse gives: built by hand, since the parse of a run so deep takes minutes. inner.node(s) makes the innermost node,
+ * its Markdown starting at offset s.
+ */
+function nested(depth: number, inner: { md: string; node: (s: number) => PhrasingContent }, before?: Piece, after?: Piece): { md: string; tree: Root } {
+  const open = before?.md.length ?? 0;
+  const close = open + 2 * depth + inner.md.length;
+  const md = `${before?.md ?? ''}${'*'.repeat(depth)}${inner.md}${'*'.repeat(depth)}${after?.md ?? ''}\n`;
+  let node = inner.node(open + depth);
+  for (let d = depth - 1; d >= 0; d--) node = { type: 'emphasis', children: [node], position: at(open + d, close - d) };
+  const kids: PhrasingContent[] = [node];
+  if (before) kids.unshift({ type: 'text', value: before.value, position: at(0, open) });
+  if (after) kids.push({ type: 'text', value: after.value, position: at(close, close + after.md.length) });
+  return { md, tree: { type: 'root', children: [{ type: 'paragraph', children: kids, position: at(0, md.length - 1) }] } };
+}
+
+/** A link to url whose text is text, written [text](url) from offset s. */
+const link = (url: string, text: string) => (s: number): PhrasingContent => ({
+  type: 'link', url, children: [{ type: 'text', value: text, position: at(s + 1, s + 1 + text.length) }], position: at(s, s + text.length + url.length + 4),
+});
+
+describe('nesting of any depth (the walk keeps a stack of its own)', () => {
+  // The walk recursed once a level: quotes 5,000 deep overflowed desktop V8's stack, which is deeper than the phone's
+  // Hermes; and a run of nested emphasis was decided afresh at every level, in time quadratic in its depth.
+  test('quotes 10,000 deep are read, the words mapped to their place', () => {
+    const md = normaliseMarkdown('> '.repeat(10_000) + 'deep text');
+    const p = project(md);
+    expect(p.text).toBe('deep text');
+    expect(p.wordStarts).toEqual([0, 5]);
+    expect(md.slice(p.offsets[0], p.offsets[0] + 9)).toBe('deep text');
+  });
+
+  test('emphasis 100,000 deep is read', () => {
+    const { md, tree } = nested(100_000, { md: 'a', node: (s) => ({ type: 'text', value: 'a', position: at(s, s + 1) }) });
+    const p = projectTree(md, tree);
+    expect(p.text).toBe('a');
+    expect(p.offsets).toEqual([100_000]);
+  });
+
+  test('a citation marker 100,000 deep in emphasis is silent, as is a maintenance tag with its brackets', () => {
+    const note = nested(100_000, { md: '[1](#cite_note-1)', node: link('#cite_note-1', '1') }, { md: 'Before ', value: 'Before ' }, { md: ' after.', value: ' after.' });
+    expect(projectTree(note.md, note.tree).text).toBe('Before after.');
+    const url = 'https://en.wikipedia.org/wiki/Wikipedia:Citation_needed';
+    const tag = nested(100_000, { md: `[citation needed](${url})`, node: link(url, 'citation needed') }, { md: 'A claim.\\[', value: 'A claim.[' }, { md: '\\] Then more.', value: '] Then more.' });
+    const p = projectTree(tag.md, tag.tree);
+    expect(p.text).toBe('A claim. Then more.');
+    expect(tag.md.slice(p.offsets[9], p.offsets[9] + 4)).toBe('Then');
   });
 });
