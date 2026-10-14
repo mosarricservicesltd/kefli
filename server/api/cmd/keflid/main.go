@@ -129,8 +129,12 @@ func run(ctx context.Context, log *slog.Logger) error {
 	return serve(ctx, servers, log)
 }
 
+// maxHeader is the most header a request may carry: a NIP-98 or Blossom authorisation is under a kilobyte and a
+// request's headers under 4 KB, where Go's default megabyte a request let a few hundred at once take 120 MB.
+const maxHeader = 64 << 10
+
 func server(addr string, h http.Handler) *http.Server {
-	return &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 2 * time.Minute, WriteTimeout: 2 * time.Minute, IdleTimeout: 2 * time.Minute}
+	return &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 2 * time.Minute, WriteTimeout: 2 * time.Minute, IdleTimeout: 2 * time.Minute, MaxHeaderBytes: maxHeader}
 }
 
 func serve(ctx context.Context, servers []*http.Server, log *slog.Logger) error {

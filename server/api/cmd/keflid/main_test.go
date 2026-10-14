@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -126,6 +127,35 @@ func TestRunServesAndStops(t *testing.T) {
 	t.Setenv("KEFLID_DEFAULTS", filepath.Join(dir, "missing.json"))
 	if err := run(context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil))); err == nil {
 		t.Fatal("ran without defaults.json")
+	}
+}
+
+// Headers were taken up to Go's default of a megabyte: 300 requests at once with a 1 MB authorisation took keflid from
+// 22 MB to 145 MB (probe odd), on a 2 GB box. A NIP-98 or Blossom authorisation is under a kilobyte, and a request's
+// headers under 4 KB; more than maxHeader (and the 4 KB Go allows past it) is answered 431.
+func TestServerHeadersAreBounded(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {})
+	s := server(l.Addr().String(), mux)
+	go s.Serve(l)
+	defer s.Close()
+	for _, c := range []struct {
+		size, want int
+	}{{8 << 10, 200}, {2 * maxHeader, http.StatusRequestHeaderFieldsTooLarge}} {
+		req, _ := http.NewRequest("GET", "http://"+l.Addr().String()+"/", nil)
+		req.Header.Set("Authorization", "Nostr "+strings.Repeat("A", c.size))
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if res.StatusCode != c.want {
+			t.Fatalf("a %d-byte header: %d, want %d", c.size, res.StatusCode, c.want)
+		}
 	}
 }
 
