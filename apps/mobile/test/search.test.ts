@@ -2,7 +2,9 @@ import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { INDEX_CHARS, indexText } from '../src/data/sync';
 import { deleteItem } from '../src/data/library';
-import { QUERY_WORDS, QUERY_WORD_CHARS, matchExpression, queryWords, search } from '../src/data/search';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { QUERY_MAX_CHARS, QUERY_WORDS, QUERY_WORD_CHARS, matchExpression, queryWords, search } from '../src/data/search';
 import { memoryDb } from './sqlite';
 
 const PK = 'ab'.repeat(32);
@@ -58,6 +60,17 @@ describe('search (mobile spec 4.9, 5.6)', () => {
     expect(search(w.db, PK, `waiting ${'x'.repeat(200_000)}`)).toEqual([]);
     expect(queryWords(pasted).length).toBeLessThanOrEqual(QUERY_WORDS);
     expect(queryWords('x'.repeat(5_000))[0]).toHaveLength(QUERY_WORD_CHARS);
+  });
+
+  test("Search's field holds what a query is read for and no more: a page pasted in keeps its first 4 KB", () => {
+    // sixteen words of 64 characters, with room for punctuation between them
+    expect(QUERY_MAX_CHARS).toBe(QUERY_WORDS * (QUERY_WORD_CHARS + 1) * 4);
+    const pasted = `${'word, '.repeat(QUERY_MAX_CHARS / 6)}latecomer`;
+    expect(pasted.length).toBeGreaterThan(QUERY_MAX_CHARS);
+    expect(queryWords(pasted.slice(0, QUERY_MAX_CHARS))).toEqual(queryWords(pasted));
+    // the field itself: Android cuts what is typed or pasted at maxLength, before it reaches the query
+    const src = readFileSync(join(__dirname, '..', 'src', 'screens', 'Search.tsx'), 'utf8');
+    expect(src).toMatch(/<TextInput[^>]*\smaxLength=\{QUERY_MAX_CHARS\}/);
   });
 
   test("a book-length text is indexed up to INDEX_CHARS, its title and opening found, in a bounded time", () => {

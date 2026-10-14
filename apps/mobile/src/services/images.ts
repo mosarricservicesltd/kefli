@@ -1,15 +1,15 @@
 // Fetching article images (mobile spec 4.5 phase 6, 5.6): one at a time, http(s) only, at most 5 MB and 20 s with no
-// cookies (net/http.ts), kept only if the bytes are an image the Reader can draw. The store stays within 200 MB by
-// evicting archived articles' images first, and an image that won't fit beside the open article's own is left out.
+// cookies, through redirects followed by hand, each to a public address (net/http.ts), kept only if the bytes are an
+// image the Reader can draw. The store stays within 200 MB by evicting archived articles' images first, and an image
+// that won't fit beside the open article's own is left out.
 // A page can name thousands, or images from servers that never answer: an article's first 500 are fetched, a run
 // stops at three time-outs in a row or once it has fetched the store's budget, and an image already on its way isn't
 // asked for twice. Ports, like sync, so this runs in tests.
-import { isPublicWebUrl } from '@kefli/protocol';
 import { articleBlocks } from '../reader/blocks';
 import { LIMITS } from '../reader/limits';
 import { drawable, imageKind, imageSize } from '../reader/imageSize';
 import type { SqlDb } from '../data/db';
-import { open, TimedOut, TooLarge } from '../net/http';
+import { Blocked, open, publicWeb, TimedOut, TooLarge, WEB_HOPS } from '../net/http';
 import {
   MAX_IMAGE_BYTES, MAX_TOTAL_BYTES, evictions, forget, getImage, heldBytes, imagesOf, keptArticles, needsFetch, recordFailed, recordImage, wanted,
   type ImageRow,
@@ -80,11 +80,15 @@ function room(p: ImagePorts, owner: string, incoming: number, hash: string): Ima
   return heldBytes(p.db) + incoming - freed > budget ? null : out;
 }
 
-/** The image's bytes, or how it failed: a redirect onto this phone's network is not kept (F26). */
+/**
+ * The image's bytes, or how it failed: a redirect onto this phone's network is never followed, nor one ending there
+ * kept (F26), and either fails that image alone, so the images after it are still fetched. An http image is asked
+ * for over https (net/http asked); one whose site has none, which only cleartext would bring, fails alone too.
+ */
 async function download(p: ImagePorts, url: string): Promise<Uint8Array | Exclude<Counted, 'ok'>> {
   try {
-    const o = await open(p.fetch, url, { headers: { 'User-Agent': IMAGE_UA, Accept: IMAGE_ACCEPT } }, IMAGE_TIMEOUT_MS);
-    if (!o.res.ok || (o.res.url && !isPublicWebUrl(o.res.url))) {
+    const o = await open(p.fetch, url, { headers: { 'User-Agent': IMAGE_UA, Accept: IMAGE_ACCEPT } }, IMAGE_TIMEOUT_MS, WEB_HOPS);
+    if (!o.res.ok) {
       o.done();
       return 'failed';
     }
@@ -92,7 +96,7 @@ async function download(p: ImagePorts, url: string): Promise<Uint8Array | Exclud
   } catch (e) {
     // a host too slow or too big is that image's failure, tried again in a day, so it can't hold up every sync (F12)
     if (e instanceof TimedOut) return 'slow';
-    return e instanceof TooLarge ? 'failed' : 'offline';
+    return e instanceof TooLarge || e instanceof Blocked ? 'failed' : 'offline';
   }
 }
 
@@ -116,8 +120,9 @@ async function fetchOne(p: ImagePorts, owner: string, url: string, hash: string)
 }
 
 async function fetchCounted(p: ImagePorts, owner: string, url: string, hash: string): Promise<Counted> {
-  // a page's image may name any address: only public web ones are fetched, never this phone's network (F26)
-  if (!WEB.test(url) || !isPublicWebUrl(url) || inFlight.has(url)) return 'skipped';
+  // a page's image may name any address: only public web ones are fetched, never this phone's network (F26), nor
+  // its files (net/http fromFiles)
+  if (!WEB.test(url) || !publicWeb(url) || inFlight.has(url)) return 'skipped';
   inFlight.add(url);
   try {
     return await fetchOne(p, owner, url, hash);

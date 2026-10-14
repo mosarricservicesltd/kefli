@@ -18,10 +18,9 @@ import { deriveArticle } from '../reader/blocks';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { getNetworkStateAsync, NetworkStateType } from 'expo-network';
 import { removeImages, syncImages, type ImagePorts } from './images';
-import { runPendingParses } from './pending';
+import { nextRunIn, runPendingParses } from './pending';
 import { drainInbox } from './inbox';
 import { pickUpSpools } from '../share/pickup';
-import { xRetryDelay } from './xpost';
 import { KefliParser } from '../../modules/kefli-parser/src';
 import type { ParserResult } from './page';
 import { stageBlob, sweepStaged } from './staging';
@@ -322,7 +321,7 @@ async function imagesIfUnmetered(owner: string): Promise<void> {
   if (n?.type === NetworkStateType.WIFI || n?.type === NetworkStateType.ETHERNET) await syncImages(imagePorts(), owner);
 }
 
-/** Phase 7: pending parses, one at a time, then their sends (4.5). */
+/** Phase 7: pending parses, one at a time for a minute at most, then their sends (4.5). */
 async function parsePending(owner: string): Promise<void> {
   const r = await runPendingParses({
     db: store(),
@@ -342,11 +341,13 @@ async function parsePending(owner: string): Promise<void> {
     },
   }, owner);
   if (r.parsed + r.failed > 0) await runOutbox().catch(() => 0);
-  // X posts whose check X didn't answer are tried again from 30 s, doubling to an hour (G3).
+  // X posts whose check X didn't answer are tried again from 30 s, doubling to an hour (G3); parses a run had no
+  // time for go on in a sync started soon after (pending.ts nextRunIn)
   if (xTimer) clearTimeout(xTimer);
   xTimer = null;
   xFailures = r.xWaiting > 0 ? xFailures + 1 : 0;
-  if (r.xWaiting > 0) xTimer = setTimeout(() => runSync().catch(() => undefined), xRetryDelay(xFailures) * 1000);
+  const next = nextRunIn(r, xFailures);
+  if (next !== null) xTimer = setTimeout(() => runSync().catch(() => undefined), next);
 }
 
 let xFailures = 0;

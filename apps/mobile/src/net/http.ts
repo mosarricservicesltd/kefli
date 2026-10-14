@@ -3,6 +3,20 @@
 // has no timeouts of its own, so a deadline cleared there leaves the body to a server that may send a byte a minute,
 // and a cap checked after arrayBuffer() comes too late for an endless one. expo/fetch also sends and keeps cookies
 // unless told otherwise, in the jar the WebViews share, so a site would know every later fetch for the same person.
+//
+// Redirects (5.4, 7.1): a page, an image or X's embed is asked for with redirect: 'manual', which expo/fetch (the
+// global fetch on Android in SDK 57) honours by turning OkHttp's own following off and handing back the 3xx itself,
+// Location and all (its NativeRequest.kt). Each hop is followed here, inside the one deadline, and its address is
+// checked before it is asked for. Left to OkHttp, a saved page or an image could send the phone to 192.168.1.1, or
+// to a loopback or link-local address; and since each hop followed here is a fresh request, which expo/fetch answers
+// from the phone's own files when its address begins http://filesystem.local (fromFiles), such a host is refused at
+// every hop as at the first (services/page.ts fetchable). A fetch that follows redirects anyway (React Native's own,
+// under EXPO_PUBLIC_USE_RN_FETCH) has its answer refused when it says it ended somewhere a hop couldn't go.
+//
+// Cleartext (7.1): release builds allow none, and OkHttp refuses plain http before it connects. That refusal fails
+// what was asked for (Blocked); read as the network, as it was, it left a save waiting for good. A read that follows
+// its hops asks a public http address over https first, and as itself only when that can't be had (asked).
+import { isPublicWebUrl, urlParts } from '@kefli/protocol';
 
 export class TimedOut extends Error {
   constructor() {
@@ -18,9 +32,62 @@ export class TooLarge extends Error {
   }
 }
 
+/**
+ * A fetch the phone won't make or finish, which asking again would only repeat, so what was asked for fails rather
+ * than waiting as offline: a redirect to an address the caller doesn't allow, or one naming nowhere a request can
+ * go (redirect); more redirects than the caller follows (redirects); or plain http, which the build refuses before
+ * connecting (cleartext), in OkHttp's words "CLEARTEXT communication to ... not permitted by network security policy".
+ */
+export class Blocked extends Error {
+  constructor(readonly why: 'redirect' | 'redirects' | 'cleartext') {
+    super(`blocked: ${why}`);
+    this.name = 'Blocked';
+  }
+}
+
+/** How a fetch follows redirects itself: at most max of them, each to an address allow passes. */
+export type Hops = { max: number; allow: (url: string) => boolean };
+
+/** The most redirects a page, an image or X's embed is followed through (5.4); one more fails it. */
+export const MAX_REDIRECTS = 10;
+
+// expo/fetch's stand-in host for file: URLs, and every host that only begins with it; the stand-in itself, with or
+// without the trailing dot a host may carry
+const FILES_HOST = /^filesystem\.local/i;
+const FILES_ITSELF = /^filesystem\.local\.?$/i;
+// what the URL parser drops before it reads a scheme: leading controls and spaces, then every tab and newline
+const LEADING = /^[\x00-\x20]+/;
+const BREAKS = /[\t\n\r]/g;
+const PLAIN = /^http:/i;
+
+/**
+ * Whether expo/fetch answers url from the phone's own files rather than the web. Its OkHttp client turns an address
+ * whose text begins http://filesystem.local back into a file: URL, ahead of the network and of the cleartext rule,
+ * and reads the rest as a path: the stand-in's own, or for a host that only begins with it, a path from the app's
+ * working directory, the root, so http://filesystem.localdata/data/app.kefli/… reads /data/data/app.kefli/…. No such
+ * host is a local name, so the public-address check passes it. RULED: the host is read as the protocol's URL parser
+ * reads it, as OkHttp does (capitals, fullwidth letters, %2E, a port of 80). Over https only the stand-in itself is
+ * refused: https://filesystem.local.example.com/ is a site like any other.
+ */
+export function fromFiles(url: string): boolean {
+  const host = urlParts(url)?.hostname ?? '';
+  if (!FILES_HOST.test(host)) return false;
+  return FILES_ITSELF.test(host) || PLAIN.test(url.replace(LEADING, '').replace(BREAKS, ''));
+}
+
+/** An address the phone asks the open web for: public (7.1), and not one expo/fetch reads from its files. */
+export function publicWeb(url: string): boolean {
+  return isPublicWebUrl(url) && !fromFiles(url);
+}
+
+/** The open web's hops: ten at most, each to a public http(s) address (7.1). */
+export const WEB_HOPS: Hops = { max: MAX_REDIRECTS, allow: publicWeb };
+
 /** A response whose body is still under the deadline it was asked for with. */
 export type Opened = {
   res: Response;
+  /** The address the answer came from: the last hop's, or where a fetch that follows redirects itself says it ended. */
+  url: string;
   /** The body, at most maxBytes: TooLarge past it (declared or streamed), TimedOut at the deadline. Ends the deadline. */
   read: (maxBytes: number) => Promise<Uint8Array>;
   /** Ends the deadline without reading the body, and lets the request go. */
@@ -29,46 +96,154 @@ export type Opened = {
 
 const noop = () => undefined;
 
-/** Fetches url with no cookies, the deadline running from now until the body is read or done() is called. */
-export async function open(f: typeof fetch, url: string, init: RequestInit, timeoutMs: number): Promise<Opened> {
-  const ctl = new AbortController();
-  let late = false;
+/** The Fetch Standard's redirect statuses: anything else, a 300 or a 304 among them, is an answer in itself. */
+const REDIRECTS = new Set([301, 302, 303, 307, 308]);
+
+/**
+ * Where a redirect sends its request next, resolved against the address that answered: null for an answer that is no
+ * redirect (an empty Location among them), '' for a Location that names nowhere a request can go.
+ */
+export function redirectTo(res: Pick<Response, 'status' | 'headers'>, at: string): string | null {
+  const to = REDIRECTS.has(res.status) ? res.headers.get('location') : null;
+  if (!to) return null;
+  try {
+    return new URL(to, at).href;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Whether an answer said to come from said, for a request to asked, has strayed from an address allow passes to one
+ * it refuses, as a fetch or a browser engine that follows redirects itself can. An address the caller chose to ask
+ * for though allow refuses it (a share of a page on the person's own network) is held to nothing more.
+ */
+export function strayed(hops: Hops, asked: string, said: string): boolean {
+  return said !== asked && hops.allow(asked) && !hops.allow(said);
+}
+
+// a build's refusal of plain http, as OkHttp words it, wrapped by expo/fetch or not
+const CLEARTEXT = /\bcleartext\b/i;
+
+/**
+ * What a failure to fetch was: the deadline's; the build refusing cleartext, which every later try would meet too,
+ * where it read as the network and left the save waiting for good; or itself.
+ */
+function failure(e: unknown, late: boolean): unknown {
+  if (late) return new TimedOut();
+  return CLEARTEXT.test(String((e as Error | undefined)?.message ?? '')) ? new Blocked('cleartext') : e;
+}
+
+// an http address's host and port as written, with no user info: a string, as the code gate misreads regex literals
+const PLAIN_HOST = new RegExp('^http://(?:[^@/?#]*@)?([^/?#]*)', 'i');
+
+/**
+ * RULED (services/save.ts, for shares): a public http:// address is fetched over https, as browsers now try first,
+ * since release builds allow no cleartext. One with a port, and a local one (the local stack's own pages), keep their
+ * http. A share's page, and a pending parse's, are asked over https alone, so one with no https waits as any page
+ * that can't be had does, and the save keeps the address it has until its page parses. The hops after it, and an
+ * article's images, fall back to the address itself (asked).
+ */
+export function overHttps(url: string): string {
+  const host = PLAIN_HOST.exec(url)?.[1];
+  return host && !host.includes(':') && isPublicWebUrl(url) ? `https://${url.slice('http://'.length)}` : url;
+}
+
+/** The request a read is on: its controller changes with each hop, and the deadline lets go of the one current. */
+type Line = { ctl: AbortController; late: boolean };
+
+/** An answer, and the address it came from. */
+type Answered = { res: Response; at: string };
+
+/**
+ * One request of a read that follows its hops: a public http address with no port is asked for over https first
+ * (overHttps), and as itself only when that can't be had (the deadline aside), which every build refuses once its
+ * name resolves (Blocked) and the network being gone fails as the network. So a redirect through plain http, a
+ * shortener's or an old link's, reaches the https its site now serves, and an image or a hop whose site has none
+ * fails, where the https try read as the network: an image's run stopped there at every sync, none after it fetched.
+ * An https address that redirected here, to its own http, isn't asked again: that would go round to the tenth hop.
+ */
+async function asked(f: typeof fetch, at: string, from: string, init: RequestInit, line: Line): Promise<Answered> {
+  const tls = overHttps(at);
+  if (tls !== at && tls !== from) {
+    try {
+      return { res: await f(tls, init), at: tls };
+    } catch (e) {
+      if (line.late) throw e;
+    }
+  }
+  return { res: await f(at, init), at };
+}
+
+/** The answer at the end of the redirects, each hop asked for afresh under the line; without hops, the fetch's own. */
+async function arrive(f: typeof fetch, url: string, init: RequestInit, line: Line, hops?: Hops): Promise<{ res: Response; url: string }> {
+  let at = url;
+  let from = '';
+  for (let n = 0; ; n++) {
+    const opts: RequestInit = { ...init, credentials: 'omit', signal: line.ctl.signal };
+    const got: Answered = hops ? await asked(f, at, from, { ...opts, redirect: 'manual' }, line) : { res: await f(at, opts), at };
+    const next = hops ? redirectTo(got.res, got.at) : null;
+    if (next === null) return { res: got.res, url: arrived(got.res, got.at, hops) };
+    // the redirect's own answer is let go, its body unread
+    line.ctl.abort();
+    if (n >= hops!.max) throw new Blocked('redirects');
+    if (!hops!.allow(next)) throw new Blocked('redirect');
+    if (line.late) throw new TimedOut();
+    line.ctl = new AbortController();
+    from = got.at;
+    at = next;
+  }
+}
+
+/** Where an answer came from: where the fetch says it ended, refused when that strays (strayed). */
+function arrived(res: Response, at: string, hops?: Hops): string {
+  const said = res.url || at;
+  if (hops && strayed(hops, at, said)) throw new Blocked('redirect');
+  return said;
+}
+
+/**
+ * Fetches url with no cookies, the deadline running from now until the body is read or done() is called. With hops,
+ * redirects are followed one at a time inside that deadline, each address checked before it is asked for (Blocked).
+ */
+export async function open(f: typeof fetch, url: string, init: RequestInit, timeoutMs: number, hops?: Hops): Promise<Opened> {
+  const line: Line = { ctl: new AbortController(), late: false };
   let timer: ReturnType<typeof setTimeout> | undefined;
   // the deadline is raced as well as signalled, so a fetch or a body that ignores the abort still lets go
   const deadline = new Promise<never>((_, fail) => {
     timer = setTimeout(() => {
-      late = true;
-      ctl.abort();
+      line.late = true;
+      line.ctl.abort();
       fail(new TimedOut());
     }, timeoutMs);
   });
   deadline.catch(noop);
   const end = () => clearTimeout(timer);
-  const why = (e: unknown) => (late ? new TimedOut() : e);
-  let res: Response;
+  let landed: { res: Response; url: string };
   try {
-    res = await Promise.race([f(url, { ...init, credentials: 'omit', signal: ctl.signal }), deadline]);
+    landed = await Promise.race([arrive(f, url, init, line, hops), deadline]);
   } catch (e) {
     end();
-    throw why(e);
+    throw failure(e, line.late);
   }
+  const { res } = landed;
   const read = async (maxBytes: number): Promise<Uint8Array> => {
     try {
       const declared = Number(res.headers.get('content-length') ?? 0);
       if (declared > maxBytes) throw new TooLarge(declared);
       return await Promise.race([body(res, maxBytes), deadline]);
     } catch (e) {
-      ctl.abort();
-      throw why(e);
+      line.ctl.abort();
+      throw failure(e, line.late);
     } finally {
       end();
     }
   };
   const done = () => {
     end();
-    ctl.abort();
+    line.ctl.abort();
   };
-  return { res, read, done };
+  return { res, url: landed.url, read, done };
 }
 
 /** The body chunk by chunk, refused as soon as it passes the cap; a fetch with no stream is read whole and then checked. */

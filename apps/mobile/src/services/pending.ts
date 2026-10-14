@@ -1,10 +1,12 @@
-// Sync's phase 7 (mobile spec 4.5): pending parses, one at a time, until the network goes. Each is fetched and
-// parsed as a share is (page.ts); its text is encrypted under a fresh key, staged, written and indexed, and its
-// sends queued (data/pending.ts). Ports, so this runs in tests.
+// Sync's phase 7 (mobile spec 4.5): pending parses, one at a time, until the network goes or the run's minute is
+// spent. Each is fetched and parsed as a share is (page.ts), a public http address over https first (net/http
+// overHttps); its text is encrypted under a fresh key, staged, written and indexed, and its sends queued
+// (data/pending.ts). Ports, so this runs in tests.
 import { encryptText, isPublicWebUrl, itemHash, textHash, type CryptoPort } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { applyFailed, applyParsed, pendingParses, timedOut, xFound, xNoArticle, type Pending } from '../data/pending';
-import { checkXPost, type XPorts } from './xpost';
+import { overHttps } from '../net/http';
+import { checkXPost, xRetryDelay, type XPorts } from './xpost';
 import type { SaveTargets } from '../data/saves';
 import { indexText } from '../data/sync';
 import { fetchPage, type PageOutcome, type PagePorts } from './page';
@@ -22,14 +24,41 @@ export type PendingPorts = {
   targets: () => Promise<SaveTargets>;
 };
 
-/** waiting: left for want of a network; xWaiting: X posts whose check X didn't answer (retried, G3). */
-export type PendingResult = { parsed: number; failed: number; waiting: number; xWaiting: number };
+/**
+ * waiting: left for want of a network; xWaiting: X posts whose check X didn't answer (retried, G3); untried, set only
+ * when the run's time ran out, or when it met SLOW_RUN pages in a row it couldn't have after settling one (stalled):
+ * of the parses it left, those never tried before, which the next run should start soon for (nextRunIn).
+ */
+export type PendingResult = { parsed: number; failed: number; waiting: number; xWaiting: number; untried?: number };
 
 /**
  * Pages in a row that can't be had before the rest of the queue waits too, the network being down or slow rather
  * than one site: each times out, or doesn't answer at all (a dead domain, a broken certificate, a redirect loop).
  */
 export const SLOW_RUN = 3;
+
+/**
+ * RULED: the seconds one run spends starting parses; the parse under way when they pass finishes. The queue runs
+ * inside the sync's single run (runner.ts), so an import of thousands held every later sync, the outbox and other
+ * phones' saves with it, for hours. A count of parses couldn't bound that: one takes from under a second to over a
+ * minute (the 20 s deadline, again on a 403, then the browser engine). A minute is some twenty typical pages, a sync
+ * now waits about two minutes at most for its parses, and the next run starts soon after while any were never tried.
+ */
+export const RUN_SECONDS = 60;
+
+/** How soon the runner starts the next run while parses a run had no time for were never tried (nextRunIn). */
+export const AGAIN_MS = 5_000;
+
+/**
+ * When the runner starts the next run itself, in milliseconds, or null to leave the queue to the next sync: soon while
+ * parses never tried remain, and while X isn't answering, from 30 s doubling to an hour (G3).
+ */
+export function nextRunIn(r: PendingResult, xFailures: number): number | null {
+  const soon = r.untried ? AGAIN_MS : Infinity;
+  const x = r.xWaiting > 0 ? xRetryDelay(xFailures) * 1000 : Infinity;
+  const ms = Math.min(soon, x);
+  return ms === Infinity ? null : ms;
+}
 
 /** One pending parse taken as far as it goes; unreached: its page, or its X post's check, couldn't be had at all. */
 type Step = 'parsed' | 'failed' | 'xWaiting' | 'unreached';
@@ -47,11 +76,14 @@ async function step(p: PendingPorts, owner: string, queued: Pending): Promise<St
     }
     item = xFound(p.db, item, x.url);
   }
-  // a page a browser asked for is never fetched from a private, loopback or link-local address (7.1)
+  // a page a browser asked for is never fetched from a private, loopback or link-local address (7.1); a share made
+  // offline, an import or another phone's save naming a public http address is fetched over https alone, as a share
+  // is, so a site with none waits as a page that can't be had (left to net/http open, its http would be asked next
+  // and fail the save)
   const fromBrowser = p.db.get<{ origin: string }>('SELECT origin FROM items WHERE id = ?', item.id)?.origin === 'browser';
   const outcome = fromBrowser && !isPublicWebUrl(item.url)
     ? { kind: 'failed' as const, reason: 'http' as const, finalUrl: item.url }
-    : await fetchPage(p.page, item.url);
+    : await fetchPage(p.page, overHttps(item.url));
   if (outcome.kind === 'offline') return 'unreached';
   return settle(p, owner, item, outcome);
 }
@@ -60,10 +92,10 @@ async function step(p: PendingPorts, owner: string, queued: Pending): Promise<St
 const runs = new Map<string, { run: Promise<PendingResult>; again: boolean }>();
 
 /**
- * The pending parses for owner, one run at a time. A sync's phase 7 and the inbox, which parses what it has just
- * saved, can ask at once, and two runs over one queue applied each parse twice: the second re-keyed a save the first
- * had re-keyed already, found it there, and deleted it as its own duplicate. A call while a run goes gets that run's
- * result, and one more pass follows it for anything queued meanwhile.
+ * The pending parses for owner, one run at a time, for RUN_SECONDS at most. A sync's phase 7 and the inbox, which
+ * parses what it has just saved, can ask at once, and two runs over one queue applied each parse twice: the second
+ * re-keyed a save the first had re-keyed already, found it there, and deleted it as its own duplicate. A call while a
+ * run goes gets that run's result, and one more pass follows it, inside the same time, for anything queued meanwhile.
  */
 export function runPendingParses(p: PendingPorts, owner: string): Promise<PendingResult> {
   const going = runs.get(owner);
@@ -74,11 +106,11 @@ export function runPendingParses(p: PendingPorts, owner: string): Promise<Pendin
   const entry = { run: Promise.resolve<PendingResult>({ parsed: 0, failed: 0, waiting: 0, xWaiting: 0 }), again: false };
   entry.run = (async () => {
     try {
-      let out = await pass(p, owner);
+      const until = p.now() + RUN_SECONDS;
+      let out = await pass(p, owner, until);
       while (entry.again) {
         entry.again = false;
-        const more = await pass(p, owner);
-        out = { parsed: out.parsed + more.parsed, failed: out.failed + more.failed, waiting: more.waiting, xWaiting: more.xWaiting };
+        out = joined(out, await pass(p, owner, until));
       }
       return out;
     } finally {
@@ -89,28 +121,54 @@ export function runPendingParses(p: PendingPorts, owner: string): Promise<Pendin
   return entry.run;
 }
 
-async function pass(p: PendingPorts, owner: string): Promise<PendingResult> {
+/** Two passes of one run as one: the parses of both, and what was left as the later saw it, unless it had no time to look. */
+function joined(a: PendingResult, b: PendingResult): PendingResult {
+  const late = b.untried !== undefined && b.parsed + b.failed + b.waiting + b.xWaiting === 0;
+  const left = late ? a : b;
+  const both = { parsed: a.parsed + b.parsed, failed: a.failed + b.failed, waiting: left.waiting, xWaiting: left.xWaiting };
+  return b.untried === undefined ? both : { ...both, untried: b.untried };
+}
+
+/** Of the parses a run had no time for, how many were never tried: those it would rather not leave to the next sync. */
+const neverTried = (rest: Pending[]): number => rest.filter((q) => !q.timed_out_at).length;
+
+/**
+ * A pass stopped at SLOW_RUN pages in a row that couldn't be had. After it has settled one, the network was there, so
+ * they were dead links in a row, as an old import has: the parses after them never tried start in a run soon after
+ * (nextRunIn); before, they waited for the next sync, for days if Kefli wasn't opened. Three from its start are the
+ * network, as before, and the rest wait for the next sync.
+ */
+function stalled(out: PendingResult, rest: Pending[]): PendingResult {
+  const untried = out.parsed + out.failed > 0 ? neverTried(rest) : 0;
+  return untried ? { ...out, untried } : out;
+}
+
+async function pass(p: PendingPorts, owner: string, until: number): Promise<PendingResult> {
   const out: PendingResult = { parsed: 0, failed: 0, waiting: 0, xWaiting: 0 };
   const queue = pendingParses(p.db, owner);
   let unreached = 0;
   for (let i = 0; queue.length > i; i++) {
+    // the run's time spent, the rest wait for the next run, which comes soon while any were never tried (nextRunIn)
+    if (p.now() >= until) return { ...out, untried: neverTried(queue.slice(i)) };
     // a save whose parse threw (what its page held, or applying it) waits like one that couldn't be had, rather
     // than stopping the queue at it on every sync
     const s = await step(p, owner, queue[i]).catch((e: unknown): Step => {
       console.log(`[kefli-pending] ${JSON.stringify({ threw: (e as Error)?.name ?? 'unknown' })}`);
       return 'unreached';
     });
+    // one that couldn't be settled goes to the back of the queue (F12), an X post X didn't answer too, so it can't
+    // spend each run's time again ahead of the rest; one that never answers can't stop the shares behind it either:
+    // a dead link shared offline once stopped every pending parse at every sync
+    if (s === 'unreached' || s === 'xWaiting') timedOut(p.db, p.now(), queue[i].id);
     if (s === 'unreached') {
       // one page that can't be had waits for the next sync without holding up the rest; a run of them is the
-      // network (F12). Each goes to the back of the queue, so pages that never answer can't stop the shares behind
-      // them either: a dead link shared offline once stopped every pending parse at every sync.
-      timedOut(p.db, p.now(), queue[i].id);
+      // network (F12)
       if (++unreached < SLOW_RUN) {
         out.waiting++;
         continue;
       }
       out.waiting += queue.length - i;
-      break;
+      return stalled(out, queue.slice(i + 1));
     }
     if (s !== 'xWaiting') unreached = 0;
     out[s]++;
@@ -162,7 +220,17 @@ export async function settle(
     p.unstage(path);
   } else {
     p.writeText(applied.hash, result.markdown, outcome.derived);
-    indexText(p.db, { id: item.id, title: result.title, site: result.site, url: outcome.finalUrl }, outcome.spoken);
+    indexStored(p.db, item.id, outcome.spoken);
   }
   return 'parsed';
+}
+
+/**
+ * A parsed save's search entry, from its row as stored: its fields as fitted under its event's ceiling, and the
+ * address it keeps, which for a save already out is its own rather than where its page now lands (applyParsed). The
+ * parse's own title, site and address found the save by words it doesn't hold.
+ */
+function indexStored(db: SqlDb, id: number, spoken: string): void {
+  const row = db.get<{ id: number; title: string | null; site: string | null; url: string }>('SELECT id, title, site, url FROM items WHERE id = ?', id);
+  if (row) indexText(db, row, spoken);
 }

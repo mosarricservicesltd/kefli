@@ -29,6 +29,14 @@ describe('the Original view stays on the web and opens no other app (F25)', () =
     expect(hold).toMatch(/KefliParser\.holdJar\(false\);\s+void clearCookies\(\);/);
   });
 
+  test('a renderer the system or Kefli ends leaves the view in its failure state, not a blank page', () => {
+    // every WebView in the app shares one renderer, which ending a stuck parse (kefli-parser's Parser.kt) ends too;
+    // the failed state also takes the dead WebView away, so nothing is drawn by it again
+    const src = readFileSync(join(__dirname, '..', 'src', 'screens', 'Original.tsx'), 'utf8');
+    expect(src).toContain("onRenderProcessGone={() => setSt('failed')}");
+    expect(src).toContain("online && st !== 'failed' && (");
+  });
+
   // Node can't run the Kotlin: these read its source, standing in for the Pixel check listed in HANDOVER
   test("the render WebView's cookies and storage go when each render ends, or when the open Original view closes (F27)", () => {
     const kt = readFileSync(join(__dirname, '..', 'modules', 'kefli-parser', 'android', 'src', 'main', 'java', 'app', 'kefli', 'parser', 'Renderer.kt'), 'utf8');

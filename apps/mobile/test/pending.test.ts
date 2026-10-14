@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { itemHash } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
@@ -6,8 +8,9 @@ import { seedGeneratedLists } from '../src/data/lists';
 import * as pendingData from '../src/data/pending';
 import { pendingParses } from '../src/data/pending';
 import { commitDelete, deleteItem } from '../src/data/library';
+import { search } from '../src/data/search';
 import { DESKTOP_UA, MOBILE_UA, PAGE_MAX_BYTES, RENDER_MAX_BYTES, fetchPage, refusal, type ParserResult } from '../src/services/page';
-import { runPendingParses, settle, type PendingPorts } from '../src/services/pending';
+import { AGAIN_MS, RUN_SECONDS, nextRunIn, runPendingParses, settle, type PendingPorts, type PendingResult } from '../src/services/pending';
 import { TimedOut } from '../src/net/http';
 import { memoryDb } from './sqlite';
 
@@ -16,7 +19,7 @@ const D = { v: 1, operator: { relay: 'ws://op', blossom: 'http://blossom', api: 
 const T = { api: D.operator.api, blossom: D.operator.blossom, mirror: D.mirrors[0] };
 const LONG = Array.from({ length: 130 }, (_, i) => `word${i}`).join(' ');
 
-type Page = { status?: number; type?: string; body?: string; finalUrl?: string; length?: number; only?: string };
+type Page = { status?: number; type?: string; body?: string; finalUrl?: string; length?: number; only?: string; location?: string };
 
 function world(pages: Record<string, Page | 'down'> = {}, parse?: (url: string) => ParserResult) {
   const db = memoryDb();
@@ -35,7 +38,7 @@ function world(pages: Record<string, Page | 'down'> = {}, parse?: (url: string) 
         const pg = pages[url];
         if (!pg || pg === 'down') throw new Error('offline');
         if (pg.only && pg.only !== ua) return Object.assign(new Response('', { status: 403 }), {});
-        const res = new Response(pg.body ?? '<html></html>', { status: pg.status ?? 200, headers: { 'content-type': pg.type ?? 'text/html; charset=utf-8', ...(pg.length ? { 'content-length': String(pg.length) } : {}) } });
+        const res = new Response(pg.body ?? '<html></html>', { status: pg.status ?? 200, headers: { 'content-type': pg.type ?? 'text/html; charset=utf-8', ...(pg.length ? { 'content-length': String(pg.length) } : {}), ...(pg.location ? { location: pg.location } : {}) } });
         Object.defineProperty(res, 'url', { value: pg.finalUrl ?? url });
         return res;
       }) as never,
@@ -54,6 +57,23 @@ function world(pages: Record<string, Page | 'down'> = {}, parse?: (url: string) 
   }, null, T);
   const outbox = () => db.all<{ op: string; subject: string; state: string }>('SELECT op, subject, state FROM outbox ORDER BY id');
   return { db, ports, uas, staged, texts, share, outbox };
+}
+
+/**
+ * The world's page fetch as a release build's: plain http refused before it connects, as expo/fetch reports OkHttp's
+ * refusal. Returns every address asked for.
+ */
+function releaseBuild(w: ReturnType<typeof world>): string[] {
+  const fetch = w.ports.page.fetch;
+  const asked: string[] = [];
+  w.ports.page.fetch = (async (url: string, init: RequestInit) => {
+    asked.push(url);
+    if (url.startsWith('http://')) {
+      throw new Error(`fetch failed: java.net.UnknownServiceException: CLEARTEXT communication to ${new URL(url).hostname} not permitted by network security policy`);
+    }
+    return fetch(url, init);
+  }) as never;
+  return asked;
 }
 
 describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
@@ -284,6 +304,32 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     expect(w.db.get('SELECT hash, url, text_state FROM items')).toEqual({ hash: itemHash('https://c.com/a'), url: 'https://c.com/a', text_state: 'cached' });
   });
 
+  test('a parse is searchable as its row is stored: at the address the save keeps, with its fields as fitted', async () => {
+    // an address long enough that the page's title has to be cut down, and its site shed, for the event to fit
+    const far = `https://d.example/r?${'x'.repeat(8_950)}`;
+    const w = world({ 'https://c.example/a': { finalUrl: 'https://landing.example/elsewhere' }, [far]: {} }, (url) => ({
+      ok: true, title: url === far ? `Bracken ${'b'.repeat(290)}` : `Quietus ${'q'.repeat(290)}`, byline: null,
+      site: url === far ? 'Fernwood' : 'Heathersite', lang: 'en', hero: null, canonical: null, readerable: true, markdown: `${LONG}\n`,
+    }));
+    // another phone's save, which keeps its own address whatever its page now lands on
+    w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, published, event_id) VALUES (?, ?, 'https://c.example/a', 10, 'unread', 'queued', 'sync', 1, 'e1')", PK, itemHash('https://c.example/a'));
+    w.share(far);
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ parsed: 2 });
+    const rows = w.db.all<{ title: string | null; site: string | null; url: string }>('SELECT title, site, url FROM items ORDER BY id');
+    expect(rows.map((r) => [r.url.slice(0, 22), r.title?.length, r.site])).toEqual([
+      ['https://c.example/a', 298, 'Heathersite'], ['https://d.example/r?xx', 80, null],
+    ]);
+    // the index is contentless: each column is asked what it holds
+    const holds = (q: string) => w.db.all('SELECT rowid FROM items_fts WHERE items_fts MATCH ?', q).length;
+    // the address the published save keeps and the fields the other kept are there, its title as cut ('Bracken bbb…')
+    const cutTail = rows[1].title!.slice('Bracken '.length, -1);
+    expect(cutTail).toBe('b'.repeat(71));
+    expect([holds('url:c'), holds('site:heathersite'), holds(`title:${'q'.repeat(290)}`), holds(`title:${cutTail}`)]).toEqual([1, 1, 1, 1]);
+    // where the page now lands, the site shed and the cut title's tail are not
+    expect([holds('url:landing'), holds('url:elsewhere'), holds('site:fernwood'), holds(`title:${'b'.repeat(290)}`)]).toEqual([0, 0, 0, 0]);
+    expect([search(w.db, PK, 'landing'), search(w.db, PK, 'fernwood')]).toEqual([[], []]);
+  });
+
   test("a published save whose page can't be read here has nothing new to send", async () => {
     const w = world({ 'https://c.com/gone': { status: 410 } });
     w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, published, event_id, modified_at) VALUES (?, ?, 'https://c.com/gone', 10, 'unread', 'queued', 'sync', 1, 'e1', 7)", PK, itemHash('https://c.com/gone'));
@@ -319,20 +365,49 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     expect(rows.every((r) => r.title.length <= 300)).toBe(true);
   });
 
-  test('a plain http save, which release builds can never fetch, no longer stops the saves behind it', async () => {
+  test('a plain http save whose site has no https waits as a page that can’t be had, without stopping the saves behind it', async () => {
     const w = world({ 'https://g.com/b': {} });
-    const fetch = w.ports.page.fetch;
-    // OkHttp's refusal of cleartext, which fetchPage reads as offline
-    w.ports.page.fetch = (async (url: string, init: RequestInit) => {
-      if (url.startsWith('http://')) throw new Error('CLEARTEXT communication to g.com not permitted by network security policy');
-      return fetch(url, init);
-    }) as never;
+    const asked = releaseBuild(w);
     w.share('http://g.com/a');
     w.share('https://g.com/b');
     expect(await runPendingParses(w.ports, PK)).toMatchObject({ parsed: 1, waiting: 1 });
     expect(w.db.all('SELECT url, text_state FROM items ORDER BY id')).toEqual([
       { url: 'http://g.com/a', text_state: 'queued' }, { url: 'https://g.com/b', text_state: 'cached' },
     ]);
+    // asked over https only, as the share path asks (net/http overHttps)
+    expect(asked).toEqual(['https://g.com/b', 'https://g.com/a']);
+  });
+
+  test('a plain http save made offline, or imported, is fetched over https and re-keyed by where it lands', async () => {
+    const w = world({ 'https://news.example/a': {}, 'https://old.example/post': {} });
+    const asked = releaseBuild(w);
+    w.share('http://news.example/a');
+    queueImported(w.db, PK, ['http://old.example/post'], 900, T);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 2, failed: 0, waiting: 0, xWaiting: 0 });
+    expect(asked).toEqual(['https://news.example/a', 'https://old.example/post']);
+    expect(w.db.all('SELECT hash, url, text_state FROM items ORDER BY id')).toEqual([
+      { hash: itemHash('https://news.example/a'), url: 'https://news.example/a', text_state: 'cached' },
+      { hash: itemHash('https://old.example/post'), url: 'https://old.example/post', text_state: 'cached' },
+    ]);
+  });
+
+  test('cleartext the build refuses fails the save at once, sent without its text, and the queue goes on', async () => {
+    // a port keeps its http (overHttps), and an https page can redirect to plain http: neither will ever be fetched
+    const w = world({ 'https://b.example/ok': {}, 'https://site.example/a': { status: 301, location: 'http://site.example/a' } });
+    const asked = releaseBuild(w);
+    for (const u of ['http://g.example:8080/a', 'https://site.example/a', 'https://b.example/ok']) w.share(u);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 1, failed: 2, waiting: 0, xWaiting: 0 });
+    expect(asked).toEqual(['https://site.example/a', 'http://site.example/a', 'https://b.example/ok', 'http://g.example:8080/a']);
+    expect(w.db.all('SELECT url, text_state, fail_reason FROM items ORDER BY id')).toEqual([
+      { url: 'http://g.example:8080/a', text_state: 'failed', fail_reason: 'http' },
+      { url: 'https://site.example/a', text_state: 'failed', fail_reason: 'http' },
+      { url: 'https://b.example/ok', text_state: 'cached', fail_reason: null },
+    ]);
+    // each goes out without text, its row opening the original, rather than waiting for good unpublished
+    expect(w.outbox().filter((o) => o.op === 'publish_item').map((o) => o.subject).sort()).toEqual(
+      [itemHash('http://g.example:8080/a'), itemHash('https://site.example/a'), itemHash('https://b.example/ok')].sort(),
+    );
+    expect(pendingParses(w.db, PK)).toEqual([]);
   });
 
   test('a save deleted while its page is fetched takes nothing: no upload, no sends, no text, no search entry', async () => {
@@ -387,5 +462,124 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     const sends = w.outbox().filter((r) => ['upload_blob', 'mirror_blob', 'publish_item'].includes(r.op));
     expect(sends.map((r) => r.op).sort()).toEqual(['mirror_blob', 'mirror_blob', 'publish_item', 'upload_blob', 'upload_blob']);
     expect(sends.filter((r) => r.op === 'publish_item').map((r) => r.subject)).toEqual([itemHash('https://f.com/new')]);
+  });
+});
+
+describe('a run of pending parses has a minute (an import of thousands held every later sync for hours)', () => {
+  /** The world's clock, moved on by each page fetched. */
+  function timed(w: ReturnType<typeof world>, pageSeconds: number) {
+    const clock = { now: 5000 };
+    w.ports.now = () => clock.now;
+    const fetch = w.ports.page.fetch;
+    w.ports.page.fetch = (async (url: string, init: RequestInit) => ((clock.now += pageSeconds), fetch(url, init))) as never;
+    return clock;
+  }
+
+  test('a run starts parses for RUN_SECONDS at most; the rest wait for a run the runner starts soon', async () => {
+    const urls = Array.from({ length: 10 }, (_, i) => `https://i.example/${i}`);
+    const w = world(Object.fromEntries(urls.map((u) => [u, {}])));
+    timed(w, 10);
+    queueImported(w.db, PK, urls, 900, T);
+    const first = await runPendingParses(w.ports, PK);
+    expect(first).toEqual({ parsed: RUN_SECONDS / 10, failed: 0, waiting: 0, xWaiting: 0, untried: 10 - RUN_SECONDS / 10 });
+    expect(nextRunIn(first, 0)).toBe(AGAIN_MS);
+    expect(pendingParses(w.db, PK).map((q) => q.url)).toEqual(urls.slice(RUN_SECONDS / 10));
+    const second = await runPendingParses(w.ports, PK);
+    expect(second).toEqual({ parsed: 10 - RUN_SECONDS / 10, failed: 0, waiting: 0, xWaiting: 0 });
+    expect(nextRunIn(second, 0)).toBeNull();
+  });
+
+  test('a run out of time asks for the next soon only for parses never tried; those that couldn’t be had wait for a sync', async () => {
+    const fresh = ['https://a.example/1', 'https://a.example/2', 'https://a.example/3'];
+    const w = world(Object.fromEntries(fresh.map((u) => [u, {}])));
+    timed(w, 30);
+    // two that couldn't be had at an earlier sync, at the back of the queue
+    for (const u of ['https://gone.example/x', 'https://gone.example/y']) w.share(u);
+    w.db.run("UPDATE items SET timed_out_at = 100 WHERE url LIKE 'https://gone.example/%'");
+    for (const u of fresh) w.share(u);
+    const first = await runPendingParses(w.ports, PK);
+    expect(first).toEqual({ parsed: 2, failed: 0, waiting: 0, xWaiting: 0, untried: 1 });
+    expect(nextRunIn(first, 0)).toBe(AGAIN_MS);
+    const second = await runPendingParses(w.ports, PK);
+    // the last new one, then one of the old until the minute is spent: none of those left was never tried
+    expect(second).toEqual({ parsed: 1, failed: 0, waiting: 1, xWaiting: 0, untried: 0 });
+    expect(nextRunIn(second, 0)).toBeNull();
+  });
+
+  test('three in a row that can’t be had after a parse are dead links: the next run comes soon, three from the start still the network', async () => {
+    // an old import: dead links come in runs, and a run that stopped at three of them waited for the next sync, for
+    // days if Kefli wasn't opened, with most of the import never tried
+    const dead = ['https://gone.example/1', 'https://gone.example/2', 'https://gone.example/3'];
+    const live = ['https://ok.example/1', 'https://ok.example/2', 'https://ok.example/3'];
+    const w = world(Object.fromEntries([...live.map((u) => [u, {}]), ...dead.map((u) => [u, 'down'])]));
+    queueImported(w.db, PK, [live[0], ...dead, live[1], live[2]], 900, T);
+    const first = await runPendingParses(w.ports, PK);
+    expect(first).toEqual({ parsed: 1, failed: 0, waiting: 5, xWaiting: 0, untried: 2 });
+    expect(nextRunIn(first, 0)).toBe(AGAIN_MS);
+    // the dead links at the back now: the rest are parsed, and the three tried again, in a row, end the run
+    const second = await runPendingParses(w.ports, PK);
+    expect(second).toEqual({ parsed: 2, failed: 0, waiting: 3, xWaiting: 0 });
+    expect(nextRunIn(second, 0)).toBeNull();
+    // three from a run's start are the network, as before: the rest wait for the next sync, unasked
+    const off = world(Object.fromEntries(live.map((u) => [u, 'down'])));
+    queueImported(off.db, PK, [...live, 'https://ok.example/4'], 900, T);
+    const offline = await runPendingParses(off.ports, PK);
+    expect(offline).toEqual({ parsed: 0, failed: 0, waiting: 4, xWaiting: 0 });
+    expect(nextRunIn(offline, 0)).toBeNull();
+  });
+
+  test("X posts X doesn't answer go to the back, so they can't spend every run's minute ahead of the pages behind them", async () => {
+    const pages = Array.from({ length: 4 }, (_, i) => `https://p.example/${i}`);
+    const w = world(Object.fromEntries(pages.map((u) => [u, {}])));
+    const clock = timed(w, 10);
+    // X's embed failing after 25 s, the longest a post's check can take
+    w.ports.x = { fetch: (async () => ((clock.now += 25), new Response('', { status: 500 }))) as never };
+    const posts = [1, 2, 3].map((n) => `https://x.com/someone/status/${n}`);
+    for (const u of posts) {
+      w.share(u);
+      w.db.run("UPDATE items SET x_state = 'pending' WHERE url = ?", u);
+    }
+    for (const u of pages) w.share(u);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 0, waiting: 0, xWaiting: 3, untried: 4 });
+    // before, the posts came first again at each run, and the pages behind them were never reached
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ parsed: 4, untried: 0 });
+    expect(pendingParses(w.db, PK).map((q) => q.url).sort()).toEqual(posts);
+  });
+
+  test('a call while a run goes is answered inside the same minute: what it queued is left for the next run, soon', async () => {
+    const w = world({ 'https://a.example/1': {}, 'https://a.example/2': {} });
+    const clock = timed(w, 0);
+    const fetch = w.ports.page.fetch;
+    let second: Promise<PendingResult> | null = null;
+    w.ports.page.fetch = (async (url: string, init: RequestInit) => {
+      await new Promise((r) => setTimeout(r, 1));
+      clock.now += RUN_SECONDS + 10;
+      // the inbox saves one and asks for its parse while the run's first page is fetched
+      if (!second) {
+        w.share('https://a.example/2');
+        second = runPendingParses(w.ports, PK);
+      }
+      return fetch(url, init);
+    }) as never;
+    w.share('https://a.example/1');
+    const first = await runPendingParses(w.ports, PK);
+    expect(first).toEqual({ parsed: 1, failed: 0, waiting: 0, xWaiting: 0, untried: 1 });
+    expect(await second).toEqual(first);
+    expect(pendingParses(w.db, PK).map((q) => q.url)).toEqual(['https://a.example/2']);
+  });
+
+  test('the next run comes soon while parses never tried remain, and backs off for X as before (G3)', () => {
+    const r = (o: Partial<PendingResult>): PendingResult => ({ parsed: 0, failed: 0, waiting: 0, xWaiting: 0, ...o });
+    // the network going, or nothing left: the next sync
+    expect([nextRunIn(r({}), 0), nextRunIn(r({ waiting: 5 }), 0), nextRunIn(r({ untried: 0 }), 0)]).toEqual([null, null, null]);
+    expect(nextRunIn(r({ untried: 3 }), 0)).toBe(AGAIN_MS);
+    expect([nextRunIn(r({ xWaiting: 1 }), 1), nextRunIn(r({ xWaiting: 1 }), 8)]).toEqual([30_000, 3_600_000]);
+    expect(nextRunIn(r({ xWaiting: 1, untried: 2 }), 8)).toBe(AGAIN_MS);
+  });
+
+  test("the runner's timer is the one nextRunIn gives (runner.ts can't load in Node)", () => {
+    const src = readFileSync(join(__dirname, '..', 'src', 'services', 'runner.ts'), 'utf8');
+    const fn = src.slice(src.indexOf('async function parsePending('), src.indexOf('let xFailures'));
+    expect(fn).toMatch(/const next = nextRunIn\(r, xFailures\);\s+if \(next !== null\) xTimer = setTimeout\(\(\) => runSync\(\)\.catch\(\(\) => undefined\), next\);/);
   });
 });
