@@ -7,8 +7,11 @@
 // An accepted request becomes a save. Its HTML, when there is some, comes from the operator Blossom server only,
 // capped and checked against its sha256: Readability's content HTML, which the canonical Markdown conversion
 // (kefliMarkdown) turns into the save's text, with the title and the rest as the extension read them; a blob that can't be read is failed_blob and
-// tried again from wrap_json at each drain. Only created, merged and unarchived queue delete_wrap; every other
-// wrap is left, so a phone without the record yet can't remove a save another phone still needs.
+// tried again from wrap_json at each drain, for the save that drain made as it stands by then, while one the operator
+// answers 404 for is gone, and the save fetches its page at once (v1.12). Only created, merged and unarchived queue
+// delete_wrap, and with it the delete of the request's inbox blob (v1.12); every other wrap is left, so a phone
+// without the record yet can't remove a save another phone still needs. A request whose save waits on its delete's
+// Undo waits for the next drain.
 //
 // RULED: a request naming another server for its HTML is taken without it, and the page is fetched instead, so a
 // save from a connected browser is never lost to a bad field.
@@ -16,7 +19,8 @@ import { KIND, UnwrapError, acceptSaveRequest, decryptText, unwrap, type CryptoP
 import type { SqlDb } from '../data/db';
 import { localRecord } from '../data/devices';
 import {
-  INBOX_BLOB_LIFE, admit, failedBlobs, giveUpBlob, noteDeviceSave, queueDeleteWrap, recordSeen, seenOutcome, type Outcome,
+  admit, closeWrap, failedBlobs, giveUpBlob, noteDeviceSave, recordSeen, requestHash, savedState, seenOutcome, usesBlob, waitsOnDelete,
+  type CaptureRead, type Kept, type Outcome,
 } from '../data/inbox';
 import type { Pending } from '../data/pending';
 import type { SaveTargets } from '../data/saves';
@@ -87,18 +91,28 @@ export async function fromBrowser(p: Pick<InboxPorts, 'markdown'>, r: SaveReques
 export const INBOX_TIMEOUT_MS = 60_000;
 
 /**
- * The inbox blob's HTML, or null when it can't be had or doesn't check out. The deadline covers the whole body and
- * the cap is counted as it streams (net/http, F12), so a server that trickles or never ends can't hold the inbox.
+ * What reading the inbox blob gave: its HTML, with the blob's size as the operator stores it; gone, when the operator
+ * answers 404 for it, as for a blob that has expired, been deleted or was never taken (C§4.4, v1.12); or failed, when
+ * it can't be had now or doesn't check out.
  */
-export async function readBlob(p: Pick<InboxPorts, 'fetch' | 'crypto'>, html: NonNullable<SaveRequest['html']>): Promise<string | null> {
+export type BlobRead = { kind: 'html'; html: string; size: number } | { kind: 'gone' } | { kind: 'failed' };
+
+const GONE: BlobRead = { kind: 'gone' };
+const FAILED: BlobRead = { kind: 'failed' };
+
+/**
+ * The inbox blob's HTML. The deadline covers the whole body and the cap is counted as it streams (net/http, F12), so
+ * a server that trickles or never ends can't hold the inbox.
+ */
+export async function readBlob(p: Pick<InboxPorts, 'fetch' | 'crypto'>, html: NonNullable<SaveRequest['html']>): Promise<BlobRead> {
   try {
     const o = await open(p.fetch, `${html.server.replace(/\/+$/, '')}/${html.sha256}`, { method: 'GET' }, INBOX_TIMEOUT_MS);
-    if (!o.res.ok) return (o.done(), null);
+    if (!o.res.ok) return (o.done(), o.res.status === 404 ? GONE : FAILED);
     const blob = await o.read(INBOX_MAX_BYTES);
     const text = await decryptText(blob, { sha256: html.sha256, key: html.key, nonce: html.nonce }, p.crypto);
-    return new TextEncoder().encode(text).length > INBOX_MAX_BYTES - 16 ? null : text;
+    return new TextEncoder().encode(text).length > INBOX_MAX_BYTES - 16 ? FAILED : { kind: 'html', html: text, size: blob.length };
   } catch {
-    return null;
+    return FAILED;
   }
 }
 
@@ -106,98 +120,161 @@ function pendingRow(db: SqlDb, owner: string, hash: string): Pending | undefined
   return db.get<Pending>('SELECT id, hash, url, shared_url, published, event_id, x_state FROM items WHERE owner = ? AND hash = ?', owner, hash);
 }
 
-/** An accepted request, made a save; its HTML read and parsed when it brings some. */
-async function take(p: InboxPorts, owner: string, wrapId: string, j: Extract<Judged, { request: SaveRequest }>, wrapJson: string, retry: boolean): Promise<Outcome> {
+/**
+ * The save's text from the request's inbox blob: what reading the blob gave, the save given its text when it brought
+ * some. A blob the operator no longer has is gone (v1.12): the save fetches its page at once, as a request without
+ * HTML does, rather than waiting out the blob's 14 days. One that failed is tried again at the next drain.
+ */
+async function textFromBlob(p: InboxPorts, owner: string, hash: string, r: SaveRequest): Promise<BlobRead> {
+  const read = await readBlob(p, r.html!);
+  if (read.kind === 'gone') giveUpBlob(p.db, owner, hash);
+  if (read.kind !== 'html') return read;
+  const item = pendingRow(p.db, owner, hash);
+  if (item) await settle(p, owner, item, await fromBrowser(p, r, read.html));
+  return read;
+}
+
+/** A capture this drain read, for its delete: its size, and now, which is after the browser uploaded it. */
+const captureRead = (read: BlobRead | null, now: number): CaptureRead | undefined => (read?.kind === 'html' ? { size: read.size, up: now } : undefined);
+
+/**
+ * An accepted request, made a save; its HTML read and parsed when it brings some. Null, while patient, when its save
+ * waits on its delete's Undo (RULED): the wrap waits for the next drain, so the save it makes or matches is the one
+ * left once the delete is done or undone, not one about to go with it.
+ */
+async function take(p: InboxPorts, owner: string, wrapId: string, j: Extract<Judged, { request: SaveRequest }>, wrapJson: string, patient: boolean): Promise<Outcome | null> {
+  if (patient && waitsOnDelete(p.db, owner, requestHash(j.request))) return null;
   const d = await p.defaults();
   const t: SaveTargets = await p.targets();
   const a = admit(p.db, p.now(), owner, j.request, j.label, t);
   const seen = { owner, requestD: null, device: j.token, hash: a.hash };
-  if (a.fetch) {
-    const html = await readBlob(p, j.request.html!);
-    if (!html) {
-      recordSeen(p.db, p.now(), wrapId, { ...seen, outcome: 'failed_blob', wrapJson });
-      return 'failed_blob';
-    }
-    const item = pendingRow(p.db, owner, a.hash);
-    if (item) await settle(p, owner, item, await fromBrowser(p, j.request, html));
+  const read = a.fetch ? await textFromBlob(p, owner, a.hash, j.request) : null;
+  if (read?.kind === 'failed') {
+    recordSeen(p.db, p.now(), wrapId, { ...seen, outcome: 'failed_blob', wrapJson });
+    return 'failed_blob';
   }
-  // A retried wrap finds the save it made itself: still its creation.
-  const outcome = retry && a.outcome === 'merged' ? 'created' : a.outcome;
   noteDeviceSave(p.db, p.now(), owner, j.token);
-  recordSeen(p.db, p.now(), wrapId, { ...seen, outcome });
-  queueDeleteWrap(p.db, p.now(), owner, wrapId, d.operator.relay);
-  return outcome;
+  // the save no longer needs the capture: the wrap's kind 5 and the inbox blob's delete go together (C§4.4, v1.12)
+  closeWrap(p.db, p.now(), wrapId, { ...seen, outcome: a.outcome }, d.operator, j.request.html, captureRead(read, p.now()));
+  return a.outcome;
 }
 
-async function handle(p: InboxPorts, owner: string, wrapId: string, rumor: Rumor, seal: NostrEvent, blossom: string, retry = false): Promise<Outcome> {
+async function handle(p: InboxPorts, owner: string, wrapId: string, rumor: Rumor, seal: NostrEvent, blossom: string, patient: boolean): Promise<Outcome | null> {
   const j = judge(p.db, owner, rumor, seal, blossom);
   const d = rumor.tags.find((x) => x[0] === 'd')?.[1] ?? null;
   if ('outcome' in j) {
     recordSeen(p.db, p.now(), wrapId, { owner, outcome: j.outcome, requestD: j.outcome === 'ignored_foreign' ? null : d });
     return j.outcome;
   }
-  return take(p, owner, wrapId, j, JSON.stringify({ rumor, seal }), retry);
+  return take(p, owner, wrapId, j, JSON.stringify({ rumor, seal }), patient);
 }
 
-/** Blobs that failed before: tried again from the kept rumor; past the blob's life, the page is fetched instead. */
-async function retryBlobs(p: InboxPorts, owner: string, blossom: string, out: InboxResult): Promise<void> {
-  for (const row of failedBlobs(p.db, owner)) {
-    const { rumor, seal } = JSON.parse(row.wrap_json) as { rumor: Rumor; seal: NostrEvent };
-    const j = judge(p.db, owner, rumor, seal, blossom);
-    if ('request' in j && p.now() >= j.request.captured_at + INBOX_BLOB_LIFE) {
-      const hash = p.db.get<{ hash: string }>('SELECT hash FROM inbox_seen WHERE wrap_id = ?', row.wrap_id)?.hash;
-      if (hash) giveUpBlob(p.db, owner, hash);
-    }
-    const o = await handle(p, owner, row.wrap_id, rumor, seal, blossom, true);
-    out[o] = (out[o] ?? 0) + 1;
+/** Within its 14 days the blob is read again; past them the save fetches its page instead (4.7), nothing read. */
+async function blobOrPage(p: InboxPorts, owner: string, hash: string, r: SaveRequest): Promise<BlobRead | null> {
+  if (usesBlob(r, p.now())) return textFromBlob(p, owner, hash, r);
+  giveUpBlob(p.db, owner, hash);
+  return null;
+}
+
+/**
+ * A wrap whose blob couldn't be read, tried again for the save its first drain made or matched (4.7), or null while
+ * that save waits on its delete's Undo: the wrap waits with it, to find the save shown again or gone. The request was
+ * taken at that drain, so it isn't judged again, and a browser disconnected since leaves its save to finish rather
+ * than waiting for its text for ever. RULED: the save keeps what was done to it meanwhile. One deleted, here or on
+ * another phone, isn't made again and one archived stays archived, since this is the same save request, not a new
+ * one (the repeat-save rule, C§4.1, is for a new save). Only a save still waiting for its text reads the blob; the
+ * wrap then closes as the creation it was, with its kind 5 and its capture's delete (C§4.4, v1.12).
+ */
+async function retake(p: InboxPorts, owner: string, k: Kept): Promise<Outcome | null> {
+  const request = JSON.parse((JSON.parse(k.wrap_json) as { rumor: Rumor }).rumor.content) as SaveRequest;
+  const save = k.hash ? savedState(p.db, owner, k.hash) : undefined;
+  if (save && save.pending_delete_at !== null) return null;
+  const read = k.hash && save?.text_state === 'fetching' ? await blobOrPage(p, owner, k.hash, request) : null;
+  if (read?.kind === 'failed') {
+    recordSeen(p.db, p.now(), k.wrap_id, { owner, outcome: 'failed_blob', wrapJson: k.wrap_json });
+    return 'failed_blob';
+  }
+  const d = await p.defaults();
+  noteDeviceSave(p.db, p.now(), owner, request.token);
+  closeWrap(p.db, p.now(), k.wrap_id, { owner, outcome: 'created' }, d.operator, request.html, captureRead(read, p.now()));
+  return 'created';
+}
+
+/**
+ * Blobs that failed before, tried again from the kept rumor. One whose retry fails part way (a disk, a signer, the
+ * database) stays as it was, for the next drain, and the rest and the new wraps go on.
+ */
+async function retryBlobs(p: InboxPorts, owner: string, out: InboxResult): Promise<void> {
+  for (const k of failedBlobs(p.db, owner)) {
+    const o = await retake(p, owner, k).catch((): null => null);
+    if (o) tally(out, o);
   }
 }
 
-/** One drain of the inbox. Restartable: the cursor moves only after the relay answers. */
+function tally(out: InboxResult, o: Outcome): void {
+  out[o] = (out[o] ?? 0) + 1;
+}
+
+/**
+ * This identity's wraps on the operator relay, from 172,800 + 300 seconds before the last drain or, before the first,
+ * all of them (4.7); null when the relay can't be reached.
+ */
+async function wrapsSince(p: InboxPorts, relay: string, owner: string): Promise<NostrEvent[] | null> {
+  const since = getCursor(p.db, relay, 'inbox', owner)?.since;
+  const f: Filter = { kinds: [KIND.giftWrap], '#p': [owner] };
+  if (since !== undefined) f.since = Math.max(0, since - WRAP_LOOKBACK);
+  try {
+    return await p.query(relay, [f]);
+  } catch {
+    return null;
+  }
+}
+
+/** A wrap left unrecorded for the next drain, the cursor staying so it is fetched again (F3). */
+const HELD = 'held';
+
+/** Filed as someone else's message sharing the p tag, so the cursor moves on past it. */
+function notOurs(p: InboxPorts, owner: string, w: NostrEvent): Outcome {
+  recordSeen(p.db, p.now(), w.id, { owner, outcome: 'ignored_foreign' });
+  return 'ignored_foreign';
+}
+
+/**
+ * One new wrap, opened and taken. While it hasn't waited a week (F3), a wrap that can't be taken yet is held: the
+ * signer couldn't answer (out of sight, timed out, declined), taking it failed part way (a signer, the network, the
+ * database), or its save waits on its delete's Undo. One still waiting after a week is filed as not ours, and so is
+ * one this key doesn't open.
+ */
+async function drainOne(p: InboxPorts, owner: string, w: NostrEvent, blossom: string): Promise<Outcome | typeof HELD> {
+  const patient = !stale(p, w);
+  let opened: Awaited<ReturnType<typeof unwrap>>;
+  try {
+    opened = await unwrap(p.signer, w);
+  } catch (e) {
+    return patient && !(e instanceof UnwrapError) ? HELD : notOurs(p, owner, w);
+  }
+  try {
+    return (await handle(p, owner, w.id, opened.rumor, opened.seal, blossom, patient)) ?? HELD;
+  } catch {
+    return patient ? HELD : notOurs(p, owner, w);
+  }
+}
+
+/** One drain of the inbox. Restartable: the cursor moves only after the relay answers, and past no wrap held. */
 export async function drainInbox(p: InboxPorts, owner: string): Promise<InboxResult> {
   const out: InboxResult = {};
   const d = await p.defaults();
   const relay = d.operator.relay;
-  await retryBlobs(p, owner, d.operator.blossom, out);
+  await retryBlobs(p, owner, out);
   const startedAt = p.now();
-  const since = getCursor(p.db, relay, 'inbox', owner)?.since;
-  let wraps: NostrEvent[];
-  try {
-    wraps = await p.query(relay, [{ kinds: [KIND.giftWrap], '#p': [owner], ...(since === undefined ? {} : { since: Math.max(0, since - WRAP_LOOKBACK) }) }]);
-  } catch {
-    return out; // unreachable: the cursor stays
-  }
+  const wraps = await wrapsSince(p, relay, owner);
+  if (!wraps) return out; // unreachable: the cursor stays
   let held = false;
   for (const w of wraps.sort((a, b) => a.created_at - b.created_at)) {
     if (w.kind !== KIND.giftWrap || seenOutcome(p.db, w.id)) continue;
-    let opened: Awaited<ReturnType<typeof unwrap>>;
-    try {
-      opened = await unwrap(p.signer, w);
-    } catch (e) {
-      // the signer couldn't answer (out of sight, timed out, declined): the wrap waits for the next drain, unrecorded,
-      // and the cursor stays so it is fetched again (F3); one still failing after a week is filed as not ours
-      if (!(e instanceof UnwrapError) && !stale(p, w)) {
-        held = true;
-        continue;
-      }
-      // not a wrap this key opens: someone else's message sharing the p tag
-      recordSeen(p.db, p.now(), w.id, { owner, outcome: 'ignored_foreign' });
-      out.ignored_foreign = (out.ignored_foreign ?? 0) + 1;
-      continue;
-    }
-    let o: Outcome;
-    try {
-      o = await handle(p, owner, w.id, opened.rumor, opened.seal, d.operator.blossom);
-    } catch {
-      // ours, but taking it failed part way (a signer, the network, the database): tried again next drain (F3)
-      if (!stale(p, w)) {
-        held = true;
-        continue;
-      }
-      o = 'ignored_foreign';
-      recordSeen(p.db, p.now(), w.id, { owner, outcome: o });
-    }
-    out[o] = (out[o] ?? 0) + 1;
+    const o = await drainOne(p, owner, w, d.operator.blossom);
+    if (o === HELD) held = true;
+    else tally(out, o);
   }
   if (!held) setCursor(p.db, startedAt, relay, 'inbox', owner, startedAt);
   return out;
