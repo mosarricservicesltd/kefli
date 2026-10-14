@@ -2,7 +2,7 @@ import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { indexText } from '../src/data/sync';
 import { deleteItem } from '../src/data/library';
-import { matchExpression, queryWords, search } from '../src/data/search';
+import { QUERY_WORDS, QUERY_WORD_CHARS, matchExpression, queryWords, search } from '../src/data/search';
 import { memoryDb } from './sqlite';
 
 const PK = 'ab'.repeat(32);
@@ -45,6 +45,19 @@ describe('search (mobile spec 4.9, 5.6)', () => {
     expect(search(w.db, PK, 'waiti').map((r) => r.hash)).toEqual([h(4)]);
     expect(search(w.db, PK, 'news').map((r) => r.hash)).toEqual([h(4)]);
     expect(search(w.db, PK, 'aiting')).toEqual([]);
+  });
+
+  test('a query pasted whole, of thousands of words or one endless one, searches without throwing', () => {
+    const w = world();
+    w.add(1, 'Bookmarks are a graveyard', 'Most people never return to what they save.');
+    w.add(2, 'Waiting for its text', null);
+    // past 1,000 words the GLOB fallback's AND chain is deeper than SQLite parses, and FTS5's is deeper still
+    const pasted = `most people ${'never return to what they save '.repeat(400)}`;
+    expect(() => search(w.db, PK, pasted)).not.toThrow();
+    expect(search(w.db, PK, pasted).map((r) => r.hash)).toEqual([h(1)]);
+    expect(search(w.db, PK, `waiting ${'x'.repeat(200_000)}`)).toEqual([]);
+    expect(queryWords(pasted).length).toBeLessThanOrEqual(QUERY_WORDS);
+    expect(queryWords('x'.repeat(5_000))[0]).toHaveLength(QUERY_WORD_CHARS);
   });
 
   test('a save waiting on a delete is not found', () => {

@@ -6,9 +6,17 @@ import { type LibRow } from './library';
 
 const COLS = 'i.id, i.hash, i.url, i.title, i.site, i.words, i.position_word, i.state, i.text_state, i.fail_reason, i.origin, i.saved_at, i.byline, i.lang, i.text_sha256, i.text_servers, i.hero, i.x_state';
 
-/** The words of a query: letters and digits, as FTS5's unicode61 tokeniser splits them. */
+/**
+ * A query's words at most, and a word's characters: a page pasted into the field searches by its first words. Past
+ * about a thousand words the fallback's chain of ANDs is deeper than SQLite parses, and the throw took the app down.
+ */
+export const QUERY_WORDS = 16;
+export const QUERY_WORD_CHARS = 64;
+
+/** The words of a query: letters and digits, as FTS5's unicode61 tokeniser splits them; the first QUERY_WORDS of them. */
 export function queryWords(q: string): string[] {
-  return q.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  const words = q.slice(0, QUERY_WORDS * (QUERY_WORD_CHARS + 1) * 4).toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  return words.slice(0, QUERY_WORDS).map((w) => (w.length > QUERY_WORD_CHARS ? Array.from(w).slice(0, QUERY_WORD_CHARS).join('') : w));
 }
 
 /** An FTS5 MATCH expression: each word quoted and taken as a prefix, all of them required. */
