@@ -5,7 +5,8 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 // The pure parts of kefli-voice's file synthesis (mobile spec 8.1): reading the WAV the engine writes, telling
-// which order the engine passed a word range's numbers in, and finding the word at a frame of a sentence's audio.
+// which order the engine passed a word range's numbers in, finding the word at a frame of a sentence's audio, and
+// cutting a sentence longer than the engine takes at a time into pieces.
 
 /** A sentence's audio as the engine wrote it: 16-bit (or 8-bit) PCM at its rate. */
 class Pcm(val sampleRate: Int, val channels: Int, val bits: Int, val data: ByteArray) {
@@ -81,6 +82,21 @@ object Timing {
     return best
   }
 
+  /** Whether any of sorted xs lies in from until (until itself not included). */
+  fun startsWithin(xs: IntArray, from: Int, until: Int): Boolean {
+    val k = lastAtOrBelow(xs, until - 1)
+    return k >= 0 && xs[k] >= from
+  }
+
+  /**
+   * Whether a file of a sentence's text from offset, which the engine reported no word ranges for, shows that it
+   * reports none (FD 91 (h)): only one holding a word start and something said as a word, a letter or a digit. A piece
+   * inside one long word (Pieces) holds no word start, and a paragraph that is only a rule or a mark ("—", "* * *",
+   * an emoji) may be said as silence: neither says anything of the engine.
+   */
+  fun showsNoRanges(wordStarts: IntArray, offset: Int, text: String): Boolean =
+    startsWithin(wordStarts, offset, offset + text.length) && text.codePoints().anyMatch(Character::isLetterOrDigit)
+
   /**
    * The word a segment is on at a frame within it: the last range whose frame has passed, its character mapped to a
    * word by the sentence's word starts. With no ranges (an engine without word timing) it is the segment's first word.
@@ -92,4 +108,30 @@ object Timing {
     if (char < 0) return firstWord + startWord
     return firstWord + maxOf(startWord, lastAtOrBelow(wordStarts, seg.offset + char))
   }
+}
+
+/**
+ * A sentence in pieces the engine takes: it speaks at most getMaxSpeechInputLength characters a call, and a sentence
+ * the splitter couldn't cut (one word longer than that, as a paragraph of Chinese or Japanese is, written without
+ * spaces) lost the rest unheard. A piece ends after the last space or punctuation mark in the second half of its
+ * window, where the voice pauses anyway, else at the limit, and never between the two halves of a surrogate pair.
+ */
+object Pieces {
+  /** Where the piece of text starting at from ends, at most max characters on. */
+  fun end(text: String, from: Int, max: Int): Int {
+    if (text.length - from <= max) return text.length
+    val limit = from + max
+    for (k in limit - 1 downTo from + max / 2) if (breaksAfter(text[k])) return k + 1
+    return if (max > 1 && text[limit - 1].isHighSurrogate()) limit - 1 else limit
+  }
+
+  /** Where the piece after one ending at end starts: past any spaces there. */
+  fun next(text: String, end: Int): Int {
+    var k = end
+    while (k < text.length && text[k].isWhitespace()) k++
+    return k
+  }
+
+  private fun breaksAfter(c: Char): Boolean =
+    c.isWhitespace() || c.category == CharCategory.OTHER_PUNCTUATION || c.category == CharCategory.DASH_PUNCTUATION
 }
