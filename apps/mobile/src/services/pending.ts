@@ -26,8 +26,8 @@ export type PendingPorts = {
 
 /**
  * waiting: left for want of a network; xWaiting: X posts whose check X didn't answer (retried, G3); untried, set only
- * when the run's time ran out: of the parses it left, those never tried before, which the next run should start soon
- * for (nextRunIn).
+ * when the run's time ran out, or when it met SLOW_RUN pages in a row it couldn't have after settling one (stalled):
+ * of the parses it left, those never tried before, which the next run should start soon for (nextRunIn).
  */
 export type PendingResult = { parsed: number; failed: number; waiting: number; xWaiting: number; untried?: number };
 
@@ -132,6 +132,17 @@ function joined(a: PendingResult, b: PendingResult): PendingResult {
 /** Of the parses a run had no time for, how many were never tried: those it would rather not leave to the next sync. */
 const neverTried = (rest: Pending[]): number => rest.filter((q) => !q.timed_out_at).length;
 
+/**
+ * A pass stopped at SLOW_RUN pages in a row that couldn't be had. After it has settled one the network was there, so
+ * they were dead links in a row, as an old import has: the parses after them never tried start in a run soon after
+ * (nextRunIn), where they waited for the next sync, for days if Kefli wasn't opened. Three from its start are the
+ * network, as before, and the rest wait for the next sync.
+ */
+function stalled(out: PendingResult, rest: Pending[]): PendingResult {
+  const untried = out.parsed + out.failed > 0 ? neverTried(rest) : 0;
+  return untried ? { ...out, untried } : out;
+}
+
 async function pass(p: PendingPorts, owner: string, until: number): Promise<PendingResult> {
   const out: PendingResult = { parsed: 0, failed: 0, waiting: 0, xWaiting: 0 };
   const queue = pendingParses(p.db, owner);
@@ -157,7 +168,7 @@ async function pass(p: PendingPorts, owner: string, until: number): Promise<Pend
         continue;
       }
       out.waiting += queue.length - i;
-      break;
+      return stalled(out, queue.slice(i + 1));
     }
     if (s !== 'xWaiting') unreached = 0;
     out[s]++;

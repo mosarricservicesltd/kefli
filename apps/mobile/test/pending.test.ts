@@ -506,6 +506,28 @@ describe('a run of pending parses has a minute (an import of thousands held ever
     expect(nextRunIn(second, 0)).toBeNull();
   });
 
+  test('three in a row that can’t be had after a parse are dead links, not the network: the next run comes soon', async () => {
+    // an old import: dead links come in runs, and a run that stopped at three of them waited for the next sync, for
+    // days if Kefli wasn't opened, with most of the import never tried
+    const dead = ['https://gone.example/1', 'https://gone.example/2', 'https://gone.example/3'];
+    const live = ['https://ok.example/1', 'https://ok.example/2', 'https://ok.example/3'];
+    const w = world(Object.fromEntries([...live.map((u) => [u, {}]), ...dead.map((u) => [u, 'down'])]));
+    queueImported(w.db, PK, [live[0], ...dead, live[1], live[2]], 900, T);
+    const first = await runPendingParses(w.ports, PK);
+    expect(first).toEqual({ parsed: 1, failed: 0, waiting: 5, xWaiting: 0, untried: 2 });
+    expect(nextRunIn(first, 0)).toBe(AGAIN_MS);
+    // the dead links at the back now: the rest are parsed, and the three tried again, in a row, end the run
+    const second = await runPendingParses(w.ports, PK);
+    expect(second).toEqual({ parsed: 2, failed: 0, waiting: 3, xWaiting: 0 });
+    expect(nextRunIn(second, 0)).toBeNull();
+    // three from a run's start are the network, as before: the rest wait for the next sync, unasked
+    const off = world(Object.fromEntries(live.map((u) => [u, 'down'])));
+    queueImported(off.db, PK, [...live, 'https://ok.example/4'], 900, T);
+    const offline = await runPendingParses(off.ports, PK);
+    expect(offline).toEqual({ parsed: 0, failed: 0, waiting: 4, xWaiting: 0 });
+    expect(nextRunIn(offline, 0)).toBeNull();
+  });
+
   test("X posts X doesn't answer go to the back, so they can't spend every run's minute ahead of the pages behind them", async () => {
     const pages = Array.from({ length: 4 }, (_, i) => `https://p.example/${i}`);
     const w = world(Object.fromEntries(pages.map((u) => [u, {}])));
