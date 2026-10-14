@@ -284,3 +284,29 @@ func TestUploadsLeaveTheDiskRoom(t *testing.T) {
 		t.Fatalf("a refused upload left %v", e.files())
 	}
 }
+
+// Every blob is a file, and the quota counts bytes: one account's 4-byte blobs used up a disk's inodes long before its
+// quota or the floor on free space (probe tinyblobs: on a disk of 1,500 inodes, the 1,242nd upload and every one after
+// it, anyone's, failed with 500, and so did every other writer on that disk). Uploads now keep a tenth of the disk's
+// files free, as they keep MinFree of its bytes, and are refused with 507 past it, which clients try again later.
+func TestUploadsLeaveTheDiskFiles(t *testing.T) {
+	e := newEnv(t)
+	user := newKey()
+	e.call(user, "POST", "/register", map[string]any{"v": 1})
+	free, total := int64(101), int64(1000)
+	e.bs.MinFree = 1
+	e.bs.Free = func(string) (int64, error) { return 1 << 40, nil }
+	e.bs.FreeFiles = func(string) (int64, int64, error) { return free, total, nil }
+	s, b := e.upload(user, []byte("leaves a tenth of the files"))
+	expect(t, s, 200, b)
+	free = 100
+	s, b = e.upload(user, []byte("would leave less"))
+	expect(t, s, 507, b)
+	if len(e.files()) != 1 {
+		t.Fatalf("a refused upload left %v", e.files())
+	}
+	// a filesystem that makes inodes as it needs them reports none, and isn't held to any
+	free, total = 0, 0
+	s, b = e.upload(user, []byte("no inode count"))
+	expect(t, s, 200, b)
+}

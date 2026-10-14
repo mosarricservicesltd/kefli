@@ -36,6 +36,8 @@ type Server struct {
 	MinFree int64
 	// Free is the space free for dir's filesystem; the disk's, from statfs, unless a test says otherwise.
 	Free func(dir string) (int64, error)
+	// FreeFiles is how many files dir's filesystem has free and in all, from statfs unless a test says otherwise.
+	FreeFiles func(dir string) (free, total int64, err error)
 	st   *store.Store
 	log  *slog.Logger
 	// commitMu makes an upload's quota check, rename and owner row one step (F2)
@@ -43,18 +45,34 @@ type Server struct {
 }
 
 func New(dir, base string, st *store.Store, log *slog.Logger) *Server {
-	return &Server{Dir: dir, Base: strings.TrimRight(base, "/"), Free: diskFree, st: st, log: log}
+	return &Server{Dir: dir, Base: strings.TrimRight(base, "/"), Free: diskFree, FreeFiles: diskFiles, st: st, log: log}
 }
 
-func diskFree(dir string) (int64, error) {
+func statfs(dir string) (*syscall.Statfs_t, error) {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return 0, err
+		return nil, err
 	}
 	var st syscall.Statfs_t
 	if err := syscall.Statfs(dir, &st); err != nil {
+		return nil, err
+	}
+	return &st, nil
+}
+
+func diskFree(dir string) (int64, error) {
+	st, err := statfs(dir)
+	if err != nil {
 		return 0, err
 	}
 	return int64(st.Bavail) * int64(st.Bsize), nil
+}
+
+func diskFiles(dir string) (int64, int64, error) {
+	st, err := statfs(dir)
+	if err != nil {
+		return 0, 0, err
+	}
+	return int64(st.Ffree), int64(st.Files), nil
 }
 
 func (s *Server) Routes(mux *http.ServeMux) {
@@ -131,7 +149,8 @@ func (s *Server) allowed(r *http.Request, sha string, size int64) (*uploader, in
 }
 
 // room refuses an upload that would leave less than MinFree on the disk with 507, which clients retry later, as backend
-// spec 7's disk-full drill expects.
+// spec 7's disk-full drill expects; and so one that would leave less than a tenth of the disk's files free, since every
+// blob is a file and the quota counts only bytes, so tiny blobs could use up the inodes every writer on the disk needs.
 func (s *Server) room(size int64) (int, string) {
 	if s.MinFree <= 0 {
 		return 0, ""
@@ -143,6 +162,20 @@ func (s *Server) room(size int64) (int, string) {
 	}
 	if free-size < s.MinFree {
 		s.log.Error("uploads held: the disk is nearly full", "free", free, "floor", s.MinFree)
+		return http.StatusInsufficientStorage, "storage"
+	}
+	return s.roomForFile()
+}
+
+// roomForFile keeps a tenth of the disk's files free, on a filesystem that counts them.
+func (s *Server) roomForFile() (int, string) {
+	files, total, err := s.FreeFiles(s.Dir)
+	if err != nil {
+		s.log.Error("free files", "err", err)
+		return http.StatusInternalServerError, "server"
+	}
+	if total > 0 && files-1 < total/10 {
+		s.log.Error("uploads held: the disk's files are nearly used up", "free", files, "total", total)
 		return http.StatusInsufficientStorage, "storage"
 	}
 	return 0, ""
