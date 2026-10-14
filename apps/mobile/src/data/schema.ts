@@ -116,9 +116,24 @@ const V7 = `
 ALTER TABLE items ADD COLUMN timed_out_at INTEGER;
 `;
 
+// v8: Backup space (FD 117, C§5, C§6). account_figures holds the library's figures from Kefli's server in bytes, the
+// last that GET /account or a 413 quota or daily gave, and when they came; they go with their identity. refused_at is
+// when the operator last refused a blob's upload (blobs.last_error), for Advanced's notice of a day's uploads used,
+// which counts a refusal from the last 24 hours. RULED: triggers keep it whenever a reason is written, by the phone's
+// clock as SQLite reads it, so every writer of last_error keeps it without knowing; a blob from before has none.
+const V8 = `
+CREATE TABLE account_figures (owner TEXT PRIMARY KEY REFERENCES identities(pubkey) ON DELETE CASCADE,
+  quota INTEGER NOT NULL, used INTEGER NOT NULL, daily INTEGER NOT NULL, today INTEGER NOT NULL, at INTEGER NOT NULL);
+ALTER TABLE blobs ADD COLUMN refused_at INTEGER;
+CREATE TRIGGER blobs_refused AFTER UPDATE OF last_error ON blobs WHEN NEW.last_error IS NOT NULL
+BEGIN UPDATE blobs SET refused_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE rowid = NEW.rowid; END;
+CREATE TRIGGER blobs_refused_new AFTER INSERT ON blobs WHEN NEW.last_error IS NOT NULL
+BEGIN UPDATE blobs SET refused_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE rowid = NEW.rowid; END;
+`;
+
 export const MIGRATIONS: ((db: SqlDb) => void)[] = [
   (db) => db.exec(V1), (db) => db.exec(V2), (db) => db.exec(V3), (db) => db.exec(V4), (db) => db.exec(V5), (db) => db.exec(V6),
-  (db) => db.exec(V7),
+  (db) => db.exec(V7), (db) => db.exec(V8),
 ];
 export const SCHEMA_VERSION = MIGRATIONS.length;
 
