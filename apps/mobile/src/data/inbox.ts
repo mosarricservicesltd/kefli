@@ -33,9 +33,18 @@ export function recordSeen(db: SqlDb, now: number, wrapId: string, s: Seen): voi
   );
 }
 
-/** Wraps whose blob couldn't be read yet, with the rumor and seal kept for the retry. */
-export function failedBlobs(db: SqlDb, owner: string): { wrap_id: string; wrap_json: string }[] {
-  return db.all("SELECT wrap_id, wrap_json FROM inbox_seen WHERE owner = ? AND outcome = 'failed_blob' AND wrap_json IS NOT NULL ORDER BY seen_at", owner);
+/** A wrap whose blob couldn't be read yet: the rumor and seal kept for the retry, and the save its drain made or matched. */
+export type Kept = { wrap_id: string; wrap_json: string; hash: string | null };
+
+export function failedBlobs(db: SqlDb, owner: string): Kept[] {
+  return db.all("SELECT wrap_id, wrap_json, hash FROM inbox_seen WHERE owner = ? AND outcome = 'failed_blob' AND wrap_json IS NOT NULL ORDER BY seen_at", owner);
+}
+
+/** The save at this hash as the inbox finds it again: where its text is, and whether its delete waits on Undo (4.3). */
+export type Found = { text_state: string; pending_delete_at: number | null };
+
+export function savedState(db: SqlDb, owner: string, hash: string): Found | undefined {
+  return db.get<Found>('SELECT text_state, pending_delete_at FROM items WHERE owner = ? AND hash = ?', owner, hash);
 }
 
 /** The browser's name for the row: the brand before " on " in its label ("Chrome on a Windows laptop"). */

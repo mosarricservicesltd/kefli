@@ -5,8 +5,10 @@ import { ensureIdentityRow } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
 import { absorbRecord } from '../src/data/devices';
 import { browserName, INBOX_BLOB_LIFE, queueDeleteInboxBlob } from '../src/data/inbox';
-import { enqueue } from '../src/data/outbox';
+import { commitDelete, deleteItem, setArchived } from '../src/data/library';
+import { enqueue, release } from '../src/data/outbox';
 import { pendingParses } from '../src/data/pending';
+import { removeItem } from '../src/data/sync';
 import { INBOX_MAX_BYTES, INBOX_TIMEOUT_MS, drainInbox, judge, readBlob, type InboxPorts } from '../src/services/inbox';
 import { GUARD_WORDS, type ParserResult } from '../src/services/page';
 import { sendOne, type SendPorts } from '../src/services/send';
@@ -269,6 +271,126 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     w.ports.fetch = served;
     expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
     expect(w.item(itemHash('https://example.com/a'))?.text_state).toBe('cached');
+  });
+
+  /** A browser save whose capture the operator failed to serve: a save still getting its text, and a failed_blob wrap. */
+  async function failedCapture() {
+    const w = world();
+    w.answerMissing(502);
+    const blob = await w.withHtml('<h1>Later</h1>', false);
+    await w.send(w.request({ html: blob.html }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_blob: 1 });
+    return { w, blob, hash: itemHash('https://example.com/a') };
+  }
+
+  test('a save deleted while its capture failed isn’t made again by the retry, here or from another phone (RULED)', async () => {
+    type World = Awaited<ReturnType<typeof failedCapture>>;
+    const deletions: [string, (f: World) => void][] = [
+      ['deleted here', ({ w, hash }) => commitDelete(w.db, w.owner, hash, deleteItem(w.db, w.ports.now(), w.owner, hash).held)],
+      // a kind 5 from another phone, as sync applies it
+      ['deleted on another phone', ({ w, hash }) => removeItem(w.db, w.db.get<{ id: number }>('SELECT id FROM items')!.id, w.owner, hash)],
+    ];
+    const retries: [string, (f: World) => void][] = [
+      ['its capture read', ({ blob }) => blob.serve()],
+      ['its capture gone', ({ w }) => w.answerMissing(404)],
+      ['its 14 days over', ({ w }) => w.tick(INBOX_BLOB_LIFE)],
+    ];
+    for (const [deleted, del] of deletions) {
+      for (const [retried, retry] of retries) {
+        const f = await failedCapture();
+        const { w, blob } = f;
+        del(f);
+        retry(f);
+        const at = `${deleted}, ${retried}`;
+        // closed as the creation it was, its kind 5 and its capture's delete queued, and nothing made, read or sent
+        expect([at, await drainInbox(w.ports, w.owner)]).toEqual([at, { created: 1 }]);
+        expect([at, w.db.get('SELECT COUNT(*) AS n FROM items')]).toEqual([at, { n: 0 }]);
+        expect([at, w.parses(), pendingParses(w.db, w.owner)]).toEqual([at, 0, []]);
+        expect([at, w.ops().filter((o) => ['upload_blob', 'mirror_blob', 'publish_item'].includes(o))]).toEqual([at, []]);
+        expect([at, w.ops().filter((o) => o === 'delete_wrap'), w.deletes().map((d) => d.subject)]).toEqual([at, ['delete_wrap'], [blob.html.sha256]]);
+        expect([at, w.db.all('SELECT outcome, wrap_json FROM inbox_seen')]).toEqual([at, [{ outcome: 'created', wrap_json: null }]]);
+        expect([at, await drainInbox(w.ports, w.owner)]).toEqual([at, {}]);
+      }
+    }
+  });
+
+  test('a save archived while its capture failed stays archived when the retry gives it its text', async () => {
+    const { w, blob, hash } = await failedCapture();
+    const archive = setArchived(w.db, w.ports.now(), w.owner, hash, true);
+    release(w.db, archive.held);
+    w.tick(60);
+    blob.serve();
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    // the same save request, not a new one: no repeat save's un-archiving, and its time stays the capture's
+    expect(w.item(hash)).toMatchObject({ state: 'archived', text_state: 'cached', saved_at: T0 - 60 });
+    expect(w.texts.get(hash)).toContain('# Later');
+  });
+
+  test('a retry waits while its save’s delete waits on Undo: shown again, it gets its text; deleted, nothing is left to upload', async () => {
+    const undone = await failedCapture();
+    const del = deleteItem(undone.w.db, undone.w.ports.now(), undone.w.owner, undone.hash);
+    undone.blob.serve();
+    expect(await drainInbox(undone.w.ports, undone.w.owner)).toEqual({});
+    expect(undone.w.ops()).not.toContain('upload_blob');
+    expect(undone.w.db.all('SELECT outcome FROM inbox_seen')).toEqual([{ outcome: 'failed_blob' }]);
+    del.revert();
+    expect(await drainInbox(undone.w.ports, undone.w.owner)).toEqual({ created: 1 });
+    expect(undone.w.item(undone.hash)?.text_state).toBe('cached');
+
+    const { w, blob, hash } = await failedCapture();
+    const gone = deleteItem(w.db, w.ports.now(), w.owner, hash);
+    blob.serve();
+    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+    commitDelete(w.db, w.owner, hash, gone.held);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    // no text was made for the save while its delete waited, so no upload or mirror is left that no save names (C§4.1)
+    expect(w.db.get('SELECT COUNT(*) AS n FROM items')).toEqual({ n: 0 });
+    expect(w.ops().filter((o) => ['upload_blob', 'mirror_blob', 'publish_item'].includes(o))).toEqual([]);
+    expect(w.db.all('SELECT sha256 FROM blobs')).toEqual([]);
+    expect(w.deletes().map((d) => d.subject)).toEqual([blob.html.sha256]);
+  });
+
+  test('a browser disconnected after its capture failed leaves its save to finish, not waiting for its text for ever', async () => {
+    // Disconnect has Kefli's server delete the browser's captures (C§6), so the retry meets a 404
+    const { w, hash } = await failedCapture();
+    w.db.run('UPDATE devices SET revoked_at = ?', w.ports.now());
+    w.answerMissing(404);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    expect(w.item(hash)?.text_state).toBe('queued');
+    expect(pendingParses(w.db, w.owner).map((p) => p.url)).toEqual(['https://example.com/a']);
+    // and one whose capture is still there is read
+    const still = await failedCapture();
+    still.w.db.run('UPDATE devices SET revoked_at = ?', still.w.ports.now());
+    still.blob.serve();
+    expect(await drainInbox(still.w.ports, still.w.owner)).toEqual({ created: 1 });
+    expect(still.w.item(still.hash)?.text_state).toBe('cached');
+  });
+
+  test('a retry that fails part way holds up neither the other retries nor the new wraps', async () => {
+    const { w, blob } = await failedCapture();
+    const other = await w.withHtml('<h1>Other</h1>', false);
+    await w.send(w.request({ url: 'https://example.com/b', html: other.html }));
+    // the first one's retry fails again, and the second fails
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_blob: 2 });
+    blob.serve();
+    other.serve();
+    await w.send(w.request({ url: 'https://example.com/c' }));
+    // the phone's disk refuses the first text it stages
+    const stage = w.ports.stage;
+    let refuse = 1;
+    w.ports.stage = (sha, bytes) => {
+      if (refuse-- > 0) throw new Error('disk full');
+      return stage(sha, bytes);
+    };
+    // one retry stays as it was, the other and the new wrap go on
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 2 });
+    const left = w.db.all<{ hash: string }>("SELECT hash FROM inbox_seen WHERE outcome = 'failed_blob'");
+    expect(left).toHaveLength(1);
+    expect(w.item(left[0].hash)?.text_state).toBe('fetching');
+    expect(w.item(itemHash('https://example.com/c'))?.text_state).toBe('queued');
+    // and it is tried again at the next drain
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    expect(['a', 'b'].map((p) => w.item(itemHash(`https://example.com/${p}`))?.text_state)).toEqual(['cached', 'cached']);
   });
 
   test('a blob server that trickles, or never ends, lets go at the deadline or the cap (F12)', async () => {
