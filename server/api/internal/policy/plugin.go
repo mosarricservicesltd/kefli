@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"sync"
@@ -55,8 +56,8 @@ func (d *DB) refresh() {
 	}
 }
 
-func keys(db *sql.DB, q string) (map[string]bool, error) {
-	rows, err := db.Query(q)
+func keys(db *sql.DB, q string, args ...any) (map[string]bool, error) {
+	rows, err := db.Query(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +106,8 @@ func (d *DB) Wrap(id string) (author, p string, ok bool) {
 	return author, p, err == nil
 }
 
-// OpenWraps opens, and makes if need be, the plugin's record of the wraps the relay holds.
+// OpenWraps opens, and makes if need be, the plugin's record of the wraps the relay holds, with when its last prune
+// began (PruneWraps).
 func OpenWraps(path string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=busy_timeout(5000)")
 	if err != nil {
@@ -113,7 +115,8 @@ func OpenWraps(path string) (*sql.DB, error) {
 	}
 	_, err = db.Exec(`PRAGMA journal_mode = WAL;
 		CREATE TABLE IF NOT EXISTS wraps (id TEXT PRIMARY KEY, author TEXT NOT NULL, p TEXT NOT NULL, at INTEGER NOT NULL);
-		CREATE INDEX IF NOT EXISTS wraps_p ON wraps(p);`)
+		CREATE INDEX IF NOT EXISTS wraps_p ON wraps(p);
+		CREATE TABLE IF NOT EXISTS pruned (id INTEGER PRIMARY KEY CHECK (id = 1), at INTEGER NOT NULL);`)
 	return db, err
 }
 
@@ -121,13 +124,25 @@ func OpenWraps(path string) (*sql.DB, error) {
 // record never forgets a wrap the relay still holds.
 const WrapLife = 31 * 24 * time.Hour
 
+// PruneOverlap is how far before the last prune's start the next looks for keys removed: the policy's allowlist is up
+// to five seconds old (DB), so a wrap to a key removed just before a prune can be recorded just after it, and the
+// next prune still forgets it.
+const PruneOverlap = time.Hour
+
 // PruneWraps forgets the wraps the relay's sweep has dropped, which no kind 5 ever named: those past WrapLife, and
-// those addressed to a key on keflid's gone list, so the record keeps no recipient a deleted account had (F45).
+// those addressed to a key keflid's gone list has taken since the last prune began, less PruneOverlap, so the record
+// keeps no recipient a deleted account had (F45). The list holds 60 days of removed keys, and reading every one of
+// them each hour, a delete apiece, did again what the prunes before had done; a record with no prune yet, as a new
+// one, looks at every key on the list. The prune's start is kept once it has run to the end.
 func PruneWraps(wraps, keflid *sql.DB, now time.Time) error {
 	if _, err := wraps.Exec(`DELETE FROM wraps WHERE at < ?`, now.Add(-WrapLife).Unix()); err != nil {
 		return err
 	}
-	gone, err := keys(keflid, `SELECT pubkey FROM gone`)
+	since, err := lastPrune(wraps)
+	if err != nil {
+		return err
+	}
+	gone, err := keys(keflid, `SELECT pubkey FROM gone WHERE at >= ?`, since)
 	if err != nil {
 		return err
 	}
@@ -136,7 +151,18 @@ func PruneWraps(wraps, keflid *sql.DB, now time.Time) error {
 			return err
 		}
 	}
-	return nil
+	_, err = wraps.Exec(`INSERT INTO pruned(id, at) VALUES(1, ?) ON CONFLICT(id) DO UPDATE SET at = excluded.at`, now.Unix())
+	return err
+}
+
+// lastPrune is when the last prune began, less PruneOverlap, and 0 when the record has had none.
+func lastPrune(wraps *sql.DB) (int64, error) {
+	var at int64
+	err := wraps.QueryRow(`SELECT at FROM pruned WHERE id = 1`).Scan(&at)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return at - int64(PruneOverlap/time.Second), err
 }
 
 // Serve answers strfry line by line until in closes: each event's verdict, with the wrap record kept in step and the

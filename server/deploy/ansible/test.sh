@@ -75,6 +75,21 @@ check "the write policy keeps the relay's floor" \
 check 'strfry keeps no compression window per connection' 'grep -qx " *slidingWindow = false" <<<"$(box cat /etc/strfry.conf)"'
 check 'the mail forwarder is held to 768 MB' '[ "$(box systemctl show -p MemoryMax --value kefli-mailfwd)" = 805306368 ]'
 check 'the sweep runs' 'box systemctl start relay-sweep'
+# The sweep keeps when its last full run began, and sweeps for the keys whose time came since then, less an hour,
+# where it swept for every key on the 60 days' list each night (F45). Counted by strfry's deletes: 120 keys removed 40
+# days ago take three for their wraps and three for their events, beside the one for wraps past 30 days, on a run with
+# nothing kept, and none on the next; a key removed since takes one, for its wraps.
+sql() { box runuser -u kefli -- sqlite3 /var/lib/kefli/keflid.db "$1"; }
+swept() { box journalctl -u relay-sweep --no-pager -o cat | grep -c 'Deleting' || true; }
+deletes() { local before; before=$(swept); box systemctl start relay-sweep; sleep 1; echo $(( $(swept) - before )); }
+sql "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 120)
+  INSERT INTO gone(pubkey, at) SELECT printf('%064x', i), unixepoch() - 40 * 86400 FROM n"
+box rm -f /var/lib/strfry/relay-sweep.last
+check 'a sweep with nothing kept sweeps for every removed key' '[ "$(deletes)" = 7 ]'
+check 'and keeps when it began' '(( $(box cat /var/lib/strfry/relay-sweep.last) > $(box date +%s) - 60 ))'
+check 'the next sweeps for none of them again' '[ "$(deletes)" = 1 ]'
+sql "INSERT INTO gone(pubkey, at) VALUES(printf('%064x', 121), unixepoch())"
+check 'and one removed since has its wraps dropped' '[ "$(deletes)" = 2 ]'
 check 'the access log holds no address' '! box grep -q 127.0.0.1 /var/log/caddy/access.log'
 # F6: a WebSocket connection to the relay, and a request with a query to a stopped upstream (Caddy's error log), leave
 # no address, query or key in the journal, which keeps seven days

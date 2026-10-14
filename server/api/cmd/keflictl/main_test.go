@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -108,6 +109,56 @@ func TestGone(t *testing.T) {
 		var out bytes.Buffer
 		if err := run(db, []string{"gone", days}, &out); err != nil || out.String() != want {
 			t.Fatalf("gone %s: %q, %v", days, out.String(), err)
+		}
+	}
+}
+
+// The relay's sweep asked for every key on the gone list each night, 60 days of them, and swept again for each: the
+// wraps of every key removed, and the events of every key gone 30 days. Given since, the start of its last run less an
+// hour, gone lists only the keys whose time came since then: removed since it, for the wraps (0 days), or with their
+// 30 days run out since it, for the events.
+func TestGoneSince(t *testing.T) {
+	db := filepath.Join(t.TempDir(), "k.db")
+	st, err := store.Open(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	now := time.Now()
+	key := func(c byte) string { return string(bytes.Repeat([]byte{c}, 64)) }
+	for _, k := range []struct {
+		pk  string
+		ago time.Duration
+	}{
+		{key('a'), 2 * time.Hour},       // removed since the last run
+		{key('b'), 3 * 24 * time.Hour},  // removed before it, and not yet gone 30 days
+		{key('c'), 31 * 24 * time.Hour}, // its 30 days ran out since the last run
+		{key('d'), 45 * 24 * time.Hour}, // its 30 days ran out before it
+	} {
+		st.Now = func() time.Time { return now.Add(-k.ago) }
+		if err := st.Register(ctx, k.pk); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := st.DeleteAccount(ctx, k.pk); err != nil {
+			t.Fatal(err)
+		}
+	}
+	st.Close()
+	since := strconv.FormatInt(now.Add(-2*24*time.Hour).Unix(), 10)
+	for _, c := range []struct{ days, since, want string }{
+		{"0", since, key('a') + "\n"},
+		{"30", since, key('c') + "\n"},
+		{"0", "0", key('a') + "\n" + key('b') + "\n" + key('c') + "\n" + key('d') + "\n"},
+		{"30", "0", key('c') + "\n" + key('d') + "\n"},
+	} {
+		var out bytes.Buffer
+		if err := run(db, []string{"gone", c.days, c.since}, &out); err != nil || out.String() != c.want {
+			t.Fatalf("gone %s %s: %q, %v", c.days, c.since, out.String(), err)
+		}
+	}
+	for _, bad := range [][]string{{"gone", "0", "-1"}, {"gone", "0", "soon"}, {"gone", "0", "1", "2"}, {"gone", "36501", "0"}} {
+		if err := run(db, bad, io.Discard); err == nil {
+			t.Fatalf("accepted %v", bad)
 		}
 	}
 }
