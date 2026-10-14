@@ -188,7 +188,7 @@ function textTaken(db: SqlDb, now: number, owner: string, sha256: string, operat
   db.run('UPDATE items SET text_servers = ? WHERE owner = ? AND text_sha256 = ? AND text_servers IS NULL', JSON.stringify([operator]), owner, sha256);
   const onMirror = db.all<{ hash: string; text_servers: string }>(
     `SELECT hash, text_servers FROM items WHERE owner = ? AND text_sha256 = ? AND event_id IS NOT NULL AND pending_delete_at IS NULL
-     AND NOT EXISTS (SELECT 1 FROM json_each(text_servers) WHERE value = ?)`, owner, sha256, operator);
+     AND text_servers IS NOT NULL AND NOT EXISTS (SELECT 1 FROM json_each(text_servers) WHERE value = ?)`, owner, sha256, operator);
   for (const r of onMirror) {
     db.run('UPDATE items SET text_servers = ? WHERE owner = ? AND hash = ?', JSON.stringify([operator, ...(JSON.parse(r.text_servers) as string[])]), owner, r.hash);
     enqueue(db, now, { op: 'publish_item', signer: owner, subject: r.hash, targets: writeRelays(db, owner) });

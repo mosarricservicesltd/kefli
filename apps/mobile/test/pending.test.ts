@@ -193,6 +193,14 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     expect(w.db.get('SELECT hash, url, text_state FROM items')).toEqual({ hash: itemHash('https://c.com/a'), url: 'https://c.com/a', text_state: 'cached' });
   });
 
+  test("a published save whose page can't be read here has nothing new to send", async () => {
+    const w = world({ 'https://c.com/gone': { status: 410 } });
+    w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, published, event_id, modified_at) VALUES (?, ?, 'https://c.com/gone', 10, 'unread', 'queued', 'sync', 1, 'e1', 7)", PK, itemHash('https://c.com/gone'));
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 1 });
+    expect(w.db.get('SELECT text_state, fail_reason, dirty, modified_at FROM items')).toEqual({ text_state: 'failed', fail_reason: 'http', dirty: 0, modified_at: 7 });
+    expect(w.outbox()).toEqual([]);
+  });
+
   test("a published save's text is its only change: uploaded and mirrored, the save not sent again until they hold it (C§4.2)", async () => {
     const w = world({ 'https://c.com/a': {} });
     w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, published, event_id, modified_at) VALUES (?, ?, 'https://c.com/a', 10, 'unread', 'queued', 'sync', 1, 'e1', 7)", PK, itemHash('https://c.com/a'));
