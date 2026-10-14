@@ -268,8 +268,48 @@ describe('sending a save (mobile spec 4.3)', () => {
     [{ ok: false, reason: 'blocked: not on the list' } as RelayAnswer, 'rejected'],
     [{ ok: false, reason: 'invalid: bad' } as RelayAnswer, 'rejected'],
     [{ ok: false, reason: 'auth-required: who are you' } as RelayAnswer, 'retry'],
+    // the phone's clock ahead of the relay's: strfry's words, and khatru's
+    [{ ok: false, reason: 'invalid: created_at too late' } as RelayAnswer, 'retry'],
+    [{ ok: false, reason: 'blocked: event too much in the future' } as RelayAnswer, 'retry'],
+    [{ ok: false, reason: 'invalid: created_at too early' } as RelayAnswer, 'rejected'],
   ])('relay answer %j is %s', (a, kind) => {
     expect(relayResult('r', a, 'id').kind).toBe(kind);
+  });
+
+  test('a clock 20 minutes fast: strfry’s “created_at too late” waits on the backoff, and the change goes once the clock is right', async () => {
+    const w = world();
+    // every relay here is strfry, which takes an event dated no more than 15 minutes past its own clock
+    let relayNow = w.now();
+    w.ports.publish = async (url, event) => {
+      w.all.push({ relay: url, event });
+      return event.created_at > relayNow + 900 ? { ok: false, reason: 'invalid: created_at too late' } : { ok: true };
+    };
+    release(w.db, (await save(w, false)).held);
+    await drain(w.ports);
+    expect(w.published()).toHaveLength(3);
+    // the phone's clock jumps 20 minutes ahead, and the save is archived
+    w.tick(1200);
+    release(w.db, setArchived(w.db, w.now(), w.signer.pubkey(), HASH, true).held);
+    await drain(w.ports);
+    const waiting = () => w.db.all<{ state: string; target: string; next_at: number; last_error: string }>(
+      "SELECT o.state, t.target, t.next_at, t.last_error FROM outbox o JOIN outbox_targets t ON t.outbox_id = o.id WHERE o.op = 'publish_item' ORDER BY t.target");
+    expect(waiting()).toEqual(['ws://a', 'ws://b', 'ws://op'].map((target) => ({ state: 'queued', target, next_at: w.now() + 30, last_error: 'invalid: created_at too late' })));
+    // still fast half a minute later: the next wait is longer
+    relayNow += 30;
+    w.tick(30);
+    await drain(w.ports);
+    expect(waiting().map((t) => t.next_at)).toEqual([w.now() + 60, w.now() + 60, w.now() + 60]);
+    // the phone's clock is put right; the retry, timed by the clock as it was, comes due 20 minutes and its wait on
+    w.tick(-1200);
+    await drain(w.ports);
+    expect(waiting()).toHaveLength(3);
+    w.tick(1200 + 60);
+    relayNow += 1200 + 60;
+    await drain(w.ports);
+    expect(waiting()).toEqual([]);
+    const last = w.published().slice(-3);
+    expect(last.map((p) => p.relay).sort()).toEqual(['ws://a', 'ws://b', 'ws://op']);
+    expect((await readItemEvent(w.signer, last[0].event)).item.item.state).toBe('archived');
   });
 
   test('backed up only once a relay the operator doesn’t run holds the newest event and a mirror holds the text (FD 93)', async () => {

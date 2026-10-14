@@ -52,12 +52,23 @@ const DAY = 86_400;
 const UNDO_WAIT = 15;
 const err = (e: unknown) => String((e as Error)?.message ?? e);
 
-/** A relay's OK prefix decides the outcome (4.3). */
+/**
+ * An event dated past the relay's clock by more than it allows: strfry's "invalid: created_at too late" (15 minutes
+ * ahead, for every strfry relay, Kefli's own among them), khatru's "event too much in the future". It is the phone's
+ * clock running fast, not the event, so it is retried with the backoff until the clock is right or the relay's has
+ * caught up; refused for good, every save made on such a phone missed every strfry relay. A refusal as too early stays
+ * final: the library copied to a relay added in Advanced goes as already signed (sendCopyRelay), and an event years old
+ * stays so however often it is sent.
+ */
+const CLOCK = new RegExp('created_at too late|too (?:much|far) in the future', 'i');
+
+/** A relay's OK prefix decides the outcome (4.3); an event refused as dated ahead of the relay's clock is tried again. */
 export function relayResult(target: string, a: RelayAnswer, eventId: string): TargetResult {
   if (a.ok) return { target, kind: 'ok', eventId };
   const reason = a.reason;
   if (/^duplicate:/.test(reason)) return { target, kind: 'ok', eventId };
   if (/^rate-limited:/.test(reason)) return { target, kind: 'retry', error: reason, waitSec: 60 };
+  if (CLOCK.test(reason)) return { target, kind: 'retry', error: reason };
   if (/^(invalid|blocked|pow|restricted|error):/.test(reason)) return { target, kind: 'rejected', error: reason };
   return { target, kind: 'retry', error: reason };
 }
