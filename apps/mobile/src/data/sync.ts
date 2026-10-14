@@ -139,13 +139,14 @@ function keepText(row: Row, c: Columns): Columns {
 }
 
 /**
- * A kept text goes out again (C§4.1): once its upload and mirror succeed when the operator hasn't taken it yet (the
- * mirror's republish, send.ts), and now otherwise, the row dirty until a relay takes it. So two phones on a full
- * library don't take turns sending the save without its text.
+ * A kept text goes out again (C§4.1): while only this phone has it, once its upload and mirror succeed (the mirror's
+ * republish, send.ts), and now when a server already holds it, the row dirty until a relay takes it, so the save names
+ * the text again: the operator's, another phone's upload, or a mirror's copy from a move (C§4.8). So two phones on a
+ * full library don't take turns sending the save without its text.
  */
 function nameKeptText(db: SqlDb, now: number, owner: string, hash: string, row: Row): void {
   const blob = blobRow(db, owner, row.text_sha256!);
-  if (blob && blob.operator_at === null) return;
+  if (blob && blob.operator_at === null && blob.mirror_at === null) return;
   db.run('UPDATE items SET dirty = 1, modified_at = ? WHERE id = ?', now, row.id);
   enqueue(db, now, { op: 'publish_item', signer: owner, subject: hash, targets: writeRelays(db, owner) });
 }

@@ -365,6 +365,24 @@ describe('a phone that holds the text and a newer copy without it (C§4.1, v1.12
     expect(notBackedUp(a.db, a.pk)).toBe(0);
   });
 
+  test('a text a mirror holds while the operator refuses it, as after a move, is named again at once, on the mirror', async () => {
+    const c = cloud();
+    const sk = nodeCrypto.randomBytes(32);
+    const a = phone(c, sk, 'A');
+    const text = await a.share();
+    // as a move leaves a text the old identity had backed up: the operator refuses it, a mirror holds it
+    c.mirror.set(text, a.staged.get(text)!);
+    a.db.run("UPDATE blobs SET mirror_at = 1, mirror_url = 'http://m1'");
+    await a.cycle();
+    expect(await newest(c, a.signer)).toMatchObject({ text: { sha256: text, servers: ['http://m1'] } });
+    c.tick(100);
+    await textless(c, sk, c.now());
+    c.tick(10);
+    await a.cycle();
+    expect(await newest(c, a.signer)).toMatchObject({ title: 'Retitled', text: { sha256: text, servers: ['http://m1'] } });
+    expect(notBackedUp(a.db, a.pk)).toBe(0);
+  });
+
   test("a text this phone only had from the servers, not yet fetched, isn't held: the copy is taken and the page parsed", async () => {
     const c = cloud();
     c.state.full = false;

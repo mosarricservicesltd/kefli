@@ -68,8 +68,12 @@ export function runOutbox(): Promise<number> {
       defaults = await loadDefaults();
       const d = defaults;
       if (!revived) {
-        reviveRefused(store(), Math.floor(Date.now() / 1000));
         revived = true;
+        try {
+          reviveRefused(store(), Math.floor(Date.now() / 1000));
+        } catch {
+          // left for the next start; the outbox sends what it has meanwhile
+        }
       }
       return await drain({
         db: store(),
