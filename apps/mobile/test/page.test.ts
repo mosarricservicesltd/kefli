@@ -275,6 +275,16 @@ describe("a page's canonical link is kept only from its own site (contract 4.3, 
     expect(o).toMatchObject({ kind: 'parsed', result: { canonical: null } });
   });
 
+  test('a canonical resolved against an address with a user name and password is kept without them', async () => {
+    // OkHttp sends no user info, but the address it reports the fetch ended at keeps it, and so does a relative
+    // canonical the parse resolves there
+    const shared = 'https://user:hunter2@amp.news.example/2026/10/story';
+    const o = await fetchPage(naming('https://user:hunter2@news.example/2026/10/story', shared), shared);
+    if (o.kind !== 'parsed') throw new Error(o.kind);
+    expect(o.result.canonical).toBe(story);
+    expect(itemHash(o.finalUrl, o.result.canonical)).toBe(itemHash(story));
+  });
+
   test('a canonical past the longest kept is left out before it is read, however long the page made it', async () => {
     // whatwg-url reads an address a code point at a time: on Node a canonical of a megabyte on the page's own site took
     // 8 s to judge and one of 5 MB 51 s, longer still in the phone's JavaScript, with the share waiting on it

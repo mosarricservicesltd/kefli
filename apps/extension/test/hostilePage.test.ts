@@ -114,6 +114,11 @@ describe("a page's canonical link is kept only from its own site (contract 4.3, 
     expect(itemHash(amp.url, amp.canonical)).toBe(itemHash(story));
     expect(captured('https://m.news.example/a', 'https://www.news.example/a').canonical).toBe('https://www.news.example/a');
   });
+
+  test('a canonical the page wrote with a user name and password goes to the phone without them', () => {
+    const c = captured('https://amp.news.example/2026/10/story', 'https://user:hunter2@news.example/2026/10/story');
+    expect(c.canonical).toBe(story);
+  });
 });
 
 describe('the base fragment links are made absolute against', () => {

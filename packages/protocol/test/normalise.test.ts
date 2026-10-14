@@ -100,6 +100,15 @@ describe("an address's user info is no part of its save (ruling 8)", () => {
     expect(itemHash('https://m.example.com/private/a', 'https://user:hunter2@example.com/private/a')).toBe(plain);
   });
 
+  test('the canonical a save keeps holds none either, however the page came to name it', () => {
+    // a relative canonical takes the user info of the address it is resolved against: on the phone, where the fetch
+    // ended, which keeps what was shared
+    expect(ownCanonical('https://user:hunter2@m.example.com/a', 'https://user:hunter2@example.com/a')).toBe('https://example.com/a');
+    expect(ownCanonical('https://m.example.com/a', 'https://:hunter2@www.example.com/a?b=1#c')).toBe('https://www.example.com/a?b=1#c');
+    // one without any is kept exactly as the page gave it
+    expect(ownCanonical('https://m.example.com/a', 'https://Example.com/a b')).toBe('https://Example.com/a b');
+  });
+
   test('withoutUserInfo takes off only the user info, as a browser sends an address', () => {
     expect(withoutUserInfo('https://user:pw@example.com/a/?b=2&a=1#f')).toBe('https://example.com/a/?b=2&a=1#f');
     expect(withoutUserInfo('http://user@[2001:db8::1]:8080/a')).toBe('http://[2001:db8::1]:8080/a');

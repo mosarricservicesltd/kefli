@@ -143,16 +143,27 @@ function siteCanonical(pageHost: string, canonical: string): URLRecord | null {
   return sameSite(pageHost, hostOf(target)) ? target : null;
 }
 
+/** input, whose URL record url is, exactly as given when it holds no user info; else url serialised without it. */
+function unauthenticated(input: string, url: URLRecord): string {
+  if (url.username === '' && url.password === '') return input;
+  url.username = '';
+  url.password = '';
+  return serializeURL(url);
+}
+
 /**
- * The canonical link a save keeps for the page at url (contract 4.3): canonical itself when it is an http or https URL
- * on the page's own site (ruling 11), otherwise null, as for a page that names none. The extension's capture and the
- * phone's parse keep a page's canonical through this, so a save's is always one normalise could take. Never throws:
- * a canonical is a page's hint, and a page or canonical that isn't a link keeps none.
+ * The canonical link a save keeps for the page at url (contract 4.3): canonical when it is an http or https URL on the
+ * page's own site (ruling 11), without any user name and password (ruling 8), otherwise null, as for a page that names
+ * none. A relative canonical takes the user info of the address it is resolved against, which on the phone is where
+ * the fetch ended and keeps what was shared. The extension's capture and the phone's parse keep a page's canonical
+ * through this, so a save's is always one normalise could take. Never throws: a canonical is a page's hint, and a page
+ * or canonical that isn't a link keeps none.
  */
 export function ownCanonical(url: string, canonical: string | null | undefined): string | null {
   if (!canonical) return null;
   try {
-    return siteCanonical(hostOf(parseHttp(url)), canonical) ? canonical : null;
+    const target = siteCanonical(hostOf(parseHttp(url)), canonical);
+    return target && unauthenticated(canonical, target);
   } catch {
     return null;
   }
@@ -170,10 +181,7 @@ export function withoutUserInfo(input: string): string {
   } catch {
     return input;
   }
-  if (url.username === '' && url.password === '') return input;
-  url.username = '';
-  url.password = '';
-  return serializeURL(url);
+  return unauthenticated(input, url);
 }
 
 /**
