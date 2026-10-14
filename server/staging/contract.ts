@@ -13,7 +13,9 @@ const API = process.argv[2] ?? 'http://localhost:8447';
 let failures = 0;
 const check = (name: string, ok: boolean, detail = '') => {
   if (!ok) failures++;
-  console.log(`${ok ? '✓' : '✗'} ${name}${ok || !detail ? '' : `: ${detail}`}`);
+  // one level of template only: lizard, which the code gate uses, loses its place in a nested one
+  const why = ok || !detail ? '' : ': ' + detail;
+  console.log(`${ok ? '✓' : '✗'} ${name}${why}`);
 };
 
 const key = () => new LocalSigner(generateSecretKey());

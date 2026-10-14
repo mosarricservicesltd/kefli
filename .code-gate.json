@@ -16,6 +16,7 @@
     "*/apps/mobile/src/share/*",
     "*/apps/mobile/scripts/*",
     "*/server/dev/*",
+    "*/server/staging/*",
     "*/apps/mobile/src/services/runner.ts",
     "*/apps/mobile/src/services/save.ts",
     "*/apps/mobile/src/services/staging.ts",
