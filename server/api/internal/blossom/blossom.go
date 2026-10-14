@@ -49,13 +49,14 @@ const MaxAddressCalls = 6000
 // MaxBlockCalls is the same a minute for one IPv6 /48, whose 65,536 /64s would otherwise each make MaxAddressCalls.
 const MaxBlockCalls = 30_000
 
-// MaxAddressDownload is how many bytes of blobs one address (an IPv6 /64) is sent an hour. Anyone may fetch any blob
-// by its hash, and MaxAddressCalls counts requests, not bytes: one client asking for an 8 MB blob of its own over and
-// over could take the server's whole link, which every user's uploads and every mirror's copies share. A phone
-// restoring a full library fetches its 50 MB of texts once, and a mirror each blob it copies once.
+// MaxAddressDownload is how many bytes of blobs one IPv4 address is sent an hour. Anyone may fetch any blob by its
+// hash, and MaxAddressCalls counts requests, not bytes: one client asking for an 8 MB blob of its own over and over
+// could take the server's whole link, which every user's uploads and every mirror's copies share. A phone restoring a
+// full library fetches its 50 MB of texts once, and a mirror each blob it copies once.
 const MaxAddressDownload = 1 << 30
 
-// MaxBlockDownload is the same an hour for one IPv6 /48.
+// MaxBlockDownload is the same an hour for one IPv6 /48, which is counted whole and not by its /64s: a count for each
+// of a /48's 65,536 /64s, kept an hour, would let one /48 fill keflid's memory with them, 30,000 a minute.
 const MaxBlockDownload = 5 << 30
 
 type Server struct {
@@ -82,7 +83,8 @@ type Server struct {
 	flights  map[string]flight
 	// calls and blockCalls count requests per address and per IPv6 /48, MaxAddressCalls and MaxBlockCalls a minute
 	calls, blockCalls *limit.Limiter
-	// downloads and blockDownloads count the bytes of blobs sent, MaxAddressDownload and MaxBlockDownload an hour
+	// downloads and blockDownloads count the bytes of blobs sent per IPv4 address and per IPv6 /48, MaxAddressDownload
+	// and MaxBlockDownload an hour
 	downloads, blockDownloads *limit.Limiter
 }
 
@@ -701,9 +703,9 @@ func (s *Server) openBlob(r *http.Request) (*os.File, refusal) {
 	return f, refusal{}
 }
 
-// charge counts what a GET sends, the whole blob even for a range, against the caller's IPv6 /48 and then its
-// address, an IPv6 /64, an hour at a time (MaxBlockDownload, MaxAddressDownload); past either it gets 429 rate with
-// Retry-After. A HEAD sends no blob and costs nothing.
+// charge counts what a GET sends, the whole blob even for a range, against the caller's IPv4 address or IPv6 /48 an
+// hour at a time (MaxAddressDownload, MaxBlockDownload); past it the GET gets 429 rate with Retry-After. A HEAD sends
+// no blob and costs nothing.
 func (s *Server) charge(r *http.Request, f *os.File) refusal {
 	if r.Method == http.MethodHead {
 		return refusal{}
@@ -713,12 +715,11 @@ func (s *Server) charge(r *http.Request, f *os.File) refusal {
 		return serverFault
 	}
 	ip := limit.ClientIP(r, s.TrustProxy)
-	if block := limit.Block(ip); strings.Contains(block, ":") {
-		if ok, retry := s.blockDownloads.AllowN(block, int(info.Size())); !ok {
-			return refusal{status: http.StatusTooManyRequests, reason: "rate", retry: retry}
-		}
+	key, sent := limit.Block(ip), s.blockDownloads
+	if !strings.Contains(key, ":") {
+		key, sent = limit.Addr(ip, 64), s.downloads
 	}
-	if ok, retry := s.downloads.AllowN(limit.Addr(ip, 64), int(info.Size())); !ok {
+	if ok, retry := sent.AllowN(key, int(info.Size())); !ok {
 		return refusal{status: http.StatusTooManyRequests, reason: "rate", retry: retry}
 	}
 	return refusal{}

@@ -58,9 +58,10 @@ func (d *discard) Write(b []byte) (int, error) {
 
 // Anyone may fetch any blob by its hash, and the request limits count requests, not bytes: one client asking for an
 // 8 MB blob of its own again and again was sent 8 MB a request, 6,000 requests a minute from one address, of the
-// link every user's uploads and every mirror's copies share. Now one address is sent MaxAddressDownload an hour and
-// one IPv6 /48 MaxBlockDownload; past them a GET gets 429 rate with Retry-After, and a HEAD, which sends no blob,
-// still answers.
+// link every user's uploads and every mirror's copies share. Now one IPv4 address is sent MaxAddressDownload an hour
+// and one IPv6 /48 MaxBlockDownload, counted whole, since a count kept an hour for each /64 a /48 sends from would
+// let it fill keflid's memory; past them a GET gets 429 rate with Retry-After, and a HEAD, which sends no blob, still
+// answers.
 func TestDownloadsPerAddress(t *testing.T) {
 	s, st, clock, mux := testServer(t)
 	ctx := context.Background()
@@ -105,7 +106,13 @@ func TestDownloadsPerAddress(t *testing.T) {
 	if d := get("GET", "198.51.100.9"); d.code != http.StatusOK {
 		t.Fatalf("an hour later: %d", d.code)
 	}
-	// a /48's /64s share MaxBlockDownload, here three blobs' worth
+	// an IPv6 /48 is counted whole: one of its /64s is sent more than an IPv4 address may be, within the /48's
+	for i := 0; i <= MaxAddressDownload/MaxBlob; i++ {
+		if d := get("GET", "2001:db8:4:1::1"); d.code != http.StatusOK {
+			t.Fatalf("an IPv6 /64's download %d: %d", i, d.code)
+		}
+	}
+	// and a /48's /64s share MaxBlockDownload, here three blobs' worth
 	s.blockDownloads = limit.New(3*MaxBlob, time.Hour, st.Now)
 	for _, from := range []string{"2001:db8:5:1::1", "2001:db8:5:2::1", "2001:db8:5:3::1"} {
 		if d := get("GET", from); d.code != http.StatusOK {
