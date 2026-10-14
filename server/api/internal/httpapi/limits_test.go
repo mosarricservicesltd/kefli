@@ -427,6 +427,36 @@ func TestAnUploadArrivingAfterItsAccountWent(t *testing.T) {
 	}
 }
 
+// A blob's GET took any number of byte ranges, each a part of a multipart answer: 20,000 one-byte ranges of a 1 MB blob,
+// a 275 KB header, cost keflid three and a half seconds (probe odd), from anyone, for any blob. No client asks for
+// more than one range, so a request for several is answered with the whole blob, as a GET without a range is.
+func TestBlobRangesAreOneAtMost(t *testing.T) {
+	e := newEnv(t)
+	user := newKey()
+	e.registered(user)
+	blob := []byte("0123456789abcdefghij")
+	if s, b := e.upload(user, blob); s != 200 {
+		t.Fatalf("upload %d %v", s, b)
+	}
+	get := func(ranges string) (int, string) {
+		req := mustReq("GET", e.blob.URL+"/"+hash(blob))
+		req.Header.Set("Range", ranges)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return res.StatusCode, string(b)
+	}
+	if s, b := get("bytes=0-0,2-2,4-4"); s != 200 || b != string(blob) {
+		t.Fatalf("three ranges: %d %q", s, b)
+	}
+	if s, b := get("bytes=10-"); s != 206 || b != string(blob[10:]) {
+		t.Fatalf("one range: %d %q", s, b)
+	}
+}
+
 // Every blob is a file, and the quota counts bytes: one account's 4-byte blobs used up a disk's inodes long before its
 // quota or the floor on free space (probe tinyblobs: on a disk of 1,500 inodes, the 1,242nd upload and every one after
 // it, anyone's, failed with 500, and so did every other writer on that disk). Uploads now keep a tenth of the disk's

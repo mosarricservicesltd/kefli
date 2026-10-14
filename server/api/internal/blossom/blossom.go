@@ -444,6 +444,11 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer f.Close()
+	// one range at most: each range of many is a part of its own, and 20,000 one-byte ranges of a 1 MB blob cost three
+	// and a half seconds; no client asks for more than one, and the whole blob is anyone's for the asking anyway
+	if strings.Contains(r.Header.Get("Range"), ",") {
+		r.Header.Del("Range")
+	}
 	h := w.Header()
 	h.Set("Content-Type", "application/octet-stream")
 	h.Set("X-Content-Type-Options", "nosniff")
