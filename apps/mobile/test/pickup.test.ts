@@ -44,6 +44,13 @@ describe('the link a share carries (5.4)', () => {
     expect(firstLink(`https://${'a'.repeat(2000)}.example/`)).toBeNull();
     expect(firstLink('https://example.com:99999/a')).toBeNull();
   });
+
+  test('so is one too long for its save to be published (C§3.3), which would never leave the phone', () => {
+    const long = `https://news.example/?q=${'x'.repeat(10_000)}`;
+    expect(firstLink(long)).toBeNull();
+    expect(firstLink(`https://news.example/a ${long}`)).toBe('https://news.example/a');
+    expect(firstLink(`https://news.example/?q=${'x'.repeat(5_000)}`)).toBe(`https://news.example/?q=${'x'.repeat(5_000)}`);
+  });
 });
 
 describe('the start-up pickup (8.5)', () => {

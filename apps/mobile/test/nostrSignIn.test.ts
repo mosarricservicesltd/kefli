@@ -86,11 +86,14 @@ describe('signing in with a nostr app (mobile spec 4.6, 5.3)', () => {
 
   test('a bookmark normalise refuses is passed over, not thrown at the sign-in every time', async () => {
     const long = `https://${'a'.repeat(2000)}.example/x`;
+    // and one too long for its save's event (C§3.3), which could never be published: not counted, not brought in
+    const tooLong = `https://example.net/?q=${'x'.repeat(10_000)}`;
     const w = await world({
-      'ws://a': async (s) => [await s.signEvent({ kind: 10003, created_at: 1, tags: [['r', long], ['r', 'https://example.org/b']], content: '' })],
+      'ws://a': async (s) => [await s.signEvent({ kind: 10003, created_at: 1, tags: [['r', long], ['r', tooLong], ['r', 'https://example.org/b']], content: '' })],
     });
     const c = await checkSignIn(w.p, w.s);
     expect(c.ok && c.links).toEqual(['https://example.org/b']);
+    expect(queueImported(w.db, w.s.pubkey(), [tooLong, long], 50, T)).toBe(0);
     // the phone's URL (Expo's, with no Unicode step) takes a host with a joiner, which normalise refuses (CheckJoiners)
     const real = globalThis.URL;
     // eslint-disable-next-line @typescript-eslint/no-require-imports

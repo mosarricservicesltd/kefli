@@ -7,7 +7,7 @@ import { phonePagePorts } from './pagePorts';
 import { phoneCrypto } from '../crypto/port';
 import type { SqlDb } from '../data/db';
 import { getItem } from '../data/items';
-import { interimRelays, priorOf, queueSave, type Prior, type SaveTargets } from '../data/saves';
+import { addressFits, fitSave, interimRelays, priorOf, queueSave, type Prior, type SaveTargets } from '../data/saves';
 import type { NewItem } from '../data/items';
 import { indexText } from '../data/sync';
 import { seedGeneratedLists } from '../data/lists';
@@ -83,11 +83,15 @@ export async function saveLink(url: string, report: (s: SaveStep) => void): Prom
     say: (step, detail, ok = true) => report({ step, ok, detail }),
   };
   c.say('identity', `${owner.slice(0, 12)}…`);
+  // a share's link is one that fits its event (firstLink passes over those that don't), so this doesn't happen
+  if (!addressFits(url)) throw new Error('address too long to save');
 
   let target = url;
   if (isXPost(url)) {
     const x = await xRoute(c, url);
     if (typeof x !== 'string') return x;
+    // an article address too long to save is no article Kefli can keep
+    if (!addressFits(x)) return { hash: null, held: [], kind: 'noarticle', prior: null, title: null, site: null };
     target = x;
   }
   const early = priorOf(db, owner, itemHash(target));
@@ -111,21 +115,27 @@ export async function saveLink(url: string, report: (s: SaveStep) => void): Prom
   }
   const { result: parsed, finalUrl, words } = outcome;
   c.say('parse', `“${parsed.title}”, ${words} words`);
-  const hash = itemHash(finalUrl, parsed.canonical);
+  // RULED: the page's fields are fitted under the event ceiling (C§3.3, data/saves fitSave). A final address too long
+  // for the event isn't adopted: the save keeps the shared one, with the text, as a failed parse keeps it.
+  const fields = { canonical: parsed.canonical, title: parsed.title, site: parsed.site, byline: parsed.byline, lang: parsed.lang, hero: parsed.hero };
+  const adopted = fitSave({ url: finalUrl, ...fields });
+  const page = adopted ?? fitSave({ url: target, ...fields, canonical: null });
+  if (!page) throw new Error('address too long to save');
+  const hash = adopted ? itemHash(finalUrl, parsed.canonical) : itemHash(target);
   // The page's own address may name a save already here (a redirect, a canonical): the repeat-save rule again.
   const prior = priorOf(db, owner, hash);
-  if (prior) return repeat(c, hash, finalUrl, prior);
+  if (prior) return repeat(c, hash, page.url, prior);
   const enc = await encryptText(parsed.markdown, phoneCrypto);
   // RULED: checked again after the last wait, with nothing awaited between it and the write. A second share of the
   // same page that passed the first check while this one was encrypting found the first's row inside queueSave and
   // came back as a new save with no prior, so its Undo deleted the first share's save.
   const meanwhile = priorOf(db, owner, hash);
-  if (meanwhile) return repeat(c, hash, finalUrl, meanwhile);
+  if (meanwhile) return repeat(c, hash, page.url, meanwhile);
   const staged = { sha256: enc.text.sha256, size: enc.blob.length, path: stageBlob(enc.text.sha256, enc.blob) };
   c.say('encrypt', `${enc.blob.length} bytes staged`);
   const held = queueSave(db, c.now(), {
-    ...base(c, hash, finalUrl, 'cached', url), canonical: parsed.canonical, title: parsed.title, site: parsed.site, byline: parsed.byline,
-    words, lang: parsed.lang, hero: parsed.hero, text: enc.text, textHash: textHash(parsed.markdown, phoneCrypto),
+    ...base(c, hash, page.url, 'cached', url), canonical: page.canonical, title: page.title, site: page.site, byline: page.byline,
+    words, lang: page.lang, hero: page.hero, text: enc.text, textHash: textHash(parsed.markdown, phoneCrypto),
   }, staged, c.targets);
   // The text is on the phone from the start, and searchable (4.1, 4.9).
   const row = getItem(db, owner, hash);
@@ -134,5 +144,5 @@ export async function saveLink(url: string, report: (s: SaveStep) => void): Prom
     indexText(db, row, outcome.spoken);
   }
   c.say('queued', `${held.length} rows held until the sheet closes`);
-  return { hash, held, kind: 'saved', prior: null, title: parsed.title, site: parsed.site };
+  return { hash, held, kind: 'saved', prior: null, title: page.title, site: page.site };
 }

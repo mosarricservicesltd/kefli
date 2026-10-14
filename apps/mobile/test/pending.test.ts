@@ -192,4 +192,22 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     await runPendingParses(w.ports, PK);
     expect(w.db.get('SELECT hash, url, text_state FROM items')).toEqual({ hash: itemHash('https://c.com/a'), url: 'https://c.com/a', text_state: 'cached' });
   });
+
+  test('a waiting share whose page is too large for its event is fitted, and keeps an address it can publish (C§3.3)', async () => {
+    const far = `https://d.com/landing?${'x'.repeat(12_000)}`;
+    const huge = (url: string): ParserResult => ({
+      ok: true, title: 'T'.repeat(50_000), byline: 'B'.repeat(9_000), site: 'S', lang: 'en', hero: `https://cdn.d.com/${'h'.repeat(9_000)}`,
+      canonical: url === far ? null : `https://d.com/b?${'c'.repeat(9_000)}`, readerable: true, markdown: `${LONG}\n`,
+    });
+    const w = world({ 'https://d.com/a': {}, 'https://d.com/r': { finalUrl: far } }, huge);
+    w.share('https://d.com/a');
+    w.share('https://d.com/r');
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ parsed: 2 });
+    const rows = w.db.all<{ hash: string; url: string; canonical: string | null; hero: string | null; title: string }>('SELECT hash, url, canonical, hero, title FROM items ORDER BY id');
+    expect(rows.map((r) => [r.hash, r.url, r.canonical, r.hero])).toEqual([
+      [itemHash('https://d.com/a', `https://d.com/b?${'c'.repeat(9_000)}`), 'https://d.com/a', null, null],
+      [itemHash('https://d.com/r'), 'https://d.com/r', null, null],
+    ]);
+    expect(rows.every((r) => r.title.length <= 300)).toBe(true);
+  });
 });

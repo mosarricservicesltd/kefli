@@ -4,6 +4,7 @@
 import { itemHash } from '@kefli/protocol';
 import { KefliShare, type SpoolEntry } from '../../modules/kefli-share/src';
 import { release } from '../data/outbox';
+import { addressFits } from '../data/saves';
 import { saveLink } from '../services/save';
 import { store } from '../services/store';
 
@@ -19,24 +20,25 @@ export const SHARE_MAX_CHARS = 64 * 1024;
 // a string, since the code gate's parser misreads regex literals
 const ADDRESS = new RegExp('https?://[^\\s<>"]+', 'g');
 
-function hashable(url: string): boolean {
+/** A link Kefli can save: one normalise takes, short enough for its save's event (data/saves addressFits). */
+function savable(url: string): boolean {
   try {
     itemHash(url);
-    return true;
+    return addressFits(url);
   } catch {
     return false;
   }
 }
 
 /**
- * The link a share carries: the last http(s) address in its text, since apps put their own words first. One that
- * isn't a link to normalise ("http://[", or a host too long) is passed over for the one before it, so such a share
- * says Not a link, rather than failing on the sheet and again at every start from the spool.
+ * The link a share carries: the last http(s) address in its text, since apps put their own words first. One Kefli
+ * can't save ("http://[", a host too long, or an address too long for its event) is passed over for the one before
+ * it, so such a share says Not a link, rather than failing on the sheet and again at every start from the spool.
  */
 export function firstLink(text: string | null): string | null {
   if (typeof text !== 'string' || text.length >= SHARE_MAX_CHARS) return null;
   const all = text.match(ADDRESS) ?? [];
-  for (let i = all.length - 1; i >= 0; i--) if (hashable(all[i])) return all[i];
+  for (let i = all.length - 1; i >= 0; i--) if (savable(all[i])) return all[i];
   return null;
 }
 

@@ -4,7 +4,7 @@
 // then its text and save go out. A page that definitely can't be read is published without text.
 import type { SqlDb } from './db';
 import { enqueue } from './outbox';
-import { registerFirst, queueSends, type SaveTargets, type StagedBlob } from './saves';
+import { addressFits, fitSave, registerFirst, queueSends, type PageFields, type SaveTargets, type StagedBlob } from './saves';
 import { writeRelays } from './lists';
 
 export type Pending = { id: number; hash: string; url: string; shared_url: string | null; published: number; event_id: string | null; x_state: string | null };
@@ -56,16 +56,28 @@ function rekey(db: SqlDb, now: number, owner: string, from: Pending, to: string)
   return { hash: to, merged: true };
 }
 
-/** A parse that succeeded: the row takes the article and its text goes out (upload, mirror, publish). */
+/** The page's fields fitted under the event ceiling (C§3.3) at this address; with every one shed if even that fails. */
+function fittedAt(url: string, parsed: Parsed): PageFields {
+  const fields = { url, canonical: parsed.canonical, title: parsed.title, site: parsed.site, byline: parsed.byline, lang: parsed.lang, hero: parsed.hero };
+  return fitSave(fields) ?? { url, canonical: null, title: null, site: null, byline: null, lang: null, hero: null };
+}
+
+/**
+ * A parse that succeeded: the row takes the article and its text goes out (upload, mirror, publish). RULED: the
+ * page's fields are fitted under the event ceiling (data/saves fitSave), and a final address too long for the event
+ * isn't adopted, so the save keeps the address it has, and its hash, with the text.
+ */
 export function applyParsed(db: SqlDb, now: number, owner: string, p: Pending, parsed: Parsed, blob: StagedBlob, t: SaveTargets): Applied {
   return db.tx(() => {
     const unpublished = !p.published && !p.event_id;
-    const where = unpublished && parsed.hash !== p.hash ? rekey(db, now, owner, p, parsed.hash) : { hash: p.hash, merged: false };
+    const adopted = unpublished && addressFits(parsed.url);
+    const page = fittedAt(adopted ? parsed.url : p.url, parsed);
+    const where = adopted && parsed.hash !== p.hash ? rekey(db, now, owner, p, parsed.hash) : { hash: p.hash, merged: false };
     if (where.merged) return where;
     db.run(
       `UPDATE items SET url = ?, canonical = ?, title = ?, site = ?, byline = ?, lang = ?, hero = ?, words = ?, text_sha256 = ?,
         text_key = ?, text_nonce = ?, text_hash = ?, text_state = 'cached', fail_reason = NULL, modified_at = ?, dirty = 1 WHERE id = ?`,
-      unpublished ? parsed.url : p.url, parsed.canonical, parsed.title, parsed.site, parsed.byline, parsed.lang, parsed.hero, parsed.words,
+      page.url, page.canonical, page.title, page.site, page.byline, page.lang, page.hero, parsed.words,
       parsed.text.sha256, parsed.text.key, parsed.text.nonce, parsed.textHash, now, p.id,
     );
     queueSends(db, now, owner, where.hash, blob, t, false, registerFirst(db, now, owner, t));

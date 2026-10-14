@@ -1,8 +1,9 @@
 // A share's save (mobile spec 5.4, contract 4.1): two shares of one link at once, as two sheets or the start-up pickup
 // and a sheet run them, must agree on which one made the save, so the second's Undo never takes the first's away.
-import { LocalSigner } from '@kefli/protocol';
+import { LocalSigner, buildItemEvent, itemHash } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import type { SqlDb } from '../src/data/db';
+import { getItem, itemJson } from '../src/data/items';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow, undoSave } from '../src/data/saves';
 import type { PagePorts } from '../src/services/page';
@@ -89,7 +90,7 @@ describe('two shares of one link at once (G2, FD 89)', () => {
       .toEqual(['upload_blob', 'mirror_blob', 'publish_item']);
   });
 
-  test('one share alone is a new save, and its Undo takes it away', async () => {
+  test('one share alone is a new save, and its Undo takes it away (and the race below is the only change)', async () => {
     const owner = setUp();
     const { page, open } = gatedPage(true);
     mockWorld.page = page;
@@ -97,6 +98,49 @@ describe('two shares of one link at once (G2, FD 89)', () => {
     const r = await saveLink(URL_A, () => undefined);
     expect(r).toMatchObject({ kind: 'saved', prior: null });
     undoSave(mockWorld.db, owner, r.hash!, r.held, r.prior);
+    expect(mockWorld.db.all('SELECT 1 FROM items')).toEqual([]);
+  });
+});
+
+describe('a share too large for its event (C§3.3)', () => {
+  const key = nodeCrypto.randomBytes(32);
+  const servers = ['https://blossom.example', 'https://m1.example'];
+  const pageOf = (o: { url?: string; parsed?: Record<string, unknown> }, fetched: string[] = []): PagePorts => ({
+    fetch: (async (url: string) => {
+      fetched.push(url);
+      const res = new Response('<article><p>x</p></article>', { status: 200, headers: { 'content-type': 'text/html' } });
+      Object.defineProperty(res, 'url', { value: o.url ?? url });
+      return res;
+    }) as never,
+    parse: async () => ({ ok: true, title: 'A story', byline: null, site: 'News', lang: 'en', hero: null, canonical: null, readerable: true, markdown: WORDS, ...o.parsed }) as never,
+  });
+
+  test('a page whose fields are huge is fitted, so the save the outbox builds publishes', async () => {
+    const owner = setUp();
+    mockWorld.page = pageOf({ parsed: { title: 'T'.repeat(50_000), byline: 'B'.repeat(20_000), site: 'S'.repeat(20_000), hero: `https://cdn.example/${'h'.repeat(20_000)}`, canonical: `${URL_A}?${'c'.repeat(20_000)}` } });
+    const r = await saveLink(URL_A, () => undefined);
+    const row = getItem(mockWorld.db, owner, r.hash!)!;
+    expect(row).toMatchObject({ url: URL_A, hero: null, canonical: null, text_state: 'cached' });
+    expect(r.title!.length).toBeLessThanOrEqual(300);
+    await expect(buildItemEvent(mockWorld.signer, row.hash, itemJson(row, servers), 1_760_000_000, key)).resolves.toBeDefined();
+  });
+
+  test('a redirect to an address too long to publish keeps the shared one, and the text', async () => {
+    const owner = setUp();
+    mockWorld.page = pageOf({ url: `https://news.example/landing?${'x'.repeat(12_000)}` });
+    const r = await saveLink(URL_A, () => undefined);
+    expect(r).toMatchObject({ kind: 'saved', hash: itemHash(URL_A), title: 'A story' });
+    const row = getItem(mockWorld.db, owner, r.hash!)!;
+    expect(row).toMatchObject({ url: URL_A, text_state: 'cached' });
+    await expect(buildItemEvent(mockWorld.signer, row.hash, itemJson(row, servers), 1_760_000_000, key)).resolves.toBeDefined();
+  });
+
+  test('a shared address too long to publish is refused before anything is fetched', async () => {
+    setUp();
+    const fetched: string[] = [];
+    mockWorld.page = pageOf({}, fetched);
+    await expect(saveLink(`https://news.example/?q=${'x'.repeat(10_000)}`, () => undefined)).rejects.toThrow('too long');
+    expect(fetched).toEqual([]);
     expect(mockWorld.db.all('SELECT 1 FROM items')).toEqual([]);
   });
 });

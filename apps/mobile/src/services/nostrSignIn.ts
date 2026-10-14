@@ -5,6 +5,7 @@
 // confirmed absent is read again at the next sync, and nothing is published meanwhile. Ports keep it testable.
 import { KIND, bookmarkSaves, newest, probeSigner, readRelayList, readServerList, type NostrEvent, type RelayEntry, type Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
+import { addressFits } from '../data/saves';
 import { adoptUserLists, confirmedAbsent, markListsSettled, type DefaultsLike } from '../data/lists';
 import { queueRecord } from '../data/devices';
 import type { Filter } from './sync';
@@ -36,12 +37,17 @@ export async function readUserLists(p: SignInPorts, pubkey: string): Promise<Use
   };
 }
 
-/** The web links the user's bookmarks name (C§4.6) that aren't saves here yet; each is one normalise takes. */
+/**
+ * The web links the user's bookmarks name (C§4.6) that aren't saves here yet: each one normalise takes and short
+ * enough to be saved (data/saves addressFits), so the import sheet counts only what Bring them in can bring.
+ */
 export async function findBookmarks(p: SignInPorts, pubkey: string, relays: string[]): Promise<string[]> {
   const asked = [...new Set([...relays, ...p.defaults.indexer])];
   const filters: Filter[] = [{ kinds: [39701, 10003, 30003], authors: [pubkey] }];
   const events = (await Promise.all(asked.map((r) => p.query(r, filters).catch(() => [] as NostrEvent[])))).flat();
-  return bookmarkSaves(events, pubkey).filter((b) => !p.db.get('SELECT 1 FROM items WHERE owner = ? AND hash = ?', pubkey, b.hash)).map((b) => b.url);
+  return bookmarkSaves(events, pubkey)
+    .filter((b) => addressFits(b.url) && !p.db.get('SELECT 1 FROM items WHERE owner = ? AND hash = ?', pubkey, b.hash))
+    .map((b) => b.url);
 }
 
 export type Checked = { ok: true; lists: UserLists; links: string[] } | { ok: false; why: 'probe' };
