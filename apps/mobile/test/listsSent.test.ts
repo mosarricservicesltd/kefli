@@ -69,6 +69,22 @@ describe('a nostr user’s lists as Kefli republishes them (C§3.1)', () => {
     expect(new Set(w.sent.filter((x) => x.event.kind === 10002).map((x) => x.relay))).toEqual(new Set([...writeRelays(w.db, w.pk), ...D.indexer]));
   });
 
+  test.each([true, false])('a 10002 and no 10063, as most nostr users have (Keep backup copies %s): their 10002 as held, the default 10063', async (keep) => {
+    const w = await world();
+    // their list names two of Kefli's default relays, one only to read from and one only to write to
+    const theirs = [['r', 'wss://mine.example'], ['r', D.relays[1], 'read'], ['r', D.relays[0], 'write']];
+    const list = await w.s.signEvent({ kind: 10002, created_at: 500, tags: theirs, content: '' });
+    w.onRelays.splice(0, w.onRelays.length, list);
+    expect(settleUserLists(w.db, 900, w.pk, D, { relays: readRelayList(list), servers: null, known: true }, keep)).toBe(true);
+    await drain(w.p);
+    // every entry of theirs in its place with its marker; Kefli's relay after them only with the switch on, and no
+    // other default relay (C§3.1)
+    expect(w.newest(10002)!.tags).toEqual(keep ? [...theirs, ['r', D.operator.relay]] : theirs);
+    expect(w.newest(10063)!.tags).toEqual([['server', D.operator.blossom], ['server', D.mirrors[0]]]);
+    // with the switch off Kefli writes only to their write relays
+    expect(writeRelays(w.db, w.pk)).toEqual(keep ? ['wss://mine.example', D.relays[0], D.operator.relay] : ['wss://mine.example', D.relays[0]]);
+  });
+
   test('their list not read since sign-in waits for a read: none is sent from the tables alone', async () => {
     const w = await world();
     w.signIn();

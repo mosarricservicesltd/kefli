@@ -13,16 +13,28 @@ export type DefaultsLike = { operator: { relay: string; blossom: string }; relay
  *  operator Blossom plus mirrors[0]. Every entry is Kefli's own. Existing rows are left as they are. */
 export function seedGeneratedLists(db: SqlDb, owner: string, d: DefaultsLike): void {
   db.tx(() => {
-    const relay = (url: string, source: string, rw: number) =>
-      db.run('INSERT OR IGNORE INTO relays (url, owner, read, write, source, added_by_app) VALUES (?, ?, ?, ?, ?, 1)', url, owner, rw, rw, source);
-    relay(d.operator.relay, 'operator', 1);
-    for (const r of d.relays.slice(0, 2)) relay(r, 'default', 1);
-    for (const r of d.indexer) relay(r, 'indexer', 0);
-    const server = (url: string, role: string) =>
-      db.run('INSERT OR IGNORE INTO servers (url, owner, role, in_10063, added_by_app) VALUES (?, ?, ?, 1, 1)', url, owner, role);
-    server(d.operator.blossom, 'operator');
-    if (d.mirrors[0]) server(d.mirrors[0], 'mirror');
+    seedRelays(db, owner, d);
+    seedServers(db, owner, d);
   });
+}
+
+/** The default 10002 (C§3.1): Kefli's relay and relays[0..1], read and write, with the indexer relays. Returns true. */
+function seedRelays(db: SqlDb, owner: string, d: DefaultsLike): boolean {
+  const relay = (url: string, source: string, rw: number) =>
+    db.run('INSERT OR IGNORE INTO relays (url, owner, read, write, source, added_by_app) VALUES (?, ?, ?, ?, ?, 1)', url, owner, rw, rw, source);
+  relay(d.operator.relay, 'operator', 1);
+  for (const r of d.relays.slice(0, 2)) relay(r, 'default', 1);
+  for (const r of d.indexer) relay(r, 'indexer', 0);
+  return true;
+}
+
+/** The default 10063 (C§3.1, C§4.2): Kefli's Blossom server and mirrors[0]. Returns true. */
+function seedServers(db: SqlDb, owner: string, d: DefaultsLike): boolean {
+  const server = (url: string, role: string) =>
+    db.run('INSERT OR IGNORE INTO servers (url, owner, role, in_10063, added_by_app) VALUES (?, ?, ?, 1, 1)', url, owner, role);
+  server(d.operator.blossom, 'operator');
+  if (d.mirrors[0]) server(d.mirrors[0], 'mirror');
+  return true;
 }
 
 /** The identity's 10002 entries, in the order they were added; indexer-only rows are not part of it. */
@@ -210,20 +222,20 @@ export function nextListTime(db: SqlDb, owner: string, now: number): number {
  * A nostr user's lists at sign-in (mobile spec 4.6, C§3.1, FD 76): their newest 10002 and 10063 seen on any relay are
  * kept entry for entry, markers too; with Keep backup copies on, the operator relay and defaults.relays[0] join the
  * 10002 and the operator Blossom server and the default mirror the 10063, each marked added_by_app, where not
- * already listed. A list confirmed absent gets the default set, whatever the switch says. Returns whether the
- * lists must be published: only when Kefli added to them or made them, so a list their other apps share is never
- * rewritten for nothing.
+ * already listed. A list confirmed absent gets the default one, whatever the switch says, and the other list stays
+ * theirs. Most nostr users have a 10002 and no 10063: seeding both lists for that put Kefli's three relays in their
+ * 10002 with the switch off as well as on, and took each entry of theirs naming one of Kefli's default relays as
+ * Kefli's own, so the 10002 sent from here changed its marker. Returns whether the lists must be published: only when
+ * Kefli added to them or made them, so a list their other apps share is never rewritten for nothing.
  */
 export function adoptUserLists(
   db: SqlDb, owner: string, d: DefaultsLike, relays: RelayEntry[] | null, servers: string[] | null, keepCopies: boolean,
 ): boolean {
   return db.tx(() => {
-    const seeded = !relays || !servers;
-    if (seeded) seedGeneratedLists(db, owner, d);
-    const addedRelays = relays ? keepUserRelays(db, owner, d, relays, keepCopies) : false;
-    const addedServers = servers ? keepUserServers(db, owner, d, servers, keepCopies) : false;
+    const addedRelays = relays ? keepUserRelays(db, owner, d, relays, keepCopies) : seedRelays(db, owner, d);
+    const addedServers = servers ? keepUserServers(db, owner, d, servers, keepCopies) : seedServers(db, owner, d);
     for (const r of d.indexer) db.run("INSERT OR IGNORE INTO relays (url, owner, read, write, source, added_by_app) VALUES (?, ?, 0, 0, 'indexer', 1)", r, owner);
-    return seeded || addedRelays || addedServers;
+    return addedRelays || addedServers;
   });
 }
 
