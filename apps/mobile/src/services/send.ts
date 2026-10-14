@@ -9,7 +9,9 @@ import type { AccountFigures, BlossomOutcome, CryptoPort, NostrEvent, Signer, St
 import type { SqlDb } from '../data/db';
 import { hasDevices, localRecord, noteRecord, pairAcked, recordCreatedAt, type DeviceProof, type PairPayload } from '../data/devices';
 import { getItem, itemJson, markPublished, textServers, type ItemRow } from '../data/items';
-import { markBacked, nextForRoom, noteFreed, roomLeft, type KnownFigures } from '../data/backup';
+import {
+  heldFor, holdUpload, holdUploads, markBacked, nextForRoom, noteFreed, releaseHold, roomLeft, type KnownFigures,
+} from '../data/backup';
 import { keyPublished, libraryKey, libraryKeyPublished, madeHere, makeLibraryKey } from '../data/libraryKey';
 import {
   indexerRelays, listEdits, listEditsSent, listServers, listsUnread, nextListTime, recordList, relayEntries, relayListTags, serverListTags, writeRelays,
@@ -167,6 +169,12 @@ async function sendUpload(p: SendPorts, row: OutboxRow, signer: Signer, t: Outbo
   const { sha256 } = JSON.parse(row.payload ?? '{}') as { sha256: string };
   // its save has gone, or took another phone's text, since this was queued: no save would name the blob (C§4.1)
   if (!namesText(p.db, row.signer, sha256)) return (withdrawText(p.db, row.signer, sha256), []);
+  // a refusal for room or the day holds the library's texts until its retry: this one would be sent only to be refused
+  const held = heldFor(p.db, row.signer, p.now());
+  if (held) {
+    holdUpload(p.db, row.signer, row.id, sha256, held);
+    return [{ target: t.target, kind: 'retry', error: `held: ${held.reason}`, waitSec: held.until - p.now() }];
+  }
   const blob = await p.readBlob(sha256);
   // the staged text is gone, so it can never be sent: the save goes without it rather than with it (C§4.2)
   if (!blob) return (releaseDependents(p.db, row.id, 'publish_item'), [{ target: t.target, kind: 'rejected', error: 'staged blob missing' }]);
@@ -186,6 +194,8 @@ async function sendUpload(p: SendPorts, row: OutboxRow, signer: Signer, t: Outbo
 function uploaded(p: SendPorts, owner: string, target: string, sha256: string, size: number): TargetResult[] {
   const waited = p.db.get<{ last_error: string | null }>('SELECT last_error FROM blobs WHERE sha256 = ? AND owner = ?', sha256, owner)?.last_error;
   p.db.run('UPDATE blobs SET operator_at = ?, last_error = NULL WHERE sha256 = ? AND owner = ?', p.now(), sha256, owner);
+  // the operator has taken a text, so the library had the room and the day for it: no refusal holds the rest back
+  releaseHold(p.db, owner);
   textTaken(p.db, p.now(), owner, sha256, target);
   if (!namesText(p.db, owner, sha256)) queueBlobDelete(p.db, p.now(), owner, sha256, [target], { sha256, size, up: p.now() });
   if (waited === 'quota') tryRoom(p, owner);
@@ -213,7 +223,7 @@ function textTaken(db: SqlDb, now: number, owner: string, sha256: string, operat
  * The operator refused the text (C§5, v1.12): its reason is kept on the blob, a refusal for room brings the library's
  * figures, and the save's publish goes now without the text, which stays on the phone (C§4.2). A text over 8 MB is never
  * sent again; one refused for room, the day's uploads or any other 4xx is tried again a day later, and a full disk
- * (507) as any server error is.
+ * (507) as any server error is. A refusal for room or the day holds the library's other texts with it (roomRefused).
  */
 function refused(p: SendPorts, row: OutboxRow, target: string, sha256: string, r: Refusal): TargetResult[] {
   const why = refusalOf(r);
@@ -221,11 +231,19 @@ function refused(p: SendPorts, row: OutboxRow, target: string, sha256: string, r
   // the save goes now, before anything else this refusal brings is kept (C§4.2)
   releaseDependents(p.db, row.id, 'publish_item');
   p.db.run('UPDATE blobs SET last_error = ? WHERE sha256 = ? AND owner = ?', why, sha256, row.signer);
-  const figures = r.figures;
-  if (figures && (why === 'quota' || why === 'daily')) quietly(() => p.onFigures?.(row.signer, figures));
+  if (why === 'quota' || why === 'daily') roomRefused(p, row, why, r.figures);
   const error = `HTTP ${r.status} ${r.reason}`;
   if (why === 'too_large') return [{ target, kind: 'rejected', error }];
   return [{ target, kind: 'retry', error, ...(r.status === 507 ? {} : { waitSec: DAY }) }];
+}
+
+/**
+ * A refusal for room or the day (C§5): its figures kept, and the library's other texts held until its retry a day
+ * from now, or for room until a confirmed deletion wakes one (holdUploads), rather than each sent whole to be refused.
+ */
+function roomRefused(p: SendPorts, row: OutboxRow, why: 'quota' | 'daily', figures: AccountFigures | undefined): void {
+  if (figures) quietly(() => p.onFigures?.(row.signer, figures));
+  holdUploads(p.db, row.signer, { reason: why, until: p.now() + DAY }, row.id);
 }
 
 /**
@@ -242,15 +260,19 @@ function quietly(f: () => void): void {
 
 /**
  * Room the operator made, by confirming a deletion, or that a text waiting for room found (C§5): the oldest text
- * waiting on quota that fits what the last known figures leave goes now. Its own success tries the next; a refusal
- * stops there, so a deletion asks for no signing for texts that can't fit. A text waiting on the day's uploads waits
- * for its day, since deleting gives none of the day back.
+ * waiting on quota that fits what the last known figures leave goes now, and the refusal's hold on the rest is lifted
+ * for it. Its own success tries the next; a refusal stops there, holding the rest again, so a deletion asks for no
+ * signing for texts that can't fit. While a refusal for the day's uploads holds the texts, they wait for its retry,
+ * since deleting gives none of the day back.
  */
 function tryRoom(p: SendPorts, owner: string): void {
   quietly(() => {
+    if (heldFor(p.db, owner, p.now())?.reason === 'daily') return;
     const f = p.figures?.(owner);
     const next = f ? nextForRoom(p.db, owner, roomLeft(p.db, owner, f)) : null;
-    if (next !== null) wake(p.db, next, p.now());
+    if (next === null) return;
+    releaseHold(p.db, owner);
+    wake(p.db, next, p.now());
   });
 }
 
