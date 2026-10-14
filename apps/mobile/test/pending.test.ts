@@ -9,7 +9,7 @@ import * as pendingData from '../src/data/pending';
 import { pendingParses } from '../src/data/pending';
 import { commitDelete, deleteItem } from '../src/data/library';
 import { search } from '../src/data/search';
-import { DESKTOP_UA, MOBILE_UA, PAGE_MAX_BYTES, RENDER_MAX_BYTES, fetchPage, refusal, type ParserResult } from '../src/services/page';
+import { DESKTOP_UA, MOBILE_UA, PAGE_MAX_BYTES, RENDER_MAX_BYTES, fetchPage, parsedOutcome, refusal, type ParserResult } from '../src/services/page';
 import { AGAIN_MS, RUN_SECONDS, nextRunIn, runPendingParses, settle, type PendingPorts, type PendingResult } from '../src/services/pending';
 import { TimedOut } from '../src/net/http';
 import { memoryDb } from './sqlite';
@@ -462,6 +462,52 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     const sends = w.outbox().filter((r) => ['upload_blob', 'mirror_blob', 'publish_item'].includes(r.op));
     expect(sends.map((r) => r.op).sort()).toEqual(['mirror_blob', 'mirror_blob', 'publish_item', 'upload_blob', 'upload_blob']);
     expect(sends.filter((r) => r.op === 'publish_item').map((r) => r.subject)).toEqual([itemHash('https://f.com/new')]);
+  });
+});
+
+describe('a user name and password are never kept in a stored address (contract 4.3, ruling 8)', () => {
+  // the hash leaves them out, but the stored address is what Original, Open in browser and X's embed query are given
+  test('an imported link is queued without them', () => {
+    const w = world();
+    expect(queueImported(w.db, PK, ['https://reader:hunter2@old.example/post', 'https://medium.example/@writer/essay'], 900, T)).toBe(2);
+    expect(w.db.all('SELECT url, shared_url FROM items ORDER BY id')).toEqual([
+      { url: 'https://old.example/post', shared_url: 'https://old.example/post' },
+      { url: 'https://medium.example/@writer/essay', shared_url: 'https://medium.example/@writer/essay' },
+    ]);
+  });
+
+  test("a parse whose address has them, as a browser's request may, is stored without them", async () => {
+    const w = world();
+    w.share('https://news.example/a');
+    const [item] = pendingParses(w.db, PK);
+    const outcome = parsedOutcome({ ok: true, title: 'T', byline: null, site: null, lang: null, hero: null, canonical: null, readerable: true, markdown: `${LONG}\n` }, 'https://reader:hunter2@news.example/a');
+    expect(await settle(w.ports, PK, item, outcome)).toBe('parsed');
+    expect(w.db.all('SELECT hash, url, text_state FROM items')).toEqual([{ hash: itemHash('https://news.example/a'), url: 'https://news.example/a', text_state: 'cached' }]);
+  });
+
+  test("another phone's save stored with them keeps its address without them once parsed here", async () => {
+    const w = world({ 'https://c.com/a': {} });
+    w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, published, event_id) VALUES (?, ?, 'https://reader:hunter2@c.com/a', 10, 'unread', 'queued', 'sync', 1, 'e1')", PK, itemHash('https://c.com/a'));
+    await runPendingParses(w.ports, PK);
+    expect(w.db.get('SELECT hash, url, text_state FROM items')).toEqual({ hash: itemHash('https://c.com/a'), url: 'https://c.com/a', text_state: 'cached' });
+  });
+
+  test("X's embed is asked about a waiting post without them, as a row stored before ruling 8 holds them", async () => {
+    const w = world();
+    const asked: string[] = [];
+    w.ports.x = { fetch: (async (u: string) => (asked.push(u), Promise.reject(new Error('offline')))) as never };
+    w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, x_state) VALUES (?, ?, 'https://reader:hunter2@x.com/someone/status/1', 10, 'unread', 'queued', 'share', 'pending')", PK, itemHash('https://x.com/someone/status/1'));
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ waiting: 1 });
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).not.toMatch(/reader|hunter2/);
+  });
+
+  test("an X post's article address is taken without them", () => {
+    const w = world();
+    w.share('https://x.com/someone/status/1');
+    const [item] = pendingParses(w.db, PK);
+    expect(pendingData.xFound(w.db, item, 'https://reader:hunter2@news.example/story').url).toBe('https://news.example/story');
+    expect(w.db.get('SELECT url FROM items')).toEqual({ url: 'https://news.example/story' });
   });
 });
 

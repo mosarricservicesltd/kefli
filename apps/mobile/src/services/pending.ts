@@ -2,7 +2,7 @@
 // spent. Each is fetched and parsed as a share is (page.ts), a public http address over https first (net/http
 // overHttps); its text is encrypted under a fresh key, staged, written and indexed, and its sends queued
 // (data/pending.ts). Ports, so this runs in tests.
-import { encryptText, isPublicWebUrl, itemHash, textHash, type CryptoPort } from '@kefli/protocol';
+import { encryptText, isPublicWebUrl, itemHash, textHash, withoutUserInfo, type CryptoPort } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { applyFailed, applyParsed, pendingParses, timedOut, xFound, xNoArticle, type Pending } from '../data/pending';
 import { overHttps } from '../net/http';
@@ -65,9 +65,10 @@ type Step = 'parsed' | 'failed' | 'xWaiting' | 'unreached';
 
 async function step(p: PendingPorts, owner: string, queued: Pending): Promise<Step> {
   let item = queued;
-  // A shared X post is checked first: its article, if it has one, is what gets parsed (5.4).
+  // A shared X post is checked first: its article, if it has one, is what gets parsed (5.4). X's embed is never asked
+  // about a post with a user name and password in it, as a row stored before ruling 8 or a browser's request may hold.
   if (item.x_state === 'pending') {
-    const x = await checkXPost(p.x, item.url);
+    const x = await checkXPost(p.x, withoutUserInfo(item.url));
     if (x.kind === 'offline') return 'unreached';
     if (x.kind === 'xfail') return 'xWaiting';
     if (x.kind === 'none') {

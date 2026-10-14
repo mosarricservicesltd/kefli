@@ -2,7 +2,7 @@
 // stage the text, record the item, and queue its outbox rows held, to be released when the share sheet closes
 // without Undo. The outbox sends them (send.ts, runner.ts). What happened comes back as a kind, which picks the
 // Saved sheet's state.
-import { encryptText, isXPost, itemHash, textHash, urlParts } from '@kefli/protocol';
+import { encryptText, isXPost, itemHash, textHash, urlParts, withoutUserInfo } from '@kefli/protocol';
 import { overHttps } from '../net/http';
 import { phonePagePorts } from './pagePorts';
 import { phoneCrypto } from '../crypto/port';
@@ -60,7 +60,7 @@ async function xRoute(c: Ctx, url: string): Promise<Queued | string> {
   if (x.kind === 'article') {
     // the protocol's parser, which took the link: the phone's URL refuses a few hosts it takes, and this is a log line
     c.say('x', `the post links to ${urlParts(x.url)?.hostname}`);
-    return x.url;
+    return withoutUserInfo(x.url);
   }
   // Offline, or X's service failing: the post waits as a pending save (G3).
   c.say('x', x.kind === 'offline' ? 'offline: the post waits' : 'X is not answering: the post waits');
@@ -95,8 +95,10 @@ async function context(report: (s: SaveStep) => void): Promise<Ctx> {
  * spools this way (8.5), since the sync it runs ahead of used to wait for each spool's fetch, the X check and the
  * page's second try and its browser engine among them, before it could start.
  */
-export async function saveLater(url: string, report: (s: SaveStep) => void): Promise<Queued> {
+export async function saveLater(shared: string, report: (s: SaveStep) => void): Promise<Queued> {
   const c = await context(report);
+  // kept without any user name and password, as a share's address is (saveLink)
+  const url = withoutUserInfo(shared);
   if (!addressFits(url)) throw new Error('address too long to save');
   const hash = itemHash(url);
   const prior = priorOf(c.db, c.owner, hash);
@@ -106,9 +108,12 @@ export async function saveLater(url: string, report: (s: SaveStep) => void): Pro
   return { hash, held, kind: 'offline', prior: null, title: null, site: null };
 }
 
-export async function saveLink(url: string, report: (s: SaveStep) => void): Promise<Queued> {
+export async function saveLink(shared: string, report: (s: SaveStep) => void): Promise<Queued> {
   const c = await context(report);
   const { db, owner } = c;
+  // RULED: a shared address is kept, fetched and checked with X without any user name and password (contract 4.3,
+  // ruling 8). The hash leaves them out, but what a save keeps is what Original, Open in browser and X's embed are given.
+  const url = withoutUserInfo(shared);
   // a share's link is one that fits its event (firstLink passes over those that don't), so this doesn't happen
   if (!addressFits(url)) throw new Error('address too long to save');
 

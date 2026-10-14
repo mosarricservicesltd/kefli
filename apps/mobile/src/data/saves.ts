@@ -1,7 +1,7 @@
 // Queues a save (mobile spec 4.3, 5.4): the item row, its staged blob, and the outbox rows, held until the
 // share sheet closes without Undo. register runs first if this identity hasn't registered; the upload follows
 // it, the mirror follows the upload, and the publish follows the upload (or register, with no text).
-import { itemHash } from '@kefli/protocol';
+import { itemHash, withoutUserInfo } from '@kefli/protocol';
 import type { SqlDb } from './db';
 import { insertItem, type NewItem } from './items';
 import { enqueue, undo } from './outbox';
@@ -357,7 +357,10 @@ export function undoSave(db: SqlDb, owner: string, hash: string, held: number[],
 export function queueImported(db: SqlDb, owner: string, links: string[], at: number, t: SaveTargets): number {
   return db.tx(() => {
     let n = 0;
-    for (const url of links) {
+    for (const link of links) {
+      // RULED: kept without a user name and password, as a share is (contract 4.3, ruling 8). Only an address with an
+      // @ can hold them, and the check spares the rest a second full parse each: as costly as its hash, over thousands
+      const url = link.includes('@') ? withoutUserInfo(link) : link;
       const hash = itemHashOf(url);
       // a link too long for its event could never be published: findBookmarks leaves it out of the count too
       if (!hash || !addressFits(url) || db.get('SELECT 1 FROM items WHERE owner = ? AND hash = ?', owner, hash)) continue;

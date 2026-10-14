@@ -35,7 +35,7 @@ jest.mock('expo-modules-core', () => ({
 // eslint-disable-next-line import/first
 import * as http from '../src/net/http';
 // eslint-disable-next-line import/first
-import { saveLink } from '../src/services/save';
+import { saveLater, saveLink } from '../src/services/save';
 // eslint-disable-next-line import/first
 import { pickUpSpools } from '../src/share/pickup';
 
@@ -187,6 +187,72 @@ describe('a plain http link (release builds allow no cleartext)', () => {
     } finally {
       rule.mockRestore();
     }
+  });
+});
+
+describe('a shared address with a user name and password (contract 4.3, ruling 8)', () => {
+  // the hash leaves them out, but a stored address is what Original, Open in browser and X's embed query are given
+  const SHARED = 'https://reader:hunter2@news.example/story';
+  /** Page ports answering status at each address, recording what was asked for. */
+  const answering = (status: number, fetched: string[]): PagePorts => ({
+    fetch: (async (url: string) => {
+      fetched.push(url);
+      return Object.defineProperty(new Response('<p>x</p>', { status, headers: { 'content-type': 'text/html' } }), 'url', { value: url });
+    }) as never,
+    parse: async () => ({ ok: true, title: 'A story', byline: null, site: null, lang: null, hero: null, canonical: null, readerable: true, markdown: WORDS }),
+  });
+
+  test('a page that parses is asked for, saved and kept without them', async () => {
+    const owner = setUp();
+    const fetched: string[] = [];
+    mockWorld.page = answering(200, fetched);
+    const r = await saveLink(SHARED, () => undefined);
+    expect(fetched).toEqual(['https://news.example/story']);
+    expect(getItem(mockWorld.db, owner, r.hash!)).toMatchObject({ url: 'https://news.example/story', shared_url: 'https://news.example/story', text_state: 'cached' });
+  });
+
+  test("a page that can't be read keeps its link without them", async () => {
+    const owner = setUp();
+    mockWorld.page = answering(404, []);
+    const r = await saveLink(SHARED, () => undefined);
+    expect(getItem(mockWorld.db, owner, r.hash!)).toMatchObject({ url: 'https://news.example/story', shared_url: 'https://news.example/story', text_state: 'failed' });
+  });
+
+  test("an X post's embed is asked for without them, and the post waits without them", async () => {
+    const owner = setUp();
+    const asked: string[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (u: string) => (asked.push(u), Promise.reject(new Error('offline')))) as never;
+    try {
+      const r = await saveLink('https://reader:hunter2@x.com/someone/status/123', () => undefined);
+      expect(r.kind).toBe('offline');
+      expect(asked).toHaveLength(1);
+      expect(asked[0]).not.toMatch(/reader|hunter2/);
+      expect(getItem(mockWorld.db, owner, r.hash!)).toMatchObject({ url: 'https://x.com/someone/status/123', x_state: 'pending' });
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  test("the article an X post links to is kept without them, when its page can't be had yet", async () => {
+    const owner = setUp();
+    mockWorld.page = { fetch: (async () => Promise.reject(new Error('offline'))) as never, parse: async () => ({ ok: false, reason: 'error' }) };
+    const realFetch = globalThis.fetch;
+    const embed = { html: '<blockquote><a href="https://reader:hunter2@news.example/story">the story</a></blockquote>' };
+    globalThis.fetch = (async () => new Response(JSON.stringify(embed), { status: 200, headers: { 'content-type': 'application/json' } })) as never;
+    try {
+      const r = await saveLink('https://x.com/someone/status/123', () => undefined);
+      expect(r.kind).toBe('offline');
+      expect(getItem(mockWorld.db, owner, r.hash!)).toMatchObject({ url: 'https://news.example/story', text_state: 'queued' });
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  test('a share saved for later, as the start-up pickup saves, is kept without them', async () => {
+    const owner = setUp();
+    const r = await saveLater(SHARED, () => undefined);
+    expect(getItem(mockWorld.db, owner, r.hash!)).toMatchObject({ url: 'https://news.example/story', shared_url: 'https://news.example/story', text_state: 'queued' });
   });
 });
 

@@ -2,6 +2,7 @@
 // A share made offline waits here keyed by its shared address; once parsed, an unpublished save is re-keyed by its
 // final address and canonical (FD 80), joining the existing save if there is one (the repeat-save rule, G2), and
 // then its text and save go out. A page that definitely can't be read is published without text.
+import { withoutUserInfo } from '@kefli/protocol';
 import type { SqlDb } from './db';
 import { enqueue } from './outbox';
 import { addressFits, fitSave, registerFirst, queueSends, queueText, type PageFields, type SaveTargets, type StagedBlob } from './saves';
@@ -86,7 +87,8 @@ function fittedAt(url: string, parsed: Parsed): PageFields {
  * mirror's republish (send.ts), since a refusal leaves it nothing new to send (C§4.2, v1.12). The row stays clean, so
  * a newer copy from another phone is taken over it, the text kept by the merge (data/sync.ts). RULED: the page's
  * fields are fitted under the event ceiling (data/saves fitSave), and a final address too long for the event isn't
- * adopted, so the save keeps the address it has, and its hash, with the text.
+ * adopted, so the save keeps the address it has, and its hash, with the text. Whichever it keeps, it keeps without
+ * a user name and password (contract 4.3, ruling 8), as a browser's request or an older row may hold them.
  */
 export function applyParsed(db: SqlDb, now: number, owner: string, p: Pending, parsed: Parsed, blob: StagedBlob, t: SaveTargets): Applied {
   return db.tx(() => {
@@ -94,8 +96,9 @@ export function applyParsed(db: SqlDb, now: number, owner: string, p: Pending, p
     // another save takes nothing, so the caller drops the staged text
     if (!live(db, p)) return { hash: p.hash, merged: true };
     const unpublished = !p.published && !p.event_id;
-    const adopted = unpublished && addressFits(parsed.url);
-    const page = fittedAt(adopted ? parsed.url : p.url, parsed);
+    const final = withoutUserInfo(parsed.url);
+    const adopted = unpublished && addressFits(final);
+    const page = fittedAt(adopted ? final : withoutUserInfo(p.url), parsed);
     const where = adopted && parsed.hash !== p.hash ? rekey(db, now, owner, p, parsed.hash) : { hash: p.hash, merged: false };
     if (where.merged) return where;
     // a save not yet published is marked changed for its sends; one already out stays clean (above)
@@ -134,9 +137,11 @@ export function applyFailed(db: SqlDb, now: number, owner: string, p: Pending, r
 /**
  * An X post's check found its article (5.4): the save now parses that address, and is re-keyed by it (FD 80). RULED:
  * an article address too long for the save's event (data/saves addressFits) is no article Kefli can keep, as on the
- * sheet: the save keeps the post's address and is read as the post, so it is never left at one it can't publish.
+ * sheet: the save keeps the post's address and is read as the post, so it is never left at one it can't publish. The
+ * article's address is kept without a user name and password (contract 4.3, ruling 8).
  */
-export function xFound(db: SqlDb, p: Pending, article: string): Pending {
+export function xFound(db: SqlDb, p: Pending, found: string): Pending {
+  const article = withoutUserInfo(found);
   if (!addressFits(article)) {
     db.run("UPDATE items SET x_state = 'none' WHERE id = ?", p.id);
     return { ...p, x_state: 'none' };

@@ -4,14 +4,14 @@
 // only text/html and application/xhtml+xml parse. The parse runs in the kefli-parser WebView (a port here), then
 // contract 4.2's guard: not readerable and fewer than 120 spoken words is a failed parse. A network failure is
 // "offline": the save waits and tries again; a redirect the phone won't follow, or plain http the build refuses,
-// fails, the save keeping its link.
+// fails, the save keeping its link. No address is asked for or handed back with a user name and password in it.
 // A page still turned away with 403 by both is loaded once in a browser engine (the render port, 8.2), since bot
 // checks such as Cloudflare's tell Android's HTTP client from a browser; its rendered HTML takes the same parse. So is a
 // page whose answer arrives as a bare 1xx. A PDF (contract 4.2, PDFs; flow decision 103), known by its type or its
 // first bytes, has a larger cap; the parser WebView reads its text runs with pdf.js and pdfMarkdown lays them out here.
 // Whatever a page holds, a parse ends as parsed or failed and never throws: a share's save and the pending parses
 // behind it go on (a failed parse keeps the save's link, without text).
-import { normaliseMarkdown, ownCanonical, pdfMarkdown, urlParts, type PdfRuns } from '@kefli/protocol';
+import { normaliseMarkdown, ownCanonical, pdfMarkdown, urlParts, withoutUserInfo, type PdfRuns } from '@kefli/protocol';
 import { deriveArticle, type Derived } from '../reader/blocks';
 import { Blocked, fromFiles, open, strayed, TimedOut, TooLarge, WEB_HOPS, type Opened } from '../net/http';
 
@@ -198,9 +198,13 @@ function unfetched(e: unknown, o: Opened | null, url: string): Extract<PageOutco
   return e instanceof TimedOut ? { kind: 'offline', timedOut: true } : { kind: 'offline' };
 }
 
-/** Where a fetch ended, unless that is past FIELD_MAX.url: then the address asked for, which a failed parse keeps too. */
+/**
+ * Where a fetch ended, without any user name and password (contract 4.3, ruling 8), unless that is past FIELD_MAX.url:
+ * then the address asked for, which a failed parse keeps too. OkHttp sends no user info, but the address it reports a
+ * fetch ended at keeps any a redirect named, and what a save keeps is what Original and Open in browser are given.
+ */
 function landedAt(at: string, url: string): string {
-  return at.length > FIELD_MAX.url ? url : at;
+  return at.length > FIELD_MAX.url ? url : withoutUserInfo(at);
 }
 
 // built from a string: the code gate's parser reads a regex literal's escaped slashes as a comment
@@ -219,7 +223,9 @@ export function fetchable(url: string): boolean {
   return !!host && !fromFiles(url);
 }
 
-export async function fetchPage(p: PagePorts, url: string): Promise<PageOutcome> {
+/** A page fetched and parsed: asked for, and every address its outcome names, without a user name and password. */
+export async function fetchPage(p: PagePorts, asked: string): Promise<PageOutcome> {
+  const url = withoutUserInfo(asked);
   if (!fetchable(url)) return { kind: 'failed', reason: 'http', finalUrl: url };
   const a = await answer(p, url);
   if ('kind' in a) return a;
@@ -286,7 +292,7 @@ async function rendered403(p: PagePorts, url: string): Promise<PageOutcome | nul
   const r = await p.render!(url).catch(() => null);
   if (!r) return null;
   if (strayed(WEB_HOPS, url, r.url)) return { kind: 'failed', reason: 'http', finalUrl: url };
-  const at = r.url.length > FIELD_MAX.url ? url : r.url;
+  const at = landedAt(r.url, url);
   // UTF-8 is at least a byte a code unit: a page past the cap in code units is refused before it is encoded
   if ('tooLarge' in r || r.html.length > RENDER_MAX_BYTES) return { kind: 'failed', reason: 'too_large', finalUrl: at };
   const bytes = new TextEncoder().encode(r.html);
@@ -355,11 +361,17 @@ function canonicalAt(canonical: string | null, finalUrl: string): string | null 
   return ownCanonical(finalUrl, upTo(canonical, FIELD_MAX.url));
 }
 
+/** The page's picture as a save keeps it: none past FIELD_MAX.url, and without a user name and password (ruling 8). */
+function heroAt(hero: string | null): string | null {
+  const kept = upTo(hero, FIELD_MAX.url);
+  return kept && withoutUserInfo(kept);
+}
+
 /** A parse's fields fitted to FIELD_MAX, for the page read at finalUrl. */
 function fitted<R extends Extract<ParserResult, { ok: true }>>(r: R, finalUrl: string): R {
   return {
     ...r,
     title: cut(r.title, FIELD_MAX.title), byline: cut(r.byline, FIELD_MAX.byline), site: cut(r.site, FIELD_MAX.site),
-    lang: upTo(r.lang, FIELD_MAX.lang), hero: upTo(r.hero, FIELD_MAX.url), canonical: canonicalAt(r.canonical, finalUrl),
+    lang: upTo(r.lang, FIELD_MAX.lang), hero: heroAt(r.hero), canonical: canonicalAt(r.canonical, finalUrl),
   };
 }

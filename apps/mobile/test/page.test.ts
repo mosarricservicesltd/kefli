@@ -296,6 +296,46 @@ describe("a page's canonical link is kept only from its own site (contract 4.3, 
   }, 60_000);
 });
 
+describe('a user name and password are never asked for or kept in an address (contract 4.3, ruling 8)', () => {
+  /** Page ports answering status, as from landed when given (a redirect's end), recording each address asked for. */
+  const answering = (asked: string[], status = 200, landed?: string, headers: Record<string, string> = {}): PagePorts => ({
+    fetch: (async (url: string) => {
+      asked.push(url);
+      const r = new Response('<p>x</p>', { status, headers: { 'content-type': 'text/html', ...headers } });
+      return Object.defineProperty(r, 'url', { value: landed ?? url });
+    }) as never,
+    parse: async () => parsed(),
+  });
+
+  test('the address asked for goes without them, and a page that parses is kept without them', async () => {
+    const asked: string[] = [];
+    expect(await fetchPage(answering(asked), 'https://reader:hunter2@news.example/a')).toMatchObject({ kind: 'parsed', finalUrl: 'https://news.example/a' });
+    expect(asked).toEqual(['https://news.example/a']);
+  });
+
+  test('where a redirect ends, parsed or not, too large or not fetched at all', async () => {
+    const landed = 'https://admin:pw@landing.example/b';
+    expect(await fetchPage(answering([], 200, landed), 'https://news.example/a')).toMatchObject({ kind: 'parsed', finalUrl: 'https://landing.example/b' });
+    expect(await fetchPage(answering([], 404, landed), 'https://news.example/a')).toMatchObject({ kind: 'failed', reason: 'http', finalUrl: 'https://landing.example/b' });
+    const huge = { 'content-length': String(50 * 1024 * 1024) };
+    expect(await fetchPage(answering([], 200, landed, huge), 'https://news.example/a')).toMatchObject({ kind: 'failed', reason: 'too_large', finalUrl: 'https://landing.example/b' });
+    const asked: string[] = [];
+    expect(await fetchPage(answering(asked), 'http://reader:hunter2@filesystem.local/data/x')).toEqual({ kind: 'failed', reason: 'http', finalUrl: 'http://filesystem.local/data/x' });
+    expect(asked).toEqual([]);
+  });
+
+  test('a page loaded in a browser engine, and the picture a page names', async () => {
+    const engine: PagePorts = {
+      ...answering([], 403),
+      parse: async () => parsed({ hero: 'https://cdn:secret@img.example/hero.jpg' }),
+      render: async () => ({ url: 'https://admin:pw@landing.example/b', html: '<p>rendered</p>' }),
+    };
+    expect(await fetchPage(engine, 'https://news.example/a')).toMatchObject({
+      kind: 'parsed', finalUrl: 'https://landing.example/b', result: { hero: 'https://img.example/hero.jpg' },
+    });
+  });
+});
+
 describe('a PDF is handed over and read only as far as a save can hold it', () => {
   const pdfPorts = (read: ({ ok: true } & PdfRuns) | { ok: false; reason: string }, seen: { body?: string } = {}): PagePorts => ({
     fetch: (async () => new Response(PDF_BYTES, { status: 200, headers: { 'content-type': 'application/pdf' } })) as unknown as typeof fetch,
