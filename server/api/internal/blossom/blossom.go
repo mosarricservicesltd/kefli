@@ -72,8 +72,10 @@ type Server struct {
 	Free func(dir string) (int64, error)
 	// FreeFiles is how many files dir's filesystem has free and in all, from statfs unless a test says otherwise.
 	FreeFiles func(dir string) (free, total int64, err error)
-	st        *store.Store
-	log       *slog.Logger
+	// syncFile puts a file's bytes, or a folder's names, on the disk itself: (*os.File).Sync unless a test says otherwise
+	syncFile func(f *os.File) error
+	st       *store.Store
+	log      *slog.Logger
 	// commitMu makes an upload's check of the limits, its rename and its owner row one step (F2), and an unlink's
 	// check that no owner holds the blob and the file's removal another
 	commitMu sync.Mutex
@@ -90,7 +92,7 @@ type Server struct {
 
 func New(dir, base string, st *store.Store, log *slog.Logger) *Server {
 	return &Server{
-		Dir: dir, Base: strings.TrimRight(base, "/"), Free: diskFree, FreeFiles: diskFiles, st: st, log: log, flights: map[string]flight{},
+		Dir: dir, Base: strings.TrimRight(base, "/"), Free: diskFree, FreeFiles: diskFiles, syncFile: (*os.File).Sync, st: st, log: log, flights: map[string]flight{},
 		calls:      limit.New(MaxAddressCalls, time.Minute, st.Now),
 		blockCalls: limit.New(MaxBlockCalls, time.Minute, st.Now),
 		sends:      limit.New(MaxBlobSends, time.Hour, st.Now),
@@ -482,14 +484,16 @@ func (s *Server) refuseWrite(w http.ResponseWriter, err error) {
 }
 
 // receive reads the body into a temporary file beside where the blob will live, and returns its path (for the caller
-// to remove) and size. The body's hash must be sha.
+// to remove) and size. The body's hash must be sha. The file is synced to the disk before it is closed: renamed into
+// place unsynced, it could come back from a power cut short or empty under the blob's name, its owner row recorded
+// all the same, and be served and backed up short.
 func (s *Server) receive(body io.Reader, sha string, onDisk bool) (string, int64, error) {
 	if onDisk {
 		n, err := copyChecked(io.Discard, body, sha)
 		return "", n, err
 	}
 	dir := filepath.Dir(s.path(sha))
-	if err := os.MkdirAll(dir, 0o750); err != nil {
+	if err := s.makeDir(dir); err != nil {
 		return "", 0, err
 	}
 	tmp, err := os.CreateTemp(dir, ".upload-*")
@@ -497,6 +501,9 @@ func (s *Server) receive(body io.Reader, sha string, onDisk bool) (string, int64
 		return "", 0, err
 	}
 	n, err := copyChecked(tmp, body, sha)
+	if err == nil {
+		err = s.syncFile(tmp)
+	}
 	if cerr := tmp.Close(); err == nil {
 		err = cerr
 	}
@@ -504,6 +511,38 @@ func (s *Server) receive(body io.Reader, sha string, onDisk bool) (string, int64
 		return tmp.Name(), 0, err
 	}
 	return tmp.Name(), n, nil
+}
+
+// makeDir makes a folder that is missing, and any missing above it, syncing the folder each is made in: a blob's
+// name, synced into its folder (place), is lost with the folder all the same if the folder's own name never reached
+// the disk. Each of the 256 folders a blob goes in is made once.
+func (s *Server) makeDir(dir string) error {
+	if _, err := os.Stat(dir); !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	parent := filepath.Dir(dir)
+	if parent != dir {
+		if err := s.makeDir(parent); err != nil {
+			return err
+		}
+	}
+	if err := os.Mkdir(dir, 0o750); err != nil && !errors.Is(err, fs.ErrExist) {
+		return err
+	}
+	return s.syncDir(parent)
+}
+
+// syncDir syncs a folder, so the names made in it since, a blob's or a folder's, outlive a power cut.
+func (s *Server) syncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	err = s.syncFile(d)
+	if cerr := d.Close(); err == nil {
+		err = cerr
+	}
+	return err
 }
 
 // copyChecked copies a body of at most MaxBlob to w and checks that it hashes to sha.
@@ -525,8 +564,9 @@ func copyChecked(w io.Writer, body io.Reader, sha string) (int64, error) {
 // or a browser's copy of a blob its library holds: its body is then checked against the hash and not written again.
 // A copy costs no fair use, and each was written whole and renamed over identical bytes, so one address could keep
 // the disk writing at the link's rate, 8 MB a request. A file of another size than the body, as one a power cut left
-// short after its rename, is written again from the body, whose hash is checked as any upload's is: a body of another
-// size than the blob's never has its hash, so only a file that is wrong is ever written over.
+// short after its rename before blobs were synced (receive), is written again from the body, whose hash is checked as
+// any upload's is: a body of another size than the blob's never has its hash, so only a file that is wrong is ever
+// written over.
 func (s *Server) onDisk(ctx context.Context, sha string, size int64) bool {
 	if held, err := s.st.Stored(ctx, sha); err != nil || !held {
 		return false
@@ -573,9 +613,11 @@ func (s *Server) commit(r *http.Request, up *uploader, sha string, size int64, t
 }
 
 // place puts a received blob where it is served, for a caller holding commitMu: its file renamed into place, so a reader
-// never sees half a blob, or, for a body that wasn't written (onDisk), the file found there still. One that went while
-// the body arrived, its last owner having deleted it, answers 500, which the client sends again, and then it is
-// written.
+// never sees half a blob, and its folder synced, so the name outlives a power cut before the owner row that counts the
+// blob is written or the upload answered; or, for a body that wasn't written (onDisk), the file found there still. One
+// that went while the body arrived, its last owner having deleted it, answers 500, which the client sends again, and
+// then it is written. So does a sync that fails, which takes back the file unless another owner holds it, as a record
+// refused does (commit).
 func (s *Server) place(sha, tmp string) refusal {
 	if tmp == "" {
 		if _, err := os.Stat(s.path(sha)); err != nil {
@@ -586,6 +628,11 @@ func (s *Server) place(sha, tmp string) refusal {
 	}
 	if err := os.Rename(tmp, s.path(sha)); err != nil {
 		s.log.Error("store blob", "err", err)
+		return serverFault
+	}
+	if err := s.syncDir(filepath.Dir(s.path(sha))); err != nil {
+		s.log.Error("sync blob", "err", err)
+		s.unlinkLocked(sha)
 		return serverFault
 	}
 	return refusal{}

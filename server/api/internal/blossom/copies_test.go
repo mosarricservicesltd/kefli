@@ -123,11 +123,12 @@ func TestACopyOfAStoredBlobIsNotWrittenAgain(t *testing.T) {
 	}
 }
 
-// Nothing syncs a blob's file before its rename, so a power cut can leave it short on the disk, or empty, under its
-// own name; the next copy of it sent whole wrote it again, until copies were checked and not written, after which
-// the file stayed short for good and was served short (probe truncated). A copy whose file on the disk isn't the size
-// of its body, checked against its hash as any upload's is, is written again, and the blob is served whole; one whose
-// file is whole is still not written.
+// Nothing synced a blob's file before its rename, until TestABlobIsOnTheDiskBeforeItIsRecorded, so a power cut could
+// leave it short on the disk, or empty, under its own name, as it can still leave a file written before then; the next
+// copy of it sent whole wrote it again, until copies were checked and not written, after which the file stayed short
+// for good and was served short (probe truncated). A copy whose file on the disk isn't the size of its body, checked
+// against its hash as any upload's is, is written again, and the blob is served whole; one whose file is whole is
+// still not written.
 func TestACopyMendsAFileCutShort(t *testing.T) {
 	s, st, clock, mux := testServer(t)
 	user := newSigner()
