@@ -14,7 +14,8 @@
 // under EXPO_PUBLIC_USE_RN_FETCH) has its answer refused when it says it ended somewhere a hop couldn't go.
 //
 // Cleartext (7.1): release builds allow none, and OkHttp refuses plain http before it connects. That refusal fails
-// what was asked for (Blocked); read as the network, as it was, it left a save waiting for good.
+// what was asked for (Blocked); read as the network, as it was, it left a save waiting for good. A read that follows
+// its hops asks a public http address over https first, and as itself only when that can't be had (asked).
 import { isPublicWebUrl, urlParts } from '@kefli/protocol';
 
 export class TimedOut extends Error {
@@ -139,8 +140,9 @@ const PLAIN_HOST = new RegExp('^http://(?:[^@/?#]*@)?([^/?#]*)', 'i');
 /**
  * RULED (services/save.ts, for shares): a public http:// address is fetched over https, as browsers now try first,
  * since release builds allow no cleartext. One with a port, and a local one (the local stack's own pages), keep their
- * http. Pending parses and article images ask the same way; a page with no https fails there as any page that can't
- * be had does, and the save keeps the address it has until its page parses.
+ * http. A share's page, and a pending parse's, are asked over https alone, so one with no https waits as any page
+ * that can't be had does, and the save keeps the address it has until its page parses. The hops after it, and an
+ * article's images, fall back to the address itself (asked).
  */
 export function overHttps(url: string): string {
   const host = PLAIN_HOST.exec(url)?.[1];
@@ -150,19 +152,45 @@ export function overHttps(url: string): string {
 /** The request a read is on: its controller changes with each hop, and the deadline lets go of the one current. */
 type Line = { ctl: AbortController; late: boolean };
 
+/** An answer, and the address it came from. */
+type Answered = { res: Response; at: string };
+
+/**
+ * One request of a read that follows its hops: a public http address with no port is asked for over https first
+ * (overHttps), and as itself only when that can't be had (the deadline aside), which every build refuses once its
+ * name resolves (Blocked) and the network being gone fails as the network. So a redirect through plain http, a
+ * shortener's or an old link's, reaches the https its site now serves, and an image or a hop whose site has none
+ * fails, where the https try read as the network: an image's run stopped there at every sync, none after it fetched.
+ * An https address that sent its request here, to its own http, is not asked again: that went round to the last hop.
+ */
+async function asked(f: typeof fetch, at: string, from: string, init: RequestInit, line: Line): Promise<Answered> {
+  const tls = overHttps(at);
+  if (tls !== at && tls !== from) {
+    try {
+      return { res: await f(tls, init), at: tls };
+    } catch (e) {
+      if (line.late) throw e;
+    }
+  }
+  return { res: await f(at, init), at };
+}
+
 /** The answer at the end of the redirects, each hop asked for afresh under the line; without hops, the fetch's own. */
 async function arrive(f: typeof fetch, url: string, init: RequestInit, line: Line, hops?: Hops): Promise<{ res: Response; url: string }> {
   let at = url;
+  let from = '';
   for (let n = 0; ; n++) {
-    const res = await f(at, { ...init, credentials: 'omit', signal: line.ctl.signal, ...(hops ? { redirect: 'manual' as const } : {}) });
-    const next = hops ? redirectTo(res, at) : null;
-    if (next === null) return { res, url: arrived(res, at, hops) };
+    const opts: RequestInit = { ...init, credentials: 'omit', signal: line.ctl.signal };
+    const got: Answered = hops ? await asked(f, at, from, { ...opts, redirect: 'manual' }, line) : { res: await f(at, opts), at };
+    const next = hops ? redirectTo(got.res, got.at) : null;
+    if (next === null) return { res: got.res, url: arrived(got.res, got.at, hops) };
     // the redirect's own answer is let go, its body unread
     line.ctl.abort();
     if (n >= hops!.max) throw new Blocked('redirects');
     if (!hops!.allow(next)) throw new Blocked('redirect');
     if (line.late) throw new TimedOut();
     line.ctl = new AbortController();
+    from = got.at;
     at = next;
   }
 }

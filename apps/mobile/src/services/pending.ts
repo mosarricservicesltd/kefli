@@ -77,7 +77,9 @@ async function step(p: PendingPorts, owner: string, queued: Pending): Promise<St
     item = xFound(p.db, item, x.url);
   }
   // a page a browser asked for is never fetched from a private, loopback or link-local address (7.1); a share made
-  // offline, an import or another phone's save naming a public http address is fetched over https, as a share is
+  // offline, an import or another phone's save naming a public http address is fetched over https alone, as a share
+  // is, so a site with none waits as a page that can't be had (left to net/http open, its http would be asked next
+  // and fail the save)
   const fromBrowser = p.db.get<{ origin: string }>('SELECT origin FROM items WHERE id = ?', item.id)?.origin === 'browser';
   const outcome = fromBrowser && !isPublicWebUrl(item.url)
     ? { kind: 'failed' as const, reason: 'http' as const, finalUrl: item.url }

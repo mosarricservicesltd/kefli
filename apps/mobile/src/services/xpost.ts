@@ -1,11 +1,11 @@
 // Checking a shared X post (mobile spec 5.4, FD 78, G3): a post is never saved as itself; the first link in it that
 // leaves X is. The embed service is asked with a 5 s timeout over its whole answer, any redirect of its own followed
 // by hand to public addresses only (net/http.ts); t.co links are followed without a browser user agent, five hops at
-// most, never to a private address, 20 links and 20 s at most for them all; neither sends or keeps cookies. The
-// rules for which link counts are packages/protocol's (x.ts). Offline, or with X's service failing or too slow, the
-// post waits as a pending save and is checked again. Ports, so this runs in tests.
+// most, never to a private address, a plain http one over https, 20 links and 20 s at most for them all; neither
+// sends or keeps cookies. The rules for which link counts are packages/protocol's (x.ts). Offline, or with X's
+// service failing or too slow, the post waits as a pending save and is checked again. Ports, so this runs in tests.
 import { linksInEmbed, pickXLink, xEmbedUrl } from '@kefli/protocol';
-import { Blocked, open, publicWeb, redirectTo, TimedOut, WEB_HOPS, type Opened } from '../net/http';
+import { Blocked, open, overHttps, publicWeb, redirectTo, TimedOut, WEB_HOPS, type Opened } from '../net/http';
 
 export const X_TIMEOUT_MS = 5_000;
 export const MAX_HOPS = 5;
@@ -69,20 +69,23 @@ function timed(p: XPorts, url: string, init: RequestInit = {}): Promise<Opened> 
 /**
  * A t.co link's destination: Location headers followed by hand, five hops at most, no browser user agent, each hop
  * inside what is left until `until`. A hop to a private, loopback or link-local address isn't asked for: a post's
- * author chooses where its links lead, and a GET to the phone's own network is not theirs to send.
+ * author chooses where its links lead, and a GET to the phone's own network is not theirs to send. A public http
+ * hop is asked for over https (net/http overHttps), since every build refuses plain http: the link to an article
+ * posted with its old http address was passed over as one that doesn't resolve, and the post had no article.
  */
 export async function resolveTco(p: XPorts, link: string, until = Infinity, now: Clock = Date.now): Promise<string> {
-  let url = link;
+  // each address checked as it was written, before it is asked for over https
+  let url = overHttps(publicOnly(link));
   for (let hop = 0; MAX_HOPS > hop; hop++) {
     publicOnly(url);
     const left = until - now();
     if (left <= 0) throw new TimedOut();
     const { res, done } = await open(p.fetch, url, { redirect: 'manual' }, Math.min(X_TIMEOUT_MS, left));
     done();
-    // a Location naming nowhere is '', which the next hop's check refuses
+    // a Location naming nowhere is '', which the check refuses
     const next = redirectTo(res, url);
     if (next !== null) {
-      url = next;
+      url = overHttps(publicOnly(next));
       continue;
     }
     // A fetch that follows redirects itself reports where it ended.

@@ -9,7 +9,7 @@ import { articleBlocks } from '../reader/blocks';
 import { LIMITS } from '../reader/limits';
 import { drawable, imageKind, imageSize } from '../reader/imageSize';
 import type { SqlDb } from '../data/db';
-import { Blocked, open, overHttps, publicWeb, TimedOut, TooLarge, WEB_HOPS } from '../net/http';
+import { Blocked, open, publicWeb, TimedOut, TooLarge, WEB_HOPS } from '../net/http';
 import {
   MAX_IMAGE_BYTES, MAX_TOTAL_BYTES, evictions, forget, getImage, heldBytes, imagesOf, keptArticles, needsFetch, recordFailed, recordImage, wanted,
   type ImageRow,
@@ -83,11 +83,11 @@ function room(p: ImagePorts, owner: string, incoming: number, hash: string): Ima
 /**
  * The image's bytes, or how it failed: a redirect onto this phone's network is never followed, nor one ending there
  * kept (F26), and either fails that image alone, so the images after it are still fetched. An http image is asked
- * for over https, as a page is (net/http overHttps); one only cleartext would bring fails alone too.
+ * for over https (net/http asked); one whose site has none, which only cleartext would bring, fails alone too.
  */
 async function download(p: ImagePorts, url: string): Promise<Uint8Array | Exclude<Counted, 'ok'>> {
   try {
-    const o = await open(p.fetch, overHttps(url), { headers: { 'User-Agent': IMAGE_UA, Accept: IMAGE_ACCEPT } }, IMAGE_TIMEOUT_MS, WEB_HOPS);
+    const o = await open(p.fetch, url, { headers: { 'User-Agent': IMAGE_UA, Accept: IMAGE_ACCEPT } }, IMAGE_TIMEOUT_MS, WEB_HOPS);
     if (!o.res.ok) {
       o.done();
       return 'failed';

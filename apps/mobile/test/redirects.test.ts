@@ -38,6 +38,25 @@ function web(routes: Record<string, Hop>, followAnyway = false) {
   return { f, asked, urls: () => asked.map((a) => a.url) };
 }
 
+/**
+ * The web as a release build reaches it: plain http refused before it connects, once its name resolves, in expo/fetch's
+ * words for OkHttp's refusal; the names in dead resolve to nothing, whatever the scheme.
+ */
+function release(routes: Record<string, Hop>, dead: string[] = []) {
+  const w = web(routes);
+  const asked: string[] = [];
+  const f = (async (url: string, init?: RequestInit) => {
+    asked.push(url);
+    const host = new URL(url).hostname;
+    if (dead.includes(host)) throw new Error(`fetch failed: java.net.UnknownHostException: Unable to resolve host "${host}"`);
+    if (url.startsWith('http://')) {
+      throw new Error(`fetch failed: java.net.UnknownServiceException: CLEARTEXT communication to ${host} not permitted by network security policy`);
+    }
+    return w.f(url, init);
+  }) as unknown as typeof fetch;
+  return { f, asked };
+}
+
 const WORDS = `${Array.from({ length: 150 }, (_, i) => `word${i}`).join(' ')}\n`;
 const READ: ParserResult = { ok: true, title: 'A story', byline: null, site: null, lang: 'en', hero: null, canonical: null, readerable: true, markdown: WORDS };
 const pages = (f: typeof fetch, render?: PagePorts['render']): PagePorts => ({ fetch: f, parse: async () => READ, ...(render ? { render } : {}) });
@@ -166,6 +185,29 @@ describe("a page's redirects are followed by hand, never onto the phone's own ne
       .toEqual([false, false, false, false]);
   });
 
+  test('a redirect through plain http is followed over https; a site with no https fails as the cleartext refused, not as the network', async () => {
+    // a shortener's link made for an http address, its site long since on https: OkHttp refused the http hop
+    const moved = release({ 'https://bit.example/x': { status: 301, location: 'http://news.example/story' }, 'https://news.example/story': {} });
+    expect(await fetchPage(pages(moved.f), 'https://bit.example/x')).toMatchObject({ kind: 'parsed', finalUrl: 'https://news.example/story' });
+    expect(moved.asked).toEqual(['https://bit.example/x', 'https://news.example/story']);
+    // a site with no https: its address as itself, which every build refuses once the name resolves, fails the page
+    const old = release({ 'https://bit.example/y': { status: 302, location: 'http://old.example/story' } });
+    expect(await fetchPage(pages(old.f), 'https://bit.example/y')).toEqual({ kind: 'failed', reason: 'http', finalUrl: 'https://bit.example/y' });
+    expect(old.asked).toEqual(['https://bit.example/y', 'https://old.example/story', 'http://old.example/story']);
+    // the network gone mid-chain is still the network: the save waits
+    const gone = release({ 'https://bit.example/z': { status: 302, location: 'http://gone.example/' } }, ['gone.example']);
+    expect(await fetchPage(pages(gone.f), 'https://bit.example/z')).toEqual({ kind: 'offline' });
+    expect(gone.asked).toEqual(['https://bit.example/z', 'https://gone.example/', 'http://gone.example/']);
+    // an address with a port keeps its http (overHttps), asked once and refused
+    const port = release({ 'https://bit.example/p': { status: 302, location: 'http://news.example:8080/story' } });
+    expect(await fetchPage(pages(port.f), 'https://bit.example/p')).toEqual({ kind: 'failed', reason: 'http', finalUrl: 'https://bit.example/p' });
+    expect(port.asked).toEqual(['https://bit.example/p', 'http://news.example:8080/story']);
+    // an https page sending its request to its own http isn't asked again over https, round and round to the tenth hop
+    const down = release({ 'https://down.example/a': { status: 301, location: 'http://down.example/a' } });
+    expect(await fetchPage(pages(down.f), 'https://down.example/a')).toEqual({ kind: 'failed', reason: 'http', finalUrl: 'https://down.example/a' });
+    expect(down.asked).toEqual(['https://down.example/a', 'http://down.example/a']);
+  });
+
   test('every hop runs inside the one deadline: a chain that outlasts it is the network being slow, and goes no further', async () => {
     jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
     try {
@@ -237,6 +279,36 @@ describe("images and X's embed take the same hops (F26, 5.4)", () => {
     };
     expect(await fetchArticleImages(ports, PK, HASH)).toBe(1);
     expect(w.urls()).toEqual(['https://img.example/a.png', 'https://img.example/ok.png']);
+  });
+
+  test('an http image is asked for over https; one whose site has no https fails alone, and the images after it still come', async () => {
+    const db = memoryDb();
+    migrate(db);
+    ensureIdentityRow(db, 1, PK, 'new', true);
+    db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin) VALUES (?, ?, 'https://e.com/', 1, 'unread', 'cached', 'share')", PK, HASH);
+    const w = release({ 'https://img.example/moved.png': { type: 'image/png', body: png() }, 'https://img.example/ok.png': { type: 'image/png', body: png() } });
+    const srcs = ['http://old.example/a.png', 'http://img.example/moved.png', 'https://img.example/ok.png'];
+    const ports: ImagePorts = {
+      db, now: () => 1_000, fetch: w.f, nameOf: (u) => u.slice(-9), files: { write: (n) => `/img/${n}`, remove: () => undefined },
+      readArticle: () => ({ blocks: srcs.map((src) => ({ kind: 'img', src })) }),
+    };
+    // before, the https try failing read as the network: the run stopped there at every sync, and no image after it came
+    expect(await fetchArticleImages(ports, PK, HASH)).toBe(2);
+    expect(w.asked).toEqual(['https://old.example/a.png', 'http://old.example/a.png', 'https://img.example/moved.png', 'https://img.example/ok.png']);
+    expect(srcs.map((u) => imageState(db, u, 1_000))).toEqual(['failed', 'here', 'here']);
+  });
+
+  test('a t.co link through plain http is followed over https', async () => {
+    const w = release({ 'https://t.co/h': { status: 301, location: 'http://news.example/story' }, 'https://news.example/story': {} });
+    expect(await resolveTco({ fetch: w.f }, 'https://t.co/h')).toBe('https://news.example/story');
+    expect(w.asked).toEqual(['https://t.co/h', 'https://news.example/story']);
+    // the post's article, which OkHttp's refusal of the http hop had passed over as a link that doesn't resolve
+    const post = 'https://x.com/someone/status/2';
+    const x = release({
+      [xEmbedUrl(post)]: { type: 'application/json', body: JSON.stringify({ html: '<a href="https://t.co/h">x</a>' }) },
+      'https://t.co/h': { status: 301, location: 'http://news.example/story' }, 'https://news.example/story': {},
+    });
+    expect(await checkXPost({ fetch: x.f }, post)).toEqual({ kind: 'article', url: 'https://news.example/story' });
   });
 
   test("a t.co link leading to a host that only begins with the stand-in for the phone's files is never followed there", async () => {
