@@ -314,12 +314,13 @@ function cut(s: string | null, max: number): string | null {
 const upTo = (s: string | null, max: number): string | null => (s !== null && s.length > max ? null : s);
 
 /**
- * The page's canonical link as a save keeps it (contract 4.3): only from the page's own site, ruled on the address the
- * page was read at, so a page at amp.evil.example can't send its save to another site's address; and none past
- * FIELD_MAX.url.
+ * The page's canonical link as a save keeps it (contract 4.3): none past FIELD_MAX.url, left out before it is read,
+ * since whatwg-url reads an address a code point at a time (a page's canonical of a megabyte took 8 s on Node, one of
+ * 5 MB 51 s); then only from the page's own site, ruled on the address the page was read at, so a page at
+ * amp.evil.example can't send its save to another site's address.
  */
 function canonicalAt(canonical: string | null, finalUrl: string): string | null {
-  return upTo(ownCanonical(finalUrl, canonical), FIELD_MAX.url);
+  return ownCanonical(finalUrl, upTo(canonical, FIELD_MAX.url));
 }
 
 /** A parse's fields fitted to FIELD_MAX, for the page read at finalUrl. */
