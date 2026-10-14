@@ -169,10 +169,17 @@ export function queueBrowsers(p: Pick<MovePorts, 'db' | 'now' | 'crypto'>, job: 
  * Step 4: T owns every blob and holds every browser, and every copied save reads back and opens on min(2, n) of T's
  * write relays. RULED: any two that answer in full will do, so a public relay that is down (its sends still
  * retrying) doesn't hold the move; the blobs must be T's first, since DELETE /account as S leaves only what T owns.
+ * An upload the operator refused under T counts as settled, and so does the mirror waiting on it (C§4.8 step 3,
+ * v1.12): its save went out naming the mirror that holds S's blob, or without text, and the text waits under T.
  */
 export async function confirmed(p: MovePorts, job: MoveJob): Promise<boolean> {
   // a row that died is left to the read-back, which finds what it failed to send
-  if (p.db.get("SELECT 1 FROM outbox WHERE signer = ? AND op IN ('register','upload_blob','mirror_blob','post_device','pair_ack') AND state IN ('held','queued','sending')", job.to)) return false;
+  if (p.db.get(
+    `SELECT 1 FROM outbox o WHERE o.signer = ? AND o.op IN ('register','upload_blob','mirror_blob','post_device','pair_ack') AND o.state IN ('held','queued','sending')
+     AND NOT (o.op IN ('upload_blob', 'mirror_blob')
+       AND EXISTS (SELECT 1 FROM blobs b WHERE b.sha256 = o.subject AND b.owner = o.signer AND b.operator_at IS NULL AND b.last_error IS NOT NULL))`,
+    job.to,
+  )) return false;
   const relays = writeRelays(p.db, job.to);
   const need = Math.min(2, relays.length);
   if (!need) return false;

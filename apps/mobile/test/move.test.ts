@@ -10,6 +10,7 @@ import { seedGeneratedLists } from '../src/data/lists';
 import { enqueue, release } from '../src/data/outbox';
 import { absorbRecord } from '../src/data/devices';
 import { commitDelete, deleteItem, setArchived, setPosition } from '../src/data/library';
+import { notBackedUp } from '../src/data/backup';
 import { drain } from '../src/services/send';
 import { syncOwner, type Filter } from '../src/services/sync';
 import { runMove, type MovePorts } from '../src/services/move';
@@ -33,7 +34,7 @@ function matches(e: NostrEvent, f: Filter): boolean {
   return true;
 }
 
-function world(o: { down?: Set<string>; accountStatus?: number } = {}) {
+function world(o: { down?: Set<string>; accountStatus?: number; refuse?: (author: string) => boolean } = {}) {
   const db = memoryDb();
   migrate(db);
   const S = new LocalSigner(nodeCrypto.randomBytes(32));
@@ -56,6 +57,10 @@ function world(o: { down?: Set<string>; accountStatus?: number } = {}) {
     if (o.down?.has(host)) throw new Error('down');
     log.push(`${method} ${url} ${authorOf(init).slice(0, 4)}`);
     const sha = url.split('/').pop()!;
+    // the operator refusing an author's texts for room (C§5): 413 quota with the library's figures
+    if (url.endsWith('/upload') && o.refuse?.(authorOf(init))) {
+      return new Response(JSON.stringify({ v: 1, error: 'quota', quota: 100, used: 100, daily: 100, today: 0 }), { status: 413, headers: { 'X-Reason': 'quota' } });
+    }
     if (url.endsWith('/upload')) {
       const bytes = new Uint8Array(init.body as ArrayBuffer);
       const s = bytesToHex(nodeCrypto.sha256(bytes));
@@ -471,6 +476,66 @@ describe('The move (contract 4.8, mobile spec 4.10)', () => {
     };
     expect(await runMove(p)).toBe('done');
     expect(rowsOf(w, w.T.pubkey()).map((r) => r.hash)).toEqual([h(1), h(2)]);
+  });
+
+  /** T's newest copy of a save on a relay the operator doesn't run. */
+  async function tCopy(w: ReturnType<typeof world>, hash: string) {
+    const T = w.T.pubkey();
+    const mine = await Promise.all(w.relays.get('ws://a')!.filter((e) => e.kind === 30078 && e.pubkey === T && e.tags.some((t) => t[1]?.startsWith('kefli/item/')))
+      .map((e) => readItemEvent(w.T, e)));
+    return mine.find((m) => m.hash === hash)!.item.item;
+  }
+
+  test("an upload refused under T counts as settled: T's copy names the mirror holding S's text, which waits under T (C§4.8, v1.12)", async () => {
+    let refused = '';
+    const w = world({ refuse: (author) => author === refused });
+    refused = w.T.pubkey();
+    const T = w.T.pubkey();
+    const sha = await w.save(w.S, 1);
+    expect(await runMove(w.p)).toBe('done');
+    expect((await tCopy(w, h(1))).text).toMatchObject({ sha256: sha, servers: ['http://m1'] });
+    // the text waits under T, its ciphertext kept on the phone, and it stays backed up on the mirror
+    expect(w.db.get('SELECT owner, operator_at, last_error, mirror_url FROM blobs')).toEqual({ owner: T, operator_at: null, last_error: 'quota', mirror_url: 'http://m1' });
+    expect(w.staged.has(sha)).toBe(true);
+    expect(notBackedUp(w.db, T)).toBe(0);
+    // room comes: T's upload goes from the phone's copy, and the save goes out again naming both
+    refused = 'nobody';
+    w.tick(86_400);
+    await w.p.runOutbox();
+    expect((await tCopy(w, h(1))).text).toMatchObject({ sha256: sha, servers: ['http://blossom', 'http://m1'] });
+    expect(w.blossom.get(sha)!.owners.has(T)).toBe(true);
+    expect(notBackedUp(w.db, T)).toBe(0);
+  });
+
+  test('a text that waited on the phone under S goes under T without text, and waits there', async () => {
+    const w = world({ refuse: () => true });
+    const T = w.T.pubkey();
+    const sha = await w.save(w.S, 1, { stagedOnly: true });
+    await w.p.runOutbox();
+    expect(w.db.get('SELECT owner, last_error FROM blobs')).toEqual({ owner: w.S.pubkey(), last_error: 'quota' });
+    expect(await runMove(w.p)).toBe('done');
+    expect((await tCopy(w, h(1))).text).toBeNull();
+    expect(w.db.get('SELECT owner, operator_at, last_error, mirror_url FROM blobs')).toEqual({ owner: T, operator_at: null, last_error: 'quota', mirror_url: null });
+    expect(w.staged.has(sha)).toBe(true);
+    expect(w.db.get("SELECT 1 AS n FROM outbox WHERE signer = ? AND op = 'upload_blob' AND state = 'queued'", T)).toEqual({ n: 1 });
+    expect(notBackedUp(w.db, T)).toBe(1);
+  });
+
+  test("a text S had from another phone's upload: T's copy names the mirror S's copy named", async () => {
+    let refused = '';
+    const w = world({ refuse: (author) => author === refused });
+    refused = w.T.pubkey();
+    const md = normaliseMarkdown('# From another phone\n\nWords.');
+    const enc = await encryptText(md, nodeCrypto);
+    w.blossom.set(enc.text.sha256, { bytes: enc.blob, owners: new Set(['another']) });
+    w.db.run(
+      `INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, text_sha256, text_key, text_nonce, text_hash, text_servers, words)
+       VALUES (?, ?, 'https://e.com/9', 5, 'unread', 'cached', 'sync', ?, ?, ?, ?, ?, 4)`,
+      w.S.pubkey(), h(9), enc.text.sha256, enc.text.key, enc.text.nonce, textHash(md, nodeCrypto), JSON.stringify(['http://blossom', 'http://m2']),
+    );
+    expect(await runMove(w.p)).toBe('done');
+    expect((await tCopy(w, h(9))).text).toMatchObject({ sha256: enc.text.sha256, servers: ['http://m2'] });
+    expect(w.db.get('SELECT mirror_url FROM blobs')).toEqual({ mirror_url: 'http://m2' });
   });
 
   test('a switch puts T beside S as the target, its lists settled, and queues the move', () => {
