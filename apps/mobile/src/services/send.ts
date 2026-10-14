@@ -15,7 +15,7 @@ import { indexerRelays, listServers, nextListTime, recordList, relayEntries, wri
 import { begin, enqueue, finish, nextDue, nextWakeAt } from '../data/outbox';
 import type { OutboxRow, OutboxTarget, TargetResult } from '../data/outbox';
 import type { Defaults } from './config';
-import { pageStream, streamFilter, type SyncPorts } from './sync';
+import { pageStream, streamFilter, takeNewerLists, type SyncPorts } from './sync';
 
 export type RelayAnswer = { ok: true } | { ok: false; reason: string };
 
@@ -279,10 +279,26 @@ async function sendDeleteItem(p: SendPorts, row: OutboxRow, signer: Signer, targ
 }
 
 /**
+ * The newest 10002 and 10063 on the indexer and the identity's relays, taken in as sync takes them, just before the
+ * lists are built: one another app published since the last sync joins this phone's rather than being overwritten.
+ * A relay that doesn't answer adds nothing.
+ */
+async function readNewerLists(p: SendPorts, owner: string): Promise<void> {
+  const query = p.query;
+  if (!query) return;
+  const relays = [...new Set([...indexerRelays(p.db, owner), ...relayEntries(p.db, owner).map((r) => r.url)])];
+  const kinds = [KIND.relayList, KIND.serverList];
+  const copies = (await Promise.all(relays.map((r) => query(r, [{ kinds, authors: [owner] }]).catch(() => [])))).flat();
+  takeNewerLists(p.db, owner, copies, kinds);
+}
+
+/**
  * The 10002 to every target; the 10063 and the connected-browsers record (C§4.9) to the write relays only (4.3).
- * All are built from the tables at send time; the record only once there is a browser in it.
+ * All are built from the tables at send time, after any newer list on the relays is taken in; the record only once
+ * there is a browser in it.
  */
 async function sendLists(p: SendPorts, row: OutboxRow, signer: Signer, targets: OutboxTarget[]): Promise<TargetResult[]> {
+  await readNewerLists(p, row.signer);
   // after the lists already held, so a phone whose clock is behind doesn't publish lists older than its own (F36)
   const now = nextListTime(p.db, row.signer, p.now());
   const relayList = await buildRelayList(signer, relayEntries(p.db, row.signer), now);

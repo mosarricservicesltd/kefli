@@ -1,8 +1,8 @@
-import { LocalSigner, buildRelayList, type NostrEvent } from '@kefli/protocol';
+import { LocalSigner, buildRelayList, buildServerList, readRelayList, readServerList, type NostrEvent } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
-import { addRelay, recordList, relayAddress, relayEntries, relayRows, removeRelay, seedGeneratedLists, writeRelays } from '../src/data/lists';
+import { addRelay, listServers, recordList, relayAddress, relayEntries, relayRows, removeRelay, seedGeneratedLists, writeRelays } from '../src/data/lists';
 import { begin, enqueue, finish } from '../src/data/outbox';
 import { commitDelete, deleteItem } from '../src/data/library';
 import { addTypedRelay, type AddRelayPorts } from '../src/services/addRelay';
@@ -248,5 +248,74 @@ describe('checking a typed relay (FD 113)', () => {
     seedGeneratedLists(w.db, w.pk, D);
     expect(await addTypedRelay(ports(w).p, w.pk, 'Relay.Mine.Example')).toEqual({ check: 'ok', url: MINE });
     expect(writeRelays(w.db, w.pk)).toContain(MINE);
+  });
+});
+
+describe('the lists sent after another app published its own (F37)', () => {
+  const THEIRS = 'wss://theirs.example';
+  const THEIR_SERVER = 'https://their.server.example';
+
+  /** The phone's lists as published at 100, and another app's at 200 built on them with what it adds. */
+  async function lists(w: ReturnType<typeof world>, add: { relay?: string; server?: string }) {
+    const ours = await buildRelayList(w.s, relayEntries(w.db, w.pk), 100);
+    recordList(w.db, w.pk, 10002, ours.id, 100, JSON.stringify(ours));
+    const ourServers = await buildServerList(w.s, listServers(w.db, w.pk), 100);
+    recordList(w.db, w.pk, 10063, ourServers.id, 100, JSON.stringify(ourServers));
+    const theirs = await buildRelayList(w.s, [...readRelayList(ours), ...(add.relay ? [{ url: add.relay, read: true, write: true }] : [])], 200);
+    const theirServers = await buildServerList(w.s, [...readServerList(ourServers), ...(add.server ? [add.server] : [])], 200);
+    return [theirs, theirServers];
+  }
+
+  function send(w: ReturnType<typeof world>, onRelays: NostrEvent[] | 'down') {
+    const sent: { relay: string; event: NostrEvent }[] = [];
+    const p: SendPorts = {
+      db: w.db, now: () => 300, signer: async () => w.s, fetch: (async () => new Response(null, { status: 500 })) as never, crypto: nodeCrypto, defaults: () => D as never,
+      publish: async (relay, event): Promise<RelayAnswer> => (sent.push({ relay, event }), { ok: true }),
+      readBlob: async () => null,
+      query: async (_relay, filters) => {
+        if (onRelays === 'down') throw new Error('unreachable');
+        return onRelays.filter((e) => filters.some((f) => f.kinds?.includes(e.kind)));
+      },
+    };
+    const newest = (kind: number) => sent.filter((s) => s.event.kind === kind).at(-1)?.event;
+    return { p, sent, newest };
+  }
+
+  test('a relay and a server another app added since the last sync are kept in the lists sent from here', async () => {
+    const w = world();
+    seedGeneratedLists(w.db, w.pk, D);
+    const elsewhere = await lists(w, { relay: THEIRS, server: THEIR_SERVER });
+    addRelay(w.db, 250, w.pk, MINE, D);
+    const s = send(w, elsewhere);
+    await drain(s.p);
+    const relays = readRelayList(s.newest(10002)!).map((e) => e.url);
+    expect(relays).toEqual(expect.arrayContaining([THEIRS, MINE]));
+    expect(readServerList(s.newest(10063)!)).toContain(THEIR_SERVER);
+    expect(s.newest(10002)!.created_at).toBeGreaterThan(200);
+  });
+
+  test('a relay removed here stays removed, though the newer list from elsewhere still names it', async () => {
+    const w = world();
+    seedGeneratedLists(w.db, w.pk, D);
+    addRelay(w.db, 50, w.pk, MINE, D);
+    w.db.run('DELETE FROM outbox');
+    const elsewhere = await lists(w, { relay: THEIRS });
+    expect(readRelayList(elsewhere[0]).map((e) => e.url)).toContain(MINE);
+    removeRelay(w.db, 250, w.pk, MINE);
+    const s = send(w, elsewhere);
+    await drain(s.p);
+    const relays = readRelayList(s.newest(10002)!).map((e) => e.url);
+    expect(relays).toContain(THEIRS);
+    expect(relays).not.toContain(MINE);
+  });
+
+  test('relays that don’t answer the read leave the lists as the tables hold them', async () => {
+    const w = world();
+    seedGeneratedLists(w.db, w.pk, D);
+    await lists(w, {});
+    addRelay(w.db, 250, w.pk, MINE, D);
+    const s = send(w, 'down');
+    await drain(s.p);
+    expect(readRelayList(s.newest(10002)!).map((e) => e.url)).toEqual(relayEntries(w.db, w.pk).map((e) => e.url));
   });
 });
