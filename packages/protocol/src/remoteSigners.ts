@@ -5,6 +5,7 @@
 import { signedAsAsked, type EventTemplate, type NostrEvent, type Signer, type SignerProvider } from './signer';
 import { isXOnlyPubkey } from './pairing';
 import { nobleSecp } from './secp';
+import { itemHash } from './normalise';
 
 /** The kinds Kefli signs (C§2): saves, deletions, seals, the two lists, AUTH, NIP-98, Blossom and kind 39701. */
 export const SIGNED_KINDS = [30078, 5, 13, 10002, 10063, 22242, 27235, 24242, 39701] as const;
@@ -280,14 +281,25 @@ export class Nip46Signer implements SignerProvider {
 /**
  * The web links an import brings in (C§4.6, FD 82): kind 39701 bookmarks (d is the URL without its scheme, imported
  * as https://<d>) and the r tags of the user's kind 10003 and every kind 30003 set. Private entries in content, e and
- * a tags aren't read. Only the user's own events count; each link once, in the order found.
+ * a tags aren't read. Only the user's own events count; each save once, by its hash, in the order found, its link as
+ * the platform's URL writes it.
+ *
+ * A link is one normalise takes, as well as the platform's URL: the phone's URL (Expo's, with no Unicode step) takes
+ * hosts normalise refuses, such as one with a joiner or a mixed-direction label, and one such bookmark made the
+ * sign-in throw at its hash, every time. The hashes seen are a set, not a list searched for each link, which took
+ * 30 s for 40,000 links.
  */
-export function bookmarkLinks(events: NostrEvent[], pubkey: string): string[] {
-  const out: string[] = [];
+export function bookmarkSaves(events: NostrEvent[], pubkey: string): { url: string; hash: string }[] {
+  const out: { url: string; hash: string }[] = [];
+  const seen = new Set<string>();
   const add = (u: string) => {
     try {
       const url = new URL(u);
-      if ((url.protocol === 'https:' || url.protocol === 'http:') && !out.includes(url.href)) out.push(url.href);
+      if (url.protocol !== 'https:' && url.protocol !== 'http:') return;
+      const hash = itemHash(url.href);
+      if (seen.has(hash)) return;
+      seen.add(hash);
+      out.push({ url: url.href, hash });
     } catch {
       // not a link
     }
@@ -302,4 +314,9 @@ export function bookmarkLinks(events: NostrEvent[], pubkey: string): string[] {
     }
   }
   return out;
+}
+
+/** The links alone, in bookmarkSaves' order. */
+export function bookmarkLinks(events: NostrEvent[], pubkey: string): string[] {
+  return bookmarkSaves(events, pubkey).map((b) => b.url);
 }

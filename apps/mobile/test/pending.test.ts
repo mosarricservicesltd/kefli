@@ -4,6 +4,7 @@ import { migrate } from '../src/data/schema';
 import { ensureIdentityRow, queueSave } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
 import { pendingParses } from '../src/data/pending';
+import { commitDelete, deleteItem } from '../src/data/library';
 import { DESKTOP_UA, MOBILE_UA, PAGE_MAX_BYTES, RENDER_MAX_BYTES, fetchPage, refusal, type ParserResult } from '../src/services/page';
 import { runPendingParses, type PendingPorts } from '../src/services/pending';
 import { TimedOut } from '../src/net/http';
@@ -191,5 +192,63 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, published, event_id) VALUES (?, ?, 'https://c.com/a', 10, 'unread', 'queued', 'sync', 1, 'e1')", PK, itemHash('https://c.com/a'));
     await runPendingParses(w.ports, PK);
     expect(w.db.get('SELECT hash, url, text_state FROM items')).toEqual({ hash: itemHash('https://c.com/a'), url: 'https://c.com/a', text_state: 'cached' });
+  });
+
+  test('a waiting share whose page is too large for its event is fitted, and keeps an address it can publish (C§3.3)', async () => {
+    const far = `https://d.com/landing?${'x'.repeat(12_000)}`;
+    const huge = (url: string): ParserResult => ({
+      ok: true, title: 'T'.repeat(50_000), byline: 'B'.repeat(9_000), site: 'S', lang: 'en', hero: `https://cdn.d.com/${'h'.repeat(9_000)}`,
+      canonical: url === far ? null : `https://d.com/b?${'c'.repeat(9_000)}`, readerable: true, markdown: `${LONG}\n`,
+    });
+    const w = world({ 'https://d.com/a': {}, 'https://d.com/r': { finalUrl: far } }, huge);
+    w.share('https://d.com/a');
+    w.share('https://d.com/r');
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ parsed: 2 });
+    const rows = w.db.all<{ hash: string; url: string; canonical: string | null; hero: string | null; title: string }>('SELECT hash, url, canonical, hero, title FROM items ORDER BY id');
+    expect(rows.map((r) => [r.hash, r.url, r.canonical, r.hero])).toEqual([
+      [itemHash('https://d.com/a', `https://d.com/b?${'c'.repeat(9_000)}`), 'https://d.com/a', null, null],
+      [itemHash('https://d.com/r'), 'https://d.com/r', null, null],
+    ]);
+    expect(rows.every((r) => r.title.length <= 300)).toBe(true);
+  });
+
+  test('a plain http save, which release builds can never fetch, no longer stops the saves behind it', async () => {
+    const w = world({ 'https://g.com/b': {} });
+    const fetch = w.ports.page.fetch;
+    // OkHttp's refusal of cleartext, which fetchPage reads as offline
+    w.ports.page.fetch = (async (url: string, init: RequestInit) => {
+      if (url.startsWith('http://')) throw new Error('CLEARTEXT communication to g.com not permitted by network security policy');
+      return fetch(url, init);
+    }) as never;
+    w.share('http://g.com/a');
+    w.share('https://g.com/b');
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ parsed: 1, waiting: 1 });
+    expect(w.db.all('SELECT url, text_state FROM items ORDER BY id')).toEqual([
+      { url: 'http://g.com/a', text_state: 'queued' }, { url: 'https://g.com/b', text_state: 'cached' },
+    ]);
+  });
+
+  test('a save deleted while its page is fetched takes nothing: no upload, no sends, no text, no search entry', async () => {
+    const w = world({ 'https://f.com/a': {}, 'https://f.com/b': { status: 404 } });
+    w.share('https://f.com/a');
+    w.share('https://f.com/b');
+    const fetch = w.ports.page.fetch;
+    let open!: () => void;
+    const gate = new Promise<void>((r) => (open = r));
+    w.ports.page.fetch = (async (url: string, init: RequestInit) => (await gate, fetch(url, init))) as never;
+    const run = runPendingParses(w.ports, PK);
+    await new Promise((r) => setTimeout(r, 20));
+    // while the first is fetched: it is deleted for good, and the second is deleted and waits on its Undo
+    const a = deleteItem(w.db, 6000, PK, itemHash('https://f.com/a'));
+    commitDelete(w.db, PK, itemHash('https://f.com/a'), a.held);
+    deleteItem(w.db, 6000, PK, itemHash('https://f.com/b'));
+    open();
+    await run;
+    expect(w.outbox().filter((r) => ['upload_blob', 'mirror_blob', 'publish_item'].includes(r.op))).toEqual([]);
+    expect(w.db.all('SELECT sha256 FROM blobs')).toEqual([]);
+    expect([w.staged.size, w.texts.size]).toEqual([0, 0]);
+    expect(w.db.get('SELECT COUNT(*) AS n FROM items_fts')).toEqual({ n: 0 });
+    // the second, if its delete is undone, is still waiting for its parse
+    expect(w.db.all('SELECT url, text_state FROM items')).toEqual([{ url: 'https://f.com/b', text_state: 'queued' }]);
   });
 });

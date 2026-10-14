@@ -23,6 +23,76 @@ function publishTargets(db: SqlDb, owner: string, t: SaveTargets): string[] {
 }
 export type StagedBlob = { sha256: string; size: number; path: string };
 
+/** The page's fields a save's event carries (C§4.1), beside its fixed ones. */
+export type PageFields = { url: string; canonical: string | null; title: string | null; site: string | null; byline: string | null; lang: string | null; hero: string | null };
+
+/**
+ * RULED: the most a save's page fields may take, as the JSON its item holds. NIP-44 pads an item over 8 KB to the
+ * next 2 KB, so 10,240 bytes of item is the most whose event stays under the 16 KB ceiling (C§3.3); this leaves 1 KB
+ * of that for the rest (the text's key and servers, the hash, the reading position). A save over it was refused by
+ * its own buildItemEvent at every send, so it never left the phone, and nothing said so.
+ */
+export const PAGE_FIELDS_BYTES = 9_216;
+
+/** UTF-8 bytes of s as JSON writes it, null as null. */
+function jsonBytes(s: string | null): number {
+  const j = JSON.stringify(s);
+  let n = 0;
+  for (let i = 0; i < j.length; i++) {
+    const c = j.charCodeAt(i);
+    if (c < 0x80) {
+      n += 1;
+    } else if (c < 0x800) {
+      n += 2;
+    } else if (c >= 0xd800 && c < 0xdc00) {
+      // a pair (JSON.stringify writes a lone half as \u escapes)
+      n += 4;
+      i++;
+    } else {
+      n += 3;
+    }
+  }
+  return n;
+}
+
+const fieldBytes = (f: PageFields): number =>
+  jsonBytes(f.url) + jsonBytes(f.canonical) + jsonBytes(f.title) + jsonBytes(f.site) + jsonBytes(f.byline) + jsonBytes(f.lang) + jsonBytes(f.hero);
+
+/** s cut to at most n characters with an ellipsis, never between the halves of a surrogate pair. */
+function cut(s: string | null, n: number): string | null {
+  if (s === null || s.length <= n) return s;
+  const end = (s.charCodeAt(n - 2) & 0xfc00) === 0xd800 ? n - 2 : n - 1;
+  return `${s.slice(0, end)}…`;
+}
+
+/** What goes, in order, from a save too large for its event: the picture, the canonical, then the words get shorter. */
+const SHEDS: ((f: PageFields) => Partial<PageFields>)[] = [
+  () => ({ hero: null }),
+  () => ({ canonical: null }),
+  (f) => ({ title: cut(f.title, 300), byline: cut(f.byline, 100), site: cut(f.site, 100), lang: f.lang && f.lang.length > 35 ? null : f.lang }),
+  () => ({ byline: null, site: null, lang: null }),
+  (f) => ({ title: cut(f.title, 80) }),
+  () => ({ title: null }),
+];
+
+/**
+ * A save's page fields fitted under the event ceiling (C§3.3), or null when its address alone won't fit. A save that
+ * fits is left as it is; one that doesn't loses its hero, then its canonical (its hash is made already), then has its
+ * title, byline and site cut down, then loses them.
+ */
+export function fitSave<T extends PageFields>(f: T): T | null {
+  let fitted = f;
+  for (const shed of SHEDS) {
+    if (fieldBytes(fitted) <= PAGE_FIELDS_BYTES) return fitted;
+    fitted = { ...fitted, ...shed(fitted) };
+  }
+  return fieldBytes(fitted) <= PAGE_FIELDS_BYTES ? fitted : null;
+}
+
+/** True when a save of this address alone fits its event: one that doesn't can never be published. */
+export const addressFits = (url: string): boolean =>
+  fitSave({ url, canonical: null, title: null, site: null, byline: null, lang: null, hero: null }) !== null;
+
 export function ensureIdentityRow(db: SqlDb, now: number, pubkey: string, origin: string, hasRecovery: boolean, provider: 'local' | 'nip55' | 'nip46' = 'local'): void {
   db.run(
     "INSERT OR IGNORE INTO identities (pubkey, provider, role, origin, has_recovery, created_at) VALUES (?, ?, 'active', ?, ?, ?)",
@@ -120,19 +190,25 @@ export function undoSave(db: SqlDb, owner: string, hash: string, held: number[],
   });
 }
 
-/** Imported links (FD 82, C§4.6): pending saves at the import time, each fetched and parsed as an offline share is. */
+/**
+ * Imported links (FD 82, C§4.6): pending saves at the import time, each fetched and parsed as an offline share is.
+ * One transaction for them all: a commit each, every one synced to storage, held the app for 43 s over 10,000.
+ */
 export function queueImported(db: SqlDb, owner: string, links: string[], at: number, t: SaveTargets): number {
-  let n = 0;
-  for (const url of links) {
-    const hash = itemHashOf(url);
-    if (!hash || db.get('SELECT 1 FROM items WHERE owner = ? AND hash = ?', owner, hash)) continue;
-    queueSave(db, at, {
-      owner, hash, url, canonical: null, title: null, site: null, byline: null, savedAt: at, words: null, lang: null, hero: null,
-      text: null, textHash: null, textState: 'queued', sharedUrl: url, origin: 'import',
-    }, null, t);
-    n++;
-  }
-  return n;
+  return db.tx(() => {
+    let n = 0;
+    for (const url of links) {
+      const hash = itemHashOf(url);
+      // a link too long for its event could never be published: findBookmarks leaves it out of the count too
+      if (!hash || !addressFits(url) || db.get('SELECT 1 FROM items WHERE owner = ? AND hash = ?', owner, hash)) continue;
+      queueSave(db, at, {
+        owner, hash, url, canonical: null, title: null, site: null, byline: null, savedAt: at, words: null, lang: null, hero: null,
+        text: null, textHash: null, textState: 'queued', sharedUrl: url, origin: 'import',
+      }, null, t);
+      n++;
+    }
+    return n;
+  });
 }
 
 function itemHashOf(url: string): string | null {

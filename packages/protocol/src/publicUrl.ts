@@ -4,6 +4,11 @@
 // RULED: the host as written is checked (names that are local by convention, and IP literals in every form the URL
 // parser accepts); names aren't resolved, and a redirect isn't followed up, since the phone's fetch doesn't expose
 // either. That stops a request naming such an address outright, which is what the control is for.
+//
+// RULED: the host is read by the protocol's own parser (whatwg-url and tr46, as normalise reads it), never the
+// platform's URL. The phone's URL is Expo's, with no Unicode step, so it left http://１２７.０.０.１/ (fullwidth digits)
+// as written and passed it as public, while OkHttp, like every browser, maps it to 127.0.0.1.
+import { urlParts } from '../../../shared/normalise';
 
 const LOCAL_NAMES = /(^|\.)(localhost|local|internal|intranet|lan|home|corp|localdomain|home\.arpa)$/i;
 
@@ -19,29 +24,46 @@ function privateV4([a, b]: number[]): boolean {
     || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
 }
 
-function privateV6(host: string): boolean {
-  const h = host.replace(/^\[|\]$/g, '').toLowerCase();
-  if (h === '::' || h === '::1') return true;
-  const mapped = h.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-  if (mapped) return privateV4(ipv4(mapped[1]) ?? [0]);
-  // ::ffff:7f00:1 and the like, as the URL parser writes mapped addresses
-  const hexMapped = h.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
-  if (hexMapped) {
-    const hi = parseInt(hexMapped[1], 16);
-    return privateV4([hi >> 8, hi & 255]);
+/** An IPv6 address as its eight 16-bit pieces, or null; a dotted IPv4 tail counts as the last two. */
+function pieces(h: string): number[] | null {
+  const tail = h.match(/^(.*:)(\d+\.\d+\.\d+\.\d+)$/);
+  let text = h;
+  if (tail) {
+    const v4 = ipv4(tail[2]);
+    if (!v4) return null;
+    text = `${tail[1]}${((v4[0] << 8) | v4[1]).toString(16)}:${((v4[2] << 8) | v4[3]).toString(16)}`;
   }
-  return /^f[cd]/.test(h) || /^fe[89ab]/.test(h) || /^ff/.test(h);
+  const halves = text.split('::');
+  if (halves.length > 2) return null;
+  const side = (s: string) => (s === '' ? [] : s.split(':').map((p) => (/^[0-9a-f]{1,4}$/.test(p) ? parseInt(p, 16) : NaN)));
+  const head = side(halves[0]);
+  const rest = halves.length === 2 ? side(halves[1]) : [];
+  const fill = 8 - head.length - rest.length;
+  if (halves.length === 1 ? head.length !== 8 : fill < 0) return null;
+  const all = [...head, ...Array<number>(halves.length === 2 ? fill : 0).fill(0), ...rest];
+  return all.some((n) => Number.isNaN(n)) ? null : all;
+}
+
+/** The IPv4 address in the last 32 bits. */
+const v4Of = (p: number[]): number[] => [p[6] >> 8, p[6] & 255, p[7] >> 8, p[7] & 255];
+
+function privateV6(host: string): boolean {
+  const p = pieces(host.replace(/^\[|\]$/g, '').toLowerCase());
+  if (!p) return true;
+  const zeros = (n: number) => p.slice(0, n).every((x) => x === 0);
+  // :: and ::1; an IPv4 address mapped (::ffff:a.b.c.d) or, as written before RFC 4291 retired it, compatible (::a.b.c.d)
+  if (zeros(7) && p[7] <= 1) return true;
+  if ((zeros(5) && p[5] === 0xffff) || zeros(6)) return privateV4(v4Of(p));
+  // NAT64's well-known prefix (64:ff9b::/96) reaches the IPv4 address in its last 32 bits
+  if (p[0] === 0x64 && p[1] === 0xff9b && p.slice(2, 6).every((x) => x === 0)) return privateV4(v4Of(p));
+  // unique local fc00::/7, link-local fe80::/10, multicast ff00::/8
+  return (p[0] & 0xfe00) === 0xfc00 || (p[0] & 0xffc0) === 0xfe80 || (p[0] & 0xff00) === 0xff00;
 }
 
 /** True for an http(s) URL whose host is neither local by name nor a private, loopback or link-local address. */
 export function isPublicWebUrl(url: string): boolean {
-  let u: URL;
-  try {
-    u = new URL(url);
-  } catch {
-    return false;
-  }
-  if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
+  const u = urlParts(url);
+  if (!u) return false;
   const host = u.hostname.replace(/\.$/, '');
   if (!host || LOCAL_NAMES.test(host) || !host.includes('.') && !host.includes(':')) return false;
   if (host.startsWith('[') || host.includes(':')) return !privateV6(host);
