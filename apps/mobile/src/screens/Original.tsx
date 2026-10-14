@@ -2,8 +2,11 @@
 // reader-original-failed, reader-original-offline, reader-error-menu): react-native-webview under Kefli's bar, with
 // ⋯ (Open in browser, Copy link, Delete) and the floating Archive. A save whose text couldn't be fetched opens here
 // with its notice. While the page loads, the Reader's skeleton sits under the bar; a page that won't load points to
-// Open in browser; offline, the view says it needs a connection. The page stays on the web and opens no other app
-// (net/navigation.ts), and runs incognito, holding the jar while open and emptying it when it closes (net/cookies.ts).
+// Open in browser, as does one whose renderer the system ended (for memory, often with Kefli in the background) or
+// Kefli did, since every WebView here shares one renderer, and ending a parse stuck in it (kefli-parser's Parser.kt)
+// left this view a blank page; offline, the view says it needs a connection. The page stays on the web and opens no
+// other app (net/navigation.ts), and runs incognito, holding the jar while open and emptying it when it closes
+// (net/cookies.ts).
 import { useCallback, useEffect, useState } from 'react';
 import { Linking, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -94,6 +97,7 @@ export function OriginalView({ row, failedSave }: { row: LibRow; failedSave: boo
             onLoadEnd={() => setSt((s) => (s === 'failed' ? s : 'page'))}
             onError={() => setSt('failed')}
             onHttpError={(e) => e.nativeEvent.statusCode >= 400 && setSt('failed')}
+            onRenderProcessGone={() => setSt('failed')}
             style={{ flex: 1, backgroundColor: '#FFFFFF', opacity: st === 'page' ? 1 : 0 }}
           />
           {st === 'loading' && (
