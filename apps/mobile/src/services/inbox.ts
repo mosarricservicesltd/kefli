@@ -26,7 +26,7 @@ import { getCursor, setCursor } from '../data/sync';
 import { deriveArticle } from '../reader/blocks';
 import type { PageOutcome, ParserResult } from './page';
 import { settle, type PendingPorts } from './pending';
-import type { Filter } from './sync';
+import { PAGE, type Filter } from './sync';
 import { TooLarge, open } from '../net/http';
 
 /** The extension's 2 MB of HTML plus the GCM tag. */
@@ -207,6 +207,51 @@ async function retryBlobs(p: InboxPorts, owner: string, blossom: string, out: In
   }
 }
 
+/**
+ * How many of the relay's answers a drain reads back through its window. The relay sends the newest wraps first, at
+ * most PAGE an answer, and anyone can send wraps nobody takes, which stay on it: read in one answer, as it was, 500
+ * newer ones hid every browser save beneath them for good. Ten answers reach beneath 5,000, more than a day and a
+ * half of the most one address may send one person (C§3.2: 120 an hour).
+ */
+export const INBOX_PAGES = 10;
+/**
+ * How often a drain reads back past the newest answer while the window holds more than one: at most every quarter
+ * of an hour, the background drain's own interval, so a flood that sets off a drain for every wrap it sends (the
+ * live subscription) can't make each of them read ten answers.
+ */
+export const INBOX_DEEP_EVERY = 15 * 60;
+/** The most wraps one drain opens, two decrypts each: the rest wait for the next drain, the cursor staying. */
+export const INBOX_UNWRAPS = PAGE;
+
+/** relay and owner → when a drain last read back through a full window. */
+const readDeep = new Map<string, number>();
+
+/**
+ * The window's wraps, newest answer first, paged back by until as sync pages (NIP-01): one answer, or up to
+ * INBOX_PAGES while the last read back through a full window is old enough. A full answer that brings nothing new is
+ * a second holding more wraps than an answer, as a flood all dated to one second makes, and is stepped past; any
+ * other answer that brings nothing new is the end.
+ */
+async function readWindow(p: InboxPorts, relay: string, owner: string, since: number | undefined, now: number): Promise<NostrEvent[]> {
+  const key = `${relay} ${owner}`;
+  const pages = now - (readDeep.get(key) ?? -Infinity) >= INBOX_DEEP_EVERY ? INBOX_PAGES : 1;
+  const base = { kinds: [KIND.giftWrap], '#p': [owner], ...(since === undefined ? {} : { since: Math.max(0, since - WRAP_LOOKBACK) }) };
+  const got = new Map<string, NostrEvent>();
+  let until: number | undefined;
+  for (let i = 0; i < pages; i++) {
+    const page = await p.query(relay, [{ ...base, limit: PAGE, ...(until === undefined ? {} : { until }) }]);
+    const before = got.size;
+    for (const e of page) got.set(e.id, e);
+    const full = page.length >= PAGE;
+    if (!page.length || (got.size === before && !full)) break;
+    // the window holds more than an answer: the next drains within the quarter read only the newest
+    if (full || i >= 2) readDeep.set(key, now);
+    const oldest = Math.min(...page.map((e) => e.created_at));
+    until = got.size === before ? oldest - 1 : oldest;
+  }
+  return [...got.values()];
+}
+
 /** One drain of the inbox. Restartable: the cursor moves only after the relay answers. */
 export async function drainInbox(p: InboxPorts, owner: string): Promise<InboxResult> {
   const out: InboxResult = {};
@@ -218,7 +263,7 @@ export async function drainInbox(p: InboxPorts, owner: string): Promise<InboxRes
   const since = getCursor(p.db, relay, 'inbox', owner)?.since;
   let wraps: NostrEvent[];
   try {
-    wraps = await p.query(relay, [{ kinds: [KIND.giftWrap], '#p': [owner], ...(since === undefined ? {} : { since: Math.max(0, since - WRAP_LOOKBACK) }) }]);
+    wraps = await readWindow(p, relay, owner, since, startedAt);
   } catch {
     return out; // unreachable: the cursor stays
   }
@@ -226,12 +271,14 @@ export async function drainInbox(p: InboxPorts, owner: string): Promise<InboxRes
   // once the signer hasn't answered, the rest of this drain's wraps wait for the next one unasked, since they would
   // fail the same way, two minutes each for a bunker, as sync's do (F14)
   let waiting = false;
+  let opens = 0;
   for (const w of wraps.sort((a, b) => a.created_at - b.created_at)) {
     if (w.kind !== KIND.giftWrap || seenOutcome(p.db, w.id)) continue;
-    if (waiting) {
+    if (waiting || opens >= INBOX_UNWRAPS) {
       held = true;
       continue;
     }
+    opens++;
     let opened: Awaited<ReturnType<typeof unwrap>>;
     try {
       opened = await unwrap(p.signer, w);

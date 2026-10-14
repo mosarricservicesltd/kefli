@@ -2,14 +2,18 @@ import { LocalSigner, encryptText, giftWrap, itemHash, wrapSaveRequest, type Nos
 import { nodeCrypto } from '@kefli/protocol/node';
 import { finalizeEvent, generateSecretKey } from 'nostr-tools/pure';
 import { v2 as nip44 } from 'nostr-tools/nip44';
+import { bytesToHex } from '@noble/hashes/utils.js';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
 import { absorbRecord } from '../src/data/devices';
 import { browserName, INBOX_BLOB_LIFE } from '../src/data/inbox';
 import { pendingParses } from '../src/data/pending';
-import { INBOX_MAX_BYTES, INBOX_TIMEOUT_MS, drainInbox, judge, readBlob, type InboxPorts } from '../src/services/inbox';
+import {
+  INBOX_DEEP_EVERY, INBOX_MAX_BYTES, INBOX_TIMEOUT_MS, INBOX_UNWRAPS, drainInbox, judge, readBlob, type InboxPorts,
+} from '../src/services/inbox';
 import { GUARD_WORDS, type ParserResult } from '../src/services/page';
+import type { Filter } from '../src/services/sync';
 import { memoryDb } from './sqlite';
 
 const D = { operator: { relay: 'ws://op', blossom: 'http://blossom', api: 'http://api' }, mirrors: ['http://m1'], relays: ['ws://a'], indexer: ['ws://a'] };
@@ -72,6 +76,20 @@ function world() {
   /** A wrap whose seal, signed by the device, holds rumorJson exactly as given. */
   const sendRawRumor = async (rumorJson: string) =>
     sendRawSeal(JSON.stringify(await device.signEvent({ kind: 13, created_at: clock, tags: [], content: await device.nip44Encrypt(owner, rumorJson) })));
+  /** n wraps nobody can take, as a flood sends them: the relay keeps them, and each is filed as not ours. */
+  const junk = (n: number, createdAt = clock) => {
+    for (let i = 0; i < n; i++) {
+      const id = bytesToHex(nodeCrypto.randomBytes(32));
+      wraps.push({ id, pubkey: id, sig: id + id, kind: 1059, created_at: createdAt, tags: [['p', owner]], content: 'x' });
+    }
+  };
+  /** The operator relay as strfry answers: matching wraps newest first, at most limit or its own cap. */
+  const relayLike = (cap: number) => async (_relay: string, filters: Filter[]) => {
+    const f = filters[0];
+    const all = wraps.filter((e) => (f.since === undefined || e.created_at >= f.since) && (f.until === undefined || e.created_at <= f.until))
+      .sort((a, b) => b.created_at - a.created_at);
+    return all.slice(0, Math.min(f.limit ?? Infinity, cap));
+  };
   /** The extension's inbox blob: the HTML encrypted and served by the operator. */
   const withHtml = async (html: string, served = true) => {
     const enc = await encryptText(html, nodeCrypto);
@@ -83,7 +101,7 @@ function world() {
     'SELECT text_state, title, origin, origin_device, state, saved_at FROM items WHERE owner = ? AND hash = ?', owner, hash);
   const cursor = () => db.get<{ since: number }>("SELECT since FROM sync_cursors WHERE stream = 'inbox'")?.since ?? null;
   return {
-    db, owner, user, userSk, device, ports, wraps, texts, request, send, sendRawSeal, sendRawRumor, withHtml, ops, item, cursor,
+    db, owner, user, userSk, device, ports, wraps, texts, request, send, sendRawSeal, sendRawRumor, junk, relayLike, withHtml, ops, item, cursor,
     parses: () => parses, tick: (s: number) => (clock += s), now: () => clock,
   };
 }
@@ -213,6 +231,52 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     w.sendRawSeal('null', w.now() + 30 * 86_400);
     expect(await drainInbox(w.ports, w.owner)).toEqual({ ignored_foreign: 1 });
     expect(w.cursor()).toBe(w.now());
+  });
+
+  test('a flood of wraps nobody takes, newer than a browser save, can’t hide it: the drain reads back through the window', async () => {
+    // spread over the hours since the save, from a relay that sends 50 an answer; and all dated to one second, more
+    // than strfry's 500 an answer, which until alone can't page past
+    for (const [cap, n, at] of [[50, 300, (i: number) => i], [500, 600, () => 0]] as const) {
+      const w = world();
+      w.ports.query = w.relayLike(cap);
+      // the browser's wrap, backdated two hours as NIP-59 allows, then the flood
+      const { wrap } = await wrapSaveRequest(w.device, w.owner, 'real', w.request({ url: 'https://example.com/real' }), w.now() - 7200, { now: w.now() - 7200 });
+      w.wraps.push(wrap);
+      for (let i = 0; i < n; i++) w.junk(1, w.now() - at(i));
+      const out = await drainInbox(w.ports, w.owner);
+      expect(out.created).toBe(1);
+      expect(w.item(itemHash('https://example.com/real'))).toBeDefined();
+    }
+  });
+
+  test('one drain opens at most INBOX_UNWRAPS wraps; the rest wait for the next, the cursor staying', async () => {
+    const w = world();
+    // older than the browser's wrap, however far NIP-59 backdates it, so opened first
+    w.junk(INBOX_UNWRAPS, w.now() - 3 * 86_400);
+    await w.send(w.request());
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ ignored_foreign: INBOX_UNWRAPS });
+    expect(w.cursor()).toBeNull();
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    expect(w.cursor()).toBe(w.now());
+  });
+
+  test('while the window is full, a drain reads back through it at most every quarter of an hour', async () => {
+    const w = world();
+    const relay = w.relayLike(500);
+    let queries = 0;
+    w.ports.query = (r, f) => (queries++, relay(r, f));
+    w.junk(700);
+    await drainInbox(w.ports, w.owner);
+    expect(queries).toBeGreaterThan(1);
+    // the live subscription sets off another drain at once: one answer
+    queries = 0;
+    w.tick(60);
+    await drainInbox(w.ports, w.owner);
+    expect(queries).toBe(1);
+    queries = 0;
+    w.tick(INBOX_DEEP_EVERY);
+    await drainInbox(w.ports, w.owner);
+    expect(queries).toBeGreaterThan(1);
   });
 
   test("other apps' messages, unknown tokens, other keys and other versions are left alone", async () => {
