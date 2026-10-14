@@ -65,6 +65,35 @@ describe('gift wraps (NIP-59, C§4.4)', () => {
     await expect(unwrap(user, wrap)).rejects.toThrow('rumor author');
   });
 
+  test('a wrap holding anything but a seal around a rumor of NIP-01’s shape is an UnwrapError, never a TypeError', async () => {
+    const [device, user] = [signer(), signer()];
+    const { finalizeEvent, generateSecretKey } = await import('nostr-tools/pure');
+    const { v2 } = await import('nostr-tools/nip44');
+    // anyone can send a wrap: its content decrypts to whatever they chose
+    const wrapOf = (sealJson: string) => {
+      const k = generateSecretKey();
+      return finalizeEvent({ kind: 1059, created_at: NOW, tags: [['p', user.pubkey()]], content: v2.encrypt(sealJson, v2.utils.getConversationKey(k, user.pubkey())) }, k);
+    };
+    const sealOf = async (rumorJson: string) => JSON.stringify(await device.signEvent({ kind: 13, created_at: NOW, tags: [], content: await device.nip44Encrypt(user.pubkey(), rumorJson) }));
+    const rumor = { pubkey: device.pubkey(), created_at: NOW, kind: 30078, tags: [['d', 'kefli/save-request/u']], content: '{}', id: '' };
+    const hex = { id: '0'.repeat(64), pubkey: device.pubkey(), sig: '0'.repeat(128) };
+    const seals = [
+      'null', '5', '[]', '"x"', JSON.stringify({ kind: 13 }),
+      // well-formed hex, so the verifier gets as far as hashing it, with a tag that isn't strings
+      JSON.stringify({ ...hex, kind: 13, created_at: NOW, tags: [[1]], content: 'c' }),
+      JSON.stringify({ ...hex, kind: 13, created_at: NOW, tags: 'd', content: 'c' }),
+      await sealOf('null'), await sealOf('[1,2]'), await sealOf('5'),
+      await sealOf(JSON.stringify({ ...rumor, tags: [['d', 'kefli/save-request/u'], [1]] })),
+      await sealOf(JSON.stringify({ ...rumor, tags: 'd' })),
+      await sealOf(JSON.stringify({ ...rumor, created_at: undefined })),
+      await sealOf(JSON.stringify({ ...rumor, content: 5 })),
+      await sealOf(JSON.stringify({ ...rumor, id: 5 })),
+    ];
+    for (const s of seals) await expect(unwrap(user, wrapOf(s))).rejects.toThrow(UnwrapError);
+    // and a wrap that isn't one at all, with hex fields but tags of the wrong type
+    await expect(unwrap(user, { ...wrapOf('null'), tags: [[1]] } as never)).rejects.toThrow(UnwrapError);
+  });
+
   test('a save request over 8 KB is refused', async () => {
     const [device, user] = [signer(), signer()];
     await expect(wrapSaveRequest(device, user.pubkey(), 'u', request({ title: 'x'.repeat(4000) }), NOW)).rejects.toThrow(EventTooLargeError);
