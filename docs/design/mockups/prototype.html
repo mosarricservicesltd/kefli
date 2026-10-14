@@ -817,6 +817,8 @@ svg .arc{transform-box:view-box;transform-origin:center}
     <div class="btns">
       <button data-jump="share">Saved</button>
       <button data-jump="share-undone">…after Undo</button>
+      <button data-jump="share-full">…backup space full</button>
+      <button data-jump="share-daily">…the day’s 20 MB used</button>
       <button data-jump="share-again">Already saved, unread</button>
       <button data-jump="share-offline">Offline</button>
       <button data-jump="share-nolink">Not a link</button>
@@ -962,6 +964,14 @@ svg .arc{transform-box:view-box;transform-origin:center}
       <button data-jump="adv-exportfail">…the export failed</button>
       <button data-jump="adv-mine">…with a relay of your own</button>
       <button data-jump="adv-remove">…removing it</button>
+      <button data-jump="adv-space-nearly">…backup space nearly full</button>
+      <button data-jump="adv-full">…backup space full</button>
+      <button data-jump="adv-daily">…the day’s 20 MB used</button>
+      <button data-jump="adv-toolarge">…a text too long to back up</button>
+      <button data-jump="adv-space-empty">…backup space empty</button>
+      <button data-jump="adv-space-loading">…checking the backup space</button>
+      <button data-jump="adv-space-offline">…offline, space not known yet</button>
+      <button data-jump="adv-space-error">…couldn’t check the space</button>
       <button data-jump="adv-add">Add a relay</button>
       <button data-jump="adv-add-bad">…not a relay address</button>
       <button data-jump="adv-add-checking">…checking</button>
@@ -1046,6 +1056,7 @@ const I = {
   clipboard:'<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>',
   settings:'<path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>',
   server:'<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>',
+  harddrive:'<line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/>',
   refresh:'<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
   laptop:'<path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>',
   info:'<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
@@ -2176,11 +2187,21 @@ function startRestore(opts = {}){
 }
 
 /* ---------------- You (batch 4) ---------------- */
+// Backup space (decision 117): space is the phone's last figures from Kefli's server, in bytes (GET /account, or the
+// figures a 413 carries), kept between checks; null until the first answer. The phone asks when Advanced opens and takes
+// the figures any 413 carries. room counts the saves not backed up whose text waits on this phone for room, and why:
+// 'quota' while any waits on the space, else 'daily' while one waits on the day's 20 MB, refused in the last 24 hours.
+// tooLong counts the saves whose text is over 8 MB, which is never sent. notBacked counts every save not backed up,
+// those among them. A megabyte is 1,048,576 bytes, as the server counts them; a figure has one decimal, rounded down,
+// so a library short of its quota never reads as 50 MB.
+const MB = 1048576;
+const mb = b => { const v = Math.floor(b / MB * 10) / 10; return `${Number.isInteger(v) ? v : v.toFixed(1)} MB`; };
 const freshYou = () => ({
   backupDone: false, backupHidden: false, nostrUser: false, voices: 1, langs: 1, voiceLang: 0, voiceSel: [0, 0], speed: 1, sampling: null,
   codeShown: false, copied: false, browsers: [{ name: 'Chrome on a Windows PC', when: 'Connected 27 September' }], disconnect: null,
   conn: 'scan', connectFrom: 'browsers', camOK: true, typed: '', dev: 'show', countdown: 298, relayDown: false, mine: [], add: 'type', addTyped: '', relayRm: null, sw: 'explain', swDone: 0,
   del: 'explain', delTyped: '', steps: [], notBacked: 0, exportFail: false,
+  space: { used: Math.round(12.43 * MB), quota: 50 * MB, today: Math.round(.31 * MB), daily: 20 * MB }, spaceFailed: false, room: null, tooLong: 0,
 });
 S.you = freshYou();
 // one voice per language (decision 109): the phone's own language first, then each other language among the saves
@@ -2390,21 +2411,52 @@ function advancedScreen(){
   const mine = Y.mine.map((host, i) => `<button class="yrow" data-you-act="relay-rm" data-i="${i}" aria-describedby="rmhint"><span class="yi">${ic('server', 20)}</span><span class="yl">Your relay<small>${esc(host)}</small></span>${off ? '<span class="status off">Unreachable</span>' : '<span class="status">Connected</span>'}</button>`).join('')
     + `<button class="yrow" data-you-go="addrelay" ${off ? 'disabled' : ''}><span class="yi">${ic('plus', 20)}</span><span class="yl">Add a relay<small>${off ? 'Needs a connection' : 'Copy your saves to a relay you choose'}</small></span><span class="chev">${ic('chev', 18)}</span></button>`;
   const n = RELAYS.length + Y.mine.length;
-  // the notice slot, error first: an export that failed, with Try again in the action bar (G9), then the count of saves no
-  // backup server holds yet (decision 93; a save is backed up once a relay Kefli doesn't run has accepted its newest change
-  // and, for a save with text, a mirror holds its text). While any aren't, the note under the relays speaks of the other
-  // saves only. Offline, the switch row is disabled and says why (fix 27)
-  const nb = Y.notBacked;
+  // the notice slot, error first: an export that failed, with Try again in the action bar (G9), then one notice about saves
+  // not backed up, the first that applies (decision 117). While any save's text waits on this phone for room it speaks of
+  // room, the space full or the day's 20 MB used, counting the saves that wait; then it counts the saves Kefli is still
+  // trying to back up (decision 93; a save is backed up once a relay Kefli doesn't run has accepted its newest change and,
+  // for a save with text, a mirror holds its text); last, the saves whose text is too long to back up, never sent. While
+  // the saves Kefli is still trying for show, the note under the relays speaks of the other saves only; a save whose text
+  // alone stays on this phone is on every relay already, without it, so it leaves the note whole. Offline, the switch row
+  // is disabled and says why (fix 27)
+  const room = Y.room, tl = Y.tooLong, trying = Math.max(0, Y.notBacked - (room ? room.n : 0) - tl);
+  const saves = k => `${say(k)} ${k === 1 ? 'save' : 'saves'}`;
+  const notice = room ? ['notice-room', room.why === 'quota'
+      ? `Your backup space is full, so the text of ${saves(room.n)} is only on this phone. Kefli tries again each day, and deleting saves makes room.`
+      : `You’ve saved a lot today, so the text of ${saves(room.n)} is only on this phone for now. Kefli tries again tomorrow.`]
+    : trying ? ['notice-backup', `${Say(trying)} ${trying === 1 ? 'save isn’t' : 'saves aren’t'} backed up yet. Kefli keeps trying until a backup server accepts ${trying === 1 ? 'it' : 'them'}.`]
+    : tl ? ['notice-toolarge', `The text of ${saves(tl)} is too long to back up, so it’s only on this phone. ${tl === 1 ? 'Its link is' : 'Their links are'} backed up.`]
+    : null;
   const slot = (Y.exportFail ? `<div class="errline" data-fk="notice-export">${ic('alert', 16)}<span>The export didn’t save. Check the phone has space, then try again.</span></div>` : '')
-    + (nb ? `<div class="notice info" data-fk="notice-backup">${ic('info', 16)}<span>${Say(nb)} ${nb === 1 ? 'save isn’t' : 'saves aren’t'} backed up yet. Kefli keeps trying until a backup server accepts ${nb === 1 ? 'it' : 'them'}.</span></div>` : '');
+    + (notice ? `<div class="notice info" data-fk="${notice[0]}">${ic('info', 16)}<span>${notice[1]}</span></div>` : '');
+  // Backup space (decision 117) sits between the relays' note and Export: one row for Kefli's server, whose sub is the
+  // phone's last figures (spaceSub), and the fine print under it, in the library's own figures (the defaults until the
+  // first answer), about 25 KB of text to an article, rounded to the hundred
+  const sp = Y.space, quota = sp ? sp.quota : 50 * MB, daily = sp ? sp.daily : 20 * MB;
+  const articles = (Math.round(quota / (25 * 1024) / 100) * 100).toLocaleString('en-GB');
   return onbShell(`<h1>Advanced</h1>${slot}
     <div class="gtitle">Relays</div>
     <div class="ygroup">${relays}${mine}</div><span id="rmhint" hidden>Asks whether to remove it</span>
-    <p class="gnote">Your ${nb ? 'other ' : ''}saves are copied to all ${say(n)}. Any one of them is enough to bring your library back.${Y.relayDown && !off ? ' Saves will reach relay.damus.io when it answers again.' : ''}</p>
+    <p class="gnote">Your ${trying ? 'other ' : ''}saves are copied to all ${say(n)}. Any one of them is enough to bring your library back.${Y.relayDown && !off ? ' Saves will reach relay.damus.io when it answers again.' : ''}</p>
+    <div class="gtitle">Backup space</div>
+    <div class="ygroup"><div class="yrow"><span class="yi">${ic('harddrive', 20)}</span><span class="yl">Kefli’s server<small data-xf="space-sub">${spaceSub()}</small></span></div></div>
+    <p class="gnote">Kefli’s server keeps up to ${mb(quota)} of your saves’ text, about ${articles} articles, and takes up to ${mb(daily)} a day. Past that, a save’s text stays on this phone. Every save’s link is backed up whatever the space.</p>
     <div class="ygroup">
       <button class="yrow" data-you-act="export"><span class="yi">${ic('download', 20)}</span><span class="yl">Export my saves<small>One file with every link and its text</small></span></button>
       ${Y.nostrUser ? '' : `<button class="yrow" data-you-go="switchnostr" ${off ? 'disabled' : ''}><span class="yi">${ic('login', 20)}</span><span class="yl">Use my nostr app instead<small>${off ? 'Needs a connection' : 'Move your saves to your nostr account'}</small></span><span class="chev">${ic('chev', 18)}</span></button>`}
     </div>`, Y.exportFail ? `<button class="btn primary full" data-you-act="export">Try again</button>` : '', 'you');
+}
+
+// The Backup space row's sub (decision 117). With no answer yet: Checking… while Kefli first asks, Checks when you're
+// online offline, Couldn't check when the check failed. With an earlier answer, offline or after a failed check, that
+// answer stays until a new one comes (adv-offline). Nearly full from 90 %. Full comes first, while a text waits on a
+// 413 quota or the use has reached the quota: Kefli's server refuses a text that would pass it, so Full usually reads
+// just short of the quota (adv-full), and a library still above a lowered quota reads its real use.
+function spaceSub(){
+  const Y = S.you, sp = Y.space;
+  if (!sp) return !S.online ? 'Checks when you’re online' : Y.spaceFailed ? 'Couldn’t check' : 'Checking…';
+  if (sp.used >= sp.quota || Y.room?.why === 'quota') return `Full · ${mb(sp.used)} of ${mb(sp.quota)}`;
+  return `${mb(sp.used)} of ${mb(sp.quota)}${sp.used >= .9 * sp.quota ? ' · nearly full' : ''}`;
 }
 
 // Add a relay (decision 113): one field, built like the sign-in link's. Add relay checks the address, then that the relay
@@ -2721,6 +2773,16 @@ function youJump(j){
   else if (j === 'adv-exportfail') { at('advanced'); Y.exportFail = true; }
   else if (j === 'adv-mine') { at('advanced'); Y.mine = ['relay.example.org']; }
   else if (j === 'adv-remove') { at('advanced'); Y.mine = ['relay.example.org']; Y.relayRm = 0; S.sheet = 'relayremove'; }
+  // Backup space (decision 117): the row's states, the notice slot while three saves' text waits for room (the last 413
+  // quota left 49.96 MB used, since the text refused didn't fit), and one save's text too long to back up
+  else if (j === 'adv-space-nearly') { at('advanced'); Y.space.used = Math.round(46.14 * MB); }
+  else if (j === 'adv-full') { at('advanced'); Y.space.used = Math.round(49.96 * MB); Y.room = { why: 'quota', n: 3 }; Y.notBacked = 3; }
+  else if (j === 'adv-daily') { at('advanced'); Y.space.used = Math.round(32.43 * MB); Y.space.today = Math.round(19.98 * MB); Y.room = { why: 'daily', n: 3 }; Y.notBacked = 3; }
+  else if (j === 'adv-toolarge') { at('advanced'); Y.tooLong = 1; Y.notBacked = 1; }
+  else if (j === 'adv-space-empty') { at('advanced'); Y.space.used = Y.space.today = 0; }
+  else if (j === 'adv-space-loading') { at('advanced'); Y.space = null; }
+  else if (j === 'adv-space-offline') { at('advanced'); Y.space = null; S.online = false; }
+  else if (j === 'adv-space-error') { at('advanced'); Y.space = null; Y.spaceFailed = true; }
   else if (j.startsWith('adv-add')) {
     at('addrelay');
     const k = j.slice(8) || 'type';
@@ -3108,9 +3170,17 @@ function sheetHTML(){
     const head = again ? 'Already in your library' : 'Saved to Kefli';
     const acts = again ? '<button class="btn secondary" data-close>Done</button><button class="btn primary" data-readnow>Read now</button>'
       : `<button class="btn secondary" data-undo-share>Undo</button>${waits ? '<button class="btn primary" data-close>Done</button>' : '<button class="btn primary" data-readnow>Read now</button>'}`;
+    // while Backup space would read Full (a text waits on a 413 quota, or the use has reached the quota), or a text waits
+    // on a 413 daily from the last 24 hours, the line says where the new save's text stays (decision 117); the save is
+    // made as always, with its countdown and Undo. A share's upload waits for the sheet to close, so the first save past
+    // a limit has the usual line
+    const sp = S.you.space, rm = S.you.room, full = (!!sp && sp.used >= sp.quota) || rm?.why === 'quota', daily = !full && rm?.why === 'daily';
+    const line = again ? 'Still in Unread, where you left it.' : off ? 'Saved · will fetch when you’re online' : xwait ? 'Saved · will check the post when X answers'
+      : full ? 'Private. Your backup space is full, so its text stays on this phone.' : daily ? 'Private. You’ve saved a lot today, so its text stays on this phone for now.'
+      : 'Private. Ready to read offline in a moment.';
     return `<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" aria-label="${head}" data-stop data-share>${bar}<div class="sbody" data-xf="share-body" data-xv="s"><div class="grab"></div>
       <h3><span class="check" data-sharecheck>${ic('check',16)}</span>${head}</h3>
-      <p class="sub">${again ? 'Still in Unread, where you left it.' : off ? 'Saved · will fetch when you’re online' : xwait ? 'Saved · will check the post when X answers' : 'Private. Ready to read offline in a moment.'}</p>
+      <p class="sub">${line}</p>
       <div class="saveditem">${coverHTML(saved, { size: 48, draw: drawIn(saved, sheetLanded) })}<div><div class="t ${saved.status === 'xwait' ? 'url' : ''}">${esc(saved.title)}</div><div class="s">${esc(saved.host)}</div></div></div>
       <div class="row">${acts}</div></div></div></div>`;
   }
@@ -4851,7 +4921,12 @@ function jumpTo(b){
   if (j === 'search-reader') { S.screen = 'search'; S.query = 'read'; render(); openItem(1, backHere()); return; }   // ← returns to these results (fix 17)
   if (j.startsWith('share')) {
     S.host = true; addSharedItem();
-    S.sheet = j === 'share' || j === 'share-undone' ? 'share-saved' : j;
+    S.sheet = ['share', 'share-undone', 'share-full', 'share-daily'].includes(j) ? 'share-saved' : j;
+    // an earlier save's text waits on a 413 quota, which left 49.96 MB used, or on a 413 daily from the last 24 hours
+    // (decision 117): the save is made as usual, countdown and Undo included, and only the sheet's line changes
+    if (j === 'share-full') { S.you.space.used = Math.round(49.96 * MB); S.you.room = { why: 'quota', n: 2 }; S.you.notBacked = 2; }
+    if (j === 'share-daily') { S.you.space.today = Math.round(19.98 * MB); S.you.room = { why: 'daily', n: 2 }; S.you.notBacked = 2; }
+    if (j === 'share-full' || j === 'share-daily') { S.shareT = freshShareT(); render(); shareRun(); return; }
     if (j === 'share-nolink' || j === 'share-checking' || j === 'share-noarticle' || j === 'share-again') S.items = S.items.filter(i => i.id !== 99);
     // the link shared is one already in the library and unread (G2): nothing changes, and the sheet counts down as usual
     if (j === 'share-again') { S.shareT = freshShareT(); render(); shareRun(); return; }

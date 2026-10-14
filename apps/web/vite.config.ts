@@ -57,6 +57,7 @@ export default defineConfig(({ mode }) => {
         input: {
           index: page('index.html'),
           privacy: page('privacy/index.html'),
+          fairUse: page('fair-use/index.html'),
           extension: page('extension/index.html'),
           extensionPrivacy: page('extension-privacy/index.html'),
           deleteAccount: page('delete-account/index.html'),

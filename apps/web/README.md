@@ -6,8 +6,9 @@ A static site, built with Vite, for the apex domain (kefli.app):
 |---|---|
 | `/` | The landing page: the summit above the fog, how it works, why the library outlives us, the name, and the downloads. Built from the chosen prototype, `docs/design/web/option-a-above-the-fog.html`. |
 | `/privacy/` | The privacy note: mobile spec 7.3's lines, contract section 1's account of what servers see, and the backend's log and backup policy. |
+| `/fair-use/` | The fair use note (flow decision 117, contract section 5): what Kefli's server keeps free for each library (50 MB of text, about 2,000 articles, and 20 MB a day), what counts, what happens past it, how to make room and where Advanced shows it. |
 | `/extension/` | The one-page install guide for the extension in developer mode (extension spec section 11), with pairing and permissions. |
-| `/extension-privacy/` | The extension's privacy note, the address its store listings give (extension spec 12), brought up to date with contract v1.5. |
+| `/extension-privacy/` | The extension's privacy note, the address its store listings give (extension spec 12), brought up to date with contract v1.12. |
 | `/delete-account/` | The deletion page Google Play requires (mobile spec 13.1), following the app's Delete my data route (flow decision 86, contract 4.7). |
 
 ## Commands

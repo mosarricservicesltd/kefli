@@ -139,7 +139,7 @@ section.block { padding-block: clamp(84px, 11vw, 168px); position: relative; }
 .fact:nth-child(even) { padding-left: 28px; }
 .fact .ic { width: 44px; height: 44px; border: 1px solid var(--line-strong); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
 .fact .ic svg.i { width: 20px; height: 20px; }
-.fact div { display: grid; gap: 8px; }
+.fact div { display: grid; gap: 8px; align-content: start; }
 .fact p { font-family: var(--font-reader); color: var(--body-text); }
 .fact a { text-underline-offset: 3px; }
 @media (max-width: 760px) {

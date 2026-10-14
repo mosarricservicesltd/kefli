@@ -2,7 +2,7 @@
   "name": "@kefli/web",
   "version": "0.1.0",
   "private": true,
-  "description": "The Kefli website: the landing page, privacy, the extension install guide and the delete-account page Play requires",
+  "description": "The Kefli website: the landing page, privacy, fair use, the extension install guide and privacy note, and the delete-account page Play requires",
   "type": "module",
   "scripts": {
     "predev": "node scripts/brand.mjs",

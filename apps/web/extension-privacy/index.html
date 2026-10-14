@@ -22,7 +22,7 @@
       <span class="label">Extension privacy</span>
       <h1>The browser extension's privacy note.</h1>
       <p class="lead">The Kefli browser extension saves web pages to the Kefli app on your phone. It reads a page only when you save it, encrypts what it captures before it leaves your browser, and collects nothing else.</p>
-      <span class="updated">Last updated 11 October 2026</span>
+      <span class="updated">Last updated 14 October 2026</span>
     </header>
 
     <nav class="toc" aria-label="On this page">
@@ -43,10 +43,10 @@
       <h2 id="sends">What it sends</h2>
       <p>The extension encrypts the capture in your browser, with a new key made for that one save, and sends it to Kefli's server for your phone to collect:</p>
       <ul>
-        <li>the encrypted capture, which expires from Kefli's server after 14 days;</li>
+        <li>the encrypted capture, which counts towards your library's <a href="/fair-use/">backup space</a> until your phone takes it, and is deleted from Kefli's server then, or after 14 days at the latest;</li>
         <li>a sealed message to your phone with the page's address, title, site and author and the key that opens the capture. Only your phone can open it, and it's deleted once your phone has it, or after 30 days.</li>
       </ul>
-      <p>If a page couldn't be captured, the message carries just its address and title, and your phone fetches the page itself.</p>
+      <p>If a page couldn't be captured, or Kefli's server has no room for the capture, the message carries just its address and title, and your phone fetches the page itself.</p>
       <p>Your phone then saves the article to your library in the usual way (see <a href="/privacy/">Privacy</a>). Kefli's server can't read the capture or the message; it sees only encrypted files, their sizes, and when they were sent.</p>
       <p>When you pair the extension with your phone, the two exchange keys through Kefli's server, the same way. The extension never holds your library's key: it has a key of its own, which your phone can remove under Connected browsers.</p>
 
