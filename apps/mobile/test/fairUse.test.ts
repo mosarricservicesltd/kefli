@@ -317,15 +317,54 @@ describe('a save deleted on another phone while its text waits here (C§4.1, v1.
 
 describe('a phone that holds the text and a newer copy without it (C§4.1, v1.12)', () => {
   /** A newer copy of the save without its text, as a phone whose own text was refused sends it. */
-  async function textless(c: Cloud, sk: Uint8Array, createdAt: number, progress = 0.5) {
+  async function textless(c: Cloud, sk: Uint8Array, createdAt: number, progress = 0.5, state: 'unread' | 'archived' = 'unread', to = ['ws://op', 'ws://a', 'ws://b']) {
     const signer = new LocalSigner(sk.slice());
     const item = {
-      v: 1 as const, url: URL_A, canonical: null, title: 'Retitled', site: 'example.com', byline: null, saved_at: 10_000, state: 'unread' as const,
+      v: 1 as const, url: URL_A, canonical: null, title: 'Retitled', site: 'example.com', byline: null, saved_at: 10_000, state,
       progress, words: 200, lang: 'en', text: null, text_hash: null, hero: null, source_kind: 'web' as const, audio_pref: null,
     };
     const { event } = await buildItemEvent(signer, HASH, { item, extra: {} }, createdAt, new Uint8Array(Buffer.from(KEY, 'hex')));
-    for (const r of ['ws://op', 'ws://a', 'ws://b']) await c.publishFor('other')(r, event);
+    for (const r of to) await c.publishFor('other')(r, event);
   }
+
+  test('a copy without text read beside the deletion that followed it leaves the save deleted, the text kept from no one', async () => {
+    const c = cloud();
+    c.state.full = false;
+    const sk = nodeCrypto.randomBytes(32);
+    const a = phone(c, sk, 'A');
+    const text = await a.share();
+    await a.cycle();
+    // another phone, without the text, archives the save and then deletes it; a relay keeps the copy beside the kind 5
+    c.tick(100);
+    await textless(c, sk, c.now(), 0.5, 'archived');
+    c.tick(5);
+    const [del] = await buildDeletions(a.signer, [a.db.get<{ remote_d: string }>('SELECT remote_d FROM items')!.remote_d], c.now());
+    for (const r of ['ws://op', 'ws://a', 'ws://b']) await c.publishFor('other')(r, del);
+    c.tick(60);
+    await a.cycle();
+    // the deletion wins: A sends nothing that would bring the save back, and its copy of the text goes from the servers
+    expect(a.row()).toBeUndefined();
+    expect(c.sent.filter((s) => s.phone === 'A')).toHaveLength(1);
+    expect([c.operator.has(text), c.mirror.has(text)]).toEqual([false, false]);
+  });
+
+  test('two copies without text from relays that differ: the newer one is taken, and the text named with its changes', async () => {
+    const c = cloud();
+    c.state.full = false;
+    const sk = nodeCrypto.randomBytes(32);
+    const a = phone(c, sk, 'A');
+    const text = await a.share();
+    await a.cycle();
+    // a relay that lags still has the older copy; the others have the newer, archived and read further
+    c.tick(100);
+    await textless(c, sk, c.now(), 0.2, 'unread', ['ws://b']);
+    c.tick(50);
+    await textless(c, sk, c.now(), 0.7, 'archived', ['ws://op', 'ws://a']);
+    c.tick(60);
+    await a.cycle();
+    expect(a.db.get('SELECT state, progress, text_sha256 FROM items')).toEqual({ state: 'archived', progress: 0.7, text_sha256: text });
+    expect(await newest(c, a.signer)).toMatchObject({ state: 'archived', progress: 0.7, text: { sha256: text } });
+  });
 
   test('a text already backed up is kept and named again at once', async () => {
     const c = cloud();

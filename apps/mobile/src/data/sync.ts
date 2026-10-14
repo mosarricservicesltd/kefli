@@ -142,12 +142,14 @@ function keepText(row: Row, c: Columns): Columns {
  * A kept text goes out again (C§4.1): while only this phone has it, once its upload and mirror succeed (the mirror's
  * republish, send.ts), and now when a server already holds it, the row dirty until a relay takes it, so the save names
  * the text again: the operator's, another phone's upload, or a mirror's copy from a move (C§4.8). So two phones on a
- * full library don't take turns sending the save without its text.
+ * full library don't take turns sending the save without its text. The change is dated at the copy taken (at), not
+ * now: adding the text changes nothing the person did, so a newer copy, or a deletion made after the copy, read in the
+ * same sync or late from a relay that lags, still wins over it rather than being sent over.
  */
-function nameKeptText(db: SqlDb, now: number, owner: string, hash: string, row: Row): void {
+function nameKeptText(db: SqlDb, now: number, owner: string, hash: string, row: Row, at: number): void {
   const blob = blobRow(db, owner, row.text_sha256!);
   if (blob && blob.operator_at === null && blob.mirror_at === null) return;
-  db.run('UPDATE items SET dirty = 1, modified_at = ? WHERE id = ?', now, row.id);
+  db.run('UPDATE items SET dirty = 1, modified_at = ? WHERE id = ?', at, row.id);
   enqueue(db, now, { op: 'publish_item', signer: owner, subject: hash, targets: writeRelays(db, owner) });
 }
 
@@ -168,7 +170,7 @@ function takeRemote(db: SqlDb, now: number, owner: string, hash: string, row: Ro
   const heldWord = open && c.position_word !== row.position_word ? c.position_word : undefined;
   writeColumns(db, row.id, open ? { ...c, position_word: row.position_word } : c, event);
   const textReplaced = textChanged(db, now, owner, row, c);
-  if (kept) nameKeptText(db, now, owner, hash, row);
+  if (kept) nameKeptText(db, now, owner, hash, row, event.created_at);
   return { outcome: 'take', textReplaced, heldWord };
 }
 
