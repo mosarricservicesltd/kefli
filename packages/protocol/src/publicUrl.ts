@@ -10,10 +10,15 @@
 // as written and passed it as public, while OkHttp, like every browser, maps it to 127.0.0.1.
 import { urlParts } from '../../../shared/normalise';
 
-const LOCAL_NAMES = /(^|\.)(localhost|local|internal|intranet|lan|home|corp|localdomain|home\.arpa)$/i;
+// built from strings: lizard, which the code gate uses, loses its place in these as regex literals, and with it every
+// function after them, isPublicWebUrl among them
+const LOCAL_NAMES = new RegExp('(^|\\.)(localhost|local|internal|intranet|lan|home|corp|localdomain|home\\.arpa)$', 'i');
+const DOTTED = new RegExp('^(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})$');
+const V4_TAIL = new RegExp('^(.*:)(\\d+\\.\\d+\\.\\d+\\.\\d+)$');
+const HEX_PIECE = new RegExp('^[0-9a-f]{1,4}$');
 
 function ipv4(host: string): number[] | null {
-  const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  const m = DOTTED.exec(host);
   if (!m) return null;
   const parts = m.slice(1).map(Number);
   return parts.every((n) => n <= 255) ? parts : null;
@@ -26,7 +31,7 @@ function privateV4([a, b]: number[]): boolean {
 
 /** An IPv6 address as its eight 16-bit pieces, or null; a dotted IPv4 tail counts as the last two. */
 function pieces(h: string): number[] | null {
-  const tail = h.match(/^(.*:)(\d+\.\d+\.\d+\.\d+)$/);
+  const tail = V4_TAIL.exec(h);
   let text = h;
   if (tail) {
     const v4 = ipv4(tail[2]);
@@ -35,11 +40,12 @@ function pieces(h: string): number[] | null {
   }
   const halves = text.split('::');
   if (halves.length > 2) return null;
-  const side = (s: string) => (s === '' ? [] : s.split(':').map((p) => (/^[0-9a-f]{1,4}$/.test(p) ? parseInt(p, 16) : NaN)));
+  const side = (s: string) => (s === '' ? [] : s.split(':').map((p) => (HEX_PIECE.test(p) ? parseInt(p, 16) : NaN)));
   const head = side(halves[0]);
   const rest = halves.length === 2 ? side(halves[1]) : [];
   const fill = 8 - head.length - rest.length;
-  if (halves.length === 1 ? head.length !== 8 : fill < 0) return null;
+  // written 0 > fill: lizard, which the code gate uses, reads fill < as the start of a generic
+  if (halves.length === 1 ? head.length !== 8 : 0 > fill) return null;
   const all = [...head, ...Array<number>(halves.length === 2 ? fill : 0).fill(0), ...rest];
   return all.some((n) => Number.isNaN(n)) ? null : all;
 }
