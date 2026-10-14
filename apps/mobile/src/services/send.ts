@@ -16,7 +16,7 @@ import {
 } from '../data/lists';
 import { backoff, begin, enqueue, finish, nextDue, nextWakeAt, releaseDependents, wake } from '../data/outbox';
 import type { OutboxRow, OutboxTarget, TargetResult } from '../data/outbox';
-import { namesText, queueBlobDelete, withdrawText } from '../data/saves';
+import { fitSave, namesText, queueBlobDelete, withdrawText } from '../data/saves';
 import type { Defaults } from './config';
 import { pageStream, streamFilter, takeNewerLists, type SyncPorts } from './sync';
 
@@ -345,6 +345,25 @@ function published(p: SendPorts, owner: string, item: ItemRow, event: NostrEvent
   retireAddress(p.db, p.now(), owner, item.hash, item.remote_d, d, item.event_created_at ?? 0);
 }
 
+/**
+ * A save's event, built at send time (4.3), created_at = max(now, last + 1), so a newer state always replaces the old
+ * one. Its page's fields are fitted under the event ceiling (C§3.3) with the fitter a save made today has (data/saves
+ * fitSave): a save made before that, its title or picture address too long, was refused by buildItemEvent at every
+ * send and never left the phone. Null when even fitted it is over the ceiling, as with an address too long for any
+ * event, which no later try changes: the save stays on the phone, counted as not backed up.
+ */
+async function saveEvent(p: SendPorts, signer: Signer, item: ItemRow, servers: string[] | null, key: Uint8Array): Promise<NostrEvent | null> {
+  const fitted = fitSave(item);
+  if (!fitted) return null;
+  const createdAt = Math.max(p.now(), (item.event_created_at ?? 0) + 1);
+  try {
+    return (await buildItemEvent(signer, item.hash, itemJson(fitted, servers), createdAt, key)).event;
+  } catch (e) {
+    if (e instanceof EventTooLargeError) return null;
+    throw e;
+  }
+}
+
 async function sendPublish(p: SendPorts, row: OutboxRow, signer: Signer, targets: OutboxTarget[]): Promise<TargetResult[]> {
   const item = getItem(p.db, row.signer, row.subject);
   if (!item) return each(targets, 'rejected', 'item gone');
@@ -359,9 +378,8 @@ async function sendPublish(p: SendPorts, row: OutboxRow, signer: Signer, targets
   }
   // text.servers never lists the operator alone (contract 4.2), and names no server while the operator lacks the text
   const servers = textServers(p.db, item, p.defaults().operator.blossom, p.defaults().mirrors[0]);
-  // Built at send time, created_at = max(now, last + 1), so a newer state always replaces the old one.
-  const createdAt = Math.max(p.now(), (item.event_created_at ?? 0) + 1);
-  const { event } = await buildItemEvent(signer, item.hash, itemJson(item, servers), createdAt, key);
+  const event = await saveEvent(p, signer, item, servers, key);
+  if (!event) return each(targets, 'rejected', 'too large for its event');
   const results = await publishTo(p, targets, event);
   if (results.some((r) => r.kind === 'ok')) published(p, row.signer, item, event, servers, savedD(key, item.hash));
   // backed up once a relay the operator doesn't run holds it (FD 93)

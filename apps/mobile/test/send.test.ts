@@ -2,7 +2,7 @@ import { LocalSigner, encryptText, normaliseMarkdown, readItemEvent, textHash } 
 import type { NostrEvent } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
-import { ensureIdentityRow, orphanBlobs, queueSave, reviveRefused } from '../src/data/saves';
+import { ensureIdentityRow, fitSave, orphanBlobs, queueSave, reviveRefused, type PageFields } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
 import { enqueue, nextDue, nextWakeAt, release } from '../src/data/outbox';
 import { drain, outboxWaker, refusalOf, relayResult, sendOne, type RelayAnswer, type SendPorts } from '../src/services/send';
@@ -937,6 +937,46 @@ describe('a large import past the day (C§4.6, C§5, v1.12)', () => {
     // ten texts tried a second day, ten more a third; nothing is left to send
     expect(uploads()).toBe(30 + 20 + 10);
     expect(w.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM outbox')?.n).toBe(0);
+  });
+});
+
+describe('a save from before its page’s fields were fitted (C§3.3)', () => {
+  /** A save as the code before the fitting stored it: its page's fields as the page gave them. */
+  function oldSave(w: W, fields: Partial<PageFields>) {
+    ensureIdentityRow(w.db, w.now(), w.signer.pubkey(), 'early_share', true);
+    seedGeneratedLists(w.db, w.signer.pubkey(), D);
+    w.db.run('UPDATE identities SET registered_at = 1');
+    release(w.db, queueSave(w.db, w.now(), {
+      owner: w.signer.pubkey(), hash: HASH, url: 'https://example.com/a', canonical: null, title: 'Title', site: 'example.com', byline: null,
+      savedAt: w.now(), words: 2, lang: 'en', hero: null, text: null, textHash: null, textState: 'failed', origin: 'share', ...fields,
+    }, null, { api: D.operator.api, blossom: D.operator.blossom, mirror: D.mirrors[0] }));
+  }
+
+  test('one whose event would pass 16 KB is fitted as a save made today is, and goes out', async () => {
+    const w = world();
+    const huge = {
+      title: 'T'.repeat(20_000), byline: 'B'.repeat(5_000), hero: `https://cdn.example/${'h'.repeat(10_000)}`,
+      canonical: `https://example.com/a?${'c'.repeat(3_000)}`,
+    };
+    oldSave(w, huge);
+    await drain(w.ports);
+    expect(w.published().map((p) => p.relay).sort()).toEqual(['ws://a', 'ws://b', 'ws://op']);
+    const item = await lastItem(w);
+    const fitted = fitSave({ url: 'https://example.com/a', site: 'example.com', lang: 'en', ...huge })!;
+    expect([item.title, item.byline, item.hero, item.canonical, item.site]).toEqual([fitted.title, fitted.byline, null, null, 'example.com']);
+    expect(w.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM outbox')?.n).toBe(0);
+    expect(notBackedUp(w.db, w.signer.pubkey())).toBe(0);
+  });
+
+  test('one whose address alone is too long for any event stays on the phone, counted, and isn’t tried for ever', async () => {
+    const w = world();
+    oldSave(w, { url: `https://example.com/?q=${'x'.repeat(10_000)}` });
+    await drain(w.ports);
+    expect(w.published()).toEqual([]);
+    expect(w.db.get("SELECT o.state, t.last_error FROM outbox o JOIN outbox_targets t ON t.outbox_id = o.id WHERE o.op = 'publish_item' LIMIT 1"))
+      .toEqual({ state: 'dead', last_error: 'too large for its event' });
+    expect(w.db.get('SELECT 1 AS kept FROM items')).toEqual({ kept: 1 });
+    expect(notBackedUp(w.db, w.signer.pubkey())).toBe(1);
   });
 });
 
