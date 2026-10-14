@@ -133,9 +133,9 @@ function joined(a: PendingResult, b: PendingResult): PendingResult {
 const neverTried = (rest: Pending[]): number => rest.filter((q) => !q.timed_out_at).length;
 
 /**
- * A pass stopped at SLOW_RUN pages in a row that couldn't be had. After it has settled one the network was there, so
+ * A pass stopped at SLOW_RUN pages in a row that couldn't be had. After it has settled one, the network was there, so
  * they were dead links in a row, as an old import has: the parses after them never tried start in a run soon after
- * (nextRunIn), where they waited for the next sync, for days if Kefli wasn't opened. Three from its start are the
+ * (nextRunIn); before, they waited for the next sync, for days if Kefli wasn't opened. Three from its start are the
  * network, as before, and the rest wait for the next sync.
  */
 function stalled(out: PendingResult, rest: Pending[]): PendingResult {

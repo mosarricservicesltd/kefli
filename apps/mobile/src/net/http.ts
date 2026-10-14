@@ -161,7 +161,7 @@ type Answered = { res: Response; at: string };
  * name resolves (Blocked) and the network being gone fails as the network. So a redirect through plain http, a
  * shortener's or an old link's, reaches the https its site now serves, and an image or a hop whose site has none
  * fails, where the https try read as the network: an image's run stopped there at every sync, none after it fetched.
- * An https address that sent its request here, to its own http, is not asked again: that went round to the last hop.
+ * An https address that redirected here, to its own http, isn't asked again: that would go round to the tenth hop.
  */
 async function asked(f: typeof fetch, at: string, from: string, init: RequestInit, line: Line): Promise<Answered> {
   const tls = overHttps(at);
