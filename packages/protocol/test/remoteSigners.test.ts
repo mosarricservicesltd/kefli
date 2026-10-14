@@ -229,4 +229,31 @@ describe('the user’s own nostr app (contract 2)', () => {
       ev(10003, [['r', 'https://someone.else/x']], 'ff'.repeat(32)),
     ], PK)).toEqual(['https://example.com/a', 'https://example.com/b', 'https://example.org/c']);
   });
+
+  const ev = (tags: string[][]) => ({ kind: 10003, tags, pubkey: PK, content: '', created_at: 1, id: '', sig: '' }) as NostrEvent;
+
+  test('bookmarks: only links normalise takes, and each save once, however its address is dressed', () => {
+    expect(bookmarkLinks([ev([
+      ['r', `https://${'a'.repeat(2000)}.example/x`], ['r', 'https://example.com/a?utm_source=feed'], ['r', 'https://example.com/a#top'],
+      ['r', 'https://EXAMPLE.com/a/'], ['r', 'https://example.com/b'],
+    ])], PK)).toEqual(['https://example.com/a?utm_source=feed', 'https://example.com/b']);
+  });
+
+  test("bookmarks on the phone's URL, which takes hosts normalise refuses", () => {
+    const real = globalThis.URL;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    globalThis.URL = require('whatwg-url-minimum').URL;
+    try {
+      expect(bookmarkLinks([ev([['r', 'https://a‍b.example/'], ['r', 'https://aאb.example/'], ['r', 'https://example.org/c']])], PK)).toEqual(['https://example.org/c']);
+    } finally {
+      globalThis.URL = real;
+    }
+  });
+
+  test('bookmarks: 20,000 links in a few seconds at most, each found in a set rather than a list', () => {
+    const tags = Array.from({ length: 20_000 }, (_, i) => ['r', `https://example.com/page/${i}`]);
+    const t = Date.now();
+    expect(bookmarkLinks([ev(tags)], PK)).toHaveLength(20_000);
+    expect(Date.now() - t).toBeLessThan(10_000);
+  });
 });

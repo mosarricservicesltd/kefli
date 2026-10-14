@@ -120,19 +120,24 @@ export function undoSave(db: SqlDb, owner: string, hash: string, held: number[],
   });
 }
 
-/** Imported links (FD 82, C§4.6): pending saves at the import time, each fetched and parsed as an offline share is. */
+/**
+ * Imported links (FD 82, C§4.6): pending saves at the import time, each fetched and parsed as an offline share is.
+ * One transaction for them all: a commit each, every one synced to storage, held the app for 43 s over 10,000.
+ */
 export function queueImported(db: SqlDb, owner: string, links: string[], at: number, t: SaveTargets): number {
-  let n = 0;
-  for (const url of links) {
-    const hash = itemHashOf(url);
-    if (!hash || db.get('SELECT 1 FROM items WHERE owner = ? AND hash = ?', owner, hash)) continue;
-    queueSave(db, at, {
-      owner, hash, url, canonical: null, title: null, site: null, byline: null, savedAt: at, words: null, lang: null, hero: null,
-      text: null, textHash: null, textState: 'queued', sharedUrl: url, origin: 'import',
-    }, null, t);
-    n++;
-  }
-  return n;
+  return db.tx(() => {
+    let n = 0;
+    for (const url of links) {
+      const hash = itemHashOf(url);
+      if (!hash || db.get('SELECT 1 FROM items WHERE owner = ? AND hash = ?', owner, hash)) continue;
+      queueSave(db, at, {
+        owner, hash, url, canonical: null, title: null, site: null, byline: null, savedAt: at, words: null, lang: null, hero: null,
+        text: null, textHash: null, textState: 'queued', sharedUrl: url, origin: 'import',
+      }, null, t);
+      n++;
+    }
+    return n;
+  });
 }
 
 function itemHashOf(url: string): string | null {

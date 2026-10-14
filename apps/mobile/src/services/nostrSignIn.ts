@@ -3,7 +3,7 @@
 // the indexer and default relays, their web bookmarks counted, and only then is the identity stored, its restore
 // queued and, when Kefli added to their lists or made them, the lists queued to publish. A list neither found nor
 // confirmed absent is read again at the next sync, and nothing is published meanwhile. Ports keep it testable.
-import { KIND, bookmarkLinks, itemHash, newest, probeSigner, readRelayList, readServerList, type NostrEvent, type RelayEntry, type Signer } from '@kefli/protocol';
+import { KIND, bookmarkSaves, newest, probeSigner, readRelayList, readServerList, type NostrEvent, type RelayEntry, type Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { adoptUserLists, confirmedAbsent, markListsSettled, type DefaultsLike } from '../data/lists';
 import { queueRecord } from '../data/devices';
@@ -36,12 +36,12 @@ export async function readUserLists(p: SignInPorts, pubkey: string): Promise<Use
   };
 }
 
-/** The web links the user's bookmarks name (C§4.6) that aren't saves here yet. */
+/** The web links the user's bookmarks name (C§4.6) that aren't saves here yet; each is one normalise takes. */
 export async function findBookmarks(p: SignInPorts, pubkey: string, relays: string[]): Promise<string[]> {
   const asked = [...new Set([...relays, ...p.defaults.indexer])];
   const filters: Filter[] = [{ kinds: [39701, 10003, 30003], authors: [pubkey] }];
   const events = (await Promise.all(asked.map((r) => p.query(r, filters).catch(() => [] as NostrEvent[])))).flat();
-  return bookmarkLinks(events, pubkey).filter((url) => !p.db.get('SELECT 1 FROM items WHERE owner = ? AND hash = ?', pubkey, itemHash(url)));
+  return bookmarkSaves(events, pubkey).filter((b) => !p.db.get('SELECT 1 FROM items WHERE owner = ? AND hash = ?', pubkey, b.hash)).map((b) => b.url);
 }
 
 export type Checked = { ok: true; lists: UserLists; links: string[] } | { ok: false; why: 'probe' };
