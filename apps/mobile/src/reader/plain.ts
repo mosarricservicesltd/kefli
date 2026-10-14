@@ -169,39 +169,64 @@ function pieceOf(p: Part): Piece | null {
   return { part: p, shown: p.kind === 'code' ? p.text : shown, said };
 }
 
-/** Where to cut text of more than cap characters: the last space (or line end, for code) before cap, else cap. */
-function cutAt(text: string, cap: number, code: boolean): number {
-  const k = text.lastIndexOf(code ? '\n' : ' ', cap);
-  return k > cap / 2 ? k : cap;
+/**
+ * Where to cut text from at: the last space (or line end, for code) in the second half of the cap after it, else at
+ * the cap. Searched in that window only, so text with no space at all costs a cap a cut, not its whole length.
+ */
+function cutAt(text: string, at: number, cap: number, code: boolean): number {
+  const from = at + Math.floor(cap / 2);
+  const k = text.slice(from, at + cap).lastIndexOf(code ? '\n' : ' ');
+  return k === -1 ? at + cap : from + k;
 }
 
-/** A piece over cap, cut into pieces of at most cap characters. */
+/**
+ * A piece over cap, cut into pieces of at most cap characters, by index: slicing the rest off each time copies it
+ * each time on Hermes, which has no shared substrings, and a 20 MB paragraph would be copied thousands of times.
+ */
 function cut(piece: Piece, cap: number, out: Piece[]): void {
   const code = piece.part.kind === 'code';
-  let rest = piece.shown;
-  while (rest.length > cap) {
-    const k = cutAt(rest, cap, code);
-    const head = rest.slice(0, k);
+  const text = piece.shown;
+  let at = 0;
+  while (text.length - at > cap) {
+    const k = cutAt(text, at, cap, code);
+    const head = text.slice(at, k);
     out.push({ part: piece.part, shown: head, said: code ? collapse(head) : head });
     // a cut at a line's end or a space drops it; a cut inside a word or a line keeps every character
-    rest = code && rest[k] === '\n' ? rest.slice(k + 1) : code ? rest.slice(k) : rest.slice(k).trimStart();
+    at = text[k] === (code ? '\n' : ' ') ? k + 1 : k;
   }
+  const rest = text.slice(at);
   if (rest) out.push({ part: piece.part, shown: rest, said: code ? collapse(rest) : rest });
 }
 
 /** Whether a piece can run into a paragraph: a paragraph, or a heading when they go too. */
 const joinable = (x: Piece, headings: boolean) => x.part.kind === 'p' || (headings && x.part.kind === 'h');
 
+/** Pieces run into one paragraph, a blank line between them as shown: joined once, not one at a time. */
+function joined(group: Piece[]): Piece {
+  if (group.length === 1) return group[0];
+  return { part: { ...group[0].part, kind: 'p' } as Part, shown: group.map((g) => g.shown).join('\n\n'), said: group.map((g) => g.said).join(' ') };
+}
+
 /** Paragraphs next to each other (and headings, when they go too) run into paragraphs of up to cap characters. */
 function runTogether(pieces: Piece[], cap: number, headings: boolean): Piece[] {
   const out: Piece[] = [];
+  let group: Piece[] = [];
+  let size = 0;
   for (const x of pieces) {
-    const prev = out[out.length - 1];
-    const joins = prev && joinable(prev, headings) && joinable(x, headings);
-    if (joins && prev.shown.length + x.shown.length + 2 <= cap) {
-      out[out.length - 1] = { part: { ...prev.part, kind: 'p' } as Part, shown: `${prev.shown}\n\n${x.shown}`, said: `${prev.said} ${x.said}` };
-    } else out.push(x);
+    const joins = joinable(x, headings);
+    if (group.length && (!joins || size + 2 + x.shown.length > cap)) {
+      out.push(joined(group));
+      group = [];
+      size = 0;
+    }
+    if (!joins) {
+      out.push(x);
+      continue;
+    }
+    size += (group.length ? 2 : 0) + x.shown.length;
+    group.push(x);
   }
+  if (group.length) out.push(joined(group));
   return out;
 }
 
