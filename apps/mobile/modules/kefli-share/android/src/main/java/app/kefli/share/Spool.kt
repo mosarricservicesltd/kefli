@@ -2,11 +2,16 @@ package app.kefli.share
 
 import android.content.Context
 import android.content.Intent
+import android.system.ErrnoException
+import android.system.Os
+import android.system.OsConstants
+import android.util.Log
 import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
 import java.util.UUID
 
-// Shares waiting for JavaScript: filesDir/share-spool/<uuid>.json, written atomically (mobile spec 8.5).
+// Shares waiting for JavaScript: filesDir/share-spool/<uuid>.json, written atomically and synced (mobile spec 8.5).
 object Spool {
   fun dir(context: Context): File = File(context.filesDir, "share-spool").apply { mkdirs() }
 
@@ -32,10 +37,38 @@ object Spool {
       .put("subject", textExtra(intent, Intent.EXTRA_SUBJECT) ?: JSONObject.NULL)
       .put("referrer", referrer ?: JSONObject.NULL)
       .put("receivedAt", System.currentTimeMillis())
-    val tmp = File(dir(context), "$id.json.tmp")
-    tmp.writeText(body.toString())
-    tmp.renameTo(File(dir(context), "$id.json"))
+      .toString()
+    writeSynced(dir(context), "$id.json", body)
     return id
+  }
+
+  /**
+   * The file whole or not at all, whenever the power goes: written beside its name, synced to the disk, then renamed,
+   * and the folder synced so the rename holds too. Renamed before its bytes were on the disk, a spool could come back
+   * from a power cut empty or cut short, which the start-up pickup reads as no share and deletes.
+   */
+  private fun writeSynced(dir: File, name: String, body: String) {
+    val tmp = File(dir, "$name.tmp")
+    FileOutputStream(tmp).use { out ->
+      out.write(body.toByteArray(Charsets.UTF_8))
+      out.fd.sync()
+    }
+    tmp.renameTo(File(dir, name))
+    syncFolder(dir)
+  }
+
+  /** The folder's entries to the disk. The spool is already whole under its name, so a failure here is only logged. */
+  private fun syncFolder(dir: File) {
+    try {
+      val fd = Os.open(dir.path, OsConstants.O_RDONLY, 0)
+      try {
+        Os.fsync(fd)
+      } finally {
+        Os.close(fd)
+      }
+    } catch (e: ErrnoException) {
+      Log.w("KefliShare", "spool folder not synced: errno ${e.errno}")
+    }
   }
 
   fun read(context: Context, id: String): String? = File(dir(context), "$id.json").takeIf { it.exists() }?.readText()
