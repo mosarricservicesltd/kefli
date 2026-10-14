@@ -32,6 +32,8 @@ async function api(signer: LocalSigner, method: 'GET' | 'POST' | 'DELETE', path:
 const QUOTA = 52_428_800;
 const DAILY = 20_971_520;
 const MAX_BLOB = 8_388_608;
+/** What a blob of n bytes counts for against the quota and the day: a disk block, 4,096 bytes, at least. */
+const block = (n: number) => Math.max(n, 4096);
 
 /** PUT /upload of blob as signer, the whole answer read: its status, X-Reason and body, which a refusal's figures ride in. */
 async function put(blossom: string, blob: Uint8Array, signer: LocalSigner) {
@@ -165,17 +167,18 @@ async function main() {
   check('an unregistered key may not upload', !strangerUp.ok && strangerUp.status === 401, JSON.stringify(strangerUp));
 
   // fair use (contract 1.12): the library's figures count its browser's captures, and the phone deletes a capture once
-  // it has made the save (contract 4.4), which gives back its room but none of the day
+  // it has made the save (contract 4.4), which gives back its room but none of the day; each of these blobs is under a
+  // block, so each counts as one
   const taken = await encryptText('<p>a page the phone has taken</p>', nodeCrypto);
   const takenUp = await uploadBlob(blossom, taken.blob, taken.text.sha256, device);
   check('the device uploads a second inbox blob', takenUp.ok, JSON.stringify(takenUp));
-  const sizes = own.blob.length + inbox.blob.length + taken.blob.length;
+  const sizes = block(own.blob.length) + block(inbox.blob.length) + block(taken.blob.length);
   const counted = (await accountOf(user)).body;
   check("GET /account counts the library's blobs and the day's uploads, its browser's included", counted?.used === sizes && counted?.today === sizes, JSON.stringify(counted));
   check("the user deletes its browser's inbox blob", (await deleteBlob(blossom, taken.text.sha256, user)).ok);
   check('and the capture is no longer served', (await fetch(`${blossom}/${taken.text.sha256}`)).status === 404);
   const freed = (await accountOf(user)).body;
-  check('which gives back its room and none of the day', freed?.used === sizes - taken.blob.length && freed?.today === sizes, JSON.stringify(freed));
+  check('which gives back its room and none of the day', freed?.used === sizes - block(taken.blob.length) && freed?.today === sizes, JSON.stringify(freed));
 
   // the day's 20 MB (contract 5, backend spec 7): two 8 MB blobs go, and a 4 MB one would pass the day, so it gets 413
   // daily with the library's figures, read in full though the server refuses it before its body; a blob the library
