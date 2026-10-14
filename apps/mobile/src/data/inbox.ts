@@ -41,10 +41,10 @@ export function failedBlobs(db: SqlDb, owner: string): Kept[] {
 }
 
 /** The save at this hash as the inbox finds it again: where its text is, and whether its delete waits on Undo (4.3). */
-export type Found = { text_state: string; pending_delete_at: number | null };
+export type SaveState = { text_state: string; pending_delete_at: number | null };
 
-export function savedState(db: SqlDb, owner: string, hash: string): Found | undefined {
-  return db.get<Found>('SELECT text_state, pending_delete_at FROM items WHERE owner = ? AND hash = ?', owner, hash);
+export function savedState(db: SqlDb, owner: string, hash: string): SaveState | undefined {
+  return db.get<SaveState>('SELECT text_state, pending_delete_at FROM items WHERE owner = ? AND hash = ?', owner, hash);
 }
 
 /** Whether the save at this hash waits on its delete's Undo (4.3), which a request for it waits for too. */
@@ -136,19 +136,30 @@ function accountedFor(db: SqlDb, owner: string, sha256: string): boolean {
  * a blob is left alone, and so is an address that isn't a sha256, which the delete's authorisation can't name, so its
  * row would be tried again for ever.
  */
-export function queueDeleteInboxBlob(db: SqlDb, now: number, owner: string, sha256: unknown, operatorBlossom: string): void {
+export function queueDeleteInboxBlob(db: SqlDb, now: number, owner: string, sha256: unknown, operatorBlossom: string, read?: CaptureRead): void {
   if (typeof sha256 !== 'string' || !SHA256.test(sha256) || accountedFor(db, owner, sha256)) return;
-  enqueue(db, now, { op: 'delete_blob', signer: owner, subject: sha256, payload: { sha256 }, targets: [operatorBlossom], lane: 'bulk' });
+  enqueue(db, now, { op: 'delete_blob', signer: owner, subject: sha256, payload: { sha256, ...read }, targets: [operatorBlossom], lane: 'bulk' });
 }
+
+/**
+ * A capture the phone read (RULED): its size, the room its delete gives back in the library's storage, and up, when
+ * the phone found it on the operator. The delete's payload carries both, as a delete of the phone's own text carries
+ * its size and when the operator took it, for the room reckoned once the operator confirms it (C§5). up is no earlier
+ * than the browser's upload, so that room is never reckoned larger than it is. A capture the phone didn't read (a
+ * repeat save's, an X post's, one gone or past its 14 days) has neither, and gives back no room the phone counts.
+ */
+export type CaptureRead = { size: number; up: number };
 
 /**
  * A wrap that created, un-archived or matched a save, closed in one transaction (C§4.4): its outcome recorded, a kind
  * 5 for it queued for the operator relay, and with it the delete of its inbox blob, if the request names one.
  */
-export function closeWrap(db: SqlDb, now: number, wrapId: string, s: Seen, operator: { relay: string; blossom: string }, html: SaveRequest['html']): void {
+export function closeWrap(
+  db: SqlDb, now: number, wrapId: string, s: Seen, operator: { relay: string; blossom: string }, html: SaveRequest['html'], read?: CaptureRead,
+): void {
   db.tx(() => {
     recordSeen(db, now, wrapId, s);
     queueDeleteWrap(db, now, s.owner, wrapId, operator.relay);
-    if (html) queueDeleteInboxBlob(db, now, s.owner, html.sha256, operator.blossom);
+    if (html) queueDeleteInboxBlob(db, now, s.owner, html.sha256, operator.blossom, read);
   });
 }

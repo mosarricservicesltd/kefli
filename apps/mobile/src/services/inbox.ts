@@ -20,7 +20,7 @@ import type { SqlDb } from '../data/db';
 import { localRecord } from '../data/devices';
 import {
   admit, closeWrap, failedBlobs, giveUpBlob, noteDeviceSave, recordSeen, requestHash, savedState, seenOutcome, usesBlob, waitsOnDelete,
-  type Kept, type Outcome,
+  type CaptureRead, type Kept, type Outcome,
 } from '../data/inbox';
 import type { Pending } from '../data/pending';
 import type { SaveTargets } from '../data/saves';
@@ -91,10 +91,11 @@ export async function fromBrowser(p: Pick<InboxPorts, 'markdown'>, r: SaveReques
 export const INBOX_TIMEOUT_MS = 60_000;
 
 /**
- * What reading the inbox blob gave: its HTML; gone, when the operator answers 404 for it, as for a blob that has
- * expired, been deleted or was never taken (C§4.4, v1.12); or failed, when it can't be had now or doesn't check out.
+ * What reading the inbox blob gave: its HTML, with the blob's size as the operator stores it; gone, when the operator
+ * answers 404 for it, as for a blob that has expired, been deleted or was never taken (C§4.4, v1.12); or failed, when
+ * it can't be had now or doesn't check out.
  */
-export type BlobRead = { kind: 'html'; html: string } | { kind: 'gone' } | { kind: 'failed' };
+export type BlobRead = { kind: 'html'; html: string; size: number } | { kind: 'gone' } | { kind: 'failed' };
 
 const GONE: BlobRead = { kind: 'gone' };
 const FAILED: BlobRead = { kind: 'failed' };
@@ -109,7 +110,7 @@ export async function readBlob(p: Pick<InboxPorts, 'fetch' | 'crypto'>, html: No
     if (!o.res.ok) return (o.done(), o.res.status === 404 ? GONE : FAILED);
     const blob = await o.read(INBOX_MAX_BYTES);
     const text = await decryptText(blob, { sha256: html.sha256, key: html.key, nonce: html.nonce }, p.crypto);
-    return new TextEncoder().encode(text).length > INBOX_MAX_BYTES - 16 ? FAILED : { kind: 'html', html: text };
+    return new TextEncoder().encode(text).length > INBOX_MAX_BYTES - 16 ? FAILED : { kind: 'html', html: text, size: blob.length };
   } catch {
     return FAILED;
   }
@@ -133,6 +134,9 @@ async function textFromBlob(p: InboxPorts, owner: string, hash: string, r: SaveR
   return read;
 }
 
+/** A capture this drain read, for its delete: its size, and now, which is after the browser uploaded it. */
+const captureRead = (read: BlobRead | null, now: number): CaptureRead | undefined => (read?.kind === 'html' ? { size: read.size, up: now } : undefined);
+
 /**
  * An accepted request, made a save; its HTML read and parsed when it brings some. Null, while patient, when its save
  * waits on its delete's Undo (RULED): the wrap waits for the next drain, so the save it makes or matches is the one
@@ -144,13 +148,14 @@ async function take(p: InboxPorts, owner: string, wrapId: string, j: Extract<Jud
   const t: SaveTargets = await p.targets();
   const a = admit(p.db, p.now(), owner, j.request, j.label, t);
   const seen = { owner, requestD: null, device: j.token, hash: a.hash };
-  if (a.fetch && (await textFromBlob(p, owner, a.hash, j.request)).kind === 'failed') {
+  const read = a.fetch ? await textFromBlob(p, owner, a.hash, j.request) : null;
+  if (read?.kind === 'failed') {
     recordSeen(p.db, p.now(), wrapId, { ...seen, outcome: 'failed_blob', wrapJson });
     return 'failed_blob';
   }
   noteDeviceSave(p.db, p.now(), owner, j.token);
   // the save no longer needs the capture: the wrap's kind 5 and the inbox blob's delete go together (C§4.4, v1.12)
-  closeWrap(p.db, p.now(), wrapId, { ...seen, outcome: a.outcome }, d.operator, j.request.html);
+  closeWrap(p.db, p.now(), wrapId, { ...seen, outcome: a.outcome }, d.operator, j.request.html, captureRead(read, p.now()));
   return a.outcome;
 }
 
@@ -191,7 +196,7 @@ async function retake(p: InboxPorts, owner: string, k: Kept): Promise<Outcome | 
   }
   const d = await p.defaults();
   noteDeviceSave(p.db, p.now(), owner, request.token);
-  closeWrap(p.db, p.now(), k.wrap_id, { owner, outcome: 'created' }, d.operator, request.html);
+  closeWrap(p.db, p.now(), k.wrap_id, { owner, outcome: 'created' }, d.operator, request.html, captureRead(read, p.now()));
   return 'created';
 }
 

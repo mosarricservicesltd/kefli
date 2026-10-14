@@ -70,7 +70,7 @@ function world() {
   const withHtml = async (html: string, served = true) => {
     const enc = await encryptText(html, nodeCrypto);
     if (served) blobs.set(`${D.operator.blossom}/${enc.text.sha256}`, enc.blob);
-    return { html: { ...enc.text, server: D.operator.blossom }, serve: () => blobs.set(`${D.operator.blossom}/${enc.text.sha256}`, enc.blob) };
+    return { html: { ...enc.text, server: D.operator.blossom }, size: enc.blob.length, serve: () => blobs.set(`${D.operator.blossom}/${enc.text.sha256}`, enc.blob) };
   };
   const ops = () => db.all<{ op: string; subject: string }>('SELECT op, subject FROM outbox ORDER BY id').map((r) => r.op);
   /** The blob deletes queued, one row per target. */
@@ -256,7 +256,7 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     w.blobs.set(at, (await encryptText('<h1>Another</h1>', nodeCrypto)).blob);
     expect(await readBlob(w.ports, html)).toEqual({ kind: 'failed' });
     w.blobs.set(at, enc.blob);
-    expect(await readBlob(w.ports, html)).toEqual({ kind: 'html', html: '<h1>Checked</h1>' });
+    expect(await readBlob(w.ports, html)).toEqual({ kind: 'html', html: '<h1>Checked</h1>', size: enc.blob.length });
     // the network failing
     const served = w.ports.fetch;
     w.ports.fetch = (async () => {
@@ -479,10 +479,12 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
 
   test("with the wrap's kind 5, the request's inbox blob is deleted from Kefli's server with the user's key (C§4.4, v1.12)", async () => {
     const w = world();
-    const { html } = await w.withHtml('<html><h1>Read later</h1><p>…</p></html>');
+    const { html, size } = await w.withHtml('<html><h1>Read later</h1><p>…</p></html>');
     await w.send(w.request({ html }));
     expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
-    expect(w.deletes()).toEqual([{ subject: html.sha256, payload: JSON.stringify({ sha256: html.sha256 }), signer: w.owner, lane: 'bulk', target: D.operator.blossom }]);
+    expect(w.deletes()).toEqual([{
+      subject: html.sha256, payload: JSON.stringify({ sha256: html.sha256, size, up: T0 }), signer: w.owner, lane: 'bulk', target: D.operator.blossom,
+    }]);
     expect(w.ops()).toEqual(expect.arrayContaining(['upload_blob', 'mirror_blob', 'publish_item', 'delete_wrap', 'delete_blob']));
     // the save's own text, under its own key, is uploaded and kept
     const own = w.db.get<{ text_sha256: string }>('SELECT text_sha256 FROM items')!.text_sha256;
@@ -515,6 +517,36 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     expect(w.parses()).toBe(1);
     expect(w.deletes().map((d) => d.subject).sort()).toEqual([first, again, back, x, gone].map((b) => b.html.sha256).sort());
     expect(new Set(w.deletes().map((d) => d.target))).toEqual(new Set([D.operator.blossom]));
+  });
+
+  test("a capture's delete carries its size and when the phone found it, only when the phone read it (RULED)", async () => {
+    const w = world();
+    const payloads = () => Object.fromEntries(w.deletes().map((d) => [d.subject, JSON.parse(d.payload)]));
+    // read at its drain: the bytes the operator holds for it, and a time after the browser's upload
+    w.tick(30);
+    const read = await w.withHtml('<h1>Read</h1>');
+    await w.send(w.request({ html: read.html }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    expect(payloads()).toEqual({ [read.html.sha256]: { sha256: read.html.sha256, size: read.size, up: T0 + 30 } });
+    // a repeat save's, an X post's and one gone are never read, so they give back no room the phone counts
+    w.tick(100);
+    const again = await w.withHtml('<h1>Again</h1>');
+    await w.send(w.request({ captured_at: T0 + 100, html: again.html }));
+    const x = await w.withHtml('<h1>x</h1>');
+    await w.send(w.request({ url: 'https://x.com/someone/status/1', html: x.html }));
+    const gone = await w.withHtml('<h1>Gone</h1>', false);
+    await w.send(w.request({ url: 'https://example.com/b', html: gone.html }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ merged: 1, created: 2 });
+    for (const b of [again, x, gone]) expect(payloads()[b.html.sha256]).toEqual({ sha256: b.html.sha256 });
+    // read at a later drain's retry: found then
+    w.answerMissing(502);
+    const late = await w.withHtml('<h1>Late</h1>', false);
+    await w.send(w.request({ url: 'https://example.com/c', html: late.html }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_blob: 1 });
+    w.tick(600);
+    late.serve();
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    expect(payloads()[late.html.sha256]).toEqual({ sha256: late.html.sha256, size: late.size, up: T0 + 730 });
   });
 
   test('the delete goes out signed by the user, and a 404 counts as done', async () => {
