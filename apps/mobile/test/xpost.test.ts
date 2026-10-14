@@ -3,7 +3,7 @@ import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow, queueSave } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
-import { MAX_TCO, X_LINKS_MS, checkXPost, resolveTco, xRetryDelay, type XPorts } from '../src/services/xpost';
+import { MAX_EMBED_LINKS, MAX_TCO, X_LINKS_MS, checkXPost, resolveTco, xRetryDelay, type XPorts } from '../src/services/xpost';
 import { runPendingParses, type PendingPorts } from '../src/services/pending';
 import { memoryDb } from './sqlite';
 
@@ -65,6 +65,18 @@ describe('X posts (mobile spec 5.4, FD 78, G3)', () => {
     routes[xEmbedUrl(POST)] = { json: embed([...links.slice(0, 5), 'https://t.co/news']) };
     routes['https://t.co/news'] = { status: 301, location: 'https://news.com/story' };
     routes['https://news.com/story'] = { url: 'https://news.com/story' };
+    expect(await checkXPost(net(routes), POST)).toEqual({ kind: 'article', url: 'https://news.com/story' });
+  });
+
+  test('only the first 200 of an embed’s links are looked at: 5,000 X links before the article find none', async () => {
+    const xs = Array.from({ length: 5_000 }, (_, i) => `https://twitter.com/hashtag/t${i}`);
+    const routes: Record<string, Route> = {
+      [xEmbedUrl(POST)]: { json: embed([...xs, 'https://news.com/story']) },
+    };
+    const t = Date.now();
+    expect(await checkXPost(net(routes), POST)).toEqual({ kind: 'none', why: 'no-link' });
+    expect(Date.now() - t).toBeLessThan(5_000);
+    routes[xEmbedUrl(POST)] = { json: embed([...xs.slice(0, MAX_EMBED_LINKS - 1), 'https://news.com/story']) };
     expect(await checkXPost(net(routes), POST)).toEqual({ kind: 'article', url: 'https://news.com/story' });
   });
 

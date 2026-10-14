@@ -22,6 +22,12 @@ export const MAX_TCO = 20;
  * parses behind the post, for minutes.
  */
 export const X_LINKS_MS = 20_000;
+/**
+ * RULED: the most of an embed's links that are looked at, in order. A post's mentions, tags, pictures and links come
+ * to a few dozen; each is parsed by the protocol's URL parser, and 512 KB of links (17,000 of them) took seconds here,
+ * many more on the phone.
+ */
+export const MAX_EMBED_LINKS = 200;
 
 /** A link that leads to a private, loopback or link-local address: not followed further, and not saved (7.1). */
 class NotPublic extends Error {
@@ -107,7 +113,7 @@ export async function checkXPost(p: XPorts, post: string, now: () => number = Da
   let followed = 0;
   // past MAX_TCO, or out of time, a t.co link is passed over as one that fails to resolve is (x.ts)
   const resolve = (tco: string) => (++followed > MAX_TCO ? Promise.reject(new Error('too many links')) : resolveTco(p, tco, until, now));
-  const picked = await pickXLink(linksInEmbed(e.html), resolve);
+  const picked = await pickXLink(linksInEmbed(e.html).slice(0, MAX_EMBED_LINKS), resolve);
   if ('save' in picked) return { kind: 'article', url: picked.save };
   // nothing found with the time gone: links were cut short, so the post waits rather than saving nothing
   return now() >= until ? { kind: 'xfail' } : { kind: 'none', why: picked.nothing };
