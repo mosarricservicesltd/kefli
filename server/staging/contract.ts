@@ -189,7 +189,8 @@ async function main() {
   const held = await put(blossom, inbox.blob, user);
   check('a blob the library holds already goes past the day', held.status === 200, JSON.stringify(held));
   const huge = await put(blossom, nodeCrypto.randomBytes(MAX_BLOB + 1), user);
-  check('a blob over 8 MB gets 413 too_large, with no figures', huge.status === 413 && huge.reason === 'too_large' && JSON.stringify(huge.body) === '{"v":1,"error":"too_large"}', JSON.stringify(huge));
+  const noFigures = huge.body?.v === 1 && huge.body.error === 'too_large' && Object.keys(huge.body).length === 2;
+  check('a blob over 8 MB gets 413 too_large, with no figures', huge.status === 413 && huge.reason === 'too_large' && noFigures, JSON.stringify(huge));
   const settled = (await accountOf(user)).body;
   check('and the refusals cost nothing', settled?.used === usedNow && settled?.today === todayNow, JSON.stringify(settled));
 
