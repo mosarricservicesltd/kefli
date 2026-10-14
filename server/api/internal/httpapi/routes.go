@@ -111,7 +111,7 @@ func (a *API) newAccountAllowed(w http.ResponseWriter, r *http.Request) bool {
 		fail(w, http.StatusTooManyRequests, "rate")
 		return false
 	}
-	ip := ClientIP(r, a.cfg.TrustProxy)
+	ip := limit.ClientIP(r, a.cfg.TrustProxy)
 	if ok, retry := a.regIP.Allow(limit.Addr(ip, 56)); !ok {
 		w.Header().Set("Retry-After", retryAfter(retry))
 		fail(w, http.StatusTooManyRequests, "rate")
@@ -188,6 +188,7 @@ func (a *API) addDevice(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, err)
 		return
 	}
+	a.devAdd.Allow(req.pubkey)
 	a.log.Info("device added", "user", a.short(req.pubkey), "device", a.short(device))
 	reply(w, http.StatusOK, map[string]any{"v": 1})
 }
@@ -217,7 +218,8 @@ func (a *API) mayTake(w http.ResponseWriter, r *http.Request, req *request, devi
 }
 
 // roomForDevice refuses a library that already has MaxDevices device keys authorised, before its proof or release is
-// used, so the same one works once a Disconnect makes room.
+// used, so the same one works once a Disconnect makes room; and one that has connected MaxDeviceAdds browsers in the
+// day, with 429 and Retry-After, which the phone sends again later, its proof or release unused as well.
 func (a *API) roomForDevice(w http.ResponseWriter, r *http.Request, user string) bool {
 	n, err := a.st.DeviceCount(r.Context(), user)
 	if err != nil {
@@ -226,6 +228,11 @@ func (a *API) roomForDevice(w http.ResponseWriter, r *http.Request, user string)
 	}
 	if n >= MaxDevices {
 		fail(w, http.StatusForbidden, "devices: too_many")
+		return false
+	}
+	if spent, retry := a.devAdd.Spent(user); spent {
+		w.Header().Set("Retry-After", retryAfter(retry))
+		fail(w, http.StatusTooManyRequests, "rate")
 		return false
 	}
 	return true
@@ -361,7 +368,7 @@ func (a *API) postOffer(kind string) http.HandlerFunc {
 // blockMayOffer holds an IPv6 caller's /48 to MaxBlockOffers posted an hour, counted before its /64 and its key, so an
 // offer the block is refused leaves no window behind for either (F45).
 func (a *API) blockMayOffer(w http.ResponseWriter, r *http.Request) bool {
-	block := limit.Block(ClientIP(r, a.cfg.TrustProxy))
+	block := limit.Block(limit.ClientIP(r, a.cfg.TrustProxy))
 	if !strings.Contains(block, ":") {
 		return true
 	}
@@ -418,7 +425,7 @@ func (a *API) getOffer(kind string) http.HandlerFunc {
 		if kind == "pair" && !a.registered(w, r, req.pubkey) {
 			return
 		}
-		block := limit.Block(ClientIP(r, a.cfg.TrustProxy))
+		block := limit.Block(limit.ClientIP(r, a.cfg.TrustProxy))
 		if kind == "phone" && (!a.offerAllowed(w, r, req.pubkey) || !a.guessesLeft(w, block)) {
 			return
 		}

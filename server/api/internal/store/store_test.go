@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -166,7 +167,7 @@ func TestTheDayCountsBytesNewToTheDisk(t *testing.T) {
 	registered(t, st, "user", "other")
 	x, y := strings.Repeat("1", 64), strings.Repeat("2", 64)
 	start := *clock
-	if err := st.Upload(ctx, x, "user", "user", 100, false); err != nil {
+	if err := st.Upload(ctx, x, "user", "user", 10_000, false); err != nil {
 		t.Fatal(err)
 	}
 	*clock = start.Add(time.Hour)
@@ -174,15 +175,15 @@ func TestTheDayCountsBytesNewToTheDisk(t *testing.T) {
 		owner, account string
 		inbox          bool
 	}{{"device", "user", true}, {"other", "other", false}} {
-		if err := st.Upload(ctx, x, up.owner, up.account, 100, up.inbox); err != nil {
+		if err := st.Upload(ctx, x, up.owner, up.account, 10_000, up.inbox); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := st.Upload(ctx, y, "device", "user", 50, true); err != nil {
+	if err := st.Upload(ctx, y, "device", "user", 5_000, true); err != nil {
 		t.Fatal(err)
 	}
-	if got := today(t, st, "user"); got != 150 {
-		t.Fatalf("the user's day %d, want 150: x once, and the browser's y", got)
+	if got := today(t, st, "user"); got != 15_000 {
+		t.Fatalf("the user's day %d, want 15,000: x once, and the browser's y", got)
 	}
 	if got := today(t, st, "other"); got != 0 {
 		t.Fatalf("another library's day %d for a blob already stored, want 0", got)
@@ -190,12 +191,12 @@ func TestTheDayCountsBytesNewToTheDisk(t *testing.T) {
 	if found, _, err := st.RemoveOwner(ctx, x, "user"); err != nil || !found {
 		t.Fatalf("delete: %v %v", found, err)
 	}
-	if got := today(t, st, "user"); got != 150 {
+	if got := today(t, st, "user"); got != 15_000 {
 		t.Fatalf("deleting gave the day back: %d", got)
 	}
 	*clock = start.Add(Day)
-	if got := today(t, st, "user"); got != 50 {
-		t.Fatalf("a day on, the day %d, want 50", got)
+	if got := today(t, st, "user"); got != 5_000 {
+		t.Fatalf("a day on, the day %d, want 5,000", got)
 	}
 	if err := st.Sweep(ctx); err != nil {
 		t.Fatal(err)
@@ -212,19 +213,91 @@ func TestTheDayCountsBytesNewToTheDisk(t *testing.T) {
 	}
 }
 
+// Contract 5: a blob counts for at least a disk block, 4,096 bytes, against its library's quota and day, since its file
+// takes one however few bytes it holds: in what the library uses, in its day and in the uploads log the day is summed
+// from. One of a block or more counts its bytes exactly, and one the library holds already still counts once.
+func TestATinyBlobCountsAsADiskBlock(t *testing.T) {
+	st, _ := open(t)
+	ctx := context.Background()
+	registered(t, st, "user")
+	sizes := []int64{0, 1, BlockSize - 1, BlockSize, BlockSize + 1, 30_000}
+	for i, size := range sizes {
+		if err := st.Upload(ctx, strings.Repeat(fmt.Sprint(i), 64), "user", "user", size, false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// the browser's copy of a tiny blob the library holds, and an owner recorded without a day's line
+	if err := st.Upload(ctx, strings.Repeat("1", 64), "device", "user", 1, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddOwner(ctx, strings.Repeat("9", 64), "user", "user", 2, false); err != nil {
+		t.Fatal(err)
+	}
+	day := 4*BlockSize + BlockSize + 1 + 30_000
+	f, ok, err := st.Figures(ctx, "user")
+	if err != nil || !ok || f.Used != day+BlockSize || f.Today != day {
+		t.Fatalf("figures %+v %v %v: used %d and today %d wanted", f, ok, err, day+BlockSize, day)
+	}
+	for _, table := range []string{"owners", "uploads"} {
+		var under int
+		if err := st.db.QueryRow(`SELECT COUNT(*) FROM ` + table + ` WHERE size < 4096`).Scan(&under); err != nil || under != 0 {
+			t.Fatalf("%d rows of %s under a block (%v)", under, table, err)
+		}
+	}
+	if Cost(0) != BlockSize || Cost(BlockSize+1) != BlockSize+1 {
+		t.Fatalf("Cost(0) %d, Cost(BlockSize+1) %d", Cost(0), Cost(BlockSize+1))
+	}
+}
+
+// A database from before a blob counted for a block holds tiny blobs and a day's uploads at their bytes: they count as
+// a block from the first open on, once, and nothing else changes.
+func TestOpenCountsOlderTinyBlobsAsABlock(t *testing.T) {
+	saved := steps
+	t.Cleanup(func() { steps = saved })
+	steps = saved[:1]
+	path := filepath.Join(t.TempDir(), "k.db")
+	st, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	clock := time.Unix(1_791_600_000, 0)
+	tiny, text := strings.Repeat("a", 64), strings.Repeat("b", 64)
+	rawExec(t, path,
+		`INSERT INTO accounts(pubkey, quota_bytes, created_at) VALUES ('user', 52428800, 1)`,
+		fmt.Sprintf(`INSERT INTO owners(sha256, owner, account, size, created_at) VALUES ('%s', 'user', 'user', 1, 1), ('%s', 'user', 'user', 30000, 1)`, tiny, text),
+		fmt.Sprintf(`INSERT INTO uploads(account, size, at) VALUES ('user', 1, %d), ('user', 30000, %d)`, clock.Unix()-60, clock.Unix()-60))
+	steps = saved
+	for range 2 {
+		again, err := Open(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		again.Now = func() time.Time { return clock }
+		f, ok, err := again.Figures(context.Background(), "user")
+		again.Close()
+		if err != nil || !ok || f.Used != BlockSize+30_000 || f.Today != BlockSize+30_000 {
+			t.Fatalf("figures %+v %v %v", f, ok, err)
+		}
+	}
+	if v := version(t, path); v != len(steps) {
+		t.Fatalf("schema version %d, want %d", v, len(steps))
+	}
+}
+
 // Contract 4.4 and 5: a browser's capture counts against its library's storage until the phone deletes it or it
 // expires after 14 days, and from the moment it expires the library no longer holds it, as it is no longer served,
-// though the hourly sweep hasn't removed it yet. Its file is still on the disk until then, so an upload of it adds
-// nothing to anyone's day.
+// though the hourly sweep hasn't removed it yet. Before anything reads the library's figures, its file is still a
+// blob the server stores, so an upload of it adds nothing to anyone's day; the figures let it go as they read.
 func TestAnExpiredCaptureNoLongerCounts(t *testing.T) {
 	st, clock := open(t)
 	ctx := context.Background()
 	registered(t, st, "user")
 	capture, own := strings.Repeat("9", 64), strings.Repeat("a", 64)
-	if err := st.Upload(ctx, capture, "device", "user", 100, true); err != nil {
+	if err := st.Upload(ctx, capture, "device", "user", 10_000, true); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Upload(ctx, own, "user", "user", 10, false); err != nil {
+	if err := st.Upload(ctx, own, "user", "user", 5_000, false); err != nil {
 		t.Fatal(err)
 	}
 	counted := func(wantUsed int64, wantHeld bool) {
@@ -238,11 +311,17 @@ func TestAnExpiredCaptureNoLongerCounts(t *testing.T) {
 		}
 	}
 	*clock = clock.Add(InboxLife - time.Second)
-	counted(110, true)
+	counted(15_000, true)
 	*clock = clock.Add(time.Second)
-	counted(10, false)
+	if held, err := st.Holds(ctx, "user", capture); err != nil || held {
+		t.Fatalf("holds the expired capture %v %v", held, err)
+	}
 	if stored, err := st.Stored(ctx, capture); err != nil || !stored {
-		t.Fatalf("the expired capture's file, before the sweep: stored %v %v", stored, err)
+		t.Fatalf("the expired capture's file, before anything lets it go: stored %v %v", stored, err)
+	}
+	counted(5_000, false)
+	if stored, err := st.Stored(ctx, capture); err != nil || stored {
+		t.Fatalf("the library's figures kept the expired capture: stored %v %v", stored, err)
 	}
 }
 
@@ -258,14 +337,14 @@ func TestFigures(t *testing.T) {
 	if err != nil || !ok || f != (Figures{Quota: DefaultQuota, Daily: DailyLimit}) {
 		t.Fatalf("a new library: %+v %v %v", f, ok, err)
 	}
-	if err := st.Upload(ctx, strings.Repeat("3", 64), "user", "user", 70, false); err != nil {
+	if err := st.Upload(ctx, strings.Repeat("3", 64), "user", "user", 7_000, false); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.SetDisabled(ctx, "user", true); err != nil {
 		t.Fatal(err)
 	}
 	f, ok, err = st.Figures(ctx, "user")
-	if err != nil || !ok || f != (Figures{Quota: DefaultQuota, Used: 70, Daily: DailyLimit, Today: 70}) {
+	if err != nil || !ok || f != (Figures{Quota: DefaultQuota, Used: 7_000, Daily: DailyLimit, Today: 7_000}) {
 		t.Fatalf("a disabled library: %+v %v %v", f, ok, err)
 	}
 	if found, err := st.SetQuota(ctx, "nobody", 1); err != nil || found {
@@ -274,42 +353,50 @@ func TestFigures(t *testing.T) {
 }
 
 // Contract 5: a user's delete removes the blob from their library, their browsers' uploads of it included; a device
-// key's removes only its own; a blob goes once no owner is left.
+// key's removes only its own; a blob goes once no owner is left. A browser's copy of a blob its library holds already
+// is no upload of its own, so its delete finds nothing.
 func TestRemoveOwner(t *testing.T) {
 	st, _ := open(t)
 	ctx := context.Background()
 	registered(t, st, "user", "other", "next")
-	x, y := strings.Repeat("4", 64), strings.Repeat("5", 64)
+	x, y, z := strings.Repeat("4", 64), strings.Repeat("5", 64), strings.Repeat("6", 64)
 	add := func(sha, owner, account string, inbox bool) {
 		t.Helper()
 		if err := st.Upload(ctx, sha, owner, account, 10, inbox); err != nil {
 			t.Fatal(err)
 		}
 	}
-	add(x, "user", "user", false)
-	add(x, "device", "user", true)
-	add(x, "other", "other", false)
-	remove := func(signer string, wantFound bool, wantOrphaned int) {
+	remove := func(sha, signer string, wantFound bool, wantOrphaned int) {
 		t.Helper()
-		found, orphaned, err := st.RemoveOwner(ctx, x, signer)
+		found, orphaned, err := st.RemoveOwner(ctx, sha, signer)
 		if err != nil || found != wantFound || len(orphaned) != wantOrphaned {
 			t.Fatalf("%s's delete: found %v, orphaned %v, %v", signer, found, orphaned, err)
 		}
 	}
-	remove("device", true, 0)
+	// the browser's capture first, then the user's own copy of it, and another library's
+	add(x, "device", "user", true)
+	add(x, "user", "user", false)
+	add(x, "other", "other", false)
+	remove(x, "device", true, 0)
 	if held, _ := st.Holds(ctx, "user", x); !held {
 		t.Fatal("a device's delete took the user's own copy")
 	}
+	// the library holds x now through the user: the browser's copy adds nothing it could delete
 	add(x, "device", "user", true)
-	remove("user", true, 0)
-	if held, _ := st.Holds(ctx, "user", x); held {
+	remove(x, "device", false, 0)
+	remove(x, "user", true, 0)
+	remove(x, "stranger", false, 0)
+	remove(x, "other", true, 1)
+	// the user's delete takes its browser's upload with its own
+	add(y, "device", "user", true)
+	add(y, "user", "user", false)
+	remove(y, "user", true, 1)
+	if held, _ := st.Holds(ctx, "user", y); held {
 		t.Fatal("the user's delete left its browser's upload counted against it")
 	}
-	remove("stranger", false, 0)
-	remove("other", true, 1)
 	// a browser's upload made while another library held it counts against that library, which alone may delete it
-	add(y, "device", "user", true)
-	if found, _, err := st.RemoveOwner(ctx, y, "next"); err != nil || found {
+	add(z, "device", "user", true)
+	if found, _, err := st.RemoveOwner(ctx, z, "next"); err != nil || found {
 		t.Fatalf("a library the blob doesn't count against deleted it: %v %v", found, err)
 	}
 }
@@ -423,7 +510,7 @@ func TestDeleteAccountIsAllOrNothing(t *testing.T) {
 				t.Fatal(err)
 			}
 			sha := strings.Repeat("d", 64)
-			if err := st.Upload(ctx, sha, "user", "user", 10, false); err != nil {
+			if err := st.Upload(ctx, sha, "user", "user", 10_000, false); err != nil {
 				t.Fatal(err)
 			}
 			failing(t, st, "DELETE", table)
@@ -436,7 +523,7 @@ func TestDeleteAccountIsAllOrNothing(t *testing.T) {
 			if gone, _ := st.Gone(ctx, 0); len(gone) != 0 {
 				t.Fatalf("listed as gone by a deletion that failed: %v", gone)
 			}
-			if today(t, st, "user") != 10 {
+			if today(t, st, "user") != 10_000 {
 				t.Fatal("the day's log went with a deletion that failed")
 			}
 		})
@@ -449,10 +536,10 @@ func TestDeleteAccountTakesItsUploadsLog(t *testing.T) {
 	st, _ := open(t)
 	ctx := context.Background()
 	registered(t, st, "user", "other")
-	if err := st.Upload(ctx, strings.Repeat("6", 64), "user", "user", 10, false); err != nil {
+	if err := st.Upload(ctx, strings.Repeat("6", 64), "user", "user", 10_000, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Upload(ctx, strings.Repeat("7", 64), "other", "other", 20, false); err != nil {
+	if err := st.Upload(ctx, strings.Repeat("7", 64), "other", "other", 20_000, false); err != nil {
 		t.Fatal(err)
 	}
 	orphaned, err := st.DeleteAccount(ctx, "user")
@@ -463,7 +550,7 @@ func TestDeleteAccountTakesItsUploadsLog(t *testing.T) {
 	if got := today(t, st, "user"); got != 0 {
 		t.Fatalf("a deleted account's day came back: %d", got)
 	}
-	if got := today(t, st, "other"); got != 20 {
-		t.Fatalf("another library's day %d, want 20", got)
+	if got := today(t, st, "other"); got != 20_000 {
+		t.Fatalf("another library's day %d, want 20,000", got)
 	}
 }

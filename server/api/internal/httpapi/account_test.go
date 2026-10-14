@@ -52,7 +52,7 @@ func TestGetAccount(t *testing.T) {
 			t.Fatalf("upload %d %v", s, b)
 		}
 	}
-	both := int64(len(own) + len(capture))
+	both := costs(own, capture)
 	s, b = e.account(user)
 	wantAccount(t, s, b, store.Figures{Quota: store.DefaultQuota, Used: both, Daily: store.DailyLimit, Today: both})
 	if s := e.remove(user, hash(capture)); s != 200 {
@@ -62,7 +62,7 @@ func TestGetAccount(t *testing.T) {
 		t.Fatalf("set quota %v %v", found, err)
 	}
 	s, b = e.account(user)
-	wantAccount(t, s, b, store.Figures{Quota: 100 << 20, Used: int64(len(own)), Daily: store.DailyLimit, Today: both})
+	wantAccount(t, s, b, store.Figures{Quota: 100 << 20, Used: costs(own), Daily: store.DailyLimit, Today: both})
 	// a device key, and a disabled library, aren't registered users
 	s, b = e.account(device)
 	wantError(t, s, b, 403, "not_registered")
@@ -120,7 +120,7 @@ func TestRegisterAnswersTheLibrarysOwnFigures(t *testing.T) {
 	}
 	e.clock = e.clock.Add(time.Second)
 	s, b = e.call(user, "POST", "/register", map[string]any{"v": 1})
-	if s != 200 || b["quota"] != float64(100<<20) || b["used"] != float64(len(blob)) {
+	if s != 200 || b["quota"] != float64(100<<20) || b["used"] != float64(costs(blob)) {
 		t.Fatalf("registering again: %d %v", s, b)
 	}
 }
@@ -147,7 +147,8 @@ func TestFiguresThatCantBeReadAre500(t *testing.T) {
 }
 
 // A blob's GET answers 404 only when it is gone: for a browser's capture the phone then fetches the page itself
-// (contract 4.4, v1.12), so a fault reading the store is a 500, which it tries again.
+// (contract 4.4, v1.12), so a fault reading the store is a 500, which it tries again. The disk is looked at before the
+// store, so the fault is met with the blob's file in place.
 func TestABlobsFaultIsNever404(t *testing.T) {
 	e := newEnv(t)
 	user := newKey()
@@ -159,11 +160,15 @@ func TestABlobsFaultIsNever404(t *testing.T) {
 	if s, _ := e.fetch(hash(blob)); s != 200 {
 		t.Fatalf("GET: %d", s)
 	}
-	if err := os.Remove(filepath.Join(e.dir, "blobs", hash(blob)[:2], hash(blob))); err != nil {
+	file := filepath.Join(e.dir, "blobs", hash(blob)[:2], hash(blob))
+	if err := os.Remove(file); err != nil {
 		t.Fatal(err)
 	}
 	if s, _ := e.fetch(hash(blob)); s != 404 {
 		t.Fatalf("a file that's gone: %d, want 404", s)
+	}
+	if err := os.WriteFile(file, blob, 0o600); err != nil {
+		t.Fatal(err)
 	}
 	db, err := sql.Open("sqlite", "file:"+filepath.Join(e.dir, "k.db"))
 	if err != nil {

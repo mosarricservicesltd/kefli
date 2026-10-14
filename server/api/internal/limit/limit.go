@@ -3,6 +3,8 @@
 package limit
 
 import (
+	"net"
+	"net/http"
 	"net/netip"
 	"strings"
 	"sync"
@@ -39,6 +41,16 @@ func (l *Limiter) Allow(key string) (ok bool, retry time.Duration) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := l.now()
+	b := l.bucketFor(key, now)
+	b.n++
+	if b.n > l.max {
+		return false, l.window - now.Sub(b.start)
+	}
+	return true, 0
+}
+
+// bucketFor is key's window, a new one once the last has ended, for a caller holding mu.
+func (l *Limiter) bucketFor(key string, now time.Time) *bucket {
 	b := l.seen[key]
 	if b == nil || now.Sub(b.start) >= l.window {
 		b = &bucket{start: now}
@@ -47,11 +59,7 @@ func (l *Limiter) Allow(key string) (ok bool, retry time.Duration) {
 			l.prune(now)
 		}
 	}
-	b.n++
-	if b.n > l.max {
-		return false, l.window - now.Sub(b.start)
-	}
-	return true, 0
+	return b
 }
 
 // Spent says whether key's window is already at its limit, without counting anything: for a limit on failures, which
@@ -94,6 +102,20 @@ func Block(addr string) string {
 		return addr
 	}
 	return p.String()
+}
+
+// ClientIP is the caller's address: Caddy's X-Forwarded-For when trusted, else the connection's.
+func ClientIP(r *http.Request, trustProxy bool) string {
+	if trustProxy {
+		if f := r.Header.Get("X-Forwarded-For"); f != "" {
+			return strings.TrimSpace(strings.Split(f, ",")[0])
+		}
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
 
 // Addr is the address a client is counted as: an IPv4 address whole, and an IPv6 address by its first bits, the block

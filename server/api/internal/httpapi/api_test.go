@@ -352,16 +352,16 @@ func TestQuotaAndPreflight(t *testing.T) {
 	e := newEnv(t)
 	user := newKey()
 	e.call(user, "POST", "/register", map[string]any{"v": 1})
-	used := store.DefaultQuota - 10
+	used := store.DefaultQuota - 5000
 	if err := e.st.AddOwner(t.Context(), hash([]byte("big")), user.pk, user.pk, used, false); err != nil {
 		t.Fatal(err)
 	}
-	s, b := e.upload(user, []byte("eleven byte"))
+	s, b := e.upload(user, bytes.Repeat([]byte("o"), 5001))
 	expect(t, s, 413, b)
 	if b["error"] != "quota" {
 		t.Fatalf("reason %v", b)
 	}
-	s, b = e.upload(user, []byte("ten bytes!"))
+	s, b = e.upload(user, bytes.Repeat([]byte("f"), 5000))
 	expect(t, s, 200, b)
 	// BUD-06: the same check without the body
 	req := mustReq("HEAD", e.blob.URL+"/upload")
@@ -387,12 +387,12 @@ func (e *env) files() []string {
 }
 
 // F2: a refused upload leaves nothing on disk, a body of unknown length is refused before it is read, and uploads
-// racing for the last of a quota can't together overshoot it.
+// racing for the last of a quota, room for one tiny blob's block, can't together overshoot it.
 func TestRefusedUploadsLeaveNothing(t *testing.T) {
 	e := newEnv(t)
 	user := newKey()
 	e.call(user, "POST", "/register", map[string]any{"v": 1})
-	if err := e.st.AddOwner(t.Context(), hash([]byte("big")), user.pk, user.pk, store.DefaultQuota-10, false); err != nil {
+	if err := e.st.AddOwner(t.Context(), hash([]byte("big")), user.pk, user.pk, store.DefaultQuota-store.BlockSize-10, false); err != nil {
 		t.Fatal(err)
 	}
 	blob := []byte("a chunked body")
@@ -403,7 +403,7 @@ func TestRefusedUploadsLeaveNothing(t *testing.T) {
 	if s, b := send(t, req); s != 411 {
 		t.Fatalf("chunked upload %d %v", s, b)
 	}
-	if s, _ := e.upload(user, []byte("eleven byte")); s != 413 {
+	if s, _ := e.upload(user, bytes.Repeat([]byte("o"), int(store.BlockSize)+11)); s != 413 {
 		t.Fatalf("over quota %d", s)
 	}
 	if f := e.files(); len(f) != 0 {
@@ -423,7 +423,7 @@ func TestRefusedUploadsLeaveNothing(t *testing.T) {
 	wg.Wait()
 	close(accepted)
 	if n := len(accepted); n != 1 || len(e.files()) != 1 {
-		t.Fatalf("%d of 20 eight-byte uploads accepted into ten bytes of quota, %d files", n, len(e.files()))
+		t.Fatalf("%d of 20 eight-byte uploads accepted into a block and ten bytes of quota, %d files", n, len(e.files()))
 	}
 	if used, _ := e.st.Used(t.Context(), user.pk); used > store.DefaultQuota {
 		t.Fatalf("used %d over the quota", used)
@@ -479,7 +479,7 @@ func TestDeviceInboxAndAccountDeletion(t *testing.T) {
 			t.Fatalf("upload %d %v", s, b)
 		}
 	}
-	if used, _ := e.st.Used(t.Context(), user.pk); used != int64(len(inbox)+len(own)+len(shared)) {
+	if used, _ := e.st.Used(t.Context(), user.pk); used != costs(inbox, own, shared) {
 		t.Fatalf("used %d: a device's uploads count against its user, each blob once", used)
 	}
 	// the inbox blob expires after 14 days; the user's own and the one the user also holds stay

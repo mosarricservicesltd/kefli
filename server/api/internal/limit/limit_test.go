@@ -1,6 +1,7 @@
 package limit
 
 import (
+	"net/http/httptest"
 	"strconv"
 	"testing"
 	"time"
@@ -32,6 +33,24 @@ func TestAllowAndSpent(t *testing.T) {
 	}
 	if ok, _ := l.Allow("k"); !ok {
 		t.Fatal("refused in the next window")
+	}
+}
+
+// ClientIP is Caddy's first X-Forwarded-For when keflid is behind it, and the connection's address otherwise.
+func TestClientIP(t *testing.T) {
+	r := httptest.NewRequest("GET", "/", nil)
+	r.RemoteAddr = "192.0.2.7:4242"
+	r.Header.Set("X-Forwarded-For", " 2001:db8::1 , 198.51.100.2")
+	if got := ClientIP(r, true); got != "2001:db8::1" {
+		t.Fatalf("behind Caddy: %q", got)
+	}
+	if got := ClientIP(r, false); got != "192.0.2.7" {
+		t.Fatalf("not behind Caddy: %q", got)
+	}
+	r.RemoteAddr = "a unix socket"
+	r.Header.Del("X-Forwarded-For")
+	if got := ClientIP(r, true); got != "a unix socket" {
+		t.Fatalf("an address without a port: %q", got)
 	}
 }
 

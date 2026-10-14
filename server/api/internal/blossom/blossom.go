@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/richardminton-glitch/Kefli/server/api/internal/auth"
+	"github.com/richardminton-glitch/Kefli/server/api/internal/limit"
 	"github.com/richardminton-glitch/Kefli/server/api/internal/store"
 )
 
@@ -37,9 +38,33 @@ const MaxRead = MaxBlob + 1<<20
 // counted against the quota, and the phone sends one at a time.
 const MaxInFlight = 8
 
+// MaxAddressCalls is how many signed requests, uploads, preflights and deletes, one address (an IPv6 /64) makes of the
+// blob store a minute, counted before anything is read, verified or asked of the database. Nothing bounded them: any
+// key may sign a preflight or a delete, and one client sending them as fast as it could held keflid's database
+// connection for everyone. The phone sends one request at a time, each a round trip and a signature, so tens a second
+// at the most, as when it deletes a whole library's texts in Delete my data. A blob's GET or HEAD is no address's call
+// (MaxBlobSends).
+const MaxAddressCalls = 6000
+
+// MaxBlockCalls is the same a minute for one IPv6 /48, whose 65,536 /64s would otherwise each make MaxAddressCalls.
+const MaxBlockCalls = 30_000
+
+// MaxBlobSends is how many times one blob is sent an hour, a GET or a HEAD each, whoever asks. Anyone may fetch any
+// blob by its hash, so one client asking for an 8 MB blob of its own again and again could take the server's whole
+// link, which every user's uploads and every mirror's copies share. Counted by the address that asks instead, every
+// user's texts would share the count of the one address a mirror fetches them from (contract 4.2, BUD-04), which an
+// attacker could spend through the mirror itself, and everyone behind a carrier's shared address would share one. A
+// blob is fetched once by each mirror that copies it, once by each phone that syncs or restores it and once by a
+// move's check, so a few times in an hour at the most: sixteen sends of an 8 MB blob are 128 MB, and a library's 50 MB
+// sent sixteen times an hour is 800 MB. A request for a blob whose file isn't on the disk costs a look at the disk
+// alone, and counts against nothing.
+const MaxBlobSends = 16
+
 type Server struct {
 	Dir  string
 	Base string // public address blobs are served from, such as https://blossom.kefli.app
+	// TrustProxy reads the client's address from X-Forwarded-For, set by Caddy in front.
+	TrustProxy bool
 	// MinFree is the space an upload must leave free on the blobs' disk, which the databases and the relay share: the
 	// quotas are per account, so only this bounds what every account together can fill (F8). 0 sets no floor.
 	MinFree int64
@@ -53,14 +78,23 @@ type Server struct {
 	// check that no owner holds the blob and the file's removal another
 	commitMu sync.Mutex
 	// flightMu guards the uploads in flight: their bytes, which count against MinFree until they finish, and how many
-	// each account has going
+	// each account has going, and their bytes
 	flightMu sync.Mutex
 	inflight int64
-	flights  map[string]int
+	flights  map[string]flight
+	// calls and blockCalls count signed requests per address and per IPv6 /48, MaxAddressCalls and MaxBlockCalls a minute
+	calls, blockCalls *limit.Limiter
+	// sends counts each blob's GETs and HEADs, MaxBlobSends an hour
+	sends *limit.Limiter
 }
 
 func New(dir, base string, st *store.Store, log *slog.Logger) *Server {
-	return &Server{Dir: dir, Base: strings.TrimRight(base, "/"), Free: diskFree, FreeFiles: diskFiles, st: st, log: log, flights: map[string]int{}}
+	return &Server{
+		Dir: dir, Base: strings.TrimRight(base, "/"), Free: diskFree, FreeFiles: diskFiles, st: st, log: log, flights: map[string]flight{},
+		calls:      limit.New(MaxAddressCalls, time.Minute, st.Now),
+		blockCalls: limit.New(MaxBlockCalls, time.Minute, st.Now),
+		sends:      limit.New(MaxBlobSends, time.Hour, st.Now),
+	}
 }
 
 func statfs(dir string) (*syscall.Statfs_t, error) {
@@ -91,19 +125,47 @@ func diskFiles(dir string) (int64, int64, error) {
 }
 
 func (s *Server) Routes(mux *http.ServeMux) {
-	mux.HandleFunc("PUT /upload", s.upload)
-	mux.HandleFunc("HEAD /upload", s.preflight)
+	mux.HandleFunc("PUT /upload", s.limited(s.upload))
+	mux.HandleFunc("HEAD /upload", s.limited(s.preflight))
 	mux.HandleFunc("GET /{blob}", s.get)
 	mux.HandleFunc("HEAD /{blob}", s.get)
-	mux.HandleFunc("DELETE /{blob}", s.remove)
+	mux.HandleFunc("DELETE /{blob}", s.limited(s.remove))
 }
 
-// refusal is an answer refusing a request: its status, the reason for X-Reason and the body, and for the two limits'
-// 413s the library's figures (contract 5). The zero refusal refuses nothing.
+// limited counts a signed request against its IPv6 /48 and then its address, an IPv6 /64, before next reads or
+// verifies anything, so a flood from one place costs a map lookup each; past either, the request gets 429 rate with
+// Retry-After, which the phone and the extension send again later.
+func (s *Server) limited(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if rf := s.callAllowed(r); rf.status != 0 {
+			rf.write(w)
+			return
+		}
+		next(w, r)
+	}
+}
+
+func (s *Server) callAllowed(r *http.Request) refusal {
+	ip := limit.ClientIP(r, s.TrustProxy)
+	if block := limit.Block(ip); strings.Contains(block, ":") {
+		if ok, retry := s.blockCalls.Allow(block); !ok {
+			return refusal{status: http.StatusTooManyRequests, reason: "rate", retry: retry}
+		}
+	}
+	if ok, retry := s.calls.Allow(limit.Addr(ip, 64)); !ok {
+		return refusal{status: http.StatusTooManyRequests, reason: "rate", retry: retry}
+	}
+	return refusal{}
+}
+
+// refusal is an answer refusing a request: its status, the reason for X-Reason and the body, for the two limits'
+// 413s the library's figures (contract 5), and for a 429 when to send again, ten seconds unless set. The zero refusal
+// refuses nothing.
 type refusal struct {
 	status  int
 	reason  string
 	figures *store.Figures
+	retry   time.Duration
 }
 
 var (
@@ -122,15 +184,23 @@ type refused struct {
 }
 
 // write answers the refusal: the status, and the reason in X-Reason, where clients read it (BUD-01), and in the body.
-// A 429 also says when to send again.
+// A 429 also says when to send again, in whole seconds rounded up.
 func (rf refusal) write(w http.ResponseWriter) {
 	w.Header().Set("X-Reason", rf.reason)
 	w.Header().Set("Content-Type", "application/json")
 	if rf.status == http.StatusTooManyRequests {
-		w.Header().Set("Retry-After", "10")
+		w.Header().Set("Retry-After", retryAfter(rf.retry))
 	}
 	w.WriteHeader(rf.status)
 	_ = json.NewEncoder(w).Encode(refused{V: 1, Error: rf.reason, Figures: rf.figures})
+}
+
+// retryAfter is Retry-After's whole seconds for a wait, rounded up, and ten when none is known.
+func retryAfter(d time.Duration) string {
+	if d <= 0 {
+		return "10"
+	}
+	return strconv.Itoa(int((d + time.Second - 1) / time.Second))
 }
 
 // refuse answers a Blossom error with no figures.
@@ -225,8 +295,9 @@ func (s *Server) allowed(r *http.Request, sha string, size int64) (*uploader, re
 
 // room refuses an upload that would leave less than MinFree on the disk with 507, which clients retry later, as backend
 // spec 7's disk-full drill expects; and so one that would leave less than a tenth of the disk's files free, since every
-// blob is a file and the quota counts only bytes, so tiny blobs could use up the inodes every writer on the disk needs.
-// The bytes of uploads in flight count as used.
+// blob is a file: each library's blobs count as a disk block at least (store.Cost), which bounds the files one library
+// holds, and this bounds what every library together can take of the inodes every writer on the disk needs. The bytes
+// of uploads in flight count as used.
 func (s *Server) room(size int64) refusal {
 	s.flightMu.Lock()
 	defer s.flightMu.Unlock()
@@ -264,20 +335,29 @@ func (s *Server) roomForFile() refusal {
 	return refusal{}
 }
 
-// takeOff counts an upload as in flight, once its account has fewer than MaxInFlight going (429 otherwise) and the
-// disk has room for it beside the others in flight (507), in one step so uploads at once can't each pass alone;
-// land, deferred, ends it.
+// flight is an account's uploads in flight: how many, and the bytes they said they would send.
+type flight struct {
+	n     int
+	bytes int64
+}
+
+// takeOff counts an upload as in flight, once its account has fewer than MaxInFlight going and no more than a day's
+// uploads in bytes with it (429 otherwise), and the disk has room for it beside the others in flight (507), in one
+// step so uploads at once can't each pass alone; land, deferred, ends it. Each in flight holds its size against the
+// floor until it lands, and of a library's uploads at most a day's can be taken, so the rest would only hold the
+// floor: eight slow 8 MB bodies held 64 MB of it for each library, for as long as they took to arrive.
 func (s *Server) takeOff(account string, size int64) refusal {
 	s.flightMu.Lock()
 	defer s.flightMu.Unlock()
-	if s.flights[account] >= MaxInFlight {
+	f := s.flights[account]
+	if f.n >= MaxInFlight || f.bytes+size > store.DailyLimit {
 		return tooMany
 	}
 	if rf := s.roomLocked(size); rf.status != 0 {
 		return rf
 	}
 	s.inflight += size
-	s.flights[account]++
+	s.flights[account] = flight{n: f.n + 1, bytes: f.bytes + size}
 	return refusal{}
 }
 
@@ -285,17 +365,21 @@ func (s *Server) land(account string, size int64) {
 	s.flightMu.Lock()
 	defer s.flightMu.Unlock()
 	s.inflight -= size
-	if s.flights[account]--; s.flights[account] <= 0 {
+	f := s.flights[account]
+	if f.n <= 1 {
 		delete(s.flights, account)
+		return
 	}
+	s.flights[account] = flight{n: f.n - 1, bytes: f.bytes - size}
 }
 
-// limits holds an upload to its library's fair use (contract 5, flow decision 117). Against the quota it costs its
-// size unless the library holds the blob already, each blob counting once whichever of the library's keys uploaded
-// it; against the day it costs its size unless the server stores the blob already, for this library or any other, as
-// after a move. Past the quota it gets 413 quota, which also answers an upload past both, and past the day 413 daily,
-// each with the library's figures. A library above its quota, as one lowered from 200 MB may be, keeps every blob it
-// holds and takes no new one until deleting brings it back within its quota.
+// limits holds an upload to its library's fair use (contract 5, flow decision 117). It costs its size, and never less
+// than a disk block (store.Cost), since its file takes one however small it is. Against the quota it costs that
+// unless the library holds the blob already, each blob counting once whichever of the library's keys uploaded it;
+// against the day, unless the server stores the blob already, for this library or any other, as after a move. Past the
+// quota it gets 413 quota, which also answers an upload past both, and past the day 413 daily, each with the library's
+// figures. A library above its quota, as one lowered from 200 MB may be, keeps every blob it holds and takes no new one
+// until deleting brings it back within its quota.
 func (s *Server) limits(ctx context.Context, up *uploader, sha string, size int64) refusal {
 	f, ok, err := s.st.Figures(ctx, up.account)
 	if err != nil {
@@ -308,10 +392,11 @@ func (s *Server) limits(ctx context.Context, up *uploader, sha string, size int6
 	if err != nil {
 		return serverFault
 	}
+	cost := store.Cost(size)
 	switch {
-	case !held && f.Used+size > f.Quota:
+	case !held && f.Used+cost > f.Quota:
 		return refusal{status: http.StatusRequestEntityTooLarge, reason: "quota", figures: &f}
-	case !stored && f.Today+size > f.Daily:
+	case !stored && f.Today+cost > f.Daily:
 		return refusal{status: http.StatusRequestEntityTooLarge, reason: "daily", figures: &f}
 	}
 	return refusal{}
@@ -363,7 +448,7 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer s.land(up.account, r.ContentLength)
-	tmp, size, err := s.receive(r.Body, sha)
+	tmp, size, err := s.receive(r.Body, sha, s.onDisk(r.Context(), sha, r.ContentLength))
 	if tmp != "" {
 		defer os.Remove(tmp) // gone once renamed; otherwise a refused upload leaves nothing behind (F2)
 	}
@@ -398,7 +483,11 @@ func (s *Server) refuseWrite(w http.ResponseWriter, err error) {
 
 // receive reads the body into a temporary file beside where the blob will live, and returns its path (for the caller
 // to remove) and size. The body's hash must be sha.
-func (s *Server) receive(body io.Reader, sha string) (string, int64, error) {
+func (s *Server) receive(body io.Reader, sha string, onDisk bool) (string, int64, error) {
+	if onDisk {
+		n, err := copyChecked(io.Discard, body, sha)
+		return "", n, err
+	}
 	dir := filepath.Dir(s.path(sha))
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return "", 0, err
@@ -407,20 +496,43 @@ func (s *Server) receive(body io.Reader, sha string) (string, int64, error) {
 	if err != nil {
 		return "", 0, err
 	}
-	h := sha256.New()
-	n, err := io.Copy(io.MultiWriter(tmp, h), io.LimitReader(body, MaxBlob+1))
+	n, err := copyChecked(tmp, body, sha)
 	if cerr := tmp.Close(); err == nil {
 		err = cerr
 	}
-	switch {
-	case err != nil:
+	if err != nil {
 		return tmp.Name(), 0, err
-	case n > MaxBlob:
-		return tmp.Name(), 0, errTooLarge
-	case hex.EncodeToString(h.Sum(nil)) != sha:
-		return tmp.Name(), 0, errHash
 	}
 	return tmp.Name(), n, nil
+}
+
+// copyChecked copies a body of at most MaxBlob to w and checks that it hashes to sha.
+func copyChecked(w io.Writer, body io.Reader, sha string) (int64, error) {
+	h := sha256.New()
+	n, err := io.Copy(io.MultiWriter(w, h), io.LimitReader(body, MaxBlob+1))
+	switch {
+	case err != nil:
+		return 0, err
+	case n > MaxBlob:
+		return 0, errTooLarge
+	case hex.EncodeToString(h.Sum(nil)) != sha:
+		return 0, errHash
+	}
+	return n, nil
+}
+
+// onDisk is whether the blob's file is on the disk for an owner already, and whole, as for a repeat upload, a move's
+// or a browser's copy of a blob its library holds: its body is then checked against the hash and not written again.
+// A copy costs no fair use, and each was written whole and renamed over identical bytes, so one address could keep
+// the disk writing at the link's rate, 8 MB a request. A file of another size than the body, as one a power cut left
+// short after its rename, is written again from the body, whose hash is checked as any upload's is: a body of another
+// size than the blob's never has its hash, so only a file that is wrong is ever written over.
+func (s *Server) onDisk(ctx context.Context, sha string, size int64) bool {
+	if held, err := s.st.Stored(ctx, sha); err != nil || !held {
+		return false
+	}
+	info, err := os.Stat(s.path(sha))
+	return err == nil && info.Size() == size
 }
 
 // commit checks the real size against the library's limits again, renames the received file into place, so a reader
@@ -445,9 +557,8 @@ func (s *Server) commit(r *http.Request, up *uploader, sha string, size int64, t
 	if rf := s.limits(r.Context(), now, sha, size); rf.status != 0 {
 		return rf
 	}
-	if err := os.Rename(tmp, s.path(sha)); err != nil {
-		s.log.Error("store blob", "err", err)
-		return serverFault
+	if rf := s.place(sha, tmp); rf.status != 0 {
+		return rf
 	}
 	err = s.st.Upload(r.Context(), sha, now.signer, now.account, size, now.inbox)
 	if err == nil {
@@ -461,35 +572,73 @@ func (s *Server) commit(r *http.Request, up *uploader, sha string, size int64, t
 	return serverFault
 }
 
+// place puts a received blob where it is served, for a caller holding commitMu: its file renamed into place, so a reader
+// never sees half a blob, or, for a body that wasn't written (onDisk), the file found there still. One that went while
+// the body arrived, its last owner having deleted it, answers 500, which the client sends again, and then it is
+// written.
+func (s *Server) place(sha, tmp string) refusal {
+	if tmp == "" {
+		if _, err := os.Stat(s.path(sha)); err != nil {
+			s.log.Info("a stored blob's file went as a copy of it arrived", "err", err)
+			return serverFault
+		}
+		return refusal{}
+	}
+	if err := os.Rename(tmp, s.path(sha)); err != nil {
+		s.log.Error("store blob", "err", err)
+		return serverFault
+	}
+	return refusal{}
+}
+
 // SweepFiles removes blob files no owner holds and upload temporaries, each once older than an hour so an upload
-// still between its rename and its owner row is left alone: what a refused upload left before F2's fix, or a
-// crash mid-upload. Returns how many it removed.
+// still between its rename and its owner row is left alone: what a refused upload left before F2's fix, a crash
+// mid-upload, or a capture its library's figures let go of once it expired. Returns how many it removed.
 func (s *Server) SweepFiles(ctx context.Context, now time.Time) (int, error) {
 	removed := 0
 	err := filepath.WalkDir(s.Dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || ctx.Err() != nil {
 			return ctx.Err()
 		}
-		info, err := d.Info()
-		if err != nil || now.Sub(info.ModTime()) < time.Hour {
-			return nil
-		}
-		name := d.Name()
-		if !strings.HasPrefix(name, ".upload-") {
-			if !auth.IsHex64(name) {
-				return nil
-			}
-			held, err := s.st.Exists(ctx, name)
-			if err != nil || held {
-				return err
-			}
-		}
-		if os.Remove(p) == nil {
+		gone, err := s.sweepFile(ctx, p, d, now)
+		if gone {
 			removed++
 		}
-		return nil
+		return err
 	})
 	return removed, err
+}
+
+// sweepFile removes one file the sweep finds when it is an hour old and an upload's temporary, or a blob's file no
+// owner holds.
+func (s *Server) sweepFile(ctx context.Context, p string, d fs.DirEntry, now time.Time) (bool, error) {
+	info, err := d.Info()
+	if err != nil || now.Sub(info.ModTime()) < time.Hour {
+		return false, nil
+	}
+	name := d.Name()
+	if strings.HasPrefix(name, ".upload-") {
+		return os.Remove(p) == nil, nil
+	}
+	if !auth.IsHex64(name) {
+		return false, nil
+	}
+	if held, err := s.st.Exists(ctx, name); err != nil || held {
+		return false, err
+	}
+	return s.removeUnheld(ctx, name, p)
+}
+
+// removeUnheld removes a blob's file once no owner holds it, checked again under the upload lock, as Unlink is: an
+// upload of the same blob may have renamed its file into place and recorded its owner since the sweep looked, and
+// removing the file then would leave a blob recorded, and counted, that nobody can be served.
+func (s *Server) removeUnheld(ctx context.Context, name, p string) (bool, error) {
+	s.commitMu.Lock()
+	defer s.commitMu.Unlock()
+	if held, err := s.st.Exists(ctx, name); err != nil || held {
+		return false, err
+	}
+	return os.Remove(p) == nil, nil
 }
 
 // blobHash reads /<sha256> with any file extension (BUD-01).
@@ -506,29 +655,9 @@ func blobHash(r *http.Request) string {
 
 // get serves a blob to anyone who knows its hash, with byte ranges; ciphertext, so never a type a browser would run.
 func (s *Server) get(w http.ResponseWriter, r *http.Request) {
-	sha := blobHash(r)
-	if sha == "" {
-		refuse(w, http.StatusNotFound, "not_found")
-		return
-	}
-	// a 404 tells the phone a browser's capture is gone, so it fetches the page itself (contract 4.4, v1.12): a fault
-	// here is a 500, which it tries again, never a 404
-	ok, err := s.st.Exists(r.Context(), sha)
-	if err != nil {
-		refuse(w, http.StatusInternalServerError, "server")
-		return
-	}
-	if !ok {
-		refuse(w, http.StatusNotFound, "not_found")
-		return
-	}
-	f, err := os.Open(s.path(sha))
-	if errors.Is(err, fs.ErrNotExist) {
-		refuse(w, http.StatusNotFound, "not_found")
-		return
-	}
-	if err != nil {
-		refuse(w, http.StatusInternalServerError, "server")
+	f, rf := s.openBlob(r)
+	if rf.status != 0 {
+		rf.write(w)
 		return
 	}
 	defer f.Close()
@@ -542,6 +671,49 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request) {
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Cache-Control", "public, max-age=31536000, immutable")
 	http.ServeContent(w, r, "", time.Time{}, f)
+}
+
+var notFound = refusal{status: http.StatusNotFound, reason: "not_found"}
+
+// openBlob opens the blob a GET or HEAD names, once its file is on the disk, it has a send left this hour and an owner
+// holds it, in that order: a request for a blob whose file isn't there is answered from the disk alone, so it costs no
+// database lookup and fills no count, and one for a blob that is there asks the database at most MaxBlobSends times an
+// hour. A 404 tells the phone a browser's capture is gone, so it fetches the page itself (contract 4.4, v1.12): a
+// fault here is a 500, which it tries again, and a blob past its sends a 429, never a 404.
+func (s *Server) openBlob(r *http.Request) (*os.File, refusal) {
+	sha := blobHash(r)
+	if sha == "" {
+		return nil, notFound
+	}
+	f, err := os.Open(s.path(sha))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, notFound
+	}
+	if err != nil {
+		return nil, serverFault
+	}
+	if rf := s.servable(r.Context(), sha); rf.status != 0 {
+		f.Close()
+		return nil, rf
+	}
+	return f, refusal{}
+}
+
+// servable counts a send of a blob whose file is on the disk against its MaxBlobSends an hour, the whole blob even for
+// a range, and asks whether an owner holds it, as an expired capture's file still on the disk isn't held: past its
+// sends a blob gets 429 rate with Retry-After from every address alike, before the database is asked.
+func (s *Server) servable(ctx context.Context, sha string) refusal {
+	if ok, retry := s.sends.Allow(sha); !ok {
+		return refusal{status: http.StatusTooManyRequests, reason: "rate", retry: retry}
+	}
+	held, err := s.st.Exists(ctx, sha)
+	if err != nil {
+		return serverFault
+	}
+	if !held {
+		return notFound
+	}
+	return refusal{}
 }
 
 // remove is BUD-02's DELETE: the caller's ownership goes, a user's taking every upload of the blob counted against

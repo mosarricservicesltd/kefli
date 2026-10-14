@@ -23,6 +23,19 @@ const DailyLimit int64 = 20 << 20
 // Day is the window DailyLimit counts over, and how long the uploads log keeps a row.
 const Day = 24 * time.Hour
 
+// BlockSize is the least a blob counts for against its library's quota and day (contract 5): a disk block, which every
+// blob's file takes however few bytes it holds. Counting bytes alone, one library's one-byte blobs could fill the
+// server's files for everyone while using next to none of its 50 MB. Counted this way a library at the default quota
+// holds at most 12,800 blobs and adds at most 5,120 a day, and a text of 4,096 bytes or more counts exactly as before.
+const BlockSize int64 = 4096
+
+// Cost is what a blob of size bytes counts for against its library's quota and day: its size, and never less than a
+// disk block. The owner rows and the uploads log keep it, so what a library uses, its day and the figures that report
+// them all count each blob this way.
+func Cost(size int64) int64 {
+	return max(size, BlockSize)
+}
+
 // InboxLife is how long a device's inbox blob is kept (contract 5: 14 days).
 const InboxLife = 14 * 24 * time.Hour
 
@@ -57,8 +70,9 @@ CREATE TABLE IF NOT EXISTS devices (
   created_at    INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS devices_user ON devices(user_pubkey);
--- One row per blob and uploader. account is whose quota it counts against: the uploader, or a device's user.
--- expires_at is set for a device's inbox blob; a user's own blob lives until its owner deletes it.
+-- One row per blob and uploader. account is whose quota it counts against: the uploader, or a device's user. size is
+-- what the blob counts for there, its bytes and never less than a disk block (Cost). expires_at is set for a device's
+-- inbox blob; a user's own blob lives until its owner deletes it.
 CREATE TABLE IF NOT EXISTS owners (
   sha256     TEXT NOT NULL,
   owner      TEXT NOT NULL,
@@ -68,7 +82,6 @@ CREATE TABLE IF NOT EXISTS owners (
   expires_at INTEGER,
   PRIMARY KEY (sha256, owner)
 );
-CREATE INDEX IF NOT EXISTS owners_account ON owners(account);
 CREATE INDEX IF NOT EXISTS owners_expiry ON owners(expires_at) WHERE expires_at IS NOT NULL;
 CREATE TABLE IF NOT EXISTS offers (
   kind       TEXT NOT NULL,
@@ -88,8 +101,8 @@ CREATE TABLE IF NOT EXISTS gone (
   at     INTEGER NOT NULL
 );
 -- One row per upload that added a blob to the disk, against the library it counts for: what DailyLimit counts (contract
--- 5). A blob the server already stores, for anyone, adds no row, and rows go only once a day old, so deleting a blob
--- gives none of the day back. No hash is kept.
+-- 5), its size the blob's Cost. A blob the server already stores, for anyone, adds no row, and rows go only once a day
+-- old, so deleting a blob gives none of the day back. No hash is kept.
 CREATE TABLE IF NOT EXISTS uploads (
   account TEXT NOT NULL,
   size    INTEGER NOT NULL,
@@ -107,6 +120,38 @@ var steps = []string{
 	// 1, contract 1.12 (flow decision 117): libraries still at the old default of 200 MB (209,715,200 bytes) fall to the
 	// new 50 MB (52,428,800). A quota set to any other figure is kept, and so is one set to 200 MB after this has run.
 	`UPDATE accounts SET quota_bytes = 52428800 WHERE quota_bytes = 209715200`,
+	// 2: every blob counts for at least a disk block, 4,096 bytes (BlockSize), against its library's quota and day, so
+	// the blobs and the day's uploads recorded before count that way too, from the first figures this keflid reports.
+	`UPDATE owners SET size = 4096 WHERE size < 4096;
+	UPDATE uploads SET size = 4096 WHERE size < 4096`,
+	// 3: each library's figures as two running totals, so reading them costs the same for a library of one blob as for
+	// one of 12,800: summing its rows on every upload let one full library's preflights hold keflid's one database
+	// connection, other users' uploads taking 4.6 s. used_bytes is what the owners rows of the account count for, each
+	// blob once (the rows of one blob in one library share one size, insertOwner sees to it), and day_bytes the sum of
+	// its uploads rows; the triggers keep both on every insert and delete, whichever code makes it, and Figures lets go
+	// of a library's expired captures and day-old uploads before it reads them. No code updates the size, account or
+	// sha256 of a row of either table, which the totals would then miss. A library's rows of one blob are found by
+	// (account, sha256), where an index on account alone let SQLite read every row of the library to find them, for
+	// each upload's check and each row the triggers see; it serves what the index on account did.
+	`DROP INDEX IF EXISTS owners_account;
+	CREATE INDEX owners_library ON owners(account, sha256);
+	ALTER TABLE accounts ADD COLUMN used_bytes INTEGER NOT NULL DEFAULT 0;
+	ALTER TABLE accounts ADD COLUMN day_bytes INTEGER NOT NULL DEFAULT 0;
+	UPDATE owners SET size = (SELECT MAX(o.size) FROM owners o WHERE o.sha256 = owners.sha256 AND o.account = owners.account);
+	UPDATE accounts SET
+	  used_bytes = (SELECT COALESCE(SUM(size), 0) FROM (SELECT MAX(size) AS size FROM owners WHERE account = accounts.pubkey GROUP BY sha256)),
+	  day_bytes = (SELECT COALESCE(SUM(size), 0) FROM uploads WHERE account = accounts.pubkey);
+	CREATE INDEX owners_inbox ON owners(account, expires_at) WHERE expires_at IS NOT NULL;
+	CREATE TRIGGER owners_held AFTER INSERT ON owners
+	  WHEN NOT EXISTS (SELECT 1 FROM owners WHERE sha256 = NEW.sha256 AND account = NEW.account AND owner != NEW.owner)
+	  BEGIN UPDATE accounts SET used_bytes = used_bytes + NEW.size WHERE pubkey = NEW.account; END;
+	CREATE TRIGGER owners_let_go AFTER DELETE ON owners
+	  WHEN NOT EXISTS (SELECT 1 FROM owners WHERE sha256 = OLD.sha256 AND account = OLD.account)
+	  BEGIN UPDATE accounts SET used_bytes = used_bytes - OLD.size WHERE pubkey = OLD.account; END;
+	CREATE TRIGGER uploads_logged AFTER INSERT ON uploads
+	  BEGIN UPDATE accounts SET day_bytes = day_bytes + NEW.size WHERE pubkey = NEW.account; END;
+	CREATE TRIGGER uploads_aged AFTER DELETE ON uploads
+	  BEGIN UPDATE accounts SET day_bytes = day_bytes - OLD.size WHERE pubkey = OLD.account; END`,
 }
 
 type Store struct {
@@ -170,9 +215,15 @@ func (s *Store) Close() error { return s.db.Close() }
 func (s *Store) unix() int64 { return s.Now().Unix() }
 
 // Register adds the pubkey with the default quota; registering again changes nothing (contract 6: idempotent). A key
-// registered again after deleting its account is taken off the gone list.
+// registered again after deleting its account is taken off the gone list. A new account's running totals (schema step
+// 3) start from the rows that count against its key already, every one of them, as the triggers and Figures' letting
+// go will take each off in turn: an upload recorded as its account was deleted left such rows before F2's fix, and
+// from nothing, deleting one took the library below nothing.
 func (s *Store) Register(ctx context.Context, pubkey string) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO accounts(pubkey, quota_bytes, created_at) VALUES(?, ?, ?) ON CONFLICT(pubkey) DO NOTHING`, pubkey, DefaultQuota, s.unix())
+	_, err := s.db.ExecContext(ctx, `INSERT INTO accounts(pubkey, quota_bytes, created_at, used_bytes, day_bytes) VALUES(?, ?, ?,
+		(SELECT COALESCE(SUM(size), 0) FROM (SELECT MAX(size) AS size FROM owners WHERE account = ? GROUP BY sha256)),
+		(SELECT COALESCE(SUM(size), 0) FROM uploads WHERE account = ?))
+		ON CONFLICT(pubkey) DO NOTHING`, pubkey, DefaultQuota, s.unix(), pubkey, pubkey)
 	if err == nil {
 		_, err = s.db.ExecContext(ctx, `DELETE FROM gone WHERE pubkey = ?`, pubkey)
 	}
