@@ -10,7 +10,8 @@ import type { CryptoPort } from '../../../packages/protocol/src/ports';
 import type { LocalSigner, NostrEvent } from '../../../packages/protocol/src/signer';
 import { unwrap } from '../../../packages/protocol/src/wrap';
 import type { Defaults } from './defaults';
-import type { Pairing } from './store';
+import { ANSWER_MAX_BYTES, capped, timed } from './save';
+import { addresses, type Pairing } from './store';
 
 /** An offer lives five minutes (contract 4.4). */
 export const OFFER_LIFE = 300;
@@ -53,12 +54,19 @@ export async function newOffer(device: LocalSigner, defaults: Defaults, label: s
   return { offer, code: newPairCode(crypto), qr: JSON.stringify(offer), posted: false };
 }
 
+/**
+ * How long POST /pair-offers may take: past it the page shows it can't connect and tries again, as it does when the
+ * post fails, rather than staying blank with no code for as long as the operator holds the request.
+ */
+export const OFFER_POST_TIMEOUT_MS = 15_000;
+
 /** Posts the offer sealed under its typed code with POST /pair-offers, signed by the device key (NIP-98). */
-export async function postOffer(device: LocalSigner, defaults: Defaults, o: Offer, crypto: CryptoPort, get: typeof fetch = fetch): Promise<void> {
+export async function postOffer(device: LocalSigner, defaults: Defaults, o: Offer, crypto: CryptoPort, get: typeof fetch = fetch, timeoutMs = OFFER_POST_TIMEOUT_MS): Promise<void> {
   const { lookup, key } = await derivePairCode(o.code, crypto);
   const url = `${defaults.operator.api}/pair-offers`;
   const body = JSON.stringify({ v: 1, lookup, offer: await sealOffer(o.offer, key, crypto) });
-  const res = await get(url, { method: 'POST', body, headers: { Authorization: await httpAuth(device, url, 'POST', body, crypto), 'Content-Type': 'application/json' } });
+  const post = timed(timeoutMs, capped(ANSWER_MAX_BYTES, get));
+  const res = await post(url, { method: 'POST', body, headers: { Authorization: await httpAuth(device, url, 'POST', body, crypto), 'Content-Type': 'application/json' } });
   if (!res.ok) throw new Error(`pair-offers answered ${res.status}`);
   o.posted = true;
 }
@@ -95,9 +103,9 @@ export function formatCode(code: string): string {
   return `${code.slice(0, 4)}-${code.slice(4)}`;
 }
 
-/** The record kept once the phone has answered. */
+/** The record kept once the phone has answered, its lists as the extension keeps them (store.ts addresses). */
 export function pairingFrom(ack: PairAck, label: string, now: number): Pairing {
-  return { v: 1, user_pubkey: ack.user_pubkey, write_relays: ack.write_relays, blossom_servers: ack.blossom_servers, token: ack.token, label, paired_at: now };
+  return { v: 1, user_pubkey: ack.user_pubkey, write_relays: addresses(ack.write_relays), blossom_servers: addresses(ack.blossom_servers), token: String(ack.token), label, paired_at: now };
 }
 
 /** An opened wrap that is this offer's pair-ack, or null for anything else on the p tag. */
@@ -130,7 +138,8 @@ export async function listenForAck(relayUrl: string, device: LocalSigner, nonce:
     relay.subscribe([{ kinds: [1059], '#p': [device.pubkey()], since: since - 172_800 - 300 }], {
       onevent: (e) => void ackFor(device, e as NostrEvent, nonce).then((ack) => ack && !stopped && onAck(ack)),
       onclose: (reason) => {
-        if (stopped || !reason.includes('auth-required')) return;
+        // a relay's CLOSED may carry anything as its reason
+        if (stopped || !String(reason).includes('auth-required')) return;
         relay.auth(sign).then(subscribe, onTrouble);
       },
     });
