@@ -4,7 +4,7 @@
 // countdown that pauses on hover or on focus given to it. It never takes focus by itself; a second press of the
 // shortcut reaches Undo (decision 58). One live region, made once, announces what it says.
 import { colors, radius, type ThemeColors } from '../../../packages/tokens/src/index';
-import { icon } from './icons';
+import { icon, MARKS } from './icons';
 import { markDelay, toastCopy, type ToastState } from './toastCopy';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -68,7 +68,6 @@ button:focus-visible,.viakey button:focus{outline:2px solid var(--focus);outline
 @media (forced-colors:active){.toast,.tile,.mk{border:1px solid CanvasText}.act,.x{border:1px solid ButtonText}.timer i{forced-color-adjust:none;background:CanvasText}.cv{forced-color-adjust:none}}
 `;
 
-const MARKS = { ok: icon('check', 12, 'stroke-width="3"'), bad: icon('bang', 12, 'stroke-width="3"'), off: icon('wifioff', 12, 'stroke-width="2.25"') };
 
 interface Mounted {
   host: HTMLElement;
@@ -183,11 +182,16 @@ function onClick(e: Event): void {
   if (act === 'options') void chrome.runtime.sendMessage({ type: 'options' });
 }
 
-/** Shows or updates the toast; the same cover stays when Saving… becomes Saved, so its drawing isn't restarted. */
-function show(s: ToastState): void {
+/**
+ * Shows or updates the toast; the same cover stays when Saving… becomes Saved, so its drawing isn't restarted. True
+ * once it shows; one that can't (a document that isn't HTML, a page that took the element's name) throws, and the
+ * background shows the popup instead.
+ */
+function show(s: ToastState): boolean {
   if (!m) m = mount();
   m.state = s;
   paint(s);
+  return true;
 }
 
 /** The second press of the shortcut: focus moves to Undo, and leaving the toast hands it back (decision 58). */
