@@ -5,7 +5,7 @@ import { Relay } from 'nostr-tools/relay';
 import { finalizeEvent, generateSecretKey } from 'nostr-tools/pure';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import {
-  LocalSigner, deviceProofTemplate, encryptText, httpAuth, signStatement, uploadBlob, deleteBlob, giftWrap, type NostrEvent,
+  LocalSigner, blossomAuth, deviceProofTemplate, encryptText, httpAuth, signStatement, uploadBlob, deleteBlob, giftWrap, type NostrEvent,
 } from '../../packages/protocol/src';
 import { nodeCrypto } from '../../packages/protocol/src/node';
 
@@ -28,9 +28,22 @@ async function api(signer: LocalSigner, method: 'GET' | 'POST' | 'DELETE', path:
   return { status: res.status, body: (await res.json().catch(() => null)) as Record<string, unknown> | null };
 }
 
-// fair use's figures for a new library (contract 5): 50 MB kept, 20 MB of new bytes a day
+// fair use's figures for a new library (contract 5): 50 MB kept, 20 MB of new bytes a day; and the largest blob, 8 MB
 const QUOTA = 52_428_800;
 const DAILY = 20_971_520;
+const MAX_BLOB = 8_388_608;
+
+/** PUT /upload of blob as signer, the whole answer read: its status, X-Reason and body, which a refusal's figures ride in. */
+async function put(blossom: string, blob: Uint8Array, signer: LocalSigner) {
+  const sha = bytesToHex(nodeCrypto.sha256(blob));
+  const headers = { Authorization: await blossomAuth(signer, 'upload', sha), 'X-SHA-256': sha, 'Content-Type': 'application/octet-stream' };
+  const res = await fetch(`${blossom}/upload`, { method: 'PUT', body: blob as unknown as BodyInit, headers });
+  return { status: res.status, reason: res.headers.get('x-reason'), body: (await res.json().catch(() => null)) as Record<string, unknown> | null };
+}
+
+/** Whether a 413's body is {v, error, quota, used, daily, today}, the figures being these (contract 5). */
+const refusedWith = (body: Record<string, unknown> | null, error: string, figures: Record<string, unknown>) =>
+  body?.v === 1 && body.error === error && Object.keys(body).length === 6 && Object.entries(figures).every(([k, n]) => body[k] === n);
 
 let lastAsked = 0;
 /** GET /account as signer, a second after the last ask, so asking twice isn't a replay of the same signed request. */
@@ -163,6 +176,22 @@ async function main() {
   check('and the capture is no longer served', (await fetch(`${blossom}/${taken.text.sha256}`)).status === 404);
   const freed = (await accountOf(user)).body;
   check('which gives back its room and none of the day', freed?.used === sizes - taken.blob.length && freed?.today === sizes, JSON.stringify(freed));
+
+  // the day's 20 MB (contract 5, backend spec 7): two 8 MB blobs go, and a 4 MB one would pass the day, so it gets 413
+  // daily with the library's figures, read in full though the server refuses it before its body; a blob the library
+  // holds already costs nothing and goes past the day; a blob over 8 MB is too_large, with no figures
+  const fills = [await put(blossom, nodeCrypto.randomBytes(MAX_BLOB), user), await put(blossom, nodeCrypto.randomBytes(MAX_BLOB), user)];
+  check('two 8 MB uploads go within the day', fills.every((f) => f.status === 200), JSON.stringify(fills.map((f) => f.status)));
+  const usedNow = (freed?.used as number) + 2 * MAX_BLOB, todayNow = sizes + 2 * MAX_BLOB;
+  const pastDay = await put(blossom, nodeCrypto.randomBytes(4 << 20), user);
+  const dayFigures = { quota: QUOTA, used: usedNow, daily: DAILY, today: todayNow };
+  check('an upload past the day gets 413 daily with the figures', pastDay.status === 413 && pastDay.reason === 'daily' && refusedWith(pastDay.body, 'daily', dayFigures), JSON.stringify(pastDay));
+  const held = await put(blossom, inbox.blob, user);
+  check('a blob the library holds already goes past the day', held.status === 200, JSON.stringify(held));
+  const huge = await put(blossom, nodeCrypto.randomBytes(MAX_BLOB + 1), user);
+  check('a blob over 8 MB gets 413 too_large, with no figures', huge.status === 413 && huge.reason === 'too_large' && JSON.stringify(huge.body) === '{"v":1,"error":"too_large"}', JSON.stringify(huge));
+  const settled = (await accountOf(user)).body;
+  check('and the refusals cost nothing', settled?.used === usedNow && settled?.today === todayNow, JSON.stringify(settled));
 
   check('the owner deletes its blob', (await deleteBlob(blossom, own.text.sha256, user)).ok);
   check('and it is no longer served', (await fetch(`${blossom}/${own.text.sha256}`)).status === 404);
