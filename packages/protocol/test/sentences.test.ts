@@ -31,6 +31,17 @@ describe('sentence splitter', () => {
     expect(split(`Before. ${long} after it. Then.`)).toEqual(['Before.', long, 'after it.', 'Then.']);
   });
 
+  test('a word with a long run of closing quotes inside it is split in linear time', () => {
+    // its closing quotes were stripped with a regex that backtracked over the run from each of its characters: 100,000
+    // apostrophes before a full stop took 8 to 29 s, and 300,000 more than three minutes
+    const quotes = "'".repeat(100_000);
+    const brackets = ')'.repeat(100_000);
+    const started = Date.now();
+    expect(split(`Start ${quotes}. Next word.`)).toEqual(['Start', `${quotes}.`, 'Next word.']);
+    expect(split(`(${brackets}! Then.`)).toEqual([`(${brackets}!`, 'Then.']);
+    expect(Date.now() - started).toBeLessThan(3_000);
+  });
+
   test('every word is in one sentence, with offsets into its text', () => {
     const p = project(normaliseMarkdown('# A title\n\nFirst one. Second one here.\n\n- item'));
     const ss = sentences(p);

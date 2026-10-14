@@ -24,8 +24,9 @@ const CLOSERS = '\u0022\u0027\u201d\u2019\u00bb)\\]}';
 const OPENERS = '\u0022\u0027\u201c\u2018\u00ab(\\[';
 const ENDS = new RegExp('[.!?\u2026][' + CLOSERS + ']*$');
 const OPENS = new RegExp('^[\\p{Lu}\\p{Nd}' + OPENERS + ']', 'u');
-const CLOSING = new RegExp('[' + CLOSERS + ']+$');
 const OPENING = new RegExp('^[' + OPENERS + ']+');
+/** The closing quotes and brackets themselves, without the backslash that escapes ] in the patterns. */
+const CLOSER_CHARS = CLOSERS.replace('\\', '');
 const INITIAL = new RegExp('^\\p{L}\\.$', 'u');
 const ABBREVIATIONS = new Set([
   'mr.', 'mrs.', 'ms.', 'dr.', 'prof.', 'st.', 'mt.', 'jr.', 'sr.', 'vs.', 'e.g.', 'i.e.', 'no.', 'inc.', 'ltd.', 'co.', 'fig.', 'cf.', 'approx.',
@@ -39,10 +40,21 @@ const ABBREVIATIONS = new Set([
  */
 export const MAX_SENTENCE_CHARS = 3_000;
 
+/**
+ * A word without the closing quotes and brackets at its end, counted back from the end: the pattern for them,
+ * [closers]+$, backtracked over a run of them inside a word from each of its characters, so 100,000 apostrophes before
+ * a full stop took seconds to split and 300,000 minutes.
+ */
+function withoutClosers(word: string): string {
+  let end = word.length;
+  while (end > 0 && CLOSER_CHARS.includes(word[end - 1])) end--;
+  return word.slice(0, end);
+}
+
 function endsSentence(word: string, next: string | undefined): boolean {
   if (next === undefined) return true;
   if (!ENDS.test(word) || !OPENS.test(next)) return false;
-  const bare = word.replace(CLOSING, '').replace(OPENING, '').toLowerCase();
+  const bare = withoutClosers(word).replace(OPENING, '').toLowerCase();
   if (ABBREVIATIONS.has(bare)) return false;
   return !INITIAL.test(bare);
 }
