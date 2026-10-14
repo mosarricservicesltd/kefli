@@ -13,8 +13,8 @@
 // first (services/page.ts fetchable). A fetch that follows redirects anyway (React Native's own, under
 // EXPO_PUBLIC_USE_RN_FETCH) has its answer refused when it says it ended somewhere a hop couldn't go.
 //
-// Cleartext (7.1): release builds allow none, and OkHttp refuses plain http before it connects. That refusal is a
-// failure of what was asked for (Blocked), never the network, which would leave a save waiting for good.
+// Cleartext (7.1): release builds allow none, and OkHttp refuses plain http before it connects. That refusal fails
+// what was asked for (Blocked); read as the network, as it was, it left a save waiting for good.
 import { isPublicWebUrl } from '@kefli/protocol';
 
 export class TimedOut extends Error {

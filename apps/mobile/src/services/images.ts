@@ -83,8 +83,8 @@ function room(p: ImagePorts, owner: string, incoming: number, hash: string): Ima
 
 /**
  * The image's bytes, or how it failed: a redirect onto this phone's network is never followed, nor one ending there
- * kept (F26), and either is that image's failure, not the network's, so the images after it are still fetched. An
- * http image is asked for over https, as a page is (net/http overHttps); one only cleartext would bring fails alone.
+ * kept (F26), and either fails that image alone, so the images after it are still fetched. An http image is asked
+ * for over https, as a page is (net/http overHttps); one only cleartext would bring fails alone too.
  */
 async function download(p: ImagePorts, url: string): Promise<Uint8Array | Exclude<Counted, 'ok'>> {
   try {
