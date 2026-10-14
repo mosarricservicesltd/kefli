@@ -431,6 +431,44 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     expect(['a', 'b'].map((p) => w.item(itemHash(`https://example.com/${p}`))?.text_state)).toEqual(['cached', 'cached']);
   });
 
+  test('a new wrap whose taking fails part way waits for the next drain, and is filed as not ours after a week (F3)', async () => {
+    const w = world();
+    const { html } = await w.withHtml('<h1>Full disk</h1>');
+    await w.send(w.request({ html }));
+    const stage = w.ports.stage;
+    w.ports.stage = () => {
+      throw new Error('disk full');
+    };
+    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+    expect(w.db.get('SELECT 1 FROM inbox_seen')).toBeUndefined();
+    expect(w.db.get("SELECT 1 FROM sync_cursors WHERE stream = 'inbox'")).toBeUndefined();
+    w.ports.stage = stage;
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ merged: 1 });
+    expect(w.item(itemHash('https://example.com/a'))?.text_state).toBe('cached');
+
+    const late = world();
+    await late.send(late.request({ html: (await late.withHtml('<h1>Never</h1>')).html }));
+    late.ports.stage = () => {
+      throw new Error('disk full');
+    };
+    expect(await drainInbox(late.ports, late.owner)).toEqual({});
+    late.tick(8 * 86_400);
+    expect(await drainInbox(late.ports, late.owner)).toEqual({ ignored_foreign: 1 });
+    expect(late.db.get("SELECT 1 AS n FROM sync_cursors WHERE stream = 'inbox'")).toEqual({ n: 1 });
+  });
+
+  test("a relay that can't be reached leaves the cursor where it was, and the retries still run", async () => {
+    const { w, blob } = await failedCapture();
+    const cursor = w.db.get("SELECT since FROM sync_cursors WHERE stream = 'inbox'");
+    blob.serve();
+    w.tick(60);
+    w.ports.query = async () => {
+      throw new Error('connection refused');
+    };
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    expect(w.db.get("SELECT since FROM sync_cursors WHERE stream = 'inbox'")).toEqual(cursor);
+  });
+
   test('a blob server that trickles, or never ends, lets go at the deadline or the cap (F12)', async () => {
     const MB = 1_048_576;
     const w = world();
