@@ -18,7 +18,18 @@ export type Outcome =
 export const INBOX_BLOB_LIFE = 14 * 86_400;
 
 export function seenOutcome(db: SqlDb, wrapId: string): Outcome | null {
-  return db.get<{ outcome: Outcome }>('SELECT outcome FROM inbox_seen WHERE wrap_id = ?', wrapId)?.outcome ?? null;
+  return db.get<{ outcome: Outcome }>("SELECT outcome FROM inbox_seen WHERE wrap_id = ? AND outcome != 'waiting'", wrapId)?.outcome ?? null;
+}
+
+/**
+ * A wrap the phone couldn't open or take yet (F3) is noted as waiting, with when a drain first tried it, and is no
+ * outcome: seenOutcome passes it by, and the next drain tries it again. Returns when the first try was, from which the
+ * week it is waited for runs. Counted from its created_at, as it was, a wrap the phone first saw a week late (NIP-59
+ * backdates it two days; a phone off for five) was filed as not ours at the first signer out of sight, and the save lost.
+ */
+export function waitingSince(db: SqlDb, now: number, wrapId: string, owner: string): number {
+  db.run("INSERT INTO inbox_seen (wrap_id, owner, seen_at, outcome) VALUES (?, ?, ?, 'waiting') ON CONFLICT (wrap_id) DO NOTHING", wrapId, owner, now);
+  return db.get<{ seen_at: number }>("SELECT seen_at FROM inbox_seen WHERE wrap_id = ? AND outcome = 'waiting'", wrapId)?.seen_at ?? now;
 }
 
 export type Seen = { owner: string; outcome: Outcome; requestD?: string | null; device?: string | null; hash?: string | null; wrapJson?: string | null };

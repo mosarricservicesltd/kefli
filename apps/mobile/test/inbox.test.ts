@@ -157,7 +157,7 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     });
     await w.send(w.request());
     expect(await drainInbox(w.ports, w.owner)).toEqual({});
-    expect(w.db.get('SELECT 1 FROM inbox_seen')).toBeUndefined();
+    expect(w.db.get("SELECT 1 FROM inbox_seen WHERE outcome != 'waiting'")).toBeUndefined();
     expect(w.db.get("SELECT 1 FROM sync_cursors WHERE stream = 'inbox'")).toBeUndefined();
     refusing = false;
     expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
@@ -175,7 +175,7 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
       return query(relay, filters);
     };
     expect(await drainInbox(w.ports, w.owner)).toEqual({});
-    expect(w.db.get('SELECT 1 FROM inbox_seen')).toBeUndefined();
+    expect(w.db.get("SELECT 1 FROM inbox_seen WHERE outcome != 'waiting'")).toBeUndefined();
     expect(w.db.get("SELECT 1 FROM sync_cursors WHERE stream = 'inbox'")).toBeUndefined();
     w.ports.signer = w.user;
     w.ports.query = query;
@@ -225,12 +225,28 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 40 });
   });
 
-  test('a wrap dated more than a week ahead, which the signer can’t open, doesn’t hold the cursor for as long as its date says', async () => {
+  test('a wrap dated weeks ahead, which the signer can’t open, holds the cursor a week from the first try, not as long as its date says', async () => {
     const w = world();
     w.ports.signer = countingSigner(w.user, () => true).signer;
     w.sendRawSeal('null', w.now() + 30 * 86_400);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+    w.tick(8 * 86_400);
     expect(await drainInbox(w.ports, w.owner)).toEqual({ ignored_foreign: 1 });
     expect(w.cursor()).toBe(w.now());
+  });
+
+  test('a browser save first seen more than a week after it was sent still waits a week for a signer out of sight (F3)', async () => {
+    const w = world();
+    let refusing = true;
+    w.ports.signer = countingSigner(w.user, () => refusing).signer;
+    // sent nine days ago, while the phone was off, and backdated as NIP-59 allows
+    const { wrap } = await wrapSaveRequest(w.device, w.owner, 'late', w.request(), w.now() - 9 * 86_400, { now: w.now() - 9 * 86_400 });
+    w.wraps.push(wrap);
+    // the background drain, Amber refusing out of sight: the save waits rather than being filed as not ours
+    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+    refusing = false;
+    w.tick(3600);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
   });
 
   test('a flood of wraps nobody takes, newer than a browser save, can’t hide it: the drain reads back through the window', async () => {

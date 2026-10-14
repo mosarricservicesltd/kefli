@@ -18,7 +18,7 @@ import {
 import type { SqlDb } from '../data/db';
 import { localRecord } from '../data/devices';
 import {
-  INBOX_BLOB_LIFE, admit, failedBlobs, giveUpBlob, noteDeviceSave, queueDeleteWrap, recordSeen, seenOutcome, type Outcome,
+  INBOX_BLOB_LIFE, admit, failedBlobs, giveUpBlob, noteDeviceSave, queueDeleteWrap, recordSeen, seenOutcome, waitingSince, type Outcome,
 } from '../data/inbox';
 import type { Pending } from '../data/pending';
 import type { SaveTargets } from '../data/saves';
@@ -34,10 +34,9 @@ export const INBOX_MAX_BYTES = 2 * 1_048_576 + 16;
 export const WRAP_LOOKBACK = 172_800 + 300;
 /** How long a wrap the signer can't open, or that can't be taken, keeps the inbox's cursor waiting for it (F3). */
 export const WRAP_PATIENCE = 7 * 86_400;
-// a wrap's created_at is up to two days early (NIP-59), so a week past it is at least five days of trying; NIP-59
-// never dates one later, so one dated more than a week ahead is no wrap of the browser's, and can't hold the cursor
-// for as long as its date says
-const stale = (p: InboxPorts, w: NostrEvent) => Math.abs(p.now() - w.created_at) > WRAP_PATIENCE;
+// the week runs from the first drain that tried the wrap (waitingSince), whatever its created_at says: NIP-59 backdates
+// it, the phone may first see it late, and one dated ahead would otherwise wait as long as its date said
+const stale = (p: InboxPorts, owner: string, w: NostrEvent) => p.now() - waitingSince(p.db, p.now(), w.id, owner) > WRAP_PATIENCE;
 
 export type InboxPorts = Pick<PendingPorts, 'db' | 'now' | 'crypto' | 'stage' | 'unstage' | 'writeText' | 'targets'> & {
   signer: Signer;
@@ -287,7 +286,7 @@ export async function drainInbox(p: InboxPorts, owner: string): Promise<InboxRes
       // and the cursor stays so it is fetched again (F3); one still failing after a week is filed as not ours
       if (!(e instanceof UnwrapError)) {
         waiting = true;
-        if (!stale(p, w)) {
+        if (!stale(p, owner, w)) {
           held = true;
           continue;
         }
@@ -302,7 +301,7 @@ export async function drainInbox(p: InboxPorts, owner: string): Promise<InboxRes
       o = await handle(p, owner, w.id, opened.rumor, opened.seal, d.operator.blossom, drain);
     } catch {
       // ours, but taking it failed part way (a signer, the network, the database): tried again next drain (F3)
-      if (!stale(p, w)) {
+      if (!stale(p, owner, w)) {
         held = true;
         continue;
       }
