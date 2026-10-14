@@ -55,6 +55,11 @@ export interface Queued extends Omit<Pending, (typeof PLAIN)[number]> {
    */
   why: 'sending' | 'offline' | 'reach' | 'blocked';
   stopped: boolean;
+  /**
+   * Its request goes without the HTML the operator refused (v1.12), so Copy debug info says it went with no text whichever
+   * background sends it; a service worker is often a new one by the next minute's flush.
+   */
+  textless?: true;
 }
 
 export async function queued(store: Store): Promise<Queued[]> {
@@ -92,7 +97,7 @@ export async function enqueue(store: Store, p: Pending, why: Queued['why']): Pro
 export async function replaceWrap(store: Store, was: string, next: Pick<Queued, 'id' | 'wrap' | 'sealed'>): Promise<boolean> {
   return changeQueue(store, (q) => {
     const i = q.findIndex((e) => e.id === was);
-    if (i >= 0) q[i] = { ...q[i], id: next.id, wrap: next.wrap, sealed: next.sealed, blob: null, sha256: null };
+    if (i >= 0) q[i] = { ...q[i], id: next.id, wrap: next.wrap, sealed: next.sealed, blob: null, sha256: null, textless: true };
     return i >= 0;
   });
 }

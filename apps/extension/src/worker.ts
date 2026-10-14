@@ -66,7 +66,8 @@ export function background(b: Browser) {
   const saves = new PerSave();
   /**
    * Saves whose request went, or waits to go, without the HTML the operator refused (v1.12), by their wrap's id, until the
-   * toast or Copy debug info says so. Kept in this background only: one started since records such a save as any other.
+   * toast or Copy debug info says so. A flush adds the queue's own marks first, so a save sent again by a background
+   * before this one is recorded as sent with no text too.
    */
   const textless = new Set<string>();
   const deliverFor = (ctx: SaveContext) => (p: Delivered) => deliver(p, ctx.defaults.operator.blossom, ctx.defaults.operator.relay, ctx.device, b.net, (q) => withoutHtml(q, ctx));
@@ -244,7 +245,9 @@ export function background(b: Browser) {
     const ctx = await b.context();
     // nothing to send to, and nobody asked: the alarm goes rather than opening the options page every minute
     if (!ctx) return b.flushAlarm(false);
-    const stoppedBefore = new Set((await queued(b.store)).filter((e) => e.stopped).map((e) => e.id));
+    const before = await queued(b.store);
+    const stoppedBefore = new Set(before.filter((e) => e.stopped).map((e) => e.id));
+    for (const e of before) if (e.textless) textless.add(e.id);
     const sent = await flush(b.store, deliverFor(ctx), b.online(), { all, only, saves });
     for (const id of sent) await record(b.store, b.now(), id, textless.delete(id) ? 'sent, no text' : 'sent from queue');
     for (const e of await queued(b.store)) if (e.stopped && !stoppedBefore.has(e.id)) await record(b.store, b.now(), e.id, 'stopped');

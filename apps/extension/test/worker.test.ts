@@ -578,17 +578,28 @@ describe('a capture the operator refuses (contract 4.4 and 5, v1.12)', () => {
     expect(await queued(h.store)).toEqual([]);
   });
 
-  test('sent later by the same background, it is recorded as sent with no text; by a background started since, as sent from the queue', async () => {
+  test('sent later, by the same background or one started since, it is recorded as sent with no text', async () => {
     for (const same of [true, false]) {
       const o: Parameters<typeof net>[0] = { blossom: operator(413, 'daily'), publish: 'down' };
       const h = harness({ net: net(o).net });
       await h.work.save(PAGE, 1, false);
+      // the queue keeps the mark, since the next minute's flush often runs in a new service worker
       const [e] = await queued(h.store);
+      expect(e).toMatchObject({ textless: true, blob: null, sha256: null });
       o.publish = 'ok';
       await (same ? h : harness({ store: h.store, session: h.session })).work.flushQueue();
       expect(await queued(h.store)).toEqual([]);
-      expect((await history(h.store))[0]).toMatchObject({ outcome: same ? 'sent, no text' : 'sent from queue', id: e.id.slice(0, 8) });
+      expect((await history(h.store)).map((x) => [x.id, x.outcome])).toEqual([[e.id.slice(0, 8), 'sent, no text'], [e.id.slice(0, 8), 'waiting, couldn’t reach']]);
     }
+  });
+
+  test('a save waiting with its HTML is recorded as sent from the queue, as before', async () => {
+    const h = harness({ online: false });
+    await h.work.save(PAGE, 1, false);
+    const [e] = await queued(h.store);
+    expect(e.textless).toBeUndefined();
+    await harness({ store: h.store }).work.flushQueue();
+    expect((await history(h.store))[0]).toMatchObject({ outcome: 'sent from queue', id: e.id.slice(0, 8) });
   });
 
   test('a waiting save whose sealed request can’t be read still goes as it was wrapped, and the phone fetches the page', async () => {
