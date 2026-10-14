@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/richardminton-glitch/Kefli/server/api/internal/auth"
+	"github.com/richardminton-glitch/Kefli/server/api/internal/limit"
 	"github.com/richardminton-glitch/Kefli/server/api/internal/store"
 )
 
@@ -37,9 +38,22 @@ const MaxRead = MaxBlob + 1<<20
 // counted against the quota, and the phone sends one at a time.
 const MaxInFlight = 8
 
+// MaxAddressCalls is how many requests one address (an IPv6 /64) makes of the blob store a minute, counted before
+// anything is read, verified or asked of the database. Nothing bounded them: any key may sign a preflight or a delete,
+// and one client sending them as fast as it could held keflid's database connection for everyone. The phone sends one
+// request at a time, each a round trip and, for an upload or a delete, a signature, so tens a second at the most, as
+// when it fetches a whole library's texts in a restore or deletes them in Delete my data; a mirror fetches each blob it
+// is asked to copy once.
+const MaxAddressCalls = 6000
+
+// MaxBlockCalls is the same a minute for one IPv6 /48, whose 65,536 /64s would otherwise each make MaxAddressCalls.
+const MaxBlockCalls = 30_000
+
 type Server struct {
 	Dir  string
 	Base string // public address blobs are served from, such as https://blossom.kefli.app
+	// TrustProxy reads the client's address from X-Forwarded-For, set by Caddy in front.
+	TrustProxy bool
 	// MinFree is the space an upload must leave free on the blobs' disk, which the databases and the relay share: the
 	// quotas are per account, so only this bounds what every account together can fill (F8). 0 sets no floor.
 	MinFree int64
@@ -57,10 +71,16 @@ type Server struct {
 	flightMu sync.Mutex
 	inflight int64
 	flights  map[string]int
+	// calls and blockCalls count requests per address and per IPv6 /48, MaxAddressCalls and MaxBlockCalls a minute
+	calls, blockCalls *limit.Limiter
 }
 
 func New(dir, base string, st *store.Store, log *slog.Logger) *Server {
-	return &Server{Dir: dir, Base: strings.TrimRight(base, "/"), Free: diskFree, FreeFiles: diskFiles, st: st, log: log, flights: map[string]int{}}
+	return &Server{
+		Dir: dir, Base: strings.TrimRight(base, "/"), Free: diskFree, FreeFiles: diskFiles, st: st, log: log, flights: map[string]int{},
+		calls:      limit.New(MaxAddressCalls, time.Minute, st.Now),
+		blockCalls: limit.New(MaxBlockCalls, time.Minute, st.Now),
+	}
 }
 
 func statfs(dir string) (*syscall.Statfs_t, error) {
@@ -91,19 +111,47 @@ func diskFiles(dir string) (int64, int64, error) {
 }
 
 func (s *Server) Routes(mux *http.ServeMux) {
-	mux.HandleFunc("PUT /upload", s.upload)
-	mux.HandleFunc("HEAD /upload", s.preflight)
-	mux.HandleFunc("GET /{blob}", s.get)
-	mux.HandleFunc("HEAD /{blob}", s.get)
-	mux.HandleFunc("DELETE /{blob}", s.remove)
+	mux.HandleFunc("PUT /upload", s.limited(s.upload))
+	mux.HandleFunc("HEAD /upload", s.limited(s.preflight))
+	mux.HandleFunc("GET /{blob}", s.limited(s.get))
+	mux.HandleFunc("HEAD /{blob}", s.limited(s.get))
+	mux.HandleFunc("DELETE /{blob}", s.limited(s.remove))
 }
 
-// refusal is an answer refusing a request: its status, the reason for X-Reason and the body, and for the two limits'
-// 413s the library's figures (contract 5). The zero refusal refuses nothing.
+// limited counts a request against its IPv6 /48 and then its address, an IPv6 /64, before next reads or verifies
+// anything, so a flood from one place costs a map lookup each; past either, the request gets 429 rate with
+// Retry-After, which the phone and the extension send again later.
+func (s *Server) limited(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if rf := s.callAllowed(r); rf.status != 0 {
+			rf.write(w)
+			return
+		}
+		next(w, r)
+	}
+}
+
+func (s *Server) callAllowed(r *http.Request) refusal {
+	ip := limit.ClientIP(r, s.TrustProxy)
+	if block := limit.Block(ip); strings.Contains(block, ":") {
+		if ok, retry := s.blockCalls.Allow(block); !ok {
+			return refusal{status: http.StatusTooManyRequests, reason: "rate", retry: retry}
+		}
+	}
+	if ok, retry := s.calls.Allow(limit.Addr(ip, 64)); !ok {
+		return refusal{status: http.StatusTooManyRequests, reason: "rate", retry: retry}
+	}
+	return refusal{}
+}
+
+// refusal is an answer refusing a request: its status, the reason for X-Reason and the body, for the two limits'
+// 413s the library's figures (contract 5), and for a 429 when to send again, ten seconds unless set. The zero refusal
+// refuses nothing.
 type refusal struct {
 	status  int
 	reason  string
 	figures *store.Figures
+	retry   time.Duration
 }
 
 var (
@@ -122,15 +170,23 @@ type refused struct {
 }
 
 // write answers the refusal: the status, and the reason in X-Reason, where clients read it (BUD-01), and in the body.
-// A 429 also says when to send again.
+// A 429 also says when to send again, in whole seconds rounded up.
 func (rf refusal) write(w http.ResponseWriter) {
 	w.Header().Set("X-Reason", rf.reason)
 	w.Header().Set("Content-Type", "application/json")
 	if rf.status == http.StatusTooManyRequests {
-		w.Header().Set("Retry-After", "10")
+		w.Header().Set("Retry-After", retryAfter(rf.retry))
 	}
 	w.WriteHeader(rf.status)
 	_ = json.NewEncoder(w).Encode(refused{V: 1, Error: rf.reason, Figures: rf.figures})
+}
+
+// retryAfter is Retry-After's whole seconds for a wait, rounded up, and ten when none is known.
+func retryAfter(d time.Duration) string {
+	if d <= 0 {
+		return "10"
+	}
+	return strconv.Itoa(int((d + time.Second - 1) / time.Second))
 }
 
 // refuse answers a Blossom error with no figures.

@@ -111,11 +111,13 @@ func run(ctx context.Context, log *slog.Logger) error {
 	if err != nil || minFree < 0 {
 		return fmt.Errorf("KEFLID_MIN_FREE_MB isn't a number of megabytes")
 	}
+	trustProxy := os.Getenv("KEFLID_TRUST_PROXY") == "1"
 	blobs := blossom.New(env("KEFLID_BLOBS", "blobs"), env("KEFLID_BLOSSOM_BASE", "http://localhost:3447"), st, log)
 	blobs.MinFree = minFree << 20
+	blobs.TrustProxy = trustProxy
 	api := httpapi.New(httpapi.Config{
 		Base: env("KEFLID_API_BASE", "http://localhost:8447"), Defaults: defaults, Names: names.Names, Relays: names.Relays,
-		TrustProxy: os.Getenv("KEFLID_TRUST_PROXY") == "1", Unlink: blobs.Unlink,
+		TrustProxy: trustProxy, Unlink: blobs.Unlink,
 	}, st, log)
 
 	apiMux, blobMux := http.NewServeMux(), http.NewServeMux()

@@ -3,6 +3,8 @@
 package limit
 
 import (
+	"net"
+	"net/http"
 	"net/netip"
 	"strings"
 	"sync"
@@ -94,6 +96,20 @@ func Block(addr string) string {
 		return addr
 	}
 	return p.String()
+}
+
+// ClientIP is the caller's address: Caddy's X-Forwarded-For when trusted, else the connection's.
+func ClientIP(r *http.Request, trustProxy bool) string {
+	if trustProxy {
+		if f := r.Header.Get("X-Forwarded-For"); f != "" {
+			return strings.TrimSpace(strings.Split(f, ",")[0])
+		}
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
 
 // Addr is the address a client is counted as: an IPv4 address whole, and an IPv6 address by its first bits, the block

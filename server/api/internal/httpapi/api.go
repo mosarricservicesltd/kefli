@@ -14,7 +14,6 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -185,21 +184,7 @@ func fail(w http.ResponseWriter, status int, why string) {
 
 // clientAddr is the address the caller is counted as by a limit: an IPv6 caller by its /64 (F8).
 func (a *API) clientAddr(r *http.Request) string {
-	return limit.Addr(ClientIP(r, a.cfg.TrustProxy), 64)
-}
-
-// ClientIP is the caller's address: Caddy's X-Forwarded-For when trusted, else the connection's.
-func ClientIP(r *http.Request, trustProxy bool) string {
-	if trustProxy {
-		if f := r.Header.Get("X-Forwarded-For"); f != "" {
-			return strings.TrimSpace(strings.Split(f, ",")[0])
-		}
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
+	return limit.Addr(limit.ClientIP(r, a.cfg.TrustProxy), 64)
 }
 
 // request is a NIP-98 request read and checked: its signer, its JSON body (if any), refused once its id is reused.
@@ -236,7 +221,7 @@ func (a *API) authed(w http.ResponseWriter, r *http.Request) (*request, bool) {
 // callAllowed counts a request against its IPv6 /48, then its address, before its body is read or its signature
 // checked, so a flood from one place costs a map lookup each.
 func (a *API) callAllowed(w http.ResponseWriter, r *http.Request) bool {
-	ip := ClientIP(r, a.cfg.TrustProxy)
+	ip := limit.ClientIP(r, a.cfg.TrustProxy)
 	var counts []func() (bool, time.Duration)
 	if block := limit.Block(ip); strings.Contains(block, ":") {
 		counts = append(counts, func() (bool, time.Duration) { return a.blkCal.Allow(block) })
