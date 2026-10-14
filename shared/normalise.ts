@@ -9,7 +9,7 @@
 // whose webidl-conversions reads SharedArrayBuffer at load, which Hermes doesn't have.
 //
 // Where the contract text leaves a choice open, the choice is marked RULED and listed in the fixtures' rulings: settled
-// with contract 1.4 (section 11.9), and rulings 8 and 11 as they now stand with contract 1.12 (section 11.1).
+// with contract 1.4 (section 11.9), and rulings 8, 11 and 12 as they now stand with contract 1.12 (section 11.1).
 
 /// <reference path="./whatwg-url-state-machine.d.ts" />
 import type { URLRecord } from 'whatwg-url';
@@ -118,15 +118,36 @@ function isAlternateForm(hostname: string, pathname: string): boolean {
 const twoLabels = (host: string): boolean => host.split('.').filter((label) => label !== '').length >= 2;
 
 /**
+ * RULED (ruling 12): shared hosting, whose sites are different people's, each at a name of its own under the domain,
+ * and on some of which every user's posts are at the domain itself (www.tumblr.com, medium.com, substack.com). There a
+ * leading m. or amp. label can be a user's own name, so a blog at amp.tumblr.com could otherwise name another user's
+ * post at www.tumblr.com as its canonical, and land on, or replace, a save of it. A page on one of these domains, or
+ * on a name under one, takes a canonical only from its own host (sameSite).
+ */
+export const SHARED_HOSTING: readonly string[] = Object.freeze([
+  'blogspot.com', 'github.io', 'medium.com', 'neocities.org', 'netlify.app',
+  'pages.dev', 'substack.com', 'tumblr.com', 'vercel.app', 'wordpress.com',
+]);
+
+/** Whether host, its trailing dots aside, is one of SHARED_HOSTING's domains or a name under one. */
+function onSharedHosting(host: string): boolean {
+  let end = host.length;
+  while (end > 0 && host[end - 1] === '.') end--;
+  const name = host.slice(0, end);
+  return SHARED_HOSTING.some((domain) => name === domain || name.endsWith(`.${domain}`));
+}
+
+/**
  * RULED: whether a canonical link on canonicalHost can stand for a page on pageHost (contract 4.3, ruling 11): only
  * from the page's own site, or a page at amp.evil.example could take another site's address and land on, or replace,
  * a save of it. The canonical's host is the page's, or equals it once a leading m. or amp. label is taken off the
  * page's and then a leading www. off each, provided the page's host so shortened still has two labels (m.com is no
- * mobile form of com, nor m.com. of com.). Hosts are compared as the URL record serialises them: in ASCII, lowercase,
- * without their ports.
+ * mobile form of com, nor m.com. of com.). A page on shared hosting takes a canonical only from its own host (ruling
+ * 12). Hosts are compared as the URL record serialises them: in ASCII, lowercase, without their ports.
  */
 function sameSite(pageHost: string, canonicalHost: string): boolean {
   if (canonicalHost === pageHost) return true;
+  if (onSharedHosting(pageHost)) return false;
   const site = pageHost.replace(ALTERNATE_LABEL, '').replace(WWW_LABEL, '');
   return twoLabels(site) && canonicalHost.replace(WWW_LABEL, '') === site;
 }
@@ -153,11 +174,11 @@ function unauthenticated(input: string, url: URLRecord): string {
 
 /**
  * The canonical link a save keeps for the page at url (contract 4.3): canonical when it is an http or https URL on the
- * page's own site (ruling 11), without any user name and password (ruling 8), otherwise null, as for a page that names
- * none. A relative canonical takes the user info of the address it is resolved against, which on the phone is where
- * the fetch ended and keeps what was shared. The extension's capture and the phone's parse keep a page's canonical
- * through this, so a save's is always one normalise could take. Never throws: a canonical is a page's hint, and a page
- * or canonical that isn't a link keeps none.
+ * page's own site (rulings 11 and 12), without any user name and password (ruling 8), otherwise null, as for a page
+ * that names none. A relative canonical takes the user info of the address it is resolved against, which on the phone
+ * is where the fetch ended and keeps what was shared. The extension's capture and the phone's parse keep a page's
+ * canonical through this, so a save's is always one normalise could take. Never throws: a canonical is a page's hint,
+ * and a page or canonical that isn't a link keeps none.
  */
 export function ownCanonical(url: string, canonical: string | null | undefined): string | null {
   if (!canonical) return null;

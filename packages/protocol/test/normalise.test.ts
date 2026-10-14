@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { NotALinkError, isItemD, itemD, itemHash, normalise, ownCanonical, withoutUserInfo } from '../src';
+import { NotALinkError, SHARED_HOSTING, isItemD, itemD, itemHash, normalise, ownCanonical, urlParts, withoutUserInfo } from '../src';
 
 type Case = { name: string; url: string; canonical?: string; expect: string | null };
 const fixtures: { cases: Case[] } = JSON.parse(
@@ -86,6 +86,40 @@ describe("a page's canonical counts only from its own site (ruling 11)", () => {
       if (own === null) expect(normalise(c.url, c.canonical)).toBe(normalise(c.url));
       else expect([normalise(c.url), normalise(own)]).toContain(normalise(c.url, c.canonical));
     }
+  });
+});
+
+describe("on shared hosting a canonical counts only from the page's own host (ruling 12)", () => {
+  const post = 'https://www.tumblr.com/victim/123';
+
+  test("a user's site at an m. or amp. name can't take another user's post's address and land on its save", () => {
+    expect(itemHash('https://amp.tumblr.com/post/1', post)).not.toBe(itemHash(post));
+    expect(itemHash('https://amp.tumblr.com/post/1', post)).toBe(itemHash('https://amp.tumblr.com/post/1'));
+    expect(ownCanonical('https://amp.tumblr.com/post/1', post)).toBeNull();
+    expect(ownCanonical('https://m.medium.com/a', 'https://medium.com/@victim/b')).toBeNull();
+    // nor can a site's www. form, which there is another host
+    expect(ownCanonical('https://www.victim.github.io/a', 'https://victim.github.io/a')).toBeNull();
+  });
+
+  test("a site's own AMP page still joins its article's save", () => {
+    const amp = 'https://victim.wordpress.com/2026/10/story/amp/';
+    const article = 'https://victim.wordpress.com/2026/10/story/';
+    expect(itemHash(amp, article)).toBe(itemHash(article));
+    expect(ownCanonical(amp, article)).toBe(article);
+  });
+
+  test('every shared hosting domain has a fixture of its own, an m. or amp. name under it keeping its address', () => {
+    for (const domain of SHARED_HOSTING) {
+      const pinned = fixtures.cases.some((c) => c.name.includes('ruling 12') && c.canonical && c.expect === normalise(c.url)
+        && /^(m|amp)\./.test(urlParts(c.url)?.hostname ?? '') && urlParts(c.url)?.hostname.endsWith(`.${domain}`));
+      expect([domain, pinned]).toEqual([domain, true]);
+    }
+  });
+
+  test('the list holds each domain once, in lowercase ASCII, and can’t be changed while the app runs', () => {
+    expect(Object.isFrozen(SHARED_HOSTING)).toBe(true);
+    expect(new Set(SHARED_HOSTING).size).toBe(SHARED_HOSTING.length);
+    for (const domain of SHARED_HOSTING) expect(domain).toMatch(/^[a-z0-9-]+(\.[a-z0-9-]+)+$/);
   });
 });
 
