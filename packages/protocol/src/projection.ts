@@ -20,9 +20,9 @@ export interface Projection {
 }
 
 /**
- * A closing quote or bracket that may follow terminal punctuation. This, ENTITY, ASCII_PUNCT, FENCE and the word match
- * are built from plain strings: the code gate's parser loses its place in a template or a regex literal holding quotes,
- * a backtick or a slash, and stops scoring the functions after it.
+ * A closing quote or bracket that may follow terminal punctuation. This, ENTITY, ASCII_PUNCT, FENCE_CHARS and the word
+ * match are built from plain strings: the code gate's parser loses its place in a template or a regex literal holding
+ * quotes, a backtick or a slash, and stops scoring the functions after it.
  */
 const CLOSERS = '\u0022\u0027”’»)]}';
 const TERMINAL = new RegExp('[.!?][' + CLOSERS.replace(']', '\\]') + ']?$');
@@ -309,31 +309,74 @@ function literal(b: Builder, node: Text | Html | InlineCode): void {
   if (pos) b.push(node.value, align(node.value, b.src, pos.start.offset!, pos.end.offset!));
 }
 
-// A fence of three backticks or tildes, built from strings: the code gate's parser loses its place at a backtick.
-const FENCE = new RegExp('^[ \\t>]*(' + '\u0060'.repeat(3) + '|~~~)');
+// A fence's characters: the backtick (by its code, since the code gate's parser loses its place at one) and the tilde.
+const FENCE_CHARS = String.fromCharCode(96) + '~';
+const LF = 10;
+const CR = 13;
+
+/** Where the line holding s[i] ends: the index of its CR or LF, or the end of s. CommonMark ends a line at either. */
+function lineEnd(s: string, i: number): number {
+  let k = i;
+  while (k < s.length && s.charCodeAt(k) !== LF && s.charCodeAt(k) !== CR) k++;
+  return k;
+}
+
+/** Where the line holding s[i] starts: just past the CR or LF before it, or 0. */
+function lineStartOf(s: string, i: number): number {
+  let k = i;
+  while (k > 0 && s.charCodeAt(k - 1) !== LF && s.charCodeAt(k - 1) !== CR) k--;
+  return k;
+}
+
+/** How long the line ending at s[end] is: two for a CR LF, one for an LF or a lone CR. */
+const endingLength = (s: string, end: number) => (s.charCodeAt(end) === CR && s.charCodeAt(end + 1) === LF ? 2 : 1);
+
+/** Where the line after the one holding s[i] starts. */
+function nextLineStart(s: string, i: number): number {
+  const end = lineEnd(s, i);
+  return end + endingLength(s, end);
+}
+
+/** An offset for each UTF-16 unit of s, from at on, as the text counts them: a character outside the BMP is two. */
+const run = (s: string, at: number) => Array.from({ length: s.length }, (_, k) => at + k);
+
+/**
+ * The offsets of a code line, which ends where its source line ends. A tab the parse took partly as indentation
+ * leaves spaces in the value that the source doesn't have, so the line can be longer than its source line: the spaces
+ * it opens with then take the line's start, and what follows them its own characters.
+ */
+const tail = (line: string, lineStart: number, end: number) =>
+  Array.from({ length: line.length }, (_, k) => Math.max(lineStart, end - line.length + k));
 
 /**
  * RULED: code blocks are spoken, as the text of a node. Each value line is the end of its source line, since the
- * parser only removes indentation from the front. A code block without a position says nothing.
+ * parser only removes indentation from the front. Lines end where CommonMark ends them: at an LF, a CR LF, or a lone
+ * CR, which normalising leaves. A code block without a position says nothing. One case maps a line early: when a lone
+ * CR ends the fence's line inside a quote or a list, the parse can drop an empty first line from the value (neither
+ * Turndown nor the PDF layout writes a CR there).
  */
 function codeBlock(b: Builder, node: Code): void {
   if (!node.position) return;
+  const { src } = b;
+  const { value } = node;
   const start = node.position.start.offset!;
-  // A fenced block's content starts on the line after its fence; an indented block's on its own first line.
-  const lineOf = b.src.lastIndexOf('\n', start - 1) + 1;
-  const fenced = FENCE.test(b.src.slice(lineOf, node.position.end.offset!));
-  let lineStart = fenced ? b.src.indexOf('\n', start) + 1 : lineOf;
-  const lines = node.value.split('\n');
-  lines.forEach((line, n) => {
-    let lineEnd = b.src.indexOf('\n', lineStart);
-    if (lineEnd === -1) lineEnd = b.src.length;
-    const srcLine = b.src.slice(lineStart, lineEnd);
-    const at = lineStart + Math.max(0, srcLine.length - line.length);
-    // one offset a UTF-16 unit, as the text counts them: a character outside the BMP is two
-    b.push(line, Array.from({ length: line.length }, (_, k) => at + k));
-    if (n < lines.length - 1) b.push('\n', [lineEnd]);
-    lineStart = lineEnd + 1;
-  });
+  // A fenced block starts at its fence, after any list marker or quote on that line (Turndown writes a list item
+  // whose first block is code as its marker and then the fence), and its content on the next line. An indented
+  // block starts in its indentation, and its content on that same line, even when the line holds a fence.
+  let lineStart = FENCE_CHARS.includes(src[start]) ? nextLineStart(src, start) : lineStartOf(src, start);
+  for (let j = 0; ; ) {
+    const valueEnd = lineEnd(value, j);
+    const end = lineEnd(src, lineStart);
+    const line = value.slice(j, valueEnd);
+    b.push(line, tail(line, lineStart, end));
+    if (valueEnd === value.length) break;
+    // A CR LF in the value is one ending only where the source has one: a lone CR, then a line holding nothing but
+    // its quote marks, comes through the parse as a CR and an LF side by side.
+    const ending = value.slice(valueEnd, valueEnd + Math.min(endingLength(value, valueEnd), endingLength(src, end)));
+    b.push(ending, run(ending, end));
+    j = valueEnd + ending.length;
+    lineStart = end + ending.length;
+  }
   b.end(false);
 }
 

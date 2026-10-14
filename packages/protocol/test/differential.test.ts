@@ -5,14 +5,67 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fromMarkdown } from 'mdast-util-from-markdown';
-import type { PhrasingContent, Root } from 'mdast';
-import { normaliseMarkdown, projectTree, sentences } from '../src';
+import type { Code, Nodes, PhrasingContent, Root } from 'mdast';
+import { normaliseMarkdown, projectTree, sentences, type Projection } from '../src';
 import * as old from './reference/projection';
 import { sentences as oldSentences } from './reference/sentences';
 import { normaliseMarkdown as oldNormalise } from './reference/normalise';
 
 const shared = join(__dirname, '../../../shared/fixtures');
 const load = (path: string) => JSON.parse(readFileSync(join(shared, path), 'utf8'));
+
+/** How the old code told a fenced block: a fence at the start of the line, after nothing but spaces, tabs and quotes. */
+const OLD_FENCE = new RegExp('^[ \\t>]*(' + String.fromCharCode(96).repeat(3) + '|~~~)');
+
+/** A code block's lines in the Markdown, and whether its characters there are checked to map to themselves. */
+type Span = { from: number; to: number; checked: boolean };
+
+/**
+ * The code blocks the old code mapped otherwise, by design: from the start of each one's first line to its end, a
+ * block holding a character outside the BMP (the old code counted its map in characters), told fenced or indented
+ * otherwise than the parse tells it (it looked for a fence at the start of the line, so missed one after a list marker
+ * and saw one at the start of an indented block's first line), or on lines holding a lone CR (it read lines by LF
+ * alone, where CommonMark ends one at a CR too) or a tab (it mapped a line the parse had widened, by taking part of a
+ * tab as indentation, from the line's start). Their offsets are left out of the comparison on both sides and checked
+ * instead to map every character but a space to itself; the text, its words and sentences, and every other offset
+ * are compared. A block whose fence line a lone CR ends isn't checked: the parse can give it without its first line
+ * (a known limit, and neither Turndown nor the PDF layout writes a CR there).
+ */
+function remapped(md: string, tree: Root): Span[] {
+  return codeBlocks(tree).flatMap((n) => misread(md, n));
+}
+
+/** Every code block in the tree that has a position. */
+function codeBlocks(tree: Root): Code[] {
+  const out: Code[] = [];
+  const stack: Nodes[] = [tree];
+  for (let n = stack.pop(); n; n = stack.pop()) {
+    if (n.type === 'code' && n.position) out.push(n);
+    if ('children' in n) for (const c of n.children) stack.push(c);
+  }
+  return out;
+}
+
+/** Whether a lone CR ends the line holding md[i]. */
+function loneCrEnds(md: string, i: number): boolean {
+  const lf = md.indexOf('\n', i);
+  const cr = md.indexOf('\r', i);
+  return cr !== -1 && (lf === -1 || cr < lf) && md[cr + 1] !== '\n';
+}
+
+/** The span of a code block the old code mapped otherwise (remapped), or none. */
+function misread(md: string, n: Code): Span[] {
+  const start = n.position!.start.offset!;
+  const end = n.position!.end.offset!;
+  const oldLine = md.lastIndexOf('\n', start - 1) + 1;
+  const fenced = md[start] === '~' || md.charCodeAt(start) === 96;
+  // the lines the old code read the block on, from its first LF-line to the LF after its end
+  const lf = md.indexOf('\n', end);
+  const lines = md.slice(oldLine, lf === -1 ? md.length : lf);
+  const differs = OLD_FENCE.test(md.slice(oldLine, end)) !== fenced || [...n.value].length !== n.value.length || /[\r\t]/.test(lines);
+  if (!differs) return [];
+  return [{ from: Math.max(oldLine, md.lastIndexOf('\r', start - 1) + 1), to: end, checked: !(fenced && loneCrEnds(md, start)) }];
+}
 
 /**
  * The projection of md and its sentences, by both from one parse, as one value each: compared as JSON, which is quick,
@@ -22,9 +75,14 @@ function agrees(md: string): void {
   const tree = fromMarkdown(md);
   const p = projectTree(md, tree);
   const q = old.projectTree(md, tree);
-  const mine = { md, p, s: sentences(p) };
-  const theirs = { md, p: q, s: oldSentences(q) };
+  const spans = remapped(md, tree);
+  const spanOf = (i: number) => spans.find((s) => p.offsets[i] >= s.from && p.offsets[i] <= s.to);
+  const compared = (x: Projection) => (spans.length === 0 ? x : { ...x, offsets: x.offsets.map((o, i) => (spanOf(i) ? null : o)) });
+  const mine = { md, p: compared(p), s: sentences(p) };
+  const theirs = { md, p: compared(q), s: oldSentences(q) };
   if (JSON.stringify(mine) !== JSON.stringify(theirs)) expect(mine).toEqual(theirs);
+  const astray = p.offsets.flatMap((o, i) => (spanOf(i)?.checked && !/\s/.test(p.text[i]) && md[o] !== p.text[i] ? [{ i, said: p.text[i], at: o }] : []));
+  if (astray.length) expect({ md, astray }).toEqual({ md, astray: [] });
 }
 
 /** A seeded generator (mulberry32), so a failure can be run again. */
@@ -116,7 +174,7 @@ test('a run of emphasis 1,000 deep around a link, silent or read, projects as it
 });
 
 test('a code block holding a character outside the BMP differs only in the offsets the old code dropped', () => {
-  // the old map of a code block counted characters, so each emoji dropped an offset: the one deliberate difference
+  // the old map of a code block counted characters, so each emoji dropped an offset: a deliberate difference
   const emoji = String.fromCodePoint(0x1f600);
   const md = normaliseMarkdown(`Before.\n\n${TICKS}\nlet face = '${emoji}';\nnext(${emoji}${emoji});\n${TICKS}\n\nAfter it.`);
   const tree = fromMarkdown(md);
@@ -126,6 +184,28 @@ test('a code block holding a character outside the BMP differs only in the offse
   expect(q.offsets.slice(0, 24)).toEqual(p.offsets.slice(0, 24));
   expect(q.offsets.some((o) => o === undefined)).toBe(true);
   expect(p.offsets.every((o, i) => /\s/.test(p.text[i]) || md[o] === p.text[i] || p.text[i] === '.')).toBe(true);
+  expect(remapped(md, tree)).toEqual([{ from: 9, to: md.indexOf('After') - 2, checked: true }]);
+});
+
+test('a code block told fenced or indented otherwise than the old code differs only in its offsets', () => {
+  // the old code looked for a fence at the start of the line: a deliberate difference, the other way round each time
+  const cases = [`Before.\n\n1.  ${TICKS}\n    let x = 1;\n    ${TICKS}\n2.  After it.`, `Before.\n\n    ${TICKS}js\n    let y = 2;\n\nAfter it.`];
+  for (const md of cases.map(normaliseMarkdown)) {
+    const tree = fromMarkdown(md);
+    const p = projectTree(md, tree);
+    const q = old.projectTree(md, tree);
+    expect({ ...p, offsets: null, s: sentences(p) }).toEqual({ ...q, offsets: null, s: oldSentences(q) });
+    const code = p.blockStarts[1];
+    const after = p.blockStarts[2];
+    expect(q.offsets.slice(0, code)).toEqual(p.offsets.slice(0, code));
+    expect(q.offsets.slice(after)).toEqual(p.offsets.slice(after));
+    expect(q.offsets.slice(code, after)).not.toEqual(p.offsets.slice(code, after));
+    expect(p.offsets.every((o, i) => /\s/.test(p.text[i]) || md[o] === p.text[i] || p.text[i] === '.')).toBe(true);
+    expect(remapped(md, tree)).toHaveLength(1);
+  }
+  // and blocks the two tell alike are compared whole
+  const alike = normaliseMarkdown(`- item\n\n  ${TICKS}\n  fenced\n  ${TICKS}\n\n> ~~~\n> quoted\n> ~~~\n\n    indented\n`);
+  expect(remapped(alike, fromMarkdown(alike))).toEqual([]);
 });
 
 test('trees of shapes the parse never makes project as they did', () => {

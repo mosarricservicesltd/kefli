@@ -90,6 +90,36 @@ describe('spoken projection (C§4.2)', () => {
     }
   });
 
+  test('code blocks map every character to itself: a fence after a list marker, an indented fence, a lone CR, a tab', () => {
+    // A fence was looked for at the start of its line, so one after a list marker (Turndown writes an item whose first
+    // block is code as its marker and then the fence) was taken for indented code, and the block mapped a line early,
+    // onto its own fence; an indented block whose first line holds a fence was taken for a fenced one, a line late.
+    // Lines were read by LF alone, where CommonMark also ends one at a lone CR, which normalising leaves (a page's
+    // &#13; in a <pre>; in a quote Turndown writes its marks after it too). And a line the parse widened, by taking
+    // part of a tab as indentation, was mapped from its start, so each character took the place of one further along.
+    const fence = String.fromCharCode(96).repeat(3);
+    const emoji = String.fromCodePoint(0x1f600);
+    const cases: [string, string][] = [
+      [`1.  ${fence}\n    let x = 1;\n    ${fence}\n2.  next step\n`, 'let x = 1;\n\nnext step.'],
+      [`- ${fence}js\n  a${emoji}b c\n  done();\n  ${fence}\n\nafter it\n`, `a${emoji}b c done();\n\nafter it`],
+      ['> - ~~~\n>   quoted code\n>   ~~~\n', 'quoted code'],
+      [`Para.\n\n    ${fence}js\n    let y = 2;\n`, `Para.\n\n${fence}js let y = 2;`],
+      [`> ${fence}\n> first\r> second\n> ${fence}\n\nNext.\n`, 'first second\n\nNext.'],
+      [`${fence}\none\rtwo\r\r${fence}\n\nNext.\n`, 'one two\n\nNext.'],
+      [` ${fence}\n\tx = 1\n ${fence}\n`, 'x = 1'],
+    ];
+    for (const [raw, spoken] of cases) {
+      const md = normaliseMarkdown(raw);
+      const p = project(md);
+      expect(p.text).toBe(spoken);
+      expect(p.offsets.length).toBe(p.text.length);
+      // every character but the spaces and a list item's added full stop is the Markdown's own
+      const own = (i: number) => !/\s/.test(p.text[i]) && !(i === p.text.length - 1 && raw.startsWith('1.'));
+      for (let i = 0; i < p.text.length; i++) if (own(i)) expect([i, md[p.offsets[i]]]).toEqual([i, p.text[i]]);
+      for (let i = 1; i < p.offsets.length; i++) expect(p.offsets[i]).toBeGreaterThanOrEqual(p.offsets[i - 1]);
+    }
+  });
+
   test('indented and quoted code blocks map inside the source', () => {
     for (const md of ['para\n\n    code here\n', '> ```\n> quoted code\n> ```\n']) {
       const p = project(md);
