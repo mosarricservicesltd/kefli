@@ -110,15 +110,32 @@
     return absoluteHttp(metaContent(doc, 'meta[property="og:image"]'), url) || absoluteHttp(metaContent(doc, 'meta[name="twitter:image"]'), url);
   }
 
-  // contract 4.2; packages/protocol's normaliseMarkdown is the same rule, and a test holds them together.
+  // contract 4.2; packages/protocol's normaliseMarkdown is the same rule, and a test holds them together. A run of
+  // combining marks past MAX_COMBINING_RUN is refused, since NFC orders each run in time quadratic in its length, and
+  // a line's end is trimmed by a loop, since /[ \t]+$/ backtracks over every run of spaces inside a line.
+  var MAX_COMBINING_RUN = 256;
+
+  function longestCombiningRun(s) {
+    var marks = /\p{M}+/gu;
+    var longest = 0;
+    for (var m = marks.exec(s); m; m = marks.exec(s)) longest = Math.max(longest, m[0].length);
+    return longest;
+  }
+
+  function trimLineEnd(line) {
+    var end = line.length;
+    while (end > 0 && (line.charCodeAt(end - 1) === 32 || line.charCodeAt(end - 1) === 9)) end--;
+    return line.slice(0, end);
+  }
+
   function normaliseMarkdown(md) {
+    var run = longestCombiningRun(md);
+    if (run > MAX_COMBINING_RUN) throw new RangeError('a run of ' + run + ' combining marks, over the ' + MAX_COMBINING_RUN + ' normalisation takes');
     return md
       .normalize('NFC')
       .replace(/\r\n/g, '\n')
       .split('\n')
-      .map(function (line) {
-        return line.replace(/[ \t]+$/, '');
-      })
+      .map(trimLineEnd)
       .join('\n')
       .replace(/\n{3,}/g, '\n\n')
       .replace(/\n*$/, '\n');
