@@ -3,7 +3,7 @@ import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow, queueSave } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
-import { checkXPost, resolveTco, xRetryDelay, type XPorts } from '../src/services/xpost';
+import { MAX_TCO, X_LINKS_MS, checkXPost, resolveTco, xRetryDelay, type XPorts } from '../src/services/xpost';
 import { runPendingParses, type PendingPorts } from '../src/services/pending';
 import { memoryDb } from './sqlite';
 
@@ -49,6 +49,55 @@ describe('X posts (mobile spec 5.4, FD 78, G3)', () => {
     for (let i = 0; 10 > i; i++) loop[`https://t.co/${i}`] = { status: 302, location: `https://t.co/${i + 1}` };
     expect(await resolveTco(net(loop), 'https://t.co/0')).toBe('https://t.co/5');
     expect(await resolveTco(net({ 'https://t.co/z': { url: 'https://end.com/' } }), 'https://t.co/z')).toBe('https://end.com/');
+  });
+
+  test('at most 20 t.co links are followed: an embed of hundreds that lead back to X ends with nothing', async () => {
+    const asked: string[] = [];
+    const routes: Record<string, Route> = {};
+    const links = Array.from({ length: 300 }, (_, i) => `https://t.co/${i}`);
+    for (const l of links) routes[l] = { status: 301, location: 'https://x.com/someone' };
+    routes['https://x.com/someone'] = { url: 'https://x.com/someone' };
+    routes[xEmbedUrl(POST)] = { json: embed(links) };
+    const p = net(routes);
+    const counting: XPorts = { fetch: ((url: string, init?: RequestInit) => (asked.push(url), p.fetch(url, init))) as never };
+    expect(await checkXPost(counting, POST)).toEqual({ kind: 'none', why: 'no-link' });
+    expect(asked.filter((u) => u.startsWith('https://t.co/'))).toHaveLength(MAX_TCO);
+    routes[xEmbedUrl(POST)] = { json: embed([...links.slice(0, 5), 'https://t.co/news']) };
+    routes['https://t.co/news'] = { status: 301, location: 'https://news.com/story' };
+    routes['https://news.com/story'] = { url: 'https://news.com/story' };
+    expect(await checkXPost(net(routes), POST)).toEqual({ kind: 'article', url: 'https://news.com/story' });
+  });
+
+  test('t.co links that take too long together leave the post waiting, as X failing does', async () => {
+    let clock = 0;
+    const routes: Record<string, Route> = { [xEmbedUrl(POST)]: { json: embed(Array.from({ length: 10 }, (_, i) => `https://t.co/${i}`)) } };
+    const slow: XPorts = {
+      fetch: (async (url: string) => {
+        if (url.startsWith('https://t.co/')) {
+          clock += 4_000; // each hop answers just inside its own 5 s, on a chain that never ends
+          return new Response('', { status: 302, headers: { location: `${url}x` } });
+        }
+        return net(routes).fetch(url);
+      }) as never,
+    };
+    expect(await checkXPost(slow, POST, () => clock)).toEqual({ kind: 'xfail' });
+    expect(clock).toBeLessThanOrEqual(X_LINKS_MS + 4_000);
+  });
+
+  test('a t.co link is never followed to a private address, nor saved from one', async () => {
+    const asked: string[] = [];
+    const routes: Record<string, Route> = {
+      [xEmbedUrl(POST)]: { json: embed(['https://t.co/lan', 'https://t.co/wide', 'https://t.co/news']) },
+      'https://t.co/lan': { status: 302, location: 'http://192.168.1.1/cgi-bin/reboot' },
+      'https://t.co/wide': { status: 302, location: 'http://１２７.０.０.１:8080/' },
+      'https://t.co/news': { status: 301, location: 'https://news.com/story' },
+      'https://news.com/story': { url: 'https://news.com/story' },
+    };
+    const p = net(routes);
+    const counting: XPorts = { fetch: ((url: string, init?: RequestInit) => (asked.push(url), p.fetch(url, init))) as never };
+    expect(await checkXPost(counting, POST)).toEqual({ kind: 'article', url: 'https://news.com/story' });
+    expect(asked.some((u) => /192\.168|127|１２７/.test(u))).toBe(false);
+    await expect(resolveTco(net({ 'https://t.co/z': { url: 'http://localhost/' } }), 'https://t.co/z')).rejects.toThrow('not a public address');
   });
 
   test('X failing is tried again from 30 s, doubling to an hour', () => {
