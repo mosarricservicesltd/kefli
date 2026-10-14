@@ -1,7 +1,7 @@
 // The background (extension spec 2 and 4): the toolbar button, the shortcut and the link menu all save; Undo, the queue's
 // minute-by-minute retry and the badge. Whatever must outlive a service worker or event page restart is in storage. The
 // work on a save is in worker.ts; this file joins it to the browser.
-import { isWebAddress, linkOnly, type Captured } from './captured';
+import { isWebAddress, linkOnly, orAfter, type Captured } from './captured';
 import { BROWSER, DEFAULTS_URL, FLAVOUR } from './config';
 import { webCrypto } from './crypto';
 import { loadDefaults } from './defaults';
@@ -76,15 +76,29 @@ function tabUrl(url: string): string {
   return url.startsWith('about:reader?') ? (new URL(url).searchParams.get('url') ?? url) : url;
 }
 
-/** The page as the capture script reads it, or null where no script can run (browser pages, PDFs, reader view). */
+/**
+ * How long the capture may take before the save goes as the page's address alone, through the popup. The capture runs
+ * on the page's own thread, so a page that keeps it busy, or never finishes loading (an injection waits for that), held
+ * the save before it was queued, until the browser stopped the worker and lost it.
+ */
+const CAPTURE_WAIT_MS = 30_000;
+/** How long the shortcut waits to learn whether a toast took the press for its Undo: a page too busy to say has none. */
+const REACH_WAIT_MS = 1_000;
+
+/** Tabs whose page is still being read: another press there (the shortcut held down, a page slow to read) is that save. */
+const reading = new Set<number>();
+
+/** The page as the capture script reads it, or null where no script can run (browser pages, PDFs, reader view) or in time. */
 async function captureTab(tabId: number): Promise<Captured | null> {
-  try {
+  reading.add(tabId);
+  const read = (async () => {
     await chrome.scripting.executeScript({ target: { tabId }, files: ['parser.js', 'capture.js'] });
     const [r] = await chrome.scripting.executeScript({ target: { tabId }, func: () => (globalThis as unknown as { kefliCapture(): Captured }).kefliCapture() });
     return (r?.result as Captured | undefined) ?? null;
-  } catch {
-    return null;
-  }
+  })()
+    .catch(() => null)
+    .finally(() => reading.delete(tabId));
+  return orAfter(read, CAPTURE_WAIT_MS, null);
 }
 
 async function shortcutWords(): Promise<string | null> {
@@ -96,12 +110,16 @@ async function toast(where: Where, s: Omit<ToastState, 'shortcut'>): Promise<voi
   const state: ToastState = { ...s, shortcut: await shortcutWords() };
   if (where === 'popup') return void (await session.set('popup', state));
   const tabId = where;
-  try {
+  const shown = await (async () => {
     await chrome.scripting.executeScript({ target: { tabId }, files: ['toast.js'] });
-    await chrome.scripting.executeScript({ target: { tabId }, func: (st: ToastState) => (globalThis as unknown as { kefliToast: { show(s: ToastState): void } }).kefliToast.show(st), args: [state] });
-  } catch {
-    // a page where no toast can run: the badge says it instead
-  }
+    const [r] = await chrome.scripting.executeScript({ target: { tabId }, func: (st: ToastState) => (globalThis as unknown as { kefliToast: { show(s: ToastState): boolean } }).kefliToast.show(st), args: [state] });
+    return r?.result === true;
+  })().catch(() => false);
+  if (shown) return;
+  // a page where no toast can run (an SVG, a page that took the toast's element name for its own, one with no root):
+  // the popup says it instead, as on a browser's own page (decision 59), so even a save refused there is heard
+  await session.set('popup', state);
+  void openSavedPopup();
 }
 
 /** The badge counts offline saves in neutral grey (decisions 30 and 64); the dev build says DEV when nothing waits. */
@@ -148,7 +166,7 @@ const work = background({
 });
 
 async function saveTab(tab: chrome.tabs.Tab): Promise<void> {
-  if (tab.id === undefined || !tab.url) return;
+  if (tab.id === undefined || !tab.url || reading.has(tab.id)) return;
   const c = await captureTab(tab.id);
   if (c) return work.save(c, tab.id, false);
   const url = tabUrl(tab.url);
@@ -163,12 +181,10 @@ chrome.action.onClicked.addListener((tab) => void saveTab(tab));
 chrome.commands.onCommand.addListener((name, tab) => {
   if (name !== 'save-page' || !tab?.id) return;
   // a second press while a Saved toast shows reaches its Undo (decision 58)
-  void chrome.scripting
+  const reached = chrome.scripting
     .executeScript({ target: { tabId: tab.id }, func: () => (globalThis as unknown as { kefliToast?: { reach(): boolean } }).kefliToast?.reach() ?? false })
-    .then(
-      ([r]) => (r?.result ? undefined : saveTab(tab)),
-      () => saveTab(tab),
-    );
+    .then(([r]) => r?.result === true, () => false);
+  void orAfter(reached, REACH_WAIT_MS, false).then((undo) => (undo ? undefined : saveTab(tab)));
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
