@@ -1,11 +1,13 @@
 package httpapi_test
 
 import (
+	"database/sql"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -193,6 +195,75 @@ func TestGoneRowsAreForAccountsAndEnd(t *testing.T) {
 	}
 	if gone, _ := e.st.Gone(t.Context(), 0); len(gone) != 0 {
 		t.Fatalf("gone %v kept past GoneLife", gone)
+	}
+}
+
+// Offers held were limited per /64 and per key only, and kept an hour, until the sweep: one IPv6 /48's 65,536 /64s at
+// 30 each could post two million 8 KB offers an hour, 16 GB of database, from fresh keys (probe offerflood: 20,000
+// taken from one /48 in two and a half minutes, 182 MB). Now one /48 posts MaxBlockOffers an hour, an IPv4 /24 being
+// many people's as with registrations.
+func TestOffersFromOneBlock(t *testing.T) {
+	e := newEnv(t, behindCaddy)
+	for i := 0; i < httpapi.MaxBlockOffers; i++ {
+		e.from = fmt.Sprintf("2001:db8:9:%x::1", i/30)
+		s, b := e.call(newKey(), "POST", "/pair-offers", map[string]any{"v": 1, "lookup": hash([]byte(fmt.Sprint("block ", i))), "offer": "o"})
+		expect(t, s, 200, b)
+	}
+	e.from = "2001:db8:9:ffff::1"
+	s, b := e.call(newKey(), "POST", "/pair-offers", map[string]any{"v": 1, "lookup": hash([]byte("one more")), "offer": "o"})
+	expect(t, s, 429, b)
+	if b["error"] != "rate" {
+		t.Fatalf("refusal %v", b)
+	}
+	// a phone offer from the same /48 waits too; another /48 goes ahead
+	user := newKey()
+	e.from = "2001:db8:10::1"
+	e.call(user, "POST", "/register", map[string]any{"v": 1})
+	e.from = "2001:db8:9:fffe::1"
+	s, b = e.call(user, "POST", "/phone-offers", map[string]any{"v": 1, "lookup": hash([]byte("phone")), "offer": "o"})
+	expect(t, s, 429, b)
+	e.from = "2001:db8:10::1"
+	e.clock = e.clock.Add(time.Second) // a fresh authorisation: the same one twice is a replay
+	s, b = e.call(user, "POST", "/phone-offers", map[string]any{"v": 1, "lookup": hash([]byte("phone")), "offer": "o"})
+	expect(t, s, 200, b)
+	// an IPv4 /24 isn't one site: past MaxBlockOffers from its addresses, each still has its own 30
+	for i := 0; i <= httpapi.MaxBlockOffers; i++ {
+		e.from = fmt.Sprintf("198.51.100.%d", i/25+1)
+		s, b := e.call(newKey(), "POST", "/pair-offers", map[string]any{"v": 1, "lookup": hash([]byte(fmt.Sprint("v4 ", i))), "offer": "o"})
+		expect(t, s, 200, b)
+	}
+}
+
+// Offers held at once had no ceiling, and expired ones stayed until the hourly sweep. Now at most MaxOffers are held
+// (the shared ceiling an availability trade, as for registrations): past it every new offer waits, and the extension's
+// pairing page and the phone show their offline state and try again; an expired offer goes as the next one comes.
+func TestOffersHeldAtOnce(t *testing.T) {
+	few := func(c *httpapi.Config) { c.TrustProxy, c.MaxOffers = true, 5 }
+	e := newEnv(t, few)
+	post := func(i int) (int, map[string]any) {
+		e.from = fmt.Sprintf("192.0.2.%d", i+1)
+		return e.call(newKey(), "POST", "/pair-offers", map[string]any{"v": 1, "lookup": hash([]byte(fmt.Sprint("held ", i))), "offer": "o"})
+	}
+	for i := 0; i < 5; i++ {
+		s, b := post(i)
+		expect(t, s, 200, b)
+	}
+	s, b := post(5)
+	expect(t, s, 429, b)
+	if b["error"] != "rate" {
+		t.Fatalf("refusal %v", b)
+	}
+	e.clock = e.clock.Add(store.OfferLife)
+	s, b = post(6)
+	expect(t, s, 200, b)
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(e.dir, "k.db")+"?mode=ro")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM offers`).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("%d offers kept (%v): the five expired ones should have gone", n, err)
 	}
 }
 

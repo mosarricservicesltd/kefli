@@ -42,6 +42,9 @@ type Config struct {
 	// MaxRegistrations is how many new accounts an hour the API takes from everyone together (DefaultMaxRegistrations
 	// when 0), so a caller with many addresses still can't make accounts without end (F8).
 	MaxRegistrations int
+	// MaxOffers is how many pairing offers the API holds at once, pair and phone offers together (DefaultMaxOffers when
+	// 0), so offers posted from many addresses can't fill the disk.
+	MaxOffers int
 }
 
 // DefaultMaxRegistrations is backend spec 5's alert level, 200 new accounts an hour, held as a limit.
@@ -64,6 +67,19 @@ const MaxBlockMisses = 10
 // costs its owner something.
 const MaxBlockRegistrations = 20
 
+// DefaultMaxOffers is how many offers are held at once from everyone: each is at most maxOffer bytes, so 80 MB at
+// most, where pairings in progress in any five minutes number a few hundred at the most.
+const DefaultMaxOffers = 10_000
+
+// MaxBlockOffers is how many offers an hour one IPv6 /48 may post, beside the 30 per /64 and per key: a /48 is 65,536
+// /64s, which could otherwise post two million offers an hour, and hold DefaultMaxOffers full alone. It is four /64s'
+// worth; an IPv4 /24 has no such limit, being many people's, and each address costs its owner something.
+const MaxBlockOffers = 120
+
+// maxOffer is the largest offer taken: a pair offer sealed as the extension makes it is under 1 KB, a phone offer
+// under 300 bytes.
+const maxOffer = 8192
+
 const maxBody = 64 << 10
 
 type API struct {
@@ -77,6 +93,7 @@ type API struct {
 	regBlk *limit.Limiter // registrations, MaxBlockRegistrations a day per IPv6 /48
 	misses *limit.Limiter // phone-offer lookups that found nothing, MaxMisses an offer's life from everyone
 	blkMis *limit.Limiter // the same, MaxBlockMisses an offer's life per block of addresses
+	offBlk *limit.Limiter // offers posted, MaxBlockOffers an hour per IPv6 /48
 	// logKey keys the fingerprints the logs show for pubkeys (short)
 	logKey []byte
 }
@@ -90,6 +107,9 @@ func New(cfg Config, st *store.Store, log *slog.Logger) *API {
 	if cfg.MaxRegistrations == 0 {
 		cfg.MaxRegistrations = DefaultMaxRegistrations
 	}
+	if cfg.MaxOffers == 0 {
+		cfg.MaxOffers = DefaultMaxOffers
+	}
 	return &API{
 		cfg: cfg, st: st, log: log, now: now, logKey: logKey,
 		calls:  limit.New(60, time.Minute, now),
@@ -98,6 +118,7 @@ func New(cfg Config, st *store.Store, log *slog.Logger) *API {
 		regBlk: limit.New(MaxBlockRegistrations, 24*time.Hour, now),
 		misses: limit.New(MaxMisses, store.OfferLife, now),
 		blkMis: limit.New(MaxBlockMisses, store.OfferLife, now),
+		offBlk: limit.New(MaxBlockOffers, time.Hour, now),
 	}
 }
 

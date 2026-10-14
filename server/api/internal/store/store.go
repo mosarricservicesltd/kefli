@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS offers (
   expires_at INTEGER NOT NULL,
   PRIMARY KEY (kind, lookup)
 );
+CREATE INDEX IF NOT EXISTS offers_expiry ON offers(expires_at);
 CREATE TABLE IF NOT EXISTS used_auth (
   id    TEXT PRIMARY KEY,
   until INTEGER NOT NULL
@@ -197,8 +198,12 @@ func (s *Store) gone(ctx context.Context, query string, arg int64) ([]string, er
 }
 
 // Offer holds a pairing offer for five minutes; ErrTaken when an unexpired one already has the lookup (contract 6).
+// Expired offers go first, so the table holds five minutes of offers rather than the hour until the sweep.
 func (s *Store) PutOffer(ctx context.Context, kind, lookup, offer string) error {
 	now := s.unix()
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM offers WHERE expires_at <= ?`, now); err != nil {
+		return err
+	}
 	res, err := s.db.ExecContext(ctx, `INSERT INTO offers(kind, lookup, offer, expires_at) VALUES(?, ?, ?, ?)
 		ON CONFLICT(kind, lookup) DO UPDATE SET offer = excluded.offer, expires_at = excluded.expires_at WHERE offers.expires_at <= ?`,
 		kind, lookup, offer, now+int64(OfferLife.Seconds()), now)
@@ -209,6 +214,13 @@ func (s *Store) PutOffer(ctx context.Context, kind, lookup, offer string) error 
 		return ErrTaken
 	}
 	return nil
+}
+
+// LiveOffers is how many unexpired offers are held, pair and phone offers together.
+func (s *Store) LiveOffers(ctx context.Context) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM offers WHERE expires_at > ?`, s.unix()).Scan(&n)
+	return n, err
 }
 
 // TakeOffer returns an unexpired offer; with remove, it is deleted as it is read (a phone offer is fetched once).
