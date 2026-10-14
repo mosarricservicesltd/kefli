@@ -1291,13 +1291,61 @@ describe('the browser’s HTML takes the guards a parsed page’s text takes (C�
     const markdown = w.ports.markdown;
     w.ports.markdown = async (html, url) => (gone ? { ok: false, reason: 'renderer_gone' } : markdown(html, url));
     await capture(w);
-    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_blob: 1 });
     expect(textOf(w)).toEqual({ text_state: 'fetching', fail_reason: null });
     gone = false;
     w.tick(60);
-    expect(await drainInbox(w.ports, w.owner)).toEqual({ merged: 1 });
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
     expect(textOf(w)).toEqual({ text_state: 'cached', fail_reason: null });
     expect(w.texts.get(hash)).toContain('# Captured');
+    expect(w.ops()).toContain('delete_wrap');
+  });
+
+  test('a renderer gone at every drain keeps the capture as a blob that failed, then fetches the page once its 14 days are past', async () => {
+    const w = world();
+    w.ports.markdown = async () => ({ ok: false, reason: 'renderer_gone' });
+    const wrap = await capture(w);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_blob: 1 });
+    // past the week a wrap may wait for, it is still this save's capture, never filed as someone else's message
+    for (let day = 1; day <= 13; day++) {
+      w.tick(86_400);
+      expect([day, await drainInbox(w.ports, w.owner)]).toEqual([day, { failed_blob: 1 }]);
+    }
+    expect(w.db.get('SELECT outcome FROM inbox_seen WHERE wrap_id = ?', wrap)).toEqual({ outcome: 'failed_blob' });
+    expect(textOf(w)).toEqual({ text_state: 'fetching', fail_reason: null });
+    expect(pendingParses(w.db, w.owner)).toEqual([]);
+    // the capture's 14 days past: the save fetches its page as a request without HTML does, and the wrap closes
+    w.tick(86_400);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    expect(textOf(w)).toEqual({ text_state: 'queued', fail_reason: null });
+    expect(pendingParses(w.db, w.owner).map((p) => p.url)).toEqual(['https://example.com/a']);
+    expect(w.ops()).toContain('delete_wrap');
+    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+  });
+
+  test('once the renderer has gone, the drain’s other captures wait for the next drain unread, and arrive once it is back', async () => {
+    const w = world();
+    let gone = true;
+    const markdown = w.ports.markdown;
+    let asked = 0;
+    w.ports.markdown = async (html, url) => (asked++, gone ? { ok: false, reason: 'renderer_gone' } : markdown(html, url));
+    let reads = 0;
+    const served = w.ports.fetch;
+    w.ports.fetch = (async (url: string, init?: RequestInit) => (reads++, served(url, init))) as never;
+    for (const path of ['a', 'b', 'c']) {
+      const { html } = await w.withHtml(`<h1>${path}</h1>`);
+      await w.send(w.request({ url: `https://example.com/${path}`, html }));
+    }
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_blob: 3 });
+    expect([asked, reads]).toEqual([1, 1]);
+    // the retries wait the same way, the first asking the parser again
+    w.tick(60);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_blob: 3 });
+    expect([asked, reads]).toEqual([2, 2]);
+    gone = false;
+    w.tick(60);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 3 });
+    expect(['a', 'b', 'c'].map((path) => w.item(itemHash(`https://example.com/${path}`))?.text_state)).toEqual(['cached', 'cached', 'cached']);
   });
 });
 
