@@ -400,12 +400,12 @@ object VoiceEngine {
   }
 
   /**
-   * An engine that reports no word ranges makes the sentence the unit (FD 91 (h)), from then on. A piece inside one
-   * long word (Pieces) holds no word start for the engine to report, so its having none says nothing of the engine.
+   * An engine that reports no word ranges makes the sentence the unit (FD 91 (h)), from then on, once a file shows it
+   * (Timing.showsNoRanges). A paragraph that is only a rule ("—" between sections) may be said as silence with no
+   * ranges, which turned word timing off for every article after it, until Kefli restarted.
    */
   private fun noteTiming(s: Synth, ranges: List<IntArray>) {
-    val holdsAWordStart = Timing.startsWithin(sentences[s.sentence].wordStarts, s.offset, s.offset + s.text.length)
-    if (ranges.isEmpty() && holdsAWordStart) wordTiming = false
+    if (ranges.isEmpty() && Timing.showsNoRanges(sentences[s.sentence].wordStarts, s.offset, s.text)) wordTiming = false
   }
 
   /** A file's audio to the track, on the writer's thread, until it is all written or a newer run has begun. */

@@ -46,9 +46,17 @@ describe('a sentence longer than the engine takes (8.1)', () => {
     const written = member(engine, 'written');
     expect(written).not.toContain('wordTiming = false');
     expect(written).toContain('noteTiming(s, ranges)');
-    const note = member(engine, 'noteTiming');
-    expect(note).toContain('Timing.startsWithin(sentences[s.sentence].wordStarts, s.offset, s.offset + s.text.length)');
-    expect(note).toContain('if (ranges.isEmpty() && holdsAWordStart) wordTiming = false');
-    expect(member(voiceSource('VoiceAudio.kt'), 'startsWithin')).toMatch(/lastAtOrBelow\(xs, until - 1\)\s+return k >= 0 && xs\[k\] >= from/);
+    expect(member(engine, 'noteTiming')).toContain('if (ranges.isEmpty() && Timing.showsNoRanges(sentences[s.sentence].wordStarts, s.offset, s.text)) wordTiming = false');
+    const audio = voiceSource('VoiceAudio.kt');
+    expect(member(audio, 'showsNoRanges')).toContain('startsWithin(wordStarts, offset, offset + text.length) &&');
+    expect(member(audio, 'startsWithin')).toMatch(/lastAtOrBelow\(xs, until - 1\)\s+return k >= 0 && xs\[k\] >= from/);
+  });
+
+  test("a sentence with nothing said as a word, a rule between sections, leaves the engine's word timing on", () => {
+    // the Reader hands the voice such sentences, which an engine may say as silence with no word ranges
+    const said = deriveArticle('Before.\n\n—\n\n\\* \\* \\*\n\n🙂\n\nAfter.\n').sentences.map((s) => s.text);
+    expect(said).toEqual(['Before.', '—', '* * *', '🙂', 'After.']);
+    // only a file holding a letter or a digit shows the engine reports no ranges
+    expect(member(voiceSource('VoiceAudio.kt'), 'showsNoRanges')).toContain('&& text.codePoints().anyMatch(Character::isLetterOrDigit)');
   });
 });

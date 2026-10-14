@@ -89,6 +89,15 @@ object Timing {
   }
 
   /**
+   * Whether a file of a sentence's text from offset, which the engine reported no word ranges for, shows that it
+   * reports none (FD 91 (h)): only one holding a word start and something said as a word, a letter or a digit. A piece
+   * inside one long word (Pieces) holds no word start, and a paragraph that is only a rule or a mark ("—", "* * *",
+   * an emoji) may be said as silence: neither says anything of the engine.
+   */
+  fun showsNoRanges(wordStarts: IntArray, offset: Int, text: String): Boolean =
+    startsWithin(wordStarts, offset, offset + text.length) && text.codePoints().anyMatch(Character::isLetterOrDigit)
+
+  /**
    * The word a segment is on at a frame within it: the last range whose frame has passed, its character mapped to a
    * word by the sentence's word starts. With no ranges (an engine without word timing) it is the segment's first word.
    */
