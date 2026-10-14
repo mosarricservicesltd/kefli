@@ -22,9 +22,20 @@ jest.mock('../src/services/identity', () => ({ ensureSigner: async () => mockWor
 jest.mock('../src/services/staging', () => ({ stageBlob: (sha: string) => `/staged/${sha}` }));
 jest.mock('../src/services/textFiles', () => ({ textFiles: { writeText: () => undefined } }));
 jest.mock('../src/services/store', () => ({ store: () => mockWorld.db }));
+const mockSpools = new Map<string, string>();
+jest.mock('expo-modules-core', () => ({
+  requireNativeModule: () => ({
+    readSpool: (id: string) => mockSpools.get(id) ?? null,
+    deleteSpool: (id: string) => mockSpools.delete(id),
+    listSpools: () => [...mockSpools.keys()],
+    finish: () => true,
+  }),
+}), { virtual: true });
 
 // eslint-disable-next-line import/first
 import { saveLink } from '../src/services/save';
+// eslint-disable-next-line import/first
+import { pickUpSpools } from '../src/share/pickup';
 
 const URL_A = 'https://news.example/story';
 const WORDS = `${Array.from({ length: 150 }, (_, i) => `word${i}`).join(' ')}\n`;
@@ -142,5 +153,30 @@ describe('a share too large for its event (C§3.3)', () => {
     await expect(saveLink(`https://news.example/?q=${'x'.repeat(10_000)}`, () => undefined)).rejects.toThrow('too long');
     expect(fetched).toEqual([]);
     expect(mockWorld.db.all('SELECT 1 FROM items')).toEqual([]);
+  });
+});
+
+describe('the start-up pickup saves without fetching (8.5)', () => {
+  test('each spool waits for the pending queue as an offline share does, an X post for its check, before the sync', async () => {
+    setUp();
+    const fetched: string[] = [];
+    mockWorld.page = { fetch: (async (u: string) => (fetched.push(u), Promise.reject(new Error('offline')))) as never, parse: async () => ({ ok: false, reason: 'error' }) };
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (u: string) => (fetched.push(u), Promise.reject(new Error('offline')))) as never;
+    try {
+      mockSpools.clear();
+      for (const [id, text] of [['a', 'https://news.example/one'], ['b', 'Look at this https://x.com/someone/status/123'], ['c', 'https://news.example/one']]) {
+        mockSpools.set(id, JSON.stringify({ v: 1, id, text, subject: null, referrer: null, receivedAt: 0 }));
+      }
+      expect(await pickUpSpools()).toBe(3);
+      expect(fetched).toEqual([]);
+      expect(mockSpools.size).toBe(0);
+      expect(mockWorld.db.all('SELECT url, text_state, x_state, origin FROM items ORDER BY id')).toEqual([
+        { url: 'https://news.example/one', text_state: 'queued', x_state: null, origin: 'share' },
+        { url: 'https://x.com/someone/status/123', text_state: 'queued', x_state: 'pending', origin: 'share' },
+      ]);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 });

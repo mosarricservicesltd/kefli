@@ -19,7 +19,7 @@ jest.mock('expo-modules-core', () => ({
   }),
 }), { virtual: true });
 jest.mock('../src/services/save', () => ({
-  saveLink: async (url: string) => {
+  saveLater: async (url: string) => {
     if (mockFail(url)) throw new Error('no signer yet');
     mockSaved.push(url);
     return { hash: 'ab'.repeat(32), held: [], kind: 'saved', prior: null, title: null, site: null };

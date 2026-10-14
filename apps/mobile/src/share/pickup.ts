@@ -1,11 +1,12 @@
 // Spools left by a share that never finished (mobile spec 8.5): the process died, or was killed, before its sheet
-// closed. Each is saved at the next start as the sheet would have saved it, its rows released at once (there is no
-// sheet left to Undo from), and the spool deleted. A sheet still open in this process keeps its spool.
+// closed. Each is saved at the next start as an offline share is, its rows released at once (there is no sheet left
+// to Undo from), and the spool deleted; its page is fetched by the pending queue, with that queue's timeouts, so the
+// sync this runs ahead of doesn't wait on a fetch for every spool. A sheet still open in this process keeps its spool.
 import { itemHash } from '@kefli/protocol';
 import { KefliShare, type SpoolEntry } from '../../modules/kefli-share/src';
 import { release } from '../data/outbox';
 import { addressFits } from '../data/saves';
-import { saveLink } from '../services/save';
+import { saveLater } from '../services/save';
 import { store } from '../services/store';
 
 /** A spool younger than this is a live sheet's. */
@@ -74,7 +75,7 @@ async function pickUp(): Promise<number> {
     const url = firstLink(entry?.text ?? null);
     try {
       if (url) {
-        const r = await saveLink(url, (st) => console.log(`[kefli-pickup] ${JSON.stringify(st)}`));
+        const r = await saveLater(url, (st) => console.log(`[kefli-pickup] ${JSON.stringify(st)}`));
         release(store(), r.held);
         if (r.hash) saved++;
       }
