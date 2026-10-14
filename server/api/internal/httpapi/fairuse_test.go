@@ -400,6 +400,32 @@ func TestAUserDeletesItsBrowsersCapture(t *testing.T) {
 	}
 }
 
+// Contract 4.4 and 5: a capture counts against its library's room until it expires, not until the hourly sweep after:
+// a library full with its browser's capture takes a text that fits as soon as the capture has expired, and GET
+// /account's figures no longer count it.
+func TestAnExpiredCaptureGivesBackItsRoom(t *testing.T) {
+	e := newEnv(t)
+	user, device := newKey(), newKey()
+	e.registered(user)
+	expect(t, e.addDevice(user, device), 200, nil)
+	capture, text := bytes.Repeat([]byte("c"), 40), bytes.Repeat([]byte("t"), 20)
+	if s, _, b := e.put(device, capture); s != 200 {
+		t.Fatalf("the capture %d %v", s, b)
+	}
+	if found, err := e.st.SetQuota(t.Context(), user.pk, 50); err != nil || !found {
+		t.Fatalf("set quota %v %v", found, err)
+	}
+	if s, reason, _ := e.put(user, text); s != 413 || reason != "quota" {
+		t.Fatalf("a text past the room the capture leaves: %d %q", s, reason)
+	}
+	e.clock = e.clock.Add(store.InboxLife)
+	s, _, b := e.put(user, text)
+	expect(t, s, 200, b)
+	s, b = e.account(user)
+	// the capture's upload is 14 days old, so only the text counts against the day
+	wantAccount(t, s, b, store.Figures{Quota: 50, Used: int64(len(text)), Daily: store.DailyLimit, Today: int64(len(text))})
+}
+
 // After a move (contract 4.8 step 4), a capture the browser sent while the old library held it stays that library's:
 // the new library can't delete it, the old one can.
 func TestAMovedBrowsersCaptureStaysWithItsLibrary(t *testing.T) {

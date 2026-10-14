@@ -211,6 +211,40 @@ func TestTheDayCountsBytesNewToTheDisk(t *testing.T) {
 	}
 }
 
+// Contract 4.4 and 5: a browser's capture counts against its library's storage until the phone deletes it or it
+// expires after 14 days, and from the moment it expires the library no longer holds it, as it is no longer served,
+// though the hourly sweep hasn't removed it yet. Its file is still on the disk until then, so an upload of it adds
+// nothing to anyone's day.
+func TestAnExpiredCaptureNoLongerCounts(t *testing.T) {
+	st, clock := open(t)
+	ctx := context.Background()
+	registered(t, st, "user")
+	capture, own := strings.Repeat("9", 64), strings.Repeat("a", 64)
+	if err := st.Upload(ctx, capture, "device", "user", 100, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Upload(ctx, own, "user", "user", 10, false); err != nil {
+		t.Fatal(err)
+	}
+	counted := func(wantUsed int64, wantHeld bool) {
+		t.Helper()
+		used, err := st.Used(ctx, "user")
+		if err != nil || used != wantUsed {
+			t.Fatalf("used %d %v, want %d", used, err, wantUsed)
+		}
+		if held, err := st.Holds(ctx, "user", capture); err != nil || held != wantHeld {
+			t.Fatalf("holds the capture %v %v, want %v", held, err, wantHeld)
+		}
+	}
+	*clock = clock.Add(InboxLife - time.Second)
+	counted(110, true)
+	*clock = clock.Add(time.Second)
+	counted(10, false)
+	if stored, err := st.Stored(ctx, capture); err != nil || !stored {
+		t.Fatalf("the expired capture's file, before the sweep: stored %v %v", stored, err)
+	}
+}
+
 // GET /account's figures, for an account enabled or not, and none for a key without one.
 func TestFigures(t *testing.T) {
 	st, _ := open(t)

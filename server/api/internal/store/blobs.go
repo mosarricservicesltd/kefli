@@ -32,10 +32,14 @@ func (s *Store) Figures(ctx context.Context, account string) (Figures, bool, err
 	return f, err == nil, err
 }
 
+// live keeps the owner rows the library still holds: a device's inbox row past its 14 days no longer counts (contract
+// 4.4, 5), from the moment it expires, though the hourly sweep may not have removed it yet.
+const live = `(expires_at IS NULL OR expires_at > ?)`
+
 // Used is the bytes counted against the user's quota: each blob once, whether the user or one of their devices holds it.
 func (s *Store) Used(ctx context.Context, account string) (int64, error) {
 	var n int64
-	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(size), 0) FROM (SELECT sha256, MAX(size) AS size FROM owners WHERE account = ? GROUP BY sha256)`, account).Scan(&n)
+	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(size), 0) FROM (SELECT sha256, MAX(size) AS size FROM owners WHERE account = ? AND `+live+` GROUP BY sha256)`, account, s.unix()).Scan(&n)
 	return n, err
 }
 
@@ -46,10 +50,11 @@ func (s *Store) Today(ctx context.Context, account string) (int64, error) {
 	return n, err
 }
 
-// Holds is whether the user, or one of their devices, already owns the blob, so a repeat upload costs no quota.
+// Holds is whether the user, or one of their devices, already owns the blob, so a repeat upload costs no quota. An
+// expired inbox row holds nothing, as Used doesn't count it.
 func (s *Store) Holds(ctx context.Context, account, sha string) (bool, error) {
 	var one int
-	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM owners WHERE account = ? AND sha256 = ? LIMIT 1`, account, sha).Scan(&one)
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM owners WHERE account = ? AND sha256 = ? AND `+live+` LIMIT 1`, account, sha, s.unix()).Scan(&one)
 	if err == sql.ErrNoRows {
 		return false, nil
 	}
