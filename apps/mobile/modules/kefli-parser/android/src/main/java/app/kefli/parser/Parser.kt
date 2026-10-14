@@ -210,10 +210,12 @@ object Parser {
     }
   }
 
-  /** The bundle never loaded: the jobs waiting on this WebView are answered, to be tried again, and it goes. */
+  /**
+   * The bundle never loaded: the jobs waiting on this WebView are answered, to be tried again, and it goes. Its
+   * renderer is left alone: one held by a page is ended by whichever WebView's time ran out with that page in it.
+   */
   private fun neverLoaded() {
     failQueued("renderer_gone", "the parser did not load")
-    web?.let { end(it) }
     destroy()
   }
 
