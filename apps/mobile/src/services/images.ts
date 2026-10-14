@@ -6,6 +6,7 @@
 // asked for twice. Ports, like sync, so this runs in tests.
 import { isPublicWebUrl } from '@kefli/protocol';
 import { articleBlocks } from '../reader/blocks';
+import { LIMITS } from '../reader/limits';
 import { drawable, imageKind, imageSize } from '../reader/imageSize';
 import type { SqlDb } from '../data/db';
 import { open, TimedOut, TooLarge } from '../net/http';
@@ -28,7 +29,7 @@ export type ImagePorts = {
 };
 
 /** An article's images fetched and shown at most; past them a figure is left out, as a failed one is (5.6). */
-export const MAX_ARTICLE_IMAGES = 500;
+export const MAX_ARTICLE_IMAGES = LIMITS.images;
 
 /** Images in a row that time out before a run stops, the rest waiting for the next, as pages do (pending.ts, F12). */
 export const SLOW_RUN = 3;

@@ -25,11 +25,18 @@ export const LIMITS = {
   blockCost: 4_000_000,
   /** Blocks in the article. */
   blocks: 20_000,
+  /** Distinct images an article fetches and shows; a figure past them is left out, so its block is too. */
+  images: 500,
 };
 
 /** The whole article's marks: each block's marks squared, and its marks times its length, summed. */
 const squaresAllowed = (n: number) => Math.max(4_000_000, 4 * n);
 const costAllowed = (n: number) => Math.max(40_000_000, 300 * n);
+/**
+ * Backslash escapes and character references: each is a token of its own, so text dense with them parses ten times
+ * slower than prose (Turndown escapes every literal * _ [ ] and backtick: a page of them, a second for 60 KB).
+ */
+const tokensAllowed = (n: number) => Math.max(20_000, n / 10);
 
 const SPACE = 32;
 const TAB = 9;
@@ -37,6 +44,7 @@ const GT = 62;
 const LT = 60;
 const BACKSLASH = 92;
 const HASH = 35;
+const AMP = 38;
 const UNDERSCORE = 95;
 const BACKTICK = 96;
 const TILDE = 126;
@@ -147,6 +155,17 @@ export function marksIn(s: string, i: number, end: number): number {
   return n;
 }
 
+/** Backslash escapes and character references (each & counts) in s from i to end. */
+export function tokensIn(s: string, i: number, end: number): number {
+  let n = 0;
+  for (let k = i; k < end; k++) {
+    const c = s.charCodeAt(k);
+    if (c === BACKSLASH || c === AMP) n++;
+    if (c === BACKSLASH) k++;
+  }
+  return n;
+}
+
 type Scan = {
   /** The open code fence, and its line's prefix: a line indented less, or with fewer quote markers, leaves it. */
   fence: string;
@@ -162,6 +181,7 @@ type Scan = {
   blocks: number;
   squares: number;
   cost: number;
+  tokens: number;
 };
 
 /** Ends the block the scan is in, adding its marks to the article's. */
@@ -235,6 +255,7 @@ function textLine(md: string, i: number, end: number, p: Prefix, s: Scan): boole
   s.html = htmlAfter(md, end, p, s);
   s.len += end - i + 1;
   s.marks += marksIn(md, p.end, end);
+  s.tokens += tokensIn(md, p.end, end);
   return s.len > LIMITS.block || s.marks > LIMITS.marks || s.marks * s.len > LIMITS.blockCost;
 }
 
@@ -243,7 +264,7 @@ function textLine(md: string, i: number, end: number, p: Prefix, s: Scan): boole
  * too marked, too many blocks, or too many marks in all. One pass over the characters.
  */
 export function beyondLimits(md: string): boolean {
-  const s: Scan = { fence: '', fenceWidth: 0, fenceQuotes: 0, html: null, itemCol: 0, len: 0, marks: 0, blocks: 0, squares: 0, cost: 0 };
+  const s: Scan = { fence: '', fenceWidth: 0, fenceQuotes: 0, html: null, itemCol: 0, len: 0, marks: 0, blocks: 0, squares: 0, cost: 0, tokens: 0 };
   for (let i = 0; i < md.length; ) {
     let end = md.indexOf('\n', i);
     if (end === -1) end = md.length;
@@ -254,5 +275,5 @@ export function beyondLimits(md: string): boolean {
     i = end + 1;
   }
   close(s);
-  return s.blocks > LIMITS.blocks || s.squares > squaresAllowed(md.length) || s.cost > costAllowed(md.length);
+  return s.blocks > LIMITS.blocks || s.squares > squaresAllowed(md.length) || s.cost > costAllowed(md.length) || s.tokens > tokensAllowed(md.length);
 }

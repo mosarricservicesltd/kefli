@@ -136,6 +136,34 @@ describe('deriveArticle on hostile Markdown (mobile spec 6.7)', () => {
     whole(code);
   });
 
+  test('text dense with escapes, as Turndown writes a page of literal stars, is read plain', () => {
+    // each escape is a token of its own to the parse: 16 paragraphs of 20,000 escaped stars took several seconds
+    const md = `${'\\* \\_ '.repeat(5_000)}\n\n`.repeat(16);
+    expect(beyondLimits(md)).toBe(true);
+    const [d, ms] = timed(md);
+    expect(ms).toBeLessThan(QUICK_MS);
+    expect(spans(d).startsWith('* _ * _')).toBe(true);
+    whole(d);
+  });
+
+  test('a page of 20,000 images keeps the blocks of the 500 it shows, in order', () => {
+    const md = Array.from({ length: 20_000 }, (_, i) => `![p${i}](https://img${i % 9}.example.com/${i}.png)`).join('\n\n');
+    const d = deriveArticle(`Words before.\n\n${md}\n\nWords after.\n`);
+    const imgs = d.blocks.filter((b) => b.kind === 'img') as { src: string }[];
+    expect(imgs).toHaveLength(LIMITS.images);
+    expect(imgs[499].src).toBe('https://img4.example.com/499.png');
+    expect(d.words).toBe(4);
+    // an image named again later is still shown where it is
+    const again = deriveArticle(`![a](https://e.com/1.png)\n\n${'![b](https://e.com/2.png)\n\n'.repeat(3)}![a](https://e.com/1.png)\n`);
+    expect(again.blocks.map((b) => (b as { src: string }).src)).toEqual(['https://e.com/1.png', ...Array(3).fill('https://e.com/2.png'), 'https://e.com/1.png']);
+  });
+
+  test('read plain, no sentence is longer than the voice takes, even one word', () => {
+    const d = deriveArticle(`Start ${'<!--'.repeat(30_000)} end.\n`);
+    expect(Math.max(...d.sentences.map((s) => s.text.length))).toBeLessThanOrEqual(VOICE_CHARS);
+    whole(d);
+  });
+
   test('read plain, escapes are taken out and headings stay headings', () => {
     const md = `# The title\n\nA \\*starred\\* word ${'<!--'.repeat(2_000)}\n`;
     const d = deriveArticle(md);

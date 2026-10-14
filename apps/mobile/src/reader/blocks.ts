@@ -5,7 +5,7 @@
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import type { Nodes, PhrasingContent, RootContent } from 'mdast';
 import { projectTree, sentences, type Sentence } from '@kefli/protocol';
-import { beyondLimits } from './limits';
+import { LIMITS, beyondLimits } from './limits';
 import { plainArticle } from './plain';
 
 export type Span = { text: string; em?: boolean; strong?: boolean; code?: boolean; href?: string };
@@ -194,12 +194,30 @@ function richArticle(markdown: string): Derived {
  * paragraphs, headings and code, and nothing hangs the phone or throws out of a save, a sync or the Reader.
  */
 export function deriveArticle(markdown: string): Derived {
+  return fewerImages(readable(markdown));
+}
+
+function readable(markdown: string): Derived {
   if (beyondLimits(markdown)) return { ...plainArticle(markdown), v: DERIVED_VERSION };
   try {
     return richArticle(markdown);
   } catch {
     return { ...plainArticle(markdown), v: DERIVED_VERSION };
   }
+}
+
+/**
+ * Only the images an article shows: those of its first LIMITS.images addresses. A figure past them is left out
+ * (services/images.ts), and its block with it, so a page naming 20,000 images isn't 20,000 blocks to mount.
+ */
+function fewerImages(d: Derived): Derived {
+  const shown = new Set<string>();
+  const blocks = d.blocks.filter((b) => {
+    if (b.kind !== 'img') return true;
+    if (shown.size < LIMITS.images) shown.add(b.src);
+    return shown.has(b.src);
+  });
+  return blocks.length === d.blocks.length ? d : { ...d, blocks };
 }
 
 export function articleBlocks(markdown: string): Article {

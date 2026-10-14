@@ -149,11 +149,12 @@ function sentencesOf(said: string, starts: number[], firstWord: number, out: Sen
 }
 
 /**
- * A plain block's characters at most, and an article's blocks: a longer paragraph is cut between words and a longer
+ * A plain block's characters at most (no more than the voice takes in a sentence, VOICE_CHARS, should one word fill
+ * it), and an article's blocks: a longer paragraph is cut between words and a longer
  * code block between lines, and past PLAIN_BLOCKS short paragraphs run together, so the Reader never lays out one
  * text of a megabyte or mounts a hundred thousand. Text of more than PLAIN_BLOCKS times PLAIN_CHARS takes longer blocks.
  */
-export const PLAIN_CHARS = 4_000;
+export const PLAIN_CHARS = 3_000;
 export const PLAIN_BLOCKS = 4_000;
 
 /** A part as it shows and says: its text collapsed (code keeps its lines), and a heading's spoken full stop. */
