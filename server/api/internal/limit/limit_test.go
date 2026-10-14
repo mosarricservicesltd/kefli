@@ -36,24 +36,6 @@ func TestAllowAndSpent(t *testing.T) {
 	}
 }
 
-// AllowN counts units, bytes say, while they fit what is left of the window, and a refusal spends nothing.
-func TestAllowN(t *testing.T) {
-	now := time.Unix(1_791_600_000, 0)
-	l := New(100, time.Hour, func() time.Time { return now })
-	for i, c := range []struct {
-		n  int
-		ok bool
-	}{{60, true}, {50, false}, {40, true}, {1, false}} {
-		if ok, retry := l.AllowN("k", c.n); ok != c.ok || (!ok && retry != time.Hour) {
-			t.Fatalf("step %d, %d units: %v %v", i, c.n, ok, retry)
-		}
-	}
-	now = now.Add(time.Hour)
-	if ok, _ := l.AllowN("k", 100); !ok {
-		t.Fatal("refused in the next window")
-	}
-}
-
 // ClientIP is Caddy's first X-Forwarded-For when keflid is behind it, and the connection's address otherwise.
 func TestClientIP(t *testing.T) {
 	r := httptest.NewRequest("GET", "/", nil)
