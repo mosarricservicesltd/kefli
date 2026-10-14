@@ -5,12 +5,11 @@
 // A page can name thousands, or images from servers that never answer: an article's first 500 are fetched, a run
 // stops at three time-outs in a row or once it has fetched the store's budget, and an image already on its way isn't
 // asked for twice. Ports, like sync, so this runs in tests.
-import { isPublicWebUrl } from '@kefli/protocol';
 import { articleBlocks } from '../reader/blocks';
 import { LIMITS } from '../reader/limits';
 import { drawable, imageKind, imageSize } from '../reader/imageSize';
 import type { SqlDb } from '../data/db';
-import { Blocked, open, overHttps, TimedOut, TooLarge, WEB_HOPS } from '../net/http';
+import { Blocked, open, overHttps, publicWeb, TimedOut, TooLarge, WEB_HOPS } from '../net/http';
 import {
   MAX_IMAGE_BYTES, MAX_TOTAL_BYTES, evictions, forget, getImage, heldBytes, imagesOf, keptArticles, needsFetch, recordFailed, recordImage, wanted,
   type ImageRow,
@@ -121,8 +120,9 @@ async function fetchOne(p: ImagePorts, owner: string, url: string, hash: string)
 }
 
 async function fetchCounted(p: ImagePorts, owner: string, url: string, hash: string): Promise<Counted> {
-  // a page's image may name any address: only public web ones are fetched, never this phone's network (F26)
-  if (!WEB.test(url) || !isPublicWebUrl(url) || inFlight.has(url)) return 'skipped';
+  // a page's image may name any address: only public web ones are fetched, never this phone's network (F26), nor
+  // its files (net/http fromFiles)
+  if (!WEB.test(url) || !publicWeb(url) || inFlight.has(url)) return 'skipped';
   inFlight.add(url);
   try {
     return await fetchOne(p, owner, url, hash);

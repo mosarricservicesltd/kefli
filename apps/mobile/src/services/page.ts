@@ -13,7 +13,7 @@
 // behind it go on (a failed parse keeps the save's link, without text).
 import { normaliseMarkdown, pdfMarkdown, urlParts, type PdfRuns } from '@kefli/protocol';
 import { deriveArticle, type Derived } from '../reader/blocks';
-import { Blocked, open, strayed, TimedOut, TooLarge, WEB_HOPS, type Opened } from '../net/http';
+import { Blocked, fromFiles, open, strayed, TimedOut, TooLarge, WEB_HOPS, type Opened } from '../net/http';
 
 export const PAGE_MAX_BYTES = 5 * 1024 * 1024;
 /**
@@ -203,21 +203,20 @@ function landedAt(at: string, url: string): string {
   return at.length > FIELD_MAX.url ? url : at;
 }
 
-/** expo/fetch's stand-in host for file: URLs, with or without the trailing dot a host may carry. */
-const FILES_HOST = /^filesystem\.local\.?$/i;
 // built from a string: the code gate's parser reads a regex literal's escaped slashes as a comment
 const WEB = new RegExp('^https?://', 'i');
 
 /**
  * Whether url is one fetchPage asks for: http(s) only, since expo/fetch reads file: URLs from the phone's own storage,
- * and never its stand-in for them, http://filesystem.local, which it serves from the phone's files too, before any
- * network. RULED: the host is read as the protocol's URL parser reads it, as OkHttp does, so no way of writing it
- * (http:///filesystem.local/, a backslash, capitals, a trailing dot, fullwidth letters) gets past. A shared link, a
- * synced save's or an X post's can name either; a browser's goes through isPublicWebUrl, and every redirect too.
+ * and never its stand-in for them, http://filesystem.local, nor any host that only begins with it, which it serves
+ * from the phone's files too, before any network (net/http fromFiles). RULED: the host is read as the protocol's URL
+ * parser reads it, as OkHttp does, so no way of writing it (http:///filesystem.local/, a backslash, capitals, a
+ * trailing dot, fullwidth letters) gets past. A shared link, a synced save's or an X post's can name either; a
+ * browser's goes through isPublicWebUrl, and every redirect through net/http publicWeb.
  */
 export function fetchable(url: string): boolean {
   const host = WEB.test(url) ? urlParts(url)?.hostname : undefined;
-  return !!host && !FILES_HOST.test(host);
+  return !!host && !fromFiles(url);
 }
 
 export async function fetchPage(p: PagePorts, url: string): Promise<PageOutcome> {

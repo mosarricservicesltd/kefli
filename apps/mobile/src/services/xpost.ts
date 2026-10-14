@@ -4,8 +4,8 @@
 // most, never to a private address, 20 links and 20 s at most for them all; neither sends or keeps cookies. The
 // rules for which link counts are packages/protocol's (x.ts). Offline, or with X's service failing or too slow, the
 // post waits as a pending save and is checked again. Ports, so this runs in tests.
-import { isPublicWebUrl, linksInEmbed, pickXLink, xEmbedUrl } from '@kefli/protocol';
-import { Blocked, open, redirectTo, TimedOut, WEB_HOPS, type Opened } from '../net/http';
+import { linksInEmbed, pickXLink, xEmbedUrl } from '@kefli/protocol';
+import { Blocked, open, publicWeb, redirectTo, TimedOut, WEB_HOPS, type Opened } from '../net/http';
 
 export const X_TIMEOUT_MS = 5_000;
 export const MAX_HOPS = 5;
@@ -29,7 +29,10 @@ export const X_LINKS_MS = 20_000;
  */
 export const MAX_EMBED_LINKS = 200;
 
-/** A link that leads to a private, loopback or link-local address: not followed further, and not saved (7.1). */
+/**
+ * A link that leads to a private, loopback or link-local address, or to one expo/fetch reads from the phone's own
+ * files (net/http fromFiles): not followed further, and not saved (7.1).
+ */
 class NotPublic extends Error {
   constructor() {
     super('not a public address');
@@ -38,7 +41,7 @@ class NotPublic extends Error {
 }
 
 const publicOnly = (url: string): string => {
-  if (!isPublicWebUrl(url)) throw new NotPublic();
+  if (!publicWeb(url)) throw new NotPublic();
   return url;
 };
 

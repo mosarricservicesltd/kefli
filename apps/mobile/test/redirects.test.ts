@@ -5,10 +5,10 @@ import type { AddressInfo } from 'node:net';
 import { xEmbedUrl } from '@kefli/protocol';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
-import { Blocked, MAX_REDIRECTS, open, redirectTo } from '../src/net/http';
+import { Blocked, MAX_REDIRECTS, fromFiles, open, redirectTo } from '../src/net/http';
 import { fetchArticleImages, imageState, type ImagePorts } from '../src/services/images';
 import { DESKTOP_UA, PAGE_TIMEOUT_MS, fetchPage, fetchable, type PagePorts, type ParserResult } from '../src/services/page';
-import { checkXPost } from '../src/services/xpost';
+import { checkXPost, resolveTco } from '../src/services/xpost';
 import { memoryDb } from './sqlite';
 
 type Hop = { status?: number; location?: string; type?: string; body?: BodyInit };
@@ -139,6 +139,33 @@ describe("a page's redirects are followed by hand, never onto the phone's own ne
     expect(fetchable('https://filesystem.local.example.com/x')).toBe(true);
   });
 
+  // expo/fetch's OkHttp client turns any address whose text begins http://filesystem.local back into a file: URL and
+  // reads the rest from the phone's storage, relative to the app's working directory, the root:
+  // http://filesystem.localdata/data/app.kefli/… is /data/data/app.kefli/…. Such a name is no local one, so it passed
+  // the public-address check; and each hop followed by hand is a fresh request, which that client reads this way,
+  // where OkHttp's own following never did.
+  const FILES = [
+    'http://filesystem.localdata/data/app.kefli/files/kefli/a.html', 'http://FileSystem.LocalData:80/user/0/app.kefli/databases/kefli.db',
+    'http://ｆｉｌｅｓｙｓｔｅｍ.ｌｏｃａｌｄａｔａ/data/app.kefli/x', 'http://filesystem.local-x/', 'http://filesystem.local0./etc/hosts',
+  ];
+
+  test("a host that only begins with the stand-in for the phone's files is never asked for, first or at any hop", async () => {
+    for (const url of FILES) {
+      const first = web({});
+      expect([url, fetchable(url), await fetchPage(pages(first.f), url)]).toEqual([url, false, { kind: 'failed', reason: 'http', finalUrl: url }]);
+      expect(first.asked).toEqual([]);
+      const hop = web({ 'https://news.example/a': { status: 302, location: url }, [new URL(url).href]: { body: '<p>the phone’s own files</p>' } });
+      expect([url, await fetchPage(pages(hop.f), 'https://news.example/a')]).toEqual([url, { kind: 'failed', reason: 'http', finalUrl: 'https://news.example/a' }]);
+      expect([url, hop.urls()]).toEqual([url, ['https://news.example/a']]);
+    }
+    // the scheme as the URL parser reads it, past leading spaces and a tab inside it; over https only the stand-in
+    // itself is refused, the rest being the web's to answer
+    expect([' http://filesystem.localdata/x', 'ht\ttp://filesystem.localdata/x', 'http://filesystem.local./x', 'https://filesystem.local/x'].map(fromFiles))
+      .toEqual([true, true, true, true]);
+    expect(['https://filesystem.localdata/x', 'https://filesystem.local.example.com/x', 'http://www.filesystem.localdata/x', 'http://e.com/filesystem.local'].map(fromFiles))
+      .toEqual([false, false, false, false]);
+  });
+
   test('every hop runs inside the one deadline: a chain that outlasts it is the network being slow, and goes no further', async () => {
     jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
     try {
@@ -189,6 +216,33 @@ describe("images and X's embed take the same hops (F26, 5.4)", () => {
     expect(await fetchArticleImages(ports, PK, HASH)).toBe(1);
     expect(w.urls()).toEqual(['https://img.example/cam.png', 'https://img.example/ok.png']);
     expect([imageState(db, 'https://img.example/cam.png', 1_000), imageState(db, 'https://img.example/ok.png', 1_000)]).toEqual(['failed', 'here']);
+  });
+
+  test("an image at, or redirected to, a host that only begins with the stand-in for the phone's files is never asked for", async () => {
+    const db = memoryDb();
+    migrate(db);
+    ensureIdentityRow(db, 1, PK, 'new', true);
+    db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin) VALUES (?, ?, 'https://e.com/', 1, 'unread', 'cached', 'share')", PK, HASH);
+    const w = web({
+      'https://img.example/a.png': { status: 302, location: 'http://filesystem.localdata/data/app.kefli/files/kefli/img.png' },
+      'http://filesystem.localdata/data/app.kefli/files/kefli/img.png': { type: 'image/png', body: png() },
+      // a port keeps an address's http (net/http overHttps), and OkHttp drops a default one before the stand-in is read
+      'http://filesystem.localdata:80/data/app.kefli/files/kefli/img.png': { type: 'image/png', body: png() },
+      'https://img.example/ok.png': { type: 'image/png', body: png() },
+    });
+    const srcs = ['https://img.example/a.png', 'http://filesystem.localdata:80/data/app.kefli/files/kefli/img.png', 'https://img.example/ok.png'];
+    const ports: ImagePorts = {
+      db, now: () => 1_000, fetch: w.f, nameOf: (u) => u.slice(-6), files: { write: (n) => `/img/${n}`, remove: () => undefined },
+      readArticle: () => ({ blocks: srcs.map((src) => ({ kind: 'img', src })) }),
+    };
+    expect(await fetchArticleImages(ports, PK, HASH)).toBe(1);
+    expect(w.urls()).toEqual(['https://img.example/a.png', 'https://img.example/ok.png']);
+  });
+
+  test("a t.co link leading to a host that only begins with the stand-in for the phone's files is never followed there", async () => {
+    const w = web({ 'https://t.co/f': { status: 301, location: 'http://filesystem.localdata/data/app.kefli/x' }, 'http://filesystem.localdata/data/app.kefli/x': {} });
+    await expect(resolveTco({ fetch: w.f }, 'https://t.co/f')).rejects.toThrow('not a public address');
+    expect(w.urls()).toEqual(['https://t.co/f']);
   });
 
   test("X's embed redirecting onto the phone's network is X failing, the address never asked for", async () => {

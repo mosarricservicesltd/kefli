@@ -9,13 +9,13 @@
 // Location and all (its NativeRequest.kt). Each hop is followed here, inside the one deadline, and its address is
 // checked before it is asked for. Left to OkHttp, a saved page or an image could send the phone to 192.168.1.1, or
 // to a loopback or link-local address; and since each hop followed here is a fresh request, which expo/fetch answers
-// from the phone's own files when it names http://filesystem.local, that name is refused at every hop as at the
-// first (services/page.ts fetchable). A fetch that follows redirects anyway (React Native's own, under
-// EXPO_PUBLIC_USE_RN_FETCH) has its answer refused when it says it ended somewhere a hop couldn't go.
+// from the phone's own files when its address begins http://filesystem.local (fromFiles), such a host is refused at
+// every hop as at the first (services/page.ts fetchable). A fetch that follows redirects anyway (React Native's own,
+// under EXPO_PUBLIC_USE_RN_FETCH) has its answer refused when it says it ended somewhere a hop couldn't go.
 //
 // Cleartext (7.1): release builds allow none, and OkHttp refuses plain http before it connects. That refusal fails
 // what was asked for (Blocked); read as the network, as it was, it left a save waiting for good.
-import { isPublicWebUrl } from '@kefli/protocol';
+import { isPublicWebUrl, urlParts } from '@kefli/protocol';
 
 export class TimedOut extends Error {
   constructor() {
@@ -50,8 +50,37 @@ export type Hops = { max: number; allow: (url: string) => boolean };
 /** The most redirects a page, an image or X's embed is followed through (5.4); one more fails it. */
 export const MAX_REDIRECTS = 10;
 
+// expo/fetch's stand-in host for file: URLs, and every host that only begins with it; the stand-in itself, with or
+// without the trailing dot a host may carry
+const FILES_HOST = /^filesystem\.local/i;
+const FILES_ITSELF = /^filesystem\.local\.?$/i;
+// what the URL parser drops before it reads a scheme: leading controls and spaces, then every tab and newline
+const LEADING = /^[\x00-\x20]+/;
+const BREAKS = /[\t\n\r]/g;
+const PLAIN = /^http:/i;
+
+/**
+ * Whether expo/fetch answers url from the phone's own files rather than the web. Its OkHttp client turns an address
+ * whose text begins http://filesystem.local back into a file: URL, ahead of the network and of the cleartext rule,
+ * and reads the rest as a path: the stand-in's own, or for a host that only begins with it, a path from the app's
+ * working directory, the root, so http://filesystem.localdata/data/app.kefli/… reads /data/data/app.kefli/…. No such
+ * host is a local name, so the public-address check passes it. RULED: the host is read as the protocol's URL parser
+ * reads it, as OkHttp does (capitals, fullwidth letters, %2E, a port of 80). Over https only the stand-in itself is
+ * refused: https://filesystem.local.example.com/ is a site like any other.
+ */
+export function fromFiles(url: string): boolean {
+  const host = urlParts(url)?.hostname ?? '';
+  if (!FILES_HOST.test(host)) return false;
+  return FILES_ITSELF.test(host) || PLAIN.test(url.replace(LEADING, '').replace(BREAKS, ''));
+}
+
+/** An address the phone asks the open web for: public (7.1), and not one expo/fetch reads from its files. */
+export function publicWeb(url: string): boolean {
+  return isPublicWebUrl(url) && !fromFiles(url);
+}
+
 /** The open web's hops: ten at most, each to a public http(s) address (7.1). */
-export const WEB_HOPS: Hops = { max: MAX_REDIRECTS, allow: isPublicWebUrl };
+export const WEB_HOPS: Hops = { max: MAX_REDIRECTS, allow: publicWeb };
 
 /** A response whose body is still under the deadline it was asked for with. */
 export type Opened = {
