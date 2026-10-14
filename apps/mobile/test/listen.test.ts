@@ -1,8 +1,9 @@
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
-import { listenRows, playFrom, readyRow, recordPlayed } from '../src/data/listen';
+import { LISTEN_CUED, clearCued, listenRows, playFrom, readyRow, recordPlayed, setCued } from '../src/data/listen';
 import { commitDelete, deleteItem, setArchived } from '../src/data/library';
-import { cardOnScreen, meter, ruler, sentenceOf } from '../src/voice/clock';
+import { getSetting } from '../src/data/settings';
+import { cardInView, cardOnScreen, meter, ruler, sentenceOf } from '../src/voice/clock';
 import { memoryDb } from './sqlite';
 
 const PK = 'ab'.repeat(32);
@@ -41,6 +42,42 @@ describe('Listen (mobile spec 5.7)', () => {
     expect(db.get('SELECT COUNT(*) AS n FROM listen_history')).toEqual({ n: 1 });
   });
 
+  test('a row put in the card comes first while it can still play, else the card falls back (FD 115)', () => {
+    const db = memoryDb();
+    migrate(db);
+    ensureIdentityRow(db, 1, PK, 'new', true);
+    const OTHER = 'cd'.repeat(32);
+    ensureIdentityRow(db, 1, OTHER, 'new', false);
+    for (const n of [1, 2, 3, 4]) db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin) VALUES (?, ?, 'u', ?, 'unread', 'cached', 's')", PK, h(n), n);
+    db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin) VALUES (?, ?, 'u', 5, 'unread', 'remote', 's')", PK, h(5));
+    db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin) VALUES (?, ?, 'u', 6, 'unread', 'cached', 's')", OTHER, h(6));
+    recordPlayed(db, PK, h(2), 20);
+    // chosen: first, labelled Up next, ahead of the last played
+    setCued(db, h(1));
+    expect(getSetting(db, LISTEN_CUED)).toBe(h(1));
+    expect(readyRow(db, PK)).toMatchObject({ row: { hash: h(1) }, last: false });
+    // archived, deleted or without text: the card falls back to the last played
+    setArchived(db, 30, PK, h(1), true);
+    expect(readyRow(db, PK)).toMatchObject({ row: { hash: h(2) }, last: true });
+    setCued(db, h(3));
+    expect(readyRow(db, PK)).toMatchObject({ row: { hash: h(3) }, last: false });
+    deleteItem(db, 40, PK, h(3));
+    expect(readyRow(db, PK)).toMatchObject({ row: { hash: h(2) }, last: true });
+    setCued(db, h(5));
+    expect(readyRow(db, PK)).toMatchObject({ row: { hash: h(2) }, last: true });
+    // another library's article is never held
+    setCued(db, h(6));
+    expect(readyRow(db, PK)).toMatchObject({ row: { hash: h(2) }, last: true });
+    // anything playing clears the choice
+    setCued(db, h(4));
+    expect(readyRow(db, PK)).toMatchObject({ row: { hash: h(4) }, last: false });
+    clearCued(db);
+    expect(getSetting(db, LISTEN_CUED)).toBeNull();
+    expect(readyRow(db, PK)).toMatchObject({ row: { hash: h(2) }, last: true });
+    clearCued(db);
+    expect(getSetting(db, LISTEN_CUED)).toBeNull();
+  });
+
   test('an article plays from its place, or from the top once heard through', () => {
     expect(playFrom({ words: 100, position_word: 40 })).toBe(40);
     expect(playFrom({ words: 100, position_word: 99 })).toBe(0);
@@ -74,5 +111,10 @@ describe('Listen (mobile spec 5.7)', () => {
     expect(cardOnScreen(false, card, 350, 1000)).toBe(false); // half: stays off
     expect(cardOnScreen(false, card, 250, 1000)).toBe(true); // 70%
     expect(cardOnScreen(false, { y: 0, h: 0 }, 0, 1000)).toBe(false);
+    // the share in view, which a row's body checks before scrolling back to the card (FD 115)
+    expect(cardInView(card, 0, 1000)).toBe(1);
+    expect(cardInView(card, 350, 1000)).toBeCloseTo(0.5);
+    expect(cardInView(card, 700, 1000)).toBe(0);
+    expect(cardInView({ y: 0, h: 0 }, 500, 1000)).toBe(1);
   });
 });

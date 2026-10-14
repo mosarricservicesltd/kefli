@@ -1,4 +1,5 @@
-import { RATES, WPS_SEED, clock, nextRate, rateLabel, readRate, readWps, seconds, snapRate, startWord, wpsFor, wpsKey } from '../src/voice/clock';
+import { RATES, WPS_SEED, clock, nextRate, positionClocks, rateLabel, readRate, readWps, seconds, snapRate, startWord, stepWord, wordAt, wpsFor, wpsKey } from '../src/voice/clock';
+import { S } from '../src/ui/strings';
 
 describe('the listening clock (mobile spec 5.7)', () => {
   test('the speed pill steps 1, 1.5, 2, 0.5 and back to 1 (FD 107)', () => {
@@ -52,5 +53,34 @@ describe('the listening clock (mobile spec 5.7)', () => {
     // the old steps read as 1
     expect([readRate('0.8'), readRate('1.2')]).toEqual([1, 1]);
     expect([readWps('3.03'), readWps('0'), readWps(null)]).toEqual([3.03, WPS_SEED, WPS_SEED]);
+  });
+
+  test('a point on the ruler is a word: the share of the words, to the word, within the article (FD 115)', () => {
+    expect(wordAt(0, 1000)).toBe(0);
+    expect(wordAt(0.5, 1000)).toBe(500);
+    expect(wordAt(0.2504, 1000)).toBe(250);
+    expect(wordAt(0.2506, 1000)).toBe(251);
+    // the far end is the last word; a point beyond either end is clamped
+    expect(wordAt(1, 1000)).toBe(999);
+    expect(wordAt(1.3, 1000)).toBe(999);
+    expect(wordAt(-0.2, 1000)).toBe(0);
+    // an empty article, or a ruler not yet measured
+    expect(wordAt(0.5, 0)).toBe(0);
+    expect(wordAt(NaN, 1000)).toBe(0);
+  });
+
+  test('a screen reader steps the ruler by a twentieth of the article, at least a word (FD 115)', () => {
+    expect(stepWord(400, 1000, 1)).toBe(450);
+    expect(stepWord(400, 1000, -1)).toBe(350);
+    expect(stepWord(980, 1000, 1)).toBe(999);
+    expect(stepWord(20, 1000, -1)).toBe(0);
+    expect(stepWord(3, 10, 1)).toBe(4);
+    expect(stepWord(0, 0, 1)).toBe(0);
+  });
+
+  test('the ruler reads as the card’s clocks, elapsed of total (FD 115)', () => {
+    expect(positionClocks(390, 3900, 3.9, 1)).toEqual(['1:40', '16:40']);
+    expect(positionClocks(390, 3900, 3.9, 2)).toEqual(['0:50', '8:20']);
+    expect(S.listen.positionValue(...positionClocks(0, 3900, 3.9, 1))).toBe('0:00 of 16:40');
   });
 });

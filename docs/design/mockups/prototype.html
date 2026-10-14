@@ -404,8 +404,18 @@ svg .arc{transform-box:view-box;transform-origin:center}
 .nowcard .controls [data-skip="15"]{grid-column:4}
 .nowcard .controls .rate{grid-column:5;justify-self:end}
 /* the word meter (decision 68): a ruler in minutes over the bar, and one mark per spoken word of the sentence being read,
-   between the times. Display only (no seeking, decision 48); it needs word positions from the voice and stays empty without them. */
-.ruler{position:relative;height:30px}
+   between the times; the marks need word positions from the voice and stay empty without them. The ruler is the card's
+   seek control (decision 115): a tap jumps, a drag that starts sideways shows a knob on the line and the time at it in
+   the left clock. Its touch area is the ruler and the space just above and below it, 48 px in all; pan-y leaves a
+   vertical drag to the list. The mini player's line, the Reader's player and the lock screen stay display-only. */
+.ruler{position:relative;z-index:1;height:30px;cursor:pointer;touch-action:pan-y;-webkit-user-select:none;user-select:none}
+.ruler::before{content:"";position:absolute;left:0;right:0;top:-9px;bottom:-9px}
+.ruler:focus-visible{outline-offset:6px;border-radius:var(--radius-control)}
+/* the knob rides a ruler-wide track moved by translateX = p × width, so it travels by transform alone (signature 2) and
+   centres on the 3 px line; a ring of the card's surface keeps it clear of the ticks. It fades in as a drag starts. */
+.ruler .knob{position:absolute;left:0;right:0;bottom:-4.5px;height:12px;pointer-events:none;opacity:0;transform:translateX(calc(var(--p, 0) * 100%));transition:opacity var(--motion-quick-out)}
+.ruler .knob::before{content:"";position:absolute;left:-6px;top:0;width:12px;height:12px;border-radius:50%;background:var(--ink,var(--text));box-shadow:0 0 0 2px var(--surface)}
+.scrubbing .ruler .knob{opacity:1;transition:opacity var(--motion-quick-in)}
 .ruler .nums span{position:absolute;top:0;transform:translateX(-50%);font-family:var(--font-mono);font-size:var(--text-13);letter-spacing:var(--font-mono-tracking);line-height:1;color:var(--muted)}
 .ruler .nums span:first-child{transform:none}
 .ruler .tk i{position:absolute;bottom:3px;width:1px;height:5px;margin-left:-.5px;background:var(--line-strong)}
@@ -423,7 +433,8 @@ svg .arc{transform-box:view-box;transform-origin:center}
 .sectionhead h2{margin:0;font-size:var(--text-17);font-weight:var(--weight-heading)}
 /* entry chips (Play all, Paste): 36 visual, 48 hit (fix 13) */
 .pbtn{height:36px;padding:0 var(--space-12) 0 10px;border-radius:var(--radius-control);display:inline-flex;align-items:center;gap:6px;font-size:var(--text-13);font-weight:var(--weight-title);line-height:1;border:1px solid var(--line);color:var(--text);position:relative;flex:none}
-/* Listen rows: catalogue rows whose leading play button wears the cover; the body opens, the button plays (Q2) */
+/* Listen rows: catalogue rows whose leading play button wears the cover; the button plays, the body puts the article in
+   the Now playing card (decision 115) */
 .lrow{display:flex;align-items:center;gap:14px;padding:12px 0 13px;position:relative}
 .lrow::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--line)}
 .lrow .lbody{flex:1;min-width:0;align-self:stretch;display:flex;align-items:center;text-align:left;border-radius:var(--radius-image)}
@@ -775,7 +786,7 @@ svg .arc{transform-box:view-box;transform-origin:center}
       <svg width="16" height="11" viewBox="0 0 16 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx=".6"/><rect x="4.3" y="5" width="3" height="6" rx=".6"/><rect x="8.6" y="2.5" width="3" height="8.5" rx=".6"/><rect x="12.9" y="0" width="3" height="11" rx=".6"/></svg>
       <svg width="15" height="11" viewBox="0 0 15 11" fill="currentColor"><path d="M7.5 2.2c2.3 0 4.4.9 6 2.4l1.2-1.3A10.4 10.4 0 0 0 7.5.4 10.4 10.4 0 0 0 .3 3.3l1.2 1.3a8.6 8.6 0 0 1 6-2.4Zm0 3.5c1.3 0 2.5.5 3.5 1.3l1.2-1.3a7 7 0 0 0-9.4 0L4 7a5.2 5.2 0 0 1 3.5-1.3Zm0 3.4c-.5 0-1 .2-1.3.6L7.5 11l1.3-1.3a1.8 1.8 0 0 0-1.3-.6Z"/></svg>
       <svg width="24" height="11" viewBox="0 0 24 11"><rect x=".5" y=".5" width="20" height="10" rx="2.5" fill="none" stroke="currentColor" opacity=".45"/><rect x="2" y="2" width="14" height="7" rx="1.4" fill="currentColor"/><rect x="21.6" y="3.5" width="1.6" height="4" rx=".8" fill="currentColor" opacity=".45"/></svg></span></div>
-    <div class="viewport"><div class="glayer" id="gUnder"></div><div id="vp"></div><div class="glayer" id="gOver"></div><div class="glayer" id="gTop"></div></div>
+    <div class="viewport"><div class="glayer" id="gUnder"></div><div id="vp"></div><div class="srlive" id="announce" role="status" aria-live="polite"></div><div class="glayer" id="gOver"></div><div class="glayer" id="gTop"></div></div>
     <div class="gesturebar"><i></i></div>
   </div>
 
@@ -839,6 +850,8 @@ svg .arc{transform-box:view-box;transform-origin:center}
       <button data-jump="listen">Listen tab</button>
       <button data-jump="listen-scrolled">Listen, card scrolled away</button>
       <button data-jump="listen-reader">Reader opened from Listen</button>
+      <button data-jump="listen-cued">…a row put in the player</button>
+      <button data-jump="listen-scrub">…dragging the ruler</button>
       <button data-jump="listen-ready">Listen, nothing playing</button>
       <button data-jump="listen-first">Listen, nothing played yet</button>
       <button data-jump="listen-empty">Listen, empty</button>
@@ -981,7 +994,7 @@ svg .arc{transform-box:view-box;transform-origin:center}
     </div>
     <div class="note">
       <p><strong>Look (Fingerprint, decisions 65–69, and 94 for the icon):</strong> every save wears its own cover, drawn by cover v1 from the sha256 of its normalised address, so the same article has the same face on every surface. The chrome is ink, paper, two greys and hairlines; the article lends its ink to its progress line, link underline and spoken-word highlight, and Night paper is tinted per article. A row draws its cover once, when the save lands. The app icon in the share row is D, the bookmark cut into a pause and a play (decision 94), frozen artwork from shared/brand/src. The lock screen’s media card shows the notification glyph in its app slot, the plain bookmark from glyph-24.svg, in the system’s tint.</p>
-      <p><strong>Player:</strong> one listening session, three sizes. The mini player sits at the bottom of every screen (8 px above the tab bar, or 16 px above the screen edge). In the playing article’s Reader it expands in place into the full row: play, time, ±15 s, speed, and ✕ once paused. Its line replaces the reading line. On Listen the Now playing card is the player; the mini slides in once the card has scrolled mostly away. Only play controls play: a Listen row’s body opens the article, its round button plays.</p>
+      <p><strong>Player:</strong> one listening session, three sizes. The mini player sits at the bottom of every screen (8 px above the tab bar, or 16 px above the screen edge). In the playing article’s Reader it expands in place into the full row: play, time, ±15 s, speed, and ✕ once paused. Its line replaces the reading line. On Listen the Now playing card is the player; the mini slides in once the card has scrolled mostly away. Only play controls play: a Listen row’s cover plays it, its body puts it in the card ready to play (“Up next”), and the card’s title opens the Reader (decision 115). The card’s ruler seeks: tap a point, or drag along it and let go; the other players’ lines are display-only.</p>
       <p><strong>Bottom stack:</strong> tab bar or screen edge, then the player, then the screen’s own bar or floating Archive, then the toast, 8 px apart. Back from a Reader returns to whatever opened it.</p>
       <p><strong>Motion (decision 73, motion-spec.md):</strong> everything fades by default and travels only to show where something went, on the motion tokens, and only transform and opacity animate. A cover draws once, when its save lands in front of you (the share sheet, “A save arrives from Chrome”, a restore, “…the first save lands”). Each article’s line is carried at its place: open a part-read row, read on, and come back to see it catch up; Archive from the Reader to see it finish before the row leaves. With reduced motion every meaning stays and the travel goes. Jumps land in place.</p>
       <p><strong>Build notes:</strong> Android Back is swallowed while switching accounts moves saves and while a deletion runs. Mark the recovery-code clip as sensitive (ClipDescription.EXTRA_IS_SENSITIVE); on Android 13+ the system confirms copies, so Kefli shows its own copy toast only below API 33. Toasts use getRecommendedTimeoutMillis(5000) and never auto-dismiss while a screen reader is on.</p>
@@ -1408,6 +1421,7 @@ function startAudio(id){
   const it = S.items.find(i => i.id === id);
   if (!it) return;
   if (S.audio && S.audio.id === id) { S.audio.playing = !S.audio.playing; return; }
+  S.cued = null;                                        // anything starting clears the row put in the player (decision 115)
   if (S.audio) { S.playAll = false; S.queue = null; }   // only starting a different article ends Play all
   else S.playerEnter = true;                            // a new session slides its player in (Q3b)
   const from = partRead(it) && it.progress < .99 ? it.progress : 0;
@@ -1416,16 +1430,23 @@ function startAudio(id){
 }
 
 // Full tier (Listen's Now playing card): −15, play, +15 centred, speed at the trailing end (fix 8).
-// Bars are display-only lines: no seeking in v1 (Q4).
 // The word meter (decision 68): a ruler in minutes over the bar, and one mark per word of the sentence being spoken, lit
-// as the voice reaches it. Display only (decision 48). The build drives it from expo-speech's onBoundary word positions;
-// if the Android spike shows none, the marks stay unlit rather than faked.
+// as the voice reaches it. The build drives it from expo-speech's onBoundary word positions; if the Android spike shows
+// none, the marks stay unlit rather than faked.
+// The ruler seeks (decision 115): a point on it is a word, the share of the article's words that the point is across the
+// ruler, rounded to the word and kept to the last one, as a double-tap in the Reader lands on a word (decision 107).
+// The mini player's line, the Reader's player and the lock screen stay display-only.
+const seekWord = p => Math.max(0, Math.min(WORDS - 1, Math.round(p * WORDS)));
+const seekT = p => seekWord(p) / WORDS * DUR;
+const posText = t => `${fmt(t)} of ${fmt(DUR)}`;
 function rulerHTML(a = S.audio){
   let tk = '', nums = '';
   for (let s = 0; s <= DUR; s += 15) tk += `<i class="${s % 60 === 0 ? 'mj' : ''}" style="left:${(s / DUR * 100).toFixed(2)}%"></i>`;
   for (let m = 0; m * 60 <= DUR; m++) nums += `<span style="left:${(m * 60 / DUR * 100).toFixed(2)}%">${m}</span>`;
-  return `<div class="ruler" aria-hidden="true"><div class="nums">${nums}</div><div class="tk">${tk}</div>
-    <div class="pline"><i class="js-bar" data-mk="pl-now" data-line data-lid="${a.id}" style="--p:${a.t / DUR}"></i></div></div>`;
+  // mid-drag (S.scrub), the line fills to the knob and the slider reads the time under it
+  const sc = S.scrub, p = sc ? sc.p : a.t / DUR, t = sc ? seekT(sc.p) : a.t;
+  return `<div class="ruler" role="slider" tabindex="0" aria-label="Position" aria-valuemin="0" aria-valuemax="${DUR}" aria-valuenow="${Math.round(t)}" aria-valuetext="${posText(t)}"><div class="nums" aria-hidden="true">${nums}</div><div class="tk" aria-hidden="true">${tk}</div>
+    <div class="pline" aria-hidden="true"><i class="js-bar" data-mk="pl-now" data-line data-lid="${a.id}" style="--p:${p}"></i></div><span class="knob" aria-hidden="true" style="--p:${p}"></span></div>`;
 }
 // without word timing the marks are drawn for the sentence's words and stay unlit (decisions 68 and 91 (h))
 const meterLit = (s0, k, w) => !S.noWordTiming && s0 + k <= w;
@@ -1442,7 +1463,7 @@ function updateMeter(t){
 function controlsHTML(a = S.audio){
   const M = meterMarks(a.t);
   return `${rulerHTML(a)}
-    <div class="times"><span class="js-t">${fmt(a.t)}</span><span class="wmeter js-meter" aria-hidden="true" data-s0="${M.s0}">${M.html}</span><span>${fmt(DUR)}</span></div>
+    <div class="times"><span class="js-t">${fmt(S.scrub ? seekT(S.scrub.p) : a.t)}</span><span class="wmeter js-meter" aria-hidden="true" data-s0="${M.s0}">${M.html}</span><span>${fmt(DUR)}</span></div>
     <div class="controls">
       <button class="ctl" data-skip="-15" aria-label="Back 15 seconds">${ic('back15', 24)}</button>
       <button class="ctl big js-pp" data-play aria-label="${a.playing ? 'Pause' : 'Play'}">${glyphHTML('now', a.playing, 24, false)}</button>
@@ -1491,13 +1512,21 @@ const rollHTML = (key, v, label) => `<span class="rv"><span data-xf="${key}" dat
 
 // Listen's list (decision 111): Unread in Saves' order, the saves that have their text
 const listenRows = () => S.items.filter(i => !i.archived && i.status === 'ok');
-// With no session the card holds an article ready to play: the last played still in Unread, else the top of Unread
+// With no session the card holds an article ready to play: the row last put in the player (decision 115), else the last
+// played still in Unread, else the top of Unread
 function readyItem(){
   const rows = listenRows();
+  const cued = S.cued != null && rows.find(i => i.id === S.cued);
+  if (cued) return { it: cued, label: 'Up next' };
   const last = S.played.map(id => rows.find(i => i.id === id)).find(Boolean);
   return last ? { it: last, label: 'Last played' } : rows[0] ? { it: rows[0], label: 'Up next' } : null;
 }
 const readyAt = it => (partRead(it) && it.progress < .99 ? it.progress : 0) * DUR;
+// the article the Now playing card holds: the session's, or the ready one
+function cardItem(){
+  const a = S.audio, p = a && S.items.find(i => i.id === a.id);
+  return p || (readyItem() || {}).it || null;
+}
 
 function listenScreen(){
   const rows = listenRows();
@@ -1514,16 +1543,17 @@ function listenScreen(){
     const cur = playing || ready.it;
     const st = playing ? a : { id: cur.id, t: readyAt(cur), playing: false, rate: S.rate };
     const lbl = playing ? (a.playing ? 'Now playing' : 'Paused') : ready.label;
-    const now = `<div class="nowcard" data-fk="nowcard" style="${inkStyle(cur, 'surface')}"><div class="art" data-xf="now-art" data-xv="${cur.id}">${coverHTML(cur, { cols: 3 })}</div><div class="in"><div class="lbl"><span data-xf="now-lbl" data-xv="${lbl}">${lbl}</span></div>
+    const now = `<div class="nowcard${S.scrub ? ' scrubbing' : ''}" data-fk="nowcard" style="${inkStyle(cur, 'surface')}"><div class="art" data-xf="now-art" data-xv="${cur.id}">${coverHTML(cur, { cols: 3 })}</div><div class="in"><div class="lbl"><span data-xf="now-lbl" data-xv="${lbl}">${lbl}</span></div>
         ${playing && !a.playing ? `<button class="pclose" data-stop-audio data-pk="now-x" aria-label="Close player">${ic('x', 20)}</button>` : ''}
         <div class="ts" data-xf="now-ts" data-xv="${cur.id}"><button class="t" ${playing ? 'data-open-audio' : `data-open="${cur.id}"`}>${esc(cur.title)}</button><div class="s">${esc(cur.src)}</div></div>
         ${controlsHTML(st)}</div></div>`;
-    // rows follow the card anatomy: the body opens the Reader, the leading play button (the article's cover) plays or pauses (Q2)
+    // the leading play button (the article's cover) plays or pauses (Q2); the body puts the article in the card, ready
+    // ("Up next"), and the card's title is the way into the Reader (decision 115)
     const list = rows.map(it => {
       const on = isPlaying(it) && S.audio.playing;
       return `<div class="lrow" data-lid="${it.id}" data-fk="lrow-${it.id}" data-mk="lrow-${it.id}" style="${inkStyle(it, 'background')}">
         <button class="rp ppc" data-playitem="${it.id}" aria-label="${on ? 'Pause' : 'Play'} ${esc(it.title)}">${coverHTML(it, { size: 48 })}<span class="disc">${glyphHTML('l' + it.id, on, 14)}</span></button>
-        <button class="lbody" data-open="${it.id}"><span class="body"><span class="src">${esc(it.src)}</span><span class="title">${esc(it.title)}</span>
+        <button class="lbody" data-cue="${it.id}" aria-description="Puts it in the player"><span class="body"><span class="src">${esc(it.src)}</span><span class="title">${esc(it.title)}</span>
           <span class="meta">${leftMetaHTML(it)}</span></span></button>${progressHTML(it, 'lrow')}</div>`;
     }).join('');
     body = `${now}${rows.length ? `<div class="sectionhead" data-fk="playedhead"><h2>Unread</h2><button class="pbtn" data-playall>${solid('play', 14)}Play all</button></div>
@@ -1559,8 +1589,12 @@ function updatePlayer(forceScroll){
   // live progress is set directly, per word, so a line never lags the voice (signature 2); clocks and 'N min left' change
   // in one frame. While a line glides (±15, Catch-up), direct sets wait for it.
   const live = !lineLocked(a.id);
-  if (live) vp.querySelectorAll('.js-bar').forEach(e => e.style.setProperty('--p', a.t / DUR));
-  vp.querySelectorAll('.js-t').forEach(e => e.textContent = fmt(a.t));
+  // a card mid-drag keeps its line at the knob and its clock at the knob's time (decision 115)
+  const held = e => !!e.closest('.scrubbing');
+  if (live) vp.querySelectorAll('.js-bar').forEach(e => { if (!held(e)) e.style.setProperty('--p', a.t / DUR); });
+  vp.querySelectorAll('.js-t').forEach(e => { if (!held(e)) e.textContent = fmt(a.t); });
+  // the Position slider reads the place, refreshed only while it isn't focused, so a screen reader isn't read every tick
+  vp.querySelectorAll('.nowcard .ruler').forEach(r => { if (held(r) || r === document.activeElement) return; r.setAttribute('aria-valuenow', Math.round(a.t)); r.setAttribute('aria-valuetext', posText(a.t)); });
   // position / total, or the position alone when both won't fit (long articles in the Reader tier)
   vp.querySelectorAll('.js-tt').forEach(e => { e.textContent = ttText(a); if (e.scrollWidth > e.clientWidth) e.textContent = fmt(a.t); });
   vp.querySelectorAll('.js-tof').forEach(e => e.textContent = `${fmt(a.t)} / ${fmt(DUR)}`);
@@ -3234,6 +3268,146 @@ function setListenMini(on){
   } else if (!on && old) leaveNode(old, 'sink');
   placeStack();
 }
+
+/* ---------------- Listen: a row put in the player, and the ruler that seeks (decision 115) ---------------- */
+// one polite line outside #vp, so a re-render never drops what it is saying
+function announce(text){
+  const el = document.getElementById('announce'); if (!el) return;
+  el.textContent = ''; setTimeout(() => { el.textContent = text; }, 60);
+}
+// share of the Now playing card inside the list's scroll view
+function cardInView(){
+  const card = vp.querySelector('.nowcard'), sc = vp.querySelector(':scope > .screen > .scroll');
+  if (!card || !sc) return 1;
+  const c = card.getBoundingClientRect(), r = sc.getBoundingClientRect();
+  return c.height ? Math.max(0, Math.min(c.bottom, r.bottom) - Math.max(c.top, r.top)) / c.height : 1;
+}
+// the list glides back to its top on the enter curve, at once under reduced motion; a finger on the list stops it
+let listGlide = 0;
+function glideListTop(){
+  const sc = vp.querySelector(':scope > .screen > .scroll'); if (!sc) return;
+  cancelAnimationFrame(listGlide); listGlide = 0;
+  if (RM()) { sc.scrollTop = 0; return; }
+  const from = sc.scrollTop, t0 = performance.now(), D = MT.enter.duration;
+  if (from < 1) return;
+  const stop = () => { cancelAnimationFrame(listGlide); listGlide = 0; };
+  sc.addEventListener('pointerdown', stop, { once: true });
+  sc.addEventListener('wheel', stop, { once: true, passive: true });
+  const step = t => {
+    if (!sc.isConnected) { listGlide = 0; return; }
+    const k = Math.min(1, (t - t0) / D);
+    sc.scrollTop = from * (1 - EASE_ENTER(k));
+    listGlide = k < 1 ? requestAnimationFrame(step) : 0;
+  };
+  listGlide = requestAnimationFrame(step);
+}
+// A row's body: the card switches to that article, ready at its stored position ("Up next"). A session under way stops
+// where it is with its place kept, as ✕ leaves it, and Play all stops with it. The article already in the card changes
+// nothing. If the card is under 60 % in view (decision 52's measure) the list goes back to it, so the switch is seen.
+function cueItem(id){
+  const it = S.items.find(i => i.id === id), cur = cardItem();
+  if (!it || (cur && cur.id === id)) return;
+  const away = cardInView() < .6;
+  S.audio = null; S.playAll = false; S.queue = null;
+  S.cued = id;
+  render();
+  if (away) glideListTop();
+  announce(`Up next: ${it.title}`);
+}
+// The card's place, and a jump to a point on the ruler (0–1). Playing, speech goes on from that word; paused, or heard to
+// its end (the prototype rewinds a finished article, decision 35), the place moves and it stays paused; on the ready
+// card the stored position moves and nothing starts (decision 111). A tap or a key glides the line, as ±15 do; a drag
+// lands where the knob already is.
+function cardPos(){
+  const a = S.audio, p = a && S.items.find(i => i.id === a.id);
+  if (p) return a.t / DUR;
+  const rd = readyItem(); return rd ? readyAt(rd.it) / DUR : 0;
+}
+function seekTo(p, glide){
+  const w = seekWord(p), q = w / WORDS;
+  const a = S.audio, playing = a && S.items.find(i => i.id === a.id);
+  let id, p0, p1;
+  if (playing) { id = a.id; p0 = a.t / DUR; a.t = q * DUR; playing.progress = p1 = q; }
+  else {
+    const rd = readyItem(); if (!rd) { S.scrub = null; render(); return; }
+    // the prototype's progress reads .99 and up as read to the end, so the ready card's last word is kept just under it
+    id = rd.it.id; p0 = readyAt(rd.it) / DUR; rd.it.progress = p1 = Math.min(q, .989);
+  }
+  S.scrub = null;
+  render();
+  if (glide) glideLines(id, p0, p1);
+}
+// the drag mid-way: the knob and the line at p, the left clock at the time there; set directly, never re-rendered
+function scrubShow(p){
+  S.scrub = { p };
+  const card = vp.querySelector(':scope > .screen .nowcard'); if (!card) return;
+  card.classList.add('scrubbing');
+  const line = card.querySelector('.ruler .pline i'), knob = card.querySelector('.ruler .knob'), clock = card.querySelector('.js-t'), r = card.querySelector('.ruler');
+  if (line) { line.getAnimations().forEach(an => an.cancel()); line.style.setProperty('--p', p); }
+  if (knob) knob.style.setProperty('--p', p);
+  if (clock) clock.textContent = fmt(seekT(p));
+  if (r) { r.setAttribute('aria-valuenow', Math.round(seekT(p))); r.setAttribute('aria-valuetext', posText(seekT(p))); }
+}
+// a drag let go of with nothing to change: the knob goes and the line and clock return to the place, set directly so a
+// tap that follows still lands on the control it touched
+function scrubClear(){
+  S.scrub = null;
+  const card = vp.querySelector(':scope > .screen .nowcard'); if (!card) return;
+  card.classList.remove('scrubbing');
+  const p = cardPos(), line = card.querySelector('.ruler .pline i'), knob = card.querySelector('.ruler .knob'), clock = card.querySelector('.js-t'), r = card.querySelector('.ruler');
+  if (line) line.style.setProperty('--p', p);
+  if (knob) knob.style.setProperty('--p', p);
+  if (clock) clock.textContent = fmt(p * DUR);
+  if (r) { r.setAttribute('aria-valuenow', Math.round(p * DUR)); r.setAttribute('aria-valuetext', posText(p * DUR)); }
+}
+// One pointer at a time. A tap (no more than 8 px of travel) jumps. A drag that goes 8 px across before 12 px down is a
+// scrub: the knob follows and the jump lands on release. One that goes down first belongs to the list, and a cancelled
+// one (the browser taking the pan) changes nothing. Listeners sit on window, so a re-render mid-drag loses nothing.
+let RG = null;
+const rulerP = x => { const r = vp.querySelector(':scope > .screen .nowcard .ruler'); if (!r) return null; const b = r.getBoundingClientRect(); return b.width ? Math.max(0, Math.min(1, (x - b.left) / b.width)) : null; };
+function bindRuler(){
+  const r = vp.querySelector(':scope > .screen .nowcard .ruler'); if (!r) return;
+  r.onpointerdown = e => {
+    if (e.button > 0) return;
+    RG = { id: e.pointerId, x: e.clientX, y: e.clientY, mode: 'wait' };
+    try { r.setPointerCapture(e.pointerId); } catch (err) {}
+  };
+  // keys step a twentieth of the article; Home and End go to the first and last word
+  r.onkeydown = e => {
+    const k = e.key, p = cardPos();
+    const to = k === 'ArrowRight' || k === 'ArrowUp' ? p + .05 : k === 'ArrowLeft' || k === 'ArrowDown' ? p - .05 : k === 'Home' ? 0 : k === 'End' ? 1 : null;
+    if (to == null) return;
+    e.preventDefault();
+    seekTo(Math.max(0, Math.min(1, to)), true);
+  };
+}
+window.addEventListener('pointermove', e => {
+  const g = RG; if (!g || g.id !== e.pointerId) return;
+  const dx = Math.abs(e.clientX - g.x), dy = Math.abs(e.clientY - g.y);
+  if (g.mode === 'wait') {
+    if (dy >= 12 && dx < 8) { RG = null; return; }   // down first: the list's
+    if (dx >= 8 && (dy < 12 || dx / 8 > dy / 12)) g.mode = 'scrub';
+    else if (dy >= 12) { RG = null; return; }
+  }
+  if (g.mode === 'scrub') { const p = rulerP(e.clientX); if (p != null) scrubShow(p); }
+});
+window.addEventListener('pointerup', e => {
+  const g = RG; if (!g || g.id !== e.pointerId) return;
+  RG = null;
+  const p = rulerP(e.clientX);
+  if (g.mode === 'scrub') { if (p != null) seekTo(p, false); else { S.scrub = null; render(); } }
+  else if (Math.hypot(e.clientX - g.x, e.clientY - g.y) <= 8 && p != null) seekTo(p, true);
+});
+window.addEventListener('pointercancel', e => {
+  const g = RG; if (!g || g.id !== e.pointerId) return;
+  RG = null;
+  if (g.mode === 'scrub' || S.scrub) scrubClear();
+});
+// a drag frozen by its jump (listen-scrub) holds until the next touch anywhere else
+vp.addEventListener('pointerdown', e => {
+  if (!S.scrub || RG || e.target.closest('.nowcard .ruler')) return;
+  scrubClear();
+}, true);
 // pushed screens: the large title fades into the pinned bar once it scrolls under it (fix 15)
 function bindBarTitle(){
   if (barIO) { barIO.disconnect(); barIO = null; }
@@ -4048,8 +4222,9 @@ function motionAfter(sn, kind, entering){
 }
 
 // keep keyboard focus on the same control when a render rebuilds it
-const FOCUS_KEYS = ['playitem', 'skip', 'rate', 'size', 'rtheme', 'wpm', 'rsvpSent', 'rsvpToggle', 'youAct'];
+const FOCUS_KEYS = ['playitem', 'cue', 'skip', 'rate', 'size', 'rtheme', 'wpm', 'rsvpSent', 'rsvpToggle', 'youAct'];
 function focusKey(el){
+  if (el && el.matches && el.matches('.nowcard .ruler') && vp.contains(el)) return '.nowcard .ruler';   // the Position slider
   if (!el || el.tagName !== 'BUTTON' || !vp.contains(el)) return null;
   if (el.matches('.js-pp')) return el.closest('.nowcard') ? '.nowcard .js-pp' : '.mini .js-pp';
   if (el.dataset.listen !== undefined) return '.mini .js-pp';
@@ -4162,6 +4337,7 @@ function render(){
   bindYou();
   const sg = document.getElementById('sugg'); if (sg) sg.onpointerdown = e => e.preventDefault();
   bindListenMini();
+  bindRuler();
   bindBarTitle();
   if (S.restoreScroll != null) { if (newScroll) newScroll.scrollTop = S.restoreScroll; S.restoreScroll = null; }
   else if (keepTop && newScroll) newScroll.scrollTop = keepTop;
@@ -4350,7 +4526,7 @@ function openItem(id, back){
 vp.addEventListener('click', e => {
   // the launch screen takes every tap while it holds, and a tap ends the hold (decision 97)
   if (e.target.closest('[data-launch-lift]')) { S.launchLift?.(); return; }
-  const t = e.target.closest('[data-keep-copies],[data-tab],[data-list],[data-go],[data-back],[data-clear],[data-sheet],[data-close],[data-rtheme],[data-size],[data-delete],[data-undo],[data-undo-share],[data-readnow],[data-archive-open],[data-next],[data-stop],[data-play],[data-skip],[data-rate],[data-listen],[data-playall],[data-playitem],[data-open-audio],[data-stop-audio],[data-rsvp],[data-rsvp-exit],[data-rsvp-toggle],[data-rsvp-sent],[data-wpm],[data-rsvp-archive],[data-rsvp-unarchive],[data-new],[data-onb-go],[data-allow-camera],[data-perm],[data-open-settings],[data-paste],[data-sugg],[data-code-continue],[data-code-retry],[data-nostr],[data-nostr-skip],[data-link-go],[data-import],[data-open],[data-rowmenu],[data-row-restore],[data-row-delete],[data-unarchive-open],[data-orig],[data-orig-close],[data-copylink],[data-openbrowser]');
+  const t = e.target.closest('[data-keep-copies],[data-tab],[data-list],[data-go],[data-back],[data-clear],[data-sheet],[data-close],[data-rtheme],[data-size],[data-delete],[data-undo],[data-undo-share],[data-readnow],[data-archive-open],[data-next],[data-stop],[data-play],[data-skip],[data-rate],[data-listen],[data-playall],[data-playitem],[data-cue],[data-open-audio],[data-stop-audio],[data-rsvp],[data-rsvp-exit],[data-rsvp-toggle],[data-rsvp-sent],[data-wpm],[data-rsvp-archive],[data-rsvp-unarchive],[data-new],[data-onb-go],[data-allow-camera],[data-perm],[data-open-settings],[data-paste],[data-sugg],[data-code-continue],[data-code-retry],[data-nostr],[data-nostr-skip],[data-link-go],[data-import],[data-open],[data-rowmenu],[data-row-restore],[data-row-delete],[data-unarchive-open],[data-orig],[data-orig-close],[data-copylink],[data-openbrowser]');
   if (!t || t.closest('.ghost')) return;
   const d = t.dataset;
   if (d.stop !== undefined) return;
@@ -4527,6 +4703,7 @@ vp.addEventListener('click', e => {
     if (S.audio && S.audio.id === id) S.audio.playing = !S.audio.playing;
     else startAudio(id);
   }
+  if (d.cue) { cueItem(+d.cue); return; }
   if (d.stopAudio !== undefined) { S.audio = null; S.playAll = false; S.queue = null; }   // render() plays the player's exit
   if (d.openAudio !== undefined && S.audio) {
     // the mini's title, the Now playing title and the lock screen open the Reader at the spoken word; ← returns here (Q7)
@@ -4576,7 +4753,7 @@ function jumpTo(b){
   document.querySelectorAll('.statusbar .plates').forEach(p => p.remove()); document.querySelectorAll('.plating').forEach(p => p.classList.remove('plating'));
   S.items = seed(); S.toast = null; S.sheet = null; S.online = true; S.savesMode = 'normal'; S.list = 'unread'; S.query = '';
   S.readerMode = 'ok'; S.readerId = 2; S.screen = 'saves'; S.readerBack = null; S.iab = 'page'; S.noWordTiming = false; S.nostrLink = '';
-  S.audio = null; S.played = []; S.playAll = false; S.queue = null; S.rate = 1; S.lock = false; S.tab = 'saves'; S.host = false; S.rowId = null; S.sheetOpener = null;
+  S.audio = null; S.played = []; S.playAll = false; S.queue = null; S.cued = null; S.scrub = null; RG = null; S.rate = 1; S.lock = false; S.tab = 'saves'; S.host = false; S.rowId = null; S.sheetOpener = null;
   S.listenMini = false; S.playerEnter = false; S.restoreScroll = null; S.restoreListenMini = false; S.searchFocus = false;
   S.shareRemoved = false; S.shareT = null; S.lastKey = null; S.lastSheet = null; S.lastNav = null; S.navHint = null;
   S.exiting = null; S.opened = null; S.plate = null; S.rowExit = null; S.skipFx = null; S.sizeAnchor = null; S.searchReturn = null; S.rsvpGlide = null;
@@ -4640,13 +4817,19 @@ function jumpTo(b){
   if (j === 'mini-reader') { listenSeed(2, .34); S.screen = 'reader'; S.readerId = 1; }
   if (j === 'mini') listenSeed(2, .34);
   if (j === 'listen' || j === 'listen-scrolled' || j === 'listen-reader') { S.tab = S.screen = 'listen'; listenSeed(2, .34); }
+  // decision 115: article 1 was playing and row 3's body was tapped: the card holds article 3, ready ("Up next") at its
+  // place; article 1 stopped where it was, its place kept, and the mini player went with the session
+  if (j === 'listen-cued') { S.tab = S.screen = 'listen'; listenSeed(1, .45); render(); cueItem(3); return; }
+  // decision 115: a drag along the ruler held at about 60 % across, the knob and the time at it showing
+  if (j === 'listen-scrub') { S.tab = S.screen = 'listen'; listenSeed(2, .34); S.scrub = { p: .6 }; }
   if (j === 'listen-scrolled') {
     // the Now playing card has scrolled away, so the mini sits at bottom 72 (Q3a)
     S.listenMini = true; render();
     const sc = vp.querySelector('.screen > .scroll'); if (sc) sc.scrollTop = sc.scrollHeight;
     return;
   }
-  if (j === 'listen-reader') { render(); openItem(1, backHere()); return; }   // ← returns to Listen (Q7)
+  // the card's title opens the card's own article at the spoken word, as data-open-audio does; ← returns to Listen (Q7)
+  if (j === 'listen-reader') { render(); S.readerBack = backHere(); S.readerId = S.audio.id; S.readerMode = 'ok'; S.screen = 'reader'; S.scrollToWord = true; }
   if (j === 'listen-empty') { S.tab = S.screen = 'listen'; S.items.forEach(i => { i.archived = true; }); }
   // no session: the card holds the last played article still in Unread, or the top of Unread (decision 111)
   if (j === 'listen-ready') { S.tab = S.screen = 'listen'; S.played = [8, 2, 1]; }
