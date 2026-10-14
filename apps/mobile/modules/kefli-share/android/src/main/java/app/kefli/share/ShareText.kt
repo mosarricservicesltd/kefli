@@ -29,11 +29,14 @@ object ShareText {
     return if (links.isEmpty()) text else links.joinToString("\n")
   }
 
-  /** The web addresses of the text's links, each once, in the order they appear: the last LINKS of them. */
+  /**
+   * The web addresses of the text's links, each once, in the order they appear: the last LINKS of them. An address is
+   * trimmed, as a browser trims a link's (`href=" https://…"`).
+   */
   private fun linksOf(s: Spanned): List<String> =
     s.getSpans(0, s.length, URLSpan::class.java)
       .sortedBy { s.getSpanStart(it) }
-      .mapNotNull { it.url }
+      .mapNotNull { it.url?.trim() }
       .filter { it.startsWith("http://") || it.startsWith("https://") }
       .distinct()
       .takeLast(LINKS)

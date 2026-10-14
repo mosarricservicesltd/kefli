@@ -67,7 +67,7 @@ describe('styled text as the spool keeps it (8.5)', () => {
     expect(of).toContain('if (text.contains("http://") || text.contains("https://")) return text');
     expect(of).toContain('return if (links.isEmpty()) text else links.joinToString("\\n")');
     const links = memberOf(st, 'linksOf');
-    const steps = ['getSpans(0, s.length, URLSpan::class.java)', '.sortedBy { s.getSpanStart(it) }', '.mapNotNull { it.url }', '.filter { it.startsWith("http://") || it.startsWith("https://") }', '.distinct()', '.takeLast(LINKS)'].map((s) => links.indexOf(s));
+    const steps = ['getSpans(0, s.length, URLSpan::class.java)', '.sortedBy { s.getSpanStart(it) }', '.mapNotNull { it.url?.trim() }', '.filter { it.startsWith("http://") || it.startsWith("https://") }', '.distinct()', '.takeLast(LINKS)'].map((s) => links.indexOf(s));
     expect(steps.every((at) => at >= 0)).toBe(true);
     expect([...steps].sort((a, b) => a - b)).toEqual(steps);
     // as many as the sheet tries, from the last
