@@ -35,9 +35,16 @@ export function uploadTimeoutMs(bytes: number): number {
   return 20_000 + Math.ceil(bytes / 32_768) * 1000;
 }
 
-/** fetch with a time limit: past it, the request is aborted and the call rejects. */
+/**
+ * fetch with a time limit: past it, the request is aborted and the call rejects, even from a fetch that pays the signal no
+ * heed. The signal aborts reading the body too.
+ */
 export function timed(ms: number, get: typeof fetch = fetch): typeof fetch {
-  return (input, init) => get(input, { ...init, signal: AbortSignal.timeout(ms) });
+  return (input, init) => {
+    const signal = AbortSignal.timeout(ms);
+    const gone = new Promise<never>((_ok, fail) => signal.addEventListener('abort', () => fail(signal.reason), { once: true }));
+    return Promise.race([get(input, { ...init, signal }), gone]);
+  };
 }
 
 /**

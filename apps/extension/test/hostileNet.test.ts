@@ -49,6 +49,15 @@ describe('defaults.json from an operator that misbehaves', () => {
     expect(r.ms).toBeLessThan(5000);
   });
 
+  test('one whose fetch pays the time limit no heed is given up on all the same', async () => {
+    const deaf = (() => new Promise(() => undefined)) as unknown as typeof fetch;
+    const store = memoryStore();
+    await store.set(KEYS.defaults, DEFAULTS);
+    expect(await timed(loadDefaults(store, 'u', deaf, 50))).toMatchObject({ rejected: false, value: DEFAULTS });
+    const o = await newOffer(device, DEFAULTS, 'Chrome on a Mac', webCrypto, NOW);
+    expect(await timed(postOffer(device, DEFAULTS, o, webCrypto, deaf, 50))).toMatchObject({ rejected: true });
+  });
+
   test('an answer that never ends is cut off as it is read, and the kept copy stands in', async () => {
     const store = memoryStore();
     await store.set(KEYS.defaults, DEFAULTS);
