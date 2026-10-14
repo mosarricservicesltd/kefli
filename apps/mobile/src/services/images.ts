@@ -55,6 +55,12 @@ export const IMAGE_UA = 'Mozilla/5.0 (Linux; Android 17; Pixel 10a) AppleWebKit/
 /** A page's 20 s (5.4), over the headers and the whole body. */
 export const IMAGE_TIMEOUT_MS = 20_000;
 
+/**
+ * The formats asked for: only those kept (imageKind). Naming AVIF first, as a browser does, had servers that choose
+ * by what is asked for send AVIF, which the store then refused, so their images never showed.
+ */
+export const IMAGE_ACCEPT = 'image/webp,image/png,image/jpeg,image/gif;q=0.9,*/*;q=0.5';
+
 /** skipped: not fetched, as not this phone's to ask for, or on its way already. */
 export type Fetched = 'ok' | 'failed' | 'offline' | 'skipped';
 /** What a run counts: a failure by the deadline is slow, and a run of them ends it. */
@@ -77,7 +83,7 @@ function room(p: ImagePorts, owner: string, incoming: number, hash: string): Ima
 /** The image's bytes, or how it failed: a redirect onto this phone's network is not kept (F26). */
 async function download(p: ImagePorts, url: string): Promise<Uint8Array | Exclude<Counted, 'ok'>> {
   try {
-    const o = await open(p.fetch, url, { headers: { 'User-Agent': IMAGE_UA, Accept: 'image/avif,image/webp,image/png,image/jpeg,image/gif;q=0.9,*/*;q=0.5' } }, IMAGE_TIMEOUT_MS);
+    const o = await open(p.fetch, url, { headers: { 'User-Agent': IMAGE_UA, Accept: IMAGE_ACCEPT } }, IMAGE_TIMEOUT_MS);
     if (!o.res.ok || (o.res.url && !isPublicWebUrl(o.res.url))) {
       o.done();
       return 'failed';

@@ -242,6 +242,19 @@ describe('article images a page can make too many, too big or too slow', () => {
     expect(w.files.size).toBe(0);
   });
 
+  test('a server choosing the format by what is asked for sends one the Reader keeps', async () => {
+    const w = world();
+    w.add(1);
+    // as image CDNs do: AVIF to whoever names it, else JPEG; the store keeps PNG, JPEG, GIF and WebP only
+    const avif = new Uint8Array([0, 0, 0, 0x1c, ...[...'ftypavif'].map((c) => c.charCodeAt(0)), 0, 0, 0, 0]);
+    w.ports.fetch = (async (_url: string, init?: RequestInit) => {
+      const accept = new Headers(init?.headers).get('accept') ?? '';
+      return new Response((accept.includes('image/avif') ? avif : jpeg(640, 480)) as never);
+    }) as never;
+    expect(await fetchImage(w.ports, PK, 'https://cdn.example.com/photo', h(1))).toBe('ok');
+    expect(getImage(w.db, 'https://cdn.example.com/photo')).toMatchObject({ w: 640, h: 480 });
+  });
+
   test('the Reader opening an article twice fetches each image once', async () => {
     const w = world();
     w.add(1);
