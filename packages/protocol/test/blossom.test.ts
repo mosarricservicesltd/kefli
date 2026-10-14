@@ -1,5 +1,5 @@
 import { verifyEvent } from 'nostr-tools/pure';
-import { LocalSigner, blossomAuth, deleteBlob, mirrorBlob, uploadBlob } from '../src';
+import { LocalSigner, blossomAuth, deleteBlob, mirrorBlob, readFigures, uploadBlob } from '../src';
 import { nodeCrypto } from '../src/node';
 
 const SHA = 'ab'.repeat(32);
@@ -41,6 +41,32 @@ describe('Blossom (contract 4.2, 5)', () => {
     expect(await uploadBlob('http://b', new Uint8Array(), SHA, signer(), fakeFetch(401, 'no').f)).toMatchObject({ permanent: false });
     expect(await uploadBlob('http://b', new Uint8Array(), SHA, signer(), fakeFetch(429, 'slow').f)).toMatchObject({ permanent: false });
     expect(await uploadBlob('http://b', new Uint8Array(), SHA, signer(), fakeFetch(503, 'down').f)).toMatchObject({ permanent: false });
+  });
+
+  test("the operator's refusals for room carry their reason and the library's figures (contract 5, v1.12)", async () => {
+    const figures = { quota: 52_428_800, used: 52_400_000, daily: 20_971_520, today: 1_000 };
+    const quota = fakeFetch(413, { v: 1, error: 'quota', ...figures }, { 'x-reason': 'quota' });
+    expect(await uploadBlob('http://b', new Uint8Array(), SHA, signer(), quota.f)).toEqual({ ok: false, status: 413, permanent: true, reason: 'quota', figures });
+    // the body's error stands in for a missing X-Reason, and the figures come whichever names the reason
+    const daily = fakeFetch(413, { v: 1, error: 'daily', ...figures, today: 20_971_000 });
+    expect(await uploadBlob('http://b', new Uint8Array(), SHA, signer(), daily.f)).toMatchObject({ reason: 'daily', figures: { today: 20_971_000 } });
+    // too_large carries no figures; nor does a body whose figures aren't whole numbers of bytes
+    const big = fakeFetch(413, { v: 1, error: 'too_large' }, { 'x-reason': 'too_large' });
+    expect(await uploadBlob('http://b', new Uint8Array(), SHA, signer(), big.f)).toEqual({ ok: false, status: 413, permanent: true, reason: 'too_large' });
+    const odd = fakeFetch(413, { v: 1, error: 'quota', ...figures, used: -1 });
+    expect(await uploadBlob('http://b', new Uint8Array(), SHA, signer(), odd.f)).not.toHaveProperty('figures');
+    // a proxy's 413 page, with no reason of the operator's, keeps its text as before
+    const proxy = fakeFetch(413, '<html>Request Entity Too Large</html>');
+    expect(await uploadBlob('http://b', new Uint8Array(), SHA, signer(), proxy.f)).toEqual({ ok: false, status: 413, permanent: true, reason: '<html>Request Entity Too Large</html>' });
+    // a disk below its floor is a server error, not a refusal
+    expect(await uploadBlob('http://b', new Uint8Array(), SHA, signer(), fakeFetch(507, { v: 1, error: 'storage' }).f)).toMatchObject({ status: 507, permanent: false, reason: 'storage' });
+  });
+
+  test('figures are read only when all four are there', () => {
+    expect(readFigures({ quota: 1, used: 0, daily: 2, today: 0 })).toEqual({ quota: 1, used: 0, daily: 2, today: 0 });
+    for (const bad of [null, 'x', [], { quota: 1, used: 0, daily: 2 }, { quota: 1.5, used: 0, daily: 2, today: 0 }, { quota: '1', used: 0, daily: 2, today: 0 }]) {
+      expect(readFigures(bad)).toBeNull();
+    }
   });
 
   test('mirror asks the mirror to fetch the url', async () => {

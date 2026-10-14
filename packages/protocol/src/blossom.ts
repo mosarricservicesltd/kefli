@@ -24,24 +24,52 @@ export async function blossomAuth(signer: Signer, verb: BlossomVerb, sha256: str
   return `Nostr ${base64.encode(utf8ToBytes(JSON.stringify(event)))}`;
 }
 
+/**
+ * A library's fair use in bytes (contract 5, 6; v1.12): its quota and what its blobs take of it, the most its uploads
+ * may add in any 24 hours and what they added in the last 24. A 413 quota or daily carries them, as GET /account does.
+ */
+export type AccountFigures = { quota: number; used: number; daily: number; today: number };
+
+const FIGURES = ['quota', 'used', 'daily', 'today'] as const;
+
+/** The figures in a parsed body, when all four are whole, non-negative numbers of bytes; otherwise null. */
+export function readFigures(body: unknown): AccountFigures | null {
+  if (!body || typeof body !== 'object') return null;
+  const o = body as Record<string, unknown>;
+  if (!FIGURES.every((k) => Number.isSafeInteger(o[k]) && (o[k] as number) >= 0)) return null;
+  return { quota: o.quota as number, used: o.used as number, daily: o.daily as number, today: o.today as number };
+}
+
 export type BlossomOutcome =
   | { ok: true; url: string }
-  /** permanent: a 4xx other than 401 and 429, which a mirror counts as refusing (contract 4.2). */
-  | { ok: false; status: number; permanent: boolean; reason: string };
+  /**
+   * permanent: a 4xx other than 401 and 429, which a mirror counts as refusing (contract 4.2). reason: X-Reason, else the
+   * body's error (BUD-01), so quota, daily or too_large from the operator (contract 5). figures: a 413's, when it has them.
+   */
+  | { ok: false; status: number; permanent: boolean; reason: string; figures?: AccountFigures };
 
 function outcome(status: number, reason: string): BlossomOutcome {
   // Written 500 > status: lizard, which the code-gate uses, reads "status <" as the start of a generic.
   return { ok: false, status, permanent: status >= 400 && 500 > status && status !== 401 && status !== 429, reason };
 }
 
-async function reason(res: Response): Promise<string> {
-  const header = res.headers.get('x-reason');
-  if (header) return header;
+function parsed(text: string): Record<string, unknown> | null {
   try {
-    return (await res.text()).slice(0, 200);
+    const v: unknown = JSON.parse(text);
+    return v && typeof v === 'object' ? (v as Record<string, unknown>) : null;
   } catch {
-    return '';
+    return null;
   }
+}
+
+/** A refusal read whole: its reason from X-Reason or the body's error, and the body's figures if it carries them. */
+async function refusal(res: Response): Promise<BlossomOutcome> {
+  const text = await res.text().catch(() => '');
+  const body = parsed(text);
+  const error = typeof body?.error === 'string' ? body.error : null;
+  const figures = readFigures(body);
+  const out = outcome(res.status, res.headers.get('x-reason') || error || text.slice(0, 200));
+  return figures ? { ...out, figures } : out;
 }
 
 /** PUT /upload on the operator server. The descriptor's sha256 must be the blob's. */
@@ -51,7 +79,7 @@ export async function uploadBlob(server: string, blob: Uint8Array, sha256: strin
     headers: { Authorization: await blossomAuth(signer, 'upload', sha256), 'Content-Type': 'application/octet-stream', 'X-SHA-256': sha256 },
     body: blob as unknown as BodyInit,
   });
-  if (!res.ok) return outcome(res.status, await reason(res));
+  if (!res.ok) return refusal(res);
   const d = (await res.json()) as { sha256?: string; url?: string };
   if (d.sha256 !== sha256) return outcome(502, 'descriptor names another blob');
   return { ok: true, url: d.url ?? `${trim(server)}/${sha256}` };
@@ -64,7 +92,7 @@ export async function mirrorBlob(mirror: string, url: string, sha256: string, si
     headers: { Authorization: await blossomAuth(signer, 'upload', sha256), 'Content-Type': 'application/json' },
     body: JSON.stringify({ url }),
   });
-  if (!res.ok) return outcome(res.status, await reason(res));
+  if (!res.ok) return refusal(res);
   const d = (await res.json()) as { sha256?: string; url?: string };
   if (d.sha256 !== sha256) return outcome(502, 'mirror holds another blob');
   return { ok: true, url: d.url ?? `${trim(mirror)}/${sha256}` };
@@ -74,5 +102,5 @@ export async function mirrorBlob(mirror: string, url: string, sha256: string, si
 export async function deleteBlob(server: string, sha256: string, signer: Signer, get: typeof fetch = fetch): Promise<BlossomOutcome> {
   const res = await get(`${trim(server)}/${sha256}`, { method: 'DELETE', headers: { Authorization: await blossomAuth(signer, 'delete', sha256) } });
   if (res.ok || res.status === 404) return { ok: true, url: `${trim(server)}/${sha256}` };
-  return outcome(res.status, await reason(res));
+  return refusal(res);
 }
