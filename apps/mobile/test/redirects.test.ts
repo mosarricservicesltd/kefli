@@ -2,12 +2,18 @@
 // hop's address checked before the phone asks for it, ten at most; a hop that fails ends the fetch as a failed one.
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { xEmbedUrl } from '@kefli/protocol';
+import { LocalSigner, encryptText, normaliseMarkdown, xEmbedUrl } from '@kefli/protocol';
+import { nodeCrypto } from '@kefli/protocol/node';
+import { MB, accountFigures } from '../src/data/account';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
-import { Blocked, MAX_REDIRECTS, fromFiles, open, redirectTo } from '../src/net/http';
+import { textQueue } from '../src/data/sync';
+import { Blocked, MAX_REDIRECTS, WEB_HOPS, fromFiles, loopback, open, redirectTo, serverHops } from '../src/net/http';
+import { checkAccount } from '../src/services/account';
 import { fetchArticleImages, imageState, type ImagePorts } from '../src/services/images';
+import { readBlob } from '../src/services/inbox';
 import { DESKTOP_UA, PAGE_TIMEOUT_MS, fetchPage, fetchable, type PagePorts, type ParserResult } from '../src/services/page';
+import { fetchText, type SyncPorts } from '../src/services/sync';
 import { checkXPost, resolveTco } from '../src/services/xpost';
 import { memoryDb } from './sqlite';
 
@@ -342,6 +348,130 @@ describe("images and X's embed take the same hops (F26, 5.4)", () => {
     const w = web({ [xEmbedUrl(post)]: { status: 302, location: 'http://10.1.1.1/' }, 'http://10.1.1.1/': { body: '{"html":""}' } });
     expect(await checkXPost({ fetch: w.f }, post)).toEqual({ kind: 'xfail' });
     expect(w.urls()).toEqual([xEmbedUrl(post)]);
+  });
+});
+
+describe("a text's blob servers, the inbox's and Kefli's API take the hops too (7.1)", () => {
+  const PK = 'cd'.repeat(32);
+  const HASH = '02'.repeat(32);
+  /** The addresses on the phone's own network a hostile server's redirect may name, each serving what was asked for. */
+  const INSIDE = ['http://192.168.1.1/', 'http://10.0.0.5/', 'http://127.0.0.1:8080/', 'http://localhost/', 'http://[::1]/', 'http://169.254.169.254/'];
+
+  /** A save whose text is on servers, as another phone's arrives, and sync's ports for its text over a web of routes. */
+  async function textWorld(servers: string[], routes: (sha: string, blob: Uint8Array) => Record<string, Hop>, localStack?: boolean) {
+    const db = memoryDb();
+    migrate(db);
+    ensureIdentityRow(db, 1, PK, 'new', true);
+    const enc = await encryptText(normaliseMarkdown('# A text\n\nA few words of it.\n'), nodeCrypto);
+    db.run(`INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, text_sha256, text_key, text_nonce, text_servers)
+      VALUES (?, ?, 'https://e.com/a', 1, 'unread', 'remote', 'sync', ?, ?, ?, ?)`, PK, HASH, enc.text.sha256, enc.text.key, enc.text.nonce, JSON.stringify(servers));
+    const w = web(routes(enc.text.sha256, enc.blob));
+    const written: string[] = [];
+    const ports: SyncPorts = {
+      db, now: () => 1_000, signer: async () => null, query: async () => [], fetch: w.f, crypto: nodeCrypto,
+      defaults: async () => ({ operator: { relay: 'wss://op.example', blossom: servers[0] }, relays: [], indexer: [], mirrors: [] }),
+      files: { writeText: (hash) => void written.push(hash), removeText: () => undefined, removeAll: () => undefined },
+      ...(localStack === undefined ? {} : { localStack }),
+    };
+    return { w, ports, job: textQueue(db, PK)[0], written, sha: enc.text.sha256 };
+  }
+
+  test('loopback is localhost, 127.0.0.0/8 and ::1 as the URL parser writes them; a local stack’s hops may go there, no other’s', () => {
+    expect(['http://localhost:3447/a', 'http://LOCALHOST./a', 'http://127.0.0.1:8447/', 'http://127.9.9.9/', 'http://[::1]:3448/', 'http://[0:0::1]/', 'http://0x7f.1/'].map(loopback))
+      .toEqual([true, true, true, true, true, true, true]);
+    expect(['http://localhost.example/', 'http://192.168.1.1/', 'http://[::2]/', 'ws://localhost:7447', 'file:///localhost', 'http://filesystem.local/x'].map(loopback))
+      .toEqual([false, false, false, false, false, false]);
+    expect(serverHops(false)).toBe(WEB_HOPS);
+    expect([serverHops(true).max, serverHops(true).allow('http://localhost:3448/x'), serverHops(false).allow('http://localhost:3448/x')]).toEqual([MAX_REDIRECTS, true, false]);
+    // the local stack's hops are the web's and loopback only: never the rest of the phone's network, nor its files
+    expect(['http://192.168.1.1/', 'http://10.0.0.1/', 'http://printer.local/', 'http://filesystem.localdata/x', 'https://news.example/'].map(serverHops(true).allow))
+      .toEqual([false, false, false, false, true]);
+  });
+
+  test("a blob server's redirect into the phone's network is never asked: the text comes from the next server, or waits", async () => {
+    for (const inside of INSIDE) {
+      const t = await textWorld(['https://mirror.example', 'https://blossom.example'], (sha, blob) => ({
+        [`https://mirror.example/${sha}`]: { status: 302, location: `${inside}${sha}` }, [`${inside}${sha}`]: { body: blob },
+        [`https://blossom.example/${sha}`]: { body: blob },
+      }));
+      expect([inside, await fetchText(t.ports, t.job)]).toEqual([inside, 'ok']);
+      expect([inside, t.w.urls()]).toEqual([inside, [`https://mirror.example/${t.sha}`, `https://blossom.example/${t.sha}`]]);
+      expect(t.w.asked.every((a) => a.init.redirect === 'manual')).toBe(true);
+    }
+    // the only server sending the phone there: the text waits for the next sync, as for a server not answering
+    const alone = await textWorld(['https://mirror.example'], (sha, blob) => ({
+      [`https://mirror.example/${sha}`]: { status: 307, location: `http://192.168.1.1/${sha}` }, [`http://192.168.1.1/${sha}`]: { body: blob },
+    }));
+    expect(await fetchText(alone.ports, alone.job)).toBe('offline');
+    expect(alone.w.urls()).toEqual([`https://mirror.example/${alone.sha}`]);
+    expect(alone.written).toEqual([]);
+  });
+
+  test("a blob server's public redirect is followed, as OkHttp followed it; on the local stack a loopback one too", async () => {
+    const cdn = await textWorld(['https://mirror.example'], (sha, blob) => ({
+      [`https://mirror.example/${sha}`]: { status: 301, location: `https://cdn.example/b/${sha}` }, [`https://cdn.example/b/${sha}`]: { body: blob },
+    }));
+    expect(await fetchText(cdn.ports, cdn.job)).toBe('ok');
+    expect(cdn.written).toEqual([HASH]);
+    const routes = (sha: string, blob: Uint8Array): Record<string, Hop> => ({
+      [`http://localhost:3447/${sha}`]: { status: 302, location: `http://127.0.0.1:3448/${sha}` }, [`http://127.0.0.1:3448/${sha}`]: { body: blob },
+    });
+    const local = await textWorld(['http://localhost:3447'], routes, true);
+    expect(await fetchText(local.ports, local.job)).toBe('ok');
+    expect(local.w.urls()).toEqual([`http://localhost:3447/${local.sha}`, `http://127.0.0.1:3448/${local.sha}`]);
+    // a release build's: the same redirect is refused, the loopback address never asked
+    const release = await textWorld(['http://localhost:3447'], routes);
+    expect(await fetchText(release.ports, release.job)).toBe('offline');
+    expect(release.w.urls()).toEqual([`http://localhost:3447/${release.sha}`]);
+  });
+
+  test("the inbox blob's server redirecting into the phone's network is never asked: the capture is read again later", async () => {
+    const enc = await encryptText('<h1>Captured</h1>', nodeCrypto);
+    const html = { ...enc.text, server: 'https://blossom.example' };
+    for (const inside of INSIDE) {
+      const w = web({ [`https://blossom.example/${enc.text.sha256}`]: { status: 307, location: `${inside}x` }, [`${inside}x`]: { body: enc.blob } });
+      expect([inside, await readBlob({ fetch: w.f, crypto: nodeCrypto }, html)]).toEqual([inside, { kind: 'failed', down: true }]);
+      expect(w.urls()).toEqual([`https://blossom.example/${enc.text.sha256}`]);
+    }
+    const local = { ...enc.text, server: 'http://localhost:3447' };
+    const routes = { [`http://localhost:3447/${enc.text.sha256}`]: { status: 302, location: 'http://localhost:3449/x' }, 'http://localhost:3449/x': { body: enc.blob } };
+    expect(await readBlob({ fetch: web(routes).f, crypto: nodeCrypto, localStack: true }, local)).toEqual({ kind: 'html', html: '<h1>Captured</h1>', size: enc.blob.length });
+    expect(await readBlob({ fetch: web(routes).f, crypto: nodeCrypto }, local)).toEqual({ kind: 'failed', down: true });
+  });
+
+  /** GET /account over a web of routes, as Advanced asks it. */
+  function accountWorld(routes: Record<string, Hop>) {
+    const db = memoryDb();
+    migrate(db);
+    const own = new LocalSigner(nodeCrypto.randomBytes(32));
+    ensureIdentityRow(db, 1_000, own.pubkey(), 'new', true);
+    const w = web(routes);
+    const ports = { db, now: () => 1_000, owner: own.pubkey(), api: async () => 'https://api.example', signer: async () => own, fetch: w.f, crypto: nodeCrypto };
+    return { w, ports, db, owner: own.pubkey() };
+  }
+  const FIGURES = JSON.stringify({ v: 1, quota: 50 * MB, used: 1, daily: 20 * MB, today: 0 });
+  const authorised = (init: RequestInit) => new Headers(init.headers).has('authorization');
+
+  test("Kefli's API redirecting into the phone's network is never asked, and the check fails", async () => {
+    for (const inside of INSIDE) {
+      const a = accountWorld({ 'https://api.example/account': { status: 302, location: `${inside}account` }, [`${inside}account`]: { body: FIGURES } });
+      expect([inside, await checkAccount(a.ports)]).toEqual([inside, 'failed']);
+      expect(a.w.urls()).toEqual(['https://api.example/account']);
+      expect(accountFigures(a.db, a.owner)).toBeNull();
+    }
+  });
+
+  test("the API's NIP-98 header goes to no other origin a redirect names, as OkHttp's own following left it out; its own keeps it", async () => {
+    const away = accountWorld({ 'https://api.example/account': { status: 307, location: 'https://elsewhere.example/account' }, 'https://elsewhere.example/account': { body: FIGURES } });
+    await checkAccount(away.ports);
+    expect(away.w.asked.map((a) => [a.url, authorised(a.init)])).toEqual([['https://api.example/account', true], ['https://elsewhere.example/account', false]]);
+    // another port or scheme is another origin too
+    const port = accountWorld({ 'https://api.example/account': { status: 308, location: 'https://api.example:8443/account' }, 'https://api.example:8443/account': { body: FIGURES } });
+    await checkAccount(port.ports);
+    expect(port.w.asked.map((a) => authorised(a.init))).toEqual([true, false]);
+    const same = accountWorld({ 'https://api.example/account': { status: 308, location: '/v1/account' }, 'https://api.example/v1/account': { body: FIGURES } });
+    expect(await checkAccount(same.ports)).toBe('ok');
+    expect(same.w.asked.map((a) => [a.url, authorised(a.init)])).toEqual([['https://api.example/account', true], ['https://api.example/v1/account', true]]);
   });
 });
 

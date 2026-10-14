@@ -11,7 +11,10 @@
 // to a loopback or link-local address; and since each hop followed here is a fresh request, which expo/fetch answers
 // from the phone's own files when its address begins http://filesystem.local (fromFiles), such a host is refused at
 // every hop as at the first (services/page.ts fetchable). A fetch that follows redirects anyway (React Native's own,
-// under EXPO_PUBLIC_USE_RN_FETCH) has its answer refused when it says it ended somewhere a hop couldn't go.
+// under EXPO_PUBLIC_USE_RN_FETCH) has its answer refused when it says it ended somewhere a hop couldn't go. A text's
+// blob servers, the inbox's and Kefli's API take the same hops (serverHops), so a mirror, a server another app named
+// or a save's text.servers can't send the phone into its own network either; and a hop to another origin is asked
+// without the request's Authorization, as OkHttp's own following and browsers leave it out (RFC 9110, 15.4).
 //
 // Cleartext (7.1): release builds allow none, and OkHttp refuses plain http before it connects. That refusal fails
 // what was asked for (Blocked); read as the network, as it was, it left a save waiting for good. A read that follows
@@ -82,6 +85,27 @@ export function publicWeb(url: string): boolean {
 
 /** The open web's hops: ten at most, each to a public http(s) address (7.1). */
 export const WEB_HOPS: Hops = { max: MAX_REDIRECTS, allow: publicWeb };
+
+// a loopback host as the protocol's URL parser writes it (lowercase, IPv4 in dotted decimal, IPv6 compressed):
+// localhost, with or without its trailing dot, 127.0.0.0/8 and ::1; a string, as the code gate misreads regex literals
+const LOOPBACK = new RegExp('^(?:localhost\\.?|127(?:\\.\\d{1,3}){3}|\\[::1\\])$');
+
+/** Whether url is an http(s) address on the phone's own loopback, as the local stack's servers are (adb reverse). */
+export function loopback(url: string): boolean {
+  return LOOPBACK.test(urlParts(url)?.hostname ?? '');
+}
+
+/** The local stack's hops: ten at most, each to a public address or to loopback, where its servers are. */
+const LOCAL_HOPS: Hops = { max: MAX_REDIRECTS, allow: (url) => publicWeb(url) || loopback(url) };
+
+/**
+ * The hops a blob server's answer or Kefli's API's may take (7.1): a page's (WEB_HOPS), so a mirror, a server another
+ * app named in the 10063 or a save's text.servers can't send the phone to 192.168.1.1; and on the local stack only
+ * (services/config.ts LOCAL_STACK, which the caller passes in), whose servers are on this machine, to loopback too.
+ */
+export function serverHops(localStack: boolean): Hops {
+  return localStack ? LOCAL_HOPS : WEB_HOPS;
+}
 
 /** A response whose body is still under the deadline it was asked for with. */
 export type Opened = {
@@ -175,12 +199,34 @@ async function asked(f: typeof fetch, at: string, from: string, init: RequestIni
   return { res: await f(at, init), at };
 }
 
+/** An address's scheme, host and port, which a hop's is compared with; '' for one that doesn't parse. */
+function originOf(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * The request as a hop from at to next asks it: an Authorization header goes no further than its own origin (RFC 9110,
+ * 15.4), as OkHttp's own following and browsers drop it, so a redirect can't hand a NIP-98 header to another server.
+ */
+function onwards(init: RequestInit, at: string, next: string): RequestInit {
+  const headers = new Headers(init.headers);
+  if (!headers.has('authorization') || originOf(at) === originOf(next)) return init;
+  headers.delete('authorization');
+  return { ...init, headers };
+}
+
 /** The answer at the end of the redirects, each hop asked for afresh under the line; without hops, the fetch's own. */
 async function arrive(f: typeof fetch, url: string, init: RequestInit, line: Line, hops?: Hops): Promise<{ res: Response; url: string }> {
   let at = url;
   let from = '';
+  let ask = init;
   for (let n = 0; ; n++) {
-    const opts: RequestInit = { ...init, credentials: 'omit', signal: line.ctl.signal };
+    const opts: RequestInit = { ...ask, credentials: 'omit', signal: line.ctl.signal };
     const got: Answered = hops ? await asked(f, at, from, { ...opts, redirect: 'manual' }, line) : { res: await f(at, opts), at };
     const next = hops ? redirectTo(got.res, got.at) : null;
     if (next === null) return { res: got.res, url: arrived(got.res, got.at, hops) };
@@ -190,6 +236,7 @@ async function arrive(f: typeof fetch, url: string, init: RequestInit, line: Lin
     if (!hops!.allow(next)) throw new Blocked('redirect');
     if (line.late) throw new TimedOut();
     line.ctl = new AbortController();
+    ask = onwards(ask, got.at, next);
     from = got.at;
     at = next;
   }

@@ -21,7 +21,7 @@ import { absorbRecord, queueRecord } from '../data/devices';
 import { KEEP_COPIES, getSetting } from '../data/settings';
 import { readUserLists, settleUserLists } from './nostrSignIn';
 import { markBacked } from '../data/backup';
-import { TooLarge, open } from '../net/http';
+import { TooLarge, open, serverHops } from '../net/http';
 import {
   heldServerList, indexerRelays, keepListedServers, listServers, recordList, relayEntries, seedGeneratedLists, writeRelays, type DefaultsLike,
 } from '../data/lists';
@@ -46,6 +46,8 @@ export type SyncPorts = {
   /** The article open in the Reader, whose remote position waits. */
   openHash?: () => string | null;
   onHeldWord?: (hash: string, word: number) => void;
+  /** The local stack's build (services/config.ts LOCAL_STACK), whose blob servers a redirect may reach on loopback. */
+  localStack?: boolean;
 };
 
 /** Relays may send fewer than the limit (NIP-01), so paging stops only when a page brings nothing new. */
@@ -224,10 +226,12 @@ type Got = { status: number; bytes: Uint8Array | null };
 /**
  * One blob from one server, the deadline running until the whole body is in (F12, through net/http's open, as pages
  * and images are read): the status, and a 2xx's bytes (null past TEXT_MAX_BYTES, declared or streamed). Throws when
- * the server can't be reached or doesn't finish within TEXT_TIMEOUT_MS.
+ * the server can't be reached or doesn't finish within TEXT_TIMEOUT_MS, and when it redirects where no hop may go
+ * (net/http serverHops): a server named by a save or a 10063, the person's own or another app's, sent the phone on
+ * to 192.168.1.1 as OkHttp followed it, and is now as one that doesn't answer.
  */
 async function getBlob(p: SyncPorts, url: string): Promise<Got> {
-  const o = await open(p.fetch, url, { method: 'GET' }, TEXT_TIMEOUT_MS);
+  const o = await open(p.fetch, url, { method: 'GET' }, TEXT_TIMEOUT_MS, serverHops(p.localStack === true));
   if (!o.res.ok) {
     o.done();
     return { status: o.res.status, bytes: null };

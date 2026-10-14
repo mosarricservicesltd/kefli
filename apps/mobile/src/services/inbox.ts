@@ -31,7 +31,7 @@ import { getCursor, setCursor } from '../data/sync';
 import { parsedOutcome, type PageOutcome, type ParserResult } from './page';
 import { settle, type PendingPorts } from './pending';
 import { PAGE, type Filter } from './sync';
-import { TooLarge, open } from '../net/http';
+import { TooLarge, open, serverHops } from '../net/http';
 
 /** The extension's 2 MB of HTML plus the GCM tag. */
 export const INBOX_MAX_BYTES = 2 * 1_048_576 + 16;
@@ -49,6 +49,8 @@ export type InboxPorts = Pick<PendingPorts, 'db' | 'now' | 'crypto' | 'stage' | 
   /** kefliMarkdown in the parser WebView (C§4.4). */
   markdown: (contentHtml: string, url: string) => Promise<ParserResult>;
   defaults: () => Promise<{ operator: { relay: string; blossom: string } }>;
+  /** The local stack's build (services/config.ts LOCAL_STACK), whose Blossom server a redirect may reach on loopback. */
+  localStack?: boolean;
 };
 
 export type InboxResult = Partial<Record<Outcome, number>>;
@@ -126,12 +128,15 @@ const refused = (status: number): BlobRead => (status === 404 ? GONE : status >=
 
 /**
  * The inbox blob's HTML, or why not. The deadline covers the whole body and the cap is counted as it streams
- * (net/http, F12), so a server that trickles or never ends can't hold the inbox.
+ * (net/http, F12), so a server that trickles or never ends can't hold the inbox. Its redirects are followed only as
+ * far as a hop may go (net/http serverHops), never into the phone's own network; one that would go there fails the
+ * read as a server not answering, and the capture is read again at the next drain.
  */
-export async function readBlob(p: Pick<InboxPorts, 'fetch' | 'crypto'>, html: NonNullable<SaveRequest['html']>): Promise<BlobRead> {
+export async function readBlob(p: Pick<InboxPorts, 'fetch' | 'crypto' | 'localStack'>, html: NonNullable<SaveRequest['html']>): Promise<BlobRead> {
   let blob: Uint8Array;
   try {
-    const o = await open(p.fetch, `${html.server.replace(/\/+$/, '')}/${html.sha256}`, { method: 'GET' }, INBOX_TIMEOUT_MS);
+    const url = `${html.server.replace(/\/+$/, '')}/${html.sha256}`;
+    const o = await open(p.fetch, url, { method: 'GET' }, INBOX_TIMEOUT_MS, serverHops(p.localStack === true));
     if (!o.res.ok) return (o.done(), refused(o.res.status));
     blob = await o.read(INBOX_MAX_BYTES);
   } catch (e) {
