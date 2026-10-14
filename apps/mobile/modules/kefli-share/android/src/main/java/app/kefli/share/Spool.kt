@@ -24,25 +24,25 @@ object Spool {
   private val unwritten = ConcurrentHashMap<String, String>()
 
   /**
-   * An extra as text. An app sharing styled text passes a CharSequence, which getStringExtra reads as null, so the
-   * sheet said That wasn't a link; read as a CharSequence, plain and styled text both arrive. Extras that can't be
+   * An extra as it was sent. An app sharing styled text passes a CharSequence, which getStringExtra reads as null, so
+   * the sheet said That wasn't a link; read as a CharSequence, plain and styled text both arrive. Extras that can't be
    * read at all (a class only the sender has) are no text, rather than a crash before the sheet rises.
    */
-  private fun textExtra(intent: Intent, name: String): String? =
+  private fun charsExtra(intent: Intent, name: String): CharSequence? =
     try {
-      intent.getCharSequenceExtra(name)?.toString()
+      intent.getCharSequenceExtra(name)
     } catch (e: RuntimeException) {
       null
     }
 
-  /** Writes the share and returns its id. Text and subject are kept as sent; nothing is parsed here. */
+  /** Writes the share and returns its id: its text as plain text (ShareText), its subject as sent. The sheet picks the link. */
   fun write(context: Context, intent: Intent, referrer: String?): String {
     val id = UUID.randomUUID().toString()
     val body = JSONObject()
       .put("v", 1)
       .put("id", id)
-      .put("text", textExtra(intent, Intent.EXTRA_TEXT) ?: JSONObject.NULL)
-      .put("subject", textExtra(intent, Intent.EXTRA_SUBJECT) ?: JSONObject.NULL)
+      .put("text", charsExtra(intent, Intent.EXTRA_TEXT)?.let(ShareText::of) ?: JSONObject.NULL)
+      .put("subject", charsExtra(intent, Intent.EXTRA_SUBJECT)?.toString() ?: JSONObject.NULL)
       .put("referrer", referrer ?: JSONObject.NULL)
       .put("receivedAt", System.currentTimeMillis())
       .toString()
