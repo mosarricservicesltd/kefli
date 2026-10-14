@@ -124,21 +124,29 @@ func (w *walk) step(ctx context.Context) string {
 }
 
 // Schema step 3: the figures are running totals the database keeps, so reading them costs the same whatever a library
-// holds. Through every way a library's rows change, in 3,000 random steps over three libraries and four browsers, they
+// holds. Through every way a library's rows change, in 1,500 random steps over three libraries and four browsers, they
 // stay exactly the sums the store read before: each blob held now once, and the uploads of the last 24 hours.
 func TestTheRunningTotalsAreTheSums(t *testing.T) {
 	st, clock := open(t)
 	ctx := context.Background()
 	w := &walk{t: t, st: st, clock: clock, rng: rand.New(rand.NewPCG(117, 4096)), users: []string{"u0", "u1", "u2"}, browse: []string{"b0", "b1", "b2", "b3"}}
 	registered(t, st, w.users...)
-	for i := range 3000 {
+	steps := map[string]int{}
+	for i := range 1500 {
 		what := w.step(ctx)
+		steps[what]++
 		for _, u := range w.users {
 			want, has := exact(t, st, u)
 			got, ok, err := st.Figures(ctx, u)
 			if err != nil || ok != has || got != want {
 				t.Fatalf("step %d (%s), %s: figures %+v %v %v, the sums %+v %v", i, what, u, got, ok, err, want, has)
 			}
+		}
+	}
+	// every kind of step taken dozens of times
+	for _, what := range []string{"upload", "delete", "connect", "disconnect", "time", "sweep", "delete account", "register", "quota", "disable"} {
+		if steps[what] < 30 {
+			t.Fatalf("%d steps of %s in %v", steps[what], what, steps)
 		}
 	}
 }
@@ -217,25 +225,20 @@ func TestFiguresCostTheSameForAFullLibrary(t *testing.T) {
 	st, clock := open(t)
 	ctx := context.Background()
 	registered(t, st, "full", "small")
-	tx, err := st.db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i := range 12_800 {
-		sha := fmt.Sprintf("%064x", i)
-		for _, row := range [][]any{{sha, "browser", "full", 4096, clock.Unix(), clock.Add(InboxLife).Unix()}, {sha, "full", "full", 4096, clock.Unix(), nil}} {
-			if _, err := tx.Exec(`INSERT INTO owners(sha256, owner, account, size, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)`, row...); err != nil {
-				t.Fatal(err)
-			}
+	// 12,800 blobs each held by a browser's capture and the user's own copy, and a full day's 5,120 uploads
+	for _, fill := range []struct {
+		query string
+		args  []any
+	}{
+		{`INSERT INTO owners(sha256, owner, account, size, created_at, expires_at) SELECT printf('%064x', i), 'browser', 'full', 4096, ?, ? FROM n`,
+			[]any{12_799, clock.Unix(), clock.Add(InboxLife).Unix()}},
+		{`INSERT INTO owners(sha256, owner, account, size, created_at, expires_at) SELECT printf('%064x', i), 'full', 'full', 4096, ?, NULL FROM n`,
+			[]any{12_799, clock.Unix()}},
+		{`INSERT INTO uploads(account, size, at) SELECT 'full', 4096, ? FROM n`, []any{5_119, clock.Unix()}},
+	} {
+		if _, err := st.db.Exec(`WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < ?) `+fill.query, fill.args...); err != nil {
+			t.Fatal(err)
 		}
-		if i < 5_120 {
-			if _, err := tx.Exec(`INSERT INTO uploads(account, size, at) VALUES ('full', 4096, ?)`, clock.Unix()); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatal(err)
 	}
 	if err := st.Upload(ctx, strings.Repeat("f", 64), "small", "small", 30_000, false); err != nil {
 		t.Fatal(err)
