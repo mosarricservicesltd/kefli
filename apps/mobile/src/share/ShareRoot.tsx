@@ -5,6 +5,9 @@
 //
 // - Saved: Undo and Read now; the countdown, getRecommendedTimeoutMillis(4000) along the top edge in the
 //   article's ink, then back to the host app. It pauses while touched and never runs with a screen reader on.
+//   While Backup space would read Full, or a text waits on the day's uploads, its line says the text stays on the
+//   phone (share-full, share-daily, FD 117), from the library as the sheet finds it: a share's own upload waits for
+//   the sheet to close, so the first save past a limit has the usual line.
 // - Already saved and unread (G2): nothing changes; Done and Read now, no Undo.
 // - Offline, or X not answering (G3): saved and waiting; Undo and Done, no countdown.
 // - Not a link; an X post with no article: nothing saved; OK. Checking an X post: Cancel.
@@ -22,6 +25,7 @@ import { ITEM_D_PREFIX, isXPost, itemHash } from '@kefli/protocol';
 import { motion, radius } from '@kefli/tokens';
 import { enter, exit, mark } from '@kefli/tokens/reanimated';
 import { KefliShare } from '../../modules/kefli-share/src';
+import { shareLine } from '../data/account';
 import { drawMs } from '../data/covers';
 import { release } from '../data/outbox';
 import { undoSave } from '../data/saves';
@@ -47,6 +51,21 @@ const REMOVED_MS = 1500;
 function modeOf(q: Queued): Mode {
   if (q.kind === 'unarchived') return 'saved';
   return q.kind as Mode;
+}
+
+type Room = 'full' | 'daily' | null;
+
+/**
+ * The library's room, for the Saved sheet's line (FD 117): read once as the sheet rises, and again for the save it
+ * made, which for a save brought back from Archive is its own text's. Nothing known, or a store not open, is the usual line.
+ */
+function roomNow(unarchived: string | null = null): Room {
+  try {
+    const owner = store().get<{ pubkey: string }>("SELECT pubkey FROM identities WHERE role = 'active'")?.pubkey;
+    return owner ? shareLine(store(), owner, Math.floor(Date.now() / 1000), unarchived) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The heading's check: it lands with the cover's last leaf (at most 1 s in), or sits still on a save already drawn. */
@@ -95,6 +114,9 @@ function SavedSheet({ spoolId }: { spoolId?: string }) {
   const [mode, setMode] = useState<Mode>(!url ? 'nolink' : isXPost(url) ? 'checking' : 'saving');
   const [shown, setShown] = useState<{ hash: string | null; title: string | null; site: string | null }>({ hash: first, title: null, site: url ? hostOf(url) : null });
   const [drawFrom] = useState(() => Date.now());
+  // read after the first frame, which the sheet spends below the screen, so opening the store never holds it back
+  const [room, setRoom] = useState<Room>(null);
+  useEffect(() => setRoom(roomNow()), []);
 
   const result = useRef<Queued | null>(null);
   const done = useRef(false);
@@ -200,6 +222,7 @@ function SavedSheet({ spoolId }: { spoolId?: string }) {
           return;
         }
         setShown({ hash: r.hash ?? first, title: r.title, site: r.site ?? (url ? hostOf(url) : null) });
+        setRoom(roomNow(r.kind === 'unarchived' ? r.hash : null));
         const next = modeOf(r);
         setMode(next);
         if (next === 'saved') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
@@ -301,7 +324,8 @@ function SavedSheet({ spoolId }: { spoolId?: string }) {
   } else {
     const again = mode === 'again';
     const waits = mode === 'offline' || mode === 'xwait';
-    const line = again ? S.share.againSub : mode === 'offline' ? S.share.offlineSub : mode === 'xwait' ? S.share.xwaitSub : S.share.savedSub;
+    const saved = room === 'full' ? S.share.fullSub : room === 'daily' ? S.share.dailySub : S.share.savedSub;
+    const line = again ? S.share.againSub : mode === 'offline' ? S.share.offlineSub : mode === 'xwait' ? S.share.xwaitSub : saved;
     const title = shown.title ?? (url ?? '').replace(/^https?:\/\//, '');
     body = (
       <>

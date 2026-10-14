@@ -1,20 +1,29 @@
-// Advanced (mobile spec 5.8, FD 76, FD 93; prototype adv, adv-down, adv-offline, adv-notbacked): the relays in the
-// identity's 10002, Kefli's own first, each with whether it answers; the count of saves not backed up while there
-// are any, after which the note under the relays speaks of "your other saves"; a relay not answering is named in
-// the note. Export my saves writes kefli-export.html to Downloads, offline too, then the toast; a failed export puts
-// its line in the notice slot with Try again (adv-exportfail, G9). Use my nostr app instead opens the switch, and is
-// hidden for a nostr user, who has nothing to switch from. Add a relay, last in the group, opens its screen
-// (FD 113), needing a connection; a relay the person added is "Your relay", and its row asks whether to remove it,
-// which stops the copying and sends the lists without it. "relay" appears in the copy here only (FD 86).
+// Advanced (mobile spec 5.8, FD 76, FD 93, FD 117; prototype adv, adv-down, adv-offline, adv-notbacked, adv-full,
+// adv-daily, adv-toolarge, adv-space-*): the relays in the identity's 10002, Kefli's own first, each with whether it
+// answers; a relay not answering is named in the note under them. The notice slot holds an export that failed, with
+// Try again (adv-exportfail, G9), then one notice about saves not backed up, the first that applies: a text waiting for
+// room on the space or the day's uploads, the saves Kefli is still trying to back up, texts too long to back up. The
+// note under the relays speaks of "your other saves" while Kefli is still trying to back up some save, since one whose
+// text alone stays on the phone is on every relay without it. Backup space shows the library's use of Kefli's server
+// from the last figures it gave, asked again each time Advanced opens online (GET /account), with the fine print in
+// the library's own figures. Export my saves writes kefli-export.html to Downloads, offline too, then the toast. Use
+// my nostr app instead opens the switch, and is hidden for a nostr user, who has nothing to switch from. Add a relay,
+// last in the group, opens its screen (FD 113), needing a connection; a relay the person added is "Your relay", and its
+// row asks whether to remove it, which stops the copying and sends the lists without it. "relay" appears in the copy
+// here only (FD 86).
 import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { radius } from '@kefli/tokens';
+import { phoneCrypto } from '../crypto/port';
+import { DEFAULT_DAILY, DEFAULT_QUOTA, NOTHING_WAITS, accountFigures, backupNotice, spaceOf, textsWaiting, type Check } from '../data/account';
 import { notBackedUp } from '../data/backup';
 import { relayRows, removeRelay, type RelayRow } from '../data/lists';
+import { checkAccount } from '../services/account';
 import { useApp } from '../services/app';
 import { loadDefaults } from '../services/config';
 import { exportSaves } from '../services/export';
+import { currentSigner } from '../services/identity';
 import { relayStatus, runOutbox } from '../services/runner';
 import { store } from '../services/store';
 import { Icon, type IconName } from '../ui/Icon';
@@ -24,7 +33,7 @@ import { Press, pressLayer } from '../ui/Press';
 import { Button } from '../ui/Button';
 import { ErrLine } from '../ui/Notice';
 import { closeSheet, openSheet } from '../ui/sheet';
-import { S } from '../ui/strings';
+import { S, noticeText } from '../ui/strings';
 import { showToast } from '../ui/toast';
 import { T, ui } from '../ui/text';
 import { useTheme } from '../ui/theme';
@@ -90,9 +99,44 @@ function RemoveSheet({ owner, url, close }: { owner: string; url: string; close:
   );
 }
 
-function Group({ children }: { children: React.ReactNode }) {
+function Group({ children, noted }: { children: React.ReactNode; noted?: boolean }) {
   const { c } = useTheme();
-  return <View style={{ marginBottom: 20, borderRadius: radius.container, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line, overflow: 'hidden' }}>{children}</View>;
+  return <View style={{ marginBottom: noted ? 8 : 20, borderRadius: radius.container, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line, overflow: 'hidden' }}>{children}</View>;
+}
+
+/** The notice slot's info notice (adv-notbacked's look), read out when it changes. */
+function Info({ text }: { text: string }) {
+  const { c } = useTheme();
+  return (
+    <View accessibilityLiveRegion="polite" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 12, paddingHorizontal: 16, marginBottom: 16, borderRadius: radius.container, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line }}>
+      <View style={{ marginTop: 1 }}><Icon name="info" size={16} color={c.muted} /></View>
+      <T style={[ui(13, 'meta', 1.4), { flex: 1 }]}>{text}</T>
+    </View>
+  );
+}
+
+const nowSec = () => Math.floor(Date.now() / 1000);
+
+/**
+ * The library's figures from Kefli's server (FD 117): asked each time Advanced comes into view online, and again when
+ * the phone comes back online on it; what the check came to, for the row's state while no figures are held.
+ */
+function useAccountCheck(owner: string, online: boolean): Check {
+  const [check, setCheck] = useState<Check>('checking');
+  useFocusEffect(useCallback(() => {
+    if (!owner || !online) return;
+    let live = true;
+    // a check after one that failed reads Checking… again; after any other answer the row keeps what it shows
+    setCheck((was) => (was === 'failed' ? 'checking' : was));
+    checkAccount({
+      db: store(), now: nowSec, owner, api: async () => (await loadDefaults()).operator.api,
+      signer: currentSigner, fetch, crypto: phoneCrypto,
+    }).then((r) => live && setCheck(r));
+    return () => {
+      live = false;
+    };
+  }, [owner, online]));
+  return check;
 }
 
 export default function Advanced() {
@@ -107,6 +151,11 @@ export default function Advanced() {
   const relays = rows.map((r) => r.url);
   const local = useLive(() => (store().get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local') === 'local', ['identities'], [owner]);
   const notBacked = useLive(() => (owner ? notBackedUp(store(), owner) : 0), ['items', 'blobs', 'outbox'], [owner]);
+  const waiting = useLive(() => (owner ? textsWaiting(store(), owner, nowSec()) : NOTHING_WAITS), ['items', 'blobs'], [owner]);
+  const figures = useLive(() => (owner ? accountFigures(store(), owner) : null), ['account_figures'], [owner]);
+  const checked = useAccountCheck(owner, online);
+  const { notice, trying } = backupNotice(waiting, notBacked);
+  const space = spaceOf(figures, waiting.full, checked, online);
 
   useEffect(() => {
     loadDefaults().then((d) => setOperator(d.operator.relay), () => undefined);
@@ -148,12 +197,7 @@ export default function Advanced() {
   return (
     <OnbShell title={S.adv.title} actions={exportFailed ? <Button label={S.adv.tryAgain} full onPress={doExport} /> : undefined}>
       {exportFailed && <ErrLine text={S.adv.exportFail} />}
-      {notBacked > 0 && (
-        <View accessibilityLiveRegion="polite" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 12, paddingHorizontal: 16, marginBottom: 16, borderRadius: radius.container, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line }}>
-          <View style={{ marginTop: 1 }}><Icon name="info" size={16} color={c.muted} /></View>
-          <T style={[ui(13, 'meta', 1.4), { flex: 1 }]}>{S.adv.notBacked(notBacked)}</T>
-        </View>
-      )}
+      {notice && <Info text={noticeText(notice)} />}
       <T muted style={[ui(13, 'groupLabel', 1.3), { marginBottom: 8 }]}>{S.adv.relays}</T>
       <View style={{ marginBottom: 8, borderRadius: radius.container, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line, overflow: 'hidden' }}>
         {ordered.map((r, i) => (
@@ -164,7 +208,14 @@ export default function Advanced() {
           onPress={() => router.push('/add-relay')} right={<Icon name="chev" size={18} color={c.muted} />} />
       </View>
       <T muted style={[ui(13, 'body', 1.45), { marginBottom: 20 }]}>
-        {S.adv.copied(notBacked > 0, ordered.length)}{down.length ? ` ${S.adv.willReach(down)}` : ''}
+        {S.adv.copied(trying > 0, ordered.length)}{down.length ? ` ${S.adv.willReach(down)}` : ''}
+      </T>
+      <T muted style={[ui(13, 'groupLabel', 1.3), { marginBottom: 8 }]}>{S.adv.space}</T>
+      <Group noted>
+        <Row first icon="harddrive" label={S.adv.server} sub={S.adv.spaceSub(space)} />
+      </Group>
+      <T muted style={[ui(13, 'body', 1.45), { marginBottom: 20 }]}>
+        {S.adv.spaceNote(figures?.quota ?? DEFAULT_QUOTA, figures?.daily ?? DEFAULT_DAILY)}
       </T>
       <Group>
         <Row first icon="download" label={S.adv.export} sub={S.adv.exportSub} onPress={doExport} />
