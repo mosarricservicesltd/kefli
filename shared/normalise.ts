@@ -155,6 +155,24 @@ export function ownCanonical(url: string, canonical: string | null | undefined):
 }
 
 /**
+ * input without its user name and password (ruling 8), as the extension sends a page's address; everything else in it
+ * as the URL Standard serialises it. An address with no user info, or input that isn't an http or https URL, comes back
+ * exactly as given.
+ */
+export function withoutUserInfo(input: string): string {
+  let url: URLRecord;
+  try {
+    url = parseHttp(input);
+  } catch {
+    return input;
+  }
+  if (url.username === '' && url.password === '') return input;
+  url.username = '';
+  url.password = '';
+  return serializeURL(url);
+}
+
+/**
  * normalise(url, canonical?) from contract 4.3. Throws NotALinkError for input that isn't an http or
  * https URL. The canonical link is used only for m. and amp. hosts and paths ending /amp, and only from the
  * page's own site (sameSite); RULED: a canonical that isn't itself an http or https URL is ignored rather than
@@ -167,11 +185,15 @@ export function normalise(input: string, canonical?: string | null): string {
   return address(own ?? url);
 }
 
-/** A URL record as a save's address: the fragment dropped, the query cleaned, every trailing slash removed. */
+/** A URL record as a save's address: no fragment or user info, the query cleaned, every trailing slash removed. */
 function address(url: URLRecord): string {
   const query = cleanQuery(url.query ? `?${url.query}` : '', isXHost(hostOf(url)));
   url.fragment = null;
   url.query = null;
+  // RULED (ruling 8): a user name and password are no part of a save's address, so the same page saved with them and
+  // without them is one save, and no address or hash holds a password
+  url.username = '';
+  url.password = '';
   // A trailing slash goes except on a bare host, whose path is "/" and always serialises.
   // RULED: every trailing slash goes, so that normalise is idempotent ("/a//" would otherwise give "/a/"
   // and then "/a"); a path of slashes only becomes "/". http and https paths are always segment lists.

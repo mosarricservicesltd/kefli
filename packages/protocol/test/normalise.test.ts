@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { NotALinkError, isItemD, itemD, itemHash, normalise, ownCanonical } from '../src';
+import { NotALinkError, isItemD, itemD, itemHash, normalise, ownCanonical, withoutUserInfo } from '../src';
 
 type Case = { name: string; url: string; canonical?: string; expect: string | null };
 const fixtures: { cases: Case[] } = JSON.parse(
@@ -85,6 +85,30 @@ describe("a page's canonical counts only from its own site (ruling 11)", () => {
       const own = ownCanonical(c.url, c.canonical);
       if (own === null) expect(normalise(c.url, c.canonical)).toBe(normalise(c.url));
       else expect([normalise(c.url), normalise(own)]).toContain(normalise(c.url, c.canonical));
+    }
+  });
+});
+
+describe("an address's user info is no part of its save (ruling 8)", () => {
+  test('a page saved with a user name and password and without them is one save, whose hash holds neither', () => {
+    const plain = itemHash('https://example.com/private/a');
+    for (const u of ['https://user:hunter2@example.com/private/a', 'https://user@example.com/private/a', 'https://:hunter2@example.com/private/a#x']) {
+      expect(itemHash(u)).toBe(plain);
+      expect(normalise(u)).not.toMatch(/hunter2|user/);
+    }
+    // through a canonical too
+    expect(itemHash('https://m.example.com/private/a', 'https://user:hunter2@example.com/private/a')).toBe(plain);
+  });
+
+  test('withoutUserInfo takes off only the user info, as a browser sends an address', () => {
+    expect(withoutUserInfo('https://user:pw@example.com/a/?b=2&a=1#f')).toBe('https://example.com/a/?b=2&a=1#f');
+    expect(withoutUserInfo('http://user@[2001:db8::1]:8080/a')).toBe('http://[2001:db8::1]:8080/a');
+    expect(withoutUserInfo('https://www.bank.example@evil.example/a')).toBe('https://evil.example/a');
+  });
+
+  test('withoutUserInfo leaves an address without any, and anything that isn’t a link, exactly as it was', () => {
+    for (const u of ['https://Example.com/a b?utm_source=x#f', 'mailto:someone@example.com', 'not a url', 'ftp://u:p@example.com/', `https://u:p@${'a'.repeat(2_000)}.example/`]) {
+      expect(withoutUserInfo(u)).toBe(u);
     }
   });
 });
