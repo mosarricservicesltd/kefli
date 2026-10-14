@@ -152,6 +152,24 @@ describe('accepting a save request (C§4.4)', () => {
     expect(acceptSaveRequest(o.rumor, o.seal, devices, BLOSSOM).ok).toBe(true);
   });
 
+  test('fields of another type come back null, so a save is never lost to one; an address that isn’t a link is malformed', async () => {
+    const { device, user, devices } = await setup();
+    const open = async (r: Record<string, unknown>, at = NOW) => unwrap(user, (await wrapSaveRequest(device, user.pubkey(), 'u', r as unknown as SaveRequest, at)).wrap);
+    let o = await open({ ...request(), title: { a: 1 }, site: 5, byline: ['x'], lang: ['en'], canonical: 5, hero: 'javascript:alert(1)', html: { sha256: '../../admin?x=1', key: 'k', nonce: 'n', server: BLOSSOM } });
+    let v = acceptSaveRequest(o.rumor, o.seal, devices, BLOSSOM);
+    expect(v.ok && v.request).toEqual({ ...request(), title: null, site: null, byline: null, lang: null, canonical: null, hero: null, html: null });
+    // captured_at: a time no later than the request was sent; otherwise the rumor's own
+    for (const [captured, want] of [['2026', NOW], [-1e12, NOW], [1e15, NOW], [null, NOW], [NOW - 3600.5, NOW - 3601]] as const) {
+      o = await open({ ...request(), captured_at: captured });
+      v = acceptSaveRequest(o.rumor, o.seal, devices, BLOSSOM);
+      expect(v.ok && v.request.captured_at).toBe(want);
+    }
+    for (const url of ['javascript:alert(1)', '', 'file:///etc/passwd', 'http://']) {
+      o = await open({ ...request(), url });
+      expect(acceptSaveRequest(o.rumor, o.seal, devices, BLOSSOM)).toEqual({ ok: false, reason: 'malformed' });
+    }
+  });
+
   test('another app’s message is left alone', async () => {
     const { device, user, devices } = await setup();
     const { wrap } = await giftWrap(device, user.pubkey(), { kind: 14, created_at: NOW, tags: [], content: 'hi' });
