@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"bytes"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -466,8 +467,8 @@ func TestAnUploadArrivingAfterItsAccountWent(t *testing.T) {
 		t.Fatalf("left on disk: %v", f)
 	}
 	// and an owner can't be recorded for an account that has gone, however late
-	if err := e.st.AddOwner(t.Context(), hash(text), user.pk, user.pk, int64(len(text)), false); err != nil {
-		t.Fatal(err)
+	if err := e.st.AddOwner(t.Context(), hash(text), user.pk, user.pk, int64(len(text)), false); !errors.Is(err, store.ErrNoAccount) {
+		t.Fatalf("an owner recorded for an account that has gone: %v", err)
 	}
 	if held, _ := e.st.Exists(t.Context(), hash(text)); held {
 		t.Fatal("an owner row for a deleted account")

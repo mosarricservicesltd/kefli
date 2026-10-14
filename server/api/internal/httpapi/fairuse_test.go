@@ -258,6 +258,73 @@ func TestRealTextsCountAsTheyAre(t *testing.T) {
 	}
 }
 
+// ownerRows is how many owner rows the store keeps for a blob.
+func (e *env) ownerRows(blob []byte) int {
+	e.t.Helper()
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(e.dir, "k.db")+"?mode=ro")
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	defer db.Close()
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM owners WHERE sha256 = ?`, hash(blob)).Scan(&n); err != nil {
+		e.t.Fatal(err)
+	}
+	return n
+}
+
+// Each of a library's browser keys recorded its own copy of a blob the library held, at no cost against its quota or
+// its day: 64 browsers sending a full library's 12,800 tiny blobs again made 832,000 rows, 171 MB of database, and the
+// library's figures, read twice for every upload, took 8.7 seconds (probe used). A browser's copy of a blob its library
+// holds, through any of its keys, now adds nothing: it is answered as stored, and the browser's delete finds nothing of
+// its own. A user's own upload of a blob the library holds only as a capture is still recorded, and outlives it.
+func TestABrowsersCopyOfAHeldBlobAddsNoRow(t *testing.T) {
+	e := newEnv(t)
+	user := newKey()
+	e.registered(user)
+	browsers := make([]key, 8)
+	for i := range browsers {
+		e.clock = e.clock.Add(time.Second)
+		browsers[i] = newKey()
+		expect(t, e.addDevice(user, browsers[i]), 200, nil)
+	}
+	text := []byte("a text the library holds")
+	for _, k := range append([]key{user}, browsers...) {
+		if s, _, b := e.put(k, text); s != 200 {
+			t.Fatalf("upload %d %v", s, b)
+		}
+	}
+	if n := e.ownerRows(text); n != 1 {
+		t.Fatalf("%d rows for a blob the library holds once", n)
+	}
+	if f := e.figures(user); f.Used != costs(text) || f.Today != costs(text) {
+		t.Fatalf("figures %+v", f)
+	}
+	if s := e.remove(browsers[0], hash(text)); s != 404 {
+		t.Fatalf("a browser's delete of a copy it never had: %d", s)
+	}
+	if s, _ := e.fetch(hash(text)); s != 200 {
+		t.Fatal("the text went")
+	}
+	// a capture one browser sent first: the others' copies add nothing, and the user's own copy keeps it past 14 days
+	capture := []byte("a page one browser captured")
+	for _, k := range append(browsers, user) {
+		if s, _, b := e.put(k, capture); s != 200 {
+			t.Fatalf("upload %d %v", s, b)
+		}
+	}
+	if n := e.ownerRows(capture); n != 2 {
+		t.Fatalf("%d rows for a capture and the user's copy, want 2", n)
+	}
+	e.clock = e.clock.Add(store.InboxLife)
+	if _, err := e.st.ExpireInbox(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := e.fetch(hash(capture)); s != 200 {
+		t.Fatal("the user's copy went with the capture")
+	}
+}
+
 // Contract 5: an upload past both limits is answered quota.
 func TestQuotaAnswersAnUploadPastBoth(t *testing.T) {
 	e := newEnv(t)

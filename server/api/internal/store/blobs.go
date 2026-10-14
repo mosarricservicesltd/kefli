@@ -55,9 +55,13 @@ func (s *Store) Today(ctx context.Context, account string) (int64, error) {
 // Holds is whether the user, or one of their devices, already owns the blob, so a repeat upload costs no quota. An
 // expired inbox row holds nothing, as Used doesn't count it.
 func (s *Store) Holds(ctx context.Context, account, sha string) (bool, error) {
+	return holds(ctx, s.db, account, sha, s.unix())
+}
+
+func holds(ctx context.Context, q querier, account, sha string, now int64) (bool, error) {
 	var one int
-	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM owners WHERE account = ? AND sha256 = ? AND `+live+` LIMIT 1`, account, sha, s.unix()).Scan(&one)
-	if err == sql.ErrNoRows {
+	err := q.QueryRowContext(ctx, `SELECT 1 FROM owners WHERE account = ? AND sha256 = ? AND `+live+` LIMIT 1`, account, sha, now).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
 	return err == nil, err
@@ -97,26 +101,65 @@ func hasAccount(ctx context.Context, q querier, pubkey string) error {
 
 // AddOwner records an owner of a blob without logging it against a day, the blob counting for its Cost. inbox marks a
 // device's blob, which expires after InboxLife (contract 5); uploading the same blob again keeps the row and, for an
-// inbox blob, its first expiry.
-// Nothing is recorded once the account is deleted or disabled, or, for an inbox blob, once the browser Blossom found
-// to be the account's has since been disconnected or connected to another library: an upload still arriving then
-// leaves no owner that nothing would ever delete. A browser the account holds is recorded even while the gone list
-// still names it, as AddDevice's second write can leave it; a key with no browser row, which only a test uploads
-// with, is recorded unless the gone list names it, as Disconnect does.
+// inbox blob, its first expiry. A browser's copy of a blob its library holds already, through any of its keys, adds no
+// row: what counts is the library's holding, and a row for each key would let a library's 64 browsers multiply its rows
+// sixty-fold at no cost against its fair use (rows that every figure, deletion and sweep then reads). A user's own
+// upload is always recorded, so a blob the library holds only as a capture stays once the capture expires.
+// Nothing is recorded, and ErrNoAccount given, once the account is deleted or disabled, or, for an inbox blob, once the
+// browser Blossom found to be the account's has since been disconnected or connected to another library: an upload
+// still arriving then leaves no owner that nothing would ever delete.
 func (s *Store) AddOwner(ctx context.Context, sha, owner, account string, size int64, inbox bool) error {
-	return s.addOwner(ctx, s.db, sha, owner, account, size, inbox)
+	return s.inTx(ctx, func(tx querier) error { return s.addOwner(ctx, tx, sha, owner, account, size, inbox) })
 }
 
-func (s *Store) addOwner(ctx context.Context, db querier, sha, owner, account string, size int64, inbox bool) error {
+// addOwner is AddOwner in a transaction the caller commits, which it must roll back on an error: the uploader's
+// standing is checked last, after the row is written, so a deletion that lands as it is written leaves nothing.
+func (s *Store) addOwner(ctx context.Context, q querier, sha, owner, account string, size int64, inbox bool) error {
+	if err := s.insertOwner(ctx, q, sha, owner, account, size, inbox); err != nil {
+		return err
+	}
+	return entitled(ctx, q, owner, account, inbox)
+}
+
+func (s *Store) insertOwner(ctx context.Context, q querier, sha, owner, account string, size int64, inbox bool) error {
 	var expires any
 	if inbox {
+		if held, err := holds(ctx, q, account, sha, s.unix()); err != nil || held {
+			return err
+		}
 		expires = s.Now().Add(InboxLife).Unix()
 	}
-	_, err := db.ExecContext(ctx, `INSERT INTO owners(sha256, owner, account, size, created_at, expires_at) SELECT ?, ?, ?, ?, ?, ?
-		WHERE EXISTS (SELECT 1 FROM accounts WHERE pubkey = ? AND disabled = 0)
+	_, err := q.ExecContext(ctx, `INSERT INTO owners(sha256, owner, account, size, created_at, expires_at) VALUES(?, ?, ?, ?, ?, ?)
+		ON CONFLICT(sha256, owner) DO NOTHING`, sha, owner, account, Cost(size), s.unix(), expires)
+	return err
+}
+
+// inTx runs fn in a transaction, committed when fn returns nil and rolled back otherwise.
+func (s *Store) inTx(ctx context.Context, fn func(querier) error) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := fn(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// entitled is nil while owner may still record an upload for account, ErrNoAccount once it may not: the account stands
+// and is enabled and, for a browser's upload, the browser is still the library's. A browser the account holds is
+// entitled even while the gone list still names it, as AddDevice's second write can leave it; a key with no browser
+// row, which only a test uploads with, is entitled unless the gone list names it, as Disconnect does.
+func entitled(ctx context.Context, q querier, owner, account string, inbox bool) error {
+	var one int
+	err := q.QueryRowContext(ctx, `SELECT 1 FROM accounts WHERE pubkey = ? AND disabled = 0
 		AND (? = 0 OR EXISTS (SELECT 1 FROM devices WHERE device_pubkey = ? AND user_pubkey = ?)
-			OR (NOT EXISTS (SELECT 1 FROM devices WHERE device_pubkey = ?) AND NOT EXISTS (SELECT 1 FROM gone WHERE pubkey = ?)))
-		ON CONFLICT(sha256, owner) DO NOTHING`, sha, owner, account, Cost(size), s.unix(), expires, account, inbox, owner, account, owner, owner)
+			OR (NOT EXISTS (SELECT 1 FROM devices WHERE device_pubkey = ?) AND NOT EXISTS (SELECT 1 FROM gone WHERE pubkey = ?)))`,
+		account, inbox, owner, account, owner, owner).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNoAccount
+	}
 	return err
 }
 
@@ -124,39 +167,17 @@ func (s *Store) addOwner(ctx context.Context, db querier, sha, owner, account st
 // library's day (contract 5): a blob the server already stores, for this library or any other, adds nothing, so a
 // repeat upload and a move's re-uploads cost no part of the day. One transaction, so the owner row and the log can't
 // part, which records nothing and gives ErrNoAccount once the library's account has gone or been disabled, or the
-// browser uploading is no longer the library's: checked last, in the same transaction, so a DELETE /account or a
-// Disconnect, each one transaction itself, falls wholly before the record, which it then finds, or after it, which it
-// then refuses, and never leaves a row for a key that has gone.
+// browser uploading is no longer the library's: checked in the same transaction, so a DELETE /account or a
+// Disconnect, each one transaction itself, runs wholly before the record, which then records nothing, or wholly after
+// it, taking the record with the rest, and never leaves a row for a key that has gone.
 func (s *Store) Upload(ctx context.Context, sha, owner, account string, size int64, inbox bool) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO uploads(account, size, at) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM owners WHERE sha256 = ?)`,
-		account, Cost(size), s.unix(), sha); err != nil {
-		return err
-	}
-	if err := s.addOwner(ctx, tx, sha, owner, account, size, inbox); err != nil {
-		return err
-	}
-	if err := recorded(ctx, tx, sha, owner, account); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
-// recorded is nil once the upload's owner row is in place and its library's account is still there, ErrNoAccount
-// otherwise: addOwner writes no row for an account that has gone or been disabled, or for a browser no longer the
-// library's.
-func recorded(ctx context.Context, q querier, sha, owner, account string) error {
-	var one int
-	err := q.QueryRowContext(ctx, `SELECT 1 FROM owners WHERE sha256 = ? AND owner = ? AND EXISTS (SELECT 1 FROM accounts WHERE pubkey = ?)`,
-		sha, owner, account).Scan(&one)
-	if errors.Is(err, sql.ErrNoRows) {
-		return ErrNoAccount
-	}
-	return err
+	return s.inTx(ctx, func(tx querier) error {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO uploads(account, size, at) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM owners WHERE sha256 = ?)`,
+			account, Cost(size), s.unix(), sha); err != nil {
+			return err
+		}
+		return s.addOwner(ctx, tx, sha, owner, account, size, inbox)
+	})
 }
 
 // Exists is whether any pubkey owns the blob, so it is served.

@@ -347,42 +347,50 @@ func TestFigures(t *testing.T) {
 }
 
 // Contract 5: a user's delete removes the blob from their library, their browsers' uploads of it included; a device
-// key's removes only its own; a blob goes once no owner is left.
+// key's removes only its own; a blob goes once no owner is left. A browser's copy of a blob its library holds already
+// is no upload of its own, so its delete finds nothing.
 func TestRemoveOwner(t *testing.T) {
 	st, _ := open(t)
 	ctx := context.Background()
 	registered(t, st, "user", "other", "next")
-	x, y := strings.Repeat("4", 64), strings.Repeat("5", 64)
+	x, y, z := strings.Repeat("4", 64), strings.Repeat("5", 64), strings.Repeat("6", 64)
 	add := func(sha, owner, account string, inbox bool) {
 		t.Helper()
 		if err := st.Upload(ctx, sha, owner, account, 10, inbox); err != nil {
 			t.Fatal(err)
 		}
 	}
-	add(x, "user", "user", false)
-	add(x, "device", "user", true)
-	add(x, "other", "other", false)
-	remove := func(signer string, wantFound bool, wantOrphaned int) {
+	remove := func(sha, signer string, wantFound bool, wantOrphaned int) {
 		t.Helper()
-		found, orphaned, err := st.RemoveOwner(ctx, x, signer)
+		found, orphaned, err := st.RemoveOwner(ctx, sha, signer)
 		if err != nil || found != wantFound || len(orphaned) != wantOrphaned {
 			t.Fatalf("%s's delete: found %v, orphaned %v, %v", signer, found, orphaned, err)
 		}
 	}
-	remove("device", true, 0)
+	// the browser's capture first, then the user's own copy of it, and another library's
+	add(x, "device", "user", true)
+	add(x, "user", "user", false)
+	add(x, "other", "other", false)
+	remove(x, "device", true, 0)
 	if held, _ := st.Holds(ctx, "user", x); !held {
 		t.Fatal("a device's delete took the user's own copy")
 	}
+	// the library holds x now through the user: the browser's copy adds nothing it could delete
 	add(x, "device", "user", true)
-	remove("user", true, 0)
-	if held, _ := st.Holds(ctx, "user", x); held {
+	remove(x, "device", false, 0)
+	remove(x, "user", true, 0)
+	remove(x, "stranger", false, 0)
+	remove(x, "other", true, 1)
+	// the user's delete takes its browser's upload with its own
+	add(y, "device", "user", true)
+	add(y, "user", "user", false)
+	remove(y, "user", true, 1)
+	if held, _ := st.Holds(ctx, "user", y); held {
 		t.Fatal("the user's delete left its browser's upload counted against it")
 	}
-	remove("stranger", false, 0)
-	remove("other", true, 1)
 	// a browser's upload made while another library held it counts against that library, which alone may delete it
-	add(y, "device", "user", true)
-	if found, _, err := st.RemoveOwner(ctx, y, "next"); err != nil || found {
+	add(z, "device", "user", true)
+	if found, _, err := st.RemoveOwner(ctx, z, "next"); err != nil || found {
 		t.Fatalf("a library the blob doesn't count against deleted it: %v %v", found, err)
 	}
 }
