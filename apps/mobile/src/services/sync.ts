@@ -11,7 +11,7 @@
 // everything collected has been applied (F14).
 import {
   DEVICES_D, KIND, LIBRARY_KEY_D, T_TAG, decryptText, isSignerFailure, newest, readDevicesEvent, readItemEvent, readLibraryKeyEvent,
-  readRelayList, readServerList,
+  readRelayList, readServerList, replaces,
 } from '@kefli/protocol';
 import { deriveArticle, type Derived } from '../reader/blocks';
 import type { CryptoPort, NostrEvent, Signer } from '@kefli/protocol';
@@ -26,7 +26,7 @@ import {
 } from '../data/lists';
 import { adoptLibraryKey, libraryKey, makeLibraryKey, moveToKeyedAddresses } from '../data/libraryKey';
 import {
-  applyDeletion, applyItem, getCursor, hashInUse, readRelays, setCursor, textCached, textMissing, textQueue,
+  applyDeletions, applyItem, getCursor, hashInUse, readRelays, setCursor, textCached, textMissing, textQueue,
   type Stream, type TextJob,
 } from '../data/sync';
 
@@ -117,6 +117,24 @@ function partition<T>(xs: T[], test: (x: T) => boolean): [T[], T[]] {
   return [xs.filter(test), xs.filter((x) => !test(x))];
 }
 
+/**
+ * The newest event at each address (NIP-01: the later created_at, a tie to the lower id), the only one of an address's
+ * versions that can win, so the only one opened (4.5, C§8): an archival relay replaying every old version of a save,
+ * or one that ignores since, would otherwise ask the signer once a version at every sync, and two saves another client
+ * put at one address would both become rows.
+ */
+function newestAt(events: NostrEvent[]): NostrEvent[] {
+  const best = new Map<string, NostrEvent>();
+  for (const e of events) {
+    const d = e.tags.find((t) => t[0] === 'd')?.[1] ?? '';
+    const held = best.get(d);
+    if (!held || replaces(e, held)) best.set(d, e);
+  }
+  return [...best.values()];
+}
+
+const isRecord = (e: NostrEvent) => e.tags.some((t) => t[0] === 'd' && t[1] === DEVICES_D);
+
 /** Copies of the connected-browsers record (C§4.9), merged in by token; republished when this phone holds more. */
 async function absorbRecords(p: SyncPorts, owner: string, signer: Signer, records: NostrEvent[], open: Open): Promise<void> {
   let republish = false;
@@ -147,11 +165,13 @@ async function applyAll(p: SyncPorts, owner: string, signer: Signer, collected: 
       return null;
     }
   };
-  const [records, saves] = partition(unique('items'), (e) => e.tags.some((t) => t[0] === 'd' && t[1] === DEVICES_D));
+  const [, saves] = partition(unique('items'), isRecord);
+  // each relay's newest copy of the record, every one merged in (C§4.9)
+  const records = [...new Map(collected.filter((c) => c.stream === 'items').flatMap((c) => newestAt(c.events.filter(isRecord))).map((e) => [e.id, e])).values()];
   await absorbRecords(p, owner, signer, records, open);
   // the event a row already holds merges as keep (4.5), so the day of overlap (F36) is read without asking the signer
   const held = new Set(p.db.all<{ event_id: string }>('SELECT event_id FROM items WHERE owner = ? AND event_id IS NOT NULL', owner).map((r) => r.event_id));
-  for (const e of saves.filter((x) => !held.has(x.id)).sort((a, b) => a.created_at - b.created_at)) {
+  for (const e of newestAt(saves).filter((x) => !held.has(x.id)).sort((a, b) => a.created_at - b.created_at)) {
     const read = await open(() => readItemEvent(signer, e));
     if (!read) continue;
     const a = applyItem(p.db, p.now(), owner, read.hash, e, read.item, p.openHash?.());
@@ -162,11 +182,9 @@ async function applyAll(p: SyncPorts, owner: string, signer: Signer, collected: 
   }
   // deletions need no signer; with the cursors kept they are read again alongside the saves that wait
   let deletions = 0;
-  for (const e of unique('deletions')) {
-    for (const hash of applyDeletion(p.db, owner, e)) {
-      deletions++;
-      if (!hashInUse(p.db, hash)) p.files.removeAll(hash);
-    }
+  for (const hash of applyDeletions(p.db, owner, unique('deletions'))) {
+    deletions++;
+    if (!hashInUse(p.db, hash)) p.files.removeAll(hash);
   }
   return { items, deletions, waiting };
 }

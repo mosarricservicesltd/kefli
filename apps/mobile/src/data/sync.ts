@@ -5,7 +5,7 @@
 // removed with its pending sends, since this phone may not write over a version it doesn't understand (C§10);
 // an older one is ignored. A save with no text arrives as text_state 'queued', so this phone tries the parse.
 import { ITEM_D_PREFIX, deletedDs, deletionRemoves, mergeItem, wordReached } from '@kefli/protocol';
-import { savesAt } from './libraryKey';
+import { addressIndex } from './libraryKey';
 import type { LocalVersion, MergeOutcome, NostrEvent, ParsedItem } from '@kefli/protocol';
 import type { SqlDb } from './db';
 import { enqueue } from './outbox';
@@ -163,16 +163,32 @@ function future(db: SqlDb, owner: string, hash: string, event: NostrEvent, row: 
 
 /** Applies a verified kind 5 of owner's; returns the hashes removed, whose files go once no row holds them. */
 export function applyDeletion(db: SqlDb, owner: string, event: NostrEvent): string[] {
+  return applyDeletions(db, owner, [event]);
+}
+
+/**
+ * Applies verified kind 5s of owner's together; returns the hashes removed. A kind 5 removes what any older one
+ * naming the same address does (deletionRemoves), so each address is applied once, at the newest kind 5 naming it,
+ * and the saves' addresses are worked out once (addressIndex): the work grows with the addresses named and the saves
+ * held, not with their product, so thousands of kind 5s can't hold the sync.
+ */
+export function applyDeletions(db: SqlDb, owner: string, events: NostrEvent[]): string[] {
+  const named = new Map<string, number>();
+  for (const e of events) for (const d of deletedDs(e, owner)) named.set(d, Math.max(named.get(d) ?? -Infinity, e.created_at));
+  if (!named.size) return [];
   return db.tx(() => {
     const removed: string[] = [];
+    const future = new Set(db.all<{ d: string }>('SELECT d FROM items_future WHERE owner = ?', owner).map((r) => r.d));
     // addresses are keyed from v1.10 (F5): each is found through the address a save is known at
-    const ds = deletedDs(event, owner);
-    for (const d of ds) db.run('DELETE FROM items_future WHERE owner = ? AND d = ? AND created_at <= ?', owner, d, event.created_at);
-    for (const hash of new Set(savesAt(db, owner, ds).values())) {
-      const row = db.get<Row>('SELECT * FROM items WHERE owner = ? AND hash = ?', owner, hash);
-      if (!row || !deletionRemoves(version(row)!, event.created_at)) continue;
-      removeItem(db, row.id, owner, hash);
-      removed.push(hash);
+    const at = addressIndex(db, owner);
+    for (const [d, deletedAt] of named) {
+      if (future.has(d)) db.run('DELETE FROM items_future WHERE owner = ? AND d = ? AND created_at <= ?', owner, d, deletedAt);
+      for (const hash of at.get(d) ?? []) {
+        const row = db.get<Row>('SELECT * FROM items WHERE owner = ? AND hash = ?', owner, hash);
+        if (!row || !deletionRemoves(version(row)!, deletedAt)) continue;
+        removeItem(db, row.id, owner, hash);
+        removed.push(hash);
+      }
     }
     return removed;
   });

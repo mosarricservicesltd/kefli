@@ -1,9 +1,10 @@
 import {
-  LocalSigner, SignerSlot, buildDeletions, buildDevicesEvent, buildRelayList, buildItemEvent, buildServerList, encryptText, normaliseMarkdown, textHash,
+  LocalSigner, SignerSlot, buildDeletions, buildDevicesEvent, buildRelayList, buildItemEvent, buildServerList, encryptText, normaliseMarkdown, savedD, textHash,
 } from '@kefli/protocol';
 import type { Item, NostrEvent, ParsedItem, Signer } from '@kefli/protocol';
 import { commitDelete, deleteItem } from '../src/data/library';
 import { nodeCrypto } from '@kefli/protocol/node';
+import { bytesToHex } from '@noble/hashes/utils.js';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
@@ -585,6 +586,48 @@ describe('events another client spoilt, or a relay sends to wear the phone out',
     expect(await syncInbound(w.ports)).toMatchObject({ items: 1 });
     expect(w.db.all('SELECT token, label FROM devices')).toEqual([{ token: good.token, label: good.label }]);
     expect(cursors(w).length).toBeGreaterThan(0);
+  });
+
+  test('a flood of kind 5s works out the library’s addresses once, not once a kind 5 (an HMAC a save each time)', async () => {
+    const w = world();
+    const key = new Uint8Array(32).fill(7);
+    w.db.run('UPDATE identities SET library_key = ?, library_key_at = 1 WHERE pubkey = ?', bytesToHex(key), w.pk);
+    w.db.tx(() => {
+      for (let i = 0; i < 500; i++) {
+        w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, event_id, event_created_at, published, remote_d) VALUES (?, ?, ?, 1, 'unread', 'queued', 'sync', ?, 100, 1, ?)",
+          w.pk, h(i), `https://e.com/${i}`, `ev${i}`, savedD(key, h(i)));
+      }
+    });
+    // 20 kind 5s of 50 addresses each, for saves long gone, and one naming a save the phone holds
+    const gone = Array.from({ length: 1_000 }, (_, i) => `kefli/item/${h(1_000_000 + i)}`);
+    for (const e of [...await buildDeletions(w.signer, gone, 500), ...await buildDeletions(w.signer, [savedD(key, h(7))], 500)]) w.publish(e, ['ws://a']);
+    // 400 kind 5s against 3,000 saves took over three minutes when each kind 5 keyed every save's address again
+    let reads = 0;
+    const all = w.db.all;
+    w.db.all = ((sql: string, ...params: never[]) => (sql === 'SELECT hash, remote_d FROM items WHERE owner = ?' && reads++, all(sql, ...params))) as typeof all;
+    expect(await syncInbound(w.ports)).toMatchObject({ deletions: 1 });
+    expect(reads).toBe(1);
+    expect(row(w, h(7))).toBeUndefined();
+    expect(w.db.get('SELECT COUNT(*) AS n FROM items')).toEqual({ n: 499 });
+  }, 120_000);
+
+  test('an archival relay replaying every version of a save asks the signer once, not once a version', async () => {
+    const w = world();
+    const r = refusing(w);
+    r.refusing = null;
+    for (let i = 0; i < 50; i++) w.publish(await remoteSave(w, h(1), 6000 + i, null, { progress: i / 50 }), ['ws://a']);
+    expect(await syncInbound(w.ports)).toMatchObject({ items: 1 });
+    expect(r.asked).toBe(1);
+    expect(row(w, h(1))).toMatchObject({ event_created_at: 6049, progress: 49 / 50 });
+  });
+
+  test('two saves another client put at one address: only the newest becomes a row, as for any address (C§8)', async () => {
+    const w = world();
+    const d = `kefli/item/${h(9)}`;
+    w.publish(await rawEvent(w, d, itemJson(h(1), { url: 'https://one.example' }), 6000), ['ws://a']);
+    w.publish(await rawEvent(w, d, itemJson(h(2), { url: 'https://two.example' }), 6001), ['ws://b']);
+    expect(await syncInbound(w.ports)).toMatchObject({ items: 1 });
+    expect(w.db.all('SELECT hash, url FROM items')).toEqual([{ hash: h(2), url: 'https://two.example' }]);
   });
 
   test('a save nested 4,500 deep, inside the 16 KB ceiling, is dropped, and the sync goes on to the rest', async () => {
