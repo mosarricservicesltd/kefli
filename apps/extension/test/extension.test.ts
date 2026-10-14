@@ -304,10 +304,15 @@ describe('delivery', () => {
     expect(r.published.map((w) => w.id)).toEqual([other.id]);
   });
   test('a save with no blob, or one already uploaded, is only published', async () => {
-    const { pending } = await prepare(linkOnly(PAGE.url), ctx);
-    const f = fakeNet({ upload: 'refused' });
-    expect(await deliver(pending, 'b', 'r', device, f.net, async () => void f.calls.push('refused'))).toBe('sent');
-    expect(f.calls).toEqual([`publish 1059 as ${device.pubkey().slice(0, 4)}`]);
+    const link = (await prepare(linkOnly(PAGE.url), ctx)).pending;
+    const uploaded = { ...(await prepare(PAGE, ctx)).pending, blob: null };
+    expect(uploaded.sha256).not.toBeNull();
+    for (const p of [link, uploaded]) {
+      const f = fakeNet({ upload: 'refused' });
+      expect(await deliver(p, 'b', 'r', device, f.net, async () => void f.calls.push('refused'))).toBe('sent');
+      expect(f.calls).toEqual([`publish 1059 as ${device.pubkey().slice(0, 4)}`]);
+      expect(f.published.map((w) => w.id)).toEqual([p.id]);
+    }
   });
   test("a relay that times out, and one that refuses", async () => {
     expect((await send({ publish: 'down' })).d).toBe('unreachable');
