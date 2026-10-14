@@ -4,7 +4,7 @@
 // text is read plain: kept whole, as paragraphs, every word in a block and a sentence.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { deriveArticle, type Derived } from '../src/reader/blocks';
+import { VOICE_CHARS, deriveArticle, type Derived } from '../src/reader/blocks';
 import { LIMITS, beyondLimits } from '../src/reader/limits';
 
 /** The derive's result and how long it took, in ms. */
@@ -96,6 +96,18 @@ describe('deriveArticle on hostile Markdown (mobile spec 6.7)', () => {
     expect((d.blocks[1] as { text: string }).text.split('\n')).toHaveLength(20_000);
     expect(d.words).toBe(2 + 60_000);
     whole(d);
+  });
+
+  test('a run-on paragraph reaches the voice in pieces it can speak whole', () => {
+    // 3,000 words and no full stop: one sentence of 20,000 characters, of which the engine would speak 4,000
+    const md = `${Array.from({ length: 3_000 }, (_, i) => ['saving', 'reading', 'later', 'quiet'][i % 4]).join(' ')}\n`;
+    const d = deriveArticle(md);
+    expect(Math.max(...d.sentences.map((s) => s.text.length))).toBeLessThanOrEqual(VOICE_CHARS);
+    expect(d.sentences.length).toBeGreaterThan(5);
+    expect(d.words).toBe(3_000);
+    whole(d);
+    // each piece is its stretch of the spoken text
+    for (const s of d.sentences) expect(d.spoken.startsWith(s.text, d.spoken.split(' ').slice(0, s.firstWord).join(' ').length + (s.firstWord ? 1 : 0))).toBe(true);
   });
 
   test('read plain, escapes are taken out and headings stay headings', () => {

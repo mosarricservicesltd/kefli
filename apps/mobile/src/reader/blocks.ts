@@ -136,8 +136,42 @@ export type Article = { blocks: Block[]; words: number };
 /** Everything the Reader and the voice need from an article, from one Markdown parse (6.7: blocks are derived once). */
 export type Derived = Article & { v: number; sentences: Sentence[]; spoken: string };
 
-/** The version of what deriveArticle writes; a stored file of another version is derived again. 2: citation markers go silent (contract 1.6). */
-export const DERIVED_VERSION = 2;
+/**
+ * The version of what deriveArticle writes; a stored file of another version is derived again. 2: citation markers
+ * go silent (contract 1.6). 3: no sentence over VOICE_CHARS, and Markdown past reader/limits read plain.
+ */
+export const DERIVED_VERSION = 3;
+
+/**
+ * A sentence's characters at most, for the voice: Android's engine takes 4,000 (getMaxSpeechInputLength) and the
+ * voice module drops the rest of a longer one, so run-on text, or a paragraph in a script without full stops the
+ * splitter knows, would go partly unheard.
+ */
+export const VOICE_CHARS = 3_000;
+
+/** The words of a long sentence, as pieces of at most VOICE_CHARS cut between words; a longer word stays whole. */
+function pieces(s: Sentence, out: Sentence[]): void {
+  const n = s.wordStarts.length;
+  const endOf = (w: number) => (w + 1 < n ? s.wordStarts[w + 1] - 1 : s.text.length);
+  let first = 0;
+  for (let w = 0; w < n; w++) {
+    const at = s.wordStarts[first];
+    const last = w + 1 === n || endOf(w + 1) - at > VOICE_CHARS;
+    if (!last) continue;
+    out.push({ text: s.text.slice(at, endOf(w)), wordStarts: s.wordStarts.slice(first, w + 1).map((x) => x - at), firstWord: s.firstWord + first });
+    first = w + 1;
+  }
+}
+
+/** The sentences, each long one cut so the voice speaks every word. */
+function voiceable(list: Sentence[]): Sentence[] {
+  const out: Sentence[] = [];
+  for (const s of list) {
+    if (s.text.length > VOICE_CHARS) pieces(s, out);
+    else out.push(s);
+  }
+  return out;
+}
 
 /** The CommonMark parse, the blocks and the spoken projection: the article as written. */
 function richArticle(markdown: string): Derived {
@@ -151,7 +185,7 @@ function richArticle(markdown: string): Derived {
     const next = i + 1 < drafts.length ? starts[i + 1] : wordOffsets.length;
     return { ...d, firstWord: starts[i], words: Math.max(0, next - starts[i]) } as Block;
   });
-  return { v: DERIVED_VERSION, blocks, words: wordOffsets.length, sentences: sentences(p), spoken: p.text };
+  return { v: DERIVED_VERSION, blocks, words: wordOffsets.length, sentences: voiceable(sentences(p)), spoken: p.text };
 }
 
 /**
