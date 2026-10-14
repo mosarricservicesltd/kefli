@@ -208,6 +208,26 @@ describe("a page's redirects are followed by hand, never onto the phone's own ne
     expect(down.asked).toEqual(['https://down.example/a', 'http://down.example/a']);
   });
 
+  test('an https try still under way at the deadline is the network being slow: its http is never asked', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    try {
+      const asked: string[] = [];
+      const f = (async (url: string, init: RequestInit) => {
+        asked.push(url);
+        if (url === 'https://bit.example/s') return new Response('', { status: 301, headers: { location: 'http://slow.example/story' } });
+        // the https try answers nothing until the deadline lets it go
+        return new Promise<Response>((_, fail) => init.signal?.addEventListener('abort', () => fail(Object.assign(new Error('aborted'), { name: 'AbortError' }))));
+      }) as unknown as typeof fetch;
+      let out: unknown = null;
+      void fetchPage(pages(f), 'https://bit.example/s').then((o) => (out = o));
+      await jest.advanceTimersByTimeAsync(PAGE_TIMEOUT_MS + 1);
+      expect(out).toEqual({ kind: 'offline', timedOut: true });
+      expect(asked).toEqual(['https://bit.example/s', 'https://slow.example/story']);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   test('every hop runs inside the one deadline: a chain that outlasts it is the network being slow, and goes no further', async () => {
     jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
     try {
