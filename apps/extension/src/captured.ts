@@ -46,9 +46,12 @@ export function keepHtml(parsed: Parsed, content: string | undefined): string | 
   return new TextEncoder().encode(content).length <= HTML_MAX_BYTES ? content : null;
 }
 
-/** A page's size, measured without reading it: its elements, the serialised length, and its widest parent. */
+/** A page's size, measured without reading it: its elements, its text, the serialised length and its widest parent. */
 export interface PageSize {
   elements: number;
+  /** The body's text, less what is inside its script and style elements, which reading drops at once. */
+  readable: number;
+  /** The serialised page; 0 until it is serialised. */
   chars: number;
   /** The most element children any one element has, and that element's text length. */
   children: number;
@@ -58,18 +61,22 @@ export interface PageSize {
 /**
  * Past any of these a page isn't read: the save goes without its text, which the phone fetches itself, as it does for a
  * page whose text is over 2 MB. Reading runs on the page's own thread, so while it runs the tab is frozen. The HTML
- * standard's single page (337,128 elements, 15.8 million characters) froze its tab for two minutes, and its text was
- * over 2 MB anyway. The longest real pages tried are well inside: World War II on Wikipedia (17,011 elements, 2.5
- * million characters, read in 2.8 s) and War and Peace on Project Gutenberg (14,900 and 3.8 million, 7.9 s). widest is
- * Turndown's cost: it joins a parent's children into a string it reads back at every child, so a parent with many
- * children costs about children × text / 2 characters copied, and 20,000 one-line paragraphs in one article (25,000
- * million) took 54 s. Pride and Prejudice, all 2,165 of its paragraphs in the body, costs 778 million and reads in 2.5 s.
+ * standard's single page (337,128 elements, 4.7 million characters of text) froze its tab for two minutes, and 10 MB of
+ * article (9 million) for 52 s, each with its text over 2 MB anyway. The longest real pages tried are inside: World War
+ * II on Wikipedia (17,011 elements, read in 2.8 s) and War and Peace on Project Gutenberg (3.6 million characters of
+ * text, 7.9 s). Scripts, styles and attributes cost only their copying (10 million characters of an app's data around a
+ * short article read in 2.6 s, a 20 MB attribute in 4.4 s), up to serialised in all, past which the copies alone would
+ * take the tab's memory. widest is Turndown's cost: it joins a parent's children into a string it reads back at every
+ * child, so a parent with many children costs about children × text / 2 characters copied, and 20,000 one-line
+ * paragraphs in one article (25,000 million) took 54 s. Moby-Dick, its 2,846 paragraphs all in the body, costs 1,964
+ * million.
  */
-export const PAGE_LIMITS = { elements: 200_000, chars: 8_000_000, widest: 4_000_000_000 } as const;
+export const PAGE_LIMITS = { elements: 200_000, readable: 4_000_000, serialised: 32_000_000, widest: 4_000_000_000 } as const;
 
 /** Whether reading the page would freeze its tab for too long, by PAGE_LIMITS. */
 export function tooLargeToRead(s: PageSize): boolean {
-  return s.elements > PAGE_LIMITS.elements || s.chars > PAGE_LIMITS.chars || (s.children * s.text) / 2 > PAGE_LIMITS.widest;
+  const L = PAGE_LIMITS;
+  return s.elements > L.elements || s.readable > L.readable || s.chars > L.serialised || (s.children * s.text) / 2 > L.widest;
 }
 
 /** A page's address and title, with nothing read from it: a page too large to read (PAGE_LIMITS). */

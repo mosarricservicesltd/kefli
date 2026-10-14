@@ -30,8 +30,8 @@ export function baseOf(doc: Pick<Document, 'querySelector'>, url: string): strin
 }
 
 /**
- * The page's elements and its widest parent, walked once, without serialising or reading it (PAGE_LIMITS). The count is
- * kept as it is found: childElementCount counts the children each time it is asked.
+ * The page's elements, its text and its widest parent, without serialising or reading it (PAGE_LIMITS). The widest
+ * parent's count is kept as it is found: childElementCount counts the children each time it is asked.
  */
 function sizeOf(doc: Document): Omit<PageSize, 'chars'> {
   let elements = 0;
@@ -42,7 +42,9 @@ function sizeOf(doc: Document): Omit<PageSize, 'chars'> {
     const n = el.childElementCount;
     if (n > children) [widest, children] = [el, n];
   }
-  return { elements, children, text: widest?.textContent?.length ?? 0 };
+  let readable = doc.body?.textContent?.length ?? 0;
+  for (const el of doc.body?.querySelectorAll('script, style') ?? []) readable -= el.textContent?.length ?? 0;
+  return { elements, readable, children, text: widest?.textContent?.length ?? 0 };
 }
 
 /**
