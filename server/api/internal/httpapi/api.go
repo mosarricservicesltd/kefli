@@ -90,6 +90,13 @@ const MaxBlockCalls = 3000
 // under the 16 KB ceiling, so this leaves room for rows a Disconnect hasn't reached yet.
 const MaxDevices = 64
 
+// MaxDeviceAdds is how many browser keys one library may connect a day, beside MaxDevices at once. A browser's proof
+// costs nothing to make, and each Disconnect lists the browser as gone for store.GoneLife, 60 days, a row that every
+// nightly relay sweep and the write policy's hourly prune read (F45): connecting and disconnecting fresh keys within
+// the API's 60 calls a minute, one library put 43,200 on the list a day. A user connects a browser now and then and a
+// move connects the library's browsers once, so twice MaxDevices a day is a full set replaced and moved in one day.
+const MaxDeviceAdds = 2 * MaxDevices
+
 // maxOffer is the largest offer taken: a pair offer sealed as the extension makes it is under 1 KB, a phone offer
 // under 300 bytes.
 const maxOffer = 8192
@@ -110,6 +117,7 @@ type API struct {
 	offBlk *limit.Limiter // offers posted, MaxBlockOffers an hour per IPv6 /48
 	adrCal *limit.Limiter // requests, MaxAddressCalls a minute per address, before anything is read
 	blkCal *limit.Limiter // the same, MaxBlockCalls a minute per IPv6 /48
+	devAdd *limit.Limiter // browsers connected, MaxDeviceAdds a day per library
 	// logKey keys the fingerprints the logs show for pubkeys (short)
 	logKey []byte
 }
@@ -137,6 +145,7 @@ func New(cfg Config, st *store.Store, log *slog.Logger) *API {
 		offBlk: limit.New(MaxBlockOffers, time.Hour, now),
 		adrCal: limit.New(MaxAddressCalls, time.Minute, now),
 		blkCal: limit.New(MaxBlockCalls, time.Minute, now),
+		devAdd: limit.New(MaxDeviceAdds, 24*time.Hour, now),
 	}
 }
 
