@@ -3,11 +3,13 @@
 //	keflictl -db keflid.db register <pubkey>…        add users, as POST /register does
 //	keflictl -db keflid.db disable <pubkey>          take a key off the allowlist and freeze its blobs, keeping them
 //	keflictl -db keflid.db enable <pubkey>
+//	keflictl -db keflid.db quota <pubkey|npub> <MB>  set one library's quota, in whole megabytes of 1,048,576 bytes
 //	keflictl -db keflid.db gone <days>               keys deleted at least that many days ago, one a line, for the relay's sweep
 package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -28,14 +30,30 @@ func main() {
 	}
 }
 
+var errUsage = errors.New("usage: keflictl -db <file> register|disable|enable <pubkey>… | quota <pubkey|npub> <MB> | gone <days>")
+
+// perKey are the commands that take one key or more.
+var perKey = map[string]func(context.Context, *store.Store, string) error{
+	"register": func(ctx context.Context, st *store.Store, k string) error { return st.Register(ctx, k) },
+	"disable":  func(ctx context.Context, st *store.Store, k string) error { return st.SetDisabled(ctx, k, true) },
+	"enable":   func(ctx context.Context, st *store.Store, k string) error { return st.SetDisabled(ctx, k, false) },
+}
+
 func run(path string, args []string, out io.Writer) error {
-	if len(args) == 2 && args[0] == "gone" {
+	switch {
+	case len(args) == 2 && args[0] == "gone":
 		return gone(path, args[1], out)
+	case len(args) == 3 && args[0] == "quota":
+		return quota(path, args[1], args[2], out)
+	case len(args) < 2 || perKey[args[0]] == nil:
+		return errUsage
 	}
-	if len(args) < 2 {
-		return fmt.Errorf("usage: keflictl -db <file> register|disable|enable <pubkey>… | gone <days>")
-	}
-	for _, k := range args[1:] {
+	return eachKey(path, args[0], args[1:], out)
+}
+
+// eachKey runs a per-key command for each key, once every one of them reads as a hex pubkey.
+func eachKey(path, command string, keys []string, out io.Writer) error {
+	for _, k := range keys {
 		if !auth.IsHex64(k) {
 			return fmt.Errorf("%q isn't a hex pubkey", k)
 		}
@@ -45,22 +63,39 @@ func run(path string, args []string, out io.Writer) error {
 		return err
 	}
 	defer st.Close()
-	ctx := context.Background()
-	for _, k := range args[1:] {
-		switch args[0] {
-		case "register":
-			err = st.Register(ctx, k)
-		case "disable", "enable":
-			err = st.SetDisabled(ctx, k, args[0] == "disable")
-		default:
-			return fmt.Errorf("unknown command %q", args[0])
-		}
-		if err != nil {
+	for _, k := range keys {
+		if err := perKey[command](context.Background(), st, k); err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "%s %s\n", args[0], k[:12])
+		fmt.Fprintf(out, "%s %s\n", command, k[:12])
 	}
 	return nil
+}
+
+// quota sets one library's quota (flow decision 117), which it keeps from then on. A library left above it keeps its
+// blobs and takes no new one until deleting brings it back within it (contract 5).
+func quota(path, who, mb string, out io.Writer) error {
+	pubkey, err := pubkeyArg(who)
+	if err != nil {
+		return err
+	}
+	bytes, err := megabytes(mb)
+	if err != nil {
+		return err
+	}
+	st, err := store.Open(path)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	found, err := st.SetQuota(context.Background(), pubkey, bytes)
+	if err == nil && !found {
+		err = fmt.Errorf("%s has no account", pubkey[:12])
+	}
+	if err == nil {
+		fmt.Fprintf(out, "quota %s %d MB\n", pubkey[:12], bytes>>20)
+	}
+	return err
 }
 
 // gone prints the keys deleted at least days ago.

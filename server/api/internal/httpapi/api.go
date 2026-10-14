@@ -1,6 +1,7 @@
-// Package httpapi is the operator HTTP API (contract 6): defaults.json, registration, device keys, the two pairing
-// offers, account deletion and NIP-05. Every request except the two public documents carries NIP-98; every body is a
-// JSON object with v; every answer is {"v":1,…}, and errors {"v":1,"error":…}, as the phone and extension read them.
+// Package httpapi is the operator HTTP API (contract 6): defaults.json, registration, the library's fair-use figures,
+// device keys, the two pairing offers, account deletion and NIP-05. Every request except the two public documents
+// carries NIP-98; every body is a JSON object with v; every answer is {"v":1,…}, and errors {"v":1,"error":…}, as the
+// phone and extension read them.
 package httpapi
 
 import (
@@ -105,6 +106,7 @@ func (a *API) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /defaults.json", a.defaults)
 	mux.HandleFunc("GET /.well-known/nostr.json", a.nip05)
 	mux.HandleFunc("POST /register", a.register)
+	mux.HandleFunc("GET /account", a.account)
 	mux.HandleFunc("DELETE /account", a.deleteAccount)
 	mux.HandleFunc("POST /devices", a.addDevice)
 	mux.HandleFunc("DELETE /devices/{device}", a.removeDevice)

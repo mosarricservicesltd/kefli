@@ -13,8 +13,15 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// DefaultQuota is contract 5's 200 MB per user, counting uploads by the user's devices.
-const DefaultQuota int64 = 200 * 1024 * 1024
+// DefaultQuota is a new library's quota under contract 5's fair use, 50 MB (flow decision 117; 200 MB until contract
+// 1.12), counting the user's uploads and their devices' together, each blob once.
+const DefaultQuota int64 = 50 << 20
+
+// DailyLimit is the most a library's uploads may add to the disk in any 24 hours (contract 5: 20 MB).
+const DailyLimit int64 = 20 << 20
+
+// Day is the window DailyLimit counts over, and how long the uploads log keeps a row.
+const Day = 24 * time.Hour
 
 // InboxLife is how long a device's inbox blob is kept (contract 5: 14 days).
 const InboxLife = 14 * 24 * time.Hour
@@ -28,6 +35,9 @@ const OfferLife = 5 * time.Minute
 const GoneLife = 60 * 24 * time.Hour
 
 var ErrTaken = errors.New("lookup taken")
+
+// ErrNoAccount is an upload's record refused because its library's account has gone (Upload).
+var ErrNoAccount = errors.New("no account")
 
 const schema = `
 PRAGMA journal_mode = WAL;
@@ -76,9 +86,27 @@ CREATE TABLE IF NOT EXISTS gone (
   pubkey TEXT PRIMARY KEY,
   at     INTEGER NOT NULL
 );
+-- One row per upload that added a blob to the disk, against the library it counts for: what DailyLimit counts (contract
+-- 5). A blob the server already stores, for anyone, adds no row, and rows go only once a day old, so deleting a blob
+-- gives none of the day back. No hash is kept.
+CREATE TABLE IF NOT EXISTS uploads (
+  account TEXT NOT NULL,
+  size    INTEGER NOT NULL,
+  at      INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS uploads_account ON uploads(account, at);
 -- Browser labels are no longer kept (F30): any stored before go. The column stays, empty, so no migration is needed.
 UPDATE devices SET label = '' WHERE label != '';
 `
+
+// steps are the schema's versioned changes (PRAGMA user_version): step i takes the database from version i to i+1, in
+// the transaction that records it, so each runs once. The schema above is applied at every open and changes nothing a
+// second time; a change that must not run twice goes here.
+var steps = []string{
+	// 1, contract 1.12 (flow decision 117): libraries still at the old default of 200 MB (209,715,200 bytes) fall to the
+	// new 50 MB (52,428,800). A quota set to any other figure is kept, and so is one set to 200 MB after this has run.
+	`UPDATE accounts SET quota_bytes = 52428800 WHERE quota_bytes = 209715200`,
+}
 
 type Store struct {
 	db  *sql.DB
@@ -95,7 +123,45 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("schema: %w", err)
 	}
+	if err := migrate(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return &Store{db: db, Now: time.Now}, nil
+}
+
+// migrate runs the steps the database hasn't had. A database from a newer keflid, at a version past the last step
+// here, isn't opened, since this code can't know what its steps changed.
+func migrate(db *sql.DB) error {
+	var version int
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		return fmt.Errorf("schema version: %w", err)
+	}
+	if version > len(steps) {
+		return fmt.Errorf("schema version %d is newer than this keflid's %d", version, len(steps))
+	}
+	for v := version; v < len(steps); v++ {
+		if err := runStep(db, v); err != nil {
+			return fmt.Errorf("schema version %d: %w", v+1, err)
+		}
+	}
+	return nil
+}
+
+// runStep runs steps[v] and records version v+1 in one transaction: a step that fails leaves the version as it was.
+func runStep(db *sql.DB, v int) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(steps[v]); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(fmt.Sprintf("PRAGMA user_version = %d", v+1)); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -124,6 +190,17 @@ func (s *Store) Registrations(ctx context.Context, since time.Time) (int, error)
 func (s *Store) SetDisabled(ctx context.Context, pubkey string, disabled bool) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE accounts SET disabled = ? WHERE pubkey = ?`, disabled, pubkey)
 	return err
+}
+
+// SetQuota sets one library's quota in bytes (flow decision 117: keflictl quota), which it keeps from then on; found
+// is false when the key has no account. A library left above its new quota keeps its blobs (contract 5).
+func (s *Store) SetQuota(ctx context.Context, pubkey string, quota int64) (found bool, err error) {
+	res, err := s.db.ExecContext(ctx, `UPDATE accounts SET quota_bytes = ? WHERE pubkey = ?`, quota, pubkey)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
 }
 
 // Account is a registered, enabled user.
@@ -237,8 +314,8 @@ func (s *Store) UseAuth(ctx context.Context, id string, until int64) (bool, erro
 	return n == 1, nil
 }
 
-// Sweep removes expired offers, used authorisation ids and keys gone longer than GoneLife. Expired inbox blobs are
-// ExpireInbox's.
+// Sweep removes expired offers, used authorisation ids, keys gone longer than GoneLife and uploads a day old, which
+// no longer count against a library's day. Expired inbox blobs are ExpireInbox's.
 func (s *Store) Sweep(ctx context.Context) error {
 	now := s.unix()
 	for _, q := range []struct {
@@ -248,6 +325,7 @@ func (s *Store) Sweep(ctx context.Context) error {
 		{`DELETE FROM offers WHERE expires_at <= ?`, now},
 		{`DELETE FROM used_auth WHERE until <= ?`, now},
 		{`DELETE FROM gone WHERE at <= ?`, s.Now().Add(-GoneLife).Unix()},
+		{`DELETE FROM uploads WHERE at <= ?`, s.Now().Add(-Day).Unix()},
 	} {
 		if _, err := s.db.ExecContext(ctx, q.query, q.arg); err != nil {
 			return err
