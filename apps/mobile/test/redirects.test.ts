@@ -185,7 +185,7 @@ describe("a page's redirects are followed by hand, never onto the phone's own ne
       .toEqual([false, false, false, false]);
   });
 
-  test('a redirect through plain http is followed over https; a site with no https fails as the cleartext refused, not as the network', async () => {
+  test('a redirect through plain http is followed over https; one to a site with no https fails, refused as cleartext', async () => {
     // a shortener's link made for an http address, its site long since on https: OkHttp refused the http hop
     const moved = release({ 'https://bit.example/x': { status: 301, location: 'http://news.example/story' }, 'https://news.example/story': {} });
     expect(await fetchPage(pages(moved.f), 'https://bit.example/x')).toMatchObject({ kind: 'parsed', finalUrl: 'https://news.example/story' });

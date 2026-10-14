@@ -506,7 +506,7 @@ describe('a run of pending parses has a minute (an import of thousands held ever
     expect(nextRunIn(second, 0)).toBeNull();
   });
 
-  test('three in a row that can’t be had after a parse are dead links, not the network: the next run comes soon', async () => {
+  test('three in a row that can’t be had after a parse are dead links: the next run comes soon, three from the start still the network', async () => {
     // an old import: dead links come in runs, and a run that stopped at three of them waited for the next sync, for
     // days if Kefli wasn't opened, with most of the import never tried
     const dead = ['https://gone.example/1', 'https://gone.example/2', 'https://gone.example/3'];
