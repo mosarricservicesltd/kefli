@@ -10,7 +10,7 @@ import { absorbRecord } from '../src/data/devices';
 import { SEEN_KEEP, browserName, INBOX_BLOB_LIFE, inboxScan } from '../src/data/inbox';
 import { pendingParses } from '../src/data/pending';
 import {
-  INBOX_DEEP_EVERY, INBOX_MAX_BYTES, INBOX_TIMEOUT_MS, INBOX_UNWRAPS, drainInbox, judge, readBlob, type InboxPorts,
+  INBOX_DEEP_EVERY, INBOX_MAX_BYTES, INBOX_TIMEOUT_MS, INBOX_UNWRAPS, drainInbox, judge, readBlob, unjudged, type InboxPorts,
 } from '../src/services/inbox';
 import { GUARD_WORDS, type ParserResult } from '../src/services/page';
 import type { Filter } from '../src/services/sync';
@@ -407,6 +407,23 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     expect(await drainInbox(w.ports, w.owner)).toEqual({ ignored_token: 2 });
     const kept = w.db.all<{ n: number | null }>('SELECT length(request_d) AS n FROM inbox_seen');
     expect(kept.every((r) => (r.n ?? 0) <= 128)).toBe(true);
+  });
+
+  test('a deep read keeps no more wraps than two drains open, those opened first, and says when it let some go', async () => {
+    const w = world();
+    const read = unjudged(w.db);
+    // ten answers of small wraps anyone can send, newest first, as a deep read gets them
+    w.junk(5_000, w.now());
+    w.wraps.forEach((x, i) => (x.created_at = w.now() - i));
+    for (let page = 0; page < 10; page++) read.take(w.wraps.slice(page * 500, (page + 1) * 500));
+    const kept = read.wraps();
+    expect(kept.length).toBeLessThanOrEqual(2 * INBOX_UNWRAPS);
+    expect(kept[0].created_at).toBe(w.now() - 4_999);
+    expect(read.over()).toBe(true);
+    // the drain counts those let go as left unopened: the cursor stays
+    w.ports.query = w.relayLike(500);
+    await drainInbox(w.ports, w.owner);
+    expect(w.cursor()).toBeNull();
   });
 
   test('a wrap of a save request’s limit or more can’t hold one: never opened, nothing kept of it, the cursor moving on', async () => {

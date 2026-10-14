@@ -238,10 +238,11 @@ const readDeep = new Map<string, number>();
 
 /**
  * What a drain read: the wraps no drain has judged that could hold a save request, in the order they are opened
- * (unjudged); the time the cursor may move to once they are all opened, null while the read didn't reach the window's
- * end; and the scan still under way (InboxScan), which a wrap left unopened marks.
+ * (unjudged), and whether more were read than kept (over); the time the cursor may move to once they are all opened,
+ * null while the read didn't reach the window's end; and the scan still under way (InboxScan), which a wrap left
+ * unopened marks.
  */
-type WindowRead = { wraps: NostrEvent[]; upTo: number | null; scan: InboxScan | null };
+type WindowRead = { wraps: NostrEvent[]; over: boolean; upTo: number | null; scan: InboxScan | null };
 
 /**
  * A wrap the size of a save request's limit or more can't hold one (C§4.4: under 8 KB, which the extension keeps to),
@@ -269,13 +270,12 @@ async function readWindow(p: InboxPorts, relay: string, owner: string, since: nu
   const base = { kinds: [KIND.giftWrap], '#p': [owner], ...(since === undefined ? {} : { since: Math.max(0, since - WRAP_LOOKBACK) }) };
   const ask = (until?: number) => p.query(relay, [{ ...base, limit: PAGE, ...(until === undefined ? {} : { until }) }]);
   const read = unjudged(p.db);
+  const done = (upTo: number | null, scan: InboxScan | null): WindowRead => ({ wraps: read.wraps(), over: read.over(), upTo, scan });
   const first = await ask();
   read.take(first);
   const whole = first.length < PAGE;
   if (whole) endInboxScan(p.db, relay, owner);
-  if (!first.length || now - (readDeep.get(key) ?? -Infinity) < INBOX_DEEP_EVERY) {
-    return { wraps: read.wraps(), upTo: whole ? now : null, scan: whole ? null : inboxScan(p.db, relay, owner) };
-  }
+  if (!first.length || now - (readDeep.get(key) ?? -Infinity) < INBOX_DEEP_EVERY) return done(whole ? now : null, whole ? null : inboxScan(p.db, relay, owner));
   readDeep.set(key, now);
   const held = inboxScan(p.db, relay, owner);
   // a scan goes on beneath the newest answer, which this read has just had
@@ -285,12 +285,12 @@ async function readWindow(p: InboxPorts, relay: string, owner: string, since: nu
     const fresh = read.take(page);
     if (!fresh && page.length < PAGE) {
       endInboxScan(p.db, relay, owner);
-      return { wraps: read.wraps(), upTo: scan.left ? null : scan.startedAt, scan: null };
+      return done(scan.left ? null : scan.startedAt, null);
     }
     scan.until = fresh ? oldestOf(page) : oldestOf(page) - 1;
   }
   keepInboxScan(p.db, relay, owner, scan);
-  return { wraps: read.wraps(), upTo: null, scan };
+  return done(null, scan);
 }
 
 /**
@@ -337,19 +337,21 @@ async function openOne(p: InboxPorts, owner: string, w: NostrEvent, blossom: str
   }
 }
 
-const byAge = (a: NostrEvent, b: NostrEvent) => a.created_at - b.created_at;
+type Kept = { e: NostrEvent; tried: boolean };
+const opensFirst = (a: Kept, b: Kept) => Number(a.tried) - Number(b.tried) || a.e.created_at - b.e.created_at;
 
 /**
  * What a read keeps: each wrap once (take returns how many of an answer were new to the read), and only one that may
  * hold a request (mayHoldRequest) and that no drain has judged, so what was read before costs no memory. wraps() is
  * the order they are opened: those never tried, oldest first, then those already waiting (a signer that didn't open
  * them, a taking that failed), so that wraps which keep failing, which anyone can send, are tried after the drain's
- * other wraps rather than spending its budget ahead of them.
+ * other wraps rather than spending its budget ahead of them. A drain opens at most INBOX_UNWRAPS, so no more than
+ * twice that are kept, those to be opened first; over() says some were let go, which the drain counts as left unopened.
  */
-function unjudged(db: SqlDb) {
+export function unjudged(db: SqlDb) {
   const ids = new Set<string>();
-  const fresh: NostrEvent[] = [];
-  const tried: NostrEvent[] = [];
+  let kept: Kept[] = [];
+  let over = false;
   const take = (page: NostrEvent[]): number => {
     let added = 0;
     for (const e of page) {
@@ -357,12 +359,15 @@ function unjudged(db: SqlDb) {
       ids.add(e.id);
       added++;
       const state = mayHoldRequest(e) ? seenState(db, e.id) : 'ignored_foreign';
-      if (state === null) fresh.push(e);
-      else if (state === 'waiting') tried.push(e);
+      if (state === null || state === 'waiting') kept.push({ e, tried: state === 'waiting' });
+    }
+    if (kept.length > 2 * INBOX_UNWRAPS) {
+      kept = kept.sort(opensFirst).slice(0, INBOX_UNWRAPS);
+      over = true;
     }
     return added;
   };
-  return { take, wraps: () => [...fresh.sort(byAge), ...tried.sort(byAge)] };
+  return { take, wraps: () => kept.sort(opensFirst).map((k) => k.e), over: () => over };
 }
 
 /** One drain of the inbox. Restartable: the cursor moves only after the relay answers, and as WindowRead.upTo allows. */
@@ -380,7 +385,8 @@ export async function drainInbox(p: InboxPorts, owner: string): Promise<InboxRes
   } catch {
     return out; // unreachable: the cursor stays
   }
-  let held = false;
+  // wraps read but let go (more than a drain opens) are left unopened as much as those the budget stops at
+  let held = read.over;
   for (const w of read.wraps) {
     // once the signer hasn't answered, and past the drain's budget, the rest wait for the next drain unasked
     const o = drain.waiting || drain.opens >= INBOX_UNWRAPS ? 'held' : await openOne(p, owner, w, d.operator.blossom, drain);
