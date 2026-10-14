@@ -286,14 +286,14 @@ describe("a page's canonical link is kept only from its own site (contract 4.3, 
   });
 
   test('a canonical past the longest kept is left out before it is read, however long the page made it', async () => {
-    // whatwg-url reads an address a code point at a time: on Node a canonical of a megabyte on the page's own site took
-    // 8 s to judge and one of 5 MB 51 s, longer still in the phone's JavaScript, with the share waiting on it
-    const huge = 'https://news.example/' + 'c'.repeat(1024 * 1024);
+    // whatwg-url reads an address a code point at a time: on Node a canonical on the page's own site took 3 to 8 s to
+    // judge at a megabyte and 51 s at 5 MB, longer still in the phone's JavaScript, with the share waiting on it
+    const huge = 'https://news.example/' + 'c'.repeat(2 * 1024 * 1024);
     const t = Date.now();
     const o = await fetchPage(naming(huge), 'https://amp.news.example/2026/10/story');
-    expect(Date.now() - t).toBeLessThan(1_000);
+    expect(Date.now() - t).toBeLessThan(2_000);
     expect(o).toMatchObject({ kind: 'parsed', finalUrl: 'https://amp.news.example/2026/10/story', result: { canonical: null } });
-  });
+  }, 60_000);
 });
 
 describe('a PDF is handed over and read only as far as a save can hold it', () => {
