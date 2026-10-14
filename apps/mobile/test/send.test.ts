@@ -387,6 +387,20 @@ describe('fair use: a refused text holds back only itself (C§4.2, C§5, v1.12)'
     expect(notBackedUp(w.db, w.signer.pubkey())).toBe(1);
   });
 
+  test("figures that can't be kept don't hold the save back: it goes without its text, which waits its day", async () => {
+    const w = world({ 'PUT http://blossom/upload': refuse('quota') });
+    w.ports.onFigures = () => {
+      throw new Error('no figures table');
+    };
+    const { held } = await save(w);
+    release(w.db, held);
+    await drain(w.ports);
+    expect(w.published().map((p) => p.relay).sort()).toEqual(['ws://a', 'ws://b', 'ws://op']);
+    expect((await lastItem(w)).text).toBeNull();
+    expect(blob(w)?.last_error).toBe('quota');
+    expect(nextDue(w.db, w.now() + 86_399)).toBeNull();
+  });
+
   test('a text over 8 MB (too_large) is never sent again; the save goes without it, and the text stays here', async () => {
     const w = world({ 'PUT http://blossom/upload': refuse('too_large') });
     const kept: unknown[] = [];
@@ -768,6 +782,21 @@ describe('deleting makes room (C§5, v1.12)', () => {
     expect(tries(w, before)).toBe(2);
     const taken = waiting(w).filter((x) => x.operator_at !== null).map((x) => x.sha256);
     expect(taken).toEqual(expect.arrayContaining([a.sha, c.sha]));
+  });
+
+  test("figures that can't be read change nothing the operator did: the delete and the upload each count as done", async () => {
+    const { w, z, a } = await full();
+    w.ports.figures = () => {
+      throw new Error('no figures table');
+    };
+    commitDelete(w.db, w.signer.pubkey(), z.hash, deleteItem(w.db, w.now(), w.signer.pubkey(), z.hash).held);
+    await drain(w.ports);
+    expect(w.db.get("SELECT 1 AS n FROM outbox WHERE op = 'delete_blob'")).toBeUndefined();
+    // a text that waited for room is taken on its day, and its mirror and publish follow
+    w.db.run("UPDATE outbox_targets SET next_at = 0 WHERE outbox_id = (SELECT id FROM outbox WHERE op = 'upload_blob' AND subject = ?)", a.sha);
+    await drain(w.ports);
+    expect(w.db.get("SELECT 1 AS n FROM outbox WHERE op IN ('upload_blob', 'mirror_blob') AND subject = ?", a.sha)).toBeUndefined();
+    expect(waiting(w).find((x) => x.sha256 === a.sha)).toMatchObject({ operator_at: expect.any(Number), last_error: null });
   });
 
   test('without known figures, or for texts waiting on the day, a deletion tries nothing at once', async () => {

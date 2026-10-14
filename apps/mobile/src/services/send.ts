@@ -205,12 +205,26 @@ function textTaken(db: SqlDb, now: number, owner: string, sha256: string, operat
 function refused(p: SendPorts, row: OutboxRow, target: string, sha256: string, r: Refusal): TargetResult[] {
   const why = refusalOf(r);
   if (!why) return [httpResult(target, r, false)];
-  p.db.run('UPDATE blobs SET last_error = ? WHERE sha256 = ? AND owner = ?', why, sha256, row.signer);
-  if (r.figures && (why === 'quota' || why === 'daily')) p.onFigures?.(row.signer, r.figures);
+  // the save goes now, before anything else this refusal brings is kept (C§4.2)
   releaseDependents(p.db, row.id, 'publish_item');
+  p.db.run('UPDATE blobs SET last_error = ? WHERE sha256 = ? AND owner = ?', why, sha256, row.signer);
+  const figures = r.figures;
+  if (figures && (why === 'quota' || why === 'daily')) quietly(() => p.onFigures?.(row.signer, figures));
   const error = `HTTP ${r.status} ${r.reason}`;
   if (why === 'too_large') return [{ target, kind: 'rejected', error }];
   return [{ target, kind: 'retry', error, ...(r.status === 507 ? {} : { waitSec: DAY }) }];
+}
+
+/**
+ * The library's figures, through data/account.ts's ports: they only reckon room early (C§5), so one that fails costs
+ * that and never the send it follows, which the operator has already answered.
+ */
+function quietly(f: () => void): void {
+  try {
+    f();
+  } catch {
+    // the next refusal, or Advanced's check, brings the figures again
+  }
 }
 
 /**
@@ -220,9 +234,11 @@ function refused(p: SendPorts, row: OutboxRow, target: string, sha256: string, r
  * for its day, since deleting gives none of the day back.
  */
 function tryRoom(p: SendPorts, owner: string): void {
-  const f = p.figures?.(owner);
-  const next = f ? nextForRoom(p.db, owner, roomLeft(p.db, owner, f)) : null;
-  if (next !== null) wake(p.db, next, p.now());
+  quietly(() => {
+    const f = p.figures?.(owner);
+    const next = f ? nextForRoom(p.db, owner, roomLeft(p.db, owner, f)) : null;
+    if (next !== null) wake(p.db, next, p.now());
+  });
 }
 
 /** The mirror after this one in defaults, or the first again after a day once every entry has refused (4.2). */
