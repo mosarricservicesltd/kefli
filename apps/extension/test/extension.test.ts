@@ -271,11 +271,13 @@ function fakeNet(o: { upload?: 'ok' | 'down' | 'refused'; publish?: 'ok' | 'down
 
 describe('delivery', () => {
   const ctx = { device, defaults: DEFAULTS, pairing: PAIRING, crypto: webCrypto, now: NOW };
+  /** The step before every publish, which notes only a refused upload among the network's calls. */
+  const noting = (calls: string[]) => async (_p: Delivered, refused: boolean) => void (refused && calls.push('refused'));
   /** A delivery whose refusal, unless the test says otherwise, is only noted among the network's calls. */
-  const send = async (o: Parameters<typeof fakeNet>[0], refused?: (p: Delivered) => Promise<void>) => {
+  const send = async (o: Parameters<typeof fakeNet>[0], before?: (p: Delivered, refused: boolean) => Promise<void>) => {
     const { pending } = await prepare(PAGE, ctx);
     const f = fakeNet(o);
-    return { d: await deliver(pending, 'b', 'r', device, f.net, refused ?? (async () => void f.calls.push('refused'))), pending, ...f };
+    return { d: await deliver(pending, 'b', 'r', device, f.net, before ?? noting(f.calls)), pending, ...f };
   };
 
   test('the blob goes up before the wrap, and is then dropped', async () => {
@@ -284,6 +286,15 @@ describe('delivery', () => {
     // the wrap goes on a connection AUTHed as the device (F9)
     expect(r.calls).toEqual(['upload', `publish 1059 as ${device.pubkey().slice(0, 4)}`]);
     expect(r.pending.blob).toBeNull();
+  });
+  test('the step before the publish runs after every upload that went or had nothing to send, and says whether it was refused', async () => {
+    const seen: boolean[] = [];
+    const before = async (_p: Delivered, refused: boolean) => void seen.push(refused);
+    for (const upload of ['ok', 'refused', 'down'] as const) await send({ upload }, before);
+    expect(seen).toEqual([false, true]);
+    const f = fakeNet();
+    await deliver((await prepare(linkOnly(PAGE.url), ctx)).pending, 'b', 'r', device, f.net, before);
+    expect(seen).toEqual([false, true, false]);
   });
   test('an unreachable server leaves the save to wait, the blob kept', async () => {
     const r = await send({ upload: 'down' });
@@ -294,12 +305,12 @@ describe('delivery', () => {
   test('a blob refused for good isn’t sent again, and the wrap that refused leaves in its place goes (v1.12)', async () => {
     const other = (await prepare(linkOnly(PAGE.url), ctx)).pending.wrap;
     const seen: string[] = [];
-    const r = await send({ upload: 'refused' }, async (p) => {
-      seen.push(`refused, blob ${p.blob === null ? 'gone' : 'kept'}`);
+    const r = await send({ upload: 'refused' }, async (p, refused) => {
+      seen.push(`refused ${refused}, blob ${p.blob === null ? 'gone' : 'kept'}`);
       p.wrap = other;
     });
     expect(r.d).toBe('sent');
-    expect(seen).toEqual(['refused, blob gone']);
+    expect(seen).toEqual(['refused true, blob gone']);
     expect(r.calls).toEqual(['upload', `publish 1059 as ${device.pubkey().slice(0, 4)}`]);
     expect(r.published.map((w) => w.id)).toEqual([other.id]);
   });
@@ -309,7 +320,7 @@ describe('delivery', () => {
     expect(uploaded.sha256).not.toBeNull();
     for (const p of [link, uploaded]) {
       const f = fakeNet({ upload: 'refused' });
-      expect(await deliver(p, 'b', 'r', device, f.net, async () => void f.calls.push('refused'))).toBe('sent');
+      expect(await deliver(p, 'b', 'r', device, f.net, noting(f.calls))).toBe('sent');
       expect(f.calls).toEqual([`publish 1059 as ${device.pubkey().slice(0, 4)}`]);
       expect(f.published.map((w) => w.id)).toEqual([p.id]);
     }

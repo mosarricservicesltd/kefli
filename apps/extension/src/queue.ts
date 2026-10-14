@@ -90,14 +90,15 @@ export async function enqueue(store: Store, p: Pending, why: Queued['why']): Pro
 }
 
 /**
- * A save wrapped again under a new id, its request sent without the HTML the operator refused (contract 4.4, v1.12): the
- * entry takes the new wrap and sealed request in the old one's place, with no blob left to upload. False when the entry
- * had already left the queue.
+ * A save wrapped again under a new id: its request sent without the HTML the operator refused (contract 4.4, v1.12), with
+ * no blob left to upload, or a wrap that waited made again (WRAP_FRESH_FOR). The entry takes the new wrap, its sealed
+ * request and what else changed in the old one's place, never the page's title, host or hash (F31), whatever it is given.
+ * False when the entry had already left the queue.
  */
-export async function replaceWrap(store: Store, was: string, next: Pick<Queued, 'id' | 'wrap' | 'sealed'>): Promise<boolean> {
+export async function replaceWrap(store: Store, was: string, next: Pick<Queued, 'id' | 'wrap' | 'sealed'> & Partial<Queued>): Promise<boolean> {
   return changeQueue(store, (q) => {
     const i = q.findIndex((e) => e.id === was);
-    if (i >= 0) q[i] = { ...q[i], id: next.id, wrap: next.wrap, sealed: next.sealed, blob: null, sha256: null, textless: true };
+    if (i >= 0) q[i] = sealedOnly({ ...q[i], ...next });
     return i >= 0;
   });
 }

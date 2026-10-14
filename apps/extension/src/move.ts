@@ -45,7 +45,7 @@ export async function followMoves(device: LocalSigner, wraps: NostrEvent[], curr
  */
 export async function rewrap(e: Queued, device: LocalSigner, pairing: Pairing, now: number): Promise<Queued> {
   const again = await wrapAgain(e.sealed, device, pairing.user_pubkey, (r) => ({ ...r, token: pairing.token }), now);
-  return again ? { ...e, id: again.wrap.id, wrap: again.wrap, sealed: again.sealed } : e;
+  return again ? { ...e, id: again.wrap.id, wrap: again.wrap, sealed: again.sealed, wrapped_at: now } : e;
 }
 
 /**

@@ -14,7 +14,7 @@ import { deviceSigner } from '../src/device';
 import { PerSave } from '../src/lock';
 import { applyMove, followMoves } from '../src/move';
 import { changeQueue, dequeue, enqueue, flush, queued, settle } from '../src/queue';
-import { AddressTooLongError, fetchNet, prepare, timed, uploadTimeoutMs, type Net, type Pending } from '../src/save';
+import { AddressTooLongError, fetchNet, prepare, timed, uploadTimeoutMs, WRAP_FRESH_FOR, type Net, type Pending } from '../src/save';
 import { KEYS, memoryStore, type Pairing, type Store } from '../src/store';
 import { toastCopy, type ToastState } from '../src/toastCopy';
 import { background, type Browser } from '../src/worker';
@@ -691,6 +691,133 @@ function slowStore(): Store & { data: Map<string, unknown> } {
 }
 
 const entry = (id: string): Pending => ({ id, wrap: { id } as NostrEvent, sealed: '', blob: null, sha256: null, hash: 'h', title: 't', host: 'h', created_at: NOW, attempts: 0 });
+
+describe('a wrap that waited (contract 4.4: the phone reads its inbox from two days and five minutes before its last look)', () => {
+  const DAY = 86_400;
+  /** Where the phone's next look at its inbox starts, after a look at lastLook (mobile services/inbox.ts, WRAP_LOOKBACK). */
+  const phoneSince = (lastLook: number) => lastLook - 172_800 - 300;
+  /** Both clocks at t: the background's, and the one giftWrap dates seals and wraps from. */
+  const at = (h: { clock: { now: number } }, t: number) => {
+    h.clock.now = t;
+    jest.spyOn(Date, 'now').mockReturnValue(t * 1000);
+  };
+  afterEach(() => jest.restoreAllMocks());
+  const open = async (w: NostrEvent) => {
+    const { rumor } = await unwrap(user, w);
+    return { tags: rumor.tags, req: JSON.parse(rumor.content) as SaveRequest };
+  };
+
+  test('a save that waited in the queue goes under a wrap made as it goes, which a phone that looked meanwhile finds', async () => {
+    const h = harness({ online: false });
+    at(h, NOW);
+    await h.work.save(PAGE, 1, false);
+    const offline = h.toasts.at(-1)!;
+    const [waited] = await queued(h.store);
+    // three days on, the browser is online again; the phone last looked an hour ago, past the date the save was wrapped under
+    const n = net();
+    const online = harness({ store: h.store, session: h.session, net: n.net, collected: [false, false] });
+    at(online, NOW + 3 * DAY);
+    await online.work.flushQueue();
+    const [w] = n.published;
+    expect(waited.wrap.created_at).toBeLessThan(phoneSince(NOW + 3 * DAY - 3600));
+    expect(w.created_at).toBeGreaterThanOrEqual(phoneSince(NOW + 3 * DAY - 3600));
+    expect(w.id).not.toBe(waited.id);
+    // the same request, its uuid, HTML and token kept, and its blob uploaded once
+    expect(await open(w)).toEqual(await open(waited.wrap));
+    expect(n.asked.uploads).toBe(1);
+    expect(await queued(h.store)).toEqual([]);
+    // the offline toast's Undo follows it: the wrap that went is retracted with its own key, and the inbox blob deleted
+    await online.work.undo(offline.id!, 1);
+    expect(kinds(online.toasts)).toEqual(['undone']);
+    expect(n.published.find((e) => e.kind === 5)).toMatchObject({ pubkey: w.pubkey, tags: [['e', w.id], ['k', '1059']] });
+    expect(n.asked.removes).toBe(1);
+  });
+
+  test('a wrap made within the minute goes as it was', async () => {
+    const h = harness({ online: false });
+    at(h, NOW);
+    await h.work.save(PAGE, 1, false);
+    const [e] = await queued(h.store);
+    expect(e.wrapped_at).toBe(NOW);
+    const n = net();
+    const online = harness({ store: h.store, net: n.net });
+    at(online, NOW + WRAP_FRESH_FOR);
+    await online.work.flushQueue();
+    expect(n.published.map((x) => x.id)).toEqual([e.id]);
+  });
+
+  test('one whose send keeps failing is made again at each try, and the offline toast’s Undo still finds the last', async () => {
+    const h = harness({ online: false });
+    at(h, NOW);
+    await h.work.save(PAGE, 1, false);
+    const offline = h.toasts.at(-1)!;
+    const n = net({ publish: 'down' });
+    const online = harness({ store: h.store, session: h.session, net: n.net, collected: [false] });
+    at(online, NOW + 120);
+    await online.work.flushQueue();
+    const [first] = await queued(h.store);
+    at(online, NOW + 240);
+    await online.work.flushQueue();
+    const [second] = await queued(h.store);
+    expect(new Set([offline.id, first.id, second.id]).size).toBe(3);
+    expect(second).toMatchObject({ attempts: 2, wrapped_at: NOW + 240, blob: null });
+    await online.work.undo(offline.id!, 1);
+    expect(await queued(h.store)).toEqual([]);
+    // its send may have reached the relay all the same, so the last wrap is retracted, with its own key
+    expect(n.published.filter((x) => x.kind === 5).map((x) => [x.pubkey, x.tags])).toEqual([[second.wrap.pubkey, [['e', second.id], ['k', '1059']]]]);
+  });
+
+  test('offline, a wrap that waited is left as it is, since its send fails anyway', async () => {
+    const h = harness({ online: false });
+    at(h, NOW);
+    await h.work.save(linkOnly(PAGE.url), 1, true);
+    const [e] = await queued(h.store);
+    const still = harness({ store: h.store, online: false, net: net({ publish: 'down' }).net });
+    at(still, NOW + DAY);
+    await still.work.flushQueue();
+    expect(await queued(h.store)).toMatchObject([{ id: e.id, wrapped_at: NOW, attempts: 1 }]);
+  });
+
+  test('a save queued by an earlier build, with no time for its wrap, counts as wrapped long ago', async () => {
+    const h = harness({ online: false });
+    at(h, NOW);
+    await h.work.save(PAGE, 1, false);
+    const q = await queued(h.store);
+    delete q[0].wrapped_at;
+    await h.store.set(KEYS.queue, q);
+    const n = net();
+    const online = harness({ store: h.store, net: n.net });
+    at(online, NOW);
+    await online.work.flushQueue();
+    expect(n.published).toHaveLength(1);
+    expect(n.published[0].id).not.toBe(q[0].id);
+  });
+
+  test('a save whose upload took more than a minute goes under a wrap made after it, which its toast and Undo name', async () => {
+    let h: ReturnType<typeof harness> | null = null;
+    const n = net();
+    const slow: Net = { ...n.net, upload: async (...a) => ((h!.clock.now += 90), n.net.upload(...a)) };
+    h = harness({ net: slow, collected: [false, false] });
+    at(h, NOW);
+    await h.work.save(PAGE, 1, false);
+    const [saving, saved] = h.toasts;
+    const [w] = n.published;
+    expect(saved).toMatchObject({ kind: 'saved', id: w.id });
+    expect(w.id).not.toBe(saving.id);
+    await h.work.undo(saved.id!, 1);
+    expect(n.published.find((e) => e.kind === 5)).toMatchObject({ pubkey: w.pubkey, tags: [['e', w.id], ['k', '1059']] });
+  });
+
+  test('a move wraps the queue again from the time of the move', async () => {
+    const h = harness({ online: false });
+    at(h, NOW);
+    await h.work.save(PAGE, 1, false);
+    await h.store.set(KEYS.pairing, PAIRING);
+    const ack: PairAck = { v: 1, user_pubkey: user.pubkey(), write_relays: [], blossom_servers: [], token: 'cd'.repeat(32), moved_from: user.pubkey() };
+    await applyMove(h.store, device, ack, NOW + 500);
+    expect(await queued(h.store)).toMatchObject([{ wrapped_at: NOW + 500 }]);
+  });
+});
 
 describe('the queue’s lock (F41)', () => {
   test('a save queued while a send settles, or while a move wraps the queue again, is kept', async () => {

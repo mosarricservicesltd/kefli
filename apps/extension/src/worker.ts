@@ -5,13 +5,16 @@
 // for the next flush (F23). A save's send and its Undo run one at a time, so Undo pressed while a send is under way waits
 // for it and then retracts what went or takes back what didn't (F40). Undo isn't timed here: it can only be pressed on a
 // toast or popup still showing it, whose countdown pauses while the pointer or focus is on it (decision 38, F24). A save
-// whose upload the operator refuses for good goes without its HTML, under a new wrap that Undo then names (v1.12).
+// whose upload the operator refuses for good goes without its HTML, under a new wrap that Undo then names (v1.12), and a
+// wrap that waited in the queue is made again just before it goes, so the phone's look at its inbox finds it.
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { isWebAddress, type Captured } from './captured';
 import { record, type Outcome } from './debug';
 import { PerSave } from './lock';
 import { changeQueue, dequeue, enqueue, flush, queued, replaceWrap, settle, shown, whyNot, type Queued, type Settled } from './queue';
-import { AddressTooLongError, deliver, prepare, retract, withoutText, type Delivered, type Delivery, type Net, type Pending, type SaveContext } from './save';
+import {
+  AddressTooLongError, deliver, freshWrap, prepare, retract, withoutText, WRAP_FRESH_FOR, type Again, type Delivered, type Delivery, type Net, type Pending, type SaveContext,
+} from './save';
 import type { Store } from './store';
 import type { ToastKind, ToastState } from './toastCopy';
 import { settleUndo } from './undo';
@@ -50,12 +53,18 @@ interface UndoKey {
 }
 
 /**
- * What Undo keeps in a wrap's place once the save's request went again under another (v1.12): a toast still naming the
- * old wrap, such as the offline one, then undoes the save under the wrap it has now (F40).
+ * What Undo keeps in a wrap's place once the save went again under another, its HTML refused (v1.12) or its wrap made
+ * again: a toast still naming the old wrap, such as the offline one, then undoes the save under the wrap it has now (F40).
  */
 interface Renamed {
   to: string;
 }
+
+/**
+ * How many new wraps Undo follows from the one a toast names. A wrap is made again at most once a minute, at a send that
+ * then fails, and a toast leaves after eight seconds unless the pointer or focus holds it.
+ */
+const RENAMED_MAX = 64;
 
 const WAITING: Record<ReturnType<typeof whyNot>, Outcome> = { offline: 'waiting, offline', reach: 'waiting, couldn’t reach', blocked: 'waiting, blocked' };
 
@@ -70,43 +79,63 @@ export function background(b: Browser) {
    * before this one is recorded as sent with no text too.
    */
   const textless = new Set<string>();
-  const deliverFor = (ctx: SaveContext) => (p: Delivered) => deliver(p, ctx.defaults.operator.blossom, ctx.defaults.operator.relay, ctx.device, b.net, (q) => withoutHtml(q, ctx));
+  const deliverFor = (ctx: SaveContext) => (p: Delivered) =>
+    deliver(p, ctx.defaults.operator.blossom, ctx.defaults.operator.relay, ctx.device, b.net, (q, refused) => (refused ? withoutHtml(q, ctx) : freshen(q, ctx)));
 
   /**
-   * Undo's key moved to a save's new wrap: the key that alone retracts it, and no inbox blob left to delete. The old wrap's
-   * id points to the new one, for an Undo pressed on a toast that still names it.
+   * Undo's key moved to a save's new wrap: the key that alone retracts it, and the inbox blob it deletes, if the operator
+   * holds one. The old wrap's id points to the new one, for an Undo pressed on a toast that still names it.
    */
-  async function moveUndoKey(was: string, to: string, wrapKey: Uint8Array): Promise<void> {
+  async function moveUndoKey(was: string, to: string, wrapKey: Uint8Array, sha256: string | null): Promise<void> {
     const kept = await b.session.get<UndoKey>(`undo:${was}`);
     if (!kept) return;
-    await b.session.set(`undo:${to}`, { key: bytesToHex(wrapKey), sha256: null, hash: kept.hash } satisfies UndoKey);
+    await b.session.set(`undo:${to}`, { key: bytesToHex(wrapKey), sha256, hash: kept.hash } satisfies UndoKey);
     await b.session.set(`undo:${was}`, { to } satisfies Renamed);
   }
 
-  /** The wrap a save goes by now: the one that took the named wrap's place, if its request went again (v1.12). */
+  /** The wrap a save goes by now: the last of those that took the named wrap's place, if it went again under another. */
   async function goesBy(id: string): Promise<string> {
-    const kept = await b.session.get<UndoKey | Renamed>(`undo:${id}`);
-    return kept && 'to' in kept ? kept.to : id;
+    for (let hops = 0; hops < RENAMED_MAX; hops++) {
+      const kept = await b.session.get<UndoKey | Renamed>(`undo:${id}`);
+      if (!kept || !('to' in kept)) break;
+      id = kept.to;
+    }
+    return id;
+  }
+
+  /**
+   * The save under a new wrap: the wrap, its key and its id take the old one's place in the queue, with what else
+   * changed, and in Undo's key before it is sent, so a worker stopped meanwhile leaves the new wrap for the next flush,
+   * and the new id is busy for as long as this send runs, as the old one is.
+   */
+  async function takePlace(p: Delivered, again: Again, changed: Partial<Queued>): Promise<void> {
+    const was = p.id;
+    Object.assign(p, { id: again.wrap.id, wrap: again.wrap, sealed: again.sealed, wrapped_at: b.now() });
+    saves.follow(was, p.id);
+    await replaceWrap(b.store, was, { ...changed, id: p.id, wrap: p.wrap, sealed: p.sealed, wrapped_at: p.wrapped_at });
+    await moveUndoKey(was, p.id, again.wrapKey, p.sha256);
   }
 
   /**
    * The operator refused the save's upload for good (contract 4.4 and 5, v1.12), and the extension doesn't wait for room:
-   * the request goes with `html` null, rebuilt and signed again with the same uuid. The new wrap, its key and its id take
-   * the old one's place in the queue and in Undo's key before it is sent, so a worker stopped meanwhile leaves the new
-   * wrap for the next flush, and the new id is busy for as long as this send runs, as the old one is. A request that
-   * can't be rebuilt goes as it was, and the phone, finding no blob, fetches the page at once.
+   * the request goes with `html` null, rebuilt and signed again with the same uuid, under a new wrap (takePlace). A
+   * request that can't be rebuilt goes as it was, and the phone, finding no blob, fetches the page at once.
    */
   async function withoutHtml(p: Delivered, ctx: SaveContext): Promise<void> {
-    const was = p.id;
     p.sha256 = null;
     const again = await withoutText(p, ctx.device, b.now());
-    if (again) {
-      Object.assign(p, { id: again.wrap.id, wrap: again.wrap, sealed: again.sealed });
-      saves.follow(was, p.id);
-      await replaceWrap(b.store, was, p);
-      await moveUndoKey(was, p.id, again.wrapKey);
-    }
+    if (again) await takePlace(p, again, { blob: null, sha256: null, textless: true });
     textless.add(p.id);
+  }
+
+  /**
+   * A wrap made more than a minute ago is made again before it goes (WRAP_FRESH_FOR, contract 4.4): the same request,
+   * under a new wrap dated from now (takePlace). Offline the send fails anyway, so the wrap waits as it is.
+   */
+  async function freshen(p: Delivered, ctx: SaveContext): Promise<void> {
+    if (b.now() - (p.wrapped_at ?? 0) <= WRAP_FRESH_FOR || !b.online()) return;
+    const again = await freshWrap(p, ctx.device, b.now());
+    if (again) await takePlace(p, again, {});
   }
 
   /**
