@@ -2,16 +2,11 @@ package blossom
 
 import (
 	"fmt"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
-
-	"github.com/richardminton-glitch/Kefli/server/api/internal/store"
 )
 
 // Blossom counted no request: any key may sign a preflight or a delete and anyone may ask for a blob, so one client
@@ -21,17 +16,7 @@ import (
 // anything is read or verified, as the API's calls are; past them every request gets 429 rate with Retry-After, which
 // the phone and the extension send again later.
 func TestCallsPerAddress(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "k.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-	clock := time.Unix(1_791_600_000, 0)
-	st.Now = func() time.Time { return clock }
-	s := New(filepath.Join(t.TempDir(), "blobs"), "http://b", st, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	s.TrustProxy = true
-	mux := http.NewServeMux()
-	s.Routes(mux)
+	_, _, clock, mux := testServer(t)
 	// an unsigned delete: answered 401 at its authorisation, before the database, unless the limit answers first
 	call := func(from string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest("DELETE", "/"+fmt.Sprintf("%064x", 1), nil)
@@ -52,7 +37,7 @@ func TestCallsPerAddress(t *testing.T) {
 	if rec := call("198.51.100.10"); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("another address: %d", rec.Code)
 	}
-	clock = clock.Add(time.Minute)
+	*clock = clock.Add(time.Minute)
 	if rec := call("198.51.100.9"); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("a minute later: %d", rec.Code)
 	}

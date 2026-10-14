@@ -49,6 +49,15 @@ const MaxAddressCalls = 6000
 // MaxBlockCalls is the same a minute for one IPv6 /48, whose 65,536 /64s would otherwise each make MaxAddressCalls.
 const MaxBlockCalls = 30_000
 
+// MaxAddressDownload is how many bytes of blobs one address (an IPv6 /64) is sent an hour. Anyone may fetch any blob
+// by its hash, and MaxAddressCalls counts requests, not bytes: one client asking for an 8 MB blob of its own over and
+// over could take the server's whole link, which every user's uploads and every mirror's copies share. A phone
+// restoring a full library fetches its 50 MB of texts once, and a mirror each blob it copies once.
+const MaxAddressDownload = 1 << 30
+
+// MaxBlockDownload is the same an hour for one IPv6 /48.
+const MaxBlockDownload = 5 << 30
+
 type Server struct {
 	Dir  string
 	Base string // public address blobs are served from, such as https://blossom.kefli.app
@@ -73,13 +82,17 @@ type Server struct {
 	flights  map[string]int
 	// calls and blockCalls count requests per address and per IPv6 /48, MaxAddressCalls and MaxBlockCalls a minute
 	calls, blockCalls *limit.Limiter
+	// downloads and blockDownloads count the bytes of blobs sent, MaxAddressDownload and MaxBlockDownload an hour
+	downloads, blockDownloads *limit.Limiter
 }
 
 func New(dir, base string, st *store.Store, log *slog.Logger) *Server {
 	return &Server{
 		Dir: dir, Base: strings.TrimRight(base, "/"), Free: diskFree, FreeFiles: diskFiles, st: st, log: log, flights: map[string]int{},
-		calls:      limit.New(MaxAddressCalls, time.Minute, st.Now),
-		blockCalls: limit.New(MaxBlockCalls, time.Minute, st.Now),
+		calls:          limit.New(MaxAddressCalls, time.Minute, st.Now),
+		blockCalls:     limit.New(MaxBlockCalls, time.Minute, st.Now),
+		downloads:      limit.New(MaxAddressDownload, time.Hour, st.Now),
+		blockDownloads: limit.New(MaxBlockDownload, time.Hour, st.Now),
 	}
 }
 
@@ -584,29 +597,9 @@ func blobHash(r *http.Request) string {
 
 // get serves a blob to anyone who knows its hash, with byte ranges; ciphertext, so never a type a browser would run.
 func (s *Server) get(w http.ResponseWriter, r *http.Request) {
-	sha := blobHash(r)
-	if sha == "" {
-		refuse(w, http.StatusNotFound, "not_found")
-		return
-	}
-	// a 404 tells the phone a browser's capture is gone, so it fetches the page itself (contract 4.4, v1.12): a fault
-	// here is a 500, which it tries again, never a 404
-	ok, err := s.st.Exists(r.Context(), sha)
-	if err != nil {
-		refuse(w, http.StatusInternalServerError, "server")
-		return
-	}
-	if !ok {
-		refuse(w, http.StatusNotFound, "not_found")
-		return
-	}
-	f, err := os.Open(s.path(sha))
-	if errors.Is(err, fs.ErrNotExist) {
-		refuse(w, http.StatusNotFound, "not_found")
-		return
-	}
-	if err != nil {
-		refuse(w, http.StatusInternalServerError, "server")
+	f, rf := s.openBlob(r)
+	if rf.status != 0 {
+		rf.write(w)
 		return
 	}
 	defer f.Close()
@@ -620,6 +613,60 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request) {
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Cache-Control", "public, max-age=31536000, immutable")
 	http.ServeContent(w, r, "", time.Time{}, f)
+}
+
+var notFound = refusal{status: http.StatusNotFound, reason: "not_found"}
+
+// openBlob opens the blob a GET or HEAD names, once an owner holds it and its file is there, and charges what serving
+// it sends to the caller's downloads (charge). A 404 tells the phone a browser's capture is gone, so it fetches the
+// page itself (contract 4.4, v1.12): a fault here is a 500, which it tries again, never a 404.
+func (s *Server) openBlob(r *http.Request) (*os.File, refusal) {
+	sha := blobHash(r)
+	if sha == "" {
+		return nil, notFound
+	}
+	ok, err := s.st.Exists(r.Context(), sha)
+	if err != nil {
+		return nil, serverFault
+	}
+	if !ok {
+		return nil, notFound
+	}
+	f, err := os.Open(s.path(sha))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, notFound
+	}
+	if err != nil {
+		return nil, serverFault
+	}
+	if rf := s.charge(r, f); rf.status != 0 {
+		f.Close()
+		return nil, rf
+	}
+	return f, refusal{}
+}
+
+// charge counts what a GET sends, the whole blob even for a range, against the caller's IPv6 /48 and then its
+// address, an IPv6 /64, an hour at a time (MaxBlockDownload, MaxAddressDownload); past either it gets 429 rate with
+// Retry-After. A HEAD sends no blob and costs nothing.
+func (s *Server) charge(r *http.Request, f *os.File) refusal {
+	if r.Method == http.MethodHead {
+		return refusal{}
+	}
+	info, err := f.Stat()
+	if err != nil {
+		return serverFault
+	}
+	ip := limit.ClientIP(r, s.TrustProxy)
+	if block := limit.Block(ip); strings.Contains(block, ":") {
+		if ok, retry := s.blockDownloads.AllowN(block, int(info.Size())); !ok {
+			return refusal{status: http.StatusTooManyRequests, reason: "rate", retry: retry}
+		}
+	}
+	if ok, retry := s.downloads.AllowN(limit.Addr(ip, 64), int(info.Size())); !ok {
+		return refusal{status: http.StatusTooManyRequests, reason: "rate", retry: retry}
+	}
+	return refusal{}
 }
 
 // remove is BUD-02's DELETE: the caller's ownership goes, a user's taking every upload of the blob counted against

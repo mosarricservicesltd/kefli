@@ -41,6 +41,30 @@ func (l *Limiter) Allow(key string) (ok bool, retry time.Duration) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := l.now()
+	b := l.bucketFor(key, now)
+	b.n++
+	if b.n > l.max {
+		return false, l.window - now.Sub(b.start)
+	}
+	return true, 0
+}
+
+// AllowN counts n units for key, bytes say, when they fit in what is left of the key's window, and says whether they
+// did; retry is how long until the window resets. Units refused aren't counted, so a refusal spends nothing.
+func (l *Limiter) AllowN(key string, n int) (ok bool, retry time.Duration) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := l.now()
+	b := l.bucketFor(key, now)
+	if b.n+n > l.max {
+		return false, l.window - now.Sub(b.start)
+	}
+	b.n += n
+	return true, 0
+}
+
+// bucketFor is key's window, a new one once the last has ended, for a caller holding mu.
+func (l *Limiter) bucketFor(key string, now time.Time) *bucket {
 	b := l.seen[key]
 	if b == nil || now.Sub(b.start) >= l.window {
 		b = &bucket{start: now}
@@ -49,11 +73,7 @@ func (l *Limiter) Allow(key string) (ok bool, retry time.Duration) {
 			l.prune(now)
 		}
 	}
-	b.n++
-	if b.n > l.max {
-		return false, l.window - now.Sub(b.start)
-	}
-	return true, 0
+	return b
 }
 
 // Spent says whether key's window is already at its limit, without counting anything: for a limit on failures, which

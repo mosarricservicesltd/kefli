@@ -3,14 +3,10 @@ package blossom
 import (
 	"context"
 	"fmt"
-	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/richardminton-glitch/Kefli/server/api/internal/store"
 )
 
 // The hourly sweep of files looked for an owner of each blob file and then removed it, outside the upload lock, so an
@@ -19,18 +15,12 @@ import (
 // it expired is just such a file, left for this sweep. Now the sweep looks again, and removes, under the upload lock,
 // as Unlink does: while an upload commits it waits, and a blob the upload recorded keeps its file.
 func TestTheSweepOfFilesWaitsForAnUpload(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "k.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-	clock := time.Unix(1_791_600_000, 0)
-	st.Now = func() time.Time { return clock }
+	s, st, now, _ := testServer(t)
+	clock := *now
 	ctx := context.Background()
 	if err := st.Register(ctx, "user"); err != nil {
 		t.Fatal(err)
 	}
-	s := New(filepath.Join(t.TempDir(), "blobs"), "http://b", st, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	sha := fmt.Sprintf("%064x", 7)
 	file := s.path(sha)
 	if err := os.MkdirAll(filepath.Dir(file), 0o750); err != nil {
