@@ -30,7 +30,7 @@ import { readStaged } from './staging';
 import { store } from './store';
 import { activeOwner } from '../data/library';
 import { beginRestore, settleRestore } from '../data/restore';
-import { interimRelays, queueImported } from '../data/saves';
+import { interimRelays, queueImported, reviveRefused } from '../data/saves';
 import { takeImport } from './nostrSignIn';
 import { disconnect } from '../data/devices';
 import type { ConnectPorts } from './connect';
@@ -42,6 +42,8 @@ import { KefliVoice } from '../../modules/kefli-voice/src';
 
 let running: Promise<number> | null = null;
 let defaults: Defaults | null = null;
+/** Whether this process has put back the saves a refusal held back before v1.12 (data/saves reviveRefused). */
+let revived = false;
 
 // One pool per process (mobile spec 4.4). ws:// only while the defaults point at the local stack.
 export const pool = new RelayPool({
@@ -65,6 +67,10 @@ export function runOutbox(): Promise<number> {
     try {
       defaults = await loadDefaults();
       const d = defaults;
+      if (!revived) {
+        reviveRefused(store(), Math.floor(Date.now() / 1000));
+        revived = true;
+      }
       return await drain({
         db: store(),
         now: () => Math.floor(Date.now() / 1000),

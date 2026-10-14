@@ -2,7 +2,7 @@ import { LocalSigner, encryptText, normaliseMarkdown, readItemEvent, textHash } 
 import type { NostrEvent } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
-import { ensureIdentityRow, orphanBlobs, queueSave } from '../src/data/saves';
+import { ensureIdentityRow, orphanBlobs, queueSave, reviveRefused } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
 import { enqueue, nextDue, nextWakeAt, release } from '../src/data/outbox';
 import { drain, outboxWaker, refusalOf, relayResult, sendOne, type RelayAnswer, type SendPorts } from '../src/services/send';
@@ -467,6 +467,63 @@ describe('fair use: a refused text holds back only itself (C§4.2, C§5, v1.12)'
     expect(blob(w)).toMatchObject({ last_error: null });
     expect(notBackedUp(w.db, w.signer.pubkey())).toBe(0);
     expect(w.db.get<{ n: number }>('SELECT COUNT(*) n FROM outbox')?.n).toBe(0);
+  });
+
+  test('a staged text that has gone can never be sent: the save goes without it', async () => {
+    const w = world();
+    const { held, sha } = await save(w);
+    w.blobs.delete(sha!);
+    release(w.db, held);
+    await drain(w.ports);
+    expect((await lastItem(w)).text).toBeNull();
+    expect(ops(w)).toEqual([{ op: 'upload_blob', state: 'dead' }, { op: 'mirror_blob', state: 'dead' }]);
+  });
+
+  test('a save a 4xx held back for good before v1.12 goes out at once, and its text is tried again (11.1, item 2)', async () => {
+    const w = world({ 'PUT http://blossom/upload': (n) => (n === 1 ? { status: 403, body: { v: 1, error: 'forbidden' } } : undefined) });
+    const { held, sha } = await save(w);
+    release(w.db, held);
+    await drain(w.ports);
+    // as the code before v1.12 left it: the upload dead, and its mirror and publish dead with it
+    w.db.run("UPDATE outbox SET state = 'dead' WHERE op IN ('upload_blob', 'mirror_blob')");
+    w.db.run("UPDATE outbox_targets SET state = 'rejected' WHERE outbox_id = (SELECT id FROM outbox WHERE op = 'upload_blob')");
+    w.db.run('UPDATE blobs SET last_error = NULL');
+    w.db.run("UPDATE items SET event_id = NULL, published = 0, dirty = 1, text_servers = NULL");
+    const upload = w.db.get<{ id: number }>("SELECT id FROM outbox WHERE op = 'upload_blob'")!.id;
+    w.db.run("INSERT INTO outbox (op, signer, subject, depends_on, lane, created_at, state, was_queued) VALUES ('publish_item', ?, ?, ?, 'interactive', 1, 'dead', 0)", w.signer.pubkey(), HASH, upload);
+    const id = w.db.get<{ id: number }>("SELECT id FROM outbox WHERE op = 'publish_item'")!.id;
+    for (const r of ['ws://op', 'ws://a', 'ws://b']) w.db.run("INSERT INTO outbox_targets (outbox_id, target, state, attempts, next_at) VALUES (?, ?, 'pending', 0, 0)", id, r);
+    const sent = w.published().length;
+    expect(reviveRefused(w.db, w.now())).toBe(1);
+    expect(reviveRefused(w.db, w.now())).toBe(0);
+    await drain(w.ports);
+    // the save went out, and then its text, uploaded and mirrored, went out again with it
+    expect(w.published().length).toBe(sent + 6);
+    expect((await lastItem(w)).text?.sha256).toBe(sha);
+    expect(ops(w)).toEqual([]);
+  });
+
+  test("reviving a dead upload already queued again leaves the queued one, and a too-large text dead", () => {
+    const w = world();
+    ensureIdentityRow(w.db, w.now(), w.signer.pubkey(), 'early_share', true);
+    const pk = w.signer.pubkey();
+    const add = (sha: string, lastError: string | null) => {
+      w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, text_sha256) VALUES (?, ?, 'https://e.com', 1, 'unread', 'cached', 'share', ?)", pk, sha, sha);
+      w.db.run("INSERT INTO blobs (sha256, hash, kind, owner, last_error) VALUES (?, ?, 'text', ?, ?)", sha, sha, pk, lastError);
+      const dead = enqueue(w.db, 1, { op: 'upload_blob', signer: pk, subject: sha, payload: { sha256: sha }, targets: ['http://blossom'] });
+      w.db.run("UPDATE outbox SET state = 'dead' WHERE id = ?", dead);
+      w.db.run("UPDATE outbox_targets SET state = 'rejected', last_error = 'HTTP 413 too_large' WHERE outbox_id = ?", dead);
+      w.db.run("INSERT INTO outbox (op, signer, subject, depends_on, lane, created_at, state, was_queued) VALUES ('mirror_blob', ?, ?, ?, 'interactive', 1, 'dead', 0)", pk, sha, dead);
+      return dead;
+    };
+    add('aa'.repeat(32), 'too_large');
+    add('bb'.repeat(32), null);
+    const queued = enqueue(w.db, 2, { op: 'upload_blob', signer: pk, subject: 'bb'.repeat(32), payload: { sha256: 'bb'.repeat(32) }, targets: ['http://blossom'] });
+    expect(reviveRefused(w.db, 5)).toBe(1);
+    expect(w.db.all('SELECT id, op, subject, state FROM outbox ORDER BY id')).toEqual([
+      { id: 1, op: 'upload_blob', subject: 'aa'.repeat(32), state: 'dead' }, { id: 2, op: 'mirror_blob', subject: 'aa'.repeat(32), state: 'dead' },
+      { id: queued, op: 'upload_blob', subject: 'bb'.repeat(32), state: 'queued' },
+    ]);
   });
 
   test('an upload whose save no longer names the text leaves the outbox unsent, its mirror with it', async () => {

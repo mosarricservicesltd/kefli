@@ -122,6 +122,46 @@ export function queueBlobDelete(db: SqlDb, now: number, owner: string, sha256: s
 }
 
 /**
+ * A dead row back in the queue, its targets due now; or, when a pending row for the same change already carries it,
+ * gone. detach: it waited on a row that died, and goes without it. Returns whether it was kept.
+ */
+function revive(db: SqlDb, now: number, r: { id: number; op: string; signer: string; subject: string }, detach: boolean): boolean {
+  if (db.get("SELECT 1 FROM outbox WHERE op = ? AND signer = ? AND subject = ? AND state IN ('held', 'queued')", r.op, r.signer, r.subject)) {
+    db.run('DELETE FROM outbox WHERE id = ?', r.id);
+    return false;
+  }
+  db.run(`UPDATE outbox SET state = 'queued'${detach ? ', depends_on = NULL' : ''} WHERE id = ?`, r.id);
+  db.run("UPDATE outbox_targets SET state = 'pending', next_at = ? WHERE outbox_id = ? AND state != 'ok'", now, r.id);
+  return true;
+}
+
+/**
+ * Saves a refusal held back for good before v1.12 (C§4.2; 11.1, item 2): an upload the operator refused with a 4xx
+ * went dead and took the save's publish with it, so the save never reached a relay. Its publish goes now, without the
+ * text, and the upload and its mirror are tried again, as any refused text is; a text refused for good since, over
+ * 8 MB, stays as it is. Run at start, it finds nothing once they have gone. Returns how many uploads it revived.
+ */
+export function reviveRefused(db: SqlDb, now: number): number {
+  return db.tx(() => {
+    const dead = db.all<{ id: number; signer: string; subject: string }>(
+      `SELECT o.id, o.signer, o.subject FROM outbox o JOIN blobs b ON b.sha256 = o.subject AND b.owner = o.signer
+       WHERE o.op = 'upload_blob' AND o.state = 'dead' AND b.operator_at IS NULL AND b.last_error IS NULL
+         AND EXISTS (SELECT 1 FROM outbox_targets t WHERE t.outbox_id = o.id AND t.last_error LIKE 'HTTP 4%')`);
+    for (const u of dead) {
+      // read before the upload is touched: a deleted row's dependents lose their link to it
+      const after = db.all<{ id: number; op: string; subject: string }>(
+        "SELECT id, op, subject FROM outbox WHERE depends_on = ? AND state = 'dead' AND op IN ('publish_item', 'mirror_blob')", u.id);
+      const kept = revive(db, now, { ...u, op: 'upload_blob' }, false);
+      for (const d of after) {
+        if (d.op === 'publish_item' || kept) revive(db, now, { ...d, signer: u.signer }, d.op === 'publish_item');
+        else db.run('DELETE FROM outbox WHERE id = ?', d.id);
+      }
+    }
+    return dead.length;
+  });
+}
+
+/**
  * Blobs no save names any more, a deleted save's or one whose text another phone's replaced: their rows go, and the
  * staged files they kept are returned for the caller to remove (4.1). An upload still under way for one finds no save
  * naming it and deletes it from the server it reached (send.ts).

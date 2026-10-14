@@ -155,7 +155,8 @@ async function sendUpload(p: SendPorts, row: OutboxRow, signer: Signer, t: Outbo
   // its save has gone, or took another phone's text, since this was queued: no save would name the blob (C§4.1)
   if (!namesText(p.db, row.signer, sha256)) return (withdrawText(p.db, row.signer, sha256), []);
   const blob = await p.readBlob(sha256);
-  if (!blob) return [{ target: t.target, kind: 'rejected', error: 'staged blob missing' }];
+  // the staged text is gone, so it can never be sent: the save goes without it rather than with it (C§4.2)
+  if (!blob) return (releaseDependents(p.db, row.id, 'publish_item'), [{ target: t.target, kind: 'rejected', error: 'staged blob missing' }]);
   try {
     const r = await uploadBlob(t.target, blob, sha256, signer, p.fetch);
     return r.ok ? uploaded(p, row.signer, t.target, sha256, blob.length) : refused(p, row, t.target, sha256, r);
