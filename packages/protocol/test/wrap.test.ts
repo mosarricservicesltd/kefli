@@ -3,8 +3,8 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import {
   acceptPairAck, EventTooLargeError, LocalSigner, UnwrapError, WRAP_BACKDATE_MAX, acceptSaveRequest, browserSavedAt,
   buildDevicesEvent, checkOffer, derivePairCode, deviceProofTemplate, giftWrap, mergeDevices, newPairCode, nip44Length, nobleSecp, openOffer,
-  proofHolds, readDevicesEvent, readPairCode, releaseTemplate, sealOffer, signStatement, signedSize, statementHolds, unwrap, wrapPairAck,
-  wrapSaveRequest,
+  opensWraps, proofHolds, readDevicesEvent, readPairCode, releaseTemplate, sealOffer, signStatement, signedSize, statementHolds, unwrap,
+  wrapPairAck, wrapSaveRequest,
 } from '../src';
 import type { DevicesRecord, PairOffer, SaveRequest } from '../src';
 import { nodeCrypto } from '../src/node';
@@ -410,4 +410,16 @@ test('the save request limit is strict: a wrap exactly at it is refused', async 
   const bytes = Buffer.byteLength(JSON.stringify(wrap));
   await expect(wrapSaveRequest(device, user.pubkey(), 'u', request(), NOW, { maxBytes: bytes })).rejects.toThrow(EventTooLargeError);
   await expect(wrapSaveRequest(device, user.pubkey(), 'u', request(), NOW, { maxBytes: bytes + 1 })).resolves.toBeDefined();
+});
+
+test('opensWraps: true while the signer opens what any wrap carries, false when it fails or answers otherwise', async () => {
+  const user = signer();
+  expect(await opensWraps(user)).toBe(true);
+  expect(await opensWraps(user, user.pubkey())).toBe(true);
+  const failing = { pubkey: () => user.pubkey(), nip44Decrypt: () => Promise.reject(Object.assign(new Error('x'), { code: 'background' })) };
+  expect(await opensWraps(failing as never)).toBe(false);
+  const wrong = { pubkey: () => user.pubkey(), nip44Decrypt: async () => 'something else' };
+  expect(await opensWraps(wrong as never)).toBe(false);
+  // a ciphertext to another key is one this signer can't open
+  expect(await opensWraps(user, signer().pubkey())).toBe(false);
 });

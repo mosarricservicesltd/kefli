@@ -138,3 +138,21 @@ function hashes(rumor: Rumor): boolean {
     return false;
   }
 }
+
+const PROBE = 'kefli-wrap-probe';
+
+/**
+ * Whether the recipient's signer opens a wrap's outer layer now: a ciphertext made here to its key from a fresh one,
+ * as any wrap is, which it is asked to decrypt. After a wrap the signer didn't open (it timed out, or declined out of
+ * sight), this tells a signer that isn't answering, whose other wraps would fail the same way, from one that only
+ * won't open that wrap, which anyone can send to look like a signer that isn't answering.
+ */
+export async function opensWraps(recipient: Signer, pubkey = recipient.pubkey(), secp: SecpPort = nobleSecp): Promise<boolean> {
+  const key = generateSecretKey();
+  const content = nip44.encrypt(PROBE, conversationKey(secp, key, pubkey));
+  try {
+    return (await recipient.nip44Decrypt(secp.publicKey(key), content)) === PROBE;
+  } catch {
+    return false;
+  }
+}

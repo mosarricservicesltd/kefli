@@ -218,11 +218,41 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     w.ports.signer = signer;
     for (let i = 0; i < 40; i++) await w.send(w.request({ url: `https://example.com/${i}` }));
     expect(await drainInbox(w.ports, w.owner)).toEqual({});
-    // a bunker takes two minutes to time out: asked once, not forty times
-    expect(asked.decrypts).toBe(1);
+    // a bunker takes two minutes to time out: asked for one wrap and the probe that it isn't answering, not forty times
+    expect(asked.decrypts).toBe(2);
     expect(w.cursor()).toBeNull();
     refusing = false;
     expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 40 });
+  });
+
+  test('a wrap the signer won’t open, while it opens others, holds only itself: the saves behind it arrive at once', async () => {
+    const w = world();
+    // a bunker that never replies to this one ciphertext, or a resolver that returns nothing for it: anyone can send it
+    const poison = new Set<string>();
+    const asked = { decrypts: 0 };
+    w.ports.signer = new Proxy(w.user, {
+      get: (t, k) => (k === 'nip44Decrypt'
+        ? (peer: string, c: string) => (asked.decrypts++, poison.has(c) ? Promise.reject(Object.assign(new Error('timeout'), { code: 'timeout' })) : w.user.nip44Decrypt(peer, c))
+        : Reflect.get(t, k)),
+    });
+    // two of them, older than any browser save, so first in the drain's order
+    for (const at of [w.now() - 2 * 86_400 + 100, w.now() - 2 * 86_400 + 101]) {
+      const k = generateSecretKey();
+      const wrap = finalizeEvent({ kind: 1059, created_at: at, tags: [['p', w.owner]], content: nip44.encrypt('x', nip44.utils.getConversationKey(k, w.owner)) }, k);
+      w.wraps.push(wrap as NostrEvent);
+      poison.add(wrap.content);
+    }
+    for (let i = 0; i < 3; i++) await w.send(w.request({ url: `https://example.com/${i}` }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 3 });
+    // the two wait, so the cursor stays; the next drains try them after anything new, and ask nothing else
+    expect(w.cursor()).toBeNull();
+    w.tick(3600);
+    await w.send(w.request({ url: 'https://example.com/later' }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    // a week after the first try they are filed as not ours, and the cursor moves on
+    w.tick(7 * 86_400);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ ignored_foreign: 2 });
+    expect(w.cursor()).toBe(w.now());
   });
 
   test('a wrap dated weeks ahead, which the signer can’t open, holds the cursor a week from the first try, not as long as its date says', async () => {

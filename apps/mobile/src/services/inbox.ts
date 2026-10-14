@@ -13,12 +13,13 @@
 // RULED: a request naming another server for its HTML is taken without it, and the page is fetched instead, so a
 // save from a connected browser is never lost to a bad field.
 import {
-  KIND, UnwrapError, acceptSaveRequest, decryptText, unwrap, type DevicesRecord, type NostrEvent, type Rumor, type SaveRequest, type Signer,
+  KIND, UnwrapError, acceptSaveRequest, decryptText, opensWraps, unwrap, type DevicesRecord, type NostrEvent, type Rumor, type SaveRequest,
+  type Signer,
 } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { localRecord } from '../data/devices';
 import {
-  INBOX_BLOB_LIFE, admit, failedBlobs, forgetIgnored, giveUpBlob, noteDeviceSave, queueDeleteWrap, recordSeen, seenOutcome, waitingSince,
+  INBOX_BLOB_LIFE, admit, failedBlobs, forgetIgnored, giveUpBlob, noteDeviceSave, queueDeleteWrap, recordSeen, seenState, waitingSince,
   type Outcome,
 } from '../data/inbox';
 import type { Pending } from '../data/pending';
@@ -136,11 +137,12 @@ function pendingRow(db: SqlDb, owner: string, hash: string): Pending | undefined
 }
 
 /**
- * What one drain learns as it goes: the connected-browsers record, read once; how many wraps it has opened, and
- * whether the signer has stopped answering; and whether the Blossom server has, after which the drain's other blobs
- * wait for the next drain rather than each waiting out the deadline.
+ * What one drain learns as it goes: the connected-browsers record, read once; how many wraps it has opened; whether
+ * the signer has stopped answering, and whether it has opened anything since it last didn't; and whether the Blossom
+ * server has stopped answering, after which the drain's other blobs wait for the next drain rather than each waiting
+ * out the deadline.
  */
-type Drain = { devices: DevicesRecord; opens: number; waiting: boolean; blobsDown: boolean };
+type Drain = { devices: DevicesRecord; opens: number; waiting: boolean; answered: boolean; blobsDown: boolean };
 
 /**
  * An accepted request, made a save; its HTML read and parsed when it brings some. A blob that can't be this capture
@@ -261,20 +263,34 @@ async function readWindow(p: InboxPorts, relay: string, owner: string, since: nu
 }
 
 /**
+ * After a wrap the signer didn't open: whether it is still answering. One that opened a wrap since it last didn't is;
+ * otherwise it is asked to open a probe (opensWraps). A signer that isn't answering would fail every other wrap the
+ * same way, two minutes each for a bunker, so they wait unasked, as sync's do (F14). One that answers failed this wrap
+ * alone, as anyone can make a wrap do (a ciphertext a bunker never replies to, a resolver that returns nothing for
+ * it): stopping there, as every drain retried that wrap first, held every browser save behind it for a week.
+ */
+async function stillAnswering(p: InboxPorts, owner: string, drain: Drain): Promise<boolean> {
+  const answering = drain.answered || (await opensWraps(p.signer, owner));
+  drain.answered = false;
+  return answering;
+}
+
+/**
  * One wrap opened and judged (4.7), or 'held' for the next drain. The signer couldn't answer (out of sight, timed out,
  * declined): the wrap waits, unrecorded but for when it was first tried, and the cursor stays so it is fetched again
- * (F3), and the drain's other wraps wait unasked, since they'd fail the same way, two minutes each for a bunker, as
- * sync's do (F14). Taking it failed part way (the network, the database): it is tried again at the next drain. Either
- * way, one still failing a week after its first try is filed as not ours.
+ * (F3); unless the signer is still answering (stillAnswering), the drain's other wraps wait unasked. Taking it failed
+ * part way (the network, the database): it is tried again at the next drain. Either way, one still failing a week
+ * after its first try is filed as not ours.
  */
 async function openOne(p: InboxPorts, owner: string, w: NostrEvent, blossom: string, drain: Drain): Promise<Outcome | 'held'> {
   drain.opens++;
   let opened: Awaited<ReturnType<typeof unwrap>>;
   try {
     opened = await unwrap(p.signer, w);
+    drain.answered = true;
   } catch (e) {
     if (!(e instanceof UnwrapError)) {
-      drain.waiting = true;
+      if (!(await stillAnswering(p, owner, drain))) drain.waiting = true;
       if (!stale(p, owner, w)) return 'held';
     }
     // not a wrap this key opens: someone else's message sharing the p tag
@@ -290,12 +306,23 @@ async function openOne(p: InboxPorts, owner: string, w: NostrEvent, blossom: str
   }
 }
 
+/**
+ * The wraps read that no drain has judged, in the order they are opened: those never tried, oldest first, then those
+ * already waiting (a signer that didn't open them, a taking that failed), so that wraps which keep failing, which
+ * anyone can send, are tried after the drain's other wraps rather than spending its budget ahead of them.
+ */
+function unjudged(db: SqlDb, wraps: NostrEvent[]): NostrEvent[] {
+  const state = new Map(wraps.map((w) => [w.id, w.kind === KIND.giftWrap ? seenState(db, w.id) : 'ignored_foreign']));
+  const tried = (w: NostrEvent) => (state.get(w.id) === 'waiting' ? 1 : 0);
+  return wraps.filter((w) => state.get(w.id) === null || state.get(w.id) === 'waiting').sort((a, b) => tried(a) - tried(b) || a.created_at - b.created_at);
+}
+
 /** One drain of the inbox. Restartable: the cursor moves only after the relay answers. */
 export async function drainInbox(p: InboxPorts, owner: string): Promise<InboxResult> {
   const out: InboxResult = {};
   const d = await p.defaults();
   const relay = d.operator.relay;
-  const drain: Drain = { devices: localRecord(p.db, owner), opens: 0, waiting: false, blobsDown: false };
+  const drain: Drain = { devices: localRecord(p.db, owner), opens: 0, waiting: false, answered: false, blobsDown: false };
   await retryBlobs(p, owner, d.operator.blossom, out, drain);
   const startedAt = p.now();
   const since = getCursor(p.db, relay, 'inbox', owner)?.since;
@@ -306,8 +333,7 @@ export async function drainInbox(p: InboxPorts, owner: string): Promise<InboxRes
     return out; // unreachable: the cursor stays
   }
   let held = false;
-  for (const w of wraps.sort((a, b) => a.created_at - b.created_at)) {
-    if (w.kind !== KIND.giftWrap || seenOutcome(p.db, w.id)) continue;
+  for (const w of unjudged(p.db, wraps)) {
     // once the signer hasn't answered, and past the drain's budget, the rest wait for the next drain unasked
     const o = drain.waiting || drain.opens >= INBOX_UNWRAPS ? 'held' : await openOne(p, owner, w, d.operator.blossom, drain);
     if (o === 'held') held = true;

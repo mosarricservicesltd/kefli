@@ -21,6 +21,11 @@ export function seenOutcome(db: SqlDb, wrapId: string): Outcome | null {
   return db.get<{ outcome: Outcome }>("SELECT outcome FROM inbox_seen WHERE wrap_id = ? AND outcome != 'waiting'", wrapId)?.outcome ?? null;
 }
 
+/** A wrap's standing: its outcome, 'waiting' for one a drain tried and couldn't open or take yet, null for one never tried. */
+export function seenState(db: SqlDb, wrapId: string): Outcome | 'waiting' | null {
+  return db.get<{ outcome: Outcome | 'waiting' }>('SELECT outcome FROM inbox_seen WHERE wrap_id = ?', wrapId)?.outcome ?? null;
+}
+
 /**
  * A wrap the phone couldn't open or take yet (F3) is noted as waiting, with when a drain first tried it, and is no
  * outcome: seenOutcome passes it by, and the next drain tries it again. Returns when the first try was, from which the
