@@ -1,5 +1,5 @@
 // Inbox-driven fetches refuse private, loopback and link-local addresses (mobile spec 7.1): a browser's save request
-// names a URL the phone then fetches, which must not reach into the phone's own network.
+// names a URL the phone then fetches, which must not reach into the phone's own network, nor its own files.
 //
 // RULED: the host as written is checked (names that are local by convention, and IP literals in every form the URL
 // parser accepts); names aren't resolved, and a redirect isn't followed up, since the phone's fetch doesn't expose
@@ -60,12 +60,34 @@ function privateV6(host: string): boolean {
   return (p[0] & 0xfe00) === 0xfc00 || (p[0] & 0xffc0) === 0xfe80 || (p[0] & 0xff00) === 0xff00;
 }
 
-/** True for an http(s) URL whose host is neither local by name nor a private, loopback or link-local address. */
+/** Whether a host, without its trailing dot, is local by name: none, a single label, or one of LOCAL_NAMES. */
+function localName(host: string): boolean {
+  return !host || LOCAL_NAMES.test(host) || (!host.includes('.') && !host.includes(':'));
+}
+
+// expo/fetch's stand-in host for file: URLs, and every host that only begins with it
+const FILES_HOST = /^filesystem\.local/i;
+
+/**
+ * RULED: whether the phone's fetch reads an address from its own files rather than the web. expo/fetch's OkHttp client
+ * turns any address whose text begins http://filesystem.local back into a file: URL, ahead of the network and of the
+ * cleartext rule, and reads the rest as a path: the stand-in's own or, for a host that only begins with it, one from
+ * the app's working directory, the root, so http://filesystem.localdata/data/app.kefli/… reads /data/data/app.kefli/….
+ * The host is read as the protocol's parser reads it, as OkHttp does (capitals, full-width letters, %2E, a port of 80).
+ * Over https the stand-in itself is a local name, and any other host is the web's to answer (as the phone's net/http
+ * fromFiles rules).
+ */
+const fromFiles = (scheme: string, host: string): boolean => scheme === 'http' && FILES_HOST.test(host);
+
+/**
+ * True for an http(s) URL whose host is neither local by name nor a private, loopback or link-local address, nor one
+ * the phone's fetch reads from its own files (fromFiles).
+ */
 export function isPublicWebUrl(url: string): boolean {
   const u = urlParts(url);
   if (!u) return false;
   const host = u.hostname.replace(/\.$/, '');
-  if (!host || LOCAL_NAMES.test(host) || !host.includes('.') && !host.includes(':')) return false;
+  if (localName(host) || fromFiles(u.scheme, host)) return false;
   if (host.startsWith('[') || host.includes(':')) return !privateV6(host);
   const v4 = ipv4(host);
   return v4 ? !privateV4(v4) : true;

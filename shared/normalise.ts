@@ -64,10 +64,10 @@ function hostOf(url: URLRecord): string {
 }
 
 /** The parts of an http or https URL the protocol's rules look at, or null for anything else. */
-export function urlParts(input: string): { hostname: string; pathname: string } | null {
+export function urlParts(input: string): { scheme: 'http' | 'https'; hostname: string; pathname: string } | null {
   try {
     const url = parseHttp(input);
-    return { hostname: hostOf(url), pathname: serializePath(url) };
+    return { scheme: url.scheme as 'http' | 'https', hostname: hostOf(url), pathname: serializePath(url) };
   } catch {
     return null;
   }
