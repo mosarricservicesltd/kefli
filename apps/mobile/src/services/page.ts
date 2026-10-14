@@ -187,7 +187,17 @@ function landedAt(res: Response, url: string): string {
   return at.length > FIELD_MAX.url ? url : at;
 }
 
+/**
+ * Whether url is one fetchPage asks for: http(s) only, since expo/fetch reads file: URLs from the phone's own storage,
+ * and never its stand-in for them, http://filesystem.local, which it serves from the phone's files too, before any
+ * network. A shared link, a synced save's or an X post's can name either; a browser's goes through isPublicWebUrl.
+ */
+export function fetchable(url: string): boolean {
+  return /^https?:\/\//i.test(url) && !/^http:\/\/filesystem\.local/i.test(url);
+}
+
 export async function fetchPage(p: PagePorts, url: string): Promise<PageOutcome> {
+  if (!fetchable(url)) return { kind: 'failed', reason: 'http', finalUrl: url };
   const a = await answer(p, url);
   if ('kind' in a) return a;
   const { res, bytes } = a;

@@ -1,5 +1,8 @@
 import { readFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
+import { gzipSync } from 'node:zlib';
 import { base64 } from '@scure/base';
 import { buildItemEvent, LocalSigner, parseItem, type PdfRuns } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
@@ -196,6 +199,36 @@ describe('what a page hands back is taken only as far as a save can hold it', ()
     expect(renderAnswer({ ok: false, reason: 'too_large', url: 'https://cf.example/a' })).toEqual({ url: 'https://cf.example/a', tooLarge: true });
     expect(renderAnswer({ ok: false, reason: 'timeout' })).toBeNull();
     expect(renderAnswer({ ok: true, url: 'https://cf.example/a', html: '<p>x</p>' })).toEqual({ url: 'https://cf.example/a', html: '<p>x</p>' });
+  });
+
+  test('a compressed page that inflates far past the cap is refused as it inflates, from a real server', async () => {
+    // 16 KB of gzip that inflates to 16 MB: the cap counts the bytes the fetch hands over, after inflating (Node's
+    // fetch here, OkHttp's gzip on the phone, both a stream)
+    const bomb = gzipSync(Buffer.concat([Buffer.from('<!doctype html><p>'), Buffer.alloc(16 * 1024 * 1024, 0x20)]), { level: 9 });
+    expect(bomb.length).toBeLessThan(40_000);
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html', 'content-encoding': 'gzip' });
+      res.end(bomb);
+    });
+    await new Promise<void>((ok) => server.listen(0, '127.0.0.1', ok));
+    try {
+      const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/bomb`;
+      expect(await fetchPage({ fetch, parse: async () => parsed() }, url)).toMatchObject({ kind: 'failed', reason: 'too_large' });
+    } finally {
+      await new Promise<void>((ok) => server.close(() => ok()));
+    }
+  }, 30_000);
+
+  test("the phone's own files are never fetched, under file: or expo/fetch's stand-in for it", async () => {
+    let asked = 0;
+    const p: PagePorts = { fetch: (async () => (asked++, HTML('<p>x</p>'))) as unknown as typeof fetch, parse: async () => parsed() };
+    for (const url of ['file:///data/user/0/app.kefli/files/a.html', 'http://filesystem.local/data/user/0/app.kefli/files/a.html', 'HTTP://FileSystem.Local/sdcard/x.html', 'content://media/x', 'javascript:alert(1)']) {
+      expect(await fetchPage(p, url)).toEqual({ kind: 'failed', reason: 'http', finalUrl: url });
+    }
+    expect(asked).toBe(0);
+    // a real site's address that merely contains the words is fetched as any other
+    expect((await fetchPage(p, 'https://filesystem.local.example.com/x')).kind).toBe('parsed');
+    expect((await fetchPage(p, 'https://example.com/http://filesystem.local/')).kind).toBe('parsed');
   });
 
   test('a redirect to an address past the longest kept leaves the save at the address asked for', async () => {
