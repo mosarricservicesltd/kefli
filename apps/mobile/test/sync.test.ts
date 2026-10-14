@@ -8,7 +8,7 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
-import { getCursor, itemColumns, type TextJob } from '../src/data/sync';
+import { TEXT_SERVERS_MAX, getCursor, itemColumns, type TextJob } from '../src/data/sync';
 import { SKEW, TEXT_MAX_BYTES, TEXT_TIMEOUT_MS, fetchText, pageStream, streamFilter, syncInbound, type Filter, type SyncPorts } from '../src/services/sync';
 import { drain, sendOne, type SendPorts } from '../src/services/send';
 import { memoryDb } from './sqlite';
@@ -329,8 +329,8 @@ describe('inbound sync (mobile spec 4.5)', () => {
     const c = itemColumns(bad, { created_at: 77 } as NostrEvent);
     expect(c).toMatchObject({ title: null, site: null, state: 'unread', words: null, progress: 0, saved_at: 77, text_sha256: null,
       text_hash: null, source_kind: 'web', hero: 'https://e.com/h.jpg', extra: '{"later":1}', position_word: 0 });
-    const good = itemColumns({ item: { ...item().item, words: 9.6, text: { sha256: 'aa', key: 'bb', nonce: 'cc', servers: ['s', 4] } } as never, extra: {} }, { created_at: 1 } as NostrEvent);
-    expect(good).toMatchObject({ words: 10, text_servers: '["s"]', extra: null, position_word: 5 });
+    const good = itemColumns({ item: { ...item().item, words: 9.6, text: { sha256: 'aa'.repeat(32), key: 'bb', nonce: 'cc', servers: ['https://s.example/', 4, 'javascript:x'] } } as never, extra: {} }, { created_at: 1 } as NostrEvent);
+    expect(good).toMatchObject({ words: 10, text_servers: '["https://s.example"]', extra: null, position_word: 5 });
   });
 
   test('no active identity or no signer: nothing to do', async () => {
@@ -628,6 +628,35 @@ describe('events another client spoilt, or a relay sends to wear the phone out',
     w.publish(await rawEvent(w, d, itemJson(h(2), { url: 'https://two.example' }), 6001), ['ws://b']);
     expect(await syncInbound(w.ports)).toMatchObject({ items: 1 });
     expect(w.db.all('SELECT hash, url FROM items')).toEqual([{ hash: h(2), url: 'https://two.example' }]);
+  });
+
+  test('a save naming hundreds of text servers is fetched from at most TEXT_SERVERS_MAX of them, each up to a minute', async () => {
+    const w = world();
+    const enc = await encryptText(normaliseMarkdown('# A\n\nwords'), nodeCrypto);
+    const servers = Array.from({ length: 300 }, (_, i) => `https://d${i}.example`);
+    w.publish(await rawEvent(w, `kefli/item/${h(1)}`, itemJson(h(1), { text: { ...enc.text, servers } }), 6000));
+    let fetches = 0;
+    const f = w.ports.fetch;
+    w.ports.fetch = (async (u: string, i?: RequestInit) => (fetches++, f(u, i))) as typeof fetch;
+    await syncInbound(w.ports);
+    expect(row(w, h(1))).toMatchObject({ text_state: 'remote' });
+    expect(fetches).toBe(TEXT_SERVERS_MAX);
+  });
+
+  test('a text whose sha256 isn’t one is never asked for, and servers that aren’t http(s) never asked', async () => {
+    const w = world();
+    const enc = await encryptText(normaliseMarkdown('# A\n\nwords'), nodeCrypto);
+    const urls: string[] = [];
+    const f = w.ports.fetch;
+    w.ports.fetch = (async (u: string, i?: RequestInit) => (urls.push(u), f(u, i))) as typeof fetch;
+    w.publish(await rawEvent(w, `kefli/item/${h(1)}`, itemJson(h(1), { text: { ...enc.text, sha256: '../../admin?x=', servers: ['http://blossom'] } }), 6000));
+    const odd = ['javascript:alert(1)', 'file:///data/data/app.kefli/x', 'content://x', 'http://blossom'];
+    w.publish(await rawEvent(w, `kefli/item/${h(2)}`, itemJson(h(2), { url: 'https://example.com/b', text: { ...enc.text, servers: odd } }), 6001));
+    await syncInbound(w.ports);
+    // with no text to fetch, its page is parsed here, as for a save that has none
+    expect(row(w, h(1))).toMatchObject({ text_sha256: null, text_state: 'queued' });
+    expect(urls.length).toBeGreaterThan(0);
+    expect(urls.filter((u) => !u.startsWith('http://blossom/') && !u.startsWith('http://m1/'))).toEqual([]);
   });
 
   test('a save nested 4,500 deep, inside the 16 KB ceiling, is dropped, and the sync goes on to the rest', async () => {

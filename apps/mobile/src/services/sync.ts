@@ -26,7 +26,7 @@ import {
 } from '../data/lists';
 import { adoptLibraryKey, libraryKey, makeLibraryKey, moveToKeyedAddresses } from '../data/libraryKey';
 import {
-  applyDeletions, applyItem, getCursor, hashInUse, readRelays, setCursor, textCached, textMissing, textQueue,
+  applyDeletions, applyItem, blobServers, getCursor, hashInUse, readRelays, setCursor, textCached, textMissing, textQueue,
   type Stream, type TextJob,
 } from '../data/sync';
 
@@ -215,12 +215,23 @@ async function getBlob(p: SyncPorts, url: string): Promise<Got> {
   }
 }
 
-/** One text from its servers, then the identity's 10063 servers: 'ok', 'missing' everywhere, or 'offline'. */
+/** A row's text servers as written, or none if they don't read. */
+function namedServers(job: TextJob): unknown[] {
+  try {
+    const named: unknown = job.text_servers ? JSON.parse(job.text_servers) : [];
+    return Array.isArray(named) ? named : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * One text from its servers, then the identity's 10063 servers: 'ok', 'missing' everywhere, or 'offline'. At most
+ * TEXT_SERVERS_MAX of them, http(s) only (blobServers), however many the save or the lists name.
+ */
 export async function fetchText(p: SyncPorts, job: TextJob): Promise<'ok' | 'missing' | 'offline'> {
-  const named = job.text_servers ? (JSON.parse(job.text_servers) as string[]) : [];
   // the 10063 as published is asked as well as the rows kept from it (C§8, F37); each server once, slash or not
-  const listed = [...named, ...listServers(p.db, job.owner), ...heldServerList(p.db, job.owner)];
-  const servers = [...new Set(listed.map((s) => s.replace(/\/+$/, '')))];
+  const servers = blobServers([...namedServers(job), ...listServers(p.db, job.owner), ...heldServerList(p.db, job.owner)]);
   let unreachable = 0;
   for (const server of servers) {
     let bytes: Uint8Array;

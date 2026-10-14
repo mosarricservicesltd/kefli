@@ -37,12 +37,33 @@ function version(r: Row | undefined): LocalVersion | null {
 
 const STRINGS = ['canonical', 'title', 'site', 'byline', 'lang', 'hero', 'source_ref', 'audio_pref'] as const;
 
-/** text, only when its sha256, key and nonce are all strings; servers kept as the strings listed. */
+/**
+ * The most servers a text is fetched from: its own (the operator's and a mirror, C§4.2, a move's target's too) and
+ * then the 10063's. Each may take a minute to fail, and a save from another client named 10,000.
+ */
+export const TEXT_SERVERS_MAX = 10;
+
+const HTTP = new RegExp('^https?://[^\\s/?#@]+', 'i');
+
+/** Blob servers as a fetch can use them: http(s) addresses only, without a trailing slash, each once, at most n. */
+export function blobServers(servers: unknown[], n = TEXT_SERVERS_MAX): string[] {
+  const out = new Set<string>();
+  for (const s of servers) {
+    if (out.size >= n) break;
+    if (typeof s === 'string' && s.length <= 2048 && HTTP.test(s)) out.add(s.replace(/\/+$/, ''));
+  }
+  return [...out];
+}
+
+/**
+ * text, only when its sha256 is 64 hex, the address every server is asked at (one that isn't would be asked for as a
+ * path on each server), and its key and nonce are strings; servers kept as blobServers reads them.
+ */
 function textOf(t: unknown) {
   const o = (t && typeof t === 'object' ? t : {}) as Record<string, unknown>;
   const [sha256, key, nonce] = [str(o.sha256), str(o.key), str(o.nonce)];
-  if (!sha256 || !key || !nonce) return null;
-  const servers = Array.isArray(o.servers) ? o.servers.filter((s): s is string => typeof s === 'string') : [];
+  if (!sha256 || !/^[0-9a-f]{64}$/.test(sha256) || !key || !nonce) return null;
+  const servers = Array.isArray(o.servers) ? blobServers(o.servers) : [];
   return { text_sha256: sha256, text_key: key, text_nonce: nonce, text_servers: JSON.stringify(servers) };
 }
 
