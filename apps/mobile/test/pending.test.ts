@@ -6,6 +6,7 @@ import { seedGeneratedLists } from '../src/data/lists';
 import * as pendingData from '../src/data/pending';
 import { pendingParses } from '../src/data/pending';
 import { commitDelete, deleteItem } from '../src/data/library';
+import { search } from '../src/data/search';
 import { DESKTOP_UA, MOBILE_UA, PAGE_MAX_BYTES, RENDER_MAX_BYTES, fetchPage, refusal, type ParserResult } from '../src/services/page';
 import { runPendingParses, settle, type PendingPorts } from '../src/services/pending';
 import { TimedOut } from '../src/net/http';
@@ -299,6 +300,32 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, published, event_id) VALUES (?, ?, 'https://c.com/a', 10, 'unread', 'queued', 'sync', 1, 'e1')", PK, itemHash('https://c.com/a'));
     await runPendingParses(w.ports, PK);
     expect(w.db.get('SELECT hash, url, text_state FROM items')).toEqual({ hash: itemHash('https://c.com/a'), url: 'https://c.com/a', text_state: 'cached' });
+  });
+
+  test('a parse is searchable as its row is stored: at the address the save keeps, with its fields as fitted', async () => {
+    // an address long enough that the page's title has to be cut down, and its site shed, for the event to fit
+    const far = `https://d.example/r?${'x'.repeat(8_950)}`;
+    const w = world({ 'https://c.example/a': { finalUrl: 'https://landing.example/elsewhere' }, [far]: {} }, (url) => ({
+      ok: true, title: url === far ? `Bracken ${'b'.repeat(290)}` : `Quietus ${'q'.repeat(290)}`, byline: null,
+      site: url === far ? 'Fernwood' : 'Heathersite', lang: 'en', hero: null, canonical: null, readerable: true, markdown: `${LONG}\n`,
+    }));
+    // another phone's save, which keeps its own address whatever its page now lands on
+    w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, published, event_id) VALUES (?, ?, 'https://c.example/a', 10, 'unread', 'queued', 'sync', 1, 'e1')", PK, itemHash('https://c.example/a'));
+    w.share(far);
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ parsed: 2 });
+    const rows = w.db.all<{ title: string | null; site: string | null; url: string }>('SELECT title, site, url FROM items ORDER BY id');
+    expect(rows.map((r) => [r.url.slice(0, 22), r.title?.length, r.site])).toEqual([
+      ['https://c.example/a', 298, 'Heathersite'], ['https://d.example/r?xx', 80, null],
+    ]);
+    // the index is contentless: each column is asked what it holds
+    const holds = (q: string) => w.db.all('SELECT rowid FROM items_fts WHERE items_fts MATCH ?', q).length;
+    // the address the published save keeps and the fields the other kept are there, its title as cut ('Bracken bbb…')
+    const cutTail = rows[1].title!.slice('Bracken '.length, -1);
+    expect(cutTail).toBe('b'.repeat(71));
+    expect([holds('url:c'), holds('site:heathersite'), holds(`title:${'q'.repeat(290)}`), holds(`title:${cutTail}`)]).toEqual([1, 1, 1, 1]);
+    // where the page now lands, the site shed and the cut title's tail are not
+    expect([holds('url:landing'), holds('url:elsewhere'), holds('site:fernwood'), holds(`title:${'b'.repeat(290)}`)]).toEqual([0, 0, 0, 0]);
+    expect([search(w.db, PK, 'landing'), search(w.db, PK, 'fernwood')]).toEqual([[], []]);
   });
 
   test("a published save whose page can't be read here has nothing new to send", async () => {

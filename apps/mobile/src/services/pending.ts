@@ -165,7 +165,17 @@ export async function settle(
     p.unstage(path);
   } else {
     p.writeText(applied.hash, result.markdown, outcome.derived);
-    indexText(p.db, { id: item.id, title: result.title, site: result.site, url: outcome.finalUrl }, outcome.spoken);
+    indexStored(p.db, item.id, outcome.spoken);
   }
   return 'parsed';
+}
+
+/**
+ * A parsed save's search entry, from its row as stored: its fields as fitted under its event's ceiling, and the
+ * address it keeps, which for a save already out is its own rather than where its page now lands (applyParsed). The
+ * parse's own title, site and address found the save by words it doesn't hold.
+ */
+function indexStored(db: SqlDb, id: number, spoken: string): void {
+  const row = db.get<{ id: number; title: string | null; site: string | null; url: string }>('SELECT id, title, site, url FROM items WHERE id = ?', id);
+  if (row) indexText(db, row, spoken);
 }
