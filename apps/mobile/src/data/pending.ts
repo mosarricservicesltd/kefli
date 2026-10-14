@@ -11,12 +11,14 @@ export type Pending = { id: number; hash: string; url: string; shared_url: strin
 
 /**
  * Saves waiting for their parse: those that haven't timed out first, oldest first, then those that have, the one
- * that timed out longest ago first (F12).
+ * that timed out longest ago first (F12). RULED: plain http pages come after all the rest. Release builds allow no
+ * cleartext, so such a fetch fails at once, and that reads as offline, which stops the queue: one http save, first in
+ * line, held every save behind it at every sync, for good.
  */
 export function pendingParses(db: SqlDb, owner: string): Pending[] {
   return db.all<Pending>(
     `SELECT id, hash, url, shared_url, published, event_id, x_state FROM items WHERE owner = ? AND text_state = 'queued' AND pending_delete_at IS NULL
-     ORDER BY COALESCE(timed_out_at, 0), saved_at, id`,
+     ORDER BY lower(substr(url, 1, 7)) = 'http://', COALESCE(timed_out_at, 0), saved_at, id`,
     owner,
   );
 }

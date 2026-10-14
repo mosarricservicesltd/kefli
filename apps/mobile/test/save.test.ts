@@ -33,7 +33,7 @@ jest.mock('expo-modules-core', () => ({
 }), { virtual: true });
 
 // eslint-disable-next-line import/first
-import { saveLink } from '../src/services/save';
+import { overHttps, saveLink } from '../src/services/save';
 // eslint-disable-next-line import/first
 import { pickUpSpools } from '../src/share/pickup';
 
@@ -153,6 +153,34 @@ describe('a share too large for its event (C§3.3)', () => {
     await expect(saveLink(`https://news.example/?q=${'x'.repeat(10_000)}`, () => undefined)).rejects.toThrow('too long');
     expect(fetched).toEqual([]);
     expect(mockWorld.db.all('SELECT 1 FROM items')).toEqual([]);
+  });
+});
+
+describe('a plain http link (release builds allow no cleartext)', () => {
+  test('a public one is fetched over https, and saved at the address its page ends at', async () => {
+    const owner = setUp();
+    const fetched: string[] = [];
+    mockWorld.page = {
+      fetch: (async (url: string) => {
+        fetched.push(url);
+        if (url.startsWith('http://')) throw new Error('CLEARTEXT communication not permitted by network security policy');
+        return Object.defineProperty(new Response('<p>x</p>', { status: 200, headers: { 'content-type': 'text/html' } }), 'url', { value: url });
+      }) as never,
+      parse: async () => ({ ok: true, title: 'A story', byline: null, site: null, lang: null, hero: null, canonical: null, readerable: true, markdown: WORDS }),
+    };
+    const r = await saveLink('http://news.example/story', () => undefined);
+    expect(fetched).toEqual(['https://news.example/story']);
+    expect(r).toMatchObject({ kind: 'saved', hash: itemHash('https://news.example/story') });
+    expect(getItem(mockWorld.db, owner, r.hash!)).toMatchObject({ url: 'https://news.example/story', shared_url: 'http://news.example/story', text_state: 'cached' });
+  });
+
+  test('a local one, or one with a port, keeps its http; https stays as it is', () => {
+    expect(overHttps('http://news.example/a?b=1#c')).toBe('https://news.example/a?b=1#c');
+    expect(overHttps('HTTP://news.example/a')).toBe('https://news.example/a');
+    expect(overHttps('http://localhost:8080/a')).toBe('http://localhost:8080/a');
+    expect(overHttps('http://192.168.1.1/')).toBe('http://192.168.1.1/');
+    expect(overHttps('http://news.example:8080/a')).toBe('http://news.example:8080/a');
+    expect(overHttps('https://news.example/a')).toBe('https://news.example/a');
   });
 });
 

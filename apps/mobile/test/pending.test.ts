@@ -212,6 +212,22 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     expect(rows.every((r) => r.title.length <= 300)).toBe(true);
   });
 
+  test('a plain http save, which release builds can never fetch, no longer stops the saves behind it', async () => {
+    const w = world({ 'https://g.com/b': {} });
+    const fetch = w.ports.page.fetch;
+    // OkHttp's refusal of cleartext, which fetchPage reads as offline
+    w.ports.page.fetch = (async (url: string, init: RequestInit) => {
+      if (url.startsWith('http://')) throw new Error('CLEARTEXT communication to g.com not permitted by network security policy');
+      return fetch(url, init);
+    }) as never;
+    w.share('http://g.com/a');
+    w.share('https://g.com/b');
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ parsed: 1, waiting: 1 });
+    expect(w.db.all('SELECT url, text_state FROM items ORDER BY id')).toEqual([
+      { url: 'http://g.com/a', text_state: 'queued' }, { url: 'https://g.com/b', text_state: 'cached' },
+    ]);
+  });
+
   test('a save deleted while its page is fetched takes nothing: no upload, no sends, no text, no search entry', async () => {
     const w = world({ 'https://f.com/a': {}, 'https://f.com/b': { status: 404 } });
     w.share('https://f.com/a');

@@ -2,7 +2,7 @@
 // stage the text, record the item, and queue its outbox rows held, to be released when the share sheet closes
 // without Undo. The outbox sends them (send.ts, runner.ts). What happened comes back as a kind, which picks the
 // Saved sheet's state.
-import { encryptText, isXPost, itemHash, textHash, urlParts } from '@kefli/protocol';
+import { encryptText, isPublicWebUrl, isXPost, itemHash, textHash, urlParts } from '@kefli/protocol';
 import { phonePagePorts } from './pagePorts';
 import { phoneCrypto } from '../crypto/port';
 import type { SqlDb } from '../data/db';
@@ -70,6 +70,20 @@ async function xRoute(c: Ctx, url: string): Promise<Queued | string> {
   return { hash, held, kind: x.kind === 'offline' ? 'offline' : 'xwait', prior: null, title: null, site: null };
 }
 
+// an http address's host and port as written, with no user info: a string, as the code gate misreads regex literals
+const PLAIN_HOST = new RegExp('^http://(?:[^@/?#]*@)?([^/?#]*)', 'i');
+
+/**
+ * RULED: a public http:// page is fetched over https, as browsers now try first. Release builds allow no cleartext,
+ * so an http fetch fails before it starts, which reads as offline: the sheet said Saved, will fetch when you're
+ * online, and the save waited for good. A page with no https still fails that way. An address with a port, and a
+ * local one (the local stack's own pages), keep their http; the save's address is the shared one until its page parses.
+ */
+export function overHttps(url: string): string {
+  const host = PLAIN_HOST.exec(url)?.[1];
+  return host && !host.includes(':') && isPublicWebUrl(url) ? `https://${url.slice('http://'.length)}` : url;
+}
+
 /** The identity, the store and the targets a save needs. */
 async function context(report: (s: SaveStep) => void): Promise<Ctx> {
   const defaults = await loadDefaults();
@@ -122,7 +136,7 @@ export async function saveLink(url: string, report: (s: SaveStep) => void): Prom
   const early = priorOf(db, owner, itemHash(target));
   if (early) return repeat(c, itemHash(target), target, early);
 
-  const outcome = await fetchPage(phonePagePorts(), target);
+  const outcome = await fetchPage(phonePagePorts(), overHttps(target));
   if (outcome.kind !== 'parsed') {
     // Offline, the save waits on the phone keyed by the shared address, to be parsed when online (share-offline);
     // a page that can't be read is saved without text, and its row opens the original.
