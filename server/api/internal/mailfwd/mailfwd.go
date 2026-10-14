@@ -32,7 +32,14 @@ type Config struct {
 	APIBase       string // https://api.resend.com
 	Client        *http.Client
 	Now           func() time.Time
+	// Busy is how long a webhook waits while another message is being forwarded before it is answered 503, for Resend
+	// to send again later (DefaultBusy when 0).
+	Busy time.Duration
 }
+
+// DefaultBusy is how long a webhook waits for the message before it, well inside the time Resend's webhook calls wait
+// for an answer.
+const DefaultBusy = 10 * time.Second
 
 const (
 	maxWebhook     = 1 << 20
@@ -50,8 +57,14 @@ type event struct {
 	} `json:"data"`
 }
 
-// Handler serves the webhook. A bad signature is 401; a failure to forward is 502, so Resend tries again later.
+// Handler serves the webhook. A bad signature is 401; a failure to forward is 502, so Resend tries again later. One
+// message is forwarded at a time, since each is held in memory whole, attachments and all: a webhook that waits longer
+// than cfg.Busy for the one before it is answered 503, and Resend sends it again later too.
 func Handler(cfg Config) http.Handler {
+	if cfg.Busy == 0 {
+		cfg.Busy = DefaultBusy
+	}
+	one := make(chan struct{}, 1)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -67,18 +80,30 @@ func Handler(cfg Config) http.Handler {
 			http.Error(w, "bad event", http.StatusBadRequest)
 			return
 		}
-		status := handle(r, cfg, ev)
+		status := handle(r, cfg, ev, one)
+		if status == http.StatusServiceUnavailable {
+			w.Header().Set("Retry-After", "60")
+		}
 		w.WriteHeader(status)
 	})
 }
 
-func handle(r *http.Request, cfg Config, ev event) int {
+func handle(r *http.Request, cfg Config, ev event, one chan struct{}) int {
 	if ev.Type != "email.received" || ev.Data.EmailID == "" {
 		return http.StatusNoContent
 	}
 	if !accepted(cfg.Accept, ev.Data.To, ev.Data.Cc, ev.Data.ReceivedFor) {
 		log.Printf("%s: not for a forwarded address, dropped", ev.Data.EmailID)
 		return http.StatusNoContent
+	}
+	select {
+	case one <- struct{}{}:
+		defer func() { <-one }()
+	case <-time.After(cfg.Busy):
+		log.Printf("%s: another message is being forwarded; Resend will send it again", ev.Data.EmailID)
+		return http.StatusServiceUnavailable
+	case <-r.Context().Done():
+		return http.StatusServiceUnavailable
 	}
 	c := client{cfg: cfg, req: r}
 	if err := c.forward(ev.Data.EmailID); err != nil {
