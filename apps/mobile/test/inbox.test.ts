@@ -268,6 +268,47 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     expect(w.cursor()).toBe(w.now());
   });
 
+  test('a signer out of sight for more than a week costs one save, not one a drain: the same wrap is tried first each time', async () => {
+    const w = world();
+    let refusing = true;
+    w.ports.signer = countingSigner(w.user, () => refusing).signer;
+    for (let i = 0; i < 5; i++) await w.send(w.request({ url: `https://example.com/${i}` }));
+    // eight days of drains, four a day, Amber declining out of sight
+    for (let d = 0; d < 32; d++) {
+      expect(await drainInbox(w.ports, w.owner)).toEqual(d < 28 ? {} : expect.anything());
+      w.tick(6 * 3600);
+    }
+    refusing = false;
+    const out = await drainInbox(w.ports, w.owner);
+    // the first, tried at every drain, waited its week and was filed; the rest were never asked for, and arrive
+    expect(out.created).toBe(4);
+  });
+
+  test('hundreds of wraps that keep failing for a signer that answers can’t spend the budget ahead of a new save', async () => {
+    const w = world();
+    w.ports.query = w.relayLike(500);
+    const poison = new Set<string>();
+    w.ports.signer = new Proxy(w.user, {
+      get: (t, k) => (k === 'nip44Decrypt'
+        ? (peer: string, c: string) => (poison.has(c) ? Promise.reject(Object.assign(new Error('timeout'), { code: 'timeout' })) : w.user.nip44Decrypt(peer, c))
+        : Reflect.get(t, k)),
+    });
+    for (let i = 0; i < 600; i++) {
+      const k = generateSecretKey();
+      const wrap = finalizeEvent({ kind: 1059, created_at: w.now() - 86_400 - i, tags: [['p', w.owner]], content: nip44.encrypt('x', nip44.utils.getConversationKey(k, w.owner)) }, k);
+      w.wraps.push(wrap as NostrEvent);
+      poison.add(wrap.content);
+    }
+    // two drains try them all, and each waits its week
+    await drainInbox(w.ports, w.owner);
+    w.tick(INBOX_DEEP_EVERY);
+    await drainInbox(w.ports, w.owner);
+    expect(w.db.get("SELECT COUNT(*) AS n FROM inbox_seen WHERE outcome = 'waiting'")).toEqual({ n: 600 });
+    await w.send(w.request({ url: 'https://example.com/new' }));
+    w.tick(INBOX_DEEP_EVERY);
+    expect(await drainInbox(w.ports, w.owner)).toMatchObject({ created: 1 });
+  });
+
   test('a browser save first seen more than a week after it was sent still waits a week for a signer out of sight (F3)', async () => {
     const w = world();
     let refusing = true;

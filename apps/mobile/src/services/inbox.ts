@@ -340,21 +340,33 @@ async function openOne(p: InboxPorts, owner: string, w: NostrEvent, blossom: str
   }
 }
 
-type Kept = { e: NostrEvent; tried: boolean };
-const opensFirst = (a: Kept, b: Kept) => Number(a.tried) - Number(b.tried) || a.e.created_at - b.e.created_at;
+/**
+ * The most wraps already waiting that a drain tries ahead of the rest. Those are tried first, so that while the signer
+ * isn't answering the drain asks about the same wrap each time, whose week runs alone: asked about a new one each
+ * drain, every save sent while the signer was away would wait out its week and be filed with it. Past this many,
+ * which only wraps that keep failing for the signer while it answers come to, the drain's other wraps go first.
+ */
+export const INBOX_RETRIES = 100;
+
+const byAge = (a: NostrEvent, b: NostrEvent) => a.created_at - b.created_at;
 
 /**
  * What a read keeps: each wrap once (take returns how many of an answer were new to the read), and only one that may
  * hold a request (mayHoldRequest) and that no drain has judged, so what was read before costs no memory. wraps() is
- * the order they are opened: those never tried, oldest first, then those already waiting (a signer that didn't open
- * them, a taking that failed), so that wraps which keep failing, which anyone can send, are tried after the drain's
- * other wraps rather than spending its budget ahead of them. A drain opens at most INBOX_UNWRAPS, so no more than
- * twice that are kept, those to be opened first; over() says some were let go, which the drain counts as left unopened.
+ * the order they are opened: up to INBOX_RETRIES already waiting (a signer that didn't open them, a taking that
+ * failed), then those never tried, each oldest first. A drain opens at most INBOX_UNWRAPS, so no more than that of the
+ * waiting and twice that of the rest are kept, those to be opened first; over() says some were let go, which the drain
+ * counts as left unopened.
  */
 export function unjudged(db: SqlDb) {
   const ids = new Set<string>();
-  let kept: Kept[] = [];
+  const kept = { tried: [] as NostrEvent[], fresh: [] as NostrEvent[] };
   let over = false;
+  const trim = (list: 'tried' | 'fresh', max: number, to: number) => {
+    if (kept[list].length <= max) return;
+    kept[list] = kept[list].sort(byAge).slice(0, to);
+    over = true;
+  };
   const take = (page: NostrEvent[]): number => {
     let added = 0;
     for (const e of page) {
@@ -362,15 +374,14 @@ export function unjudged(db: SqlDb) {
       ids.add(e.id);
       added++;
       const state = mayHoldRequest(e) ? seenState(db, e.id) : 'ignored_foreign';
-      if (state === null || state === 'waiting') kept.push({ e, tried: state === 'waiting' });
+      if (state === null || state === 'waiting') kept[state === 'waiting' ? 'tried' : 'fresh'].push(e);
     }
-    if (kept.length > 2 * INBOX_UNWRAPS) {
-      kept = kept.sort(opensFirst).slice(0, INBOX_UNWRAPS);
-      over = true;
-    }
+    trim('tried', 2 * INBOX_RETRIES, INBOX_RETRIES);
+    trim('fresh', 2 * INBOX_UNWRAPS, INBOX_UNWRAPS);
     return added;
   };
-  return { take, wraps: () => kept.sort(opensFirst).map((k) => k.e), over: () => over };
+  const wraps = () => [...kept.tried.sort(byAge).slice(0, INBOX_RETRIES), ...kept.fresh.sort(byAge), ...kept.tried.slice(INBOX_RETRIES)];
+  return { take, wraps, over: () => over };
 }
 
 /** One drain of the inbox. Restartable: the cursor moves only after the relay answers, and as WindowRead.upTo allows. */
