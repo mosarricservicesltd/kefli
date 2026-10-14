@@ -6,7 +6,7 @@ import { acceptPairAck, wrapSaveRequest, type PairAck, type SaveRequest } from '
 import type { LocalSigner, NostrEvent } from '../../../packages/protocol/src/signer';
 import { unwrap } from '../../../packages/protocol/src/wrap';
 import { changeQueue, type Queued } from './queue';
-import { KEYS, type Pairing, type Store } from './store';
+import { addresses, KEYS, type Pairing, type Store } from './store';
 
 /**
  * The move to follow, if any: each pair-ack must come from the current user (moved_from and the seal's signer), so a chain
@@ -62,7 +62,8 @@ export async function rewrap(e: Queued, device: LocalSigner, pairing: Pairing, n
  */
 export async function applyMove(store: Store, device: LocalSigner, ack: PairAck, now: number): Promise<Pairing> {
   const old = await store.get<Pairing>(KEYS.pairing);
-  const pairing: Pairing = { v: 1, user_pubkey: ack.user_pubkey, write_relays: ack.write_relays, blossom_servers: ack.blossom_servers, token: ack.token, label: old?.label ?? '', paired_at: old?.paired_at ?? now };
+  // its lists as the extension keeps them (store.ts addresses)
+  const pairing: Pairing = { v: 1, user_pubkey: ack.user_pubkey, write_relays: addresses(ack.write_relays), blossom_servers: addresses(ack.blossom_servers), token: String(ack.token), label: old?.label ?? '', paired_at: old?.paired_at ?? now };
   await changeQueue(store, async (q) => {
     for (let i = 0; i < q.length; i++) q[i] = await rewrap(q[i], device, pairing, now);
   });

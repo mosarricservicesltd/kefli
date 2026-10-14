@@ -34,6 +34,20 @@ export function memoryStore(): Store & { data: Map<string, unknown> } {
   };
 }
 
+/** The longest relay or server address kept: the URL Standard sets none, and a real one is far shorter. */
+export const ADDRESS_MAX = 2_048;
+/** The most relays or servers a pairing keeps: a nostr user's own list can be long, but not this long. */
+export const LIST_MAX = 100;
+
+/**
+ * A list of addresses from the phone or the operator as the extension keeps and shows it: strings only, none absurdly
+ * long, at most LIST_MAX. A list that holds anything else would break Advanced and Copy debug info, and a huge one would
+ * fill the storage.local the queue needs. Only the operator relay is ever sent to, so a list cut short loses nothing.
+ */
+export function addresses(l: unknown, max = LIST_MAX): string[] {
+  return Array.isArray(l) ? l.filter((u): u is string => typeof u === 'string' && u.length <= ADDRESS_MAX).slice(0, max) : [];
+}
+
 /** The pairing record (contract 4.4): who this browser saves for, and where. */
 export interface Pairing {
   v: 1;

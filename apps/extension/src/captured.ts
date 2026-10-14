@@ -39,9 +39,72 @@ export function pageUrl(href: string): string {
   return u.href;
 }
 
+/**
+ * How much of a page's Markdown the guard counts words in, when the page isn't readerable. 120 words of prose take a
+ * kilobyte, of links several; the spoken projection of more ran in the page's own thread for as long as the page liked:
+ * 3 MB of prose overflowed the stack, 3 MB of one list ran the heap out after three minutes, and runs of * and _ cost
+ * a quarter of a second a kilobyte, rising (64 KB took five minutes). A page whose opening 4 KB holds fewer than 120
+ * words is taken as no article, and the phone fetches it itself; a page of links still holds 150 or so there.
+ */
+export const GUARD_SAMPLE_CHARS = 4_096;
+
+/** At least GUARD_WORDS spoken words in the Markdown's opening, or false when they can't be counted. */
+function enoughWords(markdown: string): boolean {
+  try {
+    return countWords(markdown.slice(0, GUARD_SAMPLE_CHARS)) >= GUARD_WORDS;
+  } catch {
+    return false;
+  }
+}
+
 /** The guard (contract 4.2): readerable, or at least 120 spoken words; and the HTML no more than 2 MB as UTF-8. */
 export function keepHtml(parsed: Parsed, content: string | undefined): string | null {
   if (!parsed.ok || !content || !parsed.markdown) return null;
-  if (!parsed.readerable && countWords(parsed.markdown) < GUARD_WORDS) return null;
+  if (!parsed.readerable && !enoughWords(parsed.markdown)) return null;
   return new TextEncoder().encode(content).length <= HTML_MAX_BYTES ? content : null;
+}
+
+/** A page's size, measured without reading it: its elements, its text, the serialised length and its widest parent. */
+export interface PageSize {
+  elements: number;
+  /** The body's text, less what is inside its script and style elements, which reading drops at once. */
+  readable: number;
+  /** The serialised page; 0 until it is serialised. */
+  chars: number;
+  /** The most element children any one element has, and that element's text length. */
+  children: number;
+  text: number;
+}
+
+/**
+ * Past any of these a page isn't read: the save goes without its text, which the phone fetches itself, as it does for a
+ * page whose text is over 2 MB. Reading runs on the page's own thread, so while it runs the tab is frozen. The HTML
+ * standard's single page (337,128 elements, 4.7 million characters of text) froze its tab for two minutes, and 10 MB of
+ * article (9 million) for 52 s, each with its text over 2 MB anyway. The longest real pages tried are inside: World War
+ * II on Wikipedia (17,011 elements, read in 2.8 s) and War and Peace on Project Gutenberg (3.6 million characters of
+ * text, 7.9 s). Scripts, styles and attributes cost only their copying (10 million characters of an app's data around a
+ * short article read in 2.6 s, a 20 MB attribute in 4.4 s), up to serialised in all, past which the copies alone would
+ * take the tab's memory. widest is Turndown's cost: it joins a parent's children into a string it reads back at every
+ * child, so a parent with many children costs about children × text / 2 characters copied, and 20,000 one-line
+ * paragraphs in one article (25,000 million) took 54 s. Moby-Dick, its 2,846 paragraphs all in the body, costs 1,964
+ * million.
+ */
+export const PAGE_LIMITS = { elements: 200_000, readable: 4_000_000, serialised: 32_000_000, widest: 4_000_000_000 } as const;
+
+/** Whether reading the page would freeze its tab for too long, by PAGE_LIMITS. */
+export function tooLargeToRead(s: PageSize): boolean {
+  const L = PAGE_LIMITS;
+  return s.elements > L.elements || s.readable > L.readable || s.chars > L.serialised || (s.children * s.text) / 2 > L.widest;
+}
+
+/** A page's address and title, with nothing read from it: a page too large to read (PAGE_LIMITS). */
+export function unread(url: string, title: string): Captured {
+  return { ...linkOnly(url), title: title.trim() || null };
+}
+
+/** p's value, or fallback once ms have passed without one; p itself goes on, and whatever it gives later is let go. */
+export function orAfter<T, F>(p: Promise<T>, ms: number, fallback: F): Promise<T | F> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<F>((done) => (timer = setTimeout(() => done(fallback), ms)));
+  return Promise.race([p, late]).finally(() => clearTimeout(timer));
 }

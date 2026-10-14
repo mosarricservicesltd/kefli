@@ -2,7 +2,7 @@
 // toolbar button with the save's state in storage.session, and updates it there as Saving… becomes Saved. It is the
 // toast's anatomy in the page's own scheme; it closes after eight seconds and on Escape or ✕, and the browser closes it
 // when it loses focus.
-import { icon } from './icons';
+import { icon, MARKS } from './icons';
 import { markDelay, toastCopy, type ToastCopy, type ToastState } from './toastCopy';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -21,7 +21,6 @@ let since = 0;
 
 document.head.insertAdjacentHTML('beforeend', `<style>${ShelfCover.css}</style>`);
 const esc = (x: string) => x.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-const MARKS = { ok: icon('check', 12, 'stroke-width="3"'), bad: icon('bang', 12, 'stroke-width="3"'), off: icon('wifioff', 12, 'stroke-width="2.25"') };
 
 /** The leading slot: the save's cover, kept while Saving… becomes Saved so its drawing isn't restarted, and its mark. */
 function paintLead(t: ToastCopy): void {

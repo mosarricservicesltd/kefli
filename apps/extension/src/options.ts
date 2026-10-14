@@ -148,7 +148,7 @@ function unpairHTML(confirm: boolean): string {
 function connectedHTML(v: Extract<View, { kind: 'connected' }>, shortcut: string | null): string {
   const since = new Date(v.pairing.paired_at * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
   return `<div class="in">${head()}
-    <div class="titlerow"><span class="ok">${icon('check', 20, 'stroke-width="2.5"')}</span><h1 tabindex="-1">Connected to your phone</h1></div>
+    <div class="titlerow"><span class="ok">${icon('check', 20, 2.5)}</span><h1 tabindex="-1">Connected to your phone</h1></div>
     ${noticeHTML()}
     <p class="lead">Since ${since} · your phone shows this browser as “${esc(v.pairing.label)}”</p>
     ${failedHTML()}${waysHTML(shortcut)}${advancedHTML(v.pairing, v.advanced)}
