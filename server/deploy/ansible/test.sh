@@ -66,6 +66,14 @@ line='{"type":"new","event":{"id":"'$(printf 'b%.0s' {1..64})'","pubkey":"%s","k
 policy() { printf "$line\n" "$1" | docker exec -i "$name" runuser -u strfry -- /usr/local/lib/kefli/relay-write-policy | jq -r .action; }
 check 'the write policy, as strfry, accepts the registered key' '[ "$(policy $key)" = accept ]'
 check 'and refuses another' '[ "$(policy $(printf "c%.0s" {1..64}))" = reject ]'
+# The relay's floor: the wrapper names the disk and the floor, and with a floor above any disk's size the policy holds
+# the registered key's event, rate-limited.
+full() { printf "$line\n" "$1" | docker exec -i "$name" runuser -u strfry -- /usr/local/lib/kefli/kefli-writepolicy -db /var/lib/kefli/keflid.db \
+  -wraps /tmp/floor-wraps.db -room /var/lib/strfry/db -min-free-mb 1000000000 | jq -r .msg; }
+check "the write policy keeps the relay's floor" \
+  'grep -qF -- "-room /var/lib/strfry/db -min-free-mb 2048" <<<"$(box cat /usr/local/lib/kefli/relay-write-policy)" && [[ "$(full $key)" == rate-limited:* ]]'
+check 'strfry keeps no compression window per connection' 'grep -qx " *slidingWindow = false" <<<"$(box cat /etc/strfry.conf)"'
+check 'the mail forwarder is held to 768 MB' '[ "$(box systemctl show -p MemoryMax --value kefli-mailfwd)" = 805306368 ]'
 check 'the sweep runs' 'box systemctl start relay-sweep'
 check 'the access log holds no address' '! box grep -q 127.0.0.1 /var/log/caddy/access.log'
 # F6: a WebSocket connection to the relay, and a request with a query to a stopped upstream (Caddy's error log), leave

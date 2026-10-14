@@ -40,6 +40,13 @@ relay {
         timeoutSeconds = 10
     }
 
+    # Compressed frames still, but with no window kept for each connection: with one, 2,000 idle connections held
+    # 260 MB of the 2 GB box, and without it 5 MB, about what uncompressed ones do.
+    compression {
+        enabled = true
+        slidingWindow = false
+    }
+
     numThreads {
         ingester = 2
         reqWorker = 2
