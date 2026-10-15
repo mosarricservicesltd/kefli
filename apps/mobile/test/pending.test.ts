@@ -465,6 +465,120 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
   });
 });
 
+describe('a save at an http address whose site has no https (RULED: past three days it fails as a page that can’t be read)', () => {
+  const DAY = 86_400;
+  const TLS = () => new Error('fetch failed: javax.net.ssl.SSLPeerUnverifiedException: Hostname old.example not verified:');
+  const REFUSED = () => new Error('fetch failed: java.net.ConnectException: Failed to connect to old.example/203.0.113.7:443');
+  const NO_NAME = () => new Error('fetch failed: java.net.UnknownHostException: Unable to resolve host "old.example": No address associated with hostname');
+
+  /**
+   * The world as a release build on a network: plain http refused before it connects, old.example's https failing
+   * as fail makes it, and every other site as the world has it. Returns every address asked for.
+   */
+  function noHttps(w: ReturnType<typeof world>, fail: () => Error): string[] {
+    const asked = releaseBuild(w);
+    const inner = w.ports.page.fetch;
+    w.ports.page.fetch = (async (url: string, init: RequestInit) => {
+      if (!url.startsWith('https://old.example/')) return inner(url, init);
+      asked.push(url);
+      throw fail();
+    }) as never;
+    return asked;
+  }
+  const at = (w: ReturnType<typeof world>, seconds: number) => (w.ports.now = () => 1000 + seconds);
+  const publishes = (w: ReturnType<typeof world>) => w.outbox().filter((o) => o.op === 'publish_item').map((o) => o.subject);
+
+  test('more than three days old, its https refused with the phone online: sent without its text, its link kept', async () => {
+    const w = world({ 'https://ok.example/a': {} });
+    const asked = noHttps(w, TLS);
+    let asks = 0;
+    w.ports.online = async () => (asks++, true);
+    w.share('http://old.example/post');
+    w.share('https://ok.example/a');
+    at(w, 3 * DAY + 1);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 1, failed: 1, waiting: 0, xWaiting: 0 });
+    expect(asked).toEqual(['https://ok.example/a', 'https://old.example/post']);
+    expect(w.db.get('SELECT hash, url, text_state, fail_reason FROM items WHERE url = ?', 'http://old.example/post')).toEqual({
+      hash: itemHash('http://old.example/post'), url: 'http://old.example/post', text_state: 'failed', fail_reason: 'http',
+    });
+    expect(publishes(w)).toContain(itemHash('http://old.example/post'));
+    expect(pendingParses(w.db, PK)).toEqual([]);
+    // the network's state was asked once, for the one save the rule could fail
+    expect(asks).toBe(1);
+  });
+
+  test('so is one whose connection is refused on port 443', async () => {
+    const w = world();
+    noHttps(w, REFUSED);
+    w.ports.online = async () => true;
+    w.share('http://old.example/post');
+    at(w, 10 * DAY);
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 1, waiting: 0 });
+  });
+
+  test('three days old or less it waits, as its share did: a captive portal or a TLS hiccup can’t fail it', async () => {
+    const w = world();
+    noHttps(w, TLS);
+    w.ports.online = async () => true;
+    w.share('http://old.example/post');
+    at(w, 3 * DAY);
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 0, waiting: 1 });
+    expect(w.db.get('SELECT text_state FROM items')).toEqual({ text_state: 'queued' });
+    expect(publishes(w)).toEqual([]);
+  });
+
+  test('at any age it waits while the phone is off the internet, or can’t say it is on it', async () => {
+    // Android doesn't count a network behind a captive portal as reaching the internet (expo-network isInternetReachable)
+    for (const online of [async () => false, async () => Promise.reject(new Error('no state')), undefined]) {
+      const w = world();
+      noHttps(w, TLS);
+      w.ports.online = online;
+      w.share('http://old.example/post');
+      at(w, 30 * DAY);
+      expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 0, waiting: 1 });
+      expect(publishes(w)).toEqual([]);
+    }
+  });
+
+  test('at any age it waits when its https attempt met the network: a name that resolves nowhere, or a time-out', async () => {
+    for (const fail of [NO_NAME, () => new TimedOut()]) {
+      const w = world();
+      noHttps(w, fail);
+      w.ports.online = async () => true;
+      w.share('http://old.example/post');
+      at(w, 30 * DAY);
+      expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 0, waiting: 1 });
+    }
+  });
+
+  test('a save at an https address whose TLS is refused waits at any age: only an http one is asked over https alone', async () => {
+    const w = world();
+    noHttps(w, TLS);
+    w.ports.online = async () => true;
+    w.share('https://old.example/post');
+    at(w, 30 * DAY);
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 0, waiting: 1 });
+  });
+
+  test("the runner gives the queue Android's own judgement of the internet (runner.ts can't load in Node)", () => {
+    // without the port no save is ever failed for want of https, so the rule would never reach the phone
+    const src = readFileSync(join(__dirname, '..', 'src', 'services', 'runner.ts'), 'utf8');
+    const fn = src.slice(src.indexOf('async function parsePending('), src.indexOf('let xFailures'));
+    expect(fn).toMatch(/\bonline: async \(\) => \(await getNetworkStateAsync\(\)\)\.isInternetReachable === true,/);
+  });
+
+  test("another phone's save at such an address is marked failed here, with nothing new to send (C§4.2)", async () => {
+    const w = world();
+    noHttps(w, TLS);
+    w.ports.online = async () => true;
+    w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, published, event_id, modified_at) VALUES (?, ?, 'http://old.example/post', 10, 'unread', 'queued', 'sync', 1, 'e1', 7)", PK, itemHash('http://old.example/post'));
+    at(w, 30 * DAY);
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 1 });
+    expect(w.db.get('SELECT text_state, fail_reason, dirty, modified_at FROM items')).toEqual({ text_state: 'failed', fail_reason: 'http', dirty: 0, modified_at: 7 });
+    expect(w.outbox()).toEqual([]);
+  });
+});
+
 describe('a user name and password are never kept in a stored address (contract 4.3, ruling 8)', () => {
   // the hash leaves them out, but the stored address is what Original, Open in browser and X's embed query are given
   test('an imported link is queued without them', () => {

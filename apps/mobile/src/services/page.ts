@@ -13,7 +13,7 @@
 // behind it go on (a failed parse keeps the save's link, without text).
 import { normaliseMarkdown, ownCanonical, pdfMarkdown, urlParts, withoutUserInfo, type PdfRuns } from '@kefli/protocol';
 import { deriveArticle, type Derived } from '../reader/blocks';
-import { Blocked, fromFiles, open, strayed, TimedOut, TooLarge, WEB_HOPS, type Opened } from '../net/http';
+import { Blocked, fromFiles, open, overHttps, strayed, TimedOut, TooLarge, WEB_HOPS, type Opened } from '../net/http';
 
 export const PAGE_MAX_BYTES = 5 * 1024 * 1024;
 /**
@@ -81,8 +81,12 @@ const RENDERER_GONE = 'renderer_gone';
 export type FailReason = 'http' | 'not_html' | 'too_large' | 'not_readable' | 'pdf_no_text' | 'pdf_locked';
 
 export type PageOutcome =
-  /** timedOut: the server or the network was too slow, against the 20 s deadline, rather than not there. */
-  | { kind: 'offline'; timedOut?: true }
+  /**
+   * timedOut: the server or the network was too slow, against the 20 s deadline, rather than not there. refused:
+   * nothing answered with a page, but something refused the connection (REFUSED), as an address asked for over https
+   * alone meets when its site has none; such a save waits like any other, until the rule below fails it.
+   */
+  | { kind: 'offline'; timedOut?: true; refused?: true }
   | { kind: 'failed'; reason: FailReason; finalUrl: string }
   | { kind: 'parsed'; finalUrl: string; result: Extract<ParserResult, { ok: true }>; words: number; spoken: string; derived: Derived };
 
@@ -185,8 +189,20 @@ async function answer(p: PagePorts, url: string): Promise<Answer> {
 }
 
 /**
+ * What OkHttp ends a connection with when something answered but not with https the phone can use: a TLS failure (a
+ * certificate for another site or none, a handshake refused, plain http on port 443), or a connection refused or
+ * reset. Read from the start of the message expo/fetch rejects with, "fetch failed: " and the Java exception's own
+ * words, so a host's name, which a failure to resolve it quotes, can't pass for one. A name that resolves nowhere is
+ * the network, or no site at all, as for any address; a refusal on a network that reaches nothing past a captive
+ * portal is told apart by the network's own state (pending.ts). Built from a string: the code gate misreads regex
+ * literals.
+ */
+const REFUSED = new RegExp('^(?:fetch failed: )?(?:javax\\.net\\.ssl\\.|java\\.security\\.cert\\.|java\\.net\\.ConnectException\\b|java\\.net\\.SocketException: Connection reset\\b)');
+
+/**
  * Why a page couldn't be had: too large, a redirect the phone won't follow or cleartext the build refuses (net/http
- * Blocked) fails it, the save keeping its link; anything else is the network, timed out or not there.
+ * Blocked) fails it, the save keeping its link; anything else is the network, timed out or not there, or a connection
+ * refused before anything answered (REFUSED).
  */
 function unfetched(e: unknown, o: Opened | null, url: string): Extract<PageOutcome, { kind: 'offline' | 'failed' }> {
   if (e instanceof TooLarge) return { kind: 'failed', reason: 'too_large', finalUrl: o ? landedAt(o.url, url) : url };
@@ -195,7 +211,32 @@ function unfetched(e: unknown, o: Opened | null, url: string): Extract<PageOutco
     console.log(`[kefli-page] ${JSON.stringify({ refused: 'http', blocked: e.why })}`);
     return { kind: 'failed', reason: 'http', finalUrl: url };
   }
-  return e instanceof TimedOut ? { kind: 'offline', timedOut: true } : { kind: 'offline' };
+  if (e instanceof TimedOut) return { kind: 'offline', timedOut: true };
+  return refusedFirst(e, o) ? { kind: 'offline', refused: true } : { kind: 'offline' };
+}
+
+/**
+ * Whether e refused the connection (REFUSED) before anything answered: a site that answered once, before a 403 sent
+ * the second try or before its body broke off, has its https.
+ */
+function refusedFirst(e: unknown, o: Opened | null): boolean {
+  return !o && REFUSED.test(String((e as Error | undefined)?.message ?? ''));
+}
+
+/**
+ * RULED: how long a save at a public http address waits for its page over https, from its saved_at. Release builds
+ * allow no cleartext and such an address is asked for over https alone (net/http overHttps), so a site with no https
+ * could never be read, and its save waited unpublished for good, never backed up and tried at every sync. Past this,
+ * an https attempt refused before anything answered, with the phone on the internet, fails the save as a page that
+ * can't be read: published without its text, its link kept. Under it the save waits as before, so a captive portal or
+ * a TLS hiccup can't fail it; offline or timed out, it waits at any age. A share is new, so the rule reaches only
+ * saves waiting in the pending queue.
+ */
+export const HTTPS_WAIT_SECONDS = 3 * 86_400;
+
+/** Whether a save at url, saved at savedAt, whose page came to outcome has waited for https as long as it may. */
+export function waitedForHttps(url: string, outcome: PageOutcome, savedAt: number, now: number): boolean {
+  return outcome.kind === 'offline' && outcome.refused === true && overHttps(url) !== url && now - savedAt > HTTPS_WAIT_SECONDS;
 }
 
 /**

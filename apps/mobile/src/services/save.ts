@@ -133,7 +133,9 @@ export async function saveLink(shared: string, report: (s: SaveStep) => void): P
   const outcome = await fetchPage(phonePagePorts(), overHttps(target));
   if (outcome.kind !== 'parsed') {
     // Offline, the save waits on the phone keyed by the shared address, to be parsed when online (share-offline);
-    // a page that can't be read is saved without text, and its row opens the original.
+    // a page that can't be read is saved without text, and its row opens the original. A page whose https was refused
+    // (an http site with none) waits as an offline one does: a share is new, and the pending queue fails such a save
+    // as a page that can't be read only once it is over three days old (page.ts HTTPS_WAIT_SECONDS).
     // RULED: a failed parse keeps the shared address too. Where a redirect ends is trusted only when the page parses;
     // a sign-in wall's redirect lands on its login page, which isn't what was saved and isn't what Open original
     // should open.

@@ -12,18 +12,21 @@ export type Pending = {
   id: number; hash: string; url: string; shared_url: string | null; published: number; event_id: string | null; x_state: string | null;
   /** When it was last tried and couldn't be had (F12), as pendingParses reads it; null for one never tried. */
   timed_out_at?: number | null;
+  /** The save's own time (C§4.1), as pendingParses reads it: how long an http one has waited for https (page.ts). */
+  saved_at?: number;
 };
 
 /**
  * Saves waiting for their parse: those that haven't timed out first, oldest first, then those that have, the one
  * that timed out longest ago first (F12). RULED: plain http pages come after all the rest. Each is fetched over https
- * first (net/http overHttps), and an old site with no https can take the whole 20 s to fail there, so an import of
- * old bookmarks spends its slowest last; one that only cleartext could fetch fails at once (net/http Blocked).
+ * alone (net/http overHttps), and an old site with no https can take the whole 20 s to fail there, so an import of
+ * old bookmarks spends its slowest last; one refused there waits until it is three days old, then fails (page.ts
+ * HTTPS_WAIT_SECONDS), and one that only cleartext could fetch fails at once (net/http Blocked).
  */
 export function pendingParses(db: SqlDb, owner: string): Pending[] {
   return db.all<Pending>(
     // the person's own saves before an import's, which may run to thousands and take days past the day's 20 MB (FD 117)
-    `SELECT id, hash, url, shared_url, published, event_id, x_state, timed_out_at FROM items WHERE owner = ? AND text_state = 'queued' AND pending_delete_at IS NULL
+    `SELECT id, hash, url, shared_url, published, event_id, x_state, timed_out_at, saved_at FROM items WHERE owner = ? AND text_state = 'queued' AND pending_delete_at IS NULL
      ORDER BY lower(substr(url, 1, 7)) = 'http://', COALESCE(timed_out_at, 0), origin = 'import', saved_at, id`,
     owner,
   );

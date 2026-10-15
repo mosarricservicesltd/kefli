@@ -1,7 +1,8 @@
 // Sync's phase 7 (mobile spec 4.5): pending parses, one at a time, until the network goes or the run's minute is
-// spent. Each is fetched and parsed as a share is (page.ts), a public http address over https first (net/http
-// overHttps); its text is encrypted under a fresh key, staged, written and indexed, and its sends queued
-// (data/pending.ts). Ports, so this runs in tests.
+// spent. Each is fetched and parsed as a share is (page.ts), a public http address over https alone (net/http
+// overHttps), and one whose site has no https fails once it is over three days old (page.ts HTTPS_WAIT_SECONDS); its
+// text is encrypted under a fresh key, staged, written and indexed, and its sends queued (data/pending.ts). Ports,
+// so this runs in tests.
 import { encryptText, isPublicWebUrl, itemHash, textHash, withoutUserInfo, type CryptoPort } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { applyFailed, applyParsed, pendingParses, timedOut, xFound, xNoArticle, type Pending } from '../data/pending';
@@ -9,7 +10,7 @@ import { overHttps } from '../net/http';
 import { checkXPost, xRetryDelay, type XPorts } from './xpost';
 import type { SaveTargets } from '../data/saves';
 import { indexText } from '../data/sync';
-import { fetchPage, type PageOutcome, type PagePorts } from './page';
+import { fetchPage, waitedForHttps, type PageOutcome, type PagePorts } from './page';
 import type { Derived } from '../reader/blocks';
 
 export type PendingPorts = {
@@ -22,6 +23,11 @@ export type PendingPorts = {
   unstage: (path: string) => void;
   writeText: (hash: string, markdown: string, derived?: Derived) => void;
   targets: () => Promise<SaveTargets>;
+  /**
+   * Whether the phone is on the internet now, as Android judges it (a network behind a captive portal isn't), asked
+   * only before a save is failed for having no https (page.ts HTTPS_WAIT_SECONDS). Without it, none is.
+   */
+  online?: () => Promise<boolean>;
 };
 
 /**
@@ -64,29 +70,52 @@ export function nextRunIn(r: PendingResult, xFailures: number): number | null {
 type Step = 'parsed' | 'failed' | 'xWaiting' | 'unreached';
 
 async function step(p: PendingPorts, owner: string, queued: Pending): Promise<Step> {
-  let item = queued;
-  // A shared X post is checked first: its article, if it has one, is what gets parsed (5.4). X's embed is never asked
-  // about a post with a user name and password in it, as a row stored before ruling 8 or a browser's request may hold.
-  if (item.x_state === 'pending') {
-    const x = await checkXPost(p.x, withoutUserInfo(item.url));
-    if (x.kind === 'offline') return 'unreached';
-    if (x.kind === 'xfail') return 'xWaiting';
-    if (x.kind === 'none') {
-      xNoArticle(p.db, p.now(), owner, item, await p.targets());
-      return 'failed';
-    }
-    item = xFound(p.db, item, x.url);
+  const item = queued.x_state === 'pending' ? await xChecked(p, owner, queued) : queued;
+  if (typeof item === 'string') return item;
+  const outcome = await pageOf(p, item);
+  if (outcome.kind !== 'offline') return settle(p, owner, item, outcome);
+  if (!(await noHttps(p, item, outcome))) return 'unreached';
+  // the reason alone, never the address (7.1)
+  console.log(`[kefli-pending] ${JSON.stringify({ failed: 'http', after: 'no https' })}`);
+  return settle(p, owner, item, { kind: 'failed', reason: 'http', finalUrl: item.url });
+}
+
+/**
+ * A shared X post, checked first: its article, if it has one, is what gets parsed (5.4), and otherwise the check's end.
+ * X's embed is never asked about a post with a user name and password in it, as a row stored before ruling 8 or a
+ * browser's request may hold.
+ */
+async function xChecked(p: PendingPorts, owner: string, item: Pending): Promise<Pending | Step> {
+  const x = await checkXPost(p.x, withoutUserInfo(item.url));
+  if (x.kind === 'offline') return 'unreached';
+  if (x.kind === 'xfail') return 'xWaiting';
+  if (x.kind === 'none') {
+    xNoArticle(p.db, p.now(), owner, item, await p.targets());
+    return 'failed';
   }
-  // a page a browser asked for is never fetched from a private, loopback or link-local address (7.1); a share made
-  // offline, an import or another phone's save naming a public http address is fetched over https alone, as a share
-  // is, so a site with none waits as a page that can't be had (left to net/http open, its http would be asked next
-  // and fail the save)
+  return xFound(p.db, item, x.url);
+}
+
+/**
+ * A waiting save's page. One a browser asked for is never fetched from a private, loopback or link-local address
+ * (7.1); a share made offline, an import or another phone's save naming a public http address is fetched over https
+ * alone, as a share is, so a site with none waits as a page that can't be had (left to net/http open, its http would
+ * be asked next and fail the save at once), until noHttps fails it.
+ */
+async function pageOf(p: PendingPorts, item: Pending): Promise<PageOutcome> {
   const fromBrowser = p.db.get<{ origin: string }>('SELECT origin FROM items WHERE id = ?', item.id)?.origin === 'browser';
-  const outcome = fromBrowser && !isPublicWebUrl(item.url)
-    ? { kind: 'failed' as const, reason: 'http' as const, finalUrl: item.url }
-    : await fetchPage(p.page, overHttps(item.url));
-  if (outcome.kind === 'offline') return 'unreached';
-  return settle(p, owner, item, outcome);
+  if (fromBrowser && !isPublicWebUrl(item.url)) return { kind: 'failed', reason: 'http', finalUrl: item.url };
+  return fetchPage(p.page, overHttps(item.url));
+}
+
+/**
+ * Whether a save whose page couldn't be had has waited for https as long as it may (page.ts waitedForHttps) with the
+ * phone on the internet. The network's state is asked only then; a phone that can't say, or a save with no saved_at,
+ * waits.
+ */
+async function noHttps(p: PendingPorts, item: Pending, outcome: PageOutcome): Promise<boolean> {
+  if (item.saved_at === undefined || !waitedForHttps(item.url, outcome, item.saved_at, p.now())) return false;
+  return (await p.online?.().catch(() => false)) === true;
 }
 
 /** The run going for each owner, and whether another was asked for while it went. */

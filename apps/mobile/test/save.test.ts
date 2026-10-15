@@ -176,6 +176,19 @@ describe('a plain http link (release builds allow no cleartext)', () => {
     expect(getItem(mockWorld.db, owner, r.hash!)).toMatchObject({ url: 'https://news.example/story', shared_url: 'http://news.example/story', text_state: 'cached' });
   });
 
+  test('a share of one whose site has no https waits, as a pending parse under three days old does', async () => {
+    // a share is new, so the queue's rule that fails such a save past three days (page.ts HTTPS_WAIT_SECONDS) can't
+    // reach it here: a captive portal or a TLS hiccup at the moment of sharing never fails it
+    const owner = setUp();
+    mockWorld.page = {
+      fetch: (async () => Promise.reject(new Error('fetch failed: javax.net.ssl.SSLPeerUnverifiedException: Hostname old.example not verified:'))) as never,
+      parse: async () => ({ ok: false, reason: 'error' }),
+    };
+    const r = await saveLink('http://old.example/post', () => undefined);
+    expect(r).toMatchObject({ kind: 'offline', held: [] });
+    expect(getItem(mockWorld.db, owner, r.hash!)).toMatchObject({ url: 'http://old.example/post', text_state: 'queued' });
+  });
+
   test("the share asks by net/http's one rule, which pending parses and images follow too", async () => {
     // a copy of its own here could drift from the rule the queue behind it keeps (net/http overHttps, its cases there)
     setUp();

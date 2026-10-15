@@ -336,6 +336,46 @@ describe('a user name and password are never asked for or kept in an address (co
   });
 });
 
+describe('a page that can’t be had: the network, or something that refused it (pending.ts, an http site with no https)', () => {
+  // as expo/fetch rejects on Android: "fetch failed: " and the Java exception OkHttp ended the request with
+  const failing = (message: string, after?: Response): PagePorts => {
+    let n = 0;
+    return {
+      fetch: (async () => {
+        if (after && n++ === 0) return after;
+        throw new Error(message);
+      }) as never,
+      parse: async () => parsed(),
+    };
+  };
+  const TLS = 'fetch failed: javax.net.ssl.SSLPeerUnverifiedException: Hostname old.example not verified:';
+  const REFUSED = 'fetch failed: java.net.ConnectException: Failed to connect to old.example/203.0.113.7:443';
+
+  test('a TLS failure, or a connection refused or reset, is something refusing the page', async () => {
+    for (const m of [TLS, 'fetch failed: javax.net.ssl.SSLHandshakeException: Chain validation failed', REFUSED, 'fetch failed: java.net.SocketException: Connection reset']) {
+      expect([m, await fetchPage(failing(m), 'https://old.example/post')]).toEqual([m, { kind: 'offline', refused: true }]);
+    }
+  });
+
+  test('a name that resolves nowhere is the network, however the host is named; so is any other failure', async () => {
+    for (const m of [
+      'fetch failed: java.net.UnknownHostException: Unable to resolve host "javax.net.ssl.example": No address associated with hostname',
+      'fetch failed: java.io.IOException: unexpected end of stream', 'Network request failed', 'offline',
+    ]) {
+      expect([m, await fetchPage(failing(m), 'https://old.example/post')]).toEqual([m, { kind: 'offline' }]);
+    }
+  });
+
+  test('a site that answered first has its https: a refusal after that is the network, not the site', async () => {
+    // turned away with 403 as desktop Chrome, then refused as a phone
+    expect(await fetchPage(failing(TLS, new Response('', { status: 403 })), 'https://old.example/post')).toEqual({ kind: 'offline' });
+    // or its body broken off after the headers came
+    const reset = new ReadableStream({ pull: (c) => c.error(new Error('fetch failed: java.net.SocketException: Connection reset')) });
+    const cut: PagePorts = { fetch: (async () => new Response(reset, { status: 200, headers: { 'content-type': 'text/html' } })) as never, parse: async () => parsed() };
+    expect(await fetchPage(cut, 'https://old.example/post')).toEqual({ kind: 'offline' });
+  });
+});
+
 describe('a PDF is handed over and read only as far as a save can hold it', () => {
   const pdfPorts = (read: ({ ok: true } & PdfRuns) | { ok: false; reason: string }, seen: { body?: string } = {}): PagePorts => ({
     fetch: (async () => new Response(PDF_BYTES, { status: 200, headers: { 'content-type': 'application/pdf' } })) as unknown as typeof fetch,
