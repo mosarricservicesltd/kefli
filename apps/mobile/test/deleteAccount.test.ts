@@ -5,7 +5,9 @@ import { ensureIdentityRow } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
 import { deleteEverything, deletePorts, deleteTargets, progressOf, type DelPorts, type Progress } from '../src/services/deleteAccount';
 import type { RelayAnswer } from '../src/services/send';
+import { SERVER_TIMEOUT_MS } from '../src/net/http';
 import { memoryDb } from './sqlite';
+import { inward, silent, watch, type Sends } from './inward';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -376,5 +378,62 @@ describe('Delete my data covers every save (contract 4.7, F32)', () => {
     const signed = await signDeletion(w.p);
     expect(signed.items.flatMap((e) => e.tags).map((t) => t[1])).toContain(`30078:${w.pk}:kefli/item/${h(6)}`);
     expect(signed.items.every((e) => e.created_at > 900)).toBe(true);
+  });
+});
+
+describe('Delete my data asks its servers through the hops, each within a deadline (7.1, 7.2)', () => {
+  afterEach(() => jest.useRealTimers());
+
+  test("the operator sending DELETE /account or a blob's deletion into the phone's network: nothing is asked there, and the step fails", async () => {
+    const sendsOn: Sends[] = [(_m, url) => url.endsWith('/account'), (_m, url) => url.startsWith('http://blossom/')];
+    for (const sends of sendsOn) {
+      const w = world();
+      const net = inward(w.p.fetch, sends);
+      w.p.fetch = net.f;
+      // followed as OkHttp followed it, the account was deleted by whatever answers at 192.168.1.1, with its NIP-98 header
+      expect(await deleteEverything(w.p, () => undefined)).toBe('failed');
+      expect(net.asked).toEqual([]);
+      expect(w.wiped()).toBe(false);
+    }
+  });
+
+  test('the local stack’s API sending DELETE /account to its own other address on loopback is followed there, and only there', async () => {
+    for (const localStack of [true, false]) {
+      const w = world();
+      w.p.defaults = { ...D, operator: { ...D.operator, api: 'http://localhost:3449' } };
+      w.p.localStack = localStack;
+      const base = w.p.fetch;
+      w.p.fetch = (async (url: string, init: RequestInit) =>
+        url === 'http://localhost:3449/account' ? new Response('', { status: 307, headers: { location: '/v1/account' } }) : base(url, init)) as typeof fetch;
+      expect([localStack, await deleteEverything(w.p, () => undefined)]).toEqual([localStack, localStack ? 'done' : 'failed']);
+      expect([localStack, w.log.includes('DELETE http://localhost:3449/v1/account')]).toEqual([localStack, localStack]);
+    }
+  });
+
+  test('an API that takes DELETE /account and never answers fails the step at its deadline, where it held the screen for good', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    const w = world();
+    const base = w.p.fetch;
+    w.p.fetch = (async (url: string, init: RequestInit) => (url.endsWith('/account') ? silent(url, init) : base(url, init))) as typeof fetch;
+    // one try, as the minute's last
+    w.p.budgetMs = 0;
+    const run = watch(deleteEverything(w.p, () => undefined));
+    await jest.advanceTimersByTimeAsync(SERVER_TIMEOUT_MS - 1_000);
+    expect(run.settled).toBe(false);
+    await jest.advanceTimersByTimeAsync(2_000);
+    expect(run).toMatchObject({ settled: true, value: 'failed' });
+    expect(w.wiped()).toBe(false);
+  });
+
+  test("a mirror that never answers a deletion is let go at its deadline: it isn't confirmed, and the phone is wiped all the same", async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    const w = world();
+    const base = w.p.fetch;
+    w.p.fetch = (async (url: string, init: RequestInit) => (url.startsWith('http://m1/') ? silent(url, init) : base(url, init))) as typeof fetch;
+    w.p.budgetMs = 0;
+    const run = watch(deleteEverything(w.p, () => undefined));
+    await jest.advanceTimersByTimeAsync(SERVER_TIMEOUT_MS + 1_000);
+    expect(run).toMatchObject({ settled: true, value: 'partial' });
+    expect(w.wiped()).toBe(true);
   });
 });

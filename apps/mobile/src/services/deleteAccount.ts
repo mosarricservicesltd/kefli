@@ -13,11 +13,12 @@
 // Each step's result is kept in a delete_account job, so a deletion cut short resumes where it stopped.
 import {
   DEVICES_D, EventTooLargeError, ITEM_D_PREFIX, KIND, LIBRARY_KEY_D, T_TAG, buildDeletions, buildRelayList, buildServerList, deleteBlob, httpAuth,
-  readItemEvent, signWithinCeiling, type CryptoPort, type NostrEvent, type Signer,
+  readItemEvent, signWithinCeiling, withoutTrailingSlashes, type CryptoPort, type NostrEvent, type Signer,
 } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { deletesOwed, itemAddresses, newestVersion } from '../data/libraryKey';
 import { bare, indexerRelays, nextListTime, relayEntries, relayListTags, serverListTags } from '../data/lists';
+import { SERVER_TIMEOUT_MS, serverFetch, serverHops } from '../net/http';
 import type { RelayAnswer } from './send';
 import { pageStream, takeNewerLists, type Filter } from './sync';
 
@@ -36,7 +37,19 @@ export type DelPorts = {
   wipePhone: () => Promise<void>;
   /** Each server's minute (spec 7.2). */
   budgetMs?: number;
+  /** The local stack's build (services/config.ts LOCAL_STACK), whose servers a redirect may reach on loopback. */
+  localStack?: boolean;
 };
+
+/**
+ * p's fetch for a server, Kefli's API or a blob server (net/http serverFetch): each redirect followed a hop at a time,
+ * never into the phone's own network (on the local stack, loopback too), and each answer had within the API's 15 s.
+ * Left to OkHttp, a redirect could have the account deleted by whatever answered at 192.168.1.1, and an API that took
+ * DELETE /account and never answered held the screen, which swallows Back while the deletion runs, for good.
+ */
+function toServer(p: DelPorts): typeof fetch {
+  return serverFetch(p.fetch, { hops: serverHops(p.localStack === true), timeoutMs: SERVER_TIMEOUT_MS });
+}
 
 /** What the screen hands deletePorts: the relay pool among them, which both publishes and reads. */
 export type DelDeps = Omit<DelPorts, 'now' | 'publish' | 'query' | 'sleep'> & {
@@ -290,7 +303,8 @@ async function sendAll(p: DelPorts, relay: string, events: NostrEvent[]): Promis
 }
 
 async function deleteBlobs(p: DelPorts, server: string, shas: string[]): Promise<boolean> {
-  for (const s of shas) if (!(await deleteBlob(server, s, p.signer, p.fetch)).ok) return false;
+  const get = toServer(p);
+  for (const s of shas) if (!(await deleteBlob(server, s, p.signer, get)).ok) return false;
   return true;
 }
 
@@ -309,9 +323,10 @@ async function stepOperator(p: DelPorts, owner: string, signed: Signed): Promise
   const shas = allBlobs(p, owner, signed);
   const cleared = reached && (await withinMinute(p, () => deleteBlobs(p, op.blossom, shas)));
   if (!cleared) return false;
-  const url = `${bare(op.api)}/account`;
+  const url = `${withoutTrailingSlashes(op.api)}/account`;
+  const get = toServer(p);
   return withinMinute(p, async () => {
-    const res = await p.fetch(url, { method: 'DELETE', headers: { Authorization: await httpAuth(p.signer, url, 'DELETE', null, p.crypto) } });
+    const res = await get(url, { method: 'DELETE', headers: { Authorization: await httpAuth(p.signer, url, 'DELETE', null, p.crypto) } });
     return res.ok || res.status === 404;
   });
 }
