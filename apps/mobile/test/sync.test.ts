@@ -7,7 +7,7 @@ import { nodeCrypto } from '@kefli/protocol/node';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
-import { listServers, nextListTime, seedGeneratedLists, writeRelays } from '../src/data/lists';
+import { addRelay, listServers, nextListTime, seedGeneratedLists, writeRelays } from '../src/data/lists';
 import { TEXT_SERVERS_MAX, getCursor, itemColumns, type TextJob } from '../src/data/sync';
 import { SKEW, TEXT_MAX_BYTES, TEXT_TIMEOUT_MS, fetchText, pageStream, streamFilter, syncInbound, takeNewerLists, type Filter, type SyncPorts } from '../src/services/sync';
 import { drain, sendOne, type SendPorts } from '../src/services/send';
@@ -305,6 +305,69 @@ describe('inbound sync (mobile spec 4.5)', () => {
     expect(w.db.all<{ url: string }>("SELECT url FROM relays WHERE source = 'user' ORDER BY url")).toEqual([{ url: 'ws://y' }]);
     // Kefli's own entries stay whatever a list says
     expect(w.db.get("SELECT 1 AS n FROM relays WHERE url = 'ws://op'")).toEqual({ n: 1 });
+  });
+
+  const RW = { read: true, write: true };
+  const BASE = [{ url: 'ws://op', ...RW }, { url: 'ws://a', ...RW }, { url: 'ws://b', ...RW }];
+  const relayRow = (w: W, url: string) => w.db.get('SELECT read, write, source, added_by_app, prior FROM relays WHERE url = ?', url);
+
+  test('a newer 10002 naming a relay Kefli holds only as an indexer makes it the person’s own; a later one without it gives the indexer back', async () => {
+    const w = world();
+    w.publish(await buildRelayList(w.signer, [...BASE, { url: 'ws://idx', read: true, write: false }], 1500), ['ws://idx']);
+    w.publish(await remoteSave(w, h(13), 1400, null), ['ws://idx']);
+    // read from as the list says, as any relay of theirs is, and its saves arrive
+    expect((await syncInbound(w.ports)).items).toBe(1);
+    expect(relayRow(w, 'ws://idx')).toEqual({ read: 1, write: 0, source: 'user', added_by_app: 0, prior: JSON.stringify({ read: 0, write: 0, source: 'indexer', added_by_app: 1 }) });
+    w.publish(await buildRelayList(w.signer, BASE, 1600), ['ws://a']);
+    await syncInbound(w.ports);
+    expect(relayRow(w, 'ws://idx')).toEqual({ read: 0, write: 0, source: 'indexer', added_by_app: 1, prior: null });
+    // one added in Advanced over the indexer, which another phone then removed, gives the indexer back too
+    addRelay(w.db, 1700, w.pk, 'ws://idx', D);
+    w.publish(await buildRelayList(w.signer, BASE, 1800), ['ws://a']);
+    await syncInbound(w.ports);
+    expect(relayRow(w, 'ws://idx')).toEqual({ read: 0, write: 0, source: 'indexer', added_by_app: 1, prior: null });
+  });
+
+  test('a newer 10002 changing the marker of a relay of the person’s own is taken in, unless this phone added it since', async () => {
+    const w = world();
+    const mine = (url: string, read: boolean, write: boolean, addedAt: number | null) =>
+      w.db.run("INSERT INTO relays (url, owner, read, write, source, added_by_app, added_at) VALUES (?, ?, ?, ?, 'user', 0, ?)", url, w.pk, +read, +write, addedAt);
+    mine('ws://x', true, true, null);
+    mine('ws://y', true, true, 2000);
+    // z this phone made read and write in Advanced; the list held, and the newer one, still say it is read only
+    mine('ws://z', true, true, 900);
+    const held = await buildRelayList(w.signer, [...BASE, { url: 'ws://x', ...RW }, { url: 'ws://y', ...RW }, { url: 'ws://z', read: true, write: false }], 1000);
+    w.db.run("INSERT INTO lists (owner, kind, d, event_id, created_at, raw) VALUES (?, 10002, '', ?, 1000, ?)", w.pk, held.id, JSON.stringify(held));
+    const newer = [{ url: 'ws://x', read: true, write: false }, { url: 'ws://y', read: false, write: true }, { url: 'ws://z', read: true, write: false }];
+    // Kefli's own relays keep their markers, whatever a list says
+    w.publish(await buildRelayList(w.signer, [{ url: 'ws://op', read: true, write: false }, ...BASE.slice(1), ...newer], 1500), ['ws://idx']);
+    await syncInbound(w.ports);
+    expect(['ws://op', 'ws://x', 'ws://y', 'ws://z'].map((u) => w.db.get('SELECT read, write FROM relays WHERE url = ?', u)))
+      .toEqual([{ read: 1, write: 1 }, { read: 1, write: 0 }, { read: 1, write: 1 }, { read: 1, write: 1 }]);
+    expect(writeRelays(w.db, w.pk)).not.toContain('ws://x');
+  });
+
+  test('every entry of the list held counts: a relay removed here, past its 50th entry, stays removed when a newer list moves it up', async () => {
+    const w = world();
+    const others = Array.from({ length: 60 }, (_, i) => ({ url: `ws://r${i}`, ...RW }));
+    // the table holds what Kefli uses of the held list, its first LIST_MAX entries; ws://gone, last, was removed here
+    for (const r of others.slice(0, LIST_MAX - BASE.length)) w.db.run("INSERT INTO relays (url, owner, read, write, source, added_by_app) VALUES (?, ?, 1, 1, 'user', 0)", r.url, w.pk);
+    const held = await buildRelayList(w.signer, [...BASE, ...others, { url: 'ws://gone', ...RW }], 1000);
+    w.db.run("INSERT INTO lists (owner, kind, d, event_id, created_at, raw) VALUES (?, 10002, '', ?, 1000, ?)", w.pk, held.id, JSON.stringify(held));
+    w.publish(await buildRelayList(w.signer, [...BASE, { url: 'ws://gone', ...RW }, ...others], 1500), ['ws://idx']);
+    await syncInbound(w.ports);
+    expect(relayRow(w, 'ws://gone')).toBeUndefined();
+    expect(writeRelays(w.db, w.pk)).toEqual(expect.arrayContaining(others.slice(0, LIST_MAX - BASE.length - 1).map((r) => r.url)));
+  });
+
+  test('every server of the 10063 held counts: one removed here, past its 50th, stays removed when a newer 10063 moves it up', async () => {
+    const w = world();
+    const others = Array.from({ length: 60 }, (_, i) => `http://s${i}`);
+    const held = await buildServerList(w.signer, ['http://blossom', 'http://m1', ...others, 'http://gone'], 1000);
+    w.db.run("INSERT INTO lists (owner, kind, d, event_id, created_at, raw) VALUES (?, 10063, '', ?, 1000, ?)", w.pk, held.id, JSON.stringify(held));
+    w.publish(await buildServerList(w.signer, ['http://blossom', 'http://gone', 'http://new'], 1500), ['ws://idx']);
+    await syncInbound(w.ports);
+    expect(w.db.all<{ url: string }>('SELECT url FROM servers ORDER BY rowid').map((r) => r.url)).toEqual(['http://blossom', 'http://m1', 'http://new']);
   });
 
   test('a relay read from the start can’t bring back a save the others deleted long ago (F35)', async () => {
