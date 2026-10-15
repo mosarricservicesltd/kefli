@@ -14,7 +14,7 @@ import { deviceSigner } from '../src/device';
 import { PerSave } from '../src/lock';
 import { applyMove, followMoves } from '../src/move';
 import { ATTEMPTS_MAX, BLOB_KEEP_MAX, BLOBS_KEEP_MAX, changeQueue, dequeue, enqueue, ENTRIES_MAX, flush, QUEUE_MAX, queued, settle } from '../src/queue';
-import { AddressTooLongError, fetchNet, prepare, timed, uploadTimeoutMs, WRAP_FRESH_FOR, type Net, type Pending } from '../src/save';
+import { ADDRESS_SURE_FIT_BYTES, AddressTooLongError, fetchNet, prepare, rumorBytes, timed, uploadTimeoutMs, WRAP_FRESH_FOR, type Net, type Pending } from '../src/save';
 import { KEYS, memoryStore, type Pairing, type Store } from '../src/store';
 import { toastCopy, type ToastState } from '../src/toastCopy';
 import { background, type Browser } from '../src/worker';
@@ -1486,15 +1486,49 @@ describe('a field no wrap could ever hold (F39, faster)', () => {
     expect(Date.now() - started).toBeLessThan(10_000);
   });
 
-  test('an address no wrap could hold is refused at once', async () => {
-    // the link save's address read for its user name and password before the clock starts: under Jest that is whatwg-url's
-    // parser in JavaScript, 2 s for these 2 MB and 14 in a full run under coverage on a busy machine, where the extension
-    // has the browser's own URL (build.mjs, urlRecord.ts), which reads them in 6 ms
-    const c = linkOnly(`https://example.com/?q=${'x'.repeat(2_000_000)}`);
-    const started = Date.now();
-    await expect(prepare(c, ctx)).rejects.toBeInstanceOf(AddressTooLongError);
-    expect(Date.now() - started).toBeLessThan(10_000);
-  }, 60_000);
+  /** An address with a query of n letters. */
+  const at = (n: number) => `https://example.com/?q=${'x'.repeat(n)}`;
+
+  test('an address no wrap could hold is refused at once: its text isn’t encrypted, and one wrap at most is tried', async () => {
+    // the work is counted rather than timed, so a busy machine can't fail it. The device key signs one seal a wrap.
+    // An address of 2,600 characters, which no wrap holds, was refused only after its 2 MB of text was encrypted and a
+    // wrap tried for each field the request could spare, eight in all; now 2 MB and 6,000 characters are refused by
+    // their length, and 2,600 after the one try the spare loop would have ended with, the address and token alone
+    const seals = jest.spyOn(device, 'signEvent');
+    const crypto = { ...webCrypto, aesGcmEncrypt: jest.fn(webCrypto.aesGcmEncrypt) };
+    const html = `<p>${'Words of an article. '.repeat(99_000)}</p>`;
+    try {
+      for (const [n, wraps] of [[2_000_000, 0], [6_000, 0], [2_600, 1]] as const) {
+        seals.mockClear();
+        await expect(prepare({ ...linkOnly(at(n)), html }, { ...ctx, crypto })).rejects.toBeInstanceOf(AddressTooLongError);
+        expect(seals).toHaveBeenCalledTimes(wraps);
+      }
+      expect(crypto.aesGcmEncrypt).not.toHaveBeenCalled();
+    } finally {
+      seals.mockRestore();
+    }
+  });
+
+  test('one that only just fits alone is still saved, keeping what fits', async () => {
+    const { pending } = await prepare({ ...PAGE, url: at(2_500), byline: 'A writer' }, ctx);
+    const req = JSON.parse((await unwrap(user, pending.wrap)).rumor.content) as SaveRequest;
+    expect(req).toEqual({ v: 1, url: at(2_500), canonical: null, title: null, site: null, byline: null, lang: null, hero: null, captured_at: NOW, token: PAIRING.token, html: null });
+  });
+
+  test.each([
+    ['letters', 'x'], ['backslashes', '\\'], ['quotes', '"'], ['control characters', '\u0001'], ['accents', 'é'], ['emoji', '😀'],
+  ])('an address of %s taking up to ADDRESS_SURE_FIT_BYTES of the rumor is wrapped without a try alone first', async (_name, unit) => {
+    let url = 'https://example.com/?q=';
+    while (rumorBytes(url + unit) <= ADDRESS_SURE_FIT_BYTES) url += unit;
+    const seals = jest.spyOn(device, 'signEvent');
+    try {
+      const { pending } = await prepare(linkOnly(url), ctx);
+      expect(JSON.parse((await unwrap(user, pending.wrap)).rumor.content)).toMatchObject({ url });
+      expect(seals).toHaveBeenCalledTimes(1);
+    } finally {
+      seals.mockRestore();
+    }
+  });
 });
 
 describe('a move while saves wait, their toasts still showing (contract 4.4 and 4.8)', () => {

@@ -1,6 +1,7 @@
 // What the capture script hands the background (contract 4.4's save request, before the HTML is encrypted), and the
-// rules it applies that need no page: the address, the guard and the cap.
-import { withoutUserInfo } from '../../../packages/protocol/src/normalise';
+// rules it applies that need no page: the address, the canonical, the guard and the cap.
+import { ownCanonical, withoutUserInfo } from '../../../packages/protocol/src/normalise';
+import { CANONICAL_MAX, SAVE_REQUEST_MAX_BYTES } from '../../../packages/protocol/src/pairing';
 import { countWords } from '../../../packages/protocol/src/projection';
 
 export interface Captured {
@@ -20,9 +21,13 @@ export const GUARD_WORDS = 120;
 /** contract 4.4: content HTML over this many bytes as UTF-8 is not sent. */
 export const HTML_MAX_BYTES = 2_097_152;
 
+// built from a string: the code gate's parser reads a regex literal's escaped slashes as a comment, and lost the
+// functions after it
+const WEB_ADDRESS = new RegExp('^https?://', 'i');
+
 /** Whether an address can be saved at all: a web page's, http or https (contract 4.3; decision 100). */
 export function isWebAddress(url: string): boolean {
-  return /^https?:\/\//i.test(url);
+  return WEB_ADDRESS.test(url);
 }
 
 /**
@@ -41,6 +46,31 @@ export function pageUrl(href: string): string {
   const u = new URL(href);
   u.hash = '';
   return withoutUserInfo(u.href);
+}
+
+/**
+ * The length, in UTF-16 code units, from which no save request can carry an address, whatever its characters and
+ * whatever the request leaves out (contract 4.4, F39): a wrap has to stay under SAVE_REQUEST_MAX_BYTES, NIP-44's two
+ * layers of base64 make it more than 16/9 of the rumor inside, and the rumor holds the address at a byte or more a
+ * character. A shorter address can be too long all the same, from about 2,570 plain characters, which only a wrap
+ * tells (save.ts, addressFits).
+ */
+export const ADDRESS_UNWRAPPABLE = Math.ceil((SAVE_REQUEST_MAX_BYTES * 9) / 16);
+
+/** Whether no save request can carry the address by its length alone (ADDRESS_UNWRAPPABLE): its save is refused unread. */
+export function unwrappableAddress(url: string): boolean {
+  return url.length >= ADDRESS_UNWRAPPABLE;
+}
+
+/**
+ * The page's canonical as its save request carries it (contract 4.3): none past CANONICAL_MAX, measured as the parse read
+ * it and left out before it is read, as the phone leaves out its own parse's and a browser's; then only one on the page's
+ * own site, without a user name and password (ownCanonical), which is never longer, since the parse writes the address
+ * as the browser does. Sent whole, the phone dropped it all the same, and the wrap left out the page's details first to
+ * make room for it: one of 2,500 characters took the title, site, byline, language and picture with it.
+ */
+export function keptCanonical(url: string, canonical: string | null | undefined): string | null {
+  return canonical != null && canonical.length <= CANONICAL_MAX ? ownCanonical(url, canonical) : null;
 }
 
 /**
@@ -108,6 +138,30 @@ export function tooLargeToRead(s: PageSize): boolean {
 /** A page's address and title, with nothing read from it: a page too large to read (PAGE_LIMITS). */
 export function unread(url: string, title: string): Captured {
   return { ...linkOnly(url), title: title.trim() || null };
+}
+
+/** A detail the parse found, or null for one it didn't. */
+function found(detail: string | null | undefined): string | null {
+  return detail ?? null;
+}
+
+/**
+ * What a capture of the page at url keeps once the page is read (contract 4.3 and 4.4): the parse's details, its
+ * canonical as keptCanonical keeps it (only from the page's own site, so a page can't send a save to another site's
+ * address, and none longer than the phone keeps), the page's own title where the parse found none, and the HTML the
+ * guard and the cap let through.
+ */
+export function fromParse(url: string, parsed: Parsed, pageTitle: string, html: string | null): Captured {
+  return {
+    url,
+    canonical: keptCanonical(url, parsed.canonical),
+    hero: found(parsed.hero),
+    title: parsed.title ?? (pageTitle.trim() || null),
+    site: found(parsed.site),
+    byline: found(parsed.byline),
+    lang: found(parsed.lang),
+    html,
+  };
 }
 
 /** p's value, or fallback once ms have passed without one; p itself goes on, and whatever it gives later is let go. */

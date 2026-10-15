@@ -1,11 +1,11 @@
 // The capture content script (contract 4.2 and 4.4, extension spec 4), injected under activeTab after parser.js, the
 // phone's own parser bundle. It reads the live page as the fixtures read a fetched one: the serialised document through
 // kefliParse (canonical, hero and readerable first, then Readability and the Markdown) and kefliArticle (Readability's
-// content HTML, which is what a save sends). The guard and the 2 MB cap are applied here, so only what a save needs
-// crosses to the background, and a page too large to read in good time isn't read at all (captured.ts, PAGE_LIMITS).
-// The background calls window.kefliCapture() once both files are in.
-import { ownCanonical } from '../../../packages/protocol/src/normalise';
-import { keepHtml, pageUrl, tooLargeToRead, unread, type Captured, type PageSize, type Parsed } from './captured';
+// content HTML, which is what a save sends). The guard, the 2 MB cap and the canonical's length are applied here, so only
+// what a save needs crosses to the background, and a page too large to read in good time, or at an address too long for
+// any save request by its length alone, isn't read at all (captured.ts, PAGE_LIMITS, ADDRESS_UNWRAPPABLE). The background
+// calls window.kefliCapture() once both files are in.
+import { fromParse, keepHtml, pageUrl, tooLargeToRead, unread, unwrappableAddress, type Captured, type PageSize, type Parsed } from './captured';
 declare function kefliParse(bodyBase64: string, contentType: string, url: string): Parsed;
 declare function kefliArticle(bodyBase64: string, contentType: string, url: string): { ok: boolean; content?: string };
 
@@ -64,6 +64,9 @@ export function absoluteFragments(content: string, base: string): string {
 
 export function capture(doc: Document, href: string): Captured {
   const url = pageUrl(href);
+  // an address too long for any save request by its length alone: the background refuses its save at once, so nothing
+  // is read for it (F39)
+  if (unwrappableAddress(url)) return unread(url, doc.title);
   // a page too large to read in good time is saved unread, before anything is serialised (PAGE_LIMITS)
   const size = sizeOf(doc);
   if (tooLargeToRead({ ...size, chars: 0 })) return unread(url, doc.title);
@@ -74,17 +77,7 @@ export function capture(doc: Document, href: string): Captured {
   const parsed = kefliParse(body, type, url);
   const content = parsed.ok ? kefliArticle(body, type, url).content : undefined;
   const html = keepHtml(parsed, content === undefined ? undefined : absoluteFragments(content, baseOf(doc, url)));
-  return {
-    url,
-    // only from the page's own site (contract 4.3), so a page can't send a save to another site's address
-    canonical: ownCanonical(url, parsed.canonical),
-    hero: parsed.hero ?? null,
-    title: parsed.title ?? (doc.title.trim() || null),
-    site: parsed.site ?? null,
-    byline: parsed.byline ?? null,
-    lang: parsed.lang ?? null,
-    html,
-  };
+  return fromParse(url, parsed, doc.title, html);
 }
 
 (globalThis as { kefliCapture?: () => Captured }).kefliCapture = () => capture(document, location.href);
