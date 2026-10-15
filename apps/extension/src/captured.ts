@@ -45,10 +45,13 @@ export function pageUrl(href: string): string {
 
 /**
  * How much of a page's Markdown the guard counts words in, when the page isn't readerable. 120 words of prose take a
- * kilobyte, of links several; the spoken projection of more ran in the page's own thread for as long as the page liked:
- * 3 MB of prose overflowed the stack, 3 MB of one list ran the heap out after three minutes, and runs of * and _ cost
- * a quarter of a second a kilobyte, rising (64 KB took five minutes). A page whose opening 4 KB holds fewer than 120
- * words is taken as no article, and the phone fetches it itself; a page of links still holds 150 or so there.
+ * kilobyte, of links several. The count runs in the page's own thread, and parses the Markdown before it counts. The
+ * spoken projection after the parse is linear, so 3 MB of prose counts in a second, but the parse costs more than its
+ * length: 3 MB of one list took 13 s, runs of * and _ 3 s for 16 KB and minutes for 64 KB, and list markers nested on
+ * one line, each a list inside the one before, cost the most for their length. Turndown leaves those in a pre whose line
+ * opens with a space, and 4 KB of them, 2,040 deep, took up to 1.7 s of the tab's time in Chrome 150, half as many up to
+ * 1 s, and twice as many 5 s. A page whose opening 4 KB holds fewer than 120 words is taken as no article, and the phone
+ * fetches it itself; a page of links still holds 150 or so there.
  */
 export const GUARD_SAMPLE_CHARS = 4_096;
 
