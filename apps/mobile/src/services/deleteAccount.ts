@@ -73,6 +73,8 @@ export type Target = { url: string; kind: 'relay' | 'server'; host: string; own:
 export type Result = 'wait' | 'done' | 'fail';
 export type Progress = { operator: Result; others: Record<string, Result>; phone: Result };
 export type Outcome = 'done' | 'partial' | 'failed';
+/** The screen's view of the deletion, told each step as it resolves. A named type, so the code gate reads deleteEverything whole. */
+export type Report = (prog: Progress) => void;
 
 const host = (u: string) => {
   try {
@@ -116,7 +118,10 @@ function save(p: DelPorts, prog: Progress): void {
 }
 
 /** Tries until it succeeds or the minute is spent: 2 s, then doubling. */
-async function withinMinute(p: DelPorts, attempt: () => Promise<boolean>): Promise<boolean> {
+/** One try at a step's work: whether it went through. A named type, so the code gate's parser reads withinMinute whole. */
+type Attempt = () => Promise<boolean>;
+
+async function withinMinute(p: DelPorts, attempt: Attempt): Promise<boolean> {
   const budget = p.budgetMs ?? 60_000;
   let spent = 0;
   for (let wait = 2000; ; wait *= 2) {
@@ -338,34 +343,50 @@ async function stepOther(p: DelPorts, owner: string, t: Target, signed: Signed):
   return confirmed;
 }
 
-/**
- * Runs or resumes the deletion, reporting each step as it resolves. failed: the operator couldn't be reached or
- * refused, and nothing else ran. partial: some other server didn't confirm; the phone is wiped all the same.
- */
-export async function deleteEverything(p: DelPorts, report: (prog: Progress) => void, presigned?: Signed): Promise<Outcome> {
-  const owner = p.signer.pubkey();
-  const signed = presigned ?? (await signDeletion(p));
-  const targets = deleteTargets(p.db, owner, p.defaults.operator);
-  const prog: Progress = progressOf(p.db) ?? { operator: 'wait', others: Object.fromEntries(targets.map((t) => [t.url, 'wait'])), phone: 'wait' };
-  report(prog);
-  if (prog.operator !== 'done') {
-    prog.operator = (await stepOperator(p, owner, signed)) ? 'done' : 'fail';
-    report({ ...prog });
-    if (prog.operator === 'fail') {
-      p.db.run('DELETE FROM jobs WHERE id = ?', JOB);
-      return 'failed';
-    }
-    save(p, prog);
+/** Step 1, unless a run cut short has done it: false when the operator failed, the job then gone, to start afresh. */
+async function operatorStep(p: DelPorts, owner: string, signed: Signed, prog: Progress, report: Report): Promise<boolean> {
+  if (prog.operator === 'done') return true;
+  prog.operator = (await stepOperator(p, owner, signed)) ? 'done' : 'fail';
+  report({ ...prog });
+  if (prog.operator === 'fail') {
+    p.db.run('DELETE FROM jobs WHERE id = ?', JOB);
+    return false;
   }
-  // the lists go to the indexer as well, unreported: it holds nothing else of this identity. It refuses kind 5, so a
-  // generated identity's lists are emptied there rather than deleted (C§4.7)
+  save(p, prog);
+  return true;
+}
+
+/**
+ * The lists to the indexer as well, unreported: it holds nothing else of this identity. It refuses kind 5, so a
+ * generated identity's lists are emptied there rather than deleted (C§4.7).
+ */
+async function listsToIndexer(p: DelPorts, signed: Signed): Promise<void> {
   const forIndexer = signed.nostr ? signed.lists : signed.empties ?? [];
   await Promise.all(p.defaults.indexer.flatMap((r) => forIndexer.map((e) => p.publish(r, e).catch(() => undefined))));
+}
+
+/** Step 2: every other server still waiting, each saved and reported as it resolves. */
+async function othersStep(p: DelPorts, owner: string, targets: Target[], signed: Signed, prog: Progress, report: Report): Promise<void> {
   await Promise.all(targets.filter((t) => prog.others[t.url] === 'wait').map(async (t) => {
     prog.others[t.url] = (await stepOther(p, owner, t, signed)) ? 'done' : 'fail';
     save(p, prog);
     report({ ...prog, others: { ...prog.others } });
   }));
+}
+
+/**
+ * Runs or resumes the deletion, reporting each step as it resolves. failed: the operator couldn't be reached or
+ * refused, and nothing else ran. partial: some other server didn't confirm; the phone is wiped all the same.
+ */
+export async function deleteEverything(p: DelPorts, report: Report, presigned?: Signed): Promise<Outcome> {
+  const owner = p.signer.pubkey();
+  const signed = presigned ?? (await signDeletion(p));
+  const targets = deleteTargets(p.db, owner, p.defaults.operator);
+  const prog: Progress = progressOf(p.db) ?? { operator: 'wait', others: Object.fromEntries(targets.map((t) => [t.url, 'wait'])), phone: 'wait' };
+  report(prog);
+  if (!(await operatorStep(p, owner, signed, prog, report))) return 'failed';
+  await listsToIndexer(p, signed);
+  await othersStep(p, owner, targets, signed, prog, report);
   await p.wipePhone();
   prog.phone = 'done';
   report({ ...prog });
