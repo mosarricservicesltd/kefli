@@ -722,6 +722,44 @@ describe('a save whose page never answers (RULED: past 14 days, tried again with
     expect(publishes(w)).toEqual([]);
   });
 
+  test('a page answering that it can’t be had now, 5xx, 429 or 408, is as one that doesn’t answer: its save waits, then fails past 14 days', async () => {
+    for (const status of [500, 502, 503, 504, 522, 429, 408]) {
+      const w = world({ 'https://busy.example/post': { status, body: '<html>Try again later</html>' } });
+      expect(await fetchPage(w.ports.page, 'https://busy.example/post')).toMatchObject({ kind: 'offline' });
+      w.ports.online = async () => true;
+      w.share('https://busy.example/post');
+      at(w, DAY);
+      expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 0, waiting: 1, xWaiting: 0 });
+      expect(w.db.get('SELECT text_state FROM items')).toEqual({ text_state: 'queued' });
+      expect(publishes(w)).toEqual([]);
+      at(w, 14 * DAY + 1);
+      expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 1, waiting: 0 });
+      expect(w.db.get('SELECT text_state, fail_reason FROM items')).toEqual({ text_state: 'failed', fail_reason: 'offline' });
+    }
+  });
+
+  test('an import from one site that turns to 429 part way: the rest wait for a later sync, then are read', async () => {
+    let limited = false;
+    const links = [1, 2, 3, 4, 5, 6].map((i) => `https://blog.example/${i}`);
+    const w = world(Object.fromEntries(links.map((u) => [u, {}])));
+    const inner = w.ports.page.fetch;
+    // the site answers the first two, then turns every request away for asking too fast
+    w.ports.page.fetch = (async (url: string, init: RequestInit) => {
+      if (limited) return Object.defineProperty(new Response('', { status: 429 }), 'url', { value: url });
+      limited = url.endsWith('/2');
+      return inner(url, init);
+    }) as never;
+    queueImported(w.db, PK, links, 900, T);
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ parsed: 2, failed: 0 });
+    expect(w.db.get("SELECT COUNT(*) AS n FROM items WHERE text_state = 'failed'")).toEqual({ n: 0 });
+    // a day on, the site answers again, and the rest are read
+    limited = false;
+    w.ports.page.fetch = inner;
+    at(w, DAY);
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ parsed: 4, failed: 0 });
+    expect(w.db.get("SELECT COUNT(*) AS n FROM items WHERE text_state = 'cached'")).toEqual({ n: 6 });
+  });
+
   test('one first tried here when already old, as another phone’s save is, has a second try before it fails', async () => {
     // one slow answer on a phone that has just restored an old library is no page that never answers
     const w = world();

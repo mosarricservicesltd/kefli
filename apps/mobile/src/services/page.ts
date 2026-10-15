@@ -92,9 +92,10 @@ export type PageOutcome =
    * nothing answered with a page, but something refused the connection (REFUSED), as an address asked for over https
    * alone meets when its site has none; such a save waits like any other, until the rule below fails it. answered: the
    * page came whole, but the parser's renderer had gone before it read it (PARSER_GONE), so the save waits as a page
-   * that timed out does, and is no page that never answers (ANSWER_WAIT_SECONDS).
+   * that timed out does, and is no page that never answers (ANSWER_WAIT_SECONDS). busy: the server answered that it
+   * can't serve the page now (unavailable), and the save waits as for a page that doesn't answer.
    */
-  | { kind: 'offline'; timedOut?: true; refused?: true; answered?: true }
+  | { kind: 'offline'; timedOut?: true; refused?: true; answered?: true; busy?: true }
   | { kind: 'failed'; reason: FailReason; finalUrl: string }
   | { kind: 'parsed'; finalUrl: string; result: Extract<ParserResult, { ok: true }>; words: number; spoken: string; derived: Derived };
 
@@ -137,6 +138,20 @@ function pdfHeader(bytes: Uint8Array, within: number): boolean {
 export function isPdf(contentType: string, bytes: Uint8Array): boolean {
   return PDF_TYPE.test(contentType) || pdfHeader(bytes, HTML_TYPE.test(contentType) ? 1 : PDF_HEADER_WITHIN);
 }
+
+/**
+ * RULED: a status that says the page can't be had now, rather than that it never can be (RFC 9110 15.5.9 and 15.6,
+ * RFC 6585 4): the server timing the request out, turning it away for asking too often, or failing, as a site down
+ * behind its proxy answers. Each was a failed parse at once, so the save went out without its text, never fetched
+ * again on this phone, and an import of a blog's links that met its limit part way failed every one after it. The save
+ * waits as for a page that doesn't answer instead, three in a row stopping the run, and fails as one once it is 14 days
+ * old (ANSWER_WAIT_SECONDS).
+ */
+export function unavailable(status: number): boolean {
+  return status === 408 || status === 429 || (status >= 500 && status <= 599);
+}
+
+const BUSY: PageOutcome = { kind: 'offline', busy: true };
 
 /** Why a response can't be parsed, or null when it can. */
 export function refusal(status: number, contentType: string, bytes: number, pdf = false): FailReason | null {
@@ -329,6 +344,7 @@ export async function fetchPage(p: PagePorts, asked: string): Promise<PageOutcom
 
 /** A fetched answer read as a PDF or a page, or refused for its status, type or size. */
 function fromAnswer(p: PagePorts, res: Response, bytes: Uint8Array, finalUrl: string): Promise<PageOutcome> | PageOutcome {
+  if (unavailable(res.status)) return BUSY;
   const contentType = res.headers.get('content-type') ?? '';
   const pdf = !!p.pdf && isPdf(contentType, bytes);
   const refused = refusal(res.status, contentType, bytes.length, pdf);
