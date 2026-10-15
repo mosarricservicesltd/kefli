@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/richardminton-glitch/Kefli/server/api/internal/auth"
+	"github.com/richardminton-glitch/Kefli/server/api/internal/guard"
 	"github.com/richardminton-glitch/Kefli/server/api/internal/limit"
 	"github.com/richardminton-glitch/Kefli/server/api/internal/store"
 )
@@ -471,12 +472,16 @@ var (
 	errHash     = errors.New("hash")
 )
 
+// refuseWrite answers an upload whose body couldn't be taken: too large, not the blob authorised, or behind the guard's
+// pace (internal/guard), which is 503 timeout and the client's slowness, so no fault of the server's in the log.
 func (s *Server) refuseWrite(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, errTooLarge):
 		refuse(w, http.StatusRequestEntityTooLarge, "too_large")
 	case errors.Is(err, errHash):
 		refuse(w, http.StatusBadRequest, "hash")
+	case errors.Is(err, guard.ErrSlow):
+		guard.TooSlow(w)
 	default:
 		s.log.Error("write blob", "err", err)
 		refuse(w, http.StatusInternalServerError, "server")

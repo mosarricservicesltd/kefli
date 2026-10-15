@@ -60,6 +60,27 @@ check "Caddy's admin API isn't on localhost:2019" '! box curl -s -m 2 -o /dev/nu
 check 'its socket answers caddy and nobody else' \
   '[ "$(admin caddy)" = 200 ] && ! admin strfry && ! admin kefli && [ "$(box stat -c %U:%a /run/caddy/admin.sock)" = caddy:660 ]'
 check 'a reload goes through the socket' 'box systemctl reload caddy'
+# r5: a request whose body never finished arriving waited two minutes in keflid when no route read the body, and
+# nothing bounded a request's body in Caddy. keflid now refuses such a body at once and lets the connection go (its
+# guard), and Caddy, as it runs, holds every request's body on 443 to 20 minutes.
+early() {
+  box bash -c 'exec 3<>/dev/tcp/127.0.0.1/8447 && printf "GET /defaults.json HTTP/1.1\r\nHost: api\r\nContent-Length: 100\r\n\r\n0123456789" >&3 &&
+    timeout 3 cat <&3 >/tmp/early && head -1 /tmp/early'
+}
+check 'keflid refuses at once a body no route reads, and lets it go' '[[ "$(early)" == "HTTP/1.1 400 Bad Request"* ]]'
+check "Caddy holds a request's body to 20 minutes" \
+  'jq -e "[.[] | select(.listen | index(\":443\")) | .read_timeout] == [1200000000000]" <<<"$(box runuser -u caddy -- curl -s --unix-socket /run/caddy/admin.sock http://localhost/config/apps/http/servers)"'
+# r5 review: a refusal keflid writes before an upload's body is in reaches the client through Caddy. With the guard's
+# paced body left on the request, keflid, built with Go 1.26, closed such a connection at once, and Caddy's write to it
+# met the reset before Caddy read the answer, and answered 502 in its place, one time in four over HTTP/1.1. curl's
+# Expect: 100-continue, which no phone or browser sends, is left out: with it keflid closes at once, guard or not.
+refused() {
+  box sh -c 'head -c 8388608 /dev/zero > /tmp/refused.bin && for i in $(seq 30); do curl -sk --http1.1 -o /dev/null \
+    -w "%{http_code}\n" --resolve blossom.kefli.app:443:127.0.0.1 -X PUT -H "Expect:" -H "Authorization: Nostr x" \
+    -H "X-SHA-256: abababababababababababababababababababababababababababababababab" --data-binary @/tmp/refused.bin \
+    https://blossom.kefli.app/upload; done; rm -f /tmp/refused.bin'
+}
+check "a refusal written before an upload's body is in reaches the client through Caddy" '[ "$(refused | grep -cx 401)" = 30 ]'
 key=$(printf 'a%.0s' {1..64})
 check 'keflictl registers a key' "box keflictl register $key"
 line='{"type":"new","event":{"id":"'$(printf 'b%.0s' {1..64})'","pubkey":"%s","kind":30078,"tags":[],"content":"x","created_at":1,"sig":""},"receivedAt":1,"sourceType":"IP4","sourceInfo":"192.0.2.1"}'
