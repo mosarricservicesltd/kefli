@@ -1,10 +1,10 @@
 // The render WebView asks for no address a hop of Kefli's own fetch couldn't go to (mobile spec 7.1, 8.2). Node can't
 // run the Kotlin: these read kefli-parser's source, standing in for the check on the phone listed in HANDOVER, and
 // hold its PublicWeb.kt to the rule it ports, packages/protocol's publicUrl.ts with net/http.ts's fromFiles, by running
-// the two sides' blocks and prefixes over every address they decide, and comparing their tables of prefixes. PublicWeb
-// ran on the JVM against the protocol's answers too (20,239 addresses, each as written and as Chromium writes it, then
-// 1,026,240 round the IPv6 prefixes that reach IPv4 and NAT64's prefix for a network's own use, with the same answer
-// for every one).
+// the two sides' blocks and prefixes over every address they decide, and comparing their tables of prefixes and, a
+// statement at a time, the steps that read an IPv6 address. PublicWeb ran on the JVM against the protocol's answers too
+// (20,239 addresses, each as written and as Chromium writes it, then 1,026,240 round the IPv6 prefixes that reach IPv4
+// and NAT64's prefix for a network's own use, with the same answer for every one).
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { publicWeb } from '../src/net/http';
@@ -64,6 +64,38 @@ const jsPieces = (name: string) => numbers(declared(js, `const ${name} = [`, '];
 /** The same in PublicWeb.kt: private val NAME = intArrayOf(…) */
 const ktPieces = (name: string) => numbers(declared(kt, `private val ${name} = intArrayOf(`, ')'));
 
+/** A function's statements, a line each: its closing braces, comment lines and blank lines gone. */
+function statements(lines: string[]): string[] {
+  return lines.map((l) => l.trim()).filter((l) => l !== '' && l !== '}' && !l.startsWith('//'));
+}
+/** The statements of a function in publicUrl.ts. */
+const jsSteps = (name: string) => statements(jsBody(name).split('\n'));
+/** The statements of a function in PublicWeb.kt, after its signature. */
+const ktSteps = (name: string) => statements(member(kt, name).split('\n').slice(1));
+
+/**
+ * privateV6 and the helpers it reads an address with, a statement at a time, each beside its port in PublicWeb.kt; null
+ * where the Kotlin takes the step in the line before (?: return true). A step on one side only, or out of its place,
+ * fails: the rule the WebView keeps is the protocol's, step for step.
+ */
+const PORTED: Record<string, [string, string | null][]> = {
+  privateV6: [
+    ["const p = pieces(host.replace(/^\\[|\\]$/g, '').toLowerCase());", 'val p = pieces(host.removePrefix("[").removeSuffix("]").lowercase()) ?: return true'],
+    ['if (!p) return true;', null],
+    ['if (zeros(p, 7) && p[7] <= 1) return true;', 'if (zeros(p, 7) && p[7] <= 1) return true'],
+    ['const v4 = carried(p);', 'val v4 = carried(p)'],
+    ['if (v4) return privateV4(v4);', 'if (v4 != null) return privateV4(v4)'],
+    ['if (begins(p, LOCAL_NAT64)) return true;', 'if (begins(p, LOCAL_NAT64)) return true'],
+    [
+      'return (p[0] & 0xfe00) === 0xfc00 || (p[0] & 0xffc0) === 0xfe80 || (p[0] & 0xff00) === 0xff00;',
+      'return (p[0] and 0xfe00) == 0xfc00 || (p[0] and 0xffc0) == 0xfe80 || (p[0] and 0xff00) == 0xff00',
+    ],
+  ],
+  carried: [['return CARRIERS.some((c) => begins(p, c)) ? v4Of(p) : null;', 'return if (CARRIERS.any { begins(p, it) }) v4Of(p) else null']],
+  begins: [['return head.every((x, i) => p[i] === x);', 'return head.indices.all { p[it] == head[it] }']],
+  zeros: [['return p.slice(0, n).every((x) => x === 0);', 'return (0 until n).all { p[it] == 0 }']],
+};
+
 const lastReturn = (body: string) => body.slice(body.lastIndexOf('return '));
 const range = (n: number) => Array.from({ length: n }, (_, i) => i);
 
@@ -100,25 +132,16 @@ describe("the render engine's public-address rule is the protocol's (7.1)", () =
     expect(jsTable('CARRIERS')).toEqual([[0, 0, 0, 0, 0, 0xffff], [0, 0, 0, 0, 0xffff, 0], [0, 0, 0, 0, 0, 0], [0x64, 0xff9b, 0, 0, 0, 0]]);
     expect(ktPieces('LOCAL_NAT64')).toEqual(jsPieces('LOCAL_NAT64'));
     expect(jsPieces('LOCAL_NAT64')).toEqual([0x64, 0xff9b, 1]);
-    expect(js).toContain('return head.every((x, i) => p[i] === x);');
-    expect(member(kt, 'begins')).toContain('return head.indices.all { p[it] == head[it] }');
-    expect(js).toContain('return p.slice(0, n).every((x) => x === 0);');
-    expect(member(kt, 'zeros')).toContain('return (0 until n).all { p[it] == 0 }');
-    expect(js).toContain('return CARRIERS.some((c) => begins(p, c)) ? v4Of(p) : null;');
-    expect(member(kt, 'carried')).toContain('return if (CARRIERS.any { begins(p, it) }) v4Of(p) else null');
-    // :: and ::1, then an address that reaches IPv4, then NAT64's prefix for a network's own use, then the prefixes
-    const inOrder = (body: string, steps: string[]) => {
-      const at = steps.map((s) => body.indexOf(s));
-      return at.every((i) => i >= 0) && at.every((i, n) => n === 0 || i > at[n - 1]);
-    };
-    expect(inOrder(jsBody('privateV6'), [
-      'if (!p) return true;', 'if (zeros(p, 7) && p[7] <= 1) return true;', 'const v4 = carried(p);', 'if (v4) return privateV4(v4);',
-      'if (begins(p, LOCAL_NAT64)) return true;', 'return (p[0] & 0xfe00)',
-    ])).toBe(true);
-    expect(inOrder(member(kt, 'privateV6'), [
-      '?: return true', 'if (zeros(p, 7) && p[7] <= 1) return true', 'val v4 = carried(p)', 'if (v4 != null) return privateV4(v4)',
-      'if (begins(p, LOCAL_NAT64)) return true', 'return (p[0] and 0xfe00)',
-    ])).toBe(true);
+    // each side's privateV6 and the helpers it reads an address with, statement for statement (PORTED): :: and ::1,
+    // then an address that reaches IPv4, then NAT64's prefix for a network's own use, then the prefixes. Each step used
+    // to be looked for alone, so a step on one side only passed: a prefix added to the protocol and never to the WebView
+    for (const [name, pairs] of Object.entries(PORTED)) {
+      expect([name, jsSteps(name)]).toEqual([name, pairs.map(([j]) => j)]);
+      expect([name, ktSteps(name)]).toEqual([name, pairs.flatMap(([, k]) => (k === null ? [] : [k]))]);
+    }
+    // and the same 32 bits read as the IPv4 address a carrier reaches
+    expect(js).toContain('const v4Of = (p: number[]): number[] => [p[6] >> 8, p[6] & 255, p[7] >> 8, p[7] & 255];');
+    expect(ktSteps('v4Of')).toEqual(['return intArrayOf(p[6] shr 8, p[6] and 255, p[7] shr 8, p[7] and 255)']);
   });
 
   test('a host is refused for a local name, the phone’s files over http, a private IPv6 or IPv4 address, in that order', () => {
