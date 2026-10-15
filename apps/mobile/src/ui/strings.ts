@@ -3,9 +3,22 @@
 // "relay" only in Advanced (FD 86, FD 76).
 import type { Notice, Space } from '../data/account';
 
-/** One to nine in words, 10 and up in figures (the prototype's say()). */
+/**
+ * A count's figures with a comma each three from the right, "1,200", as the fine print's "about 2,000 articles" (FD
+ * 119): a whole number of zero or more; anything else as it is. Written out rather than as a regex, which the code
+ * gate misreads.
+ */
+function grouped(n: number): string {
+  if (!Number.isInteger(n) || n < 0) return String(n);
+  const digits = String(n);
+  let out = '';
+  for (let i = 0; i < digits.length; i++) out += (i && (digits.length - i) % 3 === 0 ? ',' : '') + digits[i];
+  return out;
+}
+
+/** One to nine in words, 10 and up in figures, a thousand and up with a comma: "1,200" (the prototype's say(), FD 119). */
 export function say(n: number): string {
-  return n >= 1 && n <= 9 ? ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'][n - 1] : String(n);
+  return n >= 1 && n <= 9 ? ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'][n - 1] : grouped(n);
 }
 
 /** "one save", "three saves", "12 saves" (the prototype's saves()). */
@@ -24,7 +37,7 @@ export function mb(bytes: number): string {
 
 /** About how many articles a quota holds, at 25 KB of text each, rounded to the hundred: "2,000" for 50 MB (FD 117). */
 export function articles(quota: number): string {
-  return String(Math.round(quota / 25_600 / 100) * 100).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return grouped(Math.round(quota / 25_600 / 100) * 100);
 }
 
 // the Backup space row's sub with no figures held (adv-space-loading, adv-space-offline, adv-space-error)

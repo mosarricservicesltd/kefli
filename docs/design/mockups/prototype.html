@@ -1228,7 +1228,9 @@ const isPlaying = it => !!(S.audio && S.audio.id === it.id);
 const busyDots = () => '<span class="dots inbtn" aria-hidden="true" data-mk="busydots"><i></i><i></i><i></i></span>';
 const offlineNotice = text => `<div class="banner" data-fk="notice">${ic('wifioff', 16)}<span>${text}</span></div>`;
 // counts in running copy: one to nine in words, 10 and up in figures ("one article", "three saves", "23 bookmarks")
-const say = n => n >= 1 && n <= 9 ? ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'][n - 1] : String(n);
+// one to nine in words, 10 and up in figures, a thousand and up with a comma, "1,200", as the fine print's "about 2,000
+// articles" (decision 119)
+const say = n => n >= 1 && n <= 9 ? ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'][n - 1] : n.toLocaleString('en-GB');
 const Say = n => { const w = say(n); return w.charAt(0).toUpperCase() + w.slice(1); };
 
 // 'N min left' and the card bar both read it.progress, the one stored position (fix 11).
@@ -2436,8 +2438,9 @@ function advancedScreen(){
   const slot = (Y.exportFail ? `<div class="errline" data-fk="notice-export">${ic('alert', 16)}<span>The export didn’t save. Check the phone has space, then try again.</span></div>` : '')
     + (notice ? `<div class="notice info" data-fk="${notice[0]}">${ic('info', 16)}<span>${notice[1]}</span></div>` : '');
   // Backup space (decision 117) sits between the relays' note and Export: one row for Kefli's server, whose sub is the
-  // phone's last figures (spaceSub), and the fine print under it, in the library's own figures (the defaults until the
-  // first answer), about 25 KB of text to an article, rounded to the hundred
+  // phone's last figures (spaceSub), changing without a crossfade as everything in the app does (decision 119), and the
+  // fine print under it, in the library's own figures (the defaults until the first answer), about 25 KB of text to an
+  // article, rounded to the hundred
   const sp = Y.space, quota = sp ? sp.quota : 50 * MB, daily = sp ? sp.daily : 20 * MB;
   const articles = (Math.round(quota / (25 * 1024) / 100) * 100).toLocaleString('en-GB');
   return onbShell(`<h1>Advanced</h1>${slot}
@@ -2445,7 +2448,7 @@ function advancedScreen(){
     <div class="ygroup">${relays}${mine}</div><span id="rmhint" hidden>Asks whether to remove it</span>
     <p class="gnote">Your ${trying ? 'other ' : ''}saves are copied to all ${say(n)}. Any one of them is enough to bring your library back.${Y.relayDown && !off ? ' Saves will reach relay.damus.io when it answers again.' : ''}</p>
     <div class="gtitle">Backup space</div>
-    <div class="ygroup"><div class="yrow"><span class="yi">${ic('harddrive', 20)}</span><span class="yl">Kefli’s server<small data-xf="space-sub">${spaceSub()}</small></span></div></div>
+    <div class="ygroup"><div class="yrow"><span class="yi">${ic('harddrive', 20)}</span><span class="yl">Kefli’s server<small>${spaceSub()}</small></span></div></div>
     <p class="gnote">Kefli’s server keeps up to ${mb(quota)} of your saves’ text, about ${articles} articles, and takes up to ${mb(daily)} a day. Past that, a save’s text stays on this phone. Every save’s link is backed up whatever the space.</p>
     <div class="ygroup">
       <button class="yrow" data-you-act="export"><span class="yi">${ic('download', 20)}</span><span class="yl">Export my saves<small>One file with every link and its text</small></span></button>
