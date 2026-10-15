@@ -768,11 +768,11 @@ describe('deleting makes room (C§5, v1.12)', () => {
   }
 
   /**
-   * One save on the operator (z, 1,000 bytes), then three texts refused for room, oldest first: a (300), b (900) and
-   * c (200). The figures the refusals brought say 100 bytes are left. refuseAfter: how many uploads the operator
-   * takes once room is back before refusing again.
+   * One save on the operator (z, 10,000 bytes), then three texts refused for room, oldest first: a (5,000), b (9,000)
+   * and c (4,500). The figures the refusals brought say 1,000 bytes are left. sizes and room change those figures.
+   * refuseAfter: how many uploads the operator takes once room is back before refusing again.
    */
-  async function full(o: { refuseAfter?: number; figures?: boolean } = {}) {
+  async function full(o: { refuseAfter?: number; figures?: boolean; sizes?: [number, number, number, number]; room?: number } = {}) {
     const state = { full: false, allowed: Infinity };
     const w = world({
       'PUT http://blossom/upload': () => {
@@ -783,14 +783,16 @@ describe('deleting makes room (C§5, v1.12)', () => {
     });
     ensureIdentityRow(w.db, w.now(), w.signer.pubkey(), 'early_share', true);
     seedGeneratedLists(w.db, w.signer.pubkey(), D);
-    const z = await sized(w, 9, 1000);
+    const [zs, as, bs, cs] = o.sizes ?? [10_000, 5_000, 9_000, 4_500];
+    const z = await sized(w, 9, zs);
     await drain(w.ports);
     state.full = true;
     state.allowed = 0;
-    const [a, b, c] = [await sized(w, 1, 300), await sized(w, 2, 900), await sized(w, 3, 200)];
+    const [a, b, c] = [await sized(w, 1, as), await sized(w, 2, bs), await sized(w, 3, cs)];
     await drain(w.ports);
     const at = w.now();
-    if (o.figures !== false) w.ports.figures = () => ({ quota: 10_000, used: 9_900, daily: 20_971_520, today: 0, at });
+    const used = 100_000 - (o.room ?? 1_000);
+    if (o.figures !== false) w.ports.figures = () => ({ quota: 100_000, used, daily: 20_971_520, today: 0, at });
     w.tick(60);
     state.allowed = o.refuseAfter ?? Infinity;
     return { w, z, a, b, c, state, at };
@@ -805,7 +807,8 @@ describe('deleting makes room (C§5, v1.12)', () => {
     const before = w.calls.length;
     commitDelete(w.db, w.signer.pubkey(), z.hash, deleteItem(w.db, w.now(), w.signer.pubkey(), z.hash).held);
     await drain(w.ports);
-    // 1,100 bytes of room: a (300) goes; then 800: b (900) doesn't fit and keeps its day, c (200) is tried and refused
+    // 11,000 bytes of room: a (5,000) goes; then 6,000: b (9,000) doesn't fit and keeps its day, c (4,500) is tried and
+    // refused
     expect(tries(w, before)).toBe(2);
     const by = new Map(waiting(w).map((x) => [x.sha256, x]));
     expect(by.get(a.sha)).toMatchObject({ last_error: null, operator_at: expect.any(Number) });
@@ -900,8 +903,22 @@ describe('deleting makes room (C§5, v1.12)', () => {
     // its blob's row gone with the staged text, as the outbox's sweep leaves it
     orphanBlobs(w.db);
     await drain(w.ports);
-    // 100 bytes left by the figures, and a's own 300 back: c (200) doesn't fit in what they counted
+    // 1,000 bytes left by the figures, and a's own 5,000 back: c (4,500) doesn't fit in what they counted
     expect(tries(w, before)).toBe(0);
+  });
+
+  test('a text under a disk block counts as one, as the operator counts it, so none is tried that it would refuse', async () => {
+    // the operator counts each blob as 4,096 bytes at least (C§5), in its figures too: deleting z (1,000 bytes) gives
+    // back a block, room for a (300 bytes, so a block), after which the 100 bytes left fit neither b (900) nor c (200)
+    const { w, z, a, b, c } = await full({ sizes: [1_000, 300, 900, 200], room: 100, refuseAfter: 1 });
+    const before = w.calls.length;
+    commitDelete(w.db, w.signer.pubkey(), z.hash, deleteItem(w.db, w.now(), w.signer.pubkey(), z.hash).held);
+    await drain(w.ports);
+    expect(tries(w, before)).toBe(1);
+    const by = new Map(waiting(w).map((x) => [x.sha256, x]));
+    expect(by.get(a.sha)).toMatchObject({ last_error: null, operator_at: expect.any(Number) });
+    expect(by.get(b.sha)).toMatchObject({ last_error: 'quota', operator_at: null });
+    expect(by.get(c.sha)).toMatchObject({ last_error: 'quota', operator_at: null });
   });
 });
 
