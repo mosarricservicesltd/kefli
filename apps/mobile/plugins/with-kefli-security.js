@@ -5,7 +5,11 @@
 //
 // RULED: VIBRATE stays, for the haptics the motion spec asks for (MS); it is a normal permission and grants nothing
 // else. ACCESS_WIFI_STATE and MODIFY_AUDIO_SETTINGS, which libraries add, are blocked: Kefli reads only the network
-// type and plays its own audio.
+// type and plays its own audio. WAKE_LOCK and RECEIVE_BOOT_COMPLETED, which WorkManager's manifest adds for the
+// background worker (expo-background-task, 4.8, FD 119), are blocked too: WorkManager takes a wake lock only on its
+// alarm path below API 23 and for foreground work, neither of which this build runs (minSdk 26, a plain worker), and
+// its JobScheduler jobs aren't persisted, so after a reboot the worker is back at Kefli's next open, when WorkManager
+// reconciles its jobs, rather than at boot.
 const fs = require('fs');
 const path = require('path');
 const { withAndroidManifest, withDangerousMod } = require('expo/config-plugins');
@@ -22,6 +26,8 @@ const BLOCKED = [
   'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
   'android.permission.ACCESS_WIFI_STATE',
   'android.permission.MODIFY_AUDIO_SETTINGS',
+  'android.permission.WAKE_LOCK',
+  'android.permission.RECEIVE_BOOT_COMPLETED',
 ];
 
 const DOMAINS = ['root', 'file', 'database', 'sharedpref', 'external'];

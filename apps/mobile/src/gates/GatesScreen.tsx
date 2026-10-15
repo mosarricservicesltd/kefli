@@ -9,6 +9,7 @@ import { FONTS } from '../ui/fonts';
 import { GATES, runGate, type GateResult } from './gates';
 import { VoiceGate } from './VoiceGate';
 import { IdentityGate } from './IdentityGate';
+import { BackgroundGate } from './BackgroundGate';
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const ShelfCover = require('../../../../shared/cover/cover-v1.js');
@@ -111,6 +112,7 @@ export function GatesScreen() {
       })}
       <IdentityGate />
       <VoiceGate />
+      <BackgroundGate />
       <Covers />
       <Fonts />
     </ScrollView>

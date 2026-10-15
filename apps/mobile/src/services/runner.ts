@@ -39,6 +39,7 @@ import type { AddRelayPorts } from './addRelay';
 import { dailyCheck } from './nostrCheck';
 import { KefliKeystore } from '../../modules/kefli-keystore/src';
 import { KefliVoice } from '../../modules/kefli-voice/src';
+import type { BackgroundPorts } from './background';
 
 let running: Promise<number> | null = null;
 let defaults: Defaults | null = null;
@@ -251,6 +252,23 @@ export function runMoveJob(): Promise<MoveOutcome> {
 }
 
 /**
+ * The foreground's one sync, as the background worker runs it too (background.ts, 4.8): always after the launch
+ * resolver, so a sync never runs before Block Store's key is adopted, and after the spool is picked up.
+ */
+export function syncOnce(log: (tag: string, v: unknown) => void = () => undefined): Promise<SyncResult> {
+  return launchPlan()
+    .catch(() => null)
+    // shares a killed process left in the spool are saved before the sync sends them (8.5)
+    .then(() => pickUpSpools().then((n) => n && log('pickup', { saved: n })).catch((e) => log('pickup', { error: String((e as Error).message) })))
+    .then(runSync);
+}
+
+/** The background worker's ports (background.ts): the sync above, and whether there is a library to sync. */
+export function backgroundPorts(): BackgroundPorts {
+  return { sync: () => syncOnce(), hasLibrary: () => activeOwner(store()) !== null };
+}
+
+/**
  * The app's sync triggers (4.5): start and each return to the foreground, always after the launch resolver,
  * so a sync never runs before Block Store's key is adopted. Returns the cleanup, for useEffect.
  */
@@ -259,11 +277,7 @@ export function startSync(): () => void {
   // a voice test log an earlier build wrote goes; a release build never writes one (F7)
   if (!LOCAL_STACK) KefliVoice.clearLog();
   const sync = () =>
-    launchPlan()
-      .catch(() => null)
-      // shares a killed process left in the spool are saved before the sync sends them (8.5)
-      .then(() => pickUpSpools().then((n) => n && log('pickup', { saved: n })).catch((e) => log('pickup', { error: String((e as Error).message) })))
-      .then(runSync)
+    syncOnce(log)
       .then(async (r) => log('sync', { owner: (await currentSigner())?.pubkey().slice(0, 12), ...r }))
       // an earlier sign-in with a nostr app is checked at most once a day, out of sight (FD 104)
       .then(() => dailyCheck().catch((e) => log('nostr-check', { error: String((e as Error).message) })))

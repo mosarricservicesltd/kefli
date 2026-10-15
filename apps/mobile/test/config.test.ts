@@ -46,6 +46,17 @@ describe('defaults.json (contract 3.1, F1)', () => {
     expect(validDefaults({ ...FRESH, relays: ['wss://only-one'] })).toBe(false);
   });
 
+  test('a copy whose operator.api carries a trailing slash is refused as an invalid file is (contract 6, FD 119)', async () => {
+    expect(validDefaults(mk('https://fresh/'))).toBe(false);
+    expect(validDefaults(mk('https://fresh/v1/'))).toBe(false);
+    expect(validDefaults(mk('https://fresh/v1'))).toBe(true);
+    // fetched with one, the kept copy stands; kept with one, the baked copy does
+    const w = ports(ok(mk('https://fresh/')), JSON.stringify(FRESH));
+    expect(await pickDefaults(w.p, freshState())).toEqual(FRESH);
+    expect(JSON.parse(w.kept()!)).toEqual(FRESH);
+    expect(await pickDefaults(ports(down, JSON.stringify(mk('https://kept/'))).p, freshState())).toEqual(BAKED);
+  });
+
   test('after a failure it waits five minutes before trying again', async () => {
     const w = ports(down);
     const s = freshState();

@@ -605,6 +605,30 @@ describe('a save at an http address whose site has no https (RULED: past three d
     expect(publishes(w)).toEqual([itemHash('http://old.example/post')]);
   });
 
+  test('three old http saves in a row refused are the network: a run fails two at most, as for pages that never answer (FD 119)', async () => {
+    // a captive portal Android calls validated refuses every https, and failed every old http save in one run
+    const w = world();
+    noHttps(w, REFUSED);
+    w.ports.online = async () => true;
+    for (let n = 1; 6 >= n; n++) w.share(`http://old.example/${n}`);
+    // under three days each waits: three in a row stop a run, the rest waiting unasked
+    at(w, DAY);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 0, waiting: 6, xWaiting: 0 });
+    at(w, DAY + 60);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 0, waiting: 6, xWaiting: 0 });
+    // past three days: two fail, the third is the network's and waits, the rest unasked
+    const failed = () => w.db.all<{ url: string }>("SELECT url FROM items WHERE text_state = 'failed' ORDER BY url").map((r) => r.url);
+    at(w, 3 * DAY + 1);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 2, waiting: 4, xWaiting: 0 });
+    expect(failed()).toEqual(['http://old.example/1', 'http://old.example/2']);
+    at(w, 3 * DAY + 61);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 2, waiting: 2, xWaiting: 0 });
+    at(w, 3 * DAY + 121);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 2, waiting: 0, xWaiting: 0 });
+    expect(failed()).toHaveLength(6);
+    expect(publishes(w)).toHaveLength(6);
+  });
+
   test('three days old or less it waits, as its share did: a captive portal or a TLS hiccup can’t fail it', async () => {
     const w = world();
     noHttps(w, TLS);
@@ -741,6 +765,31 @@ describe('a save whose page never answers (RULED: past 14 days, tried again with
     }
     expect(w.db.get('SELECT text_state FROM items')).toEqual({ text_state: 'queued' });
     expect(publishes(w)).toEqual([]);
+  });
+
+  test('an X post whose check X never answers gets the same rule: published with its link once 14 days old and checked again (FD 119)', async () => {
+    const w = world();
+    w.ports.x = { fetch: (async () => { throw new TimedOut(); }) as never };
+    w.ports.online = async () => true;
+    w.share('https://x.com/someone/status/1');
+    w.db.run("UPDATE items SET x_state = 'pending' WHERE url = 'https://x.com/someone/status/1'");
+    const result = async (seconds: number) => {
+      w.ports.now = () => 1000 + seconds;
+      return runPendingParses(w.ports, PK);
+    };
+    // under 14 days it waits however often it is checked, and so does a first check past them
+    expect(await result(13 * DAY)).toEqual({ parsed: 0, failed: 0, waiting: 0, xWaiting: 1 });
+    w.db.run('UPDATE items SET timed_out_at = NULL');
+    expect(await result(15 * DAY)).toEqual({ parsed: 0, failed: 0, waiting: 0, xWaiting: 1 });
+    // checked before, off the internet it still waits
+    w.ports.online = async () => false;
+    expect(await result(15 * DAY + 60)).toEqual({ parsed: 0, failed: 0, waiting: 0, xWaiting: 1 });
+    // checked again on the internet: sent without its text, its link kept, as a page that never answers is
+    w.ports.online = async () => true;
+    expect(await result(15 * DAY + 120)).toEqual({ parsed: 0, failed: 1, waiting: 0, xWaiting: 0 });
+    expect(w.db.get('SELECT text_state, fail_reason FROM items')).toEqual({ text_state: 'failed', fail_reason: 'offline' });
+    expect(w.outbox().filter((o) => o.op === 'publish_item')).toHaveLength(1);
+    expect(pendingParses(w.db, PK)).toEqual([]);
   });
 
   test('a page answering that it can’t be had now, 5xx, 429 or 408, is as one that doesn’t answer: its save waits, then fails past 14 days', async () => {

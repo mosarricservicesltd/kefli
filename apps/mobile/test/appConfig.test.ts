@@ -1,4 +1,7 @@
 // app.config.js decides whether a build may use cleartext: only KEFLI_VARIANT=local, and only to localhost.
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const appConfig = require('../app.config.js') as (a: { config: Record<string, unknown> }) => { plugins: unknown[]; extra: { kefli: unknown } };
 
@@ -40,6 +43,21 @@ describe('app.config.js', () => {
 
   test('a release build refuses a baked copy that names another API (F1)', () => {
     withEnv({ KEFLI_DEFAULTS_URL: 'https://api.example/defaults.json' }, () => expect(() => appConfig({ config: base })).toThrow('names the API'));
+  });
+
+  test('a release build refuses a baked copy whose operator.api carries a trailing slash (contract 6, FD 119)', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kefli-defaults-'));
+    const file = path.join(dir, 'defaults.json');
+    const d = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'defaults.release.json'), 'utf8')) as { operator: { api: string } };
+    fs.writeFileSync(file, JSON.stringify({ ...d, operator: { ...d.operator, api: `${d.operator.api}/` } }));
+    const saved = process.env.KEFLI_DEFAULTS_FILE;
+    process.env.KEFLI_DEFAULTS_FILE = file;
+    try {
+      withEnv({ KEFLI_DEFAULTS_URL: `${d.operator.api}/defaults.json` }, () => expect(() => appConfig({ config: base })).toThrow('trailing slash'));
+    } finally {
+      if (saved === undefined) delete process.env.KEFLI_DEFAULTS_FILE; else process.env.KEFLI_DEFAULTS_FILE = saved;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test('a release build refuses an http URL or none', () => {
