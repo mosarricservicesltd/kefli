@@ -1121,6 +1121,33 @@ describe('a save the browser’s own parts let down', () => {
     expect((await history(down.store))[0]).toMatchObject({ outcome: 'queue full' });
   });
 
+  test('a queue storage.local can’t read: the save still ends on its toast, Saved once sent, refused out loud when it can’t be', async () => {
+    /** storage.local whose reads of the queue fail, as in a profile whose database is damaged. */
+    const unreadable = () => {
+      const store = memoryStore();
+      const get = store.get.bind(store);
+      store.get = (async (k: string) => {
+        if (k === KEYS.queue) throw new Error('IO error: database corrupt');
+        return get(k);
+      }) as Store['get'];
+      return store;
+    };
+    const n = net();
+    const h = harness({ store: unreadable(), net: n.net, collected: [false, false] });
+    expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+    expect(kinds(h.toasts)).toEqual(['saving', 'saved']);
+    expect(n.published).toHaveLength(1);
+    // its Undo still retracts it, and says so
+    expect(await ends(h.work.undo(h.toasts[1].id!, 1))).toBe('ended');
+    expect(h.toasts.at(-1)!.kind).toBe('undone');
+    expect(n.published.filter((e) => e.kind === 5)).toHaveLength(1);
+    // one that can't be sent either isn't left at Saving…, and the alarm stays on for the next minute's look
+    const down = harness({ store: unreadable(), online: false });
+    expect(await ends(down.work.save(PAGE, 1, false))).toBe('ended');
+    expect(kinds(down.toasts)).toEqual(['saving', 'full']);
+    expect(down.alarm.on).toBe(true);
+  });
+
   test('a save refused by storage before its send, and not sent, is kept without its text when it can be', async () => {
     // the first write, the save going in with its text, is refused; the smaller one after the send is taken
     const store = refusing(KEYS.queue, 1);

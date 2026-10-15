@@ -160,11 +160,14 @@ export function background(b: Browser) {
   /**
    * After the queue changes: the alarm is on while anything still tries and goes once nothing does, and the badge counts
    * what waits. Turned on here as well as at a save, since the alarm may be gone after a browser restart (Firefox keeps
-   * none) and a start-up flush that fails must still leave one to try again.
+   * none) and a start-up flush that fails must still leave one to try again. A queue storage.local can't read leaves the
+   * alarm on, for the next minute's flush, and stops neither the toast after it nor Undo: it left a save at Saving… for
+   * good, whether it had gone or wasn't kept.
    */
   async function queueChanged(): Promise<void> {
-    await b.flushAlarm((await queued(b.store)).some((e) => !e.stopped));
-    await b.badge();
+    const trying = await queued(b.store).then((q) => q.some((e) => !e.stopped), () => true);
+    await b.flushAlarm(trying);
+    await b.badge().catch(() => undefined);
   }
 
   /** The request wrapped, or null when nothing can be saved, with the toast saying why (decision 100, F39). */
@@ -299,8 +302,9 @@ export function background(b: Browser) {
     if (undone.has(id)) return;
     const kept = await b.session.get<UndoKey>(`undo:${id}`).catch(() => undefined);
     const u = undoOf(id, where, kept, ctx);
-    // read on its own line: lizard, which the code gate uses, ends the function at a find called on a bracketed await
-    const q = await queued(b.store);
+    // read on its own line: lizard, which the code gate uses, ends the function at a find called on a bracketed await. A
+    // queue that can't be read holds no save Undo can find there, so it retracts, and says if it couldn't
+    const q = await queued(b.store).catch((): Queued[] => []);
     const waitingSave = q.find((e) => e.id === id);
     if (waitingSave && (await dequeue(b.store, id))) return unqueue(u, waitingSave, ctx.device);
     const outcome = await settleUndo(u.retractIt, u.collected, b.wait).catch(() => 'failed' as const);
