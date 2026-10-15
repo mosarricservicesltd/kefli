@@ -94,6 +94,12 @@ export function background(b: Browser) {
    * twice) found no key and no waiting save, and said "Couldn't undo this save" over "Removed from Kefli".
    */
   const undone = new Set<string>();
+  /**
+   * Saves a move put under a new wrap while a send of the old one was under way, by the wrap they went by (follow). The
+   * move says so before it writes the queue, and before it moves Undo's key, so a send that ends as the move does is
+   * settled under the new wrap even when Undo's key hasn't followed yet (settleFirst).
+   */
+  const movedMidSend = new Map<string, string>();
   const deliverFor = (ctx: SaveContext) => (p: Delivered) =>
     deliver(p, ctx.defaults.operator.blossom, ctx.defaults.operator.relay, ctx.device, b.net, (q, refused) => (refused ? withoutHtml(q, ctx) : freshen(q, ctx)));
 
@@ -219,8 +225,10 @@ export function background(b: Browser) {
    */
   async function settleFirst(pending: Pending, d: Delivery, online: boolean): Promise<Settled> {
     const s = await settle(b.store, pending, d, online, true);
+    const moved = movedMidSend.get(pending.id);
+    movedMidSend.delete(pending.id);
     if (s !== 'gone' || d === 'sent') return s;
-    const now = await goesBy(pending.id);
+    const now = await goesBy(moved ?? pending.id);
     return now === pending.id ? s : settle(b.store, { id: now, blob: pending.blob }, d, online, true);
   }
 
@@ -400,10 +408,14 @@ export function background(b: Browser) {
 
   /**
    * A move put a save under a new wrap (move.ts): while a send under its old id is under way, the new id is busy too, so
-   * a flush leaves it to that send rather than sending it beside it. True when one is, since its old wrap may then reach
-   * the relay, and Undo has to retract it as well.
+   * a flush leaves it to that send rather than sending it beside it, and the send settles under the new id (movedMidSend).
+   * True when one is, since its old wrap may then reach the relay, and Undo has to retract it as well.
    */
-  const follow = (was: string, to: string): boolean => saves.follow(was, to);
+  function follow(was: string, to: string): boolean {
+    const underWay = saves.follow(was, to);
+    if (underWay) movedMidSend.set(was, to);
+    return underWay;
+  }
 
   return { save, undo, flushQueue, disconnected, follow };
 }

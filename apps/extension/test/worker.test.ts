@@ -1633,6 +1633,34 @@ describe('a move while saves wait, their toasts still showing (contract 4.4 and 
       expect(await queued(h.store)).toEqual([]);
     });
 
+    test('one whose send ends while the move wraps the queue again, before Undo’s key follows, still waits under its new wrap', async () => {
+      const held = gate();
+      const n = net({ publish: 'down', hold: held.p });
+      // storage.session takes a while to write, so the move's queue is written well before Undo's key moves
+      const session = memoryStore();
+      const set = session.set.bind(session);
+      session.set = async (k, v) => {
+        await new Promise((r) => setTimeout(r, 50));
+        return set(k, v);
+      };
+      const h = harness({ net: n.net, session, collected: [false, false] });
+      const saving = h.work.save(PAGE, 1, false);
+      await until(() => n.asked.n === 1);
+      await h.store.set(KEYS.pairing, PAIRING);
+      // the send's answer comes as the move holds the queue, so its settle runs as soon as the move has written it
+      const moving = applyMove(h.store, device, ack, NOW, h.session, h.work.follow);
+      held.open();
+      await Promise.all([saving, moving]);
+      const [moved] = await queued(h.store);
+      expect(kinds(h.toasts)).toEqual(['saving', 'failed']);
+      expect(moved).toMatchObject({ why: 'reach', attempts: 0 });
+      expect(moved.wrap.tags).toEqual([['p', T.pubkey()]]);
+      // and its toast's Undo takes it off the queue once the key has followed
+      await h.work.undo(h.toasts.at(-1)!.id!, 1);
+      expect(await queued(h.store)).toEqual([]);
+      expect(h.toasts.at(-1)).toMatchObject({ kind: 'unqueued', title: 'A page' });
+    });
+
     test('one that then can’t reach the relay waits under its new wrap and says so, rather than Removed from Kefli', async () => {
       const { h, held, saving, moved } = await movedMidSend({ publish: 'down' });
       held.open();
