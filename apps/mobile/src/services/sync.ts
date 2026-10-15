@@ -401,12 +401,14 @@ export function takeNewerLists(db: SqlDb, owner: string, copies: NostrEvent[], k
 /**
  * Phase 1, after the lists: the library key (F5, C§4.3). The newest record on the write relays is taken (another phone
  * may have made it first). With none on any of them, once every one has answered, a key is made here and its record
- * goes out; an identity made on this phone makes its own at its first publish instead.
+ * goes out; an identity made on this phone makes its own at its first publish instead. The record opens with the
+ * signer the sync was given for owner: a move's target is not the phone's identity until the move ends, and asked of
+ * the ports, which answer for the phone's identity alone, its key was never learnt, so every copy of the switch waited
+ * on it, unsent, and the move never finished.
  */
-export async function syncLibraryKey(p: SyncPorts, owner: string): Promise<void> {
+export async function syncLibraryKey(p: SyncPorts, owner: string, signer: Signer): Promise<void> {
   const relays = writeRelays(p.db, owner);
-  const signer = await p.signer(owner);
-  if (!relays.length || !signer) return;
+  if (!relays.length) return;
   const found: NostrEvent[] = [];
   let answered = 0;
   await Promise.all(relays.map(async (r) => {
@@ -457,7 +459,7 @@ export async function syncInbound(p: SyncPorts): Promise<SyncResult> {
 /** The same for any identity on the phone: a move collects its source's library this way (C§4.8 step 2). */
 export async function syncOwner(p: SyncPorts, owner: string, signer: Signer): Promise<SyncResult> {
   await syncLists(p, owner);
-  await syncLibraryKey(p, owner);
+  await syncLibraryKey(p, owner, signer);
   const startedAt = p.now();
   const collected = await collect(p, owner);
   const { items, deletions, waiting } = await applyAll(p, owner, signer, collected);

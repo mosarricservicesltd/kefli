@@ -94,11 +94,11 @@ describe('the library key (contract 4.3, F5)', () => {
     await drain(other.send);
     // the same identity restored on a second phone, against the same relays, one of them down
     const w = world('recovery_code', ['ws://b'], { s: other.s, relays: other.relays });
-    await syncLibraryKey(w.sync, w.pk);
+    await syncLibraryKey(w.sync, w.pk, w.s);
     expect(libraryKey(w.db, w.pk)).toEqual(libraryKey(other.db, other.pk));
     // a restore that finds no record while a relay is down makes no key; once all answer, it makes one
     const fresh = world('recovery_code', ['ws://b']);
-    await syncLibraryKey(fresh.sync, fresh.pk);
+    await syncLibraryKey(fresh.sync, fresh.pk, fresh.s);
     expect(libraryKey(fresh.db, fresh.pk)).toBeNull();
     fresh.item(1);
     await drain(fresh.send);
@@ -113,7 +113,7 @@ describe('the library key (contract 4.3, F5)', () => {
     w.db.run("DELETE FROM outbox WHERE op = 'publish_item'");
     const theirs = nodeCrypto.randomBytes(32);
     await w.send.publish('ws://op', await buildLibraryKeyEvent(w.s, theirs, 800));
-    await syncLibraryKey(w.sync, w.pk);
+    await syncLibraryKey(w.sync, w.pk, w.s);
     expect(libraryKey(w.db, w.pk)).toEqual(theirs);
     w.tick(10);
     await drain(w.send);
@@ -138,13 +138,13 @@ describe('the library key (contract 4.3, F5)', () => {
     w.item(2, ITEM_D_PREFIX + h(2));
     w.db.run("DELETE FROM outbox WHERE op = 'publish_item'");
     // no record anywhere and every relay answers: the key is made, and both saves are queued to move
-    await syncLibraryKey(w.sync, w.pk);
+    await syncLibraryKey(w.sync, w.pk, w.s);
     const key = libraryKey(w.db, w.pk)!;
     expect(w.db.all<{ subject: string }>("SELECT subject FROM outbox WHERE op = 'publish_item' ORDER BY subject").map((r) => r.subject)).toEqual([h(1), h(2)]);
     await drain(w.send);
     for (const n of [1, 2]) expect(w.db.get('SELECT remote_d FROM items WHERE hash = ?', h(n))).toEqual({ remote_d: savedD(key, h(n)) });
     // and nothing more to move at the next sync
-    await syncLibraryKey(w.sync, w.pk);
+    await syncLibraryKey(w.sync, w.pk, w.s);
     expect(w.db.get("SELECT 1 FROM outbox WHERE op = 'publish_item'")).toBeUndefined();
   });
 
@@ -156,14 +156,14 @@ describe('the library key (contract 4.3, F5)', () => {
       const w = world('recovery_code');
       await w.send.publish('ws://a', await buildLibraryKeyEvent(w.s, good, 800));
       await w.send.publish('ws://op', await record(w, junk, 900));
-      await syncLibraryKey(w.sync, w.pk);
+      await syncLibraryKey(w.sync, w.pk, w.s);
       expect(libraryKey(w.db, w.pk)).toEqual(good);
     }
     // a later version, which a newer Kefli wrote, stops it: nothing taken, nothing made over it
     const w = world('recovery_code');
     await w.send.publish('ws://a', await buildLibraryKeyEvent(w.s, good, 800));
     await w.send.publish('ws://op', await record(w, `{"v":2,"key":"${'a'.repeat(64)}"}`, 900));
-    await syncLibraryKey(w.sync, w.pk);
+    await syncLibraryKey(w.sync, w.pk, w.s);
     expect(libraryKey(w.db, w.pk)).toBeNull();
     expect(w.db.get("SELECT 1 FROM outbox WHERE op = 'publish_library_key'")).toBeUndefined();
   });
@@ -171,7 +171,7 @@ describe('the library key (contract 4.3, F5)', () => {
   test('a record dated decades ahead isn’t taken, and no key is made over it', async () => {
     const w = world('recovery_code');
     await w.send.publish('ws://op', await buildLibraryKeyEvent(w.s, nodeCrypto.randomBytes(32), 4_102_444_800));
-    await syncLibraryKey(w.sync, w.pk);
+    await syncLibraryKey(w.sync, w.pk, w.s);
     expect(libraryKey(w.db, w.pk)).toBeNull();
     expect(w.db.get("SELECT 1 FROM outbox WHERE op = 'publish_library_key'")).toBeUndefined();
   });

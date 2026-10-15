@@ -1,5 +1,6 @@
 import {
-  LocalSigner, encryptText, normaliseMarkdown, readItemEvent, releaseTemplate, statementHolds, textHash, unwrap, type NostrEvent, type Signer,
+  LocalSigner, buildLibraryKeyEvent, encryptText, normaliseMarkdown, readItemEvent, releaseTemplate, savedD, statementHolds, textHash, unwrap,
+  type NostrEvent, type Signer,
 } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import { bytesToHex } from '@noble/hashes/utils.js';
@@ -11,6 +12,7 @@ import { enqueue, release } from '../src/data/outbox';
 import { absorbRecord } from '../src/data/devices';
 import { commitDelete, deleteItem, setArchived, setPosition } from '../src/data/library';
 import { notBackedUp } from '../src/data/backup';
+import { libraryKey } from '../src/data/libraryKey';
 import { drain } from '../src/services/send';
 import { TEXT_TIMEOUT_MS, syncOwner, type Filter } from '../src/services/sync';
 import { runMove, type MovePorts } from '../src/services/move';
@@ -36,7 +38,7 @@ function matches(e: NostrEvent, f: Filter): boolean {
   return true;
 }
 
-function world(o: { down?: Set<string>; accountStatus?: number; refuse?: (author: string) => boolean; dayUsed?: (author: string) => boolean } = {}) {
+function world(o: { down?: Set<string>; accountStatus?: number; refuse?: (author: string) => boolean; dayUsed?: (author: string) => boolean; switch?: boolean } = {}) {
   const db = memoryDb();
   migrate(db);
   const S = new LocalSigner(nodeCrypto.randomBytes(32));
@@ -112,15 +114,23 @@ function world(o: { down?: Set<string>; accountStatus?: number; refuse?: (author
     drainSourceInbox: async () => undefined,
     retireKeys: async () => void (keysRetired = true),
   };
-  ensureIdentityRow(db, clock, T.pubkey(), 'recovery_code', true);
-  ensureIdentityRow(db, clock, S.pubkey(), 'early_share', true);
-  seedGeneratedLists(db, T.pubkey(), D);
-  seedGeneratedLists(db, S.pubkey(), D);
-  // T was restored, so it learnt its library key at its first sync (F5); S was made here and makes its own
-  db.run('UPDATE identities SET library_key = ?, library_key_at = 1 WHERE pubkey = ?', '0a'.repeat(32), T.pubkey());
-  db.run("UPDATE identities SET role = 'move_source' WHERE pubkey = ?", S.pubkey());
-  db.run("INSERT INTO jobs (id, kind, state, step, data, started_at, updated_at) VALUES (?, 'move', 'queued', 0, ?, 1, 1)",
-    `move:${S.pubkey()}`, JSON.stringify({ from: S.pubkey(), to: T.pubkey() }));
+  if (o.switch) {
+    // Use my nostr app instead (C§4.8): S, made here, stays the phone's identity; T, the nostr app's key, joins beside it
+    // as the move's target, its lists confirmed absent, and learns its library key only from its relays or by making one
+    ensureIdentityRow(db, clock, S.pubkey(), 'new', true);
+    seedGeneratedLists(db, S.pubkey(), D);
+    queueSwitch(db, clock, S.pubkey(), T.pubkey(), 'nip55', { relays: null, servers: null, known: true }, false, D);
+  } else {
+    ensureIdentityRow(db, clock, T.pubkey(), 'recovery_code', true);
+    ensureIdentityRow(db, clock, S.pubkey(), 'early_share', true);
+    seedGeneratedLists(db, T.pubkey(), D);
+    seedGeneratedLists(db, S.pubkey(), D);
+    // T was restored, so it learnt its library key at its first sync (F5); S was made here and makes its own
+    db.run('UPDATE identities SET library_key = ?, library_key_at = 1 WHERE pubkey = ?', '0a'.repeat(32), T.pubkey());
+    db.run("UPDATE identities SET role = 'move_source' WHERE pubkey = ?", S.pubkey());
+    db.run("INSERT INTO jobs (id, kind, state, step, data, started_at, updated_at) VALUES (?, 'move', 'queued', 0, ?, 1, 1)",
+      `move:${S.pubkey()}`, JSON.stringify({ from: S.pubkey(), to: T.pubkey() }));
+  }
 
   /** A save under owner, its blob staged on the phone (or only on the operator's server), then sent. */
   async function save(owner: Signer, n: number, opts: { state?: 'unread' | 'archived'; stagedOnly?: boolean } = {}) {
@@ -141,7 +151,7 @@ function world(o: { down?: Set<string>; accountStatus?: number; refuse?: (author
     }
     return enc.text.sha256;
   }
-  return { db, S, T, p, log, devicePosts, relays, blossom, staged, save, tick: (s: number) => (clock += s), keysRetired: () => keysRetired };
+  return { db, S, T, p, log, devicePosts, relays, blossom, staged, save, syncPorts, tick: (s: number) => (clock += s), keysRetired: () => keysRetired };
 }
 
 /** Runs the move with relays a and b unreachable, so it stops at step 4's read-back with S whole; then time passes. */
@@ -563,6 +573,30 @@ describe('The move (contract 4.8, mobile spec 4.10)', () => {
     expect(await runMove(w.p)).toBe('done');
     expect((await tCopy(w, h(9))).text).toMatchObject({ sha256: enc.text.sha256, servers: ['http://m2'] });
     expect(w.db.get('SELECT mirror_url FROM blobs')).toEqual({ mirror_url: 'http://m2' });
+  });
+
+  test("a switch's target learns its library key through its own signer, though the sync's answers only for the phone's identity, S", async () => {
+    for (const held of [false, true]) {
+      const w = world({ switch: true });
+      const T = w.T.pubkey();
+      // T's record from another phone, when it has used Kefli before
+      const theirs = nodeCrypto.randomBytes(32);
+      if (held) for (const r of ['ws://op', 'ws://a', 'ws://b']) await w.p.publish(r, await buildLibraryKeyEvent(w.T, theirs, 900));
+      await w.save(w.S, 1);
+      await w.save(w.S, 2);
+      // the phone's sync ports (services/runner.ts) answer for the signer slot alone, which is S's until the move ends
+      const phone = { ...w.syncPorts, signer: async (pk: string) => (pk === w.S.pubkey() ? w.S : null) };
+      const p: MovePorts = { ...w.p, collect: async (owner, signer) => (await syncOwner(phone, owner, signer)).waiting === 0 };
+      expect(await runMove(p)).toBe('done');
+      const key = libraryKey(w.db, T)!;
+      if (held) expect(key).toEqual(theirs);
+      // T's copies went out at the addresses T's own key makes, on every write relay
+      for (const r of ['ws://op', 'ws://a', 'ws://b']) {
+        const ds = w.relays.get(r)!.filter((e) => e.kind === 30078 && e.pubkey === T).map((e) => e.tags.find((t) => t[0] === 'd')?.[1]);
+        expect(ds).toEqual(expect.arrayContaining([savedD(key, h(1)), savedD(key, h(2))]));
+      }
+      expect(rowsOf(w, T).map((r) => r.hash)).toEqual([h(1), h(2)]);
+    }
   });
 
   test('a switch puts T beside S as the target, its lists settled, and queues the move', () => {
