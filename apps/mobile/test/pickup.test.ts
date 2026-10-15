@@ -1,8 +1,11 @@
 // The link a share carries (mobile spec 5.4) and the start-up pickup of spools a killed process left (8.5): a share
 // that can't be read or saved must not stop the shares behind it, at this start or any other.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { memoryDb } from './sqlite';
 import { migrate } from '../src/data/schema';
-import { SHARE_MAX_CHARS, SHARE_MAX_TRIES, activeSpools, firstLink, pickUpSpools, readSpool } from '../src/share/pickup';
+import { SHARE_MAX_CHARS, SHARE_MAX_TRIES, activeSpools, firstLink, pickUpSpools, readSpool, sheetLink } from '../src/share/pickup';
+import { S } from '../src/ui/strings';
 
 const mockSpools = new Map<string, string>();
 const mockSaved: string[] = [];
@@ -55,10 +58,31 @@ describe('the link a share carries (5.4)', () => {
     expect(firstLink('[x] https://example.com/a]')).toBe('https://example.com/a');
   });
 
+  test('an address ends at the mark a picture leaves in plain text (U+FFFC), as at a space', () => {
+    // an app that flattens its own styled text before sharing it sends the mark as it is, beside the link
+    expect(firstLink('A story https://example.com/a￼')).toBe('https://example.com/a');
+    expect(firstLink('https://example.com/a￼Looks good')).toBe('https://example.com/a');
+    expect(firstLink('Look ￼https://example.com￼')).toBe('https://example.com');
+    expect(firstLink('https://a.example/x￼https://b.example/y')).toBe('https://b.example/y');
+    // a link that is the whole share but for the mark is still the whole share, its own full stop kept
+    expect(firstLink('https://en.wikipedia.org/wiki/Washington,_D.C.￼')).toBe('https://en.wikipedia.org/wiki/Washington,_D.C.');
+    expect(firstLink('Look: https://example.com/a.￼')).toBe('https://example.com/a');
+  });
+
   test('a link that is the whole share, as a browser shares a page, is taken as it is, but for invisible marks', () => {
     expect(firstLink('https://en.wikipedia.org/wiki/Washington,_D.C.')).toBe('https://en.wikipedia.org/wiki/Washington,_D.C.');
     expect(firstLink('  https://en.wikipedia.org/wiki/Foo_(bar)\n')).toBe('https://en.wikipedia.org/wiki/Foo_(bar)');
     expect(firstLink('https://example.com/a​')).toBe('https://example.com/a');
+  });
+
+  test('a link that is the whole share but for the marks that show nothing round it is still the whole share', () => {
+    // a right-to-left chat app puts direction marks round a link it shares alone: its own full stop stays, as without them
+    expect(firstLink('\u200fhttps://en.wikipedia.org/wiki/Washington,_D.C.\u200f')).toBe('https://en.wikipedia.org/wiki/Washington,_D.C.');
+    expect(firstLink('\u2066https://en.wikipedia.org/wiki/Washington,_D.C.\u2069\n')).toBe('https://en.wikipedia.org/wiki/Washington,_D.C.');
+    expect(firstLink('\u200b https://example.com/a. \u200e\uFFFC')).toBe('https://example.com/a.');
+    // with words beside it, it is still read as written in a sentence, and the marks still go from its end
+    expect(firstLink('\u200fLook: https://example.com/a.\u200f')).toBe('https://example.com/a');
+    expect(firstLink('\u200fhttps://example.com/a.\u200f \u200fmore\u200f')).toBe('https://example.com/a');
   });
 
   test('at most the last 16 addresses are tried', () => {
@@ -114,5 +138,33 @@ describe('the start-up pickup (8.5)', () => {
     } finally {
       activeSpools.delete('held');
     }
+  });
+});
+
+describe('what a share sheet opens on (5.4)', () => {
+  beforeEach(() => mockSpools.clear());
+
+  test("its spool's link; a spool with none is Not a link; one gone or cut short is a share that didn't save", () => {
+    spool('link', 'Look at this https://a.example/story');
+    spool('words', 'no link here');
+    spool('picture', null);
+    mockSpools.set('cut', '{"v":1,"id":"cut","text":"https://a.exa');
+    expect(sheetLink('link')).toEqual({ url: 'https://a.example/story' });
+    expect(sheetLink('words')).toEqual({ url: null, why: 'nolink' });
+    expect(sheetLink('picture')).toEqual({ url: null, why: 'nolink' });
+    // a share held in memory for want of room to write it goes with its process, and a sheet brought back after it
+    // finds nothing: sharing again mends that, where a different page or address would not
+    expect(sheetLink('cut')).toEqual({ url: null, why: 'failed' });
+    expect(sheetLink('gone')).toEqual({ url: null, why: 'failed' });
+    expect(sheetLink(undefined)).toEqual({ url: null, why: 'failed' });
+  });
+
+  test("the sheet opens on it: a share that didn't save says so, and to share it again", () => {
+    // Node can't draw the sheet: this reads its source, as the Original view's test reads its own
+    const src = readFileSync(join(__dirname, '..', 'src', 'share', 'ShareRoot.tsx'), 'utf8');
+    expect(src).toContain('const opened = useMemo(() => sheetLink(spoolId), [spoolId]);');
+    expect(src).toContain("useState<Mode>(opened.url === null ? opened.why : isXPost(opened.url) ? 'checking' : 'saving')");
+    expect(src).toContain("mode === 'nolink' ? [S.share.noLink, S.share.noLinkSub] : [S.share.failed, S.share.failedSub]");
+    expect([S.share.failed, S.share.failedSub]).toEqual(['That didn’t save', 'Try sharing it again.']);
   });
 });

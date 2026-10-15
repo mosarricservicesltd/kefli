@@ -21,11 +21,22 @@ export const SHARE_MAX_CHARS = 64 * 1024;
 /** The most addresses in one share that are tried, from the last: a share holds one or two. */
 export const SHARE_MAX_TRIES = 16;
 
-// strings, since the code gate's parser misreads regex literals
-const ADDRESS = new RegExp('https?://[^\\s<>"]+', 'g');
+// strings, since the code gate's parser misreads regex literals. An address ends at a space, < > or ", and at U+FFFC,
+// the mark a picture in styled text leaves in its plain text: ShareText.kt reads it as a space in styled text, but an
+// app that flattens its own styled text sends a plain share with the mark as it is, and it was saved as part of the
+// address beside it, a page that wasn't there.
+const ADDRESS = new RegExp('https?://[^\\s<>"\\ufffc]+', 'g');
+const PICTURE = new RegExp('\\ufffc', 'g');
 // marks that show nothing: zero-width spaces and joiners, and the direction marks right-to-left chat apps put round a link
 const INVISIBLE = new RegExp('[\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u2064\\u2066-\\u2069\\ufeff]');
+const INVISIBLES = new RegExp(INVISIBLE.source, 'g');
 const SENTENCE_END = '.,;:!?';
+
+/**
+ * Text as it shows, to ask whether a link is the whole share: a picture's mark is a space, and the marks that show
+ * nothing are gone.
+ */
+const shown = (s: string) => s.replace(PICTURE, ' ').replace(INVISIBLES, '').trim();
 
 /** A link Kefli can save: one normalise takes, short enough for its save's event (data/saves addressFits). */
 function savable(url: string): boolean {
@@ -71,12 +82,14 @@ function asWritten(link: string, whole: boolean): string {
  * The link a share carries: the last http(s) address in its text, since apps put their own words first, read as it
  * was written (asWritten). One Kefli can't save ("http://[", a host too long, or an address too long for its event)
  * is passed over for the one before it, the last 16 at most, so such a share says Not a link, rather than failing on
- * the sheet and again at every start from the spool.
+ * the sheet and again at every start from the spool. A picture's mark counts as a space here too, and the marks that
+ * show nothing as nothing, so a link and a picture, or a link a right-to-left chat app put direction marks round, are
+ * still a link that is the whole share.
  */
 export function firstLink(text: string | null): string | null {
   if (typeof text !== 'string' || text.length >= SHARE_MAX_CHARS) return null;
   const all = text.match(ADDRESS) ?? [];
-  const whole = all.length === 1 && text.trim() === all[0];
+  const whole = all.length === 1 && shown(text) === shown(all[0]);
   for (let i = all.length - 1, tries = 0; i >= 0 && tries < SHARE_MAX_TRIES; i--, tries++) {
     const link = asWritten(all[i], whole);
     if (savable(link)) return link;
@@ -93,6 +106,22 @@ export function readSpool(id: string): SpoolEntry | null {
     console.log(`[kefli-pickup] ${JSON.stringify({ unreadable: id, error: String((e as Error)?.message ?? e) })}`);
     return null;
   }
+}
+
+/** What a share sheet opens on: the link its spool carries, or why there is none. */
+export type SheetLink = { url: string } | { url: null; why: 'failed' | 'nolink' };
+
+/**
+ * The link a sheet's spool carries (5.4). A spool gone or unreadable when its sheet opens is a share that didn't save
+ * (That didn't save, Try sharing it again): a share held in memory for want of room to write it goes with its process,
+ * so a sheet brought back after it finds nothing, and sharing again mends that. A spool that holds no address Kefli
+ * can save is Not a link, which sharing the same thing again would not mend.
+ */
+export function sheetLink(spoolId: string | undefined): SheetLink {
+  const entry = spoolId ? readSpool(spoolId) : null;
+  if (!entry) return { url: null, why: 'failed' };
+  const url = firstLink(entry.text);
+  return url ? { url } : { url: null, why: 'nolink' };
 }
 
 let picking: Promise<number> | null = null;

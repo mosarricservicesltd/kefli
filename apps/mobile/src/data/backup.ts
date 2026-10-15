@@ -162,23 +162,33 @@ export function holdUpload(db: SqlDb, owner: string, id: number, sha256: string,
 const counted = (f: KnownFigures) => (e: Freed) => e.at > f.at && !(typeof e.up === 'number' && e.up > f.at);
 
 /**
+ * The least a blob counts for against its library's quota and day (C§5): a disk block, which its file takes however
+ * few bytes it holds. Kefli's server counts each blob for its size and never less (store.Cost), in its figures too,
+ * so the reckoning below counts each the same way, a blob whose size this phone doesn't know as one block.
+ */
+const BLOCK = 4096;
+
+/**
  * The room the last known figures leave (C§5): their quota less their use, less what this phone has had the operator
- * take since and plus what it has had deleted since of what they counted. Another device's uploads and deletions
- * aren't known here, so the reckoning can be out either way; a text it lets through that doesn't fit is refused, and
- * the refusal brings the next figures.
+ * take since and plus what it has had deleted since of what they counted, each blob a block at least. Another
+ * device's uploads and deletions aren't known here, so the reckoning can be out either way; a text it lets through
+ * that doesn't fit is refused, and the refusal brings the next figures.
  */
 export function roomLeft(db: SqlDb, owner: string, f: KnownFigures): number {
-  const taken = db.get<{ n: number | null }>('SELECT SUM(size) AS n FROM blobs WHERE owner = ? AND operator_at > ?', owner, f.at)?.n ?? 0;
-  const freed = freedLog(db, owner).filter(counted(f)).reduce((n, e) => n + e.size, 0);
+  const taken = db.get<{ n: number | null }>('SELECT SUM(MAX(COALESCE(size, 0), ?)) AS n FROM blobs WHERE owner = ? AND operator_at > ?', BLOCK, owner, f.at)?.n ?? 0;
+  const freed = freedLog(db, owner).filter(counted(f)).reduce((n, e) => n + Math.max(e.size, BLOCK), 0);
   return f.quota - f.used - taken + freed;
 }
 
-/** The oldest text waiting for room (refused with 413 quota, C§5) whose blob fits in room: its upload's row, or null. */
+/**
+ * The oldest text waiting for room (refused with 413 quota, C§5) whose blob fits in room, counted a block at least:
+ * its upload's row, or null. A text under a block, tried in less, would only be refused again.
+ */
 export function nextForRoom(db: SqlDb, owner: string, room: number): number | null {
   return db.get<{ id: number }>(
     `SELECT o.id FROM outbox o JOIN blobs b ON b.sha256 = o.subject AND b.owner = o.signer
      WHERE o.op = 'upload_blob' AND o.signer = ? AND o.state = 'queued' AND b.last_error = 'quota' AND b.operator_at IS NULL
-       AND COALESCE(b.size, 0) <= ?
-     ORDER BY o.created_at, o.id LIMIT 1`, owner, room,
+       AND MAX(COALESCE(b.size, 0), ?) <= ?
+     ORDER BY o.created_at, o.id LIMIT 1`, owner, BLOCK, room,
   )?.id ?? null;
 }
