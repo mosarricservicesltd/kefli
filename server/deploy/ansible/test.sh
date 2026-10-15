@@ -62,10 +62,14 @@ check 'its socket answers caddy and nobody else' \
 check 'a reload goes through the socket' 'box systemctl reload caddy'
 # r5: a request whose body never finished arriving waited two minutes in keflid when no route read the body, and
 # nothing bounded a request's body in Caddy. keflid now refuses such a body at once and lets the connection go (its
-# guard), and Caddy, as it runs, holds every request's body on 443 to 20 minutes.
+# guard), and Caddy, as it runs, holds every request's body on 443 to 20 minutes. The guard closes with the rest of the
+# body still to come, so the connection is as often reset as ended (guard.refuse): cat then exits 1 after it has
+# written the whole answer, which is why the answer is read from the file whatever cat's exit, and only a cat that
+# ran into its three seconds, the connection held open, fails the check. That reset failed the check one run in two
+# locally and once on GitHub (15 October 2026) when its exit was part of the chain.
 early() {
-  box bash -c 'exec 3<>/dev/tcp/127.0.0.1/8447 && printf "GET /defaults.json HTTP/1.1\r\nHost: api\r\nContent-Length: 100\r\n\r\n0123456789" >&3 &&
-    timeout 3 cat <&3 >/tmp/early && head -1 /tmp/early'
+  box bash -c 'exec 3<>/dev/tcp/127.0.0.1/8447 && printf "GET /defaults.json HTTP/1.1\r\nHost: api\r\nContent-Length: 100\r\n\r\n0123456789" >&3 || exit 1
+    timeout 3 cat <&3 >/tmp/early 2>/dev/null; [ $? != 124 ] && head -1 /tmp/early'
 }
 check 'keflid refuses at once a body no route reads, and lets it go' '[[ "$(early)" == "HTTP/1.1 400 Bad Request"* ]]'
 check "Caddy holds a request's body to 20 minutes" \
