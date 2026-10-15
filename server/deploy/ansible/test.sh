@@ -73,6 +73,10 @@ full() { printf "$line\n" "$1" | docker exec -i "$name" runuser -u strfry -- /us
 check "the write policy keeps the relay's floor" \
   'grep -qF -- "-room /var/lib/strfry/db -min-free-mb 2048" <<<"$(box cat /usr/local/lib/kefli/relay-write-policy)" && [[ "$(full $key)" == rate-limited:* ]]'
 check 'strfry keeps no compression window per connection' 'grep -qx " *slidingWindow = false" <<<"$(box cat /etc/strfry.conf)"'
+# The phone's inbox takes an answer of fewer than 500 wraps as the whole window: the configuration sets the 500 rather
+# than leaving it to strfry's default, and the relay's NIP-11 shows the figure strfry read.
+check 'strfry answers a filter with up to 500 events, as set' \
+  'grep -qx " *maxFilterLimit = 500" <<<"$(box cat /etc/strfry.conf)" && jq -e ".limitation.max_limit == 500" <<<"$(via relay.kefli.app -H "Accept: application/nostr+json" https://relay.kefli.app/)"'
 check 'the mail forwarder is held to 768 MB' '[ "$(box systemctl show -p MemoryMax --value kefli-mailfwd)" = 805306368 ]'
 check 'the sweep runs' 'box systemctl start relay-sweep'
 # The sweep keeps when its last full run began, and sweeps for the keys whose time came since then, less two days,
