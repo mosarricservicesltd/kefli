@@ -1,6 +1,7 @@
 // What the capture script hands the background (contract 4.4's save request, before the HTML is encrypted), and the
-// rules it applies that need no page: the address, the guard and the cap.
-import { withoutUserInfo } from '../../../packages/protocol/src/normalise';
+// rules it applies that need no page: the address, the canonical, the guard and the cap.
+import { ownCanonical, withoutUserInfo } from '../../../packages/protocol/src/normalise';
+import { CANONICAL_MAX } from '../../../packages/protocol/src/pairing';
 import { countWords } from '../../../packages/protocol/src/projection';
 
 export interface Captured {
@@ -45,6 +46,17 @@ export function pageUrl(href: string): string {
   const u = new URL(href);
   u.hash = '';
   return withoutUserInfo(u.href);
+}
+
+/**
+ * The page's canonical as its save request carries it (contract 4.3): none past CANONICAL_MAX, measured as the parse read
+ * it and left out before it is read, as the phone leaves out its own parse's and a browser's; then only one on the page's
+ * own site, without a user name and password (ownCanonical), which is never longer, since the parse writes the address
+ * as the browser does. Sent whole, the phone dropped it all the same, and the wrap left out the page's details first to
+ * make room for it: one of 2,500 characters took the title, site, byline, language and picture with it.
+ */
+export function keptCanonical(url: string, canonical: string | null | undefined): string | null {
+  return canonical != null && canonical.length <= CANONICAL_MAX ? ownCanonical(url, canonical) : null;
 }
 
 /**

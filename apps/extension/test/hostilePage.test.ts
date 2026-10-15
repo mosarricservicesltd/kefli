@@ -1,8 +1,14 @@
 // What a page itself can do to a save: be too large to read in good time, keep its thread busy or never finish loading,
-// name a javascript: base for its links, or name another site's address as its own.
+// name a javascript: base for its links, or name another site's address as its own, or one longer than the phone keeps.
+import { hexToBytes } from '@noble/hashes/utils.js';
 import { itemHash } from '../../../packages/protocol/src/normalise';
+import { CANONICAL_MAX, type SaveRequest } from '../../../packages/protocol/src/pairing';
+import { LocalSigner } from '../../../packages/protocol/src/signer';
+import { unwrap } from '../../../packages/protocol/src/wrap';
 import { GUARD_SAMPLE_CHARS, keepHtml, linkOnly, orAfter, PAGE_LIMITS, tooLargeToRead, unread, type PageSize, type Parsed } from '../src/captured';
 import { baseOf, capture } from '../src/capture';
+import { webCrypto } from '../src/crypto';
+import { prepare, type SaveContext } from '../src/save';
 
 describe('a page too large to read in good time (PAGE_LIMITS)', () => {
   // measured in Chrome on the pages themselves (the extension's probes): elements, the body’s text less its scripts and
@@ -90,19 +96,19 @@ describe('a capture or a shortcut press the page never lets finish', () => {
   });
 });
 
-describe("a page's canonical link is kept only from its own site (contract 4.3, ruling 11)", () => {
-  const ARTICLE = Array.from({ length: 150 }, (_, i) => `word${i}`).join(' ') + '\n';
-  /** A small page as capture reads it, without a browser: no elements to count, a body of a few words. */
-  const page = { getElementsByTagName: () => [], body: { textContent: 'a few words', querySelectorAll: () => [] }, documentElement: { outerHTML: '<html><body><p>a few words</p></body></html>' }, title: 'A page', querySelector: () => null } as unknown as Document;
-  /** capture on that page, with the parser bundle's two calls answering as for a page naming canonical. */
-  const captured = (href: string, canonical: string | null) => {
-    const g = globalThis as unknown as { kefliParse: () => Parsed; kefliArticle: () => { ok: boolean; content?: string } };
-    g.kefliParse = () => ({ ok: true, title: 'A story', canonical, readerable: true, markdown: ARTICLE });
-    g.kefliArticle = () => ({ ok: true, content: '<p>a few words</p>' });
-    return capture(page, href);
-  };
-  const story = 'https://news.example/2026/10/story';
+const ARTICLE = Array.from({ length: 150 }, (_, i) => `word${i}`).join(' ') + '\n';
+/** A small page as capture reads it, without a browser: no elements to count, a body of a few words. */
+const page = { getElementsByTagName: () => [], body: { textContent: 'a few words', querySelectorAll: () => [] }, documentElement: { outerHTML: '<html><body><p>a few words</p></body></html>' }, title: 'A page', querySelector: () => null } as unknown as Document;
+/** capture on that page, with the parser bundle's two calls answering as for a page naming canonical, and any details given. */
+const captured = (href: string, canonical: string | null, details: Partial<Parsed> = {}) => {
+  const g = globalThis as unknown as { kefliParse: () => Parsed; kefliArticle: () => { ok: boolean; content?: string } };
+  g.kefliParse = () => ({ ok: true, title: 'A story', canonical, readerable: true, markdown: ARTICLE, ...details });
+  g.kefliArticle = () => ({ ok: true, content: '<p>a few words</p>' });
+  return capture(page, href);
+};
+const story = 'https://news.example/2026/10/story';
 
+describe("a page's canonical link is kept only from its own site (contract 4.3, ruling 11)", () => {
   test("a page at an amp. host naming another site's address keeps its own, and the save request names none", () => {
     const c = captured('https://amp.evil.example/2026/10/story#top', story);
     expect(c).toMatchObject({ url: 'https://amp.evil.example/2026/10/story', canonical: null, html: '<p>a few words</p>' });
@@ -123,6 +129,42 @@ describe("a page's canonical link is kept only from its own site (contract 4.3, 
   test('a canonical the page wrote with a user name and password goes to the phone without them', () => {
     const c = captured('https://amp.news.example/2026/10/story', 'https://user:hunter2@news.example/2026/10/story');
     expect(c.canonical).toBe(story);
+  });
+});
+
+describe('a canonical longer than the phone keeps is left out (CANONICAL_MAX)', () => {
+  const amp = 'https://amp.news.example/2026/10/story';
+  /** The story's address, n characters long. */
+  const storyOf = (n: number) => `${story}?q=${'x'.repeat(n - story.length - 3)}`;
+  const user = new LocalSigner(hexToBytes('11'.repeat(32)));
+  const NOW = 1_791_600_000;
+  const ctx: SaveContext = {
+    device: new LocalSigner(hexToBytes('22'.repeat(32))), crypto: webCrypto, now: NOW,
+    defaults: { v: 1, operator: { relay: 'wss://relay.example', blossom: 'https://blossom.example', api: 'https://api.example' }, relays: [], mirrors: [] },
+    pairing: { v: 1, user_pubkey: user.pubkey(), write_relays: [], blossom_servers: [], token: 'ab'.repeat(32), label: 'Chrome on a Mac', paired_at: NOW },
+  };
+
+  test('past 2,048 characters, as the phone leaves out its own parse’s and a browser’s; one of 2,048 is kept', () => {
+    expect(storyOf(CANONICAL_MAX + 1)).toHaveLength(2_049);
+    expect(captured(amp, storyOf(CANONICAL_MAX + 1)).canonical).toBeNull();
+    expect(captured(amp, storyOf(CANONICAL_MAX)).canonical).toBe(storyOf(CANONICAL_MAX));
+  });
+
+  test('measured as the parse read it, before a user name and password come out, as the phone’s own parse measures it', () => {
+    const c = captured(amp, `https://reader:${'p'.repeat(CANONICAL_MAX)}@news.example/2026/10/story`);
+    expect(c.canonical).toBeNull();
+    // the save is the page's own, as the same page shared from the phone is
+    expect(itemHash(c.url, c.canonical)).toBe(itemHash(amp));
+  });
+
+  test("so the wrap keeps the page's details: one of 2,500 took the title, site, byline, language and picture with it", async () => {
+    const hero = `https://cdn.example/${'h'.repeat(500)}.jpg`;
+    const c = captured(amp, storyOf(2_500), { site: 'News', byline: 'A writer', lang: 'en', hero });
+    const { pending } = await prepare(c, ctx);
+    const req = JSON.parse((await unwrap(user, pending.wrap)).rumor.content) as SaveRequest;
+    expect(req).toMatchObject({ url: amp, canonical: null, title: 'A story', site: 'News', byline: 'A writer', lang: 'en', hero });
+    expect(req.html).not.toBeNull();
+    expect(pending.hash).toBe(itemHash(amp));
   });
 });
 

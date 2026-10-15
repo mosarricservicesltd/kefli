@@ -1,11 +1,10 @@
 // The capture content script (contract 4.2 and 4.4, extension spec 4), injected under activeTab after parser.js, the
 // phone's own parser bundle. It reads the live page as the fixtures read a fetched one: the serialised document through
 // kefliParse (canonical, hero and readerable first, then Readability and the Markdown) and kefliArticle (Readability's
-// content HTML, which is what a save sends). The guard and the 2 MB cap are applied here, so only what a save needs
-// crosses to the background, and a page too large to read in good time isn't read at all (captured.ts, PAGE_LIMITS).
-// The background calls window.kefliCapture() once both files are in.
-import { ownCanonical } from '../../../packages/protocol/src/normalise';
-import { keepHtml, pageUrl, tooLargeToRead, unread, type Captured, type PageSize, type Parsed } from './captured';
+// content HTML, which is what a save sends). The guard, the 2 MB cap and the canonical's length are applied here, so only
+// what a save needs crosses to the background, and a page too large to read in good time isn't read at all (captured.ts,
+// PAGE_LIMITS). The background calls window.kefliCapture() once both files are in.
+import { keepHtml, keptCanonical, pageUrl, tooLargeToRead, unread, type Captured, type PageSize, type Parsed } from './captured';
 declare function kefliParse(bodyBase64: string, contentType: string, url: string): Parsed;
 declare function kefliArticle(bodyBase64: string, contentType: string, url: string): { ok: boolean; content?: string };
 
@@ -76,8 +75,9 @@ export function capture(doc: Document, href: string): Captured {
   const html = keepHtml(parsed, content === undefined ? undefined : absoluteFragments(content, baseOf(doc, url)));
   return {
     url,
-    // only from the page's own site (contract 4.3), so a page can't send a save to another site's address
-    canonical: ownCanonical(url, parsed.canonical),
+    // only from the page's own site (contract 4.3), so a page can't send a save to another site's address, and none
+    // longer than the phone keeps
+    canonical: keptCanonical(url, parsed.canonical),
     hero: parsed.hero ?? null,
     title: parsed.title ?? (doc.title.trim() || null),
     site: parsed.site ?? null,
