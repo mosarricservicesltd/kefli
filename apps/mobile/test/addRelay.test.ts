@@ -330,6 +330,13 @@ describe('checking a typed relay (FD 113)', () => {
     const duplicate = { ok: false as const, reason: 'duplicate: have this event' };
     expect(await addTypedRelay(ports(w, { answer: duplicate }).p, w.pk, MINE)).toEqual({ check: 'ok', url: MINE });
     expect(relayResult(MINE, duplicate, list.id).kind).toBe('ok');
+    // strfry's answer when it holds a newer list of theirs than this phone's, one another app sent it since the last
+    // sync: it has taken this person's list already
+    const v = world();
+    seedGeneratedLists(v.db, v.pk, D);
+    recordList(v.db, v.pk, 10002, list.id, 5, JSON.stringify(list));
+    expect(await addTypedRelay(ports(v, { answer: { ok: false, reason: 'replaced: have newer event' } }).p, v.pk, MINE)).toEqual({ check: 'ok', url: MINE });
+    expect(writeRelays(v.db, v.pk)).toContain(MINE);
     for (const reason of ['restricted: not on the allow list', 'pow: difficulty 28 is required', 'blocked: you are banned', 'invalid: bad signature']) {
       const v = world();
       seedGeneratedLists(v.db, v.pk, D);
