@@ -626,6 +626,43 @@ describe('The move (contract 4.8, mobile spec 4.10)', () => {
     expect(b.deleted(wrap)).toBe(true);
   });
 
+  test("a wrap's kind 5 the outbox put off for an hour, the operator relay having been out of reach, goes out at once at the end", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    const b = browserOfS(w);
+    // taken by S's inbox before the move, its kind 5 failing while the relay was out of reach, so the outbox's next
+    // try is an hour off (data/outbox backoff)
+    const wrap = await b.send('https://e.com/taken-before');
+    await b.drainS();
+    w.db.run("UPDATE outbox_targets SET attempts = 8, next_at = ? WHERE outbox_id IN (SELECT id FROM outbox WHERE op = 'delete_wrap')", w.p.now() + 3_600);
+    w.tick(10);
+    // the person watches the move with Back turned off: it ends now that the relay answers, rather than in an hour
+    expect(await runMove({ ...w.p, drainSourceInbox: b.drainS, fetch: b.watching(() => [wrap]) })).toBe('done');
+    expect(b.deleted(wrap)).toBe(true);
+  });
+
+  test("a wrap's kind 5 queued for an operator relay defaults.json has since replaced goes to the one it names now", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    const b = browserOfS(w);
+    const wrap = await b.send('https://e.com/relay-moved');
+    // S's inbox took it as the move began, its kind 5 queued for the operator relay as defaults.json named it then;
+    // the operator has since moved the relay to a new address, the browser's Undo reading S's kind 5s there, and the
+    // old one answers no more
+    await b.drainS();
+    const now = { ...D, operator: { ...D.operator, relay: 'ws://op2' } };
+    const publish: MovePorts['publish'] = (r, e) => (r === 'ws://op' && e.kind === 5 ? Promise.reject(new Error('gone')) : w.p.publish(r, e));
+    const outbox = () => drain({
+      db: w.db, now: w.p.now, signer: async (pk) => (pk === w.S.pubkey() ? w.S : pk === w.T.pubkey() ? w.T : null),
+      fetch: w.p.fetch, crypto: nodeCrypto, defaults: () => now, publish, readBlob: w.p.readStaged,
+    });
+    const p: MovePorts = { ...w.p, defaults: async () => now, publish, runOutbox: outbox, drainSourceInbox: b.drainS };
+    // waited on at the old address, it held S, and the move, for good
+    expect(await runMove(p)).toBe('done');
+    const at = (relay: string) => (w.relays.get(relay) ?? []).some((e) => e.kind === 5 && e.pubkey === w.S.pubkey() && e.tags.some((t) => t[0] === 'e' && t[1] === wrap));
+    expect([at('ws://op'), at('ws://op2')]).toEqual([false, true]);
+  });
+
   /** T's newest copy of a save on a relay the operator doesn't run. */
   async function tCopy(w: ReturnType<typeof world>, hash: string) {
     const T = w.T.pubkey();
