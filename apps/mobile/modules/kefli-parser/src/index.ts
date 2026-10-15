@@ -10,11 +10,14 @@ export type Parsed =
   | { ok: true; title: string | null; byline: string | null; site: string | null; lang: string | null; hero: string | null; canonical: string | null; readerable: boolean; markdown: string }
   | { ok: false; reason: 'no_webview' | 'not_readable' | 'error' | 'too_large' | 'renderer_gone'; message?: string };
 
-/** A page loaded once in a browser engine (8.2): its rendered HTML and final address, or why not. */
+/**
+ * A page loaded once in a browser engine (8.2): its rendered HTML and final address, or why not. refused: the page
+ * went for an address no hop of the fetch could go to (7.1), which the engine didn't ask for, and the render stopped.
+ */
 export type Rendered =
   | { ok: true; url: string; html: string }
   | { ok: false; reason: 'too_large'; url: string }
-  | { ok: false; reason: 'no_webview' | 'timeout' };
+  | { ok: false; reason: 'no_webview' | 'timeout' | 'refused' };
 
 /** A PDF's text runs (contract 4.2, PDFs), for pdfMarkdown to lay out, or why there are none. */
 export type PdfRead = ({ ok: true } & PdfRuns) | { ok: false; reason: 'no_webview' | 'pdf_locked' | 'pdf_too_long' | 'too_large' | 'renderer_gone' | 'error'; message?: string };

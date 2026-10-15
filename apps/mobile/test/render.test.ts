@@ -6,6 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { publicWeb } from '../src/net/http';
+import { fetchPage, renderAnswer, type PagePorts, type ParserResult } from '../src/services/page';
 import { kotlinSource, member } from './kotlin';
 
 const kt = kotlinSource('kefli-parser', 'parser', 'PublicWeb.kt');
@@ -19,17 +20,15 @@ function ktPattern(name: string): { source: string; ignoreCase: boolean } {
   return { source: m[1].replace(/\\(.)/g, '$1'), ignoreCase: !!m[2] };
 }
 
-/** The pattern of the regex literal in publicUrl.ts that follows prefix. */
-function jsPattern(prefix: string): string {
-  const at = js.indexOf(prefix);
-  if (at === -1) throw new Error(`no ${prefix}`);
-  const m = /^\/(.*?)\/[a-z]*[;).]/.exec(js.slice(at + prefix.length));
-  if (!m) throw new Error(`no pattern after ${prefix}`);
-  return m[1];
+/**
+ * Whether publicUrl.ts holds a pattern, as a regex literal or as the string a RegExp is built from (the code gate's
+ * parser loses its place in a regex literal, so either may be there); anchored, between ^ and $, for one Kotlin's
+ * matchEntire and matches hold to the whole of a string.
+ */
+function jsHolds(pattern: string, anchored: boolean): boolean {
+  const p = anchored ? `^${pattern}$` : pattern;
+  return js.includes(`/${p}/`) || js.includes(`'${p.replace(/\\/g, '\\\\')}'`);
 }
-
-/** A pattern the whole of a string must match, as Kotlin's matchEntire and matches read one: without its ^ and $. */
-const whole = (pattern: string) => /^\^(.*)\$$/.exec(pattern)?.[1] ?? `not anchored: ${pattern}`;
 
 /** The statements of a Kotlin function with a block body, as JavaScript reads them: val is const, and is &. */
 function ktBody(name: string): string {
@@ -50,12 +49,10 @@ const range = (n: number) => Array.from({ length: n }, (_, i) => i);
 describe("the render engine's public-address rule is the protocol's (7.1)", () => {
   test('the same local names, IPv4 and IPv6 text, longest host and stand-in for the phone’s files', () => {
     const names = ktPattern('LOCAL_NAMES');
-    expect(names.source).toBe(jsPattern('const LOCAL_NAMES = '));
+    expect(jsHolds(names.source, false)).toBe(true);
     expect(names.ignoreCase).toBe(true);
-    expect(js).toMatch(/const LOCAL_NAMES = \/.*\/i;/);
-    expect(ktPattern('DOTTED').source).toBe(whole(jsPattern('host.match(')));
-    expect(ktPattern('TAIL').source).toBe(whole(jsPattern('h.match(')));
-    expect(ktPattern('PIECE').source).toBe(whole(jsPattern('(p) => (')));
+    expect(js).toMatch(/const LOCAL_NAMES = (\/.*\/i|new RegExp\('.*', 'i'\));/);
+    expect(['DOTTED', 'TAIL', 'PIECE'].map((name) => [name, jsHolds(ktPattern(name).source, true)])).toEqual([['DOTTED', true], ['TAIL', true], ['PIECE', true]]);
     const maxHost = /export const MAX_HOST_CHARS = (\d+);/.exec(repo('shared', 'normalise.ts'))?.[1];
     expect(kt).toContain(`private const val MAX_HOST_CHARS = ${maxHost}`);
     expect(kt).toContain('private const val FILES_HOST = "filesystem.local"');
@@ -114,5 +111,59 @@ describe("the render engine's public-address rule is the protocol's (7.1)", () =
     expect(ktPattern('NUMBER').source).toBe('\\d+|0[xX][0-9a-fA-F]*');
     expect(ktPattern('DECIMAL').source).toBe('(0|[1-9]\\d{0,2})(\\.(0|[1-9]\\d{0,2})){3}');
     expect(member(kt, 'port')).toContain('return n.length < 5 || n.length == 5 && n.toInt() <= 65535');
+  });
+});
+
+describe("the render engine asks for no address a hop of the fetch couldn't go to (7.1, 8.2)", () => {
+  const renderer = kotlinSource('kefli-parser', 'parser', 'Renderer.kt');
+  /** One of the WebViewClient's overrides, up to the blank line after it. */
+  const override = (name: string) => {
+    const at = renderer.indexOf(`override fun ${name}(`);
+    return at === -1 ? '' : renderer.slice(at, renderer.indexOf('\n\n', at));
+  };
+
+  test("a redirect or navigation to such an address isn't followed, and the page's own going there ends the render", () => {
+    // a page that sent the engine to 192.168.1.1, or a challenge that went on to a loopback address, had the phone ask
+    // it, and page.ts only refused the answer afterwards
+    const nav = override('shouldOverrideUrlLoading');
+    const steps = [
+      'if (scheme != "https" && scheme != "http") return true', 'if (PublicWeb.isPublicWebUrl(request.url.toString())) return false',
+      'if (request.isForMainFrame) main.post { refused(load) }', '\n        return true\n      }',
+    ].map((s) => nav.indexOf(s));
+    expect(steps.every((at) => at >= 0)).toBe(true);
+    expect([...steps].sort((a, b) => a - b)).toEqual(steps);
+    expect(member(renderer, 'refused')).toContain('finish(load, failure("refused"))');
+  });
+
+  test('a frame or subresource asking one is answered empty in place of the network, and the page itself asking one ends the render', () => {
+    // a script, a stylesheet, a frame, a fetch from the page's script or a form's POST to the router went out as the
+    // page asked: Android shows a navigation to the client, and no other request, unless it is intercepted
+    expect(override('shouldInterceptRequest')).toMatch(/: WebResourceResponse\? =\s+if \(askable\(load, request\)\) null else refusal\(load, request\)$/);
+    const askable = member(renderer, 'askable');
+    expect(askable).toContain('if (scheme != "https" && scheme != "http") return true');
+    expect(askable).toContain('return given || PublicWeb.isPublicWebUrl(url)');
+    const refusal = member(renderer, 'refusal');
+    expect(refusal).toContain('if (request.isForMainFrame) main.post { refused(load) }');
+    expect(refusal).toContain('return WebResourceResponse("text/plain", "utf-8", 403, "Forbidden", emptyMap(), ByteArrayInputStream(ByteArray(0)))');
+  });
+
+  test("the address given is asked for once, though it may be on the person's own network, and no other that isn't public", () => {
+    // as the fetch asks for a page someone shared from their own network, and for no hop after it there
+    expect(member(renderer, 'askable')).toContain(
+      'val given = request.isForMainFrame && load.host != null && PublicWeb.hostname(url) == load.host && load.unasked.getAndSet(false)',
+    );
+    expect(renderer).toContain('val host = PublicWeb.hostname(url)');
+    expect(renderer).toContain('val unasked = AtomicBoolean(true)');
+  });
+
+  test("a render that stopped there fails as a redirect the fetch won't follow does, the save keeping its link", async () => {
+    const index = readFileSync(join(__dirname, '..', 'modules', 'kefli-parser', 'src', 'index.ts'), 'utf8');
+    expect(index).toContain("{ ok: false; reason: 'no_webview' | 'timeout' | 'refused' }");
+    // page.ts takes any failure but too_large as no render, so the fetch's own 403 is the answer
+    expect(renderAnswer({ ok: false, reason: 'refused' })).toBeNull();
+    const read: ParserResult = { ok: true, title: 'A story', byline: null, site: null, lang: 'en', hero: null, canonical: null, readerable: true, markdown: 'Words.\n' };
+    const f = (async () => new Response('', { status: 403, headers: { 'content-type': 'text/html' } })) as unknown as typeof fetch;
+    const p: PagePorts = { fetch: f, parse: async () => read, render: async () => renderAnswer({ ok: false, reason: 'refused' }) };
+    expect(await fetchPage(p, 'https://cf.example/a')).toEqual({ kind: 'failed', reason: 'http', finalUrl: 'https://cf.example/a' });
   });
 });
