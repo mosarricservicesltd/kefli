@@ -6,6 +6,7 @@ import { seedGeneratedLists } from '../src/data/lists';
 import { deleteEverything, deletePorts, deleteTargets, progressOf, type DelPorts, type Progress } from '../src/services/deleteAccount';
 import type { RelayAnswer } from '../src/services/send';
 import { SERVER_TIMEOUT_MS } from '../src/net/http';
+import { CutShort } from '../src/net/pool';
 import { memoryDb } from './sqlite';
 import { inward, silent, watch, type Sends } from './inward';
 import { readFileSync } from 'node:fs';
@@ -366,10 +367,45 @@ describe('Delete my data covers every save (contract 4.7, F32)', () => {
     expect(w.log).toContain(`DELETE http://m1/${h(709)}`);
   });
 
-  test('a relay that doesn’t answer the read adds nothing and stops nothing', async () => {
+  // FD 119: every relay's answer must come whole before the deletions are built; read as holding nothing, as it was, a
+  // relay that cut its answer short had the saves it alone held skipped in silence
+  test("the operator relay's read cut short or unanswered fails the deletion as unreachable: nothing sent, the key kept", async () => {
     const w = world();
-    const p: DelPorts = { ...w.p, query: async () => Promise.reject(new Error('down')) };
-    expect(await deleteEverything(p, () => undefined, await signDeletion(p))).toBe('done');
+    const p: DelPorts = { ...w.p, query: async (relay) => (relay === 'ws://op' ? Promise.reject(new Error('down')) : []) };
+    expect(await deleteEverything(p, () => undefined, await signDeletion(p))).toBe('failed');
+    expect(w.sent).toHaveLength(0);
+    expect(w.log.some((l) => l.startsWith('DELETE'))).toBe(false);
+    expect(progressOf(w.db)).toBeNull();
+  });
+
+  test('a backup relay whose answer is cut short gets kind 5s for what came and is reported as not confirming', async () => {
+    const w = world();
+    const theirs = await elsewhere(w, 9, 500);
+    const p: DelPorts = {
+      ...w.p,
+      query: async (relay) => {
+        if (relay === 'ws://b') throw new CutShort('ws://b', [theirs], 'no EOSE within 60000 ms');
+        return [];
+      },
+    };
+    const reports: Progress[] = [];
+    expect(await deleteEverything(p, (prog) => reports.push(prog), await signDeletion(p))).toBe('partial');
+    const last = reports[reports.length - 1];
+    expect(last.others['ws://a']).toBe('done');
+    expect(last.others['ws://b']).toBe('fail');
+    // the save that came before the cut is named everywhere, dated past it, and its text goes from the mirror
+    const d = theirs.tags.find((t) => t[0] === 'd')![1];
+    for (const relay of ['ws://op', 'ws://a', 'ws://b']) expect(named(w, relay)).toContain(d);
+    expect(named(w, 'ws://b')).toEqual(expect.arrayContaining([`kefli/item/${h(1)}`, 'kefli/devices']));
+    expect(w.log).toContain(`DELETE http://m1/${h(709)}`);
+  });
+
+  test("a backup relay that doesn't answer the read is reported the same way, the rest unaffected", async () => {
+    const w = world();
+    const p: DelPorts = { ...w.p, query: async (relay) => (relay === 'ws://a' ? Promise.reject(new Error('down')) : []) };
+    const reports: Progress[] = [];
+    expect(await deleteEverything(p, (prog) => reports.push(prog), await signDeletion(p))).toBe('partial');
+    expect(reports[reports.length - 1].others).toMatchObject({ 'ws://a': 'fail', 'ws://b': 'done' });
     expect(named(w, 'ws://a')).toEqual(expect.arrayContaining([`kefli/item/${h(1)}`, 'kefli/devices']));
   });
 

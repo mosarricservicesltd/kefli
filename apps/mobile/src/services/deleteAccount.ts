@@ -10,7 +10,10 @@
 //      confirmed when it answered OK to every kind 5, a server when it answered 2xx or 404 to every delete; each
 //      gets a minute.
 //   3. the phone: the key file, Block Store, the database and the files.
-// Each step's result is kept in a delete_account job, so a deletion cut short resumes where it stopped.
+// Each step's result is kept in a delete_account job, so a deletion cut short resumes where it stopped. Before step
+// 1, every relay is read for the saves it holds, and the read must come whole (FD 119): the operator relay's cut short
+// or unanswered fails step 1 as unreachable, so nothing is sent and the deletion is tried again; another relay's
+// marks it as not confirming, so no save it alone holds is skipped in silence.
 import {
   DEVICES_D, EventTooLargeError, ITEM_D_PREFIX, KIND, LIBRARY_KEY_D, T_TAG, buildDeletions, buildRelayList, buildServerList, deleteBlob, httpAuth,
   readItemEvent, signWithinCeiling, withoutTrailingSlashes, type CryptoPort, type NostrEvent, type Signer,
@@ -20,7 +23,7 @@ import { deletesOwed, itemAddresses, newestVersion } from '../data/libraryKey';
 import { bare, indexerRelays, nextListTime, relayEntries, relayListTags, serverListTags } from '../data/lists';
 import { SERVER_TIMEOUT_MS, apiFetch, serverFetch, serverHops } from '../net/http';
 import { holdsAlready, type RelayAnswer } from './send';
-import { pageStream, takeNewerLists, type Filter } from './sync';
+import { StreamCut, pageStream, takeNewerLists, type Filter } from './sync';
 
 export type DelPorts = {
   db: SqlDb;
@@ -154,22 +157,30 @@ function blobs(db: SqlDb, owner: string): string[] {
   return [...new Set([...held, ...deletesOwed(db, owner).blobs])];
 }
 
-type OnRelays = { ds: string[]; blobs: string[]; newest: number };
+type OnRelays = { ds: string[]; blobs: string[]; newest: number; unread: string[] };
 
 /**
  * Every kind 30078 with #t kefli on the user's relays, whatever its v (C§4.7 step 2), so a save another device made
  * since this phone last synced is deleted too (F32). A save the phone doesn't hold is opened for its text's blob,
- * which goes with the rest; one that doesn't open still gets its kind 5. A relay that doesn't answer adds nothing.
- * newest: the newest event's time, which the kind 5s are dated past (F36).
+ * which goes with the rest; one that doesn't open still gets its kind 5. A relay that doesn't answer, or cuts its
+ * answer short (sync.ts StreamCut), is unread: what came of its answer is named all the same, and the relay can't
+ * confirm the deletion, since a save it alone holds may not have come (FD 119); read as holding nothing, as it was, a
+ * relay that cut its answer short had its saves skipped in silence. newest: the newest event's time, which the kind
+ * 5s are dated past (F36).
  */
 async function onRelays(p: DelPorts, owner: string, held: Set<string>): Promise<OnRelays> {
   const query = p.query;
-  if (!query) return { ds: [], blobs: [], newest: 0 };
+  if (!query) return { ds: [], blobs: [], newest: 0, unread: [] };
   const filter: Filter = { kinds: [KIND.appData], authors: [owner], '#t': [T_TAG] };
   const relays = [...new Set([p.defaults.operator.relay, ...relayEntries(p.db, owner).map((r) => r.url)])];
   const found = new Map<string, NostrEvent>();
+  const unread: string[] = [];
   await Promise.all(relays.map(async (relay) => {
-    for (const e of await pageStream(query, relay, filter).catch(() => [])) {
+    const events = await pageStream(query, relay, filter).catch((e: unknown) => {
+      unread.push(relay);
+      return e instanceof StreamCut ? e.events : [];
+    });
+    for (const e of events) {
       const d = e.tags.find((t) => t[0] === 'd')?.[1];
       if (e.pubkey !== owner || !d) continue;
       const had = found.get(d);
@@ -188,7 +199,7 @@ async function onRelays(p: DelPorts, owner: string, held: Set<string>): Promise<
       // not one that opens: its kind 5 goes all the same
     }
   }
-  return { ds: [...found.keys()], blobs: shas, newest: Math.max(0, ...[...found.values()].map((e) => e.created_at)) };
+  return { ds: [...found.keys()], blobs: shas, newest: Math.max(0, ...[...found.values()].map((e) => e.created_at)), unread };
 }
 
 async function wrapDeletions(p: DelPorts, owner: string): Promise<NostrEvent[]> {
@@ -289,9 +300,10 @@ async function emptyLists(p: DelPorts, deletion: NostrEvent): Promise<NostrEvent
 /**
  * Everything the deletion publishes, signed before anything is sent: for a nostr user, the approval in their app.
  * empties: a generated identity's emptied lists, sent after the kind 5s and not counted towards a relay's confirmation.
- * blobs: the texts of saves found only on the relays, deleted with the phone's.
+ * blobs: the texts of saves found only on the relays, deleted with the phone's. unread: the relays whose saves
+ * weren't read whole (onRelays), which can't confirm the deletion (FD 119).
  */
-export type Signed = { wraps: NostrEvent[]; items: NostrEvent[]; lists: NostrEvent[]; empties?: NostrEvent[]; blobs?: string[]; nostr: boolean };
+export type Signed = { wraps: NostrEvent[]; items: NostrEvent[]; lists: NostrEvent[]; empties?: NostrEvent[]; blobs?: string[]; nostr: boolean; unread: string[] };
 
 /** The row the identity's provider is read from: a named type, so the code gate's parser reads signDeletion whole. */
 type Provider = { provider: string };
@@ -309,7 +321,7 @@ export async function signDeletion(p: DelPorts): Promise<Signed> {
   // dated past the newest version of anything they name, whatever this phone's clock says (F36)
   const newest = Math.max(remote.newest, newestVersion(p.db, owner));
   const items = await buildDeletions(p.signer, [...new Set([...held, ...remote.ds])], Math.max(p.now(), newest + 1));
-  const extra = { blobs: remote.blobs, nostr };
+  const extra = { blobs: remote.blobs, nostr, unread: remote.unread };
   if (nostr) return { wraps, items, lists: await listRewrites(p), ...extra };
   const deletion = await listDeletion(p);
   return { wraps, items, lists: [deletion], empties: await emptyLists(p, deletion), ...extra };
@@ -336,8 +348,13 @@ async function deleteBlobs(p: DelPorts, server: string, shas: string[]): Promise
 
 const allBlobs = (p: DelPorts, owner: string, signed: Signed) => [...new Set([...blobs(p.db, owner), ...(signed.blobs ?? [])])];
 
+/** Whether a relay's saves weren't read whole before signing (onRelays), by its address as the lists hold it. */
+const unread = (signed: Signed, relay: string) => signed.unread.some((u) => bare(u) === bare(relay));
+
 async function stepOperator(p: DelPorts, owner: string, signed: Signed): Promise<boolean> {
   const op = p.defaults.operator;
+  // its answer cut short or missing is the relay unreachable (FD 119): nothing is sent, and the deletion is tried again
+  if (unread(signed, op.relay)) return false;
   const inList = !!p.db.get("SELECT 1 FROM relays WHERE owner = ? AND url = ? AND source != 'indexer'", owner, op.relay);
   // in the 10002, it gets everything step 2 sends the other relays: the saves' deletions and the lists'
   const events = [...signed.wraps, ...(inList ? [...signed.items, ...signed.lists, ...(signed.empties ?? [])] : [])];
@@ -365,7 +382,8 @@ async function stepOperator(p: DelPorts, owner: string, signed: Signed): Promise
  * identity's lists' deletion among them; a nostr user's lists republished go after them, as a generated identity's
  * emptied lists do, their answers counting for nothing. Counted, a relay that took every kind 5 but turned a list away,
  * holding a newer one from another app or keeping no lists, was named as not having confirmed the deletion, and the
- * other list never reached it.
+ * other list never reached it. A relay whose saves weren't read whole (onRelays, FD 119) gets the kind 5s all the
+ * same, for every save known, and is reported as not confirming, since one it alone holds may be left.
  */
 async function stepOther(p: DelPorts, owner: string, t: Target, signed: Signed): Promise<boolean> {
   if (t.kind === 'server') return withinMinute(p, () => deleteBlobs(p, t.url, allBlobs(p, owner, signed)));
@@ -373,7 +391,7 @@ async function stepOther(p: DelPorts, owner: string, t: Target, signed: Signed):
   const after = [...signed.lists.filter((e) => e.kind !== KIND.deletion), ...(signed.empties ?? [])];
   const confirmed = await withinMinute(p, () => sendAll(p, t.url, kind5s));
   await Promise.all(after.map((e) => p.publish(t.url, e).catch(() => undefined)));
-  return confirmed;
+  return confirmed && !unread(signed, t.url);
 }
 
 /** Step 1, unless a run cut short has done it: false when the operator failed, the job then gone, to start afresh. */
