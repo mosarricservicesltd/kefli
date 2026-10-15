@@ -73,6 +73,26 @@ full() { printf "$line\n" "$1" | docker exec -i "$name" runuser -u strfry -- /us
 check "the write policy keeps the relay's floor" \
   'grep -qF -- "-room /var/lib/strfry/db -min-free-mb 2048" <<<"$(box cat /usr/local/lib/kefli/relay-write-policy)" && [[ "$(full $key)" == rate-limited:* ]]'
 check 'strfry keeps no compression window per connection' 'grep -qx " *slidingWindow = false" <<<"$(box cat /etc/strfry.conf)"'
+# The phone's inbox takes an answer of fewer than 500 wraps as the whole window: the configuration sets the 500 rather
+# than leaving it to strfry's default, and the relay's NIP-11 shows the figure strfry read.
+check 'strfry answers a filter with up to 500 events, as set' \
+  'grep -qx " *maxFilterLimit = 500" <<<"$(box cat /etc/strfry.conf)" && jq -e ".limitation.max_limit == 500" <<<"$(via relay.kefli.app -H "Accept: application/nostr+json" https://relay.kefli.app/)"'
+# strfry passes over a key in the wrong block without a word, and its own default is the same 500, so neither the line
+# nor the relay's figure shows that strfry reads the line where it is: the deployed file, with that figure alone
+# changed, run on a port and a database of its own and without the write policy, must report the new figure.
+read_limit() {
+  box sh -c 'install -d -o strfry -g strfry /tmp/limit/db && sed -e "s/^\( *maxFilterLimit = \)[0-9]*\$/\1499/" \
+    -e "s/^\( *port = \)[0-9]*\$/\17778/" -e "s|^db = .*|db = \"/tmp/limit/db/\"|" -e "s|^\( *plugin = \).*|\1\"\"|" \
+    /etc/strfry.conf > /tmp/limit/strfry.conf'
+  box systemd-run -q --collect --unit=strfry-limit --uid=strfry --gid=strfry \
+    /usr/local/bin/strfry --verbosity=WARNING --config=/tmp/limit/strfry.conf relay
+  local got=''
+  for _ in $(seq 20); do got=$(box curl -sf -H 'Accept: application/nostr+json' http://127.0.0.1:7778/) && break; sleep 0.5; done
+  box systemctl stop strfry-limit
+  box rm -rf /tmp/limit
+  jq -r .limitation.max_limit <<<"$got"
+}
+check 'and strfry reads that figure where the configuration sets it' '[ "$(read_limit)" = 499 ]'
 check 'the mail forwarder is held to 768 MB' '[ "$(box systemctl show -p MemoryMax --value kefli-mailfwd)" = 805306368 ]'
 check 'the sweep runs' 'box systemctl start relay-sweep'
 # The sweep keeps when its last full run began, and sweeps for the keys whose time came since then, less two days,
