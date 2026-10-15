@@ -346,6 +346,33 @@ describe('Undo (F24, F40)', () => {
     }
   });
 
+  test('Undo on a waiting save a try may have sent, whose key the session lost, says it couldn’t, or finds it on the phone', async () => {
+    for (const onPhone of [false, true]) {
+      const n = net({ publish: 'down' });
+      const h = harness({ net: n.net, collected: [onPhone] });
+      await h.work.save(PAGE, 1, false);
+      // the answer timed out, though the relay may hold the wrap, and the session couldn't keep the key that retracts it
+      expect(await queued(h.store)).toMatchObject([{ why: 'reach' }]);
+      const id = h.toasts[0].id!;
+      await h.session.remove(`undo:${id}`);
+      await h.work.undo(id, 1);
+      // off the queue, so it won't go again; with no key nothing could retract the wrap the try may have sent
+      expect(await queued(h.store)).toEqual([]);
+      expect(n.published.filter((e) => e.kind === 5)).toEqual([]);
+      expect(h.toasts.at(-1)!.kind).toBe(onPhone ? 'onphone' : 'undofailed');
+    }
+  });
+
+  test('Undo on a waiting save never tried, whose key the session lost, only takes it off the queue', async () => {
+    const h = harness({ online: false });
+    await h.work.save(PAGE, 1, false);
+    const id = h.toasts[0].id!;
+    await h.session.remove(`undo:${id}`);
+    await h.work.undo(id, 1);
+    expect(await queued(h.store)).toEqual([]);
+    expect(h.toasts.at(-1)).toMatchObject({ kind: 'unqueued', title: 'A page' });
+  });
+
   test('one whose retraction the relay refuses as holding no such wrap never reached it, and is removed', async () => {
     const h = harness({ net: net({ publish: 'down', retract: 'refused' }).net, collected: [false, false] });
     await h.work.save(PAGE, 1, false);

@@ -86,9 +86,10 @@ const WAITING: Record<ReturnType<typeof whyNot>, Outcome> = { offline: 'waiting,
 
 /**
  * Whether a waiting save may be on the relay all the same: one tried before, whose answer may have timed out though the
- * relay took it, or one a move put under a new wrap while its old one may have gone (undo.ts Earlier).
+ * relay took it, or one a move put under a new wrap while its old one may have gone (undo.ts Earlier). Whether the
+ * session still holds its key or not: without it the wrap can't be retracted, which Undo then says.
  */
-const mayBeOnRelay = (e: Queued, kept: UndoKey) => e.why !== 'offline' || e.attempts > 0 || (kept.earlier?.length ?? 0) > 0;
+const mayBeOnRelay = (e: Queued, kept: UndoKey | undefined) => e.why !== 'offline' || e.attempts > 0 || (kept?.earlier?.length ?? 0) > 0;
 
 /**
  * Whether a save about to go may be on the relay already: a waiting one tried before, or one a stopped worker left on its
@@ -485,12 +486,13 @@ export function background(b: Browser) {
    * wrap never reached it, and the save is removed with its entry; a retraction it couldn't be asked for, out of reach or
    * refusing it for now, leaves a wrap that did reach it there for the phone to take, so Undo says it couldn't, as it
    * does for a save that went. Every failure read as removed said Removed from Kefli of a save sent before a move, whose
-   * wrap waited on the relay for the phone's last look at the old library's inbox.
+   * wrap waited on the relay for the phone's last look at the old library's inbox. So does a key the session no longer
+   * holds, which can retract nothing: the save is still looked for on the phone, and otherwise Undo says it couldn't.
    */
   async function unqueue(u: UndoOf, waitingSave: Queued, device: SaveContext['device']): Promise<void> {
     await note(u.id, 'undo: off the queue');
     await queueChanged();
-    const went = u.kept && mayBeOnRelay(waitingSave, u.kept) ? await settleUndo(u.retractIt, u.collected, b.wait).catch((): UndoOutcome => 'failed') : 'undone';
+    const went = mayBeOnRelay(waitingSave, u.kept) ? await settleUndo(u.retractIt, u.collected, b.wait).catch((): UndoOutcome => 'failed') : 'undone';
     if (went === 'onphone' || went === 'failed') return told(u, went);
     await u.forget();
     // the title and host come from the sealed request; the queue doesn't keep them in the clear (F31)
