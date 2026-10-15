@@ -611,6 +611,51 @@ describe('a user name and password are never kept in a stored address (contract 
     expect(w.db.all('SELECT hash, url, text_state FROM items')).toEqual([{ hash: itemHash('https://news.example/a'), url: 'https://news.example/a', text_state: 'cached' }]);
   });
 
+  test("a page that can't be read keeps its link without them, and the save goes out without them", async () => {
+    // as a browser's request from an extension before ruling 8, or a row stored before it, may hold them: the link a
+    // failed save keeps is what Original, Open in browser and its published item are given
+    const w = world({ 'https://news.example/a': { status: 404 } });
+    w.share('https://reader:hunter2@news.example/a');
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 1 });
+    expect(w.db.get('SELECT url, text_state, fail_reason, dirty FROM items')).toEqual({ url: 'https://news.example/a', text_state: 'failed', fail_reason: 'http', dirty: 1 });
+    expect(w.outbox().filter((o) => o.op === 'publish_item').map((o) => o.subject)).toEqual([itemHash('https://news.example/a')]);
+  });
+
+  test('so does an http save past three days whose site has no https', async () => {
+    const w = world();
+    const asked: string[] = [];
+    w.ports.page.fetch = (async (url: string) => {
+      asked.push(url);
+      throw new Error('fetch failed: java.net.ConnectException: Failed to connect to old.example/203.0.113.7:443');
+    }) as never;
+    w.ports.online = async () => true;
+    w.ports.now = () => 1000 + 4 * 86_400;
+    w.share('http://reader:hunter2@old.example/post');
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 1 });
+    expect(asked).toEqual(['https://old.example/post']);
+    expect(w.db.get('SELECT url, text_state, fail_reason FROM items')).toEqual({ url: 'http://old.example/post', text_state: 'failed', fail_reason: 'http' });
+  });
+
+  test("another phone's save stored with them keeps its link without them once its page fails here, with nothing sent", async () => {
+    const w = world({ 'https://c.com/a': { status: 404 } });
+    w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, published, event_id, modified_at) VALUES (?, ?, 'https://reader:hunter2@c.com/a', 10, 'unread', 'queued', 'sync', 1, 'e1', 7)", PK, itemHash('https://c.com/a'));
+    await runPendingParses(w.ports, PK);
+    expect(w.db.get('SELECT url, text_state, dirty, modified_at FROM items')).toEqual({ url: 'https://c.com/a', text_state: 'failed', dirty: 0, modified_at: 7 });
+    expect(w.outbox()).toEqual([]);
+  });
+
+  test('the link kept is the one the row holds when the failure is written, as a copy merged during the fetch left it', async () => {
+    const w = world();
+    w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, published, event_id, modified_at) VALUES (?, ?, 'https://c.com/a', 10, 'unread', 'queued', 'sync', 1, 'e1', 7)", PK, itemHash('https://c.com/a'));
+    w.ports.page.fetch = (async () => {
+      // another phone's newer copy, taken while this page was fetched, names the save's address as it now has it
+      w.db.run("UPDATE items SET url = 'https://reader:hunter2@c.com/a?page=1'");
+      return new Response('', { status: 404 });
+    }) as never;
+    await runPendingParses(w.ports, PK);
+    expect(w.db.get('SELECT url, text_state FROM items')).toEqual({ url: 'https://c.com/a?page=1', text_state: 'failed' });
+  });
+
   test("another phone's save stored with them keeps its address without them once parsed here", async () => {
     const w = world({ 'https://c.com/a': {} });
     w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, published, event_id) VALUES (?, ?, 'https://reader:hunter2@c.com/a', 10, 'unread', 'queued', 'sync', 1, 'e1')", PK, itemHash('https://c.com/a'));

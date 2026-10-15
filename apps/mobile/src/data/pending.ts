@@ -121,18 +121,29 @@ export function applyParsed(db: SqlDb, now: number, owner: string, p: Pending, p
 }
 
 /**
+ * The link a save keeps as its row now holds it, without a user name and password (contract 4.3, ruling 8): read in
+ * the transaction that writes it, so a newer copy merged while the page was fetched keeps its address.
+ */
+function linkKept(db: SqlDb, id: number): string {
+  return withoutUserInfo(db.get<{ url: string }>('SELECT url FROM items WHERE id = ?', id)!.url);
+}
+
+/**
  * A page that can't be read (an HTTP error, not HTML, too large, not readable): the save goes out without text. One
  * already published, as another phone's without text, has nothing new to send, its text still null (C§4.2, v1.12):
  * only this phone notes that the page couldn't be read, so a phone that holds the text isn't asked to send it again.
+ * RULED: either keeps its link without a user name and password, as a browser's request or an older row may hold
+ * them: the link is what Original, Open in browser and the published item are given.
  */
 export function applyFailed(db: SqlDb, now: number, owner: string, p: Pending, reason: string, t: SaveTargets): void {
   db.tx(() => {
     if (!live(db, p)) return;
+    const url = linkKept(db, p.id);
     if (p.published || p.event_id) {
-      db.run("UPDATE items SET text_state = 'failed', fail_reason = ? WHERE id = ?", reason, p.id);
+      db.run("UPDATE items SET url = ?, text_state = 'failed', fail_reason = ? WHERE id = ?", url, reason, p.id);
       return;
     }
-    db.run("UPDATE items SET text_state = 'failed', fail_reason = ?, modified_at = ?, dirty = 1 WHERE id = ?", reason, now, p.id);
+    db.run("UPDATE items SET url = ?, text_state = 'failed', fail_reason = ?, modified_at = ?, dirty = 1 WHERE id = ?", url, reason, now, p.id);
     queueSends(db, now, owner, p.hash, null, t, false, registerFirst(db, now, owner, t));
   });
 }
