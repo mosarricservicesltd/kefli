@@ -288,7 +288,7 @@ export function freshWrap(p: Pick<Pending, 'wrap' | 'sealed'>, device: LocalSign
   return wrapFor(p, device, (r) => r, now);
 }
 
-export type Delivery = 'sent' | 'unreachable' | 'blocked';
+export type Delivery = 'sent' | 'unreachable';
 
 /** What delivery reads of a save, and may change: its blob goes once uploaded, and another wrap can take its wrap's place. */
 export type Delivered = Pick<Pending, 'id' | 'wrap' | 'sealed' | 'blob' | 'sha256' | 'wrapped_at'>;
@@ -313,14 +313,15 @@ async function uploadInbox(p: Delivered, server: string, device: LocalSigner, ne
   return up.ok ? 'done' : 'refused';
 }
 
-/** The wrap published; 'blocked' is a relay that answered and refused, which the options page names. */
+/**
+ * The wrap published. A relay that refuses it answers by its own rules (blocked:, as Kefli's does for a library deleted,
+ * or one that moved away and was retired), its limits (rate-limited:) or the event (invalid:), none of which anything in
+ * this browser can lift, so a refusal waits to be tried again as a relay out of reach does. Read as the browser blocking
+ * Kefli's server, it sent the person to Advanced, where nothing could help. A socket the browser blocks, as Brave's
+ * Shields can, comes to the extension as a connection that failed, as one over a network that is down does.
+ */
 async function publishWrap(p: Delivered, relay: string, device: LocalSigner, net: Net): Promise<Delivery> {
-  try {
-    await net.publish(relay, p.wrap, device);
-    return 'sent';
-  } catch (e) {
-    return String(e).includes('blocked') || String(e).includes('restricted') ? 'blocked' : 'unreachable';
-  }
+  return net.publish(relay, p.wrap, device).then((): Delivery => 'sent', (): Delivery => 'unreachable');
 }
 
 /**

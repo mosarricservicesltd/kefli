@@ -2093,7 +2093,10 @@ describe('a move while saves wait, their toasts still showing (contract 4.4 and 
       await h.work.save(PAGE, 1, false);
       const failedToast = h.toasts.at(-1)!;
       const [left] = await queued(h.store);
-      expect(left).toMatchObject({ why: 'blocked', wrap: { tags: [['p', user.pubkey()]] } });
+      // the relay's own refusal, which nothing in the browser can lift, waits as couldn't reach rather than as blocked here
+      expect(left).toMatchObject({ why: 'reach', wrap: { tags: [['p', user.pubkey()]] } });
+      expect(failedToast.kind).toBe('failed');
+      expect((await history(h.store))[0]).toMatchObject({ outcome: 'waiting, couldn’t reach' });
       // the move was written before this save joined the queue, or a worker stopped between its two writes
       await h.store.set(KEYS.pairing, moved);
       const n = net();

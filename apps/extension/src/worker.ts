@@ -82,7 +82,7 @@ interface Held {
 /** The wrap a save goes by now, when another has taken this one's place (undo.ts Renamed), or what Undo found under it. */
 type Finding = Renamed | Held;
 
-const WAITING: Record<ReturnType<typeof whyNot>, Outcome> = { offline: 'waiting, offline', reach: 'waiting, couldn’t reach', blocked: 'waiting, blocked' };
+const WAITING: Record<ReturnType<typeof whyNot>, Outcome> = { offline: 'waiting, offline', reach: 'waiting, couldn’t reach' };
 
 /**
  * Whether a waiting save may be on the relay all the same: one tried before, whose answer may have timed out though the
@@ -271,7 +271,7 @@ export function background(b: Browser) {
     if (d === 'sent') return { d, online, s: 'sent' };
     // with the mark a save whose HTML the operator refused carries in the queue, for whichever background sends it
     const smaller = { ...pending, blob: null, ...(textless.has(pending.id) ? { textless: true as const } : {}) };
-    const s = await enqueue(b.store, smaller, whyNot(d, online)).catch((): Settled => 'full');
+    const s = await enqueue(b.store, smaller, whyNot(online)).catch((): Settled => 'full');
     return { d, online, s };
   }
 
@@ -306,7 +306,7 @@ export function background(b: Browser) {
     const { d, s, online } = await saves.run(pending.id, () => firstSend(pending, ctx));
     // from here the toast names the wrap the save has now, a new one if its HTML was refused, so Undo retracts that
     if (d === 'sent') return sentNow(pending, where, link);
-    await waits(pending, where, link, { d, s, online });
+    await waits(pending, where, link, { s, online });
   }
 
   /**
@@ -323,7 +323,7 @@ export function background(b: Browser) {
   }
 
   /** A save that didn't go at once: taken off the queue meanwhile, refused as the ninth, or waiting, and why. */
-  async function waits(pending: Pending, where: Where, link: boolean, r: { d: Exclude<Delivery, 'sent'>; s: Settled; online: boolean }): Promise<void> {
+  async function waits(pending: Pending, where: Where, link: boolean, r: { s: Settled; online: boolean }): Promise<void> {
     await queueChanged();
     const base = toasted(pending, link);
     // taken off the queue while it was sending: Disconnect deleted it, as its confirm said
@@ -332,7 +332,7 @@ export function background(b: Browser) {
       await note(pending.id, 'queue full', link);
       return toast(where, { ...base, kind: 'full' });
     }
-    const why = whyNot(r.d, r.online);
+    const why = whyNot(r.online);
     await note(pending.id, WAITING[why], link);
     await toast(where, { ...base, kind: why === 'offline' ? 'offline' : 'failed' });
     if (where === 'popup' && why === 'offline') await b.tick();

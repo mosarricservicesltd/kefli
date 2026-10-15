@@ -67,6 +67,7 @@ function list(rows: string[], cls = 'list'): string {
 
 const head = () => `<div class="brandrow"><span class="lg">${LOGO}</span>Kefli</div>`;
 const PIN = `<span class="ic">${icon('puzzle')}</span><span class="t">Pin Kefli to your toolbar: click the puzzle piece, then the pin next to Kefli.</span>`;
+// blocked, and Advanced's Blocked in this browser, show only for a save an earlier build stored as blocked (queue.ts why)
 const WHY = {
   reach: 'Couldn’t reach Kefli’s server. It will keep trying.',
   blocked: 'Something in this browser is blocking Kefli’s server. See Advanced.',

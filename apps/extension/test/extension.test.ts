@@ -332,9 +332,9 @@ describe('delivery', () => {
       expect(f.published.map((w) => w.id)).toEqual([p.id]);
     }
   });
-  test("a relay that times out, and one that refuses", async () => {
+  test('a relay that times out, and one that refuses, which is the relay’s own answer and nothing in the browser', async () => {
     expect((await send({ publish: 'down' })).d).toBe('unreachable');
-    expect((await send({ publish: 'blocked' })).d).toBe('blocked');
+    expect((await send({ publish: 'blocked' })).d).toBe('unreachable');
   });
   test('Undo is a kind 5 by the wrap key, and the inbox blob goes', async () => {
     const { pending, wrapKey } = await prepare(PAGE, ctx);
@@ -387,8 +387,9 @@ describe('the queue (extension spec 4, decisions 30, 31 and 60)', () => {
     await enqueue(store, p('c'), 'blocked');
     const q = await queued(store);
     expect(waiting(q)).toBe(1);
+    // c: an entry an earlier build stored as blocked in this browser is still listed
     expect(failed(q).map((e) => e.id)).toEqual(['b', 'c']);
-    expect([whyNot('blocked', true), whyNot('unreachable', true), whyNot('unreachable', false)]).toEqual(['blocked', 'reach', 'offline']);
+    expect([whyNot(true), whyNot(false)]).toEqual(['reach', 'offline']);
   });
   test('a pass sends what it can, counts attempts, and stops at 200', async () => {
     const store = memoryStore();
@@ -411,10 +412,9 @@ describe('the queue (extension spec 4, decisions 30, 31 and 60)', () => {
     await enqueue(store, p('a'), 'offline');
     for (let i = 0; i <= ATTEMPTS_MAX; i++) await flush(store, async () => 'unreachable', false);
     expect(await queued(store)).toMatchObject([{ id: 'a', why: 'offline', attempts: 0, stopped: false }]);
-    // online, a try that fails counts; a relay that answered and refused counts whatever the browser says
+    // online, a try that fails counts, the relay out of reach or refusing it
     await flush(store, async () => 'unreachable', true);
-    await flush(store, async () => 'blocked', false);
-    expect(await queued(store)).toMatchObject([{ id: 'a', why: 'blocked', attempts: 2 }]);
+    expect(await queued(store)).toMatchObject([{ id: 'a', why: 'reach', attempts: 1 }]);
   });
   test('a stopped save is listed under Couldn’t send, with Retry, whatever it waited on, and isn’t counted as waiting to send', async () => {
     const store = memoryStore();
