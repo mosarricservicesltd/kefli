@@ -354,7 +354,7 @@ describe("images and X's embed take the same hops (F26, 5.4)", () => {
   });
 });
 
-describe("a text's blob servers, the inbox's and Kefli's API take the hops too (7.1)", () => {
+describe("a text's blob servers and the inbox's take the hops too, and Kefli's API none (7.1)", () => {
   const PK = 'cd'.repeat(32);
   const HASH = '02'.repeat(32);
   /** The addresses on the phone's own network a hostile server's redirect may name, each serving what was asked for. */
@@ -610,26 +610,26 @@ describe("the local stack's loopback hops are wired where its servers are asked,
 describe('a request that is not a GET, redirected (the Fetch Standard, HTTP-redirect fetch)', () => {
   /** Each hop as asked: its method, address, body and Content-Type. */
   async function hops(method: string, status: number) {
-    const w = web({ 'https://api.example/register': { status, location: '/registered' }, 'https://api.example/registered': { body: '{}' } });
+    const w = web({ 'https://blossom.example/upload': { status, location: '/uploaded' }, 'https://blossom.example/uploaded': { body: '{}' } });
     const init = { method, body: '{"v":1}', headers: { 'Content-Type': 'application/json', Authorization: 'Nostr x' } };
-    const o = await open(w.f, 'https://api.example/register', init, 5_000, serverHops(false));
+    const o = await open(w.f, 'https://blossom.example/upload', init, 5_000, serverHops(false));
     o.done();
     return w.asked.map((a) => [a.init.method, a.url, a.init.body ?? null, new Headers(a.init.headers).get('content-type'), new Headers(a.init.headers).has('authorization')]);
   }
 
   test("a 303, or a 301 or 302 to a POST, is followed with a GET and without the body or what describes it", async () => {
-    // sent again as it was, a POST to Kefli's API answered 303 went on as a POST, its body with it
+    // a blob server's, as Kefli's API follows none: sent again as it was, a call answered 303 went on with its method and body
     for (const [method, status] of [['POST', 303], ['PUT', 303], ['DELETE', 303], ['POST', 301], ['POST', 302]] as const) {
-      expect([method, status, (await hops(method, status))[1]]).toEqual([method, status, ['GET', 'https://api.example/registered', null, null, true]]);
+      expect([method, status, (await hops(method, status))[1]]).toEqual([method, status, ['GET', 'https://blossom.example/uploaded', null, null, true]]);
     }
   });
 
   test('a 307 or 308 keeps the method and body, and so does a 301 or 302 to anything but a POST', async () => {
     for (const [method, status] of [['POST', 307], ['POST', 308], ['PUT', 301], ['PUT', 302], ['DELETE', 302]] as const) {
-      expect([method, status, (await hops(method, status))[1]]).toEqual([method, status, [method, 'https://api.example/registered', '{"v":1}', 'application/json', true]]);
+      expect([method, status, (await hops(method, status))[1]]).toEqual([method, status, [method, 'https://blossom.example/uploaded', '{"v":1}', 'application/json', true]]);
     }
     // a GET or a HEAD answered 303 stays as it was
-    expect((await hops('HEAD', 303))[1]).toEqual(['HEAD', 'https://api.example/registered', '{"v":1}', 'application/json', true]);
+    expect((await hops('HEAD', 303))[1]).toEqual(['HEAD', 'https://blossom.example/uploaded', '{"v":1}', 'application/json', true]);
   });
 });
 
