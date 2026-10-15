@@ -10,9 +10,15 @@ import { writeRelays } from './lists';
 
 export type Pending = {
   id: number; hash: string; url: string; shared_url: string | null; published: number; event_id: string | null; x_state: string | null;
-  /** When it was last tried and couldn't be had (F12), as pendingParses reads it; null for one never tried. */
+  /**
+   * When it was last tried and couldn't be had (F12), as pendingParses reads it; null for one never tried, which a
+   * page that never answers can't fail yet (page.ts ANSWER_WAIT_SECONDS).
+   */
   timed_out_at?: number | null;
-  /** The save's own time (C§4.1), as pendingParses reads it: how long an http one has waited for https (page.ts). */
+  /**
+   * The save's own time (C§4.1), as pendingParses reads it: how long an http one has waited for https, and any one
+   * for its page to answer (page.ts).
+   */
   saved_at?: number;
 };
 
@@ -21,7 +27,8 @@ export type Pending = {
  * that timed out longest ago first (F12). RULED: plain http pages come after all the rest. Each is fetched over https
  * alone (net/http overHttps), and an old site with no https can take the whole 20 s to fail there, so an import of
  * old bookmarks spends its slowest last; one refused there waits until it is three days old, then fails (page.ts
- * HTTPS_WAIT_SECONDS), and one that only cleartext could fetch fails at once (net/http Blocked).
+ * HTTPS_WAIT_SECONDS), and one that only cleartext could fetch fails at once (net/http Blocked). Any page that never
+ * answers fails once its save is 14 days old and tried again (page.ts ANSWER_WAIT_SECONDS).
  */
 export function pendingParses(db: SqlDb, owner: string): Pending[] {
   return db.all<Pending>(
@@ -45,6 +52,9 @@ export type Parsed = {
 };
 
 export type Applied = { hash: string; merged: boolean };
+
+/** Puts a parse's text on the phone for the save at hash (services/pending.ts), throwing when it can't. */
+export type WriteText = (hash: string) => void;
 
 /**
  * Moves an unpublished save to its final hash (FD 80): its row, search entry and cover record, so the cover
@@ -91,9 +101,14 @@ function fittedAt(url: string, parsed: Parsed): PageFields {
  * a newer copy from another phone is taken over it, the text kept by the merge (data/sync.ts). RULED: the page's
  * fields are fitted under the event ceiling (data/saves fitSave), and a final address too long for the event isn't
  * adopted, so the save keeps the address it has, and its hash, with the text. Whichever it keeps, it keeps without
- * a user name and password (contract 4.3, ruling 8), as a browser's request or an older row may hold them.
+ * a user name and password (contract 4.3, ruling 8), as a browser's request or an older row may hold them. The text is
+ * written (write) before the row says it has it, at the hash the save is kept at: a write that fails, as on a full
+ * disk, throws, and the transaction takes the re-key back with everything else, so the save waits for its parse
+ * rather than reading as cached with no text on the phone.
  */
-export function applyParsed(db: SqlDb, now: number, owner: string, p: Pending, parsed: Parsed, blob: StagedBlob, t: SaveTargets): Applied {
+export function applyParsed(
+  db: SqlDb, now: number, owner: string, p: Pending, parsed: Parsed, blob: StagedBlob, t: SaveTargets, write: WriteText,
+): Applied {
   return db.tx(() => {
     // deleted while its page was fetched, or waiting on its delete's Undo: the row takes nothing, as one that joined
     // another save takes nothing, so the caller drops the staged text
@@ -104,6 +119,7 @@ export function applyParsed(db: SqlDb, now: number, owner: string, p: Pending, p
     const page = fittedAt(adopted ? final : withoutUserInfo(p.url), parsed);
     const where = adopted && parsed.hash !== p.hash ? rekey(db, now, owner, p, parsed.hash) : { hash: p.hash, merged: false };
     if (where.merged) return where;
+    write(where.hash);
     // a save not yet published is marked changed for its sends; one already out stays clean (above)
     const changed = Number(unpublished);
     db.run(

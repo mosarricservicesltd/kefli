@@ -30,7 +30,7 @@ import {
 import type { Pending } from '../data/pending';
 import type { SaveTargets } from '../data/saves';
 import { getCursor, setCursor } from '../data/sync';
-import { parsedOutcome, type PageOutcome, type ParserResult } from './page';
+import { RENDERER_GONE, parsedOutcome, type PageOutcome, type ParserResult } from './page';
 import { settle, type PendingPorts } from './pending';
 import { PAGE, type Filter } from './sync';
 import { TooLarge, open, serverHops } from '../net/http';
@@ -86,12 +86,6 @@ function readable(json: string): boolean {
     return false;
   }
 }
-
-/**
- * The parser port's answer when its WebView's renderer has gone, killed for memory or never loaded: page.ts's own word
- * for it, which a page's parse meets as a page that timed out.
- */
-const RENDERER_GONE = 'renderer_gone';
 
 /**
  * The save's text from the browser's content HTML (C§4.4): the canonical Markdown conversion, with the metadata the

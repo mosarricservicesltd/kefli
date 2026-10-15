@@ -7,11 +7,16 @@ import { base64 } from '@scure/base';
 import { buildItemEvent, itemHash, LocalSigner, parseItem, type PdfRuns } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import * as blocks from '../src/reader/blocks';
-import { FIELD_MAX, fetchPage, isPdf, parsedOutcome, PDF_MAX_BYTES, PDF_MAX_RUNS, renderAnswer, TEXT_MAX_BYTES, toBase64, type PagePorts, type ParserResult } from '../src/services/page';
+import {
+  FIELD_MAX, PAGE_MAX_BYTES, PDF_MAX_BYTES, PDF_MAX_RUNS, TEXT_MAX_BYTES, capFor, fetchPage, isPdf, parsedOutcome, renderAnswer, toBase64, type PagePorts,
+  type ParserResult,
+} from '../src/services/page';
 import { failNotice } from '../src/screens/failNotice';
 import { S } from '../src/ui/strings';
 
 
+// the URL parser's own exports, through which normalise calls it (an import * of a CommonJS module is a copy of them)
+const urlParser = require('whatwg-url/lib/url-state-machine') as typeof import('whatwg-url/lib/url-state-machine');
 const PDFS = join(__dirname, '..', '..', '..', 'shared', 'fixtures', 'pdfs');
 const runs = (id: string) => JSON.parse(readFileSync(join(PDFS, `${id}.runs.json`), 'utf8'));
 const expected = (id: string) => (JSON.parse(readFileSync(join(PDFS, 'expected.json'), 'utf8')) as { pdfs: { id: string; markdown?: string; title?: string; words?: number }[] }).pdfs.find((p) => p.id === id)!;
@@ -78,6 +83,19 @@ describe('a linked PDF (contract 4.2, flow decision 103)', () => {
       const { p } = ports(PDF_BYTES, { 'content-type': type, 'content-length': six }, runs('report-one-column'));
       expect((await fetchPage(p, 'https://example.com/report')).kind).toBe('parsed');
     }
+  });
+
+  test('the cap by declared type: a page’s for a type that names anything but a PDF, a PDF’s for a body that may be one', () => {
+    const port = { pdf: async () => ({ ok: false as const, reason: 'error' }) };
+    const page = ['text/html; charset=utf-8', ' TEXT/PLAIN', 'image/png', 'video/mp4', 'audio/mpeg', 'font/woff2', 'model/gltf+json',
+      'multipart/form-data', 'application/xhtml+xml', 'application/zip', 'application/gzip', 'application/x-tar', 'application/x-7z-compressed',
+      'application/vnd.rar'];
+    for (const type of page) expect([type, capFor(port, type)]).toEqual([type, PAGE_MAX_BYTES]);
+    const maybe = ['application/pdf', 'application/x-pdf', 'application/octet-stream', 'binary/octet-stream', 'application/force-download', '',
+      'application/zipped', 'application/vnd.rarity'];
+    for (const type of maybe) expect([type, capFor(port, type)]).toEqual([type, PDF_MAX_BYTES]);
+    // without the pdf port nothing is read as a PDF
+    expect(capFor({}, 'application/pdf')).toBe(PAGE_MAX_BYTES);
   });
 
   test('without the pdf port, a PDF is still not a page', async () => {
@@ -188,7 +206,8 @@ describe('what a page hands back is taken only as far as a save can hold it', ()
   });
 
   test('a parse whose renderer the system killed waits, as a page that timed out does; a crash is a page not read', async () => {
-    expect(await fetchPage(parsing({ ok: false, reason: 'renderer_gone' }), 'https://e.com/a')).toEqual({ kind: 'offline', timedOut: true });
+    // its page answered, so its save waits at any age, as pending.ts reads it
+    expect(await fetchPage(parsing({ ok: false, reason: 'renderer_gone' }), 'https://e.com/a')).toEqual({ kind: 'offline', answered: true });
     expect(await fetchPage(parsing({ ok: false, reason: 'error' }), 'https://e.com/a')).toMatchObject({ kind: 'failed', reason: 'not_readable' });
   });
 
@@ -287,12 +306,18 @@ describe("a page's canonical link is kept only from its own site (contract 4.3, 
 
   test('a canonical past the longest kept is left out before it is read, however long the page made it', async () => {
     // whatwg-url reads an address a code point at a time: on Node a canonical on the page's own site took 3 to 8 s to
-    // judge at a megabyte and 51 s at 5 MB, longer still in the phone's JavaScript, with the share waiting on it
+    // judge at a megabyte and 51 s at 5 MB, longer still in the phone's JavaScript, with the share waiting on it. What
+    // the URL parser is given is counted, not timed, so a busy machine can't fail it
     const huge = 'https://news.example/' + 'c'.repeat(2 * 1024 * 1024);
-    const t = Date.now();
-    const o = await fetchPage(naming(huge), 'https://amp.news.example/2026/10/story');
-    expect(Date.now() - t).toBeLessThan(2_000);
-    expect(o).toMatchObject({ kind: 'parsed', finalUrl: 'https://amp.news.example/2026/10/story', result: { canonical: null } });
+    const read = jest.spyOn(urlParser, 'basicURLParse');
+    try {
+      const o = await fetchPage(naming(huge), 'https://amp.news.example/2026/10/story');
+      expect(o).toMatchObject({ kind: 'parsed', finalUrl: 'https://amp.news.example/2026/10/story', result: { canonical: null } });
+      expect(read).toHaveBeenCalled();
+      expect(Math.max(...read.mock.calls.map(([input]) => String(input).length))).toBeLessThanOrEqual(FIELD_MAX.url);
+    } finally {
+      read.mockRestore();
+    }
   }, 60_000);
 });
 
@@ -432,7 +457,7 @@ describe('a PDF is handed over and read only as far as a save can hold it', () =
   });
 
   test('a PDF read whose renderer the system killed waits; one the parser stopped for its size is too large', async () => {
-    expect(await fetchPage(pdfPorts({ ok: false, reason: 'renderer_gone' }), 'https://e.com/a.pdf')).toEqual({ kind: 'offline', timedOut: true });
+    expect(await fetchPage(pdfPorts({ ok: false, reason: 'renderer_gone' }), 'https://e.com/a.pdf')).toEqual({ kind: 'offline', answered: true });
     expect(await fetchPage(pdfPorts({ ok: false, reason: 'pdf_too_long' }), 'https://e.com/a.pdf')).toMatchObject({ kind: 'failed', reason: 'too_large' });
     expect(await fetchPage(pdfPorts({ ok: false, reason: 'too_large' }), 'https://e.com/a.pdf')).toMatchObject({ kind: 'failed', reason: 'too_large' });
   });

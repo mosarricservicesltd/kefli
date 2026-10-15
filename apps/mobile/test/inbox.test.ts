@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { LocalSigner, SAVE_REQUEST_MAX_BYTES, encryptText, giftWrap, itemHash, makeRumor, wrapSaveRequest, type NostrEvent, type SaveRequest } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import { finalizeEvent, generateSecretKey } from 'nostr-tools/pure';
@@ -13,9 +15,9 @@ import { enqueue, release } from '../src/data/outbox';
 import { pendingParses } from '../src/data/pending';
 import { removeItem } from '../src/data/sync';
 import {
-  INBOX_DEEP_EVERY, INBOX_MAX_BYTES, INBOX_TIMEOUT_MS, INBOX_UNWRAPS, drainInbox, judge, readBlob, unjudged, type InboxPorts,
+  INBOX_DEEP_EVERY, INBOX_MAX_BYTES, INBOX_TIMEOUT_MS, INBOX_UNWRAPS, drainInbox, fromBrowser, judge, readBlob, unjudged, type InboxPorts,
 } from '../src/services/inbox';
-import { FIELD_MAX, GUARD_WORDS, TEXT_MAX_BYTES, type ParserResult } from '../src/services/page';
+import { FIELD_MAX, GUARD_WORDS, RENDERER_GONE, TEXT_MAX_BYTES, parseHtml, type ParserResult } from '../src/services/page';
 import * as blocks from '../src/reader/blocks';
 import { sendOne, type SendPorts } from '../src/services/send';
 import type { Filter } from '../src/services/sync';
@@ -558,6 +560,29 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     w2.tick(INBOX_BLOB_LIFE);
     expect(await drainInbox(w2.ports, w2.owner)).toEqual({ created: 1 });
     expect(w2.item(hash)?.text_state).toBe('queued');
+  });
+
+  test('a capture whose text can’t be written, as on a full disk, leaves its save getting the text and its wrap to read again', async () => {
+    // written after the row was marked, a failed write left the save cached with no text on the phone, its upload queued
+    const w = world();
+    const { html } = await w.withHtml('<html><h1>Read later</h1><p>…</p></html>');
+    await w.send(w.request({ html }));
+    const write = w.ports.writeText;
+    w.ports.writeText = () => {
+      throw new Error('ENOSPC (No space left on device)');
+    };
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_blob: 1 });
+    const hash = itemHash('https://example.com/a');
+    expect(w.item(hash)?.text_state).toBe('fetching');
+    expect(w.texts.size).toBe(0);
+    expect(w.ops()).not.toContain('upload_blob');
+    expect(w.ops()).not.toContain('delete_wrap');
+    // with room again, the next drain reads the capture again and the save takes its text
+    w.ports.writeText = write;
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    expect(w.item(hash)?.text_state).toBe('cached');
+    expect([...w.texts.keys()]).toEqual([hash]);
+    expect(w.ops()).toContain('upload_blob');
   });
 
   test('a capture the operator answers 404 for is gone: its page is fetched at once, not after 14 days (C§4.4, v1.12)', async () => {
@@ -1373,6 +1398,17 @@ describe('the browser’s HTML takes the guards a parsed page’s text takes (C�
     expect(pendingParses(w.db, w.owner).map((p) => p.url)).toEqual(['https://example.com/a']);
     expect(w.ops()).toContain('delete_wrap');
     expect(await drainInbox(w.ports, w.owner)).toEqual({});
+  });
+
+  test('a gone renderer is one word, page.ts’s, which the native parser sends and a capture and a page read alike', async () => {
+    // the inbox kept a copy of its own, so a change to either left the other reading a gone renderer as a failed parse
+    const gone = { ok: false, reason: RENDERER_GONE } as const;
+    expect(await fromBrowser({ markdown: async () => gone }, world().request(), '<p>x</p>')).toEqual({ kind: 'offline', timedOut: true });
+    // both wait to be read again; a page's says it answered, so the pending queue never takes it for one that didn't
+    expect(await parseHtml({ parse: async () => gone }, new Uint8Array([60]), 'text/html', 'https://example.com/a')).toEqual({ kind: 'offline', answered: true });
+    const parser = readFileSync(join(__dirname, '..', 'modules', 'kefli-parser', 'android', 'src', 'main', 'java', 'app', 'kefli', 'parser', 'Parser.kt'), 'utf8');
+    expect(parser).toContain(`"${RENDERER_GONE}"`);
+    expect(readFileSync(join(__dirname, '..', 'src', 'services', 'inbox.ts'), 'utf8')).not.toContain(`'${RENDERER_GONE}'`);
   });
 
   test('once the renderer has gone, the drain’s other captures wait for the next drain unread, and arrive once it is back', async () => {

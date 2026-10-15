@@ -1,5 +1,6 @@
 // Staged ciphertext (mobile spec 4.2; contract 4.1, v1.12): kept while a save names the text, and swept with its row
 // once none does. expo-file-system is a map in memory here.
+import type { Param, SqlDb } from '../src/data/db';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow, orphanBlobs } from '../src/data/saves';
 import { memoryDb } from './sqlite';
@@ -79,15 +80,28 @@ describe('staged texts (4.2, C§4.1)', () => {
   });
 
   test('the sweep reads the saves once, not once for each text: 4,000 texts take a moment, on every outbox run', () => {
+    // counted, not timed, so a busy machine can't fail it: the statements the sweep sends, and how SQLite plans each.
+    // A subquery run again for each text (CORRELATED) read every save for each of thousands of texts; the saves' texts
+    // are listed once (LIST SUBQUERY), and the statements are as many for 4,000 texts as for one
     const w = world();
     for (let n = 0; 4000 > n; n++) {
       w.db.run("INSERT INTO blobs (sha256, hash, kind, owner) VALUES (?, ?, 'text', ?)", sha(n), sha(n), PK);
       w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, text_sha256) VALUES (?, ?, 'https://e.com', 1, 'unread', 'cached', 'share', ?)", PK, sha(n), n % 2 ? sha(n) : null);
     }
-    const t0 = Date.now();
-    expect(orphanBlobs(w.db)).toEqual([]);
-    expect(Date.now() - t0).toBeLessThan(150);
+    const sent: [string, Param[]][] = [];
+    const counted: SqlDb = {
+      ...w.db,
+      run: (sql: string, ...params: Param[]) => (sent.push([sql, params]), w.db.run(sql, ...params)),
+      get: <T,>(sql: string, ...params: Param[]) => (sent.push([sql, params]), w.db.get<T>(sql, ...params)),
+      all: <T,>(sql: string, ...params: Param[]) => (sent.push([sql, params]), w.db.all<T>(sql, ...params)),
+    };
+    expect(orphanBlobs(counted)).toEqual([]);
     expect(w.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM blobs')?.n).toBe(2000);
+    expect(sent.length).toBeLessThanOrEqual(2);
+    for (const [sql, params] of sent) {
+      const plan = w.db.all<{ detail: string }>(`EXPLAIN QUERY PLAN ${sql}`, ...params).map((r) => r.detail);
+      expect([sql, plan.filter((d) => d.includes('CORRELATED'))]).toEqual([sql, []]);
+    }
   });
 
   test("a blob row with no staged file, or another phone's inbox blob, is no business of the sweep's files", () => {

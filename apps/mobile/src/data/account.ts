@@ -8,6 +8,11 @@ import type { SqlDb } from './db';
 
 /** A megabyte as Kefli's server counts it. */
 export const MB = 1_048_576;
+/**
+ * The least a text counts for against the quota (C§5): a disk block, which its file takes however few bytes it holds.
+ * Kefli's server counts each blob so, and data/backup.ts reckons the room left the same way.
+ */
+export const BLOCK = 4096;
 /** The defaults (C§5), which Backup space shows until Kefli's server has given the library's own. */
 export const DEFAULT_QUOTA = 50 * MB;
 export const DEFAULT_DAILY = 20 * MB;
@@ -141,9 +146,16 @@ export type Space =
   | { kind: 'figures'; used: number; quota: number; level: 'room' | 'nearly' | 'full' }
   | { kind: 'checking' | 'offline' | 'failed' };
 
-/** Full while a text waits on the space or the use has reached the quota; nearly full from 90 %. */
+/**
+ * RULED: whether figures leave no room for any text: less than a block left, since each text counts a block at least
+ * (BLOCK), so Kefli's server refuses every one there however short; at or over the quota among them. Read Full only at
+ * the quota, a library a few bytes short of it read as having room while its every text stayed on the phone.
+ */
+const noRoom = (f: Pick<Figures, 'used' | 'quota'>): boolean => f.quota - f.used < BLOCK;
+
+/** Full while a text waits on the space or no text has room (noRoom); nearly full from 90 %. */
 function levelOf(f: Pick<Figures, 'used' | 'quota'>, full: boolean): Space {
-  const level = full || f.used >= f.quota ? 'full' : f.used >= 0.9 * f.quota ? 'nearly' : 'room';
+  const level = full || noRoom(f) ? 'full' : f.used >= 0.9 * f.quota ? 'nearly' : 'room';
   return { kind: 'figures', used: f.used, quota: f.quota, level };
 }
 
@@ -164,20 +176,20 @@ export function spaceOf(held: Pick<Figures, 'used' | 'quota'> | null, full: bool
  * waits on a refusal for the day's uploads from the last 24 hours, else the usual line.
  */
 export function shareRoom(held: Pick<Figures, 'used' | 'quota'> | null, w: Waiting): 'full' | 'daily' | null {
-  if (w.full || (held !== null && held.used >= held.quota)) return 'full';
+  if (w.full || (held !== null && noRoom(held))) return 'full';
   return w.dailyRecent > 0 ? 'daily' : null;
 }
 
 /**
- * The figures held, while their use reaching the quota may still stand. RULED: Kefli's server takes no upload past the
- * quota (but one of a blob the library holds already), so once one of this phone's uploads has gone through since they
- * came, a library they show at or over its quota has been brought back within it by deleting, and they no longer tell
+ * The figures held, while their leaving no room for a text (noRoom) may still stand. RULED: Kefli's server takes no
+ * upload past the quota (but one of a blob the library holds already), so once one of this phone's uploads has gone
+ * through since they came, a library they show without room has been given room by deleting, and they no longer tell
  * a share that its text stays here; Backup space shows them as they came until the next answer, and the next text
  * refused for the space makes the sheet say so again.
  */
 function standingFigures(db: SqlDb, owner: string): (Figures & { at: number }) | null {
   const held = accountFigures(db, owner);
-  if (!held || held.used < held.quota) return held;
+  if (!held || !noRoom(held)) return held;
   return db.get('SELECT 1 FROM blobs WHERE owner = ? AND operator_at > ?', owner, held.at) ? null : held;
 }
 

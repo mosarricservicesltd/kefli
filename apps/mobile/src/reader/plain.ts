@@ -1,5 +1,5 @@
-// An article read plain (mobile spec 6.7), for Markdown past what the CommonMark parse and the spoken projection
-// take in linear time (./limits), or that overflows the stack all the same: all its text, without inline styling.
+// An article read plain (mobile spec 6.7), for Markdown past what the CommonMark parse takes in linear time and the
+// Reader lays out (./limits), or that throws all the same: all its text, without inline styling.
 // Paragraphs run between blank lines, and a list item starts one; # headings and fenced code keep their kind, code
 // as written; a line's indentation and quote markers go; a backslash escape reads as the character it escapes; a
 // line that is only an image stays an image. One pass over the lines with nothing that backtracks, so its time is
@@ -54,6 +54,8 @@ function headingLevel(line: string): number {
 }
 
 type Code = { fence: string; lines: string[]; start: number };
+/** A line that opens fenced code, by its fence (alone). */
+type Fence = { fence: string };
 type Reading = { parts: Part[]; lines: string[]; start: number; code: Code | null };
 
 /** The paragraph being read, ended: its lines joined, unescaped. */
@@ -73,7 +75,7 @@ function codeLine(r: Reading, line: string, raw: string): void {
 }
 
 /** A line that stands alone: a heading or a lone image; or a fence, which opens code; null for a paragraph's text. */
-function alone(line: string, at: number): Part | { fence: string } | null {
+function alone(line: string, at: number): Part | Fence | null {
   const fence = fenceOf(line);
   if (fence) return { fence };
   const level = headingLevel(line);

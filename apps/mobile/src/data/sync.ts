@@ -5,7 +5,7 @@
 // removed with its pending sends, since this phone may not write over a version it doesn't understand (C§10);
 // an older one is ignored. A save with no text arrives as text_state 'queued', so this phone tries the parse,
 // unless this phone holds the save's text, which it keeps (C§4.1, v1.12).
-import { ITEM_D_PREFIX, deletedDs, deletionRemoves, isServerUrl, mergeItem, wordReached } from '@kefli/protocol';
+import { ITEM_D_PREFIX, deletedDs, deletionRemoves, isServerUrl, mergeItem, withoutUserInfo, wordReached } from '@kefli/protocol';
 import { addressIndex } from './libraryKey';
 import type { LocalVersion, MergeOutcome, NostrEvent, ParsedItem } from '@kefli/protocol';
 import type { SqlDb } from './db';
@@ -39,6 +39,7 @@ function version(r: Row | undefined): LocalVersion | null {
 }
 
 const STRINGS = ['canonical', 'title', 'site', 'byline', 'lang', 'hero', 'source_ref', 'audio_pref'] as const;
+type Strings = Record<(typeof STRINGS)[number], string | null>;
 
 const WEB = new RegExp('^https?://', 'i');
 
@@ -94,21 +95,39 @@ function savedAtOf(v: unknown, createdAt: number): number {
   return t !== null && t >= 0 && t <= createdAt + SAVED_AHEAD ? Math.floor(t) : createdAt;
 }
 
+/** A count of words as kept: from none to MAX_WORDS, rounded; otherwise none. */
+function wordsOf(v: unknown): number | null {
+  const raw = num(v);
+  return raw !== null && raw >= 0 && raw <= MAX_WORDS ? Math.round(raw) : null;
+}
+
+/** A save's addresses as the phone keeps them: its page's, its canonical and its picture. */
+type Addresses = { url: string; canonical: string | null; hero: string | null };
+
+/**
+ * RULED: each address without a user name and password (contract 4.3, ruling 8), as the phone's own parse keeps them:
+ * another client may publish them with one, and the save's link is what Original, Open in browser and the save
+ * published again from here are given. The picture only at an http(s) address, since the phone fetches it.
+ */
+function addressesOf(url: string, s: Strings): Addresses {
+  const hero = s.hero && WEB.test(s.hero) ? withoutUserInfo(s.hero) : null;
+  return { url: withoutUserInfo(url), canonical: s.canonical && withoutUserInfo(s.canonical), hero };
+}
+
 /**
  * The row's columns from item JSON, each field checked, since another client wrote it (C§10): progress within 0 to 1
- * (C§4.1), so the word reached is within the text; words no more than MAX_WORDS; hero an http(s) address, since the
- * phone fetches it.
+ * (C§4.1), so the word reached is within the text; words no more than MAX_WORDS; its addresses as addressesOf keeps
+ * them.
  */
 export function itemColumns({ item, extra }: ParsedItem, event: NostrEvent) {
   const o = item as unknown as Record<string, unknown>;
-  const strings = Object.fromEntries(STRINGS.map((k) => [k, str(o[k])])) as Record<(typeof STRINGS)[number], string | null>;
-  const raw = num(item.words);
-  const words = raw !== null && raw >= 0 && raw <= MAX_WORDS ? Math.round(raw) : null;
+  const strings = Object.fromEntries(STRINGS.map((k) => [k, str(o[k])])) as Strings;
+  const words = wordsOf(item.words);
   const progress = Math.min(1, Math.max(0, num(item.progress) ?? 0));
   const text = textOf(item.text);
   return {
-    ...strings, ...(text ?? NO_TEXT), hero: strings.hero && WEB.test(strings.hero) ? strings.hero : null,
-    url: item.url, saved_at: savedAtOf(item.saved_at, event.created_at), state: item.state === 'archived' ? 'archived' : 'unread',
+    ...strings, ...(text ?? NO_TEXT), ...addressesOf(item.url, strings),
+    saved_at: savedAtOf(item.saved_at, event.created_at), state: item.state === 'archived' ? 'archived' : 'unread',
     progress, words, title: strings.title, text_hash: text ? str(item.text_hash) : null, source_kind: str(item.source_kind) ?? 'web',
     extra: Object.keys(extra).length ? JSON.stringify(extra) : null,
     position_word: wordReached({ progress, words }),
@@ -199,10 +218,14 @@ function nameKeptText(db: SqlDb, now: number, owner: string, hash: string, row: 
   enqueue(db, now, { op: 'publish_item', signer: owner, subject: hash, targets: writeRelays(db, owner) });
 }
 
-/** The row's text after taking a newer copy: fetched if it names another, and the one it replaced retired. */
+/**
+ * The row's text after taking a newer copy: fetched if it names another, and the one it replaced retired. One queued
+ * again for its parse waits afresh, as one never tried: the pending queue reads a time-out left from an earlier wait as
+ * the try before that lets a page that never answers fail (services/pending.ts), so its first try would have failed it.
+ */
 function textChanged(db: SqlDb, now: number, owner: string, row: Row, c: Columns): boolean {
   if (row.text_sha256 === c.text_sha256) return false;
-  db.run('UPDATE items SET text_state = ?, fail_reason = NULL WHERE id = ?', c.text_sha256 ? 'remote' : 'queued', row.id);
+  db.run('UPDATE items SET text_state = ?, fail_reason = NULL, timed_out_at = NULL WHERE id = ?', c.text_sha256 ? 'remote' : 'queued', row.id);
   if (!row.text_sha256) return false;
   db.run('DELETE FROM items_fts WHERE rowid = ?', row.id);
   // taking a copy that names another text cancels this phone's waiting upload of its own (C§4.1)
@@ -248,12 +271,17 @@ export function applyItem(db: SqlDb, now: number, owner: string, hash: string, e
 const deletionWaiting = (db: SqlDb, owner: string, hash: string) =>
   !!db.get("SELECT 1 FROM outbox WHERE op = 'delete_item' AND signer = ? AND subject = ? AND state IN ('held', 'queued', 'sending')", owner, hash);
 
+/** Whether a copy dated at is newer than the one held apart for its address, if any, and than the row's own event. */
+function newest(held: { created_at: number } | undefined, row: Row | undefined, at: number): boolean {
+  if (held && held.created_at >= at) return false;
+  return !row || row.event_created_at === null || row.event_created_at < at;
+}
+
 function future(db: SqlDb, owner: string, hash: string, event: NostrEvent, row: Row | undefined, v: unknown): Applied {
   if (!(typeof v === 'number' && v > 1)) return { outcome: 'ignored' };
   const d = dOf(event) ?? ITEM_D_PREFIX + hash;
   const held = db.get<{ created_at: number }>('SELECT created_at FROM items_future WHERE owner = ? AND d = ?', owner, d);
-  if (held && held.created_at >= event.created_at) return { outcome: 'ignored' };
-  if (row && row.event_created_at !== null && row.event_created_at >= event.created_at) return { outcome: 'ignored' };
+  if (!newest(held, row, event.created_at)) return { outcome: 'ignored' };
   db.run('INSERT OR REPLACE INTO items_future (owner, d, event_json, created_at) VALUES (?, ?, ?, ?)', owner, d, JSON.stringify(event), event.created_at);
   if (row) removeItem(db, row.id, owner, hash);
   return { outcome: 'future', textReplaced: !!row };

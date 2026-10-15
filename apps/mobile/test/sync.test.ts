@@ -8,7 +8,7 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { addRelay, listServers, nextListTime, seedGeneratedLists, writeRelays } from '../src/data/lists';
-import { TEXT_SERVERS_MAX, getCursor, itemColumns, type TextJob } from '../src/data/sync';
+import { TEXT_SERVERS_MAX, applyItem, getCursor, itemColumns, type TextJob } from '../src/data/sync';
 import { SKEW, TEXT_MAX_BYTES, TEXT_TIMEOUT_MS, fetchText, pageStream, streamFilter, syncInbound, takeNewerLists, type Filter, type SyncPorts } from '../src/services/sync';
 import { drain, sendOne, type SendPorts } from '../src/services/send';
 import { memoryDb } from './sqlite';
@@ -205,6 +205,26 @@ describe('inbound sync (mobile spec 4.5)', () => {
     expect(row(w, h(6))).toBeUndefined();
     expect(w.db.get('SELECT created_at FROM items_future WHERE d = ?', `kefli/item/${h(6)}`)).toEqual({ created_at: 7000 });
     expect(w.db.get('SELECT 1 FROM outbox WHERE subject = ?', h(6))).toBeUndefined();
+  });
+
+  test('a copy from a newer version is held apart only while it is the newest: an older one, or one no newer than the row, is ignored', () => {
+    const w = world();
+    const ev = (id: string, created_at: number) => ({ id, created_at, tags: [['d', `kefli/item/${h(9)}`]] }) as unknown as NostrEvent;
+    const v = (n: unknown) => ({ item: { ...item().item, v: n }, extra: {} }) as unknown as ParsedItem;
+    applyItem(w.db, 100, w.pk, h(9), ev('e1', 6000), item());
+    // no newer than the row: ignored, the row kept
+    expect(applyItem(w.db, 100, w.pk, h(9), ev('e0', 6000), v(2))).toEqual({ outcome: 'ignored' });
+    expect(row(w, h(9))).toBeDefined();
+    // a version that isn't a number above 1 is no version this phone can hold apart (C§10)
+    for (const n of ['2', 0, null, NaN]) expect(applyItem(w.db, 100, w.pk, h(9), ev('ex', 9000), v(n))).toEqual({ outcome: 'ignored' });
+    expect(row(w, h(9))).toBeDefined();
+    // newer: held apart, the row gone
+    expect(applyItem(w.db, 100, w.pk, h(9), ev('e2', 7000), v(2))).toEqual({ outcome: 'future', textReplaced: true });
+    expect(row(w, h(9))).toBeUndefined();
+    // a copy no newer than the one held apart is ignored; a newer one takes its place
+    expect(applyItem(w.db, 100, w.pk, h(9), ev('e3', 7000), v(3))).toEqual({ outcome: 'ignored' });
+    expect(applyItem(w.db, 100, w.pk, h(9), ev('e4', 8000), v(3))).toEqual({ outcome: 'future', textReplaced: false });
+    expect(w.db.all('SELECT d, created_at FROM items_future')).toEqual([{ d: `kefli/item/${h(9)}`, created_at: 8000 }]);
   });
 
   test('the article open in the Reader keeps its place, and the remote one is handed back', async () => {
@@ -414,6 +434,46 @@ describe('inbound sync (mobile spec 4.5)', () => {
       text_hash: null, source_kind: 'web', hero: 'https://e.com/h.jpg', extra: '{"later":1}', position_word: 0 });
     const good = itemColumns({ item: { ...item().item, words: 9.6, text: { sha256: 'aa'.repeat(32), key: 'bb', nonce: 'cc', servers: ['https://s.example/', 4, 'javascript:x'] } } as never, extra: {} }, { created_at: 1 } as NostrEvent);
     expect(good).toMatchObject({ words: 10, text_servers: '["https://s.example"]', extra: null, position_word: 5 });
+  });
+
+  test("another phone's addresses are kept without a user name and password (contract 4.3, ruling 8)", async () => {
+    // another client may publish them with one, as a browser's request or an older row held them: the save's link is
+    // what Original, Open in browser and the save published again from here are given, and its picture is fetched
+    const w = world();
+    const named = { url: 'https://reader:hunter2@example.com/a', canonical: 'https://reader:hunter2@example.com/c', hero: 'https://cdn:secret@img.example.com/h.jpg' };
+    w.publish(await remoteSave(w, h(1), 6000, null, named));
+    await syncInbound(w.ports);
+    const kept = () => w.db.get('SELECT url, canonical, hero, title FROM items WHERE hash = ?', h(1));
+    expect(kept()).toEqual({ url: 'https://example.com/a', canonical: 'https://example.com/c', hero: 'https://img.example.com/h.jpg', title: 'A title' });
+    // so is a newer copy taken over the row
+    w.publish(await remoteSave(w, h(1), 7000, null, { ...named, url: 'https://admin:pw@example.com/b', title: 'Newer' }));
+    await syncInbound(w.ports);
+    expect(kept()).toEqual({ url: 'https://example.com/b', canonical: 'https://example.com/c', hero: 'https://img.example.com/h.jpg', title: 'Newer' });
+    // and an address without them is kept exactly as written
+    const plain = itemColumns(item({ url: 'https://example.com/a?q=1#x', canonical: 'https://example.com/c', hero: 'https://img.example.com/h.jpg' }), { created_at: 1 } as NostrEvent);
+    expect(plain).toMatchObject({ url: 'https://example.com/a?q=1#x', canonical: 'https://example.com/c', hero: 'https://img.example.com/h.jpg' });
+  });
+
+  test('a save queued again by a newer copy without text waits afresh, as one never tried (F12)', () => {
+    // the pending queue reads timed_out_at as a try before, the 14-day rule's "again" (services/pending.ts): one left
+    // from an earlier wait let a save past its 14 days fail at the first time-out after a newer copy queued it again
+    const w = world();
+    const at = (id: string, created_at: number) => ({ id, created_at, tags: [['d', `kefli/item/${h(1)}`]] }) as unknown as NostrEvent;
+    const text = { sha256: 'ab'.repeat(32), key: 'k'.repeat(44), nonce: 'n'.repeat(16), servers: ['http://blossom', 'http://m1'] };
+    applyItem(w.db, 100, w.pk, h(1), at('e1', 6000), item());
+    expect(row(w, h(1))).toMatchObject({ text_state: 'queued', timed_out_at: null });
+    // tried here and couldn't be had; then another phone sends its text, and a newer copy without it before this phone
+    // had fetched it
+    w.db.run('UPDATE items SET timed_out_at = 6500 WHERE hash = ?', h(1));
+    applyItem(w.db, 100, w.pk, h(1), at('e2', 7000), item({ text }));
+    expect(row(w, h(1))).toMatchObject({ text_state: 'remote', timed_out_at: null });
+    w.db.run('UPDATE items SET timed_out_at = 7500 WHERE hash = ?', h(1));
+    applyItem(w.db, 100, w.pk, h(1), at('e3', 8000), item());
+    expect(row(w, h(1))).toMatchObject({ text_state: 'queued', timed_out_at: null });
+    // a copy that changes nothing of its text leaves the wait as it was
+    w.db.run('UPDATE items SET timed_out_at = 8500 WHERE hash = ?', h(1));
+    applyItem(w.db, 100, w.pk, h(1), at('e4', 9000), item({ state: 'archived' }));
+    expect(row(w, h(1))).toMatchObject({ text_state: 'queued', state: 'archived', timed_out_at: 8500 });
   });
 
   test('no active identity or no signer: nothing to do', async () => {
