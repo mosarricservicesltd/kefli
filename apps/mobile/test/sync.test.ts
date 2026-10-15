@@ -1079,7 +1079,8 @@ describe('an answer a relay cuts short (net/pool CutShort)', () => {
     expect(w.db.get('SELECT COUNT(*) AS n FROM items')).toEqual({ n: 120 });
     expect(getCursor(w.db, 'ws://op', 'items', w.pk)).not.toBeNull();
     pool.close();
-  });
+    // 120 signed saves read over sockets: as its neighbours, it outlasts Jest's 5 s on a full coverage run's workers
+  }, 30_000);
 
   test('a library key behind answers cut short isn’t read as none: no key is made over it, and the next sync takes it', async () => {
     const w = world();
