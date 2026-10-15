@@ -31,8 +31,8 @@ const MaxInFlight = 32
 const MaxBlockInFlight = 4 * MaxInFlight
 
 // Pace is how a request's body must arrive: in its first Grace it may bring nothing at all, from then on it must have
-// brought at least Floor bytes a second on average since it began, and no one read may wait longer than Stall for a
-// byte.
+// brought at least Floor bytes for every second past its Grace, so a body of n bytes may take Grace and a second for
+// every Floor bytes, and no one read may wait longer than Stall for a byte.
 type Pace struct {
 	Grace time.Duration
 	Floor int64
@@ -168,7 +168,12 @@ func (g *Guard) release(cs []count) {
 // refuse answers a request the guard turns away before its route sees it. One with a body closes its connection with
 // the answer and has none of the body read: a client sending such requests as fast as it could would otherwise have
 // each kept while the server read on, past the count of requests in flight. No phone or browser sends one, unless a
-// crowd behind one address has reached its cap, and that request is sent again later, as any 429 is.
+// crowd behind one address has reached its cap, and that request is sent again later, as any 429 is. Closed at once
+// with up to 256 KB of the body still to come, the connection is reset, and Caddy, its write to keflid meeting the
+// reset before it has read the answer, may answer 502 in its place (two in five of the 429s to uploads of 100 KB sent
+// to Caddy over HTTP/2, in the r5 review), which the phone and the extension send again later just as they do a 429.
+// Waiting before the close, as the server does after a route's early answer (answer.done), would keep each refused
+// request in keflid, uncounted, as reading on would.
 func (g *Guard) refuse(w http.ResponseWriter, r *http.Request, status int, reason string) {
 	if r.ContentLength != 0 {
 		w.Header().Set("Connection", "close")
