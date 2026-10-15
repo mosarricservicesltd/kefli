@@ -18,8 +18,8 @@
 // RULED: a request naming another server for its HTML is taken without it, and the page is fetched instead, so a
 // save from a connected browser is never lost to a bad field.
 import {
-  KIND, SAVE_REQUEST_MAX_BYTES, UnwrapError, acceptSaveRequest, decryptText, eventBytes, opensWraps, unwrap, withoutUserInfo, type DevicesRecord,
-  type NostrEvent, type Rumor, type SaveRequest, type Signer,
+  KIND, SAVE_REQUEST_MAX_BYTES, UnwrapError, acceptSaveRequest, decryptText, eventBytes, opensWraps, unwrap, withoutTrailingSlashes, withoutUserInfo,
+  type DevicesRecord, type NostrEvent, type Rumor, type SaveRequest, type Signer,
 } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { localRecord } from '../data/devices';
@@ -143,7 +143,7 @@ const refused = (status: number): BlobRead => (status === 404 ? GONE : status >=
 export async function readBlob(p: Pick<InboxPorts, 'fetch' | 'crypto' | 'localStack'>, html: NonNullable<SaveRequest['html']>): Promise<BlobRead> {
   let blob: Uint8Array;
   try {
-    const url = `${html.server.replace(/\/+$/, '')}/${html.sha256}`;
+    const url = `${withoutTrailingSlashes(html.server)}/${html.sha256}`;
     const o = await open(p.fetch, url, { method: 'GET' }, INBOX_TIMEOUT_MS, serverHops(p.localStack === true));
     if (!o.res.ok) return (o.done(), refused(o.res.status));
     blob = await o.read(INBOX_MAX_BYTES);
