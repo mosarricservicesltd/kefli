@@ -1,8 +1,11 @@
 // The link a share carries (mobile spec 5.4) and the start-up pickup of spools a killed process left (8.5): a share
 // that can't be read or saved must not stop the shares behind it, at this start or any other.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { memoryDb } from './sqlite';
 import { migrate } from '../src/data/schema';
-import { SHARE_MAX_CHARS, SHARE_MAX_TRIES, activeSpools, firstLink, pickUpSpools, readSpool } from '../src/share/pickup';
+import { SHARE_MAX_CHARS, SHARE_MAX_TRIES, activeSpools, firstLink, pickUpSpools, readSpool, sheetLink } from '../src/share/pickup';
+import { S } from '../src/ui/strings';
 
 const mockSpools = new Map<string, string>();
 const mockSaved: string[] = [];
@@ -125,5 +128,33 @@ describe('the start-up pickup (8.5)', () => {
     } finally {
       activeSpools.delete('held');
     }
+  });
+});
+
+describe('what a share sheet opens on (5.4)', () => {
+  beforeEach(() => mockSpools.clear());
+
+  test("its spool's link; a spool with none is Not a link; one gone or cut short is a share that didn't save", () => {
+    spool('link', 'Look at this https://a.example/story');
+    spool('words', 'no link here');
+    spool('picture', null);
+    mockSpools.set('cut', '{"v":1,"id":"cut","text":"https://a.exa');
+    expect(sheetLink('link')).toEqual({ url: 'https://a.example/story' });
+    expect(sheetLink('words')).toEqual({ url: null, why: 'nolink' });
+    expect(sheetLink('picture')).toEqual({ url: null, why: 'nolink' });
+    // a share held in memory for want of room to write it goes with its process, and a sheet brought back after it
+    // finds nothing: sharing again mends that, where a different page or address would not
+    expect(sheetLink('cut')).toEqual({ url: null, why: 'failed' });
+    expect(sheetLink('gone')).toEqual({ url: null, why: 'failed' });
+    expect(sheetLink(undefined)).toEqual({ url: null, why: 'failed' });
+  });
+
+  test("the sheet opens on it: a share that didn't save says so, and to share it again", () => {
+    // Node can't draw the sheet: this reads its source, as the Original view's test reads its own
+    const src = readFileSync(join(__dirname, '..', 'src', 'share', 'ShareRoot.tsx'), 'utf8');
+    expect(src).toContain('const opened = useMemo(() => sheetLink(spoolId), [spoolId]);');
+    expect(src).toContain("useState<Mode>(opened.url === null ? opened.why : isXPost(opened.url) ? 'checking' : 'saving')");
+    expect(src).toContain("mode === 'nolink' ? [S.share.noLink, S.share.noLinkSub] : [S.share.failed, S.share.failedSub]");
+    expect([S.share.failed, S.share.failedSub]).toEqual(['That didn’t save', 'Try sharing it again.']);
   });
 });

@@ -40,7 +40,7 @@ import { Icon } from '../ui/Icon';
 import { S } from '../ui/strings';
 import { T, ui } from '../ui/text';
 import { useTheme } from '../ui/theme';
-import { activeSpools, firstLink, readSpool } from './pickup';
+import { activeSpools, sheetLink } from './pickup';
 import { hostOf } from '../screens/SaveRow';
 
 type Mode = 'saving' | 'checking' | 'saved' | 'again' | 'offline' | 'xwait' | 'noarticle' | 'nolink' | 'failed' | 'removed';
@@ -102,10 +102,10 @@ export default function ShareRoot({ spoolId }: { spoolId?: string }) {
 function SavedSheet({ spoolId }: { spoolId?: string }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
-  // a spool that can't be read is no share: Not a link, rather than a sheet that throws while it draws
-  const entry = useMemo(() => (spoolId ? readSpool(spoolId) : null), [spoolId]);
-  // once, not at every render: each address tried is normalised
-  const url = useMemo(() => firstLink(entry?.text ?? null), [entry]);
+  // once, not at every render: each address tried is normalised. A spool gone or unreadable is a share that didn't
+  // save, rather than a sheet that throws while it draws or one that says Not a link of a link that was never read
+  const opened = useMemo(() => sheetLink(spoolId), [spoolId]);
+  const url = opened.url;
   const first = useMemo(() => {
     try {
       return url ? itemHash(url) : null;
@@ -113,7 +113,7 @@ function SavedSheet({ spoolId }: { spoolId?: string }) {
       return null;
     }
   }, [url]);
-  const [mode, setMode] = useState<Mode>(!url ? 'nolink' : isXPost(url) ? 'checking' : 'saving');
+  const [mode, setMode] = useState<Mode>(opened.url === null ? opened.why : isXPost(opened.url) ? 'checking' : 'saving');
   const [shown, setShown] = useState<{ hash: string | null; title: string | null; site: string | null }>({ hash: first, title: null, site: url ? hostOf(url) : null });
   const [drawFrom] = useState(() => Date.now());
   // read after the first frame, which the sheet spends below the screen, so opening the store never holds it back

@@ -100,6 +100,22 @@ export function readSpool(id: string): SpoolEntry | null {
   }
 }
 
+/** What a share sheet opens on: the link its spool carries, or why there is none. */
+export type SheetLink = { url: string } | { url: null; why: 'failed' | 'nolink' };
+
+/**
+ * The link a sheet's spool carries (5.4). A spool gone or unreadable when its sheet opens is a share that didn't save
+ * (That didn't save, Try sharing it again): a share held in memory for want of room to write it goes with its process,
+ * so a sheet brought back after it finds nothing, and sharing again mends that. A spool that holds no address Kefli
+ * can save is Not a link, which sharing the same thing again would not mend.
+ */
+export function sheetLink(spoolId: string | undefined): SheetLink {
+  const entry = spoolId ? readSpool(spoolId) : null;
+  if (!entry) return { url: null, why: 'failed' };
+  const url = firstLink(entry.text);
+  return url ? { url } : { url: null, why: 'nolink' };
+}
+
 let picking: Promise<number> | null = null;
 
 /** Returns how many spools were saved. Concurrent calls (the start's several triggers) share one run. */
