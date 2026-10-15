@@ -743,6 +743,31 @@ describe('a save whose page never answers (RULED: past 14 days, tried again with
     expect(publishes(w)).toEqual([]);
   });
 
+  test('an X post whose check X never answers gets the same rule: published with its link once 14 days old and checked again (FD 119)', async () => {
+    const w = world();
+    w.ports.x = { fetch: (async () => { throw new TimedOut(); }) as never };
+    w.ports.online = async () => true;
+    w.share('https://x.com/someone/status/1');
+    w.db.run("UPDATE items SET x_state = 'pending' WHERE url = 'https://x.com/someone/status/1'");
+    const result = async (seconds: number) => {
+      w.ports.now = () => 1000 + seconds;
+      return runPendingParses(w.ports, PK);
+    };
+    // under 14 days it waits however often it is checked, and so does a first check past them
+    expect(await result(13 * DAY)).toEqual({ parsed: 0, failed: 0, waiting: 0, xWaiting: 1 });
+    w.db.run('UPDATE items SET timed_out_at = NULL');
+    expect(await result(15 * DAY)).toEqual({ parsed: 0, failed: 0, waiting: 0, xWaiting: 1 });
+    // checked before, off the internet it still waits
+    w.ports.online = async () => false;
+    expect(await result(15 * DAY + 60)).toEqual({ parsed: 0, failed: 0, waiting: 0, xWaiting: 1 });
+    // checked again on the internet: sent without its text, its link kept, as a page that never answers is
+    w.ports.online = async () => true;
+    expect(await result(15 * DAY + 120)).toEqual({ parsed: 0, failed: 1, waiting: 0, xWaiting: 0 });
+    expect(w.db.get('SELECT text_state, fail_reason FROM items')).toEqual({ text_state: 'failed', fail_reason: 'offline' });
+    expect(w.outbox().filter((o) => o.op === 'publish_item')).toHaveLength(1);
+    expect(pendingParses(w.db, PK)).toEqual([]);
+  });
+
   test('a page answering that it can’t be had now, 5xx, 429 or 408, is as one that doesn’t answer: its save waits, then fails past 14 days', async () => {
     for (const status of [500, 502, 503, 504, 522, 429, 408]) {
       const w = world({ 'https://busy.example/post': { status, body: '<html>Try again later</html>' } });

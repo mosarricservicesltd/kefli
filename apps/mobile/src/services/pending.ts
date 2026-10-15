@@ -2,7 +2,8 @@
 // spent. Each is fetched and parsed as a share is (page.ts), a public http address over https alone (net/http
 // overHttps); one whose site has no https fails once it is over three days old (page.ts HTTPS_WAIT_SECONDS), and one
 // whose page never answers once it is over 14 days old and tried again (page.ts ANSWER_WAIT_SECONDS), unless it would
-// make SLOW_RUN pages in a row that can't be had, which are the network. Its text is encrypted under a fresh key,
+// make SLOW_RUN pages in a row that can't be had, which are the network; an X post whose check X never answers gets
+// the same 14-day rule (FD 119). Its text is encrypted under a fresh key,
 // staged and written, and only then is the save marked as having it, indexed and its sends queued (data/pending.ts).
 // Ports, so this runs in tests.
 import { encryptText, isPublicWebUrl, itemHash, textHash, withoutUserInfo, type CryptoPort } from '@kefli/protocol';
@@ -81,7 +82,7 @@ type Step = 'parsed' | 'failed' | 'xWaiting' | 'unreached' | 'unanswered';
 
 /** A queued parse taken as far as it goes, after run pages in a row that couldn't be had (pass). */
 async function step(p: PendingPorts, owner: string, queued: Pending, run: number): Promise<Step> {
-  const item = queued.x_state === 'pending' ? await xChecked(p, owner, queued) : queued;
+  const item = queued.x_state === 'pending' ? await xChecked(p, owner, queued, run) : queued;
   if (typeof item === 'string') return item;
   const outcome = await pageOf(p, item);
   if (outcome.kind !== 'offline') return settle(p, owner, item, outcome);
@@ -98,15 +99,30 @@ async function step(p: PendingPorts, owner: string, queued: Pending, run: number
  * X's embed is never asked about a post with a user name and password in it, as a row stored before ruling 8 or a
  * browser's request may hold.
  */
-async function xChecked(p: PendingPorts, owner: string, item: Pending): Promise<Pending | Step> {
+async function xChecked(p: PendingPorts, owner: string, item: Pending, run: number): Promise<Pending | Step> {
   const x = await checkXPost(p.x, withoutUserInfo(item.url));
   if (x.kind === 'offline') return 'unreached';
-  if (x.kind === 'xfail') return 'xWaiting';
+  if (x.kind === 'xfail') return xGivenUp(p, owner, item, run);
   if (x.kind === 'none') {
     xNoArticle(p.db, p.now(), owner, item, await p.targets());
     return 'failed';
   }
   return xFound(p.db, item, x.url);
+}
+
+/**
+ * An X post whose check X didn't answer: it waits and is checked again (xWaiting, G3), unless it has waited as long
+ * as a page may for its answer and was checked before, with the phone on the internet (givenUp), when it is published
+ * with its link as a page that never answers is, and counts towards the run that reads as the network (FD 119);
+ * waiting for good, as it did, a post X never answers was never backed up.
+ */
+async function xGivenUp(p: PendingPorts, owner: string, item: Pending, run: number): Promise<Step> {
+  const reason = await givenUp(p, item, { kind: 'offline' }, run);
+  if (!reason) return 'xWaiting';
+  // the reason alone, never the address (7.1)
+  console.log(`[kefli-pending] ${JSON.stringify({ failed: reason, after: WAITED_FOR[reason], x: true })}`);
+  await settle(p, owner, item, { kind: 'failed', reason, finalUrl: item.url });
+  return 'unanswered';
 }
 
 /**
