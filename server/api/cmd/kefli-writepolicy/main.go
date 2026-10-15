@@ -58,7 +58,7 @@ func run(args []string, in io.Reader, out io.Writer) error {
 	prune(wraps, keflid)
 	ctx, stop := context.WithCancel(context.Background())
 	defer stop()
-	go pruneEvery(ctx, wraps, keflid, time.Hour)
+	go pruneEvery(ctx, wraps, keflid, policy.PruneEvery)
 	p := policy.New(policy.NewDB(keflid, wraps), time.Now)
 	if *minFree > 0 {
 		p.Full = policy.Floor(*room, *minFree<<20, policy.DiskFree, time.Now)

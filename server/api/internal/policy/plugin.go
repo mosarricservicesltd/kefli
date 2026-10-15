@@ -124,10 +124,15 @@ func OpenWraps(path string) (*sql.DB, error) {
 // record never forgets a wrap the relay still holds.
 const WrapLife = 31 * 24 * time.Hour
 
+// PruneEvery is how often the write policy prunes its record (PruneWraps), besides once as it starts.
+const PruneEvery = time.Hour
+
 // PruneOverlap is how far before the last prune's start the next looks for keys removed: the policy's allowlist is up
 // to five seconds old (DB), so a wrap to a key removed just before a prune can be recorded just after it, and the
-// next prune still forgets it.
-const PruneOverlap = time.Hour
+// next prune still forgets it. It is as long as the time between prunes, so a clock put back, which leaves the start
+// kept ahead of the keys removed after it, only puts off their prune: the next prune keeps its own start, and the one
+// after it, looking back from there, finds them.
+const PruneOverlap = PruneEvery
 
 // PruneWraps forgets the wraps the relay's sweep has dropped, which no kind 5 ever named: those past WrapLife, and
 // those addressed to a key keflid's gone list has taken since the last prune began, less PruneOverlap, so the record

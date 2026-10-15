@@ -249,6 +249,39 @@ func TestPruneWrapsReadsOnlyKeysRemovedSince(t *testing.T) {
 	}
 }
 
+// A prune made while the clock ran a day fast keeps a start a day ahead, and the keys removed once the clock is put
+// right fall before it, so the next prune passes over them. The overlap, an hour as the prunes are, has the prune
+// after that look back from the next one's own start, so it forgets the wrap the policy took to a key removed a
+// second after the clock was put right; an overlap shorter than the time between prunes, as the allowlist's five
+// stale seconds alone would ask, kept that wrap, and its deleted recipient, until WrapLife.
+func TestAClockPutBackOnlyPutsOffAPrune(t *testing.T) {
+	_, wraps, st, ro := setupDB(t)
+	ctx := context.Background()
+	right := time.Unix(1_791_600_000, 0)
+	if err := policy.PruneWraps(wraps, ro, right.Add(24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	k := strings.Repeat("7", 64)
+	st.Now = func() time.Time { return right.Add(time.Second) }
+	if err := st.Register(ctx, k); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DeleteAccount(ctx, k); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := wraps.Exec(`INSERT INTO wraps(id, author, p, at) VALUES('to the removed', ?, ?, ?)`, throw, k, right.Add(3*time.Second).Unix()); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 2; i++ {
+		if err := policy.PruneWraps(wraps, ro, right.Add(time.Duration(i)*policy.PruneEvery)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := recorded(t, wraps); len(got) != 0 {
+		t.Fatalf("two prunes after the clock was put right the record still holds %v", got)
+	}
+}
+
 // The floor reads the disk at most once a second, and a reading that fails counts as room.
 func TestFloor(t *testing.T) {
 	now := time.Unix(1_791_600_000, 0)
