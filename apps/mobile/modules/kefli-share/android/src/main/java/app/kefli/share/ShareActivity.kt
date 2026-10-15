@@ -12,15 +12,26 @@ import java.lang.ref.WeakReference
 
 // The share sheet's target (mobile spec 8.5). onCreate spools the share to a file before any JavaScript runs,
 // so process death never loses it, then renders the "share" surface on the app's one ReactHost with the
-// spool's id. It ends with no transition, back in the sender's task (flow decision 39).
+// spool's id. Recreated, it opens on the same spool while that is still there, and spools the share again from
+// its intent when it isn't. It ends with no transition, back in the sender's task (flow decision 39).
 class ShareActivity : ReactActivity() {
   private var spoolId: String? = null
 
   override fun onCreate(savedInstanceState: Bundle?) {
-    spoolId = savedInstanceState?.getString(SPOOL_KEY) ?: Spool.write(this, intent, referrer?.toString())
+    spoolId = spool(savedInstanceState?.getString(SPOOL_KEY))
     spoolId?.let { live[it] = WeakReference(this) }
     super.onCreate(null)
   }
+
+  /**
+   * The spool this sheet opens on: the one it had before it was recreated, while that is still on disk or held in
+   * memory, and otherwise the share spooled again from the intent, which the system keeps with its text. A share held
+   * in memory for want of room to write it went with its process, and one the start-up pickup saved meanwhile is gone
+   * from the disk: a sheet brought back after either opened on nothing and said That didn't save. Spooled again, the
+   * first is saved, and the second is Already saved.
+   */
+  private fun spool(kept: String?): String =
+    kept?.takeIf { Spool.has(this, it) } ?: Spool.write(this, intent, referrer?.toString())
 
   override fun onDestroy() {
     spoolId?.let { if (live[it]?.get() === this) live.remove(it) }
