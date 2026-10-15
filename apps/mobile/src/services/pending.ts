@@ -131,8 +131,8 @@ type GivenUp = keyof typeof WAITED_FOR;
  * waitedForAnswer) and was tried before, so one that comes to this phone old, as another phone's save does, has a
  * second try before one slow answer can fail it. Either only with the phone on the internet, whose state is asked
  * only then; a phone that can't say, or a save with no saved_at, waits. run is the pages in a row before it that
- * couldn't be had (pass): RULED, one that would make SLOW_RUN of them waits whatever its age, since a run of pages
- * that can't be had is the network (F12), not their own.
+ * couldn't be had (pass): RULED, one that would make SLOW_RUN of them waits whatever its age, a run of pages that
+ * can't be had being the network's doing (F12).
  */
 async function givenUp(p: PendingPorts, item: Pending, outcome: PageOutcome, run: number): Promise<GivenUp | null> {
   const reason = waitedOut(item, outcome, p.now(), run);

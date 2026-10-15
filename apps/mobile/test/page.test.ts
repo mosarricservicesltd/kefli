@@ -206,7 +206,7 @@ describe('what a page hands back is taken only as far as a save can hold it', ()
   });
 
   test('a parse whose renderer the system killed waits, as a page that timed out does; a crash is a page not read', async () => {
-    // its page answered, so the save waits at any age: it is no page that never answers (pending.ts)
+    // its page answered, so its save waits at any age, as pending.ts reads it
     expect(await fetchPage(parsing({ ok: false, reason: 'renderer_gone' }), 'https://e.com/a')).toEqual({ kind: 'offline', answered: true });
     expect(await fetchPage(parsing({ ok: false, reason: 'error' }), 'https://e.com/a')).toMatchObject({ kind: 'failed', reason: 'not_readable' });
   });
