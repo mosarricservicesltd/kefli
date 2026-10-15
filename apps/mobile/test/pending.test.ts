@@ -516,6 +516,18 @@ describe('a save at an http address whose site has no https (RULED: past three d
     expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 1, waiting: 0 });
   });
 
+  test("so is one whose firewall turns port 443 away as host unreachable, RHEL's and CentOS's default", async () => {
+    // left waiting, a site whose server has only port 80 open behind that firewall was never read nor backed up
+    const w = world();
+    noHttps(w, () => new Error('fetch failed: java.net.NoRouteToHostException: Host unreachable'));
+    w.ports.online = async () => true;
+    w.share('http://old.example/post');
+    at(w, 10 * DAY);
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 1, waiting: 0 });
+    expect(w.db.get('SELECT text_state, fail_reason FROM items')).toEqual({ text_state: 'failed', fail_reason: 'http' });
+    expect(publishes(w)).toEqual([itemHash('http://old.example/post')]);
+  });
+
   test('three days old or less it waits, as its share did: a captive portal or a TLS hiccup can’t fail it', async () => {
     const w = world();
     noHttps(w, TLS);

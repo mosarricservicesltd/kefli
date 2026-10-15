@@ -357,6 +357,21 @@ describe('a page that can’t be had: the network, or something that refused it 
     }
   });
 
+  test("a firewall that turns port 443 away as host unreachable refuses it too, and so does a reset in Android's own words", async () => {
+    // RHEL's and CentOS's default firewall rejects a closed port with ICMP host-prohibited: Android's socket reports
+    // it as NoRouteToHostException, which OkHttp throws as it is (it rewords a ConnectException only), and a reset
+    // read off a plain socket says "recvfrom failed: ECONNRESET" there, not "Connection reset"
+    for (const m of [
+      'fetch failed: java.net.NoRouteToHostException: Host unreachable',
+      'fetch failed: java.net.SocketException: recvfrom failed: ECONNRESET (Connection reset by peer)',
+    ]) {
+      expect([m, await fetchPage(failing(m), 'https://old.example/post')]).toEqual([m, { kind: 'offline', refused: true }]);
+    }
+    // the phone's own network going mid-request is the network
+    const abort = 'fetch failed: java.net.SocketException: Software caused connection abort';
+    expect(await fetchPage(failing(abort), 'https://old.example/post')).toEqual({ kind: 'offline' });
+  });
+
   test('a name that resolves nowhere is the network, however the host is named; so is any other failure', async () => {
     for (const m of [
       'fetch failed: java.net.UnknownHostException: Unable to resolve host "javax.net.ssl.example": No address associated with hostname',

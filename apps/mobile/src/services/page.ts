@@ -190,14 +190,20 @@ async function answer(p: PagePorts, url: string): Promise<Answer> {
 
 /**
  * What OkHttp ends a connection with when something answered but not with https the phone can use: a TLS failure (a
- * certificate for another site or none, a handshake refused, plain http on port 443), or a connection refused or
- * reset. Read from the start of the message expo/fetch rejects with, "fetch failed: " and the Java exception's own
- * words, so a host's name, which a failure to resolve it quotes, can't pass for one. A name that resolves nowhere is
- * the network, or no site at all, as for any address; a refusal on a network that reaches nothing past a captive
+ * certificate for another site or none, a handshake refused, plain http on port 443), a connection refused or reset,
+ * or a firewall's reject of port 443 as host unreachable (RHEL's and CentOS's default, ICMP host-prohibited), which
+ * Android's socket throws as NoRouteToHostException and OkHttp passes on unwrapped, as it rewords only a
+ * ConnectException. A reset is "Connection reset" in OkHttp's words and "recvfrom failed: ECONNRESET" in a plain
+ * socket's on Android. Read from the start of the message expo/fetch rejects with, "fetch failed: " and the Java
+ * exception's own words, so a host's name, which a failure to resolve it quotes, can't pass for one. A name that
+ * resolves nowhere is the network, or no site at all, as for any address, and so is a connection the phone's own
+ * network dropped (Software caused connection abort); a refusal on a network that reaches nothing past a captive
  * portal is told apart by the network's own state (pending.ts). Built from a string: the code gate misreads regex
  * literals.
  */
-const REFUSED = new RegExp('^(?:fetch failed: )?(?:javax\\.net\\.ssl\\.|java\\.security\\.cert\\.|java\\.net\\.ConnectException\\b|java\\.net\\.SocketException: Connection reset\\b)');
+const REFUSED = new RegExp(
+  '^(?:fetch failed: )?(?:javax\\.net\\.ssl\\.|java\\.security\\.cert\\.|java\\.net\\.(?:ConnectException|NoRouteToHostException)\\b|java\\.net\\.SocketException: (?:Connection reset|\\w+ failed: ECONNRESET)\\b)',
+);
 
 /**
  * Why a page couldn't be had: too large, a redirect the phone won't follow or cleartext the build refuses (net/http
