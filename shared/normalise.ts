@@ -122,11 +122,18 @@ const twoLabels = (host: string): boolean => host.split('.').filter((label) => l
  * and on some of which every user's posts are at the domain itself (www.tumblr.com, medium.com, substack.com). There a
  * leading m. or amp. label can be a user's own name, so a blog at amp.tumblr.com could otherwise name another user's
  * post at www.tumblr.com as its canonical, and land on, or replace, a save of it. A page on one of these domains, or
- * on a name under one, takes a canonical only from its own host (sameSite).
+ * on a name under one, takes a canonical only from its own host (sameSite). The first ten were ruled on 14 October
+ * 2026; ghost.io, gitlab.io, web.app, wixsite.com and blogspot's country domains, where amp.blogspot.co.uk would
+ * otherwise take www.blogspot.co.uk, were added on 15 October 2026 (flow decision 119).
  */
 export const SHARED_HOSTING: readonly string[] = Object.freeze([
-  'blogspot.com', 'github.io', 'medium.com', 'neocities.org', 'netlify.app',
-  'pages.dev', 'substack.com', 'tumblr.com', 'vercel.app', 'wordpress.com',
+  'blogspot.ca', 'blogspot.ch', 'blogspot.co.nz', 'blogspot.co.uk', 'blogspot.com',
+  'blogspot.com.au', 'blogspot.com.br', 'blogspot.de', 'blogspot.es', 'blogspot.fr',
+  'blogspot.hk', 'blogspot.ie', 'blogspot.in', 'blogspot.it', 'blogspot.jp',
+  'blogspot.kr', 'blogspot.mx', 'blogspot.nl', 'blogspot.se', 'blogspot.sg',
+  'blogspot.tw', 'ghost.io', 'github.io', 'gitlab.io', 'medium.com',
+  'neocities.org', 'netlify.app', 'pages.dev', 'substack.com', 'tumblr.com',
+  'vercel.app', 'web.app', 'wixsite.com', 'wordpress.com',
 ]);
 
 /** Whether host, its trailing dots aside, is one of SHARED_HOSTING's domains or a name under one. */
