@@ -584,7 +584,7 @@ describe('a capture the operator refuses (contract 4.4 and 5, v1.12)', () => {
     await h.work.save(PAGE, 1, false);
     await h.store.set(KEYS.pairing, PAIRING);
     const ack: PairAck = { v: 1, user_pubkey: T.pubkey(), write_relays: ['wss://relay.example'], blossom_servers: ['https://blossom.example'], token: 'cd'.repeat(32), moved_from: user.pubkey() };
-    const moved = await applyMove(h.store, device, ack, NOW);
+    const moved = await applyMove(h.store, device, ack, NOW, h.session);
     const n = net({ blossom: operator(413, 'quota') });
     // the background reads the new library's pairing after the move
     await harness({ store: h.store, net: n.net, pairing: moved }).work.flushQueue();
@@ -904,7 +904,7 @@ describe('a wrap that waited (contract 4.4: the phone reads its inbox from two d
     await h.work.save(PAGE, 1, false);
     await h.store.set(KEYS.pairing, PAIRING);
     const ack: PairAck = { v: 1, user_pubkey: user.pubkey(), write_relays: [], blossom_servers: [], token: 'cd'.repeat(32), moved_from: user.pubkey() };
-    await applyMove(h.store, device, ack, NOW + 500);
+    await applyMove(h.store, device, ack, NOW + 500, h.session);
     expect(await queued(h.store)).toMatchObject([{ wrapped_at: NOW + 500 }]);
   });
 });
@@ -917,7 +917,7 @@ describe('the queue’s lock (F41)', () => {
     expect((await queued(store)).map((e) => e.id).sort()).toEqual(['a', 'b']);
     await store.set(KEYS.pairing, PAIRING);
     const ack: PairAck = { v: 1, user_pubkey: user.pubkey(), write_relays: [], blossom_servers: [], token: 'cd'.repeat(32), moved_from: user.pubkey() };
-    await Promise.all([applyMove(store, device, ack, NOW), enqueue(store, entry('c'), 'offline')]);
+    await Promise.all([applyMove(store, device, ack, NOW, memoryStore()), enqueue(store, entry('c'), 'offline')]);
     expect((await queued(store)).map((e) => e.id).sort()).toEqual(['a', 'b', 'c']);
   });
 
@@ -1002,7 +1002,7 @@ describe('hardening (F52)', () => {
     const listed = { ...ackTo(T, user.pubkey(), 'cd'.repeat(32)), token: ['cd'.repeat(32)] as unknown as string };
     const ack = await followMoves(device, [(await wrapPairAck(user, device.pubkey(), listed, NOW)).wrap], user.pubkey());
     expect(ack?.token).toEqual(['cd'.repeat(32)]);
-    const moved = await applyMove(h.store, device, ack!, NOW);
+    const moved = await applyMove(h.store, device, ack!, NOW, h.session);
     expect(moved.token).toBe('cd'.repeat(32));
     expect((await h.store.get<Pairing>(KEYS.pairing))?.token).toBe('cd'.repeat(32));
     const [e] = await queued(h.store);
@@ -1384,5 +1384,85 @@ describe('a field no wrap could ever hold (F39, faster)', () => {
     const started = Date.now();
     await expect(prepare(linkOnly(`https://example.com/?q=${'x'.repeat(2_000_000)}`), ctx)).rejects.toBeInstanceOf(AddressTooLongError);
     expect(Date.now() - started).toBeLessThan(10_000);
+  });
+});
+
+describe('a move while saves wait, their toasts still showing (contract 4.4 and 4.8)', () => {
+  const T = new LocalSigner(hexToBytes('33'.repeat(32)));
+  const ack: PairAck = { v: 1, user_pubkey: T.pubkey(), write_relays: ['wss://relay.example'], blossom_servers: ['https://blossom.example'], token: 'cd'.repeat(32), moved_from: user.pubkey() };
+  /** A save made offline, its toast, and the queue wrapped again for T by a move. */
+  async function savedThenMoved(o: Parameters<typeof net>[0] = {}) {
+    const n = net(o);
+    const h = harness({ online: false, net: n.net, collected: [false, false] });
+    await h.work.save(PAGE, 1, false);
+    const offline = h.toasts.at(-1)!;
+    await h.store.set(KEYS.pairing, PAIRING);
+    await applyMove(h.store, device, ack, NOW, h.session);
+    const [moved] = await queued(h.store);
+    return { h, n, offline, moved };
+  }
+
+  test('Undo on the offline toast of a save the move wrapped again takes it off the queue', async () => {
+    // the relay refuses a retraction of a wrap it doesn't hold, as Kefli's does (contract 3.2)
+    const { h, n, offline, moved } = await savedThenMoved({ retract: 'refused' });
+    expect(offline.kind).toBe('offline');
+    expect(moved.id).not.toBe(offline.id);
+    expect(moved.wrap.tags).toEqual([['p', T.pubkey()]]);
+    await h.work.undo(offline.id!, 1);
+    expect(h.toasts.at(-1)).toMatchObject({ kind: 'unqueued', title: 'A page' });
+    expect(await queued(h.store)).toEqual([]);
+    expect(n.published).toEqual([]);
+    expect((await history(h.store))[0]).toMatchObject({ outcome: 'undo: off the queue', id: moved.id.slice(0, 8) });
+  });
+
+  test('Undo’s key follows the new wrap, with the save’s cover and inbox blob, and the old wrap points to it', async () => {
+    const { h, offline, moved } = await savedThenMoved();
+    expect(moved.sha256).not.toBeNull();
+    expect(await h.session.get(`undo:${offline.id}`)).toEqual({ to: moved.id });
+    expect(await h.session.get(`undo:${moved.id}`)).toMatchObject({ hash: offline.hash, sha256: moved.sha256 });
+  });
+
+  test('one tried since, whose send may have reached the relay, is retracted under its new wrap with that wrap’s own key', async () => {
+    const h = harness({ online: false });
+    await h.work.save(PAGE, 1, false);
+    const offline = h.toasts.at(-1)!;
+    // online again, the queue's try times out while the offline toast still shows
+    await harness({ store: h.store, session: h.session, net: net({ publish: 'down' }).net }).work.flushQueue();
+    expect(await queued(h.store)).toMatchObject([{ why: 'reach', attempts: 1 }]);
+    await h.store.set(KEYS.pairing, PAIRING);
+    await applyMove(h.store, device, ack, NOW, h.session);
+    const [moved] = await queued(h.store);
+    const n = net();
+    const after = harness({ store: h.store, session: h.session, net: n.net, collected: [false, false] });
+    await after.work.undo(offline.id!, 1);
+    expect(await queued(h.store)).toEqual([]);
+    expect(n.published.filter((e) => e.kind === 5).map((e) => [e.pubkey, e.tags])).toEqual([[moved.wrap.pubkey, [['e', moved.id], ['k', '1059']]]]);
+    expect(after.toasts.at(-1)).toMatchObject({ kind: 'unqueued', title: 'A page' });
+  });
+
+  test('a save whose request can’t be read isn’t wrapped again, and keeps the key it had', async () => {
+    const h = harness({ online: false });
+    await h.work.save(PAGE, 1, false);
+    const q = await queued(h.store);
+    q[0].sealed = 'from before requests were kept';
+    await h.store.set(KEYS.queue, q);
+    const before = await h.session.get(`undo:${q[0].id}`);
+    await h.store.set(KEYS.pairing, PAIRING);
+    await applyMove(h.store, device, ack, NOW, h.session);
+    expect((await queued(h.store))[0].id).toBe(q[0].id);
+    expect(await h.session.get(`undo:${q[0].id}`)).toEqual(before);
+  });
+
+  test('a session that won’t take the new key doesn’t stop the move: the queue still goes to the new library', async () => {
+    const session = memoryStore();
+    const h = harness({ online: false, session });
+    await h.work.save(PAGE, 1, false);
+    session.set = async () => {
+      throw new Error('QUOTA_BYTES quota exceeded');
+    };
+    await h.store.set(KEYS.pairing, PAIRING);
+    expect(await ends(applyMove(h.store, device, ack, NOW, session))).toBe('ended');
+    expect((await queued(h.store))[0].wrap.tags).toEqual([['p', T.pubkey()]]);
+    expect((await h.store.get<Pairing>(KEYS.pairing))?.user_pubkey).toBe(T.pubkey());
   });
 });

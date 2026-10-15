@@ -17,7 +17,7 @@ import {
 } from './save';
 import type { Store } from './store';
 import type { ToastKind, ToastState } from './toastCopy';
-import { settleUndo } from './undo';
+import { moveUndoKey, settleUndo, type Renamed, type UndoKey } from './undo';
 
 /** Where a save's notices go: the tab's toast, the toolbar popup where no toast can run, or nowhere (a link menu). */
 export type Where = number | 'popup' | null;
@@ -45,24 +45,10 @@ export interface Browser {
   wait(ms: number): Promise<void>;
 }
 
-/** What Undo keeps of a save for the session: the wrap's own key, which alone can retract it. */
-interface UndoKey {
-  key: string;
-  sha256: string | null;
-  hash: string;
-}
-
 /**
- * What Undo keeps in a wrap's place once the save went again under another, its HTML refused (v1.12) or its wrap made
- * again: a toast still naming the old wrap, such as the offline one, then undoes the save under the wrap it has now (F40).
- */
-interface Renamed {
-  to: string;
-}
-
-/**
- * How many new wraps Undo follows from the one a toast names. A wrap is made again at most once a minute, at a send that
- * then fails, and a toast leaves after eight seconds unless the pointer or focus holds it.
+ * How many new wraps Undo follows from the one a toast names (undo.ts, Renamed). A wrap is made again at most once a
+ * minute, at a send that then fails, or at a move, and a toast leaves after eight seconds unless the pointer or focus
+ * holds it.
  */
 const RENAMED_MAX = 64;
 
@@ -118,17 +104,6 @@ export function background(b: Browser) {
   const note = (id: string, outcome: Outcome, link?: boolean) => record(b.store, b.now(), id, outcome, link).catch(() => undefined);
 
   /**
-   * Undo's key moved to a save's new wrap: the key that alone retracts it, and the inbox blob it deletes, if the operator
-   * holds one. The old wrap's id points to the new one, for an Undo pressed on a toast that still names it.
-   */
-  async function moveUndoKey(was: string, to: string, wrapKey: Uint8Array, sha256: string | null): Promise<void> {
-    const kept = await b.session.get<UndoKey>(`undo:${was}`);
-    if (!kept) return;
-    await b.session.set(`undo:${to}`, { key: bytesToHex(wrapKey), sha256, hash: kept.hash } satisfies UndoKey);
-    await b.session.set(`undo:${was}`, { to } satisfies Renamed);
-  }
-
-  /**
    * The wrap a save goes by now: the last of those that took the named wrap's place, if it went again under another. A
    * session that can't be read leaves Undo with the last wrap it found, which then says if it couldn't undo.
    */
@@ -157,7 +132,7 @@ export function background(b: Browser) {
     if (!placed) return;
     Object.assign(p, next);
     if (textless.delete(was)) textless.add(p.id);
-    await moveUndoKey(was, p.id, again.wrapKey, p.sha256).catch(() => undefined);
+    await moveUndoKey(b.session, was, p.id, again.wrapKey, p.sha256).catch(() => undefined);
   }
 
   /**

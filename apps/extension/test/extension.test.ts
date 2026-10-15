@@ -496,7 +496,7 @@ describe('following a move (contract 4.4 and 4.8)', () => {
     await store.set(KEYS.pairing, PAIRING);
     const { pending } = await prepare(PAGE, { device, defaults: DEFAULTS, pairing: PAIRING, crypto: webCrypto, now: NOW });
     await enqueue(store, pending, 'offline');
-    const p = await applyMove(store, device, ackFor(T, user.pubkey(), 'c1'.repeat(32)), NOW + 10);
+    const p = await applyMove(store, device, ackFor(T, user.pubkey(), 'c1'.repeat(32)), NOW + 10, memoryStore());
     expect(p).toMatchObject({ user_pubkey: T.pubkey(), token: 'c1'.repeat(32), label: PAIRING.label, paired_at: PAIRING.paired_at, write_relays: ['wss://t.example'] });
     const [moved] = await queued(store);
     expect(moved.id).not.toBe(pending.id);

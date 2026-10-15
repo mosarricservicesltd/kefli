@@ -2,6 +2,36 @@
 // the save it is an item in the library, which only the phone's key can remove. The phone publishes a kind 5 for the wrap
 // when it collects one, so after retracting, Undo looks for that deletion, and once more a moment later in case the phone
 // was collecting it as Undo was pressed. Retracting first means a phone that collects in between is still caught.
+import { bytesToHex } from '@noble/hashes/utils.js';
+import type { Store } from './store';
+
+/** What Undo keeps of a save for the session: the wrap's own key, which alone can retract it. */
+export interface UndoKey {
+  key: string;
+  sha256: string | null;
+  hash: string;
+}
+
+/**
+ * What Undo keeps in a wrap's place once the save goes by another: its HTML refused (v1.12), its wrap made again, or its
+ * library moved to another key (contract 4.8). A toast still naming the old wrap, such as the offline one, then undoes the
+ * save under the wrap it has now (F40).
+ */
+export interface Renamed {
+  to: string;
+}
+
+/**
+ * Undo's key moved to a save's new wrap: the key that alone retracts it, and the inbox blob it deletes, if the operator
+ * holds one. The old wrap's id points to the new one, for an Undo pressed on a toast that still names it. A save the
+ * session holds no key for, such as one queued in an earlier browser session, is left as it is.
+ */
+export async function moveUndoKey(session: Store, was: string, to: string, wrapKey: Uint8Array, sha256: string | null): Promise<void> {
+  const kept = await session.get<UndoKey>(`undo:${was}`);
+  if (!kept) return;
+  await session.set(`undo:${to}`, { key: bytesToHex(wrapKey), sha256, hash: kept.hash } satisfies UndoKey);
+  await session.set(`undo:${was}`, { to } satisfies Renamed);
+}
 
 export const SECOND_LOOK_MS = 1500;
 
