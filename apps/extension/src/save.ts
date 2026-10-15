@@ -9,11 +9,11 @@ import { finalizeEvent } from 'nostr-tools/pure';
 import { uploadBlob, deleteBlob, type BlossomOutcome } from '../../../packages/protocol/src/blossom';
 import { EventTooLargeError } from '../../../packages/protocol/src/events';
 import { itemHash } from '../../../packages/protocol/src/normalise';
-import { SAVE_REQUEST_MAX_BYTES, wrapSaveRequest, type SaveRequest } from '../../../packages/protocol/src/pairing';
+import { wrapSaveRequest, type SaveRequest } from '../../../packages/protocol/src/pairing';
 import type { CryptoPort } from '../../../packages/protocol/src/ports';
 import type { LocalSigner, NostrEvent } from '../../../packages/protocol/src/signer';
 import { encryptText } from '../../../packages/protocol/src/text';
-import { unwrappableAddress, type Captured } from './captured';
+import { fitted, unwrappableAddress, type Captured } from './captured';
 import type { Defaults } from './defaults';
 import type { Pairing } from './store';
 
@@ -167,14 +167,6 @@ function pendingOf(wrap: NostrEvent, sealed: string, request: SaveRequest, enc: 
 }
 
 /**
- * A field longer than a whole wrap's limit, which could never go in one: it is left out before the first try rather than
- * after a try for each field spared before it. A page's 1 MB title cost five wraps of a megabyte each, seven seconds of
- * the worker's time. The address, which can't be left out, is refused instead (addressFits).
- */
-const unwrappable = (s: string | null) => s !== null && s.length > SAVE_REQUEST_MAX_BYTES;
-const fitting = (s: string | null) => (unwrappable(s) ? null : s);
-
-/**
  * An address that takes at most this much of a rumor (rumorBytes) always fits a wrap with its token alone: one of 2,576
  * bytes does, whatever its characters, and one of 2,577 doesn't. Every ordinary address takes less, and goes to its
  * wrap without the try alone (addressFits).
@@ -210,11 +202,14 @@ async function addressFits(bare: SaveRequest, uuid: string, ctx: SaveContext): P
 }
 
 /**
- * The request and its wrap, the HTML encrypted with a fresh key; nothing is sent yet. A wrap has to stay under 8 KB, so a
- * page with a long address or hero loses what it can spare until it fits; one whose address can't fit even alone is
- * AddressTooLongError, at once.
+ * The request and its wrap, the HTML encrypted with a fresh key; nothing is sent yet. The page's details go as the phone
+ * will keep them (fitted), so a title past its 300 characters is cut here rather than costing the wrap its other
+ * details. A wrap has to stay under 8 KB, so a page with a long address loses what it can spare until it fits; one
+ * whose address can't fit even alone is AddressTooLongError, at once. The address, which can't be left out or cut, is
+ * refused instead (addressFits), before the HTML is encrypted or a wrap tried.
  */
-export async function prepare(c: Captured, ctx: SaveContext): Promise<Prepared> {
+export async function prepare(captured: Captured, ctx: SaveContext): Promise<Prepared> {
+  const c = fitted(captured);
   const uuid = bytesToHex(ctx.crypto.randomBytes(16));
   const bare: SaveRequest = {
     v: 1, url: c.url, canonical: null, title: null, site: null, byline: null, lang: null, hero: null, captured_at: ctx.now, token: ctx.pairing.token, html: null,
@@ -222,7 +217,7 @@ export async function prepare(c: Captured, ctx: SaveContext): Promise<Prepared> 
   if (!(await addressFits(bare, uuid, ctx))) throw new AddressTooLongError();
   const enc = c.html === null ? null : await encryptText(c.html, ctx.crypto);
   let request: SaveRequest = {
-    ...bare, canonical: fitting(c.canonical), title: fitting(c.title), site: fitting(c.site), byline: fitting(c.byline), lang: fitting(c.lang), hero: fitting(c.hero),
+    ...bare, canonical: c.canonical, title: c.title, site: c.site, byline: c.byline, lang: c.lang, hero: c.hero,
     html: enc ? { ...enc.text, server: ctx.defaults.operator.blossom } : null,
   };
   for (let spared = 0; ; spared++) {

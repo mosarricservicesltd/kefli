@@ -6,7 +6,7 @@ import { uploadBlob } from '../../../packages/protocol/src/blossom';
 import { acceptSaveRequest, wrapPairAck, type PairAck, type SaveRequest } from '../../../packages/protocol/src/pairing';
 import { LocalSigner, type NostrEvent } from '../../../packages/protocol/src/signer';
 import { unwrap } from '../../../packages/protocol/src/wrap';
-import { linkOnly, type Captured } from '../src/captured';
+import { FIELD_MAX, linkOnly, type Captured } from '../src/captured';
 import { webCrypto } from '../src/crypto';
 import { history } from '../src/debug';
 import { relayRows, type Defaults } from '../src/defaults';
@@ -1834,14 +1834,15 @@ describe('Undo pressed twice (a double click, Enter twice on the toast’s butto
   });
 });
 
-describe('a field no wrap could ever hold (F39, faster)', () => {
-  test('is left out at once, and the page’s other details stay', async () => {
+describe('a field no wrap could ever hold (F39, faster; cut to the phone’s limits since decision 119)', () => {
+  test('is cut at once to what the phone keeps, and the page’s other details stay', async () => {
     const started = Date.now();
     const { pending } = await prepare({ ...PAGE, title: 'T'.repeat(1_000_000), byline: 'A writer', site: `S${'😀'.repeat(300_000)}` }, ctx);
     const req = JSON.parse((await unwrap(user, pending.wrap)).rumor.content) as SaveRequest;
-    expect(req).toMatchObject({ title: null, site: null, byline: 'A writer', lang: 'en' });
+    // the site's hundredth code unit would open a surrogate pair, so the cut stops a unit short
+    expect(req).toMatchObject({ title: 'T'.repeat(FIELD_MAX.title), site: `S${'😀'.repeat(49)}`, byline: 'A writer', lang: 'en' });
     expect(req.html).not.toBeNull();
-    expect(pending.title).toBe('example.com');
+    expect(pending.title).toBe('T'.repeat(FIELD_MAX.title));
     expect(Date.now() - started).toBeLessThan(10_000);
   });
 
