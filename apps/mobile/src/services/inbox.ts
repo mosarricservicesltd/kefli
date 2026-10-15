@@ -371,6 +371,45 @@ const mayHoldRequest = (w: NostrEvent) =>
 
 const oldestOf = (page: NostrEvent[]) => page.reduce((t, e) => Math.min(t, e.created_at), Infinity);
 
+/** One answer of the window, the newest or, given until, the next down from it. */
+type Ask = (until?: number) => Promise<NostrEvent[]>;
+/** What a read of the window has taken so far (unjudged). */
+type Taken = ReturnType<typeof unjudged>;
+/** Where a read of the window ends: the time the cursor may move to, and the scan still under way (WindowRead). */
+type WindowEnd = Pick<WindowRead, 'upTo' | 'scan'>;
+
+/** This identity's wraps (4.7), from WRAP_LOOKBACK before since, or every one of them before the first drain. */
+function windowFilter(owner: string, since: number | undefined): Filter {
+  const base: Filter = { kinds: [KIND.giftWrap], '#p': [owner] };
+  return since === undefined ? base : { ...base, since: Math.max(0, since - WRAP_LOOKBACK) };
+}
+
+/** Where a deep read starts: beneath the newest answer, which the read has just had, and on from the scan held. */
+function scanFrom(held: InboxScan | null, first: NostrEvent[], now: number): InboxScan {
+  return { until: Math.min(held?.until ?? Infinity, oldestOf(first)), startedAt: held?.startedAt ?? now, left: held?.left ?? false };
+}
+
+/**
+ * A deep read's answers beneath the newest: up to INBOX_PAGES - 1 of them, down the window from scan.until. A full
+ * answer that brings nothing new is a second holding more wraps than an answer, as a flood all dated to one second
+ * makes, and is stepped past; any other answer that brings nothing new is the window's end, which ends the scan, the
+ * cursor moving to when it began unless a wrap it read was left unopened. Short of the end, the scan is kept for the
+ * next deep read. An answer cut short throws (net/pool CutShort), before anything here is kept or ended.
+ */
+async function readDeeper(p: InboxPorts, relay: string, owner: string, ask: Ask, read: Taken, scan: InboxScan): Promise<WindowEnd> {
+  for (let i = 1; i < INBOX_PAGES; i++) {
+    const page = await ask(scan.until);
+    const fresh = read.take(page);
+    if (!fresh && page.length < PAGE) {
+      endInboxScan(p.db, relay, owner);
+      return { upTo: scan.left ? null : scan.startedAt, scan: null };
+    }
+    scan.until = fresh ? oldestOf(page) : oldestOf(page) - 1;
+  }
+  keepInboxScan(p.db, relay, owner, scan);
+  return { upTo: null, scan };
+}
+
 /**
  * The window's wraps, newest answer first, paged back by until as sync pages (NIP-01). The newest answer is always
  * read; one short of PAGE is the whole window, the operator's strfry answering at most PAGE (its maxFilterLimit, which
@@ -378,42 +417,29 @@ const oldestOf = (page: NostrEvent[]) => page.reduce((t, e) => Math.min(t, e.cre
  * finish fails the read (net/pool CutShort) as a relay that can't be reached does, so the cursor and the scan stay as
  * they were. Taken as whole, an answer cut at nostr-tools' own EOSE timer moved the cursor to now and ended the scan,
  * and the wraps beneath the cut were never read.
- * While the last deep read is old enough, up to INBOX_PAGES - 1 more answers go on down the window from where the
- * last deep read stopped (InboxScan), so every part of a window too large for one deep read is read in turn. A full
- * answer that brings nothing new is a second holding more wraps than an answer, as a flood all dated to one second
- * makes, and is stepped past; any other answer that brings nothing new is the window's end. Only a read that reached it
- * moves the cursor (WindowRead.upTo), and a scan only once no wrap it read was left unopened: moved past wraps it never
- * read or left unopened, as a drain reading the newest answer alone moved it, the cursor dropped a save beneath a flood
- * out of the window for good.
+ * While the last deep read is old enough, more answers go on down the window from where the last deep read stopped
+ * (InboxScan, readDeeper), so every part of a window too large for one deep read is read in turn. Only a read that
+ * reached the window's end moves the cursor (WindowRead.upTo), and a scan only once no wrap it read was left unopened:
+ * moved past wraps it never read or left unopened, as a drain reading the newest answer alone moved it, the cursor
+ * dropped a save beneath a flood out of the window for good.
  */
 async function readWindow(p: InboxPorts, relay: string, owner: string, since: number | undefined, now: number): Promise<WindowRead> {
   const key = `${relay} ${owner}`;
-  const base = { kinds: [KIND.giftWrap], '#p': [owner], ...(since === undefined ? {} : { since: Math.max(0, since - WRAP_LOOKBACK) }) };
-  const ask = (until?: number) => p.query(relay, [{ ...base, limit: PAGE, ...(until === undefined ? {} : { until }) }]);
+  const filter = windowFilter(owner, since);
+  const ask: Ask = (until) => p.query(relay, [{ ...filter, limit: PAGE, ...(until === undefined ? {} : { until }) }]);
   const read = unjudged(p.db);
-  const done = (upTo: number | null, scan: InboxScan | null): WindowRead => ({ wraps: read.wraps(), over: read.over(), upTo, scan });
   const first = await ask();
   read.take(first);
   const whole = first.length < PAGE;
   if (whole) endInboxScan(p.db, relay, owner);
+  let end: WindowEnd;
   if (!first.length || now - (readDeep.get(key) ?? -Infinity) < INBOX_DEEP_EVERY) {
-    return done(whole ? now : null, whole ? null : inboxScan(p.db, relay, owner));
+    end = whole ? { upTo: now, scan: null } : { upTo: null, scan: inboxScan(p.db, relay, owner) };
+  } else {
+    readDeep.set(key, now);
+    end = await readDeeper(p, relay, owner, ask, read, scanFrom(inboxScan(p.db, relay, owner), first, now));
   }
-  readDeep.set(key, now);
-  const held = inboxScan(p.db, relay, owner);
-  // a scan goes on beneath the newest answer, which this read has just had
-  const scan = { until: Math.min(held?.until ?? Infinity, oldestOf(first)), startedAt: held?.startedAt ?? now, left: held?.left ?? false };
-  for (let i = 1; i < INBOX_PAGES; i++) {
-    const page = await ask(scan.until);
-    const fresh = read.take(page);
-    if (!fresh && page.length < PAGE) {
-      endInboxScan(p.db, relay, owner);
-      return done(scan.left ? null : scan.startedAt, null);
-    }
-    scan.until = fresh ? oldestOf(page) : oldestOf(page) - 1;
-  }
-  keepInboxScan(p.db, relay, owner, scan);
-  return done(null, scan);
+  return { wraps: read.wraps(), over: read.over(), ...end };
 }
 
 /**

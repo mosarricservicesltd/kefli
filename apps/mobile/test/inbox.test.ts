@@ -9,7 +9,7 @@ import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
 import { absorbRecord } from '../src/data/devices';
-import { SEEN_KEEP, browserName, INBOX_BLOB_LIFE, inboxScan, keepInboxScan, queueDeleteInboxBlob } from '../src/data/inbox';
+import { SEEN_KEEP, browserName, INBOX_BLOB_LIFE, inboxScan, keepInboxScan, queueDeleteInboxBlob, recordSeen } from '../src/data/inbox';
 import { commitDelete, deleteItem, setArchived } from '../src/data/library';
 import { enqueue, release } from '../src/data/outbox';
 import { pendingParses } from '../src/data/pending';
@@ -437,6 +437,42 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
       await fresh!.drainInbox(w.ports, w.owner);
     }
     expect(w.item(itemHash('https://example.com/deep'))).toBeDefined();
+  });
+
+  test('a scan that left a wrap unopened doesn’t move the cursor when it ends, so the wrap is read again', async () => {
+    const w = world();
+    w.ports.query = w.relayLike(500);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+    const opened = w.now();
+    // three days with the app closed: a browser save half a day after the last drain, a wrap anyone could send in the
+    // newest answer, and 6,000 others already judged, 4,000 newer than the save and 2,000 older
+    w.tick(3 * 86_400);
+    const sent = opened + 43_200;
+    const { wrap } = await wrapSaveRequest(w.device, w.owner, 'left', w.request({ url: 'https://example.com/left' }), sent, { now: sent, random: noBackdate });
+    w.wraps.push(wrap);
+    w.junk(1, w.now() - 60);
+    const judged = (createdAt: number) => {
+      w.junk(1, createdAt);
+      recordSeen(w.db, w.now(), w.wraps[w.wraps.length - 1].id, { owner: w.owner, outcome: 'ignored_foreign' });
+    };
+    for (let i = 0; i < 4_000; i++) judged(sent + 1 + i * 50);
+    for (let i = 0; i < 2_000; i++) judged(sent - 1 - i * 50);
+    // the first drain's deep read reaches the save but not the window's end, and the signer answers nothing: the save
+    // and the other wrap wait, and the scan is kept with a wrap left unopened
+    let refusing = true;
+    w.ports.signer = countingSigner(w.user, () => refusing).signer;
+    await drainInbox(w.ports, w.owner);
+    expect(inboxScan(w.db, D.operator.relay, w.owner)).toMatchObject({ left: true });
+    // the next deep read goes on beneath the save to the window's end, opening all it reads: moved to when the scan
+    // began, the cursor took the save, dated more than two days before that, out of every later read
+    refusing = false;
+    w.tick(INBOX_DEEP_EVERY);
+    await drainInbox(w.ports, w.owner);
+    expect(w.cursor()).toBe(opened);
+    // the deep read after that begins again at the top, and opens the save
+    w.tick(INBOX_DEEP_EVERY);
+    await drainInbox(w.ports, w.owner);
+    expect(w.item(itemHash('https://example.com/left'))).toBeDefined();
   });
 
   test('while the window is full, a drain reads back through it at most every quarter of an hour', async () => {
