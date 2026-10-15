@@ -822,6 +822,7 @@ svg .arc{transform-box:view-box;transform-origin:center}
       <button data-jump="share-again">Already saved, unread</button>
       <button data-jump="share-offline">Offline</button>
       <button data-jump="share-nolink">Not a link</button>
+      <button data-jump="share-failed">Didn’t save</button>
       <button data-jump="share-checking">X post: checking it</button>
       <button data-jump="share-noarticle">X post with no article</button>
       <button data-jump="share-embedfail">X post: X not answering</button>
@@ -887,6 +888,7 @@ svg .arc{transform-box:view-box;transform-origin:center}
       <button data-jump="code-ready">All twelve words</button>
       <button data-jump="code-checking">Checking</button>
       <button data-jump="code-notfound">Nothing found</button>
+      <button data-jump="code-offline">Lost connection</button>
     </div>
     <h2>Sign in with your nostr app</h2>
     <div class="btns">
@@ -1799,8 +1801,9 @@ const WORDLIST = ('abandon ability able about above absent absorb abstract absur
   + 'wrap wreck wrestle wrist write wrong yard year yellow you young youth zebra zero zone zoo')
   .split(' ');
 const WORDSET = new Set(WORDLIST);
-const SAMPLE_CODE = 'harbor lemon candle rescue orbit velvet noble garden shadow tiger across museum'.split(' ');
-const freshCode = () => ({ words: Array(12).fill(''), focus: 0, checking: false, notFound: false });
+// every word on the BIP-39 list above ("candle", which isn't, flagged word 3 in every state that pastes the code)
+const SAMPLE_CODE = 'harbor lemon candy rescue orbit velvet noble garden shadow tiger across museum'.split(' ');
+const freshCode = () => ({ words: Array(12).fill(''), focus: 0, checking: false, notFound: false, lost: false });
 S.code = freshCode();
 let onbTimers = [];
 const later = (fn, ms) => onbTimers.push(setTimeout(fn, ms));
@@ -1991,12 +1994,15 @@ function codeScreen(){
   const firstBad = C.words.findIndex((w, i) => bad(i));
   const ready = C.words.every(w => WORDSET.has(w));
   // checking is shown in the pressed button at full opacity; [disabled] means only 'not ready yet' (fix 28)
-  return onbShell(`<h1>Enter your recovery code</h1><p class="lead">The twelve words from when you backed up your library, in order.</p>
+  // a check whose relays never answered, or a phone offline, reads as a lost connection in the notice slot under the
+  // h1 (decision 118): the words stay, and Bring back my library tries again once there is a network
+  const lost = C.lost || !S.online;
+  return onbShell(`<h1>Enter your recovery code</h1>${lost ? offlineNotice('Bringing back your library needs a connection') : ''}<p class="lead">The twelve words from when you backed up your library, in order.</p>
     <div class="headrow"><h2>Your twelve words</h2><button class="pbtn" data-paste>${ic('clipboard', 14)}Paste</button></div>
     <div class="words">${fields}</div>
     <div class="sugg" id="sugg">${suggHTML()}</div>
     <div class="fielderr" id="ferr" data-xf="ferr-code">${firstBad >= 0 ? `Word ${firstBad + 1}, “${esc(C.words[firstBad])}”, isn’t one of the recovery words. Check the spelling.` : ''}</div>`,
-    `<button class="btn primary full ${C.checking ? 'busy' : ''}" id="codego" data-code-continue ${C.checking ? 'aria-busy="true"' : (ready ? '' : 'disabled')}>${busyLabel('codego', C.checking, 'Checking', 'Bring back my library')}</button>`, 'return');
+    `<button class="btn primary full ${C.checking ? 'busy' : ''}" id="codego" data-code-continue ${C.checking ? 'aria-busy="true"' : (ready && S.online ? '' : 'disabled')}>${busyLabel('codego', C.checking, 'Checking', 'Bring back my library')}</button>`, 'return');
 }
 // a busy button keeps its size, fill and full opacity; if the wait passes 150 ms its label crossfades to three breathing
 // dots and the '-ing' label, so a quick answer never shows the busy state
@@ -2450,12 +2456,14 @@ function advancedScreen(){
 // The Backup space row's sub (decision 117). With no answer yet: Checking… while Kefli first asks, Checks when you're
 // online offline, Couldn't check when the check failed. With an earlier answer, offline or after a failed check, that
 // answer stays until a new one comes (adv-offline). Nearly full from 90 %. Full comes first, while a text waits on a
-// 413 quota or the use has reached the quota: Kefli's server refuses a text that would pass it, so Full usually reads
-// just short of the quota (adv-full), and a library still above a lowered quota reads its real use.
+// 413 quota or less than a block, 4,096 bytes, of the quota is left (decision 118: Kefli's server counts every text as
+// at least that): it refuses a text that would pass the quota, so Full usually reads just short of it (adv-full), and a
+// library still above a lowered quota reads its real use.
+const noRoom = (sp) => sp.quota - sp.used < 4096;
 function spaceSub(){
   const Y = S.you, sp = Y.space;
   if (!sp) return !S.online ? 'Checks when you’re online' : Y.spaceFailed ? 'Couldn’t check' : 'Checking…';
-  if (sp.used >= sp.quota || Y.room?.why === 'quota') return `Full · ${mb(sp.used)} of ${mb(sp.quota)}`;
+  if (noRoom(sp) || Y.room?.why === 'quota') return `Full · ${mb(sp.used)} of ${mb(sp.quota)}`;
   return `${mb(sp.used)} of ${mb(sp.quota)}${sp.used >= .9 * sp.quota ? ' · nearly full' : ''}`;
 }
 
@@ -3150,6 +3158,12 @@ function sheetHTML(){
     if (mode === 'nolink') {
       return `<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" data-stop><div class="grab"></div><h3>${ic('alert',22,'style="color:var(--error)"')}That wasn’t a link</h3><p class="sub">Kefli saves web pages. Try sharing the page itself, or copy its address and share that.</p><div class="row"><button class="btn secondary" data-close>OK</button></div></div></div>`;
     }
+    // a share that didn't save (decision 118): the save failed, as when its text can't be written on a full disk, or the
+    // share's spool was gone or unreadable when the sheet opened. Nothing is saved here, and the sheet waits for OK; a
+    // save that failed keeps its spool for the start-up pickup (mobile spec 8.5)
+    if (mode === 'failed') {
+      return `<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" data-stop><div class="grab"></div><h3>${ic('alert',22,'style="color:var(--error)"')}That didn’t save</h3><p class="sub">Try sharing it again.</p><div class="row"><button class="btn secondary" data-close>OK</button></div></div></div>`;
+    }
     // after Undo the sheet says so for 1.5 s, with no buttons and no bar, then returns to the host app (fix 5): the content
     // crossfades and the top edge glides down to the shorter height
     if (S.shareRemoved) {
@@ -3174,7 +3188,7 @@ function sheetHTML(){
     // on a 413 daily from the last 24 hours, the line says where the new save's text stays (decision 117); the save is
     // made as always, with its countdown and Undo. A share's upload waits for the sheet to close, so the first save past
     // a limit has the usual line
-    const sp = S.you.space, rm = S.you.room, full = (!!sp && sp.used >= sp.quota) || rm?.why === 'quota', daily = !full && rm?.why === 'daily';
+    const sp = S.you.space, rm = S.you.room, full = (!!sp && noRoom(sp)) || rm?.why === 'quota', daily = !full && rm?.why === 'daily';
     const line = again ? 'Still in Unread, where you left it.' : off ? 'Saved · will fetch when you’re online' : xwait ? 'Saved · will check the post when X answers'
       : full ? 'Private. Your backup space is full, so its text stays on this phone.' : daily ? 'Private. You’ve saved a lot today, so its text stays on this phone for now.'
       : 'Private. Ready to read offline in a moment.';
@@ -4704,7 +4718,7 @@ vp.addEventListener('click', e => {
   if (d.openSettings !== undefined) { showToast('Would open Kefli in Android settings'); }
   if (d.paste !== undefined) { S.code.words = [...SAMPLE_CODE]; S.code.focus = null; }
   if (d.sugg && S.code.focus != null) { const i = S.code.focus; S.code.words[i] = d.sugg; S.code.focus = i < 11 ? i + 1 : null; }
-  if (d.codeContinue !== undefined) { if (S.code.checking) return; const ok = S.code.words.join(' ') === SAMPLE_CODE.join(' '); S.code.checking = true; S.code.focus = null; render(); later(() => { S.code.checking = false; if (ok) startRestore(); else { S.code.notFound = true; render(); } }, 1400); return; }
+  if (d.codeContinue !== undefined) { if (S.code.checking) return; const ok = S.code.words.join(' ') === SAMPLE_CODE.join(' '); S.code.checking = true; S.code.lost = false; S.code.focus = null; render(); later(() => { S.code.checking = false; if (ok) startRestore(); else { S.code.notFound = true; render(); } }, 1400); return; }
   if (d.codeRetry !== undefined) S.code = freshCode();
   if (d.keepCopies !== undefined) S.keepCopies = !S.keepCopies;
   if (d.nostr) { clearOnb(); S.nostr = d.nostr; if (d.nostr === 'waiting') later(() => { if (S.screen === 'nostr' && S.nostr === 'waiting') { S.sheet = 'import'; render(); } }, 2200); }
@@ -4857,9 +4871,11 @@ function jumpTo(b){
   }
   if (j.startsWith('code-')) {
     S.screen = 'code';
-    if (j === 'code-wrong') { S.code.words = ['harbor', 'lemmon', 'candle', 'rescue', '', '', '', '', '', '', '', '']; S.code.focus = null; }
+    if (j === 'code-wrong') { S.code.words = ['harbor', 'lemmon', 'candy', 'rescue', '', '', '', '', '', '', '', '']; S.code.focus = null; }
     if (j === 'code-ready' || j === 'code-checking') { S.code.words = [...SAMPLE_CODE]; S.code.focus = null; S.code.checking = j === 'code-checking'; }
     if (j === 'code-notfound') S.code.notFound = true;
+    // decision 118: the relays never answered the check, so the library can't be looked for; the words stay
+    if (j === 'code-offline') { S.code.words = [...SAMPLE_CODE]; S.code.focus = null; S.code.lost = true; }
   }
   if (j.startsWith('nostr') && !j.startsWith('nostrapp')) {
     S.screen = 'nostr';
@@ -4927,7 +4943,7 @@ function jumpTo(b){
     if (j === 'share-full') { S.you.space.used = Math.round(49.96 * MB); S.you.room = { why: 'quota', n: 2 }; S.you.notBacked = 2; }
     if (j === 'share-daily') { S.you.space.today = Math.round(19.98 * MB); S.you.room = { why: 'daily', n: 2 }; S.you.notBacked = 2; }
     if (j === 'share-full' || j === 'share-daily') { S.shareT = freshShareT(); render(); shareRun(); return; }
-    if (j === 'share-nolink' || j === 'share-checking' || j === 'share-noarticle' || j === 'share-again') S.items = S.items.filter(i => i.id !== 99);
+    if (j === 'share-nolink' || j === 'share-failed' || j === 'share-checking' || j === 'share-noarticle' || j === 'share-again') S.items = S.items.filter(i => i.id !== 99);
     // the link shared is one already in the library and unread (G2): nothing changes, and the sheet counts down as usual
     if (j === 'share-again') { S.shareT = freshShareT(); render(); shareRun(); return; }
     if (j === 'share-offline') S.online = false;

@@ -51,7 +51,7 @@ A new group under the relays' note, before Export my saves:
 |---|---|
 | Populated | 12.4 MB of 50 MB |
 | Nearly full (90 % or more) | 46.1 MB of 50 MB · nearly full |
-| Full (a text waits on a 413 `quota`, or the use has reached the quota) | Full · 49.9 MB of 50 MB |
+| Full (a text waits on a 413 `quota`, or less than a block, 4,096 bytes, of the quota is left, decision 118) | Full · 49.9 MB of 50 MB |
 | Empty (nothing uploaded yet, or not registered) | 0 MB of 50 MB |
 | Loading (first check, nothing known) | Checking… |
 | Offline, nothing known | Checks when you're online |
