@@ -158,19 +158,25 @@ function failure(e: unknown, late: boolean): unknown {
   return CLEARTEXT.test(String((e as Error | undefined)?.message ?? '')) ? new Blocked('cleartext') : e;
 }
 
-// an http address's host and port as written, with no user info: a string, as the code gate misreads regex literals
-const PLAIN_HOST = new RegExp('^http://(?:[^@/?#]*@)?([^/?#]*)', 'i');
+// an http address as written up to its path: its user info, its host (an IPv6 one in its brackets) and any port; a
+// string, as the code gate misreads regex literals
+const PLAIN_AUTHORITY = new RegExp('^http://([^@/?#]*@)?(\\[[^\\]/?#]*\\]|[^:/?#]+)(?::([^/?#]*))?', 'i');
+// a port as written that the URL parser reads as http's own, and drops: 80, with any leading zeros, or none at all
+const HTTP_PORT = new RegExp('^(?:0*80)?$');
 
 /**
  * RULED (services/save.ts, for shares): a public http:// address is fetched over https, as browsers now try first,
- * since release builds allow no cleartext. One with a port, and a local one (the local stack's own pages), keep their
- * http. A share's page, and a pending parse's, are asked over https alone, so one with no https waits as any page
- * that can't be had does, and the save keeps the address it has until its page parses. The hops after it, and an
- * article's images, fall back to the address itself (asked).
+ * since release builds allow no cleartext. One with another port, and a local one (the local stack's own pages), keep
+ * their http. http's own port written out (http://host:80/) is no port, as the URL parser reads it: the address goes
+ * over https without it, where kept as a port its save failed at once on cleartext. A share's page, and a pending
+ * parse's, are asked over https alone, so one with no https waits as any page that can't be had does, and the save
+ * keeps the address it has until its page parses. The hops after it, and an article's images, fall back to the
+ * address itself (asked).
  */
 export function overHttps(url: string): string {
-  const host = PLAIN_HOST.exec(url)?.[1];
-  return host && !host.includes(':') && isPublicWebUrl(url) ? `https://${url.slice('http://'.length)}` : url;
+  const m = PLAIN_AUTHORITY.exec(url);
+  if (!m || !HTTP_PORT.test(m[3] ?? '') || !isPublicWebUrl(url)) return url;
+  return `https://${m[1] ?? ''}${m[2]}${url.slice(m[0].length)}`;
 }
 
 /** The request a read is on: its controller changes with each hop, and the deadline lets go of the one current. */

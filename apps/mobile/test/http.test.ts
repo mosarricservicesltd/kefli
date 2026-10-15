@@ -134,6 +134,31 @@ describe('plain http, which release builds refuse (7.1)', () => {
     expect(overHttps('http://news.example:8080/a')).toBe('http://news.example:8080/a');
     expect(overHttps('https://news.example/a')).toBe('https://news.example/a');
   });
+
+  test("http's own port written out is no port: the address goes over https without it, as it would with none", async () => {
+    // the URL parser drops a port of 80, leading zeros and all, and an empty one; kept, https would knock on port 80
+    expect(overHttps('http://news.example:80/a?b=1#c')).toBe('https://news.example/a?b=1#c');
+    expect(overHttps('HTTP://news.example:80')).toBe('https://news.example');
+    expect(overHttps('http://user:pw@news.example:080/a')).toBe('https://user:pw@news.example/a');
+    expect(overHttps('http://news.example:/a')).toBe('https://news.example/a');
+    // an IPv6 host's colons are no port either
+    expect(overHttps('http://[2606:4700::1111]/a')).toBe('https://[2606:4700::1111]/a');
+    expect(overHttps('http://[2606:4700::1111]:80/a')).toBe('https://[2606:4700::1111]/a');
+    // any other port, and a local address with http's own, keep their http
+    for (const kept of ['http://news.example:8080/a', 'http://news.example:443/a', 'http://news.example:800/a', 'http://news.example:8/a',
+      'http://localhost:80/a', 'http://[::1]:80/a', 'http://192.168.1.1:80/']) expect(overHttps(kept)).toBe(kept);
+    // a share of such an address in a release build, which refuses plain http before it connects: its page is had
+    // over https, where with :80 kept as a port it failed at once as cleartext
+    const asked: string[] = [];
+    const release = (async (url: string) => {
+      asked.push(url);
+      if (url.startsWith('http://')) throw new Error('fetch failed: java.net.UnknownServiceException: CLEARTEXT communication to news.example not permitted by network security policy');
+      return Object.defineProperty(html('<p>x</p>'), 'url', { value: url });
+    }) as unknown as typeof fetch;
+    const parsed: PagePorts = { fetch: release, parse: async () => ({ ok: true, title: 'A story', byline: null, site: null, lang: 'en', hero: null, canonical: null, readerable: true, markdown: `${'word '.repeat(150)}\n` }) };
+    expect(await fetchPage(parsed, overHttps('http://news.example:80/story'))).toMatchObject({ kind: 'parsed', finalUrl: 'https://news.example/story' });
+    expect(asked).toEqual(['https://news.example/story']);
+  });
 });
 
 describe('open() against a real server', () => {
