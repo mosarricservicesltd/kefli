@@ -166,13 +166,17 @@ export function waiting(q: Queued[]): number {
 }
 
 /**
+ * Some of the queue's entries, of whichever kind it is given (the options page's are Shown): a named type, so the code
+ * gate's parser reads failed whole, as it loses a function at its type parameter.
+ */
+type Listed = <T extends Queued>(q: T[]) => T[];
+
+/**
  * The options page's Couldn't send list: everything else still here but a save on its first send, and every stopped
  * save, whatever it last waited on, since Retry alone sends one: a Retry made while the browser is offline leaves it
  * offline and stopped.
  */
-export function failed<T extends Queued>(q: T[]): T[] {
-  return q.filter((e) => e.stopped || (e.why !== 'offline' && e.why !== 'sending'));
-}
+export const failed: Listed = (q) => q.filter((e) => e.stopped || (e.why !== 'offline' && e.why !== 'sending'));
 
 /** Why a delivery that didn't send leaves its save waiting. */
 export function whyNot(d: Exclude<Delivery, 'sent'>, online: boolean): Exclude<Queued['why'], 'sending'> {
