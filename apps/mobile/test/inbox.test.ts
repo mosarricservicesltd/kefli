@@ -9,7 +9,7 @@ import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
 import { absorbRecord } from '../src/data/devices';
-import { SEEN_KEEP, browserName, INBOX_BLOB_LIFE, inboxScan, queueDeleteInboxBlob } from '../src/data/inbox';
+import { SEEN_KEEP, browserName, INBOX_BLOB_LIFE, inboxScan, keepInboxScan, queueDeleteInboxBlob, recordSeen } from '../src/data/inbox';
 import { commitDelete, deleteItem, setArchived } from '../src/data/library';
 import { enqueue, release } from '../src/data/outbox';
 import { pendingParses } from '../src/data/pending';
@@ -21,7 +21,9 @@ import { FIELD_MAX, GUARD_WORDS, RENDERER_GONE, TEXT_MAX_BYTES, parseHtml, type 
 import * as blocks from '../src/reader/blocks';
 import { sendOne, type SendPorts } from '../src/services/send';
 import type { Filter } from '../src/services/sync';
+import { RelayPool } from '../src/net/pool';
 import { memoryDb } from './sqlite';
+import { WHOLE, relaySockets, type Step } from './relaySocket';
 
 const D = { operator: { relay: 'ws://op', blossom: 'http://blossom', api: 'http://api' }, mirrors: ['http://m1'], relays: ['ws://a'], indexer: ['ws://a'] };
 const T0 = 1_800_000_000;
@@ -435,6 +437,42 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
       await fresh!.drainInbox(w.ports, w.owner);
     }
     expect(w.item(itemHash('https://example.com/deep'))).toBeDefined();
+  });
+
+  test('a scan that left a wrap unopened doesn’t move the cursor when it ends, so the wrap is read again', async () => {
+    const w = world();
+    w.ports.query = w.relayLike(500);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+    const opened = w.now();
+    // three days with the app closed: a browser save half a day after the last drain, a wrap anyone could send in the
+    // newest answer, and 6,000 others already judged, 4,000 newer than the save and 2,000 older
+    w.tick(3 * 86_400);
+    const sent = opened + 43_200;
+    const { wrap } = await wrapSaveRequest(w.device, w.owner, 'left', w.request({ url: 'https://example.com/left' }), sent, { now: sent, random: noBackdate });
+    w.wraps.push(wrap);
+    w.junk(1, w.now() - 60);
+    const judged = (createdAt: number) => {
+      w.junk(1, createdAt);
+      recordSeen(w.db, w.now(), w.wraps[w.wraps.length - 1].id, { owner: w.owner, outcome: 'ignored_foreign' });
+    };
+    for (let i = 0; i < 4_000; i++) judged(sent + 1 + i * 50);
+    for (let i = 0; i < 2_000; i++) judged(sent - 1 - i * 50);
+    // the first drain's deep read reaches the save but not the window's end, and the signer answers nothing: the save
+    // and the other wrap wait, and the scan is kept with a wrap left unopened
+    let refusing = true;
+    w.ports.signer = countingSigner(w.user, () => refusing).signer;
+    await drainInbox(w.ports, w.owner);
+    expect(inboxScan(w.db, D.operator.relay, w.owner)).toMatchObject({ left: true });
+    // the next deep read goes on beneath the save to the window's end, opening all it reads: moved to when the scan
+    // began, the cursor took the save, dated more than two days before that, out of every later read
+    refusing = false;
+    w.tick(INBOX_DEEP_EVERY);
+    await drainInbox(w.ports, w.owner);
+    expect(w.cursor()).toBe(opened);
+    // the deep read after that begins again at the top, and opens the save
+    w.tick(INBOX_DEEP_EVERY);
+    await drainInbox(w.ports, w.owner);
+    expect(w.item(itemHash('https://example.com/left'))).toBeDefined();
   });
 
   test('while the window is full, a drain reads back through it at most every quarter of an hour', async () => {
@@ -1434,6 +1472,89 @@ describe('the browser’s HTML takes the guards a parsed page’s text takes (C�
     w.tick(60);
     expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 3 });
     expect(['a', 'b', 'c'].map((path) => w.item(itemHash(`https://example.com/${path}`))?.text_state)).toEqual(['cached', 'cached', 'cached']);
+  });
+});
+
+// The deploy check's finding (r3/deploy-r): against strfry, answers of 500 wraps came back cut at nostr-tools' own EOSE
+// timer, 428, 131, 189, 150 and 362 of them, as if whole. Here the inbox reads through the pool itself (net/pool), on a
+// socket the test drives, from an operator relay that cuts answers while told to: a cut answer is a read that isn't
+// whole, which leaves the cursor and the deep scan as they were, as a relay that can't be reached does.
+describe('an answer the operator relay cuts short (net/pool CutShort)', () => {
+  /** The world's wraps on an operator relay behind the pool's own sockets, answering as cut says, or whole for null. */
+  function overSockets(w: ReturnType<typeof world>, cut: (filter: Filter) => Step[] | null) {
+    const relay = relaySockets({ holds: () => w.wraps, cap: 500, plan: (_url, f) => cut(f as Filter) ?? WHOLE });
+    const pool = new RelayPool({ verify: () => true, signer: async () => w.user, allowInsecure: true, WebSocket: relay.Socket });
+    // a relay a second without a word in an answer has cut it
+    w.ports.query = (url, filters) => pool.query(url, filters as never, 1_000);
+    return pool;
+  }
+
+  /** A browser save backdated almost two days before T0, the first drain (NIP-59 allows two). */
+  async function sendBeneath(w: ReturnType<typeof world>) {
+    const sent = T0 - 172_800 + 600;
+    const { wrap } = await wrapSaveRequest(w.device, w.owner, 'beneath', w.request({ url: 'https://example.com/beneath' }), sent, { now: sent, random: noBackdate });
+    w.wraps.push(wrap);
+  }
+  const beneath = (w: ReturnType<typeof world>) => w.item(itemHash('https://example.com/beneath'));
+  /** n wraps nobody takes, a minute apart, from a minute after T0. */
+  const flood = (w: ReturnType<typeof world>, n: number) => Array.from({ length: n }, (_, i) => w.junk(1, T0 + 60 * (i + 1)));
+
+  test('the newest answer cut short leaves the cursor where it was, so a save beneath the cut still arrives', async () => {
+    const w = world();
+    const cutting = { now: false };
+    const pool = overSockets(w, () => (cutting.now ? [{ send: 100 }] : null));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+    expect(w.cursor()).toBe(T0);
+    // a day on, 600 wraps nobody takes: a drain reads through them all and opens its budget of them
+    w.tick(86_400);
+    flood(w, 600);
+    await drainInbox(w.ports, w.owner);
+    expect(w.cursor()).toBe(T0);
+    await sendBeneath(w);
+    // a minute on, the live subscription's drain reads the newest answer alone, and the relay cuts it at 100 of 500:
+    // read as the whole window, it moved the cursor to now, past the save
+    w.tick(60);
+    cutting.now = true;
+    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+    expect(w.cursor()).toBe(T0);
+    cutting.now = false;
+    w.tick(INBOX_DEEP_EVERY);
+    await drainInbox(w.ports, w.owner);
+    expect(beneath(w)).toBeDefined();
+    pool.close();
+  });
+
+  test('an answer cut short part way down the window leaves the cursor and the scan as they were', async () => {
+    const w = world();
+    // the newest answer whole, and nothing of any further down: read as the window's end, it moved the cursor to now
+    const cutting = { now: false };
+    const pool = overSockets(w, (f) => (cutting.now && f.until !== undefined ? [] : null));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+    w.tick(86_400);
+    await sendBeneath(w);
+    flood(w, 600);
+    cutting.now = true;
+    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+    expect(w.cursor()).toBe(T0);
+    expect(inboxScan(w.db, D.operator.relay, w.owner)).toBeNull();
+    cutting.now = false;
+    w.tick(INBOX_DEEP_EVERY);
+    await drainInbox(w.ports, w.owner);
+    expect(beneath(w)).toBeDefined();
+    pool.close();
+  });
+
+  test('a scan under way is left as it was by a cut answer, not ended and begun again', async () => {
+    const w = world();
+    const cuts = { left: 1 };
+    const pool = overSockets(w, () => (cuts.left-- > 0 ? [{ send: 100 }] : null));
+    for (let i = 0; i < 600; i++) w.junk(1, T0 - 60 * i);
+    const scan = { until: T0 - 30_000, startedAt: T0 - 3_600, left: false };
+    keepInboxScan(w.db, D.operator.relay, w.owner, scan);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+    expect(inboxScan(w.db, D.operator.relay, w.owner)).toEqual(scan);
+    expect(w.cursor()).toBeNull();
+    pool.close();
   });
 });
 

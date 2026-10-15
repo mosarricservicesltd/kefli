@@ -38,7 +38,10 @@ export type SyncPorts = {
   db: SqlDb;
   now: () => number;
   signer: (pubkey: string) => Promise<Signer | null>;
-  /** The events matching filters until EOSE; throws when the relay can't be reached. */
+  /**
+   * The events matching filters once the relay has sent EOSE; throws when the relay can't be reached or doesn't finish
+   * its answer (net/pool CutShort), so a page is whole or the read fails, and a cursor never moves past a cut.
+   */
   query: (relay: string, filters: Filter[]) => Promise<NostrEvent[]>;
   fetch: typeof fetch;
   crypto: CryptoPort;
@@ -78,30 +81,40 @@ const addressOf = (e: NostrEvent) => (e.kind >= 30_000 && e.kind < 40_000 ? `${e
  * (replaces), which is all any reader of these uses: an archival relay, or a hostile one that kept everything, answered
  * a first read with every version of every save, 30,000 events (57 MB) for 300 saves of 100 versions each, and up to
  * MAX_PAGES answers a relay, all held at once. Every id read is still counted, so paging goes on as before. Given now,
- * an event dated past it by more than SKEW is left out (notYet), so the newest version kept is one that is due.
+ * an event dated past it by more than SKEW is left out (notYet), so the newest version kept is one that is due. A page
+ * the relay cuts short throws here as the query does (net/pool CutShort), rather than passing for an answer: one cut
+ * before anything new came was read as the stream's end, and the cursor moved past every event beneath it.
  */
 export async function pageStream(query: SyncPorts['query'], relay: string, base: Filter, now = Infinity): Promise<NostrEvent[]> {
-  const ids = new Set<string>();
-  const kept = new Map<string, NostrEvent>();
+  const read: StreamRead = { ids: new Set(), kept: new Map() };
   let until: number | undefined;
   for (let i = 0; MAX_PAGES > i; i++) {
     const page = await query(relay, [{ ...base, limit: PAGE, ...(until === undefined ? {} : { until }) }]);
-    let fresh = 0;
-    let oldest = until ?? Infinity;
-    for (const e of page) {
-      oldest = Math.min(oldest, e.created_at);
-      if (ids.has(e.id)) continue;
-      ids.add(e.id);
-      fresh++;
-      const at = addressOf(e) ?? e.id;
-      const held = kept.get(at);
-      if (!notYet(e, now) && (!held || replaces(e, held))) kept.set(at, e);
-    }
-    if (fresh === 0) break;
+    const taken = takePage(read, page, now, until ?? Infinity);
+    if (taken.fresh === 0) break;
     // The next page's until is the oldest seen, inclusive: events sharing that second aren't skipped.
-    until = oldest;
+    until = taken.oldest;
   }
-  return [...kept.values()];
+  return [...read.kept.values()];
+}
+
+/** What a stream has read (pageStream): every id, and the newest due version kept at each address. */
+type StreamRead = { ids: Set<string>; kept: Map<string, NostrEvent> };
+
+/** One page taken into what the stream has read: how many of its events were new, and the oldest of them all, or from. */
+function takePage(read: StreamRead, page: NostrEvent[], now: number, from: number): { fresh: number; oldest: number } {
+  let fresh = 0;
+  let oldest = from;
+  for (const e of page) {
+    oldest = Math.min(oldest, e.created_at);
+    if (read.ids.has(e.id)) continue;
+    read.ids.add(e.id);
+    fresh++;
+    const at = addressOf(e) ?? e.id;
+    const held = read.kept.get(at);
+    if (!notYet(e, now) && (!held || replaces(e, held))) read.kept.set(at, e);
+  }
+  return { fresh, oldest };
 }
 
 export function streamFilter(stream: Stream, owner: string, since: number | null): Filter {
@@ -113,20 +126,38 @@ export function streamFilter(stream: Stream, owner: string, since: number | null
 
 type Collected = { relay: string; stream: Stream; events: NostrEvent[] };
 
+/** The oldest of the relays' saves cursors, or null while any relay's saves are read from the start. */
+function savesFloor(p: SyncPorts, owner: string, relays: string[]): number | null {
+  const saves = relays.map((r) => getCursor(p.db, r, 'items', owner)?.since ?? null);
+  return saves.includes(null) ? null : Math.min(...(saves as number[]));
+}
+
+/**
+ * Where a stream's read starts, null for the start: its own cursor, but a deletions read from no later than the oldest
+ * saves cursor (savesFloor), so a save a relay still holds can't come back past a kind 5 the deletions reads have moved
+ * beyond. While any relay's saves are read from the start (one just added, say), every relay's deletions are too (F35);
+ * while one relay's saves read lags, cut short (net/pool CutShort) or unanswered while the deletions were read whole and
+ * their cursors moved on, they are read from its cursor: read from their own, a save deleted meanwhile came back from
+ * that relay with its kind 5 more than a day before every deletions read.
+ */
+function readsFrom(p: SyncPorts, owner: string, relay: string, stream: Stream, floor: number | null): number | null {
+  const own = getCursor(p.db, relay, stream, owner)?.since ?? null;
+  if (stream === 'items' || own === null) return own;
+  return floor === null ? null : Math.min(own, floor);
+}
+
 async function collect(p: SyncPorts, owner: string): Promise<Collected[]> {
   const relays = readRelays(p.db, owner);
   const jobs = relays.flatMap((relay) => (['items', 'deletions'] as Stream[]).map((stream) => ({ relay, stream })));
-  // while any relay's saves are read from the start (one just added, say), every relay's deletions are too, so a
-  // save it still holds can't come back past a deletion the others got long ago (F35)
-  const backfilling = relays.some((r) => !getCursor(p.db, r, 'items', owner));
+  const floor = savesFloor(p, owner, relays);
   const results = await Promise.all(
     jobs.map(async ({ relay, stream }) => {
       try {
-        const since = stream === 'deletions' && backfilling ? null : getCursor(p.db, relay, stream, owner)?.since ?? null;
+        const since = readsFrom(p, owner, relay, stream, floor);
         const events = await pageStream(p.query, relay, streamFilter(stream, owner, since), p.now());
         return { relay, stream, events };
       } catch {
-        return null; // unreachable: its cursor stays, and the next trigger asks again
+        return null; // unreachable, or an answer cut short: its cursor stays, and the next trigger asks again
       }
     }),
   );
@@ -383,7 +414,7 @@ export async function syncLibraryKey(p: SyncPorts, owner: string): Promise<void>
       found.push(...(await p.query(r, [{ kinds: [KIND.appData], authors: [owner], '#d': [LIBRARY_KEY_D] }])));
       answered++;
     } catch {
-      // unreachable: no say in whether a key exists
+      // unreachable, or an answer cut short: no say in whether a key exists
     }
   }));
   const records = [...new Map(found.filter((e) => e.pubkey === owner && e.tags.some((t) => t[0] === 'd' && t[1] === LIBRARY_KEY_D)).map((e) => [e.id, e])).values()];

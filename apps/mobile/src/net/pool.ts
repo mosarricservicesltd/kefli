@@ -4,7 +4,9 @@
 // answered auth-required, or a query closed with it, authenticates and tries once more (contract 3.2); a challenge
 // sent on connect asks nothing of the signer. An AUTH that fails, whether the signer refused, never answered or the
 // socket went, closes that connection so the next call starts afresh (F13): nostr-tools keeps one AUTH promise per
-// connection and leaves it pending for good when the signer throws.
+// connection and leaves it pending for good when the signer throws. A query's answer is whole only once the relay sends
+// EOSE; one it doesn't finish fails the query (CutShort), and one with nothing at all closes the connection too, as one
+// the network dropped without a word.
 import { AbstractRelay } from 'nostr-tools/abstract-relay';
 import type { Filter } from 'nostr-tools/filter';
 import { NIP46_TIMEOUT_MS, withTimeout, type EventTemplate, type NostrEvent, type Signer } from '@kefli/protocol';
@@ -44,6 +46,77 @@ export function publishAnswer(error: unknown): RelayAnswer {
   const reason = String((error as Error)?.message ?? error);
   if (PREFIXED.test(reason)) return { ok: false, reason };
   throw error;
+}
+
+/** How long a relay may send nothing in an answer, from the REQ or from its last event, before the answer is cut. */
+export const QUERY_QUIET_MS = 10_000;
+/** The longest one answer may take however steadily it comes: a minute, as a text's whole body has (sync TEXT_TIMEOUT_MS). */
+export const QUERY_MAX_MS = 60_000;
+
+/**
+ * An answer the relay didn't finish with EOSE: it went quiet for QUERY_QUIET_MS, ran past QUERY_MAX_MS, or closed the
+ * subscription or the connection first. What came is some of the answer, of no known size, so the query fails as a
+ * relay that can't be reached does. Returned as whole, as it was when nostr-tools' own EOSE timer (4.4 s from the REQ,
+ * however much was still coming) or the pool's ten seconds ended it, a cut answer moved the inbox's cursor and sync's
+ * past the events beneath the cut, which were then never read: against strfry, 428, 131, 189, 150 and 362 of 500 wraps
+ * came back as if whole. It counted, too, as a relay answering that a list (C§3.1) or a library key (C§4.3) wasn't there.
+ */
+export class CutShort extends Error {
+  constructor(readonly relay: string, readonly received: number, readonly why: string) {
+    super(`${relay} cut its answer short after ${received} events: ${why}`);
+    this.name = 'CutShort';
+  }
+}
+
+/** One REQ's answer: its events, whether the relay ended it with EOSE, and why it ended. */
+type Answer = { events: NostrEvent[]; eose: boolean; why: string };
+
+/**
+ * The relay's answer to one REQ, ended by its EOSE, its CLOSED, the connection closing, or the pool's limits
+ * (QUERY_QUIET_MS, QUERY_MAX_MS). nostr-tools' own timer ends a subscription as if the relay had sent EOSE, so it is
+ * set past the pool's limits. A subscription ended any other way leaves that timer running, so it is run at once
+ * (receivedEose), to an answer already settled. A relay that sent nothing at all for QUERY_QUIET_MS has its connection
+ * closed (silence).
+ */
+function answer(relay: AbstractRelay, filters: Filter[], quietMs: number, maxMs: number): Promise<Answer> {
+  return new Promise((settle) => {
+    const events: NostrEvent[] = [];
+    const timers: { quiet?: ReturnType<typeof setTimeout>; longest?: ReturnType<typeof setTimeout> } = {};
+    let open = true;
+    const end = (eose: boolean, why: string, close: boolean) => {
+      if (!open) return;
+      open = false;
+      clearTimeout(timers.quiet);
+      clearTimeout(timers.longest);
+      if (close) sub.close();
+      if (!sub.eosed) sub.receivedEose();
+      settle({ events, eose, why });
+    };
+    // Nothing at all since the REQ is, as like as not, a connection the network dropped without a word, as a NAT that
+    // forgot an idle one does: it takes every REQ and answers none, and nostr-tools sends no pings here to find out.
+    // Closed and forgotten (the pool's onclose), the next call opens another; kept, every query on it was cut short
+    // until the system gave up on the socket, minutes later. A relay that went quiet part way keeps its connection.
+    const silence = () => {
+      end(false, `nothing for ${quietMs} ms`, true);
+      if (!events.length) relay.close();
+    };
+    const quiet = () => {
+      clearTimeout(timers.quiet);
+      timers.quiet = setTimeout(silence, quietMs);
+    };
+    const sub = relay.subscribe(filters, {
+      eoseTimeout: maxMs + 1_000,
+      onevent: (e) => {
+        events.push(e as NostrEvent);
+        quiet();
+      },
+      oneose: () => end(true, 'EOSE', true),
+      // the relay's CLOSED, or the connection closing: nostr-tools has closed the subscription itself
+      onclose: (reason) => end(false, `closed: ${reason}`, false),
+    });
+    quiet();
+    timers.longest = setTimeout(() => end(false, `no EOSE within ${maxMs} ms`, true), maxMs);
+  });
 }
 
 /** What the pool keeps beside each connection: a promise that fails when it closes, and its AUTH once begun. */
@@ -151,33 +224,19 @@ export class RelayPool {
     return attempt();
   }
 
-  /** The events matching filters, until EOSE (or the timeout). A CLOSED auth-required authenticates once and asks again. */
-  async query(url: string, filters: Filter[], timeoutMs = 10_000): Promise<NostrEvent[]> {
+  /**
+   * The events matching filters, once the relay has sent EOSE. A CLOSED auth-required authenticates once and asks
+   * again; an answer the relay doesn't finish throws CutShort, as a relay that can't be reached throws.
+   */
+  async query(url: string, filters: Filter[], quietMs = QUERY_QUIET_MS, maxMs = QUERY_MAX_MS): Promise<NostrEvent[]> {
     const relay = await this.relay(url);
-    const ask = () =>
-      new Promise<{ events: NostrEvent[]; closed?: string }>((ok) => {
-        const events: NostrEvent[] = [];
-        const timer = setTimeout(() => {
-          sub.close();
-          ok({ events });
-        }, timeoutMs);
-        const sub = relay.subscribe(filters, {
-          onevent: (e) => events.push(e as NostrEvent),
-          oneose: () => {
-            clearTimeout(timer);
-            sub.close();
-            ok({ events });
-          },
-          onclose: (reason) => {
-            clearTimeout(timer);
-            ok({ events, closed: reason });
-          },
-        });
-      });
-    const first = await ask();
-    if (!first.closed || !AUTH_REQUIRED.test(first.closed)) return first.events;
-    await this.authenticate(url, relay);
-    return (await ask()).events;
+    let got = await answer(relay, filters, quietMs, maxMs);
+    if (!got.eose && AUTH_REQUIRED.test(got.why)) {
+      await this.authenticate(url, relay);
+      got = await answer(relay, filters, quietMs, maxMs);
+    }
+    if (!got.eose) throw new CutShort(url, got.events.length, got.why);
+    return got.events;
   }
 
   /**

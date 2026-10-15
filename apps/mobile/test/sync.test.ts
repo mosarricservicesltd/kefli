@@ -1,5 +1,6 @@
 import {
-  LocalSigner, SignerSlot, buildDeletions, buildDevicesEvent, buildRelayList, buildItemEvent, buildServerList, encryptText, LIST_MAX, normaliseMarkdown, savedD, textHash,
+  LIBRARY_KEY_D, LocalSigner, SignerSlot, buildDeletions, buildDevicesEvent, buildLibraryKeyEvent, buildRelayList, buildItemEvent, buildServerList, encryptText, LIST_MAX,
+  normaliseMarkdown, savedD, textHash,
 } from '@kefli/protocol';
 import type { Item, NostrEvent, ParsedItem, Signer } from '@kefli/protocol';
 import { commitDelete, deleteItem } from '../src/data/library';
@@ -11,7 +12,10 @@ import { addRelay, listServers, nextListTime, seedGeneratedLists, writeRelays } 
 import { TEXT_SERVERS_MAX, applyItem, getCursor, itemColumns, type TextJob } from '../src/data/sync';
 import { SKEW, TEXT_MAX_BYTES, TEXT_TIMEOUT_MS, fetchText, pageStream, streamFilter, syncInbound, takeNewerLists, type Filter, type SyncPorts } from '../src/services/sync';
 import { drain, sendOne, type SendPorts } from '../src/services/send';
+import { libraryKey } from '../src/data/libraryKey';
+import { RelayPool } from '../src/net/pool';
 import { memoryDb } from './sqlite';
+import { WHOLE, relaySockets, type Step } from './relaySocket';
 
 const D = {
   v: 1, operator: { relay: 'ws://op', blossom: 'http://blossom', api: 'http://api' },
@@ -968,5 +972,81 @@ describe('events another client spoilt, or a relay sends to wear the phone out',
     expect(row(w, h(2))).toBeUndefined();
     expect(row(w, h(3))).toMatchObject({ url: 'https://example.com/ok' });
     expect(cursors(w).length).toBeGreaterThan(0);
+  });
+});
+
+// The deploy check's finding (r3/deploy-r): relays' answers came back cut at nostr-tools' own EOSE timer, as if whole.
+// Here sync reads through the pool itself (net/pool), on sockets the test drives, from relays that cut answers while
+// told to: a cut answer is a read that isn't whole, which leaves that relay's cursors as they were, as a relay that
+// can't be reached does, and doesn't count as a relay answering that it holds nothing.
+describe('an answer a relay cuts short (net/pool CutShort)', () => {
+  /** The world's relays behind the pool's own sockets, 50 events an answer, answering as cut says, or whole for null. */
+  function overSockets(w: W, cut: (url: string, filter: Filter) => Step[] | null) {
+    const relay = relaySockets({ holds: (url) => w.relays.get(url) ?? [], cap: 50, plan: (url, f) => cut(url, f as Filter) ?? WHOLE });
+    const pool = new RelayPool({ verify: () => true, signer: async () => null, allowInsecure: true, WebSocket: relay.Socket });
+    // a relay a second without a word in an answer has cut it
+    w.ports.query = (url, filters) => pool.query(url, filters as never, 1_000);
+    return pool;
+  }
+
+  test('keeps that relay’s cursor where it was, so the saves beneath the cut arrive at the next sync', async () => {
+    const w = world();
+    w.tick(3 * SKEW);
+    // 120 saves on the operator relay alone, whose second answer for them is cut to nothing: read as the end of the
+    // stream, the cursor moved to now and the 70 saves beneath were out of every later read
+    for (let i = 0; i < 120; i++) w.publish(await remoteSave(w, h(300 + i), 6000 + i, null), ['ws://op']);
+    const cutting = { now: true };
+    const pool = overSockets(w, (url, f) => (cutting.now && url === 'ws://op' && f['#t'] && f.until !== undefined ? [] : null));
+    await syncInbound(w.ports);
+    expect(getCursor(w.db, 'ws://op', 'items', w.pk)).toBeNull();
+    cutting.now = false;
+    w.tick(60);
+    await syncInbound(w.ports);
+    expect(w.db.get('SELECT COUNT(*) AS n FROM items')).toEqual({ n: 120 });
+    expect(getCursor(w.db, 'ws://op', 'items', w.pk)).not.toBeNull();
+    pool.close();
+  });
+
+  test('a library key behind answers cut short isn’t read as none: no key is made over it, and the next sync takes it', async () => {
+    const w = world();
+    const theirs = nodeCrypto.randomBytes(32);
+    w.publish(await buildLibraryKeyEvent(w.signer, theirs, 800));
+    // every write relay's answer for the record cut to nothing: read as three answers without one, a key was made here
+    const cutting = { now: true };
+    const pool = overSockets(w, (_url, f) => (cutting.now && f['#d']?.includes(LIBRARY_KEY_D) ? [] : null));
+    await syncInbound(w.ports);
+    expect(libraryKey(w.db, w.pk)).toBeNull();
+    cutting.now = false;
+    await syncInbound(w.ports);
+    expect(libraryKey(w.db, w.pk)).toEqual(theirs);
+    pool.close();
+  });
+
+  test('a relay whose saves read is cut while the deletions are read whole can’t bring back a save deleted meanwhile', async () => {
+    const w = world();
+    w.tick(10 * SKEW);
+    w.publish(await remoteSave(w, h(420), w.ports.now() - 100, null));
+    // the operator relay's saves read, while told to, cut part way by a CLOSED, as a relay going down sends
+    const cutting = { now: false };
+    const pool = overSockets(w, (url, f) => (cutting.now && url === 'ws://op' && f['#t'] ? [{ send: 1 }, { closed: 'error: shutting down' }] : null));
+    await syncInbound(w.ports);
+    expect(row(w, h(420))).toBeDefined();
+    // deleted on another phone a minute on; these relays keep the save's event beside its kind 5, as one that
+    // honours no a-tag deletion does
+    w.tick(60);
+    const [del] = await buildDeletions(w.signer, [`kefli/item/${h(420)}`], w.ports.now());
+    w.publish(del);
+    // over a day on, the operator relay's saves read is cut and every deletions read is whole: the save goes, the
+    // deletions cursors move a day past its kind 5, and the operator relay's saves cursor stays behind
+    w.tick(SKEW + 100);
+    cutting.now = true;
+    await syncInbound(w.ports);
+    expect(row(w, h(420))).toBeUndefined();
+    // read again from that cursor, the save came back, its kind 5 now before every deletions read
+    cutting.now = false;
+    w.tick(60);
+    await syncInbound(w.ports);
+    expect(row(w, h(420))).toBeUndefined();
+    pool.close();
   });
 });
