@@ -318,8 +318,9 @@ const WEB = new RegExp('^https?://', 'i');
  * and never its stand-in for them, http://filesystem.local, nor any host that only begins with it, which it serves
  * from the phone's files too, before any network (net/http fromFiles). RULED: the host is read as the protocol's URL
  * parser reads it, as OkHttp does, so no way of writing it (http:///filesystem.local/, a backslash, capitals, a
- * trailing dot, fullwidth letters) gets past. A shared link, a synced save's or an X post's can name either; a
- * browser's goes through isPublicWebUrl, and every redirect through net/http publicWeb.
+ * trailing dot, fullwidth letters) gets past. A share made on this phone can name either; every other save's address,
+ * a browser's, an import's or another phone's, goes through isPublicWebUrl first (pending.ts pageOf), and every
+ * redirect through net/http publicWeb.
  */
 export function fetchable(url: string): boolean {
   const host = WEB.test(url) ? urlParts(url)?.hostname : undefined;

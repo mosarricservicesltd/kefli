@@ -130,4 +130,4 @@ The role went on the box on 15 October 2026 (`deploy.sh --tags monitor`), and a 
 
 ## Not yet on the box
 
-NIP-11's operator pubkey, and the 90-day trim of unrelated public kinds (only registered keys can write, so none arrive yet). NIP-05's `_` name went live by hand on 10 October 2026, the same file the playbook writes.
+NIP-11's operator pubkey and contact are in the playbook (`kefli_operator_pubkey`, 15 October 2026) and reach the relay with the next `deploy.sh --tags deploy`. Still to do: the 90-day trim of unrelated public kinds (only registered keys can write, so none arrive yet). NIP-05's `_` name went live by hand on 10 October 2026, the same file the playbook writes.

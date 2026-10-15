@@ -45,6 +45,11 @@ kefli_min_free_mb: 4096
 # what keflid's database needs: below the blobs' floor, so uploads stop first, and saves, which are small, go on longer.
 kefli_relay_min_free_mb: 2048
 
+# The operator's identity for the relay's NIP-11 (backend spec 6): the Kefli account's key, the same as NIP-05's `_`
+# below, and the address its contact names. The key lives in Richard's signer, never on the box.
+kefli_operator_pubkey: 47d7b470fb54566252061f50e466de732b0bb1069e444a89d1987053c119245b
+kefli_operator_contact: "privacy@{{ kefli_domain }}"
+
 # NIP-05 for the operator's own identity (contract section 6; user names are v2), served by keflid at
 # https://<domain>/.well-known/nostr.json. The Kefli account's key lives in Richard's signer, never on the box.
 kefli_nip05:

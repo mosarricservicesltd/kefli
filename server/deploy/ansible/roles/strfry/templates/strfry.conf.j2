@@ -39,8 +39,9 @@ relay {
     info {
         name = "Kefli"
         description = "Kefli's own relay. Writes are accepted from registered keys only."
-        pubkey = ""
-        contact = ""
+        # The operator's key, the Kefli account's (NIP-11; contract 6 names it the operator), and where to write.
+        pubkey = "{{ kefli_operator_pubkey }}"
+        contact = "{{ kefli_operator_contact }}"
     }
 
     writePolicy {

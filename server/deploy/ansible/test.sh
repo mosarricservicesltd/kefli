@@ -48,6 +48,8 @@ check "the operator's NIP-05 through Caddy" \
   'via kefli.app "https://kefli.app/.well-known/nostr.json?name=_" | jq -e ".names._ | test(\"^[0-9a-f]{64}$\")"'
 check "the relay's NIP-11 through Caddy" \
   'via relay.kefli.app -H "Accept: application/nostr+json" https://relay.kefli.app/ | jq -e ".name == \"Kefli\""'
+check "and it names the operator" \
+  'via relay.kefli.app -H "Accept: application/nostr+json" https://relay.kefli.app/ | jq -e ".pubkey == \"47d7b470fb54566252061f50e466de732b0bb1069e444a89d1987053c119245b\" and .contact == \"privacy@kefli.app\""'
 check 'Blossom answers 404 for a blob it lacks' \
   '[ "$(box curl -sk -o /dev/null -w %{http_code} --resolve blossom.kefli.app:443:127.0.0.1 https://blossom.kefli.app/$(printf %064d 0))" = 404 ]'
 box sh -c 'echo x > /var/www/kefli/downloads/t.xpi && echo x > /var/www/kefli/downloads/t.apk'
