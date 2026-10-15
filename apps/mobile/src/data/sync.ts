@@ -218,10 +218,14 @@ function nameKeptText(db: SqlDb, now: number, owner: string, hash: string, row: 
   enqueue(db, now, { op: 'publish_item', signer: owner, subject: hash, targets: writeRelays(db, owner) });
 }
 
-/** The row's text after taking a newer copy: fetched if it names another, and the one it replaced retired. */
+/**
+ * The row's text after taking a newer copy: fetched if it names another, and the one it replaced retired. One queued
+ * again for its parse waits afresh, as one never tried: the pending queue reads a time-out left from an earlier wait as
+ * the try before that lets a page that never answers fail (services/pending.ts), so its first try would have failed it.
+ */
 function textChanged(db: SqlDb, now: number, owner: string, row: Row, c: Columns): boolean {
   if (row.text_sha256 === c.text_sha256) return false;
-  db.run('UPDATE items SET text_state = ?, fail_reason = NULL WHERE id = ?', c.text_sha256 ? 'remote' : 'queued', row.id);
+  db.run('UPDATE items SET text_state = ?, fail_reason = NULL, timed_out_at = NULL WHERE id = ?', c.text_sha256 ? 'remote' : 'queued', row.id);
   if (!row.text_sha256) return false;
   db.run('DELETE FROM items_fts WHERE rowid = ?', row.id);
   // taking a copy that names another text cancels this phone's waiting upload of its own (C§4.1)

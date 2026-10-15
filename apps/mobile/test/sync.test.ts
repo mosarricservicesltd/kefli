@@ -8,7 +8,7 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { addRelay, listServers, nextListTime, seedGeneratedLists, writeRelays } from '../src/data/lists';
-import { TEXT_SERVERS_MAX, getCursor, itemColumns, type TextJob } from '../src/data/sync';
+import { TEXT_SERVERS_MAX, applyItem, getCursor, itemColumns, type TextJob } from '../src/data/sync';
 import { SKEW, TEXT_MAX_BYTES, TEXT_TIMEOUT_MS, fetchText, pageStream, streamFilter, syncInbound, takeNewerLists, type Filter, type SyncPorts } from '../src/services/sync';
 import { drain, sendOne, type SendPorts } from '../src/services/send';
 import { memoryDb } from './sqlite';
@@ -432,6 +432,28 @@ describe('inbound sync (mobile spec 4.5)', () => {
     // and an address without them is kept exactly as written
     const plain = itemColumns(item({ url: 'https://example.com/a?q=1#x', canonical: 'https://example.com/c', hero: 'https://img.example.com/h.jpg' }), { created_at: 1 } as NostrEvent);
     expect(plain).toMatchObject({ url: 'https://example.com/a?q=1#x', canonical: 'https://example.com/c', hero: 'https://img.example.com/h.jpg' });
+  });
+
+  test('a save queued again by a newer copy without text waits afresh, as one never tried (F12)', () => {
+    // the pending queue reads timed_out_at as a try before, the 14-day rule's "again" (services/pending.ts): one left
+    // from an earlier wait let a save past its 14 days fail at the first time-out after a newer copy queued it again
+    const w = world();
+    const at = (id: string, created_at: number) => ({ id, created_at, tags: [['d', `kefli/item/${h(1)}`]] }) as unknown as NostrEvent;
+    const text = { sha256: 'ab'.repeat(32), key: 'k'.repeat(44), nonce: 'n'.repeat(16), servers: ['http://blossom', 'http://m1'] };
+    applyItem(w.db, 100, w.pk, h(1), at('e1', 6000), item());
+    expect(row(w, h(1))).toMatchObject({ text_state: 'queued', timed_out_at: null });
+    // tried here and couldn't be had; then another phone sends its text, and a newer copy without it before this phone
+    // had fetched it
+    w.db.run('UPDATE items SET timed_out_at = 6500 WHERE hash = ?', h(1));
+    applyItem(w.db, 100, w.pk, h(1), at('e2', 7000), item({ text }));
+    expect(row(w, h(1))).toMatchObject({ text_state: 'remote', timed_out_at: null });
+    w.db.run('UPDATE items SET timed_out_at = 7500 WHERE hash = ?', h(1));
+    applyItem(w.db, 100, w.pk, h(1), at('e3', 8000), item());
+    expect(row(w, h(1))).toMatchObject({ text_state: 'queued', timed_out_at: null });
+    // a copy that changes nothing of its text leaves the wait as it was
+    w.db.run('UPDATE items SET timed_out_at = 8500 WHERE hash = ?', h(1));
+    applyItem(w.db, 100, w.pk, h(1), at('e4', 9000), item({ state: 'archived' }));
+    expect(row(w, h(1))).toMatchObject({ text_state: 'queued', state: 'archived', timed_out_at: 8500 });
   });
 
   test('no active identity or no signer: nothing to do', async () => {
