@@ -5,7 +5,8 @@
 // sent on connect asks nothing of the signer. An AUTH that fails, whether the signer refused, never answered or the
 // socket went, closes that connection so the next call starts afresh (F13): nostr-tools keeps one AUTH promise per
 // connection and leaves it pending for good when the signer throws. A query's answer is whole only once the relay sends
-// EOSE; one it doesn't finish fails the query (CutShort).
+// EOSE; one it doesn't finish fails the query (CutShort), and one with nothing at all closes the connection too, as one
+// the network dropped without a word.
 import { AbstractRelay } from 'nostr-tools/abstract-relay';
 import type { Filter } from 'nostr-tools/filter';
 import { NIP46_TIMEOUT_MS, withTimeout, type EventTemplate, type NostrEvent, type Signer } from '@kefli/protocol';
@@ -74,7 +75,8 @@ type Answer = { events: NostrEvent[]; eose: boolean; why: string };
  * The relay's answer to one REQ, ended by its EOSE, its CLOSED, the connection closing, or the pool's limits
  * (QUERY_QUIET_MS, QUERY_MAX_MS). nostr-tools' own timer ends a subscription as if the relay had sent EOSE, so it is
  * set past the pool's limits. A subscription ended any other way leaves that timer running, so it is run at once
- * (receivedEose), to an answer already settled.
+ * (receivedEose), to an answer already settled. A relay that sent nothing at all for QUERY_QUIET_MS has its connection
+ * closed (silence).
  */
 function answer(relay: AbstractRelay, filters: Filter[], quietMs: number, maxMs: number): Promise<Answer> {
   return new Promise((settle) => {
@@ -90,9 +92,17 @@ function answer(relay: AbstractRelay, filters: Filter[], quietMs: number, maxMs:
       if (!sub.eosed) sub.receivedEose();
       settle({ events, eose, why });
     };
+    // Nothing at all since the REQ is, as like as not, a connection the network dropped without a word, as a NAT that
+    // forgot an idle one does: it takes every REQ and answers none, and nostr-tools sends no pings here to find out.
+    // Closed and forgotten (the pool's onclose), the next call opens another; kept, every query on it was cut short
+    // until the system gave up on the socket, minutes later. A relay that went quiet part way keeps its connection.
+    const silence = () => {
+      end(false, `nothing for ${quietMs} ms`, true);
+      if (!events.length) relay.close();
+    };
     const quiet = () => {
       clearTimeout(timers.quiet);
-      timers.quiet = setTimeout(() => end(false, `nothing for ${quietMs} ms`, true), quietMs);
+      timers.quiet = setTimeout(silence, quietMs);
     };
     const sub = relay.subscribe(filters, {
       eoseTimeout: maxMs + 1_000,

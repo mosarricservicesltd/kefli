@@ -103,3 +103,44 @@ describe('a query is whole only once the relay sends EOSE (net/pool)', () => {
     authed.pool.close();
   });
 });
+
+// A connection the network has dropped without a word, as a NAT that forgot an idle one does, takes every REQ and
+// answers none, and nothing tells the phone: nostr-tools sends no pings here. While nostr-tools' timer passed for EOSE,
+// each query on it came back empty, as if whole; with the timer past the pool's limits, each was cut short instead, the
+// next on the same connection too, until the system gave up on the socket minutes later.
+describe('a relay that answers nothing at all is let go of (net/pool)', () => {
+  beforeEach(() => jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] }));
+  afterEach(() => jest.useRealTimers());
+
+  test('the next query asks on a new connection, and a live subscription on the old one is dropped to be opened again', async () => {
+    // the first connection gone dead under the phone; any other answers
+    const { pool, sockets } = poolFor(() => (sockets.length === 1 ? [] : [{}, 'eose']));
+    const dropped = jest.fn();
+    const live = watch(pool.watch(URL, filter, () => undefined, dropped));
+    await jest.advanceTimersByTimeAsync(10);
+    expect(live.settled).toBe(true);
+    const first = watch(pool.query(URL, filter));
+    await jest.advanceTimersByTimeAsync(QUERY_QUIET_MS + 1);
+    expect(first.error).toMatchObject({ name: 'CutShort', received: 0, why: `nothing for ${QUERY_QUIET_MS} ms` });
+    expect(sockets[0].readyState).toBe(3);
+    expect(dropped).toHaveBeenCalledTimes(1);
+    const again = watch(pool.query(URL, filter));
+    await jest.advanceTimersByTimeAsync(10);
+    expect(sockets).toHaveLength(2);
+    expect(again.value).toHaveLength(500);
+    pool.close();
+  });
+
+  test('a relay that went quiet part way through an answer keeps its connection', async () => {
+    // events came, so the connection was there: the next query is asked on it
+    const { pool, sockets } = poolFor((before) => (before === 0 ? [{ send: 300 }] : [{}, 'eose']));
+    const got = watch(pool.query(URL, filter));
+    await jest.advanceTimersByTimeAsync(QUERY_QUIET_MS + 1);
+    expect(got.error).toMatchObject({ name: 'CutShort', received: 300 });
+    const again = watch(pool.query(URL, filter));
+    await jest.advanceTimersByTimeAsync(10);
+    expect(again.value).toHaveLength(500);
+    expect(sockets).toHaveLength(1);
+    pool.close();
+  });
+});
