@@ -11,7 +11,7 @@
 // everything collected has been applied (F14).
 import {
   DEVICES_D, KIND, LIBRARY_KEY_D, LibraryKeyVersionError, T_TAG, decryptText, isSignerFailure, newest, readDevicesEvent, readItemEvent, readLibraryKeyEvent,
-  readRelayList, readServerList, replaces,
+  readServerList, replaces,
 } from '@kefli/protocol';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { deriveArticle, type Derived } from '../reader/blocks';
@@ -363,7 +363,7 @@ export function takeNewerLists(db: SqlDb, owner: string, copies: NostrEvent[], k
     recordList(db, owner, kind, latest.id, latest.created_at, JSON.stringify(latest));
     const raw = held?.raw ?? null;
     if (kind === KIND.serverList) keepListedServers(db, owner, readServerList(latest), serversNamed(raw));
-    if (kind === KIND.relayList) keepListedRelays(db, owner, readRelayList(latest), relaysNamed(raw), latest.created_at);
+    if (kind === KIND.relayList) keepListedRelays(db, owner, latest, relaysNamed(raw));
   }
 }
 

@@ -360,6 +360,25 @@ describe('inbound sync (mobile spec 4.5)', () => {
     expect(writeRelays(w.db, w.pk)).toEqual(expect.arrayContaining(others.slice(0, LIST_MAX - BASE.length - 1).map((r) => r.url)));
   });
 
+  test('a relay added in Advanced stays while a newer list names it, past the most Kefli reads of a list too', async () => {
+    const w = world();
+    const theirs = Array.from({ length: LIST_MAX + 5 }, (_, i) => ({ url: `ws://r${i}`, ...RW }));
+    // a list longer than Kefli reads, the table holding what it reads of it
+    const held = await buildRelayList(w.signer, [...BASE, ...theirs], 1000);
+    w.db.run("INSERT INTO lists (owner, kind, d, event_id, created_at, raw) VALUES (?, 10002, '', ?, 1000, ?)", w.pk, held.id, JSON.stringify(held));
+    for (const r of theirs.slice(0, LIST_MAX - BASE.length)) w.db.run("INSERT INTO relays (url, owner, read, write, source, added_by_app) VALUES (?, ?, 1, 1, 'user', 0)", r.url, w.pk);
+    expect(addRelay(w.db, 1100, w.pk, 'ws://mine', D)).toBe(true);
+    // the list sent from here names it after theirs, and another app republishes that list as it was
+    takeNewerLists(w.db, w.pk, [await buildRelayList(w.signer, [...BASE, ...theirs, { url: 'ws://mine', ...RW }], 1200)], [10002], 1300);
+    expect(writeRelays(w.db, w.pk)).toContain('ws://mine');
+    expect(relayRow(w, 'ws://mine')).toMatchObject({ read: 1, write: 1, source: 'user' });
+    // a relay of theirs past what Kefli reads still isn't one it writes to
+    expect(writeRelays(w.db, w.pk)).not.toContain(`ws://r${LIST_MAX}`);
+    // one that no longer names it, made after it was added, takes it away
+    takeNewerLists(w.db, w.pk, [await buildRelayList(w.signer, [...BASE, ...theirs], 1400)], [10002], 1500);
+    expect(writeRelays(w.db, w.pk)).not.toContain('ws://mine');
+  });
+
   test('every server of the 10063 held counts: one removed here, past its 50th, stays removed when a newer 10063 moves it up', async () => {
     const w = world();
     const others = Array.from({ length: 60 }, (_, i) => `http://s${i}`);

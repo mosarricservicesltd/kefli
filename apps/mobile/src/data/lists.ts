@@ -2,7 +2,7 @@
 // read when choosing where saves go. The indexer relays carry the 10002 only. The tables hold what Kefli uses, at
 // most LIST_MAX of a list's entries (packages/protocol); the 10002 and 10063 it publishes are the lists held, entry
 // for entry, with its own changes (relayListTags, serverListTags).
-import { KIND, isRelayUrl, isServerUrl, readServerList, relayTags, sameUrl, type RelayEntry } from '@kefli/protocol';
+import { KIND, isRelayUrl, isServerUrl, readRelayList, readServerList, relayTags, sameUrl, type NostrEvent, type RelayEntry } from '@kefli/protocol';
 import type { SqlDb } from './db';
 import { enqueue } from './outbox';
 import { getSetting, setSetting } from './settings';
@@ -87,18 +87,20 @@ export function keepListedServers(db: SqlDb, owner: string, servers: string[], b
   });
 }
 
-/**
- * The tags named name of a list kept as raw JSON whose address ok takes, each address once (the first, slash or not),
- * every one of them: past LIST_MAX too, which only bounds what Kefli uses of a list. Nothing for no list, or one that
- * doesn't read.
- */
-function namedIn(raw: string | null, name: string, ok: (url: unknown) => url is string): string[][] {
-  let tags: unknown;
+/** The tags of a list kept as raw JSON; null for no list, or one that doesn't read. */
+function rawTags(raw: string | null): unknown {
   try {
-    tags = raw ? (JSON.parse(raw) as { tags?: unknown } | null)?.tags : null;
+    return raw ? (JSON.parse(raw) as { tags?: unknown } | null)?.tags : null;
   } catch {
-    return [];
+    return null;
   }
+}
+
+/**
+ * The tags named name of a list's tags whose address ok takes, each address once (the first, slash or not), every one
+ * of them: past LIST_MAX too, which only bounds what Kefli uses of a list. Nothing for tags that aren't a list.
+ */
+function namedIn(tags: unknown, name: string, ok: (url: unknown) => url is string): string[][] {
   const seen = new Set<string>();
   return (Array.isArray(tags) ? tags : []).filter((t): t is string[] => {
     if (!Array.isArray(t) || t[0] !== name || !ok(t[1]) || seen.has(bare(t[1]))) return false;
@@ -107,18 +109,23 @@ function namedIn(raw: string | null, name: string, ok: (url: unknown) => url is 
   });
 }
 
+/** Every relay a 10002's tags name, with its markers as readRelayList reads them, past LIST_MAX too. */
+function relaysIn(tags: unknown): RelayEntry[] {
+  return namedIn(tags, 'r', isRelayUrl).map((t) => ({ url: t[1], read: t[2] !== 'write', write: t[2] !== 'read' }));
+}
+
 /**
  * Every relay a 10002 kept as raw JSON names, with its markers as readRelayList reads them: what "the list it held"
  * named (C§3.1), past LIST_MAX too. Read to its first LIST_MAX alone, a relay removed here that the held list named
  * further down came back when another app's newer list moved it up.
  */
 export function relaysNamed(raw: string | null): RelayEntry[] {
-  return namedIn(raw, 'r', isRelayUrl).map((t) => ({ url: t[1], read: t[2] !== 'write', write: t[2] !== 'read' }));
+  return relaysIn(rawTags(raw));
 }
 
 /** Every server a 10063 kept as raw JSON names, past LIST_MAX too (relaysNamed). */
 export function serversNamed(raw: string | null): string[] {
-  return namedIn(raw, 'server', isServerUrl).map((t) => t[1]);
+  return namedIn(rawTags(raw), 'server', isServerUrl).map((t) => t[1]);
 }
 
 type HeldRelay = { url: string; read: number; write: number; source: string; added_by_app: number; added_at: number | null; prior: string | null };
@@ -164,6 +171,18 @@ const addedSince = (r: HeldRelay, madeAt: number) => (r.added_at ?? 0) > madeAt;
 /** Whether the list held said of an entry what the newer list says: then no other app changed its markers. */
 const sameMarks = (was: RelayEntry | undefined, e: RelayEntry) => !!was && was.read === e.read && was.write === e.write;
 
+/**
+ * Whether a newer 10002 takes a row away: one of the person's own that the list no longer names among the entries
+ * Kefli reads of it (named), unless this phone added it after the list was made. One this phone added in Advanced
+ * stays while the list names it anywhere, past LIST_MAX too: added after a long list of theirs, it came after the
+ * entries Kefli reads, and went when another app republished the list as it was, so Kefli no longer wrote to it.
+ */
+function goes(r: HeldRelay, named: Set<string>, anywhere: Set<string>, madeAt: number): boolean {
+  if (r.source !== 'user' || addedSince(r, madeAt)) return false;
+  const url = bare(r.url);
+  return !named.has(url) && !(r.added_at !== null && anywhere.has(url));
+}
+
 /** A relay of the person's own that a newer 10002 no longer names: gone, or the indexer row it replaced back as it was. */
 function dropOwn(db: SqlDb, owner: string, r: HeldRelay): void {
   const p = priorRow(r.prior);
@@ -179,18 +198,18 @@ function dropOwn(db: SqlDb, owner: string, r: HeldRelay): void {
  * A newer 10002 seen on a relay (C§3.1, FD 113): its entries (at most LIST_MAX, what Kefli uses) taken in against the
  * list held before it (before: every entry it named, its markers too) by takeEntry. A relay of the person's own that
  * the newer list no longer names was removed elsewhere, and goes, unless this phone added it after the list was made
- * (madeAt): an indexer it replaced comes back as it was. Without this, a relay the person's list named that Kefli held
+ * (goes): an indexer it replaced comes back as it was. Without this, a relay the person's list named that Kefli held
  * as an indexer was never read from or written to, and a marker changed in another app never reached this phone.
  */
-export function keepListedRelays(db: SqlDb, owner: string, entries: RelayEntry[], before: RelayEntry[], madeAt: number): void {
+export function keepListedRelays(db: SqlDb, owner: string, latest: Pick<NostrEvent, 'tags' | 'created_at'>, before: RelayEntry[]): void {
+  const entries = readRelayList(latest);
+  const named = new Set(entries.map((e) => bare(e.url)));
+  const anywhere = new Set(relaysIn(latest.tags).map((e) => bare(e.url)));
   db.tx(() => {
     const rows = new Map(db.all<HeldRelay>('SELECT url, read, write, source, added_by_app, added_at, prior FROM relays WHERE owner = ?', owner).map((r) => [bare(r.url), r]));
     const was = new Map(before.map((e) => [bare(e.url), e]));
-    for (const e of entries) takeEntry(db, owner, e, rows.get(bare(e.url)), was.get(bare(e.url)), madeAt);
-    const named = new Set(entries.map((e) => bare(e.url)));
-    for (const r of rows.values()) {
-      if (r.source === 'user' && !named.has(bare(r.url)) && !addedSince(r, madeAt)) dropOwn(db, owner, r);
-    }
+    for (const e of entries) takeEntry(db, owner, e, rows.get(bare(e.url)), was.get(bare(e.url)), latest.created_at);
+    for (const r of rows.values()) if (goes(r, named, anywhere, latest.created_at)) dropOwn(db, owner, r);
   });
 }
 
