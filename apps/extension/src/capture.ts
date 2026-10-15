@@ -5,7 +5,7 @@
 // what a save needs crosses to the background, and a page too large to read in good time, or at an address no save request
 // can carry, isn't read at all (captured.ts, PAGE_LIMITS, ADDRESS_UNWRAPPABLE). The background calls window.kefliCapture()
 // once both files are in.
-import { keepHtml, keptCanonical, pageUrl, tooLargeToRead, unread, unwrappableAddress, type Captured, type PageSize, type Parsed } from './captured';
+import { fromParse, keepHtml, pageUrl, tooLargeToRead, unread, unwrappableAddress, type Captured, type PageSize, type Parsed } from './captured';
 declare function kefliParse(bodyBase64: string, contentType: string, url: string): Parsed;
 declare function kefliArticle(bodyBase64: string, contentType: string, url: string): { ok: boolean; content?: string };
 
@@ -76,18 +76,7 @@ export function capture(doc: Document, href: string): Captured {
   const parsed = kefliParse(body, type, url);
   const content = parsed.ok ? kefliArticle(body, type, url).content : undefined;
   const html = keepHtml(parsed, content === undefined ? undefined : absoluteFragments(content, baseOf(doc, url)));
-  return {
-    url,
-    // only from the page's own site (contract 4.3), so a page can't send a save to another site's address, and none
-    // longer than the phone keeps
-    canonical: keptCanonical(url, parsed.canonical),
-    hero: parsed.hero ?? null,
-    title: parsed.title ?? (doc.title.trim() || null),
-    site: parsed.site ?? null,
-    byline: parsed.byline ?? null,
-    lang: parsed.lang ?? null,
-    html,
-  };
+  return fromParse(url, parsed, doc.title, html);
 }
 
 (globalThis as { kefliCapture?: () => Captured }).kefliCapture = () => capture(document, location.href);

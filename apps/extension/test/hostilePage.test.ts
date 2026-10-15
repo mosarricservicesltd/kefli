@@ -6,7 +6,7 @@ import { CANONICAL_MAX, type SaveRequest } from '../../../packages/protocol/src/
 import { LocalSigner } from '../../../packages/protocol/src/signer';
 import { unwrap } from '../../../packages/protocol/src/wrap';
 import {
-  ADDRESS_UNWRAPPABLE, GUARD_SAMPLE_CHARS, keepHtml, linkOnly, orAfter, PAGE_LIMITS, pageUrl, tooLargeToRead, unread, type PageSize, type Parsed,
+  ADDRESS_UNWRAPPABLE, fromParse, GUARD_SAMPLE_CHARS, keepHtml, linkOnly, orAfter, PAGE_LIMITS, pageUrl, tooLargeToRead, unread, type PageSize, type Parsed,
 } from '../src/captured';
 import { baseOf, capture } from '../src/capture';
 import { webCrypto } from '../src/crypto';
@@ -168,6 +168,24 @@ describe('a canonical longer than the phone keeps is left out (CANONICAL_MAX)', 
     expect(req).toMatchObject({ url: amp, canonical: null, title: 'A story', site: 'News', byline: 'A writer', lang: 'en', hero });
     expect(req.html).not.toBeNull();
     expect(pending.hash).toBe(itemHash(amp));
+  });
+});
+
+describe('what a capture keeps of the parse (fromParse)', () => {
+  const amp = 'https://amp.news.example/2026/10/story';
+  const hero = 'https://cdn.example/h.jpg';
+
+  test('what the parse found, and its canonical as the phone keeps one', () => {
+    const parsed: Parsed = { ok: true, title: 'A story', byline: 'A writer', site: 'News', lang: 'en', hero, canonical: story };
+    expect(fromParse(amp, parsed, 'A page', '<p>x</p>')).toEqual({ url: amp, canonical: story, hero, title: 'A story', site: 'News', byline: 'A writer', lang: 'en', html: '<p>x</p>' });
+    expect(fromParse(amp, { ...parsed, canonical: `${story}?q=${'x'.repeat(CANONICAL_MAX)}` }, 'A page', null).canonical).toBeNull();
+    expect(fromParse(amp, { ...parsed, canonical: 'https://evil.example/2026/10/story' }, 'A page', null).canonical).toBeNull();
+  });
+
+  test('a page the parse couldn’t read keeps its canonical, picture and own title, and nothing it didn’t find', () => {
+    expect(fromParse(amp, { ok: false, canonical: story, hero }, '  A page \n', null))
+      .toEqual({ url: amp, canonical: story, hero, title: 'A page', site: null, byline: null, lang: null, html: null });
+    expect(fromParse(amp, { ok: true, title: null }, '   ', null)).toEqual(linkOnly(amp));
   });
 });
 

@@ -138,6 +138,30 @@ export function unread(url: string, title: string): Captured {
   return { ...linkOnly(url), title: title.trim() || null };
 }
 
+/** A detail the parse found, or null for one it didn't. */
+function found(detail: string | null | undefined): string | null {
+  return detail ?? null;
+}
+
+/**
+ * What a capture of the page at url keeps once the page is read (contract 4.3 and 4.4): the parse's details, its
+ * canonical as keptCanonical keeps it (only from the page's own site, so a page can't send a save to another site's
+ * address, and none longer than the phone keeps), the page's own title where the parse found none, and the HTML the
+ * guard and the cap let through.
+ */
+export function fromParse(url: string, parsed: Parsed, pageTitle: string, html: string | null): Captured {
+  return {
+    url,
+    canonical: keptCanonical(url, parsed.canonical),
+    hero: found(parsed.hero),
+    title: parsed.title ?? (pageTitle.trim() || null),
+    site: found(parsed.site),
+    byline: found(parsed.byline),
+    lang: found(parsed.lang),
+    html,
+  };
+}
+
 /** p's value, or fallback once ms have passed without one; p itself goes on, and whatever it gives later is let go. */
 export function orAfter<T, F>(p: Promise<T>, ms: number, fallback: F): Promise<T | F> {
   let timer: ReturnType<typeof setTimeout> | undefined;
