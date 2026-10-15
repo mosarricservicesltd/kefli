@@ -1487,10 +1487,14 @@ describe('a field no wrap could ever hold (F39, faster)', () => {
   });
 
   test('an address no wrap could hold is refused at once', async () => {
+    // the link save's address read for its user name and password before the clock starts: under Jest that is whatwg-url's
+    // parser in JavaScript, 2 s for these 2 MB and 14 in a full run under coverage on a busy machine, where the extension
+    // has the browser's own URL (build.mjs, urlRecord.ts), which reads them in 6 ms
+    const c = linkOnly(`https://example.com/?q=${'x'.repeat(2_000_000)}`);
     const started = Date.now();
-    await expect(prepare(linkOnly(`https://example.com/?q=${'x'.repeat(2_000_000)}`), ctx)).rejects.toBeInstanceOf(AddressTooLongError);
+    await expect(prepare(c, ctx)).rejects.toBeInstanceOf(AddressTooLongError);
     expect(Date.now() - started).toBeLessThan(10_000);
-  });
+  }, 60_000);
 });
 
 describe('a move while saves wait, their toasts still showing (contract 4.4 and 4.8)', () => {
