@@ -68,21 +68,27 @@ function kept(p: DefaultsPorts): Defaults | null {
   }
 }
 
+/**
+ * A fresh copy asked for when one is due, none having been had for a day, and no ask has failed in the last five
+ * minutes; asks made while one is under way share it. One that answers is kept; one that fails is when the next waits from.
+ */
+async function refresh(p: DefaultsPorts, s: DefaultsState, now: number): Promise<void> {
+  const due = !s.fresh || now - s.fetchedAt >= DAY;
+  if (!due || RETRY > now - s.failedAt) return;
+  s.inflight ??= fetchDefaults(p).finally(() => { s.inflight = null; });
+  const d = await s.inflight;
+  if (d) {
+    s.fresh = d;
+    s.fetchedAt = now;
+    p.write(JSON.stringify(d));
+  } else {
+    s.failedAt = now;
+  }
+}
+
 /** The defaults to use now: a fresh copy when one is due and answers, else the kept copy, else the baked one. */
 export async function pickDefaults(p: DefaultsPorts, s: DefaultsState): Promise<Defaults> {
-  const now = p.now();
-  const due = !s.fresh || now - s.fetchedAt >= DAY;
-  if (due && now - s.failedAt >= RETRY) {
-    s.inflight ??= fetchDefaults(p).finally(() => { s.inflight = null; });
-    const d = await s.inflight;
-    if (d) {
-      s.fresh = d;
-      s.fetchedAt = now;
-      p.write(JSON.stringify(d));
-    } else {
-      s.failedAt = now;
-    }
-  }
+  await refresh(p, s, p.now());
   const d = s.fresh ?? kept(p) ?? p.baked;
   if (!d) throw new Error('no defaults: none fetched, kept or baked into this build');
   return d;
