@@ -149,6 +149,17 @@ describe("an address's user info is no part of its save (ruling 8)", () => {
     expect(withoutUserInfo('https://www.bank.example@evil.example/a')).toBe('https://evil.example/a');
   });
 
+  test('an address without an @ holds no user info, and comes back at once however long it is', () => {
+    // whatwg-url reads an address a code point at a time: this one took 8 s, on every save of a link the browser made
+    const long = `https://example.com/?q=${'x'.repeat(2_000_000)}`;
+    const started = Date.now();
+    expect(withoutUserInfo(long)).toBe(long);
+    expect(Date.now() - started).toBeLessThan(1_000);
+    // only an @ ends user info, so every other address comes back as written, as the URL Standard's reading gives it
+    for (const c of fixtures.cases.filter((k) => !k.url.includes('@'))) expect(withoutUserInfo(c.url)).toBe(c.url);
+    expect(withoutUserInfo(`https://u:p@example.com/?q=${'x'.repeat(1_000)}`)).toBe(`https://example.com/?q=${'x'.repeat(1_000)}`);
+  });
+
   test('withoutUserInfo leaves an address without any, and anything that isn’t a link, exactly as it was', () => {
     for (const u of ['https://Example.com/a b?utm_source=x#f', 'mailto:someone@example.com', 'not a url', 'ftp://u:p@example.com/', `https://u:p@${'a'.repeat(2_000)}.example/`]) {
       expect(withoutUserInfo(u)).toBe(u);

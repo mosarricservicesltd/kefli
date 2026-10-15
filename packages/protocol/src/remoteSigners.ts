@@ -323,8 +323,7 @@ function bookmarkSave(u: string): { url: string; hash: string } | null {
   try {
     const url = new URL(u);
     if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
-    // only an address holding them is read again: whatwg-url's parse would near treble an import's time
-    const link = url.username || url.password ? withoutUserInfo(url.href) : url.href;
+    const link = withoutUserInfo(url.href);
     return { url: link, hash: itemHash(link) };
   } catch {
     return null;

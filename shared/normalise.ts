@@ -193,9 +193,11 @@ export function ownCanonical(url: string, canonical: string | null | undefined):
 /**
  * input without its user name and password (ruling 8), as the extension sends a page's address; everything else in it
  * as the URL Standard serialises it. An address with no user info, or input that isn't an http or https URL, comes back
- * exactly as given.
+ * exactly as given. Only an @ ends user info, so input without one is given back unread: whatwg-url reads an address
+ * a code point at a time, and a link's address of 2 MB took 8 s.
  */
 export function withoutUserInfo(input: string): string {
+  if (!input.includes('@')) return input;
   let url: URLRecord;
   try {
     url = parseHttp(input);
