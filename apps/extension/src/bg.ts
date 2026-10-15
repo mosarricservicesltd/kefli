@@ -6,7 +6,7 @@ import { BROWSER, DEFAULTS_URL, FLAVOUR } from './config';
 import { webCrypto } from './crypto';
 import { loadDefaults } from './defaults';
 import { deviceSigner } from './device';
-import { applyMove, followMoves } from './move';
+import { lookForMove } from './move';
 import { queued, waiting } from './queue';
 import { collected, fetchWraps, publish } from './relay';
 import { fetchNet, type SaveContext } from './save';
@@ -35,22 +35,15 @@ const MOVES_EVERY_MINUTES = 30;
 const MOVES_AFTER_SEND = 300;
 
 /**
- * Following a move (contract 4.4 and 4.8): the gift wraps addressed to this browser since the last look, less NIP-59's two
- * days of backdating, are checked for a pair-ack from the current user carrying moved_from; one that is found replaces
- * the pairing and wraps the queue again for the new key. A service worker can't hold a subscription open, so the
+ * Following a move (contract 4.4 and 4.8; move.ts lookForMove): a pair-ack from the current user carrying moved_from
+ * replaces the pairing and wraps the queue again for the new key. A service worker can't hold a subscription open, so the
  * background looks at start, every half hour and after sending (ruling, extension spec 15).
  */
 async function checkMoves(): Promise<void> {
-  const pairing = await store.get<Pairing>(KEYS.pairing);
-  const defaults = pairing ? await loadDefaults(store, DEFAULTS_URL) : null;
-  if (!pairing || !defaults) return;
+  const defaults = (await store.get<Pairing>(KEYS.pairing)) ? await loadDefaults(store, DEFAULTS_URL) : null;
+  if (!defaults) return;
   const device = await deviceSigner(store, webCrypto);
-  const since = ((await store.get<number>(KEYS.movesChecked)) ?? pairing.paired_at) - 172_800 - 300;
-  const look = await fetchWraps(defaults.operator.relay, device, since).catch(() => null);
-  if (!look) return;
-  const ack = await followMoves(device, look.events, pairing.user_pubkey);
-  if (ack) await applyMove(store, device, ack, now(), session, work.follow);
-  await store.set(KEYS.movesChecked, now());
+  await lookForMove({ store, session, device, now, follow: work.follow, lookUp: (since) => fetchWraps(defaults.operator.relay, device, since) });
 }
 
 async function watchMoves(): Promise<void> {

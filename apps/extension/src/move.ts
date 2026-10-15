@@ -8,6 +8,7 @@ import type { LocalSigner, NostrEvent } from '../../../packages/protocol/src/sig
 import { unwrap } from '../../../packages/protocol/src/wrap';
 import { exclusive } from './lock';
 import { changeQueue, type Queued } from './queue';
+import type { Answer } from './relay';
 import { wrapAgain } from './save';
 import { addresses, KEYS, type Pairing, type Store } from './store';
 import { moveUndoKey } from './undo';
@@ -144,5 +145,43 @@ export function applyMove(store: Store, device: LocalSigner, ack: PairAck, now: 
     for (const r of renamed) await moveUndoKey(session, r.was, r.to, r.wrapKey, r.sha256, r.wentTo).catch(() => undefined);
     return pairing;
   });
+}
+
+/** How far back a look reads from the last one: NIP-59 dates a wrap up to two days back, and five minutes for clocks. */
+export const LOOKBACK = 172_800 + 300;
+
+/** A read of the wraps addressed to the device since a time, and whether the relay finished its answer (relay.ts). */
+export type LookUp = (since: number) => Promise<Pick<Answer, 'events' | 'whole'>>;
+
+/** What a look for a move works with (bg.ts): storage, the device key, the read, the clock and the background's follow. */
+export interface Looking {
+  store: Store;
+  session: Store;
+  device: LocalSigner;
+  lookUp: LookUp;
+  now(): number;
+  follow: Follow;
+}
+
+/**
+ * A look for a move (contract 4.4 and 4.8, extension spec 15): the gift wraps addressed to this browser since the last
+ * look, less LOOKBACK, are checked for a pair-ack from the pairing's user carrying moved_from, and one that is found is
+ * taken (applyMove). The last look's time moves on, to when this look began, only once the relay has finished its answer
+ * (EOSE). One stopped at WRAPS_MAX or at its ten seconds may have stopped above a pair-ack dated up to two days back, which
+ * no look would reach once the last look's time had passed that date and five minutes: a hundred wraps dated now, from
+ * anyone who saw the device's key in its QR, kept every look from reaching the ack while each moved the time on, and the
+ * browser went on saving to the library that had moved away.
+ */
+export async function lookForMove(o: Looking): Promise<void> {
+  const pairing = await o.store.get<Pairing>(KEYS.pairing);
+  if (!pairing) return;
+  const began = o.now();
+  // read on its own line: lizard, which the code gate uses, ends a function at a bracketed await
+  const last = await o.store.get<number>(KEYS.movesChecked);
+  const look = await o.lookUp((last ?? pairing.paired_at) - LOOKBACK).catch(() => null);
+  if (!look) return;
+  const ack = await followMoves(o.device, look.events, pairing.user_pubkey);
+  if (ack) await applyMove(o.store, o.device, ack, o.now(), o.session, o.follow);
+  if (look.whole) await o.store.set(KEYS.movesChecked, began);
 }
 

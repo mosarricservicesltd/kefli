@@ -12,7 +12,7 @@ import { history } from '../src/debug';
 import { relayRows, type Defaults } from '../src/defaults';
 import { deviceSigner } from '../src/device';
 import { PerSave } from '../src/lock';
-import { applyMove, followMoves } from '../src/move';
+import { applyMove, followMoves, LOOKBACK, lookForMove, type LookUp } from '../src/move';
 import { ATTEMPTS_MAX, BLOB_KEEP_MAX, BLOBS_KEEP_MAX, changeQueue, dequeue, enqueue, ENTRIES_MAX, failed, flush, QUEUE_MAX, queued, settle, waiting } from '../src/queue';
 import { ADDRESS_SURE_FIT_BYTES, AddressTooLongError, fetchNet, prepare, rumorBytes, timed, uploadTimeoutMs, WRAP_FRESH_FOR, type Net, type Pending } from '../src/save';
 import { KEYS, memoryStore, type Pairing, type Store } from '../src/store';
@@ -1092,6 +1092,51 @@ describe('Advanced’s relays (F43)', () => {
   });
   test('with Keep backup copies off, Kefli’s relay is still shown, as the one this browser sends to', () => {
     expect(relayRows(['wss://nos.lol'], DEFAULTS)[0]).toEqual({ url: 'wss://relay.example', label: 'Kefli', operator: true });
+  });
+});
+
+describe('a look for a move (bg.ts checkMoves; contract 4.4 and 4.8)', () => {
+  const T = new LocalSigner(hexToBytes('33'.repeat(32)));
+  const ack: PairAck = { v: 1, user_pubkey: T.pubkey(), write_relays: ['wss://relay.example'], blossom_servers: [], token: 'cd'.repeat(32), moved_from: user.pubkey() };
+  /** A wrap addressed to the device that isn't a pair-ack: a stranger's, which the look can't open. */
+  const junk = (i: number) => ({ id: i.toString(16).padStart(64, '0'), kind: 1059, pubkey: 'ee'.repeat(32), created_at: NOW, tags: [['p', device.pubkey()]], content: 'junk', sig: '00'.repeat(64) }) as NostrEvent;
+  /** A browser paired with S, its last look at NOW, and the looks it makes, each answering as it is told. */
+  async function browser() {
+    const store = memoryStore();
+    const session = memoryStore();
+    await store.set(KEYS.pairing, PAIRING);
+    await store.set(KEYS.movesChecked, NOW);
+    const clock = { now: NOW };
+    const asked: number[] = [];
+    const look = (answer: Awaited<ReturnType<LookUp>>, takes = 10) =>
+      lookForMove({ store, session, device, now: () => clock.now, follow: () => false, lookUp: async (since) => (asked.push(since), (clock.now += takes), answer) });
+    return { store, clock, asked, look };
+  }
+
+  test('a look stopped at WRAPS_MAX leaves the last look’s time, so a later look still reaches the pair-ack it stopped above', async () => {
+    const { wrap } = await wrapPairAck(user, device.pubkey(), ack, NOW - 86_400);
+    const b = await browser();
+    b.clock.now = NOW + 600;
+    // a hundred wraps dated now, newer than the pair-ack the phone sent a day ago (relay.ts fetchWraps stops there)
+    await b.look({ events: Array.from({ length: 100 }, (_, i) => junk(i)), whole: false });
+    expect(await b.store.get(KEYS.movesChecked)).toBe(NOW);
+    expect((await b.store.get<Pairing>(KEYS.pairing))!.user_pubkey).toBe(user.pubkey());
+    // a day later the flood has gone, and the look reads from as far back as before
+    b.clock.now = NOW + 86_400;
+    await b.look({ events: [wrap], whole: true });
+    expect(b.asked).toEqual([NOW - LOOKBACK, NOW - LOOKBACK]);
+    expect((await b.store.get<Pairing>(KEYS.pairing))!.user_pubkey).toBe(T.pubkey());
+    // and a whole answer moves the time on, to when that look began
+    expect(await b.store.get(KEYS.movesChecked)).toBe(NOW + 86_400);
+  });
+
+  test('one the relay didn’t finish within its ten seconds leaves it too, though a move found in what came is taken', async () => {
+    const { wrap } = await wrapPairAck(user, device.pubkey(), ack, NOW);
+    const b = await browser();
+    b.clock.now = NOW + 600;
+    await b.look({ events: [wrap], whole: false });
+    expect((await b.store.get<Pairing>(KEYS.pairing))!.user_pubkey).toBe(T.pubkey());
+    expect(await b.store.get(KEYS.movesChecked)).toBe(NOW);
   });
 });
 
