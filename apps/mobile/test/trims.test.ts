@@ -9,6 +9,7 @@ import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { enqueue } from '../src/data/outbox';
+import { TEXT_SERVERS_MAX, blobServers } from '../src/data/sync';
 import { readBlob } from '../src/services/inbox';
 import { stagedBlob, type MovePorts } from '../src/services/move';
 import { sendOne, type SendPorts } from '../src/services/send';
@@ -79,9 +80,29 @@ describe("a server's address loses its trailing slashes in linear time, however 
     expect(ms).toBeLessThan(2_000);
   });
 
+  test("the blob servers a save's text names, as a sync reads them, are given to no pattern but the check of their form", () => {
+    // a server's address is at most 2,048 characters (isServerUrl); these are nearly all a run of slashes before a
+    // letter, and end in two more. Counted, not timed: every pattern runs through exec, and each address may be given
+    // to the one that checks its form, once. The trim's pattern was given each as well, and tried from every slash
+    const run = `https://b.example${'/'.repeat(2_000)}x`;
+    const servers = Array.from({ length: TEXT_SERVERS_MAX }, (_, i) => `${run}${i}//`);
+    const exec = jest.spyOn(RegExp.prototype, 'exec');
+    let kept: string[] = [];
+    let given: number[] = [];
+    try {
+      kept = blobServers(servers);
+      given = exec.mock.calls.map(([s]) => String(s).length);
+    } finally {
+      exec.mockRestore();
+    }
+    expect(kept).toEqual(servers.map((s) => s.slice(0, -2)));
+    expect(given.filter((n) => n >= 2_000)).toHaveLength(servers.length);
+  });
+
   test("no server's address in the phone's calls to servers is trimmed by the pattern that backtracks", () => {
-    // what the move's HEAD and S's DELETE /account, Delete my data's DELETE /account and the rest join a path to
-    for (const file of ['services/send.ts', 'services/move.ts', 'services/inbox.ts', 'services/deleteAccount.ts']) {
+    // what the move's HEAD and S's DELETE /account, Delete my data's DELETE /account and the rest join a path to, and
+    // the blob servers a sync reads a text from
+    for (const file of ['services/send.ts', 'services/move.ts', 'services/inbox.ts', 'services/deleteAccount.ts', 'data/sync.ts']) {
       const src = readFileSync(join(__dirname, '..', 'src', file), 'utf8');
       expect([file, src.includes('replace(/\\/+$/')]).toEqual([file, false]);
     }
