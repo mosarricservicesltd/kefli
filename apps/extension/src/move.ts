@@ -207,6 +207,9 @@ export interface MovesScan {
   startedAt: number;
 }
 
+/** How soon after a look, whatever came of it, a save or the queue's retry may look again (bg.ts checkMovesSoon). */
+export const MOVES_AFTER_SEND = 300;
+
 /**
  * A look for a move (contract 4.4 and 4.8, extension spec 15): the gift wraps addressed to this browser since the last
  * look, less LOOKBACK, are checked for a pair-ack from the pairing's user carrying moved_from, and one that is found is
@@ -216,12 +219,14 @@ export interface MovesScan {
  * would reach once the last look's time had passed that date and five minutes: a hundred wraps dated now, from anyone who
  * saw the device's key in its QR, kept every look from reaching the ack while each moved the time on, and the browser
  * went on saving to the library that had moved away. The wraps stay on the relay for 30 days, so with the time kept the
- * newest answer still held only them: a deep look reads on down past them.
+ * newest answer still held only them: a deep look reads on down past them. Each look notes when it began (movesLooked),
+ * so a save's look waits its five minutes (lookDue) even while the window stays unread.
  */
 export async function lookForMove(o: Looking): Promise<void> {
   const pairing = await o.store.get<Pairing>(KEYS.pairing);
   if (!pairing) return;
   const began = o.now();
+  await o.store.set(KEYS.movesLooked, began);
   // read on its own line: lizard, which the code gate uses, ends a function at a bracketed await
   const last = await o.store.get<number>(KEYS.movesChecked);
   const since = (last ?? pairing.paired_at) - LOOKBACK;
@@ -280,4 +285,17 @@ async function lookDeeper(o: Looking, since: number, newest: NostrEvent[], read:
   }
   await o.store.set(KEYS.movesScan, scan);
   return null;
+}
+
+/**
+ * Whether a save's or the queue's look for a move is due: none has begun in the last MOVES_AFTER_SEND seconds, whatever
+ * came of it. Read from the last whole look alone, a window kept unread by a flood or a relay slow to finish its answers
+ * had every save and every minute's retry look again, each waiting on the relay before it went. A build before this one
+ * noted only the last whole look.
+ */
+export async function lookDue(store: Store, now: number): Promise<boolean> {
+  // each read on its own line: lizard, which the code gate uses, ends a function at a bracketed await
+  const looked = await store.get<number>(KEYS.movesLooked);
+  const checked = await store.get<number>(KEYS.movesChecked);
+  return now - (looked ?? checked ?? 0) > MOVES_AFTER_SEND;
 }

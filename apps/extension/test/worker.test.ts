@@ -12,7 +12,7 @@ import { history } from '../src/debug';
 import { relayRows, type Defaults } from '../src/defaults';
 import { deviceSigner } from '../src/device';
 import { PerSave } from '../src/lock';
-import { applyMove, followMoves, LOOKBACK, lookForMove, MOVE_PAGES, type LookUp, type MovesScan } from '../src/move';
+import { applyMove, followMoves, LOOKBACK, lookDue, lookForMove, MOVE_PAGES, MOVES_AFTER_SEND, type LookUp, type MovesScan } from '../src/move';
 import { ATTEMPTS_MAX, BLOB_KEEP_MAX, BLOBS_KEEP_MAX, changeQueue, dequeue, enqueue, ENTRIES_MAX, failed, flush, QUEUE_MAX, queued, settle, waiting } from '../src/queue';
 import { WRAPS_MAX } from '../src/relay';
 import { ADDRESS_SURE_FIT_BYTES, AddressTooLongError, fetchNet, prepare, rumorBytes, timed, uploadTimeoutMs, WRAP_FRESH_FOR, type Net, type Pending } from '../src/save';
@@ -1372,6 +1372,17 @@ describe('a look for a move (bg.ts checkMoves; contract 4.4 and 4.8)', () => {
       await b.look(true, NOW + 1_800);
       expect(asked).toEqual([undefined, NOW + 700, NOW + 699]);
       expect(await b.pairedWith()).toBe(T.pubkey());
+    });
+
+    test('a save’s look waits five minutes from the last look begun, whatever came of it; a build that noted only whole looks is read from those', async () => {
+      const b = await flooded(holding(Array.from({ length: 150 }, (_, i) => junkAt(i, NOW + 700 + i))));
+      expect(await lookDue(b.store, NOW + MOVES_AFTER_SEND)).toBe(false);
+      expect(await lookDue(b.store, NOW + MOVES_AFTER_SEND + 1)).toBe(true);
+      await b.look(false, NOW + 1_000);
+      // the window is still unread, yet a save a minute later goes without looking again
+      expect(await b.store.get(KEYS.movesChecked)).toBe(NOW);
+      expect(await lookDue(b.store, NOW + 1_060)).toBe(false);
+      expect(await lookDue(b.store, NOW + 1_000 + MOVES_AFTER_SEND + 1)).toBe(true);
     });
   });
 });

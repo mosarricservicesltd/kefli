@@ -6,7 +6,7 @@ import { BROWSER, DEFAULTS_URL, FLAVOUR } from './config';
 import { webCrypto } from './crypto';
 import { loadDefaults } from './defaults';
 import { deviceSigner } from './device';
-import { lookForMove } from './move';
+import { lookDue, lookForMove } from './move';
 import { queued, waiting } from './queue';
 import { collected, fetchWraps, publish } from './relay';
 import { fetchNet, type SaveContext } from './save';
@@ -30,9 +30,8 @@ chrome.runtime.onInstalled.addListener((d) => {
 // a save the browser closed on mid-send is still in the queue, and Firefox doesn't keep the alarm across a restart (F23)
 chrome.runtime.onStartup.addListener(() => void watchMoves().then(() => work.flushQueue()));
 
-/** How often the background looks for a move while the browser runs, and how soon after one look a send may look again. */
+/** How often the background looks for a move while the browser runs; a send may look again after five (move.ts). */
 const MOVES_EVERY_MINUTES = 30;
-const MOVES_AFTER_SEND = 300;
 
 /**
  * Following a move (contract 4.4 and 4.8; move.ts lookForMove): a pair-ack from the current user carrying moved_from
@@ -53,9 +52,9 @@ async function watchMoves(): Promise<void> {
   await checkMoves();
 }
 
+/** A save's or the retry's look: at most once in five minutes from the last look begun, whatever came of it (lookDue). */
 async function checkMovesSoon(): Promise<void> {
-  const last = (await store.get<number>(KEYS.movesChecked)) ?? 0;
-  if (now() - last > MOVES_AFTER_SEND) await checkMoves(false);
+  if (await lookDue(store, now())) await checkMoves(false);
 }
 
 /** What a save needs, or null before pairing; the caller decides whether that opens the options page (F10). */
