@@ -898,6 +898,24 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     expect(w.db.get('SELECT title, lang, canonical, hero, saved_at FROM items')).toEqual({ title: null, lang: null, canonical: null, hero: null, saved_at: w.now() });
   });
 
+  test('a request whose address holds a user name and password is saved without them, its text read at that address', async () => {
+    const w = world();
+    const at: string[] = [];
+    const markdown = w.ports.markdown;
+    w.ports.markdown = async (html, url) => (at.push(url), markdown(html, url));
+    const { html } = await w.withHtml('<h1>Behind a login</h1>');
+    await w.send(w.request({ url: 'https://user:hunter2@example.com/a', html }));
+    await w.send(w.request({ url: 'https://me@example.com/b', html: null }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 2 });
+    expect(w.db.all('SELECT url, shared_url, text_state FROM items ORDER BY url')).toEqual([
+      { url: 'https://example.com/a', shared_url: 'https://example.com/a', text_state: 'cached' },
+      { url: 'https://example.com/b', shared_url: 'https://example.com/b', text_state: 'queued' },
+    ]);
+    // the browser's HTML is converted at the address without them, so no link in its text resolves to one with them
+    expect(at).toEqual(['https://example.com/a']);
+    expect(pendingParses(w.db, w.owner).map((p) => p.url)).toEqual(['https://example.com/b']);
+  });
+
   test('a request whose address isn’t a link is failed_parse at once, rather than tried for a week', async () => {
     const w = world();
     for (const url of ['javascript:alert(1)', '', 'file:///etc/passwd']) await w.send(w.request({ url }));

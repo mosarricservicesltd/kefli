@@ -17,8 +17,8 @@
 // RULED: a request naming another server for its HTML is taken without it, and the page is fetched instead, so a
 // save from a connected browser is never lost to a bad field.
 import {
-  KIND, SAVE_REQUEST_MAX_BYTES, UnwrapError, acceptSaveRequest, decryptText, eventBytes, opensWraps, unwrap, type DevicesRecord, type NostrEvent,
-  type Rumor, type SaveRequest, type Signer,
+  KIND, SAVE_REQUEST_MAX_BYTES, UnwrapError, acceptSaveRequest, decryptText, eventBytes, opensWraps, unwrap, withoutUserInfo, type DevicesRecord,
+  type NostrEvent, type Rumor, type SaveRequest, type Signer,
 } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { localRecord } from '../data/devices';
@@ -100,14 +100,17 @@ const RENDERER_GONE = 'renderer_gone';
  * as a page's is. Without them, a text too long was kept and refused at every upload, and one the derivation couldn't
  * take held its wrap for a week, its save at "Getting the text…". When the parser's renderer has gone, nothing about
  * the capture is known: it is offline, as a page whose renderer went is (page.ts), and the inbox keeps the capture to
- * read again (textFromBlob).
+ * read again (textFromBlob). The HTML is converted at the page's address without a user name and password (ruling 8),
+ * as the save keeps it (data/inbox admit): at the address as sent, a relative link in the text took them, and the
+ * parse put them back on the save.
  */
 export async function fromBrowser(p: Pick<InboxPorts, 'markdown'>, r: SaveRequest, contentHtml: string): Promise<PageOutcome> {
-  const m = await p.markdown(contentHtml, r.url).catch((): ParserResult => ({ ok: false, reason: 'error' }));
+  const at = withoutUserInfo(r.url);
+  const m = await p.markdown(contentHtml, at).catch((): ParserResult => ({ ok: false, reason: 'error' }));
   if (!m.ok && m.reason === RENDERER_GONE) return { kind: 'offline', timedOut: true };
-  if (!m.ok) return { kind: 'failed', reason: m.reason === 'too_large' ? 'too_large' : 'not_readable', finalUrl: r.url };
+  if (!m.ok) return { kind: 'failed', reason: m.reason === 'too_large' ? 'too_large' : 'not_readable', finalUrl: at };
   const browser = { title: r.title, byline: r.byline, site: r.site, lang: r.lang, hero: r.hero, canonical: r.canonical };
-  return parsedOutcome({ ...m, ...browser, readerable: true }, r.url);
+  return parsedOutcome({ ...m, ...browser, readerable: true }, at);
 }
 
 /** How long the inbox blob's server has to send the whole blob, as for a text (F12). */

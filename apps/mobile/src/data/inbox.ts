@@ -8,7 +8,7 @@
 // RULED: a request with HTML joins Saves as text_state 'fetching' ("Getting the text…") until its inbox blob is
 // read; pending parses (phase 7) take only 'queued', so they never fetch the page over a browser's own HTML. The
 // browser's label is kept in origin_device for the row's "From Chrome".
-import { browserSavedAt, isXPost, itemHash, type SaveRequest } from '@kefli/protocol';
+import { browserSavedAt, isXPost, itemHash, withoutUserInfo, type SaveRequest } from '@kefli/protocol';
 import type { SqlDb } from './db';
 import type { NewItem } from './items';
 import { enqueue, release } from './outbox';
@@ -143,16 +143,19 @@ function readByBrowser(r: SaveRequest): Pick<NewItem, 'canonical' | 'title' | 's
 
 /**
  * An accepted request becomes a save (C§4.4): created, an archived save un-archived, or matched. A save still
- * fetching its blob (a drain cut short) carries on fetching.
+ * fetching its blob (a drain cut short) carries on fetching. Its address is kept without a user name and password
+ * (ruling 8), as the extension sends one from v1.12 and its hash never had them: a browser from before, or another
+ * client, sent them, and they were kept on the row, shown on it and fetched with.
  */
 export function admit(db: SqlDb, now: number, owner: string, r: SaveRequest, label: string, t: SaveTargets): Admitted {
   return db.tx(() => {
     const hash = requestHash(r);
     const blob = usesBlob(r, now);
+    const url = withoutUserInfo(r.url);
     const existing = db.get<{ state: string; text_state: string }>('SELECT state, text_state FROM items WHERE owner = ? AND hash = ?', owner, hash);
     const held = queueSave(db, now, {
-      owner, hash, url: r.url, ...readByBrowser(r), savedAt: browserSavedAt(r.captured_at, now), words: null,
-      text: null, textHash: null, textState: 'queued', sharedUrl: r.url, origin: 'browser',
+      owner, hash, url, ...readByBrowser(r), savedAt: browserSavedAt(r.captured_at, now), words: null,
+      text: null, textHash: null, textState: 'queued', sharedUrl: url, origin: 'browser',
     }, null, t);
     release(db, held);
     if (existing) {
