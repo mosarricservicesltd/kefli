@@ -189,6 +189,57 @@ func TestAnAnswerBeforeTheBodyIsLetGo(t *testing.T) {
 	}
 }
 
+// The route reads the paced body, and once it is done the request has the server's own body back: the server looks
+// for its own body there after the route (Go 1.26's closedRequestBodyEarly) to know it left a body unread, and
+// waits before it closes such a connection.
+func TestTheRequestHasItsOwnBodyBack(t *testing.T) {
+	req := httptest.NewRequest("PUT", "/x", strings.NewReader("a body"))
+	own := req.Body
+	var routed io.ReadCloser
+	fast().Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		routed = r.Body
+		w.WriteHeader(http.StatusUnauthorized)
+	})).ServeHTTP(httptest.NewRecorder(), req)
+	if routed == own || req.Body != own {
+		t.Fatalf("the route read the server's own body (%v), or the request kept the paced one after it (%v)", routed == own, req.Body != own)
+	}
+}
+
+// An answer written before a large body is in reaches a client still sending it, as Caddy is: the server half-closes
+// the connection and waits half a second before it resets it. With the paced body left on the request, Go 1.26's
+// server, which keflid is built with, closed at once, and Caddy's write to keflid met the reset before it read the
+// answer, one early answer in five sent over HTTP/1.1, and answered 502 in its place (r5 review). Go 1.27's server
+// waits either way, so this test fails without the fix only under Go 1.26 (make test).
+func TestAnEarlyAnswerReachesAClientStillSending(t *testing.T) {
+	addr, _ := serving(t, fast(), http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	c := dial(t, addr, "PUT /x HTTP/1.1\r\nHost: k\r\nContent-Length: 8388608\r\n\r\n")
+	failed := make(chan time.Time, 1)
+	go func() {
+		chunk := make([]byte, 32<<10)
+		for {
+			if _, err := c.Write(chunk); err != nil {
+				failed <- time.Now()
+				return
+			}
+		}
+	}()
+	res := answerOf(t, c, 2*time.Second)
+	answered := time.Now()
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("the answer: %d", res.StatusCode)
+	}
+	select {
+	case at := <-failed:
+		if gap := at.Sub(answered); gap < 300*time.Millisecond {
+			t.Fatalf("the connection was reset %v after the answer, under the client still sending", gap)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the connection was never let go")
+	}
+}
+
 // slowRoute reads the whole body, and answers its size, or TooSlow for a body that fell behind its pace, with how
 // long the read took in Took.
 func slowRoute(w http.ResponseWriter, r *http.Request) {

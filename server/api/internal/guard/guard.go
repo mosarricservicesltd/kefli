@@ -184,7 +184,7 @@ func (g *Guard) serve(w http.ResponseWriter, r *http.Request, next http.Handler)
 		a.body = &paced{ReadCloser: r.Body, rc: a.rc, pace: g.Pace, start: time.Now()}
 		r.Body = a.body
 	}
-	defer a.done(g.Drain)
+	defer a.done(r, g.Drain)
 	next.ServeHTTP(a, r)
 }
 
@@ -233,11 +233,20 @@ func (a *answer) Unwrap() http.ResponseWriter {
 	return a.ResponseWriter
 }
 
-// done, once the route has finished: an answer it never began begins, for the server to write, and a body it didn't
-// read to its end has Drain for the server's own read of the rest, where it had until the read's deadline.
-func (a *answer) done(drain time.Duration) {
+// done, once the route has finished: an answer it never began begins, for the server to write; the request has the
+// server's own body back; and a body the route didn't read to its end has Drain for the server's own read of the rest,
+// where it had until the read's deadline. The server looks for its own body on the request to know it left one unread
+// (Go 1.26's closedRequestBodyEarly), and then half-closes the connection and waits half a second before it closes it,
+// so the answer reaches a client still sending, as Caddy is. Left with the paced body, it closed the connection at
+// once, and Caddy's write to keflid met the reset before it read the answer: of the early answers to uploads of 600 KB
+// or more, one in five sent to Caddy over HTTP/1.1, and one in a hundred over HTTP/2, came back as a 502.
+func (a *answer) done(r *http.Request, drain time.Duration) {
 	a.begin()
-	if a.body != nil && !a.body.whole {
+	if a.body == nil {
+		return
+	}
+	r.Body = a.body.ReadCloser
+	if !a.body.whole {
 		_ = a.rc.SetReadDeadline(time.Now().Add(drain))
 	}
 }
