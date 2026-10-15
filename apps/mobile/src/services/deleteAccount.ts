@@ -26,7 +26,7 @@ export type DelPorts = {
   db: SqlDb;
   now: () => number;
   signer: Signer;
-  defaults: { operator: { relay: string; blossom: string; api: string }; indexer: string[] };
+  defaults: { operator: { relay: string; blossom: string; api: string }; relays: string[]; indexer: string[] };
   publish: (relay: string, event: NostrEvent) => Promise<RelayAnswer>;
   /** The relays' saves and records, read before signing; without it, only what the phone holds is deleted. */
   query?: (relay: string, filters: Filter[]) => Promise<NostrEvent[]>;
@@ -235,16 +235,19 @@ async function rewritten(p: DelPorts, kind: number, tags: string[][], name: stri
 }
 
 /**
- * A nostr user's newest 10002 and 10063 on the indexer and their relays, taken in as the list send takes them just
- * before it builds its own (C§3.1, send.ts readNewerLists), so the deletion's rewrite starts from them: from the lists
- * held alone, a relay or server they added in another app since this phone last synced went from the lists their other
- * apps share. Read before the saves are, so a relay they read from now is read for saves too. A relay that doesn't
- * answer adds nothing, and with none answering the lists held are rewritten.
+ * A nostr user's newest 10002 and 10063 on the indexer relays, the default relays and their own relays, taken in as
+ * the list send takes them just before it builds its own (C§3.1, send.ts readNewerLists), so the deletion's rewrite
+ * starts from them: from the lists held alone, a relay or server they added in another app since this phone last
+ * synced went from the lists their other apps share, and so did one whose list reached only a default relay that isn't
+ * in theirs, as the second is not when Kefli adds the first. Read before the saves are, so a relay they read from now
+ * is read for saves too. A relay that doesn't answer adds nothing, and with none answering the lists held are
+ * rewritten.
  */
 async function takeNewestLists(p: DelPorts, owner: string): Promise<void> {
   const query = p.query;
   if (!query) return;
-  const relays = [...new Set([...p.defaults.indexer, ...indexerRelays(p.db, owner), ...relayEntries(p.db, owner).map((r) => r.url)])];
+  const d = p.defaults;
+  const relays = [...new Set([...d.indexer, ...indexerRelays(p.db, owner), ...d.relays, ...relayEntries(p.db, owner).map((r) => r.url)])];
   const kinds = [KIND.relayList, KIND.serverList];
   const copies = await Promise.all(relays.map((r) => query(r, [{ kinds, authors: [owner] }]).catch((): NostrEvent[] => [])));
   takeNewerLists(p.db, owner, copies.flat(), kinds, p.now());
