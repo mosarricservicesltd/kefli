@@ -64,10 +64,24 @@ interface Renaming {
   to: string;
   wrapKey: Uint8Array;
   sha256: string | null;
+  /** The library the old wrap went to, when that wrap may be on the relay already, so Undo retracts it too (undo.ts). */
+  wentTo: string | null;
 }
 
-/** Told of each save the move puts under a new wrap, before the queue naming it is written (worker.ts follow). */
-export type Follow = (was: string, to: string) => void;
+/**
+ * Told of each save the move puts under a new wrap, before the queue naming it is written (worker.ts follow); true while
+ * a send of its old wrap is under way.
+ */
+export type Follow = (was: string, to: string) => boolean;
+
+/**
+ * Whether a waiting save's wrap may be on the relay already, as Undo reads a waiting save (worker.ts unqueue): one tried
+ * before, whose answer may have timed out though the relay took it, or one whose send is under way as the move is taken.
+ */
+const mayHaveGone = (e: Queued, underWay: boolean) => underWay || e.why !== 'offline' || e.attempts > 0;
+
+/** The library a queued save's wrap was made for: its p tag. */
+const recipient = (e: Queued): string | null => e.wrap?.tags?.find((t) => t[0] === 'p')?.[1] ?? null;
 
 /** The queue wrapped again for the new user, in place, and the saves that went under a new wrap. */
 async function rewrapQueue(q: Queued[], device: LocalSigner, pairing: Pairing, now: number, follow: Follow): Promise<Renaming[]> {
@@ -75,8 +89,8 @@ async function rewrapQueue(q: Queued[], device: LocalSigner, pairing: Pairing, n
   for (let i = 0; i < q.length; i++) {
     const { entry, wrapKey } = await rewrap(q[i], device, pairing, now);
     if (wrapKey) {
-      renamed.push({ was: q[i].id, to: entry.id, wrapKey, sha256: entry.sha256 });
-      follow(q[i].id, entry.id);
+      const underWay = follow(q[i].id, entry.id);
+      renamed.push({ was: q[i].id, to: entry.id, wrapKey, sha256: entry.sha256, wentTo: mayHaveGone(q[i], underWay) ? recipient(q[i]) : null });
     }
     q[i] = entry;
   }
@@ -88,15 +102,17 @@ async function rewrapQueue(q: Queued[], device: LocalSigner, pairing: Pairing, n
  * queue's lock, so a save queued meanwhile isn't overwritten (F41). A save whose send is under way is wrapped again too,
  * and `follow` is told, so its new wrap waits for that send (worker.ts). Undo's key for each save then moves to its new
  * wrap in the session (undo.ts), so Undo on a toast still naming the old one, such as the offline one, takes the save off
- * the queue rather than retracting a wrap that never went and saying it couldn't undo. A session that won't take a key
- * doesn't stop the move; that save's Undo then says it couldn't.
+ * the queue rather than retracting a wrap that never went and saying it couldn't undo. An old wrap that may be on the
+ * relay, tried before or sending now, keeps its key beside the new one, so Undo retracts it as well: the phone's last look
+ * at the old library's inbox would otherwise bring the save into the new one. A session that won't take a key doesn't
+ * stop the move; that save's Undo then says it couldn't.
  */
-export async function applyMove(store: Store, device: LocalSigner, ack: PairAck, now: number, session: Store, follow: Follow = () => undefined): Promise<Pairing> {
+export async function applyMove(store: Store, device: LocalSigner, ack: PairAck, now: number, session: Store, follow: Follow = () => false): Promise<Pairing> {
   const old = await store.get<Pairing>(KEYS.pairing);
   // its lists as the extension keeps them (store.ts addresses)
   const pairing: Pairing = { v: 1, user_pubkey: ack.user_pubkey, write_relays: addresses(ack.write_relays), blossom_servers: addresses(ack.blossom_servers), token: String(ack.token), label: old?.label ?? '', paired_at: old?.paired_at ?? now };
   const renamed = await changeQueue(store, (q) => rewrapQueue(q, device, pairing, now, follow));
-  for (const r of renamed) await moveUndoKey(session, r.was, r.to, r.wrapKey, r.sha256).catch(() => undefined);
+  for (const r of renamed) await moveUndoKey(session, r.was, r.to, r.wrapKey, r.sha256, r.wentTo).catch(() => undefined);
   await store.set(KEYS.pairing, pairing);
   return pairing;
 }

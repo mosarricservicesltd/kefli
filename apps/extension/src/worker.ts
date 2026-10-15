@@ -17,7 +17,7 @@ import {
 } from './save';
 import type { Store } from './store';
 import type { ToastKind, ToastState } from './toastCopy';
-import { moveUndoKey, settleUndo, type Renamed, type UndoKey } from './undo';
+import { moveUndoKey, settleUndo, type Earlier, type Renamed, type UndoKey } from './undo';
 
 /** Where a save's notices go: the tab's toast, the toolbar popup where no toast can run, or nowhere (a link menu). */
 export type Where = number | 'popup' | null;
@@ -63,6 +63,12 @@ interface UndoOf {
 }
 
 const WAITING: Record<ReturnType<typeof whyNot>, Outcome> = { offline: 'waiting, offline', reach: 'waiting, couldn’t reach', blocked: 'waiting, blocked' };
+
+/**
+ * Whether a waiting save may be on the relay all the same: one tried before, whose answer may have timed out though the
+ * relay took it, or one a move put under a new wrap while its old one may have gone (undo.ts Earlier).
+ */
+const mayBeOnRelay = (e: Queued, kept: UndoKey) => e.why !== 'offline' || e.attempts > 0 || (kept.earlier?.length ?? 0) > 0;
 
 /** What the toast shows of a save, under the id its wrap has now, which Undo names. */
 const toasted = (p: Pending, link: boolean) => ({ id: p.id, hash: p.hash, title: p.title, host: p.host, link });
@@ -281,15 +287,37 @@ export function background(b: Browser) {
   }
 
   /**
-   * One Undo of the save under the wrap it goes by now: its wrap retracted with its own key, the look for it on the
-   * phone, and its key forgotten once it is undone, so a second press says nothing more.
+   * The save's wraps from before a move retracted, each with its own key (undo.ts Earlier). The relay refuses to retract
+   * one it never took, which changes nothing, so a refusal here doesn't stop Undo; whether the phone took one is looked
+   * for after (collectedEarlier).
+   */
+  async function retractEarlier(earlier: Earlier[], ctx: SaveContext): Promise<void> {
+    const { relay, blossom } = ctx.defaults.operator;
+    for (const e of earlier) await retract({ id: e.id, sha256: null }, hexToBytes(e.key), blossom, relay, ctx.device, b.net, b.now()).catch(() => undefined);
+  }
+
+  /** Whether the phone took one of them: its deletion is signed by the library that wrap went to, as it read that inbox. */
+  async function collectedEarlier(earlier: Earlier[], relay: string): Promise<boolean> {
+    for (const e of earlier) if (await b.collected(relay, e.id, e.user)) return true;
+    return false;
+  }
+
+  /**
+   * One Undo of the save under the wrap it goes by now: its wrap retracted with its own key, with any from before a move
+   * that may be on the relay, the look for it on the phone, and its key forgotten once it is undone, so a second press
+   * says nothing more.
    */
   function undoOf(id: string, where: Where, kept: UndoKey | undefined, ctx: SaveContext): UndoOf {
     const { relay, blossom } = ctx.defaults.operator;
+    const earlier = kept?.earlier ?? [];
     return {
       id, where, kept,
-      retractIt: () => (kept ? retract({ id, sha256: kept.sha256 }, hexToBytes(kept.key), blossom, relay, ctx.device, b.net, b.now()) : Promise.reject(new Error('no key'))),
-      collected: () => b.collected(relay, id, ctx.pairing.user_pubkey),
+      retractIt: async () => {
+        await retractEarlier(earlier, ctx);
+        if (!kept) throw new Error('no key');
+        await retract({ id, sha256: kept.sha256 }, hexToBytes(kept.key), blossom, relay, ctx.device, b.net, b.now());
+      },
+      collected: async () => (await b.collected(relay, id, ctx.pairing.user_pubkey)) || collectedEarlier(earlier, relay),
       forget: async () => {
         undone.add(id);
         await b.session.remove(`undo:${id}`).catch(() => undefined);
@@ -316,12 +344,14 @@ export function background(b: Browser) {
     await toast(where, { kind: said[outcome][1], hash: kept?.hash, title: '', host: '', link: false });
   }
 
-  /** Undo of a save still in the queue: off it, and retracted as well when its send may have reached the relay. */
+  /**
+   * Undo of a save still in the queue: off it, and retracted as well when its send may have reached the relay, under the
+   * wrap it has now or one from before a move (mayBeOnRelay).
+   */
   async function unqueue(u: UndoOf, waitingSave: Queued, device: SaveContext['device']): Promise<void> {
     await note(u.id, 'undo: off the queue');
     await queueChanged();
-    const tried = waitingSave.why !== 'offline' || waitingSave.attempts > 0;
-    const went = tried && u.kept ? await settleUndo(u.retractIt, u.collected, b.wait).catch(() => 'undone' as const) : 'undone';
+    const went = u.kept && mayBeOnRelay(waitingSave, u.kept) ? await settleUndo(u.retractIt, u.collected, b.wait).catch(() => 'undone' as const) : 'undone';
     if (went === 'onphone') {
       if (u.kept) await b.session.remove(`undo:${u.id}`).catch(() => undefined);
       await note(u.id, 'undo: on the phone');
@@ -368,9 +398,10 @@ export function background(b: Browser) {
 
   /**
    * A move put a save under a new wrap (move.ts): while a send under its old id is under way, the new id is busy too, so
-   * a flush leaves it to that send rather than sending it beside it.
+   * a flush leaves it to that send rather than sending it beside it. True when one is, since its old wrap may then reach
+   * the relay, and Undo has to retract it as well.
    */
-  const follow = (was: string, to: string): void => saves.follow(was, to);
+  const follow = (was: string, to: string): boolean => saves.follow(was, to);
 
   return { save, undo, flushQueue, disconnected, follow };
 }

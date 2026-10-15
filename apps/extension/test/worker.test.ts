@@ -72,7 +72,12 @@ function net(o: { publish?: 'ok' | 'down'; retract?: 'ok' | 'refused'; hold?: Pr
 }
 
 function harness(
-  o: { paired?: boolean; pairing?: Pairing; online?: boolean; net?: Net; collected?: boolean[]; store?: Store; session?: Store; alarmHold?: Promise<void>; toast?: Browser['toast']; checkMovesSoon?: Browser['checkMovesSoon'] } = {},
+  o: {
+    paired?: boolean; pairing?: Pairing; online?: boolean; net?: Net; collected?: boolean[]; store?: Store; session?: Store; alarmHold?: Promise<void>; toast?: Browser['toast'];
+    checkMovesSoon?: Browser['checkMovesSoon'];
+    /** The phone's deletions on the relay, by wrap and library, in place of the answers in `collected`. */
+    found?: Browser['collected'];
+  } = {},
 ) {
   const store = o.store ?? memoryStore();
   const session = o.session ?? memoryStore();
@@ -101,7 +106,7 @@ function harness(
       if (!on) alarm.cleared++;
     },
     checkMovesSoon: o.checkMovesSoon ?? (async () => undefined),
-    collected: async () => answers.shift() ?? false,
+    collected: o.found ?? (async () => answers.shift() ?? false),
     wait: async () => undefined,
   };
   return { store, session, toasts, alarm, opened, clock, work: background(b) };
@@ -1466,22 +1471,63 @@ describe('a move while saves wait, their toasts still showing (contract 4.4 and 
     expect(await h.session.get(`undo:${moved.id}`)).toMatchObject({ hash: offline.hash, sha256: moved.sha256 });
   });
 
-  test('one tried since, whose send may have reached the relay, is retracted under its new wrap with that wrap’s own key', async () => {
+  test('one tried since, whose send may have reached the relay, has that wrap retracted with its own key, and its new one taken off the queue', async () => {
     const h = harness({ online: false });
     await h.work.save(PAGE, 1, false);
     const offline = h.toasts.at(-1)!;
-    // online again, the queue's try times out while the offline toast still shows
+    // online again, the queue's try times out while the offline toast still shows: the relay may hold that wrap
     await harness({ store: h.store, session: h.session, net: net({ publish: 'down' }).net }).work.flushQueue();
-    expect(await queued(h.store)).toMatchObject([{ why: 'reach', attempts: 1 }]);
+    const [tried] = await queued(h.store);
+    expect(tried).toMatchObject({ id: offline.id, why: 'reach', attempts: 1 });
     await h.store.set(KEYS.pairing, PAIRING);
     await applyMove(h.store, device, ack, NOW, h.session);
     const [moved] = await queued(h.store);
+    expect(await h.session.get(`undo:${moved.id}`)).toMatchObject({ earlier: [{ id: tried.id, user: user.pubkey() }] });
     const n = net();
     const after = harness({ store: h.store, session: h.session, net: n.net, collected: [false, false] });
     await after.work.undo(offline.id!, 1);
     expect(await queued(h.store)).toEqual([]);
-    expect(n.published.filter((e) => e.kind === 5).map((e) => [e.pubkey, e.tags])).toEqual([[moved.wrap.pubkey, [['e', moved.id], ['k', '1059']]]]);
+    // the wrap the try sent, to the library that moved away, whose phone's last look at its inbox would take the save, and
+    // the new one, which no send has tried, as Undo retracts any waiting save that was tried
+    expect(n.published.filter((e) => e.kind === 5).map((e) => [e.pubkey, e.tags])).toEqual([
+      [tried.wrap.pubkey, [['e', tried.id], ['k', '1059']]],
+      [moved.wrap.pubkey, [['e', moved.id], ['k', '1059']]],
+    ]);
     expect(after.toasts.at(-1)).toMatchObject({ kind: 'unqueued', title: 'A page' });
+  });
+
+  test('one tried since that the phone took in its last look at the old library’s inbox is on the phone', async () => {
+    const h = harness({ online: false });
+    await h.work.save(PAGE, 1, false);
+    const offline = h.toasts.at(-1)!;
+    await harness({ store: h.store, session: h.session, net: net({ publish: 'down' }).net }).work.flushQueue();
+    await h.store.set(KEYS.pairing, PAIRING);
+    await applyMove(h.store, device, ack, NOW, h.session);
+    // the phone deleted the wrap as the library it went to, the one that moved away (contract 4.8, step 5)
+    const found: Browser['collected'] = async (_relay, wrapId, by) => wrapId === offline.id && by === user.pubkey();
+    const after = harness({ store: h.store, session: h.session, net: net({ retract: 'refused' }).net, found });
+    await after.work.undo(offline.id!, 1);
+    expect(after.toasts.at(-1)).toMatchObject({ kind: 'onphone', hash: offline.hash });
+    expect(await queued(h.store)).toEqual([]);
+  });
+
+  test('a wrap from before the move stays with the save when its new wrap is made again, and Undo still retracts it', async () => {
+    const h = harness({ online: false });
+    await h.work.save(PAGE, 1, false);
+    const offline = h.toasts.at(-1)!;
+    await harness({ store: h.store, session: h.session, net: net({ publish: 'down' }).net }).work.flushQueue();
+    await h.store.set(KEYS.pairing, PAIRING);
+    await applyMove(h.store, device, ack, NOW, h.session);
+    // two minutes on, the new wrap is made again as it goes, and that try times out too
+    const later = harness({ store: h.store, session: h.session, net: net({ publish: 'down' }).net, pairing: { ...PAIRING, user_pubkey: T.pubkey() } });
+    later.clock.now = NOW + 120;
+    await later.work.flushQueue();
+    const [last] = await queued(h.store);
+    expect(await h.session.get(`undo:${last.id}`)).toMatchObject({ earlier: [{ id: offline.id }] });
+    const n = net();
+    await harness({ store: h.store, session: h.session, net: n.net, collected: [false, false] }).work.undo(offline.id!, 1);
+    expect(n.published.filter((e) => e.kind === 5).map((e) => e.tags[0][1])).toEqual([offline.id, last.id]);
+    expect(await queued(h.store)).toEqual([]);
   });
 
   test('a save whose request can’t be read isn’t wrapped again, and keeps the key it had', async () => {
@@ -1512,10 +1558,10 @@ describe('a move while saves wait, their toasts still showing (contract 4.4 and 
 
   describe('found while a save’s first send is under way', () => {
     /** A save whose first send is held at the relay, and the move the background finds meanwhile (bg.ts checkMoves). */
-    async function movedMidSend(o: Parameters<typeof net>[0]) {
+    async function movedMidSend(o: Parameters<typeof net>[0], found?: Browser['collected']) {
       const held = gate();
       const n = net({ ...o, hold: held.p });
-      const h = harness({ net: n.net, collected: [false, false] });
+      const h = harness({ net: n.net, collected: [false, false], found });
       const saving = h.work.save(PAGE, 1, false);
       await until(() => n.asked.n === 1);
       await h.store.set(KEYS.pairing, PAIRING);
@@ -1523,6 +1569,37 @@ describe('a move while saves wait, their toasts still showing (contract 4.4 and 
       const [moved] = await queued(h.store);
       return { h, n, held, saving, moved };
     }
+
+    test('one that went: Undo on its Saved toast retracts the wrap that went, with its own key, and takes the new one off the queue', async () => {
+      const { h, n, held, saving, moved } = await movedMidSend({});
+      held.open();
+      await saving;
+      const saved = h.toasts.at(-1)!;
+      expect(saved.kind).toBe('saved');
+      const [went] = n.published;
+      expect(went.id).toBe(saved.id);
+      await h.work.undo(saved.id!, 1);
+      // the phone's last look at the old library's inbox would otherwise bring it into the new one (contract 4.8, step 5)
+      expect(n.published.filter((e) => e.kind === 5).map((e) => [e.pubkey, e.tags[0]])).toEqual([[went.pubkey, ['e', went.id]], [moved.wrap.pubkey, ['e', moved.id]]]);
+      expect(h.toasts.at(-1)).toMatchObject({ kind: 'unqueued', title: 'A page' });
+      expect(await queued(h.store)).toEqual([]);
+      const later = net();
+      await harness({ store: h.store, session: h.session, net: later.net }).work.flushQueue();
+      expect(later.published).toEqual([]);
+    });
+
+    test('one that went, which the phone then took in its last look at the old library’s inbox, is on the phone', async () => {
+      const took = { id: '' };
+      // the phone's deletion of the wrap is the old library's, the inbox it read it from
+      const found: Browser['collected'] = async (_relay, wrapId, by) => wrapId === took.id && by === user.pubkey();
+      const { h, held, saving } = await movedMidSend({}, found);
+      took.id = h.toasts[0].id!;
+      held.open();
+      await saving;
+      await h.work.undo(h.toasts.at(-1)!.id!, 1);
+      expect(h.toasts.at(-1)).toMatchObject({ kind: 'onphone', hash: h.toasts[0].hash });
+      expect(await queued(h.store)).toEqual([]);
+    });
 
     test('one that then can’t reach the relay waits under its new wrap and says so, rather than Removed from Kefli', async () => {
       const { h, held, saving, moved } = await movedMidSend({ publish: 'down' });
@@ -1544,6 +1621,28 @@ describe('a move while saves wait, their toasts still showing (contract 4.4 and 
       held.open();
       await saving;
       expect(await queued(h.store)).toMatchObject([{ id: moved.id, why: 'reach' }]);
+    });
+
+    test('a flush sending a save that waited offline when the move lands: Undo on the offline toast retracts the wrap that went', async () => {
+      const h = harness({ online: false });
+      await h.work.save(PAGE, 1, false);
+      const offline = h.toasts.at(-1)!;
+      const held = gate();
+      const n = net({ hold: held.p });
+      const online = harness({ store: h.store, session: h.session, net: n.net, collected: [false, false] });
+      const flushing = online.work.flushQueue();
+      await until(() => n.asked.n === 1);
+      // a save that waited offline counts no try until its send ends, so only the send under way says its wrap may go
+      expect(await queued(h.store)).toMatchObject([{ id: offline.id, why: 'offline', attempts: 0 }]);
+      await h.store.set(KEYS.pairing, PAIRING);
+      await applyMove(h.store, device, ack, NOW, h.session, online.work.follow);
+      held.open();
+      await flushing;
+      expect(n.published.map((e) => e.id)).toEqual([offline.id]);
+      await online.work.undo(offline.id!, 1);
+      expect(n.published.filter((e) => e.kind === 5).map((e) => e.tags[0][1])).toContain(offline.id);
+      expect(online.toasts.at(-1)).toMatchObject({ kind: 'unqueued', title: 'A page' });
+      expect(await queued(h.store)).toEqual([]);
     });
 
     test('one that went, to the library that moved away, is Saved, and its new wrap still goes to the new library', async () => {
