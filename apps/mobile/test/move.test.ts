@@ -641,6 +641,20 @@ describe('The move (contract 4.8, mobile spec 4.10)', () => {
     expect(b.deleted(wrap)).toBe(true);
   });
 
+  test("a wrap's kind 5 the operator relay refuses for good doesn't hold S: the move ends", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    const b = browserOfS(w);
+    const wrap = await b.send('https://e.com/refused');
+    const publish: MovePorts['publish'] = async (r, e) => (e.kind === 5 && e.tags.some((t) => t[1] === wrap) ? { ok: false, reason: 'blocked: not allowed' } : w.p.publish(r, e));
+    const outbox = () => drain({
+      db: w.db, now: w.p.now, signer: async (pk) => (pk === w.S.pubkey() ? w.S : pk === w.T.pubkey() ? w.T : null),
+      fetch: w.p.fetch, crypto: nodeCrypto, defaults: () => D, publish, readBlob: w.p.readStaged,
+    });
+    expect(await runMove({ ...w.p, publish, runOutbox: outbox, drainSourceInbox: b.drainS })).toBe('done');
+    expect(rowsOf(w, w.T.pubkey()).map((r) => r.hash)).toEqual(expect.arrayContaining([h(1), itemHash('https://e.com/refused')]));
+  });
+
   test("a wrap's kind 5 queued for an operator relay defaults.json has since replaced goes to the one it names now", async () => {
     const w = world();
     await w.save(w.S, 1);
