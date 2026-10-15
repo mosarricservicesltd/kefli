@@ -1327,6 +1327,38 @@ describe('every call to a server takes its hops, and has a deadline (7.1)', () =
     expect(run).toMatchObject({ settled: true, value: expect.any(Number) });
     expect(tried(w)).toMatchObject({ state: 'queued', last_error: 'timed out' });
   });
+
+  test("a mirror's copy has an upload's time for its text, or for 8 MB when its size isn't known; a deletion has the API's", async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    const sha = 'ef'.repeat(32);
+    /** How long the one row queued for op on w took to let go of a server that never answers, to the second. */
+    async function lettingGo(w: W, op: 'mirror_blob' | 'delete_blob', target: string, payload: object): Promise<number> {
+      registered(w);
+      enqueue(w.db, w.now(), { op, signer: w.signer.pubkey(), subject: sha, payload, targets: [target] });
+      w.ports.fetch = silent;
+      const run = watch(drain(w.ports));
+      let ms = 0;
+      while (!run.settled && 600_000 > ms) {
+        await jest.advanceTimersByTimeAsync(1_000);
+        ms += 1_000;
+      }
+      expect(tried(w)).toMatchObject({ state: 'queued', last_error: 'timed out' });
+      return ms;
+    }
+    // the mirror fetches the text from the operator before it answers, so a large text has the time its upload would;
+    // given the API's 15 s alone, a large text was never mirrored from a mirror that takes longer, and never backed up
+    const known = world();
+    known.db.run('INSERT INTO blobs (sha256, owner, size, operator_at) VALUES (?, ?, ?, ?)', sha, known.signer.pubkey(), 2_097_152, 1);
+    const took = [
+      await lettingGo(known, 'mirror_blob', 'http://m1', { sha256: sha }),
+      await lettingGo(world(), 'mirror_blob', 'http://m1', { sha256: sha }),
+      await lettingGo(world(), 'delete_blob', 'http://blossom', { sha256: sha, size: 2_097_152 }),
+    ];
+    // to within the second the loop above steps by
+    const meant = [movingMs(2_097_152), movingMs(8_388_608), SERVER_TIMEOUT_MS];
+    expect(took.map((ms, i) => ms >= meant[i] && meant[i] + 1_000 >= ms)).toEqual([true, true, true]);
+    expect(meant).toEqual([SERVER_TIMEOUT_MS + 64_000, SERVER_TIMEOUT_MS + 256_000, SERVER_TIMEOUT_MS]);
+  });
 });
 
 describe('the foreground retry (4.3, F11)', () => {
