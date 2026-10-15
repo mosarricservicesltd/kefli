@@ -4,10 +4,11 @@
 # has been gone 30 days. strfry delete prints counts only, so the journal holds no content.
 set -euo pipefail
 
-# A removed key is swept for once its time comes, not on each of its 60 nights on keflid's list (F45): this file keeps
-# when the last sweep that ran to the end began, and keflictl lists only the keys removed, or gone 30 days, since then,
-# less an hour, so a wrap the write policy took in the seconds before it saw its key go is dropped all the same. With
-# nothing kept, as on a new box or once the file is removed after a restore, every key on the list is swept for.
+# Each sweep looks only at the keys whose time has come since the last one (F45), where it read all 60 days of keflid's
+# list every night: this file keeps when the last sweep that ran to the end began, and keflictl lists only the keys
+# removed, or gone 30 days, since then, less an hour, so a wrap the write policy took in the seconds before it saw its
+# key go is dropped all the same. With nothing kept, as on a new box or once the file is removed after a restore, every
+# key on the list is swept for.
 last=/var/lib/strfry/relay-sweep.last
 start=$(date +%s)
 since=0
