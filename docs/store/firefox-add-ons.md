@@ -78,7 +78,7 @@ The menu item reads "Save Link to Kefli" in Firefox, in title case as Firefox's 
 
 **Support email:** privacy@kefli.app (the address the extension privacy note gives; a general support address can replace it when there is one)
 
-**Licence:** GNU Affero General Public License v3.0 or later, with the added permission in `LICENSE`. If the Developer Hub has no AGPL entry, choose a custom licence and paste `LICENSE`.
+**Licence:** GNU Affero General Public License v3.0 or later, with the added permission in `LICENSE`. AMO has no AGPL slug (`License with slug=AGPL-3.0-or-later does not exist`, 15 October 2026), so it goes in as a custom licence whose text is `LICENSE`; by API that is `version.custom_license` with `name` and `text`.
 
 **Privacy policy:** AMO wants the text itself. Paste the extension privacy note, kefli.app/extension-privacy, from "What it reads" to the end, with the contact line as "Write to privacy@kefli.app."
 
@@ -88,8 +88,10 @@ The menu item reads "Save Link to Kefli" in Firefox, in title case as Firefox's 
 
 ## Notes to reviewer
 
+AMO holds these to 3,000 characters (15 October 2026: 3,264 was refused). They are sent by API as `version.approval_notes` from `apps/extension/dist/amo-metadata.json`, which the upload command below builds them into.
+
 ```
-Kefli saves the page the user is reading to the Kefli app on their Android phone. Saving needs the phone: install the Kefli Android app (https://kefli.app), then click the toolbar button, which opens the options page with a QR code to scan in the app (You > Connected browsers > Connect a browser). Without a phone you can see the options page and the pairing QR, and the toolbar button opens the same page until the add-on is paired.
+Kefli saves the page the user is reading to the Kefli app on their Android phone. Saving needs the phone: install the Kefli Android app (https://kefli.app), then click the toolbar button, which opens the options page with a QR code to scan in the app (You > Connected browsers > Connect a browser). Without a phone you can see the options page and the pairing QR; the toolbar button opens that page until the add-on is paired.
 
 BUILD (reproduces the uploaded package exactly)
 Node 24 (tested with 24.18.0) and npm 12 (12.0.2), on Linux or macOS with the zip command.
@@ -98,18 +100,18 @@ Node 24 (tested with 24.18.0) and npm 12 (12.0.2), on Linux or macOS with the zi
      (npm may list packages whose install scripts it didn't run; none are needed.)
   3. KEFLI_COMMIT=<commit> KEFLI_DEFAULTS_URL=https://api.kefli.app/defaults.json node apps/extension/build.mjs store
      where <commit> is the short commit in the archive's name.
-  4. apps/extension/dist/store-firefox/ is the package, and apps/extension/dist/kefli-firefox-store-<version>.zip is it zipped.
-The build is apps/extension/build.mjs: esbuild bundles src/*.ts with packages/protocol and their npm dependencies (package-lock.json pins them), never minified. KEFLI_COMMIT only fills in the commit shown under Advanced on the options page; KEFLI_DEFAULTS_URL is the settings file the add-on fetches.
+  4. apps/extension/dist/store-firefox/ is the package; apps/extension/dist/kefli-firefox-store-<version>.zip is it zipped.
+The build is apps/extension/build.mjs: esbuild bundles src/*.ts with packages/protocol and their npm dependencies (pinned by package-lock.json), never minified. KEFLI_COMMIT only fills in the commit shown under Advanced on the options page.
 
 THIRD-PARTY CODE
-parser.js is the article parser, built from files copied byte-for-byte from the npm tarballs into shared/vendor: @mozilla/readability 0.6.0 and turndown 7.2.4, with their sha256 in shared/vendor/VERSIONS.md, plus our wrapper shared/vendor/parser-runner.js. The same file runs in the phone app, so an article reads the same in both. Everything else comes from npm through package-lock.json (nostr-tools, @noble/hashes, @noble/ciphers, @noble/curves, @scure/base, toqr, and mdast-util-from-markdown with micromark and their small helpers, which read the parser's Markdown). cover-v1.js (shared/cover) draws each save's cover from its hash.
+parser.js is the article parser: @mozilla/readability 0.6.0 and turndown 7.2.4, copied byte for byte from the npm tarballs into shared/vendor (sha256 in shared/vendor/VERSIONS.md), plus our wrapper shared/vendor/parser-runner.js. Everything else comes from npm via package-lock.json (nostr-tools, @noble/hashes, @noble/ciphers, @noble/curves, @scure/base, toqr, mdast-util-from-markdown with micromark). cover-v1.js (shared/cover) draws each save's cover from its hash.
 
 WHAT IT DOES AND DOESN'T DO
-- Permissions: activeTab and scripting to read the tab the user saves, only after their click, shortcut or menu choice; storage; alarms (retrying offline saves, and a half-hourly check for a message from the phone); contextMenus (Save Link to Kefli). No host permissions.
-- Network: api.kefli.app (the settings file, and the pairing offer), the WebSocket server at relay.kefli.app (a nostr relay), and Kefli's encrypted file store. Every save is encrypted in the browser before it is sent, with NIP-44 and AES-GCM, so only the user's phone can read it.
-- Data collection: websiteContent and browsingActivity, declared as required, are the saved page's text, title and address, sent encrypted for the user's own phone. Nothing is sent for any page the user doesn't save, and there is no analytics or telemetry.
-- No remote code: the add-on never loads or runs code from outside the package.
-- The linter's innerHTML warnings are our own pages (the options page, the popup and the toast), where every value is escaped or is the cover's SVG, drawn by our own code from a hash, and the vendored Readability and Turndown. The warning for action.onUserSettingsChanged is a feature check: the options page uses it only where Firefox has it.
+- Permissions: activeTab and scripting read the tab the user saves, only after their click, shortcut or menu choice; storage; alarms (retrying offline saves, and a half-hourly check for a message from the phone); contextMenus (Save Link to Kefli). No host permissions.
+- Network: api.kefli.app (the settings file and the pairing offer), the WebSocket server at relay.kefli.app (a nostr relay) and Kefli's encrypted file store. Every save is encrypted in the browser before it is sent (NIP-44 and AES-GCM), so only the user's phone can read it.
+- Data collection: websiteContent and browsingActivity, declared as required, are the saved page's text, title and address, sent encrypted for the user's own phone. Nothing is sent for a page the user doesn't save; no analytics or telemetry.
+- No remote code: nothing is loaded or run from outside the package.
+- The linter's innerHTML warnings are our own pages (options, popup, toast), where every value is escaped or is the cover's SVG drawn by our own code, plus the vendored Readability and Turndown. The action.onUserSettingsChanged warning is a feature check used only where Firefox has it.
 ```
 
 ## After the first approval
