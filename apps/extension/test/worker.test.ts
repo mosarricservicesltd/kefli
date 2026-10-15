@@ -915,7 +915,7 @@ describe('a wrap that waited (contract 4.4: the phone reads its inbox from two d
     expect(n.published.map((x) => x.id)).toEqual([e.id]);
   });
 
-  test('one whose send keeps failing is made again at each try, and the offline toast’s Undo still finds the last', async () => {
+  test('one whose send keeps failing is made again at each try, and the offline toast’s Undo retracts each wrap a try may have sent', async () => {
     const h = harness({ online: false });
     at(h, NOW);
     await h.work.save(PAGE, 1, false);
@@ -932,8 +932,60 @@ describe('a wrap that waited (contract 4.4: the phone reads its inbox from two d
     expect(second).toMatchObject({ attempts: 2, wrapped_at: NOW + 240, blob: null });
     await online.work.undo(offline.id!, 1);
     expect(await queued(h.store)).toEqual([]);
-    // its send may have reached the relay all the same, so the last wrap is retracted, with its own key
-    expect(n.published.filter((x) => x.kind === 5).map((x) => [x.pubkey, x.tags])).toEqual([[second.wrap.pubkey, [['e', second.id], ['k', '1059']]]]);
+    // the first try's send of the first wrap, and the second's of the second, may each have reached the relay though their
+    // answers timed out, so both are retracted, each with its own key. The wrap made offline never left the browser
+    expect(n.published.filter((x) => x.kind === 5).map((x) => [x.pubkey, x.tags])).toEqual([
+      [first.wrap.pubkey, [['e', first.id], ['k', '1059']]],
+      [second.wrap.pubkey, [['e', second.id], ['k', '1059']]],
+    ]);
+  });
+
+  test('a wrap whose send timed out, made again and sent, is retracted with the one that went, and found on the phone if the phone took it', async () => {
+    for (const tookFirst of [false, true]) {
+      const h = harness({ online: false });
+      at(h, NOW);
+      await h.work.save(PAGE, 1, false);
+      const offline = h.toasts.at(-1)!;
+      const o: Parameters<typeof net>[0] = { publish: 'down' };
+      const n = net(o);
+      const timedOut = { id: '' };
+      // the phone took the first wrap sent, which the relay held though its answer timed out, and deleted it as the user
+      const found: Browser['collected'] = async (_relay, wrapId, by) => tookFirst && wrapId === timedOut.id && by === user.pubkey();
+      const online = harness({ store: h.store, session: h.session, net: n.net, found });
+      at(online, NOW + 120);
+      await online.work.flushQueue();
+      const [tried] = await queued(h.store);
+      timedOut.id = tried.id;
+      o.publish = 'ok';
+      at(online, NOW + 240);
+      await online.work.flushQueue();
+      const [went] = n.published;
+      expect(await queued(h.store)).toEqual([]);
+      await online.work.undo(offline.id!, 1);
+      expect(n.published.filter((x) => x.kind === 5).map((x) => x.tags[0][1])).toEqual([timedOut.id, went.id]);
+      expect(online.toasts.at(-1)!.kind).toBe(tookFirst ? 'onphone' : 'undone');
+    }
+  });
+
+  test('a save a stopped worker left mid-send, its upload then refused, is retracted under both wraps', async () => {
+    // the first worker uploaded the blob and published the wrap, and was stopped before it could say so
+    const held = gate();
+    const first = net({ hold: held.p });
+    const h = harness({ net: first.net });
+    void h.work.save(PAGE, 1, false);
+    await until(() => first.asked.n === 1);
+    const [left] = await queued(h.store);
+    expect(left).toMatchObject({ why: 'sending' });
+    expect(left.blob).not.toBeNull();
+    // the next worker's try finds the operator full for the day, and sends the request without its HTML
+    const n = net({ blossom: (async () => new Response('{"v":1,"error":"daily"}', { status: 413, headers: { 'X-Reason': 'daily' } })) as unknown as typeof fetch });
+    const next = harness({ store: h.store, session: h.session, net: n.net, collected: [false, false] });
+    await next.work.flushQueue();
+    const [w] = n.published;
+    expect(w.id).not.toBe(left.id);
+    await next.work.undo(h.toasts[0].id!, 1);
+    expect(n.published.filter((x) => x.kind === 5).map((x) => x.tags[0][1])).toEqual([left.id, w.id]);
+    expect(next.toasts.at(-1)!.kind).toBe('undone');
   });
 
   test('offline, a wrap that waited is left as it is, since its send fails anyway, and the try counts no attempt', async () => {
@@ -1723,15 +1775,19 @@ describe('a move while saves wait, their toasts still showing (contract 4.4 and 
     await harness({ store: h.store, session: h.session, net: net({ publish: 'down' }).net }).work.flushQueue();
     await h.store.set(KEYS.pairing, PAIRING);
     await applyMove(h.store, device, ack, NOW, h.session);
+    const [moved] = await queued(h.store);
     // two minutes on, the new wrap is made again as it goes, and that try times out too
     const later = harness({ store: h.store, session: h.session, net: net({ publish: 'down' }).net, pairing: { ...PAIRING, user_pubkey: T.pubkey() } });
     later.clock.now = NOW + 120;
     await later.work.flushQueue();
     const [last] = await queued(h.store);
-    expect(await h.session.get(`undo:${last.id}`)).toMatchObject({ earlier: [{ id: offline.id }] });
+    // the queue counts tries by save, not by wrap, so the move's wrap, made again before any try sent it, counts as one a
+    // try may have sent, as a wrap a move replaces does (move.ts mayHaveGone); the relay refuses its retraction, which
+    // changes nothing
+    expect(await h.session.get(`undo:${last.id}`)).toMatchObject({ earlier: [{ id: offline.id }, { id: moved.id, user: T.pubkey() }] });
     const n = net();
     await harness({ store: h.store, session: h.session, net: n.net, collected: [false, false] }).work.undo(offline.id!, 1);
-    expect(n.published.filter((e) => e.kind === 5).map((e) => e.tags[0][1])).toEqual([offline.id, last.id]);
+    expect(n.published.filter((e) => e.kind === 5).map((e) => e.tags[0][1])).toEqual([offline.id, moved.id, last.id]);
     expect(await queued(h.store)).toEqual([]);
   });
 

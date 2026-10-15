@@ -111,9 +111,16 @@ export function background(b: Browser) {
    * settled under the new wrap even when Undo's key hasn't followed yet (settleFirst).
    */
   const movedMidSend = new Map<string, string>();
-  const deliverFor = (ctx: SaveContext) => async (p: Delivered) => {
+  /**
+   * A save's delivery. The wrap a try before this one may have sent (triedBefore) is the one the save has as the try
+   * begins; a wrap made in this try, as for a move caught up with (forPairing), has gone nowhere yet. When it is made
+   * again, its HTML refused or its date too old, Undo keeps its key to retract it too (takePlace, wentTo).
+   */
+  const deliverFor = (ctx: SaveContext) => async (p: Delivered & Partial<Queued>) => {
+    const tried = triedBefore(p) ? p.id : null;
     await forPairing(p, ctx);
-    return deliver(p, ctx.defaults.operator.blossom, ctx.defaults.operator.relay, ctx.device, b.net, (q, refused) => (refused ? withoutHtml(q, ctx) : freshen(q, ctx)));
+    const wentTo = (q: Delivered) => (q.id === tried ? recipient(q) : null);
+    return deliver(p, ctx.defaults.operator.blossom, ctx.defaults.operator.relay, ctx.device, b.net, (q, refused) => (refused ? withoutHtml(q, ctx, wentTo(q)) : freshen(q, ctx, wentTo(q))));
   };
 
   /** Each tab's toasts, one after another, so Saved never lands before the Saving… it replaces. */
@@ -185,23 +192,26 @@ export function background(b: Browser) {
   /**
    * The operator refused the save's upload for good (contract 4.4 and 5, v1.12), and the extension doesn't wait for room:
    * the request goes with `html` null, rebuilt and signed again with the same uuid, under a new wrap (takePlace). A
-   * request that can't be rebuilt goes as it was, and the phone, finding no blob, fetches the page at once.
+   * request that can't be rebuilt goes as it was, and the phone, finding no blob, fetches the page at once. wentTo: the
+   * library the old wrap went to, when a try before this one may have sent it, as a worker stopped mid-send may have.
    */
-  async function withoutHtml(p: Delivered, ctx: SaveContext): Promise<void> {
+  async function withoutHtml(p: Delivered, ctx: SaveContext, wentTo: string | null): Promise<void> {
     p.sha256 = null;
     const again = await withoutText(p, ctx.device, b.now());
-    if (again) await takePlace(p, again, { blob: null, sha256: null, textless: true });
+    if (again) await takePlace(p, again, { blob: null, sha256: null, textless: true }, wentTo);
     textless.add(p.id);
   }
 
   /**
    * A wrap made more than a minute ago is made again before it goes (WRAP_FRESH_FOR, contract 4.4): the same request,
-   * under a new wrap dated from now (takePlace). Offline the send fails anyway, so the wrap waits as it is.
+   * under a new wrap dated from now (takePlace). Offline the send fails anyway, so the wrap waits as it is. wentTo: the
+   * library the old wrap went to, when a try before this one may have sent it, its answer timed out though the relay
+   * took it; Undo then retracts it as well as the new one, which a toast held open through both sends retracted alone.
    */
-  async function freshen(p: Delivered, ctx: SaveContext): Promise<void> {
+  async function freshen(p: Delivered, ctx: SaveContext, wentTo: string | null): Promise<void> {
     if (b.now() - (p.wrapped_at ?? 0) <= WRAP_FRESH_FOR || !b.online()) return;
     const again = await freshWrap(p, ctx.device, b.now());
-    if (again) await takePlace(p, again, {});
+    if (again) await takePlace(p, again, {}, wentTo);
   }
 
   /**
