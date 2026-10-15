@@ -552,23 +552,29 @@ describe('a save at an http address whose site has no https (RULED: past three d
     }
   });
 
-  test('at any age it waits when its https attempt met the network: a name that resolves nowhere, or a time-out', async () => {
+  test('when its https attempt meets the network, a name that resolves nowhere or a time-out, it waits as a page that doesn’t answer', async () => {
     for (const fail of [NO_NAME, () => new TimedOut()]) {
       const w = world();
       noHttps(w, fail);
       w.ports.online = async () => true;
       w.share('http://old.example/post');
-      at(w, 30 * DAY);
+      at(w, 14 * DAY);
       expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 0, waiting: 1 });
+      expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 0, waiting: 1 });
+      // past 14 days, tried again, it fails as a page that never answers (below), not for want of https
+      at(w, 14 * DAY + 1);
+      expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 1, waiting: 0 });
+      expect(w.db.get('SELECT text_state, fail_reason FROM items')).toEqual({ text_state: 'failed', fail_reason: 'offline' });
     }
   });
 
-  test('a save at an https address whose TLS is refused waits at any age: only an http one is asked over https alone', async () => {
+  test('a save at an https address whose TLS is refused isn’t failed for want of https: only an http one is asked over https alone', async () => {
     const w = world();
     noHttps(w, TLS);
     w.ports.online = async () => true;
     w.share('https://old.example/post');
-    at(w, 30 * DAY);
+    at(w, 14 * DAY);
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 0, waiting: 1 });
     expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 0, waiting: 1 });
   });
 
@@ -588,6 +594,102 @@ describe('a save at an http address whose site has no https (RULED: past three d
     expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 1 });
     expect(w.db.get('SELECT text_state, fail_reason, dirty, modified_at FROM items')).toEqual({ text_state: 'failed', fail_reason: 'http', dirty: 0, modified_at: 7 });
     expect(w.outbox()).toEqual([]);
+  });
+});
+
+describe('a save whose page never answers (RULED: past 14 days, tried again with the phone online, it fails as a page that can’t be read)', () => {
+  const DAY = 86_400;
+  const NO_NAME = () => new Error('fetch failed: java.net.UnknownHostException: Unable to resolve host "gone.example": No address associated with hostname');
+  const REFUSED = () => new Error('fetch failed: java.net.ConnectException: Failed to connect to gone.example/203.0.113.9:443');
+  const SLOW = () => new TimedOut();
+
+  /** The world with gone.example never answering, as fail makes it, and every other site as the world has it. */
+  function gone(w: ReturnType<typeof world>, fail: () => Error): string[] {
+    const asked: string[] = [];
+    const inner = w.ports.page.fetch;
+    w.ports.page.fetch = (async (url: string, init: RequestInit) => {
+      if (!url.startsWith('https://gone.example/')) return inner(url, init);
+      asked.push(url);
+      throw fail();
+    }) as never;
+    return asked;
+  }
+  const at = (w: ReturnType<typeof world>, seconds: number) => (w.ports.now = () => 1000 + seconds);
+  const publishes = (w: ReturnType<typeof world>) => w.outbox().filter((o) => o.op === 'publish_item').map((o) => o.subject);
+
+  test('more than 14 days old and tried before, its page timing out again with the phone online: sent without its text, its link kept', async () => {
+    const w = world({ 'https://ok.example/a': {} });
+    const asked = gone(w, SLOW);
+    let asks = 0;
+    w.ports.online = async () => (asks++, true);
+    w.share('https://gone.example/post');
+    at(w, DAY);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 0, waiting: 1, xWaiting: 0 });
+    w.share('https://ok.example/a');
+    at(w, 14 * DAY + 1);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 1, failed: 1, waiting: 0, xWaiting: 0 });
+    expect(asked).toEqual(['https://gone.example/post', 'https://gone.example/post']);
+    expect(w.db.get('SELECT hash, url, text_state, fail_reason FROM items WHERE url = ?', 'https://gone.example/post')).toEqual({
+      hash: itemHash('https://gone.example/post'), url: 'https://gone.example/post', text_state: 'failed', fail_reason: 'offline',
+    });
+    expect(publishes(w)).toContain(itemHash('https://gone.example/post'));
+    expect(pendingParses(w.db, PK)).toEqual([]);
+    // the network's state was asked once, for the one save the rule could fail
+    expect(asks).toBe(1);
+  });
+
+  test('so is one whose domain has gone, or whose connection is refused: any failure of the network', async () => {
+    for (const fail of [NO_NAME, REFUSED, () => new Error('Network request failed')]) {
+      const w = world();
+      gone(w, fail);
+      w.ports.online = async () => true;
+      w.share('https://gone.example/post');
+      at(w, 20 * DAY);
+      expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 0, waiting: 1 });
+      at(w, 20 * DAY + 60);
+      expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 1, waiting: 0 });
+      expect(w.db.get('SELECT text_state, fail_reason FROM items')).toEqual({ text_state: 'failed', fail_reason: 'offline' });
+      expect(publishes(w)).toEqual([itemHash('https://gone.example/post')]);
+    }
+  });
+
+  test('14 days old or less it waits, however often it was tried: a slow network or a site down for days can’t fail it', async () => {
+    const w = world();
+    gone(w, SLOW);
+    w.ports.online = async () => true;
+    w.share('https://gone.example/post');
+    for (const day of [1, 7, 13, 14, 14]) {
+      at(w, day * DAY);
+      expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 0, waiting: 1 });
+    }
+    expect(w.db.get('SELECT text_state FROM items')).toEqual({ text_state: 'queued' });
+    expect(publishes(w)).toEqual([]);
+  });
+
+  test('one first tried here when already old, as another phone’s save is, has a second try before it fails', async () => {
+    // one slow answer on a phone that has just restored an old library is no page that never answers
+    const w = world();
+    gone(w, SLOW);
+    w.ports.online = async () => true;
+    w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, published, event_id, modified_at) VALUES (?, ?, 'https://gone.example/post', 10, 'unread', 'queued', 'sync', 1, 'e1', 7)", PK, itemHash('https://gone.example/post'));
+    at(w, 300 * DAY);
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 0, waiting: 1 });
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 1, waiting: 0 });
+    // marked failed here, with nothing new to send (C§4.2)
+    expect(w.db.get('SELECT text_state, fail_reason, dirty, modified_at FROM items')).toEqual({ text_state: 'failed', fail_reason: 'offline', dirty: 0, modified_at: 7 });
+    expect(w.outbox()).toEqual([]);
+  });
+
+  test('at any age it waits while the phone is off the internet, or can’t say it is on it', async () => {
+    for (const online of [async () => false, async () => Promise.reject(new Error('no state')), undefined]) {
+      const w = world();
+      gone(w, SLOW);
+      w.ports.online = online;
+      w.share('https://gone.example/post');
+      at(w, 30 * DAY);
+      for (let i = 0; 3 > i; i++) expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 0, waiting: 1 });
+      expect(publishes(w)).toEqual([]);
+    }
   });
 });
 

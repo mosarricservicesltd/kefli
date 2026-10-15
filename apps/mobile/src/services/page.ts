@@ -3,8 +3,9 @@
 // body streams, no cookies, redirects followed by hand, ten at most and each to a public address (net/http.ts), and
 // only text/html and application/xhtml+xml parse. The parse runs in the kefli-parser WebView (a port here), then
 // contract 4.2's guard: not readerable and fewer than 120 spoken words is a failed parse. A network failure is
-// "offline": the save waits and tries again; a redirect the phone won't follow, or plain http the build refuses,
-// fails, the save keeping its link. No address is asked for or handed back with a user name and password in it.
+// "offline": the save waits and tries again, until the pending queue has waited as long as a page may take to answer
+// (ANSWER_WAIT_SECONDS); a redirect the phone won't follow, or plain http the build refuses, fails, the save keeping
+// its link. No address is asked for or handed back with a user name and password in it.
 // A page still turned away with 403 by both is loaded once in a browser engine (the render port, 8.2), since bot
 // checks such as Cloudflare's tell Android's HTTP client from a browser; its rendered HTML takes the same parse. So is a
 // page whose answer arrives as a bare 1xx. A PDF (contract 4.2, PDFs; flow decision 103), known by its type or its
@@ -78,7 +79,11 @@ export function renderAnswer(r: { ok: true; url: string; html: string } | { ok: 
  */
 const RENDERER_GONE = 'renderer_gone';
 
-export type FailReason = 'http' | 'not_html' | 'too_large' | 'not_readable' | 'pdf_no_text' | 'pdf_locked';
+/**
+ * Why a save's page can't be read. offline: it never answered for as long as a save waits for its page (pending.ts,
+ * ANSWER_WAIT_SECONDS), which only the pending queue judges; a fetch never ends with it.
+ */
+export type FailReason = 'http' | 'not_html' | 'too_large' | 'not_readable' | 'pdf_no_text' | 'pdf_locked' | 'offline';
 
 export type PageOutcome =
   /**
@@ -235,14 +240,29 @@ function refusedFirst(e: unknown, o: Opened | null): boolean {
  * could never be read, and its save waited unpublished for good, never backed up and tried at every sync. Past this,
  * an https attempt refused before anything answered, with the phone on the internet, fails the save as a page that
  * can't be read: published without its text, its link kept. Under it the save waits as before, so a captive portal or
- * a TLS hiccup can't fail it; offline or timed out, it waits at any age. A share is new, so the rule reaches only
- * saves waiting in the pending queue.
+ * a TLS hiccup can't fail it; offline or timed out, it waits as any save does (ANSWER_WAIT_SECONDS). A share is new,
+ * so the rule reaches only saves waiting in the pending queue.
  */
 export const HTTPS_WAIT_SECONDS = 3 * 86_400;
 
 /** Whether a save at url, saved at savedAt, whose page came to outcome has waited for https as long as it may. */
 export function waitedForHttps(url: string, outcome: PageOutcome, savedAt: number, now: number): boolean {
   return outcome.kind === 'offline' && outcome.refused === true && overHttps(url) !== url && now - savedAt > HTTPS_WAIT_SECONDS;
+}
+
+/**
+ * RULED: how long a save waits for a page that never answers, from its saved_at: a domain that has gone, or a port
+ * that drops packets so every try times out. Such a save waited unpublished for good, never backed up and tried at
+ * every sync. Past this, a try that times out or meets the network once more, with the phone on the internet, fails the
+ * save as a page that can't be read: published without its text, its link kept (pending.ts). Under it the save waits as
+ * before, so a slow network, a site down for a few days or a fortnight away from a signal can't fail it. A share is
+ * new, so the rule reaches only saves waiting in the pending queue.
+ */
+export const ANSWER_WAIT_SECONDS = 14 * 86_400;
+
+/** Whether a save saved at savedAt, whose page came to outcome, has waited as long as it may for its page to answer. */
+export function waitedForAnswer(outcome: PageOutcome, savedAt: number, now: number): boolean {
+  return outcome.kind === 'offline' && now - savedAt > ANSWER_WAIT_SECONDS;
 }
 
 /**

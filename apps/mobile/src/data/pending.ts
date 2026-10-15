@@ -10,9 +10,15 @@ import { writeRelays } from './lists';
 
 export type Pending = {
   id: number; hash: string; url: string; shared_url: string | null; published: number; event_id: string | null; x_state: string | null;
-  /** When it was last tried and couldn't be had (F12), as pendingParses reads it; null for one never tried. */
+  /**
+   * When it was last tried and couldn't be had (F12), as pendingParses reads it; null for one never tried, which a
+   * page that never answers can't fail yet (page.ts ANSWER_WAIT_SECONDS).
+   */
   timed_out_at?: number | null;
-  /** The save's own time (C§4.1), as pendingParses reads it: how long an http one has waited for https (page.ts). */
+  /**
+   * The save's own time (C§4.1), as pendingParses reads it: how long an http one has waited for https, and any one
+   * for its page to answer (page.ts).
+   */
   saved_at?: number;
 };
 
@@ -21,7 +27,8 @@ export type Pending = {
  * that timed out longest ago first (F12). RULED: plain http pages come after all the rest. Each is fetched over https
  * alone (net/http overHttps), and an old site with no https can take the whole 20 s to fail there, so an import of
  * old bookmarks spends its slowest last; one refused there waits until it is three days old, then fails (page.ts
- * HTTPS_WAIT_SECONDS), and one that only cleartext could fetch fails at once (net/http Blocked).
+ * HTTPS_WAIT_SECONDS), and one that only cleartext could fetch fails at once (net/http Blocked). Any page that never
+ * answers fails once its save is 14 days old and tried again (page.ts ANSWER_WAIT_SECONDS).
  */
 export function pendingParses(db: SqlDb, owner: string): Pending[] {
   return db.all<Pending>(

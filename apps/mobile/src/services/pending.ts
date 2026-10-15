@@ -1,8 +1,9 @@
 // Sync's phase 7 (mobile spec 4.5): pending parses, one at a time, until the network goes or the run's minute is
 // spent. Each is fetched and parsed as a share is (page.ts), a public http address over https alone (net/http
-// overHttps), and one whose site has no https fails once it is over three days old (page.ts HTTPS_WAIT_SECONDS); its
-// text is encrypted under a fresh key, staged, written and indexed, and its sends queued (data/pending.ts). Ports,
-// so this runs in tests.
+// overHttps); one whose site has no https fails once it is over three days old (page.ts HTTPS_WAIT_SECONDS), and one
+// whose page never answers once it is over 14 days old and tried again (page.ts ANSWER_WAIT_SECONDS). Its text is
+// encrypted under a fresh key, staged, written and indexed, and its sends queued (data/pending.ts). Ports, so this
+// runs in tests.
 import { encryptText, isPublicWebUrl, itemHash, textHash, withoutUserInfo, type CryptoPort } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { applyFailed, applyParsed, pendingParses, timedOut, xFound, xNoArticle, type Pending } from '../data/pending';
@@ -10,7 +11,7 @@ import { overHttps } from '../net/http';
 import { checkXPost, xRetryDelay, type XPorts } from './xpost';
 import type { SaveTargets } from '../data/saves';
 import { indexText } from '../data/sync';
-import { fetchPage, waitedForHttps, type PageOutcome, type PagePorts } from './page';
+import { fetchPage, waitedForAnswer, waitedForHttps, type PageOutcome, type PagePorts } from './page';
 import type { Derived } from '../reader/blocks';
 
 export type PendingPorts = {
@@ -25,7 +26,8 @@ export type PendingPorts = {
   targets: () => Promise<SaveTargets>;
   /**
    * Whether the phone is on the internet now, as Android judges it (a network behind a captive portal isn't), asked
-   * only before a save is failed for having no https (page.ts HTTPS_WAIT_SECONDS). Without it, none is.
+   * only before a save is failed for having no https or no answer (page.ts HTTPS_WAIT_SECONDS, ANSWER_WAIT_SECONDS).
+   * Without it, none is.
    */
   online?: () => Promise<boolean>;
 };
@@ -74,10 +76,11 @@ async function step(p: PendingPorts, owner: string, queued: Pending): Promise<St
   if (typeof item === 'string') return item;
   const outcome = await pageOf(p, item);
   if (outcome.kind !== 'offline') return settle(p, owner, item, outcome);
-  if (!(await noHttps(p, item, outcome))) return 'unreached';
+  const reason = await givenUp(p, item, outcome);
+  if (!reason) return 'unreached';
   // the reason alone, never the address (7.1)
-  console.log(`[kefli-pending] ${JSON.stringify({ failed: 'http', after: 'no https' })}`);
-  return settle(p, owner, item, { kind: 'failed', reason: 'http', finalUrl: item.url });
+  console.log(`[kefli-pending] ${JSON.stringify({ failed: reason, after: WAITED_FOR[reason] })}`);
+  return settle(p, owner, item, { kind: 'failed', reason, finalUrl: item.url });
 }
 
 /**
@@ -108,15 +111,31 @@ async function pageOf(p: PendingPorts, item: Pending): Promise<PageOutcome> {
   return fetchPage(p.page, overHttps(item.url));
 }
 
+/** What a save the queue gives up on waited for, by the reason it fails with, for its log line. */
+const WAITED_FOR = { http: 'no https', offline: 'no answer' } as const;
+type GivenUp = keyof typeof WAITED_FOR;
+
 /**
- * Whether a save whose page couldn't be had has waited for https as long as it may (page.ts waitedForHttps) with the
- * phone on the internet. The network's state is asked only then; a phone that can't say, or a save with no saved_at,
- * waits.
+ * Why a save whose page couldn't be had fails now, or null while it waits: http once it has waited for https as long
+ * as it may (page.ts waitedForHttps); offline once it has waited as long as it may for its page to answer (page.ts
+ * waitedForAnswer) and was tried before, so one that comes to this phone old, as another phone's save does, has a
+ * second try before one slow answer can fail it. Either only with the phone on the internet, whose state is asked
+ * only then; a phone that can't say, or a save with no saved_at, waits.
  */
-async function noHttps(p: PendingPorts, item: Pending, outcome: PageOutcome): Promise<boolean> {
-  if (item.saved_at === undefined || !waitedForHttps(item.url, outcome, item.saved_at, p.now())) return false;
-  return (await p.online?.().catch(() => false)) === true;
+async function givenUp(p: PendingPorts, item: Pending, outcome: PageOutcome): Promise<GivenUp | null> {
+  const reason = waitedOut(item, outcome, p.now());
+  return reason && (await p.online?.().catch(() => false)) === true ? reason : null;
 }
+
+/** The wait a save whose page came to outcome has outlasted, by its saved_at, if any. */
+function waitedOut(item: Pending, outcome: PageOutcome, now: number): GivenUp | null {
+  if (item.saved_at === undefined) return null;
+  if (waitedForHttps(item.url, outcome, item.saved_at, now)) return 'http';
+  return triedBefore(item) && waitedForAnswer(outcome, item.saved_at, now) ? 'offline' : null;
+}
+
+/** Whether a pending parse was tried before and couldn't be had (F12). */
+const triedBefore = (q: Pending): boolean => !!q.timed_out_at;
 
 /** The run going for each owner, and whether another was asked for while it went. */
 const runs = new Map<string, { run: Promise<PendingResult>; again: boolean }>();
@@ -160,7 +179,7 @@ function joined(a: PendingResult, b: PendingResult): PendingResult {
 }
 
 /** Of the parses a run had no time for, how many were never tried: those it would rather not leave to the next sync. */
-const neverTried = (rest: Pending[]): number => rest.filter((q) => !q.timed_out_at).length;
+const neverTried = (rest: Pending[]): number => rest.filter((q) => !triedBefore(q)).length;
 
 /**
  * A pass stopped at SLOW_RUN pages in a row that couldn't be had. After it has settled one, the network was there, so
