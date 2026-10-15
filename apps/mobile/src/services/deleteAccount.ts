@@ -124,14 +124,16 @@ type Attempt = () => Promise<boolean>;
  * Tries until it succeeds or the minute is spent (spec 7.2): 2 s, then doubling. The minute is wall time, the tries as
  * well as the waits between them, and a try starts only while a request's deadline (net/http SERVER_TIMEOUT_MS) would
  * still end it within the minute. Counting the waits alone, as it did, five tries of 15 s each held the screen, which
- * swallows Back while the deletion runs, for 1 min 45 s before the step read as failed.
+ * swallows Back while the deletion runs, for 1 min 45 s before the step read as failed. RULED: the time is read from
+ * the steady clock (performance.now), which the phone's clock being set doesn't move: read from Date.now, a phone set
+ * back an hour while a try ran, as a network's time sets one whose clock was wrong, held the screen for 37 minutes.
  */
 async function withinMinute(p: DelPorts, attempt: Attempt): Promise<boolean> {
   const budget = p.budgetMs ?? 60_000;
-  const started = Date.now();
+  const started = performance.now();
   for (let wait = 2000; ; wait *= 2) {
     if (await attempt().catch(() => false)) return true;
-    if (Date.now() - started + wait + SERVER_TIMEOUT_MS > budget) return false;
+    if (performance.now() - started + wait + SERVER_TIMEOUT_MS > budget) return false;
     await p.sleep(wait);
   }
 }

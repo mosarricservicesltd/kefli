@@ -508,6 +508,30 @@ describe('Delete my data asks its servers through the hops, each within a deadli
     expect(at).toEqual([0, 2_000, 6_000, 14_000, 30_000]);
   });
 
+  test("the phone's clock set back or forward while the first step runs neither stretches nor cuts its minute", async () => {
+    // the minute was read from the wall clock: set back an hour during the first try, as a network's time can set a phone
+    // whose clock was wrong, a never-answering API held the screen, which swallows Back, for 37 minutes of eleven tries
+    for (const step of [-3_600_000, 3_600_000]) {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+      const w = world();
+      const base = w.p.fetch;
+      let tries = 0;
+      const ports = screenPorts(w, (async (url: string, init: RequestInit) => {
+        if (!url.endsWith('/account')) return base(url, init);
+        if (++tries === 1) jest.setSystemTime(Date.now() + step);
+        return silent(url, init);
+      }) as typeof fetch);
+      const run = watch(deleteEverything(ports, () => undefined));
+      let ms = 0;
+      while (!run.settled && 7_200_000 > ms) {
+        await jest.advanceTimersByTimeAsync(1_000);
+        ms += 1_000;
+      }
+      expect([step, run, ms, tries, w.wiped()]).toEqual([step, expect.objectContaining({ settled: true, value: 'failed' }), 51_000, 3, false]);
+      jest.useRealTimers();
+    }
+  });
+
   test("a mirror that never answers a deletion is let go at its deadline: it isn't confirmed, and the phone is wiped all the same", async () => {
     jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
     const w = world();
