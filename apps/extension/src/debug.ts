@@ -9,12 +9,13 @@ import { KEYS, type Pairing, type Store } from './store';
 export const HISTORY_MAX = 20;
 
 /**
- * What became of a save: sent at once (with or without its text), queued and why, refused as the ninth, sent later from
- * the queue, stopped after 200 attempts, or undone (taken off the queue, retracted, or already on the phone), or an Undo
- * that couldn't retract it (F40). A save whose HTML the operator refused is sent with no text, at once or from the queue
+ * What became of a save: sent at once (with or without its text), queued and why, refused as the ninth, neither sent nor
+ * kept (storage refused it or couldn't be read, or the entries were full; decision 119), sent later from the queue,
+ * stopped after 200 attempts, or undone (taken off the queue, retracted, or already on the phone), or an Undo that
+ * couldn't retract it (F40). A save whose HTML the operator refused is sent with no text, at once or from the queue
  * (v1.12).
  */
-export type Outcome = 'sent' | 'sent, no text' | 'waiting, offline' | 'waiting, couldn’t reach' | 'waiting, blocked' | 'queue full' | 'sent from queue' | 'stopped' | 'undo: off the queue' | 'undo: retracted' | 'undo: on the phone' | 'undo: failed';
+export type Outcome = 'sent' | 'sent, no text' | 'waiting, offline' | 'waiting, couldn’t reach' | 'queue full' | 'not sent, not kept' | 'sent from queue' | 'stopped' | 'undo: off the queue' | 'undo: retracted' | 'undo: on the phone' | 'undo: failed';
 
 export interface HistoryEntry {
   at: number;
@@ -74,7 +75,7 @@ function queueLine(q: Queued[]): string {
   if (!q.length) return 'Waiting: none';
   const count = (why: Queued['why']) => q.filter((e) => e.why === why).length;
   const stopped = q.filter((e) => e.stopped).length;
-  return `Waiting: ${q.length} (sending ${count('sending')}, offline ${count('offline')}, couldn’t reach ${count('reach')}, blocked ${count('blocked')}, stopped ${stopped}; most attempts ${Math.max(...q.map((e) => e.attempts))})`;
+  return `Waiting: ${q.length} (sending ${count('sending')}, offline ${count('offline')}, couldn’t reach ${count('reach')}, stopped ${stopped}; most attempts ${Math.max(...q.map((e) => e.attempts))})`;
 }
 
 /** The plain text Copy debug info puts on the clipboard. */

@@ -384,10 +384,12 @@ describe('the queue (extension spec 4, decisions 30, 31 and 60)', () => {
     const store = memoryStore();
     await enqueue(store, p('a'), 'offline');
     await enqueue(store, p('b'), 'reach');
-    await enqueue(store, p('c'), 'blocked');
+    // c: an entry an earlier build stored as blocked in this browser, a state since retired (decision 119)
+    await changeQueue(store, (q) => void q.push({ ...p('c'), why: 'blocked' as 'reach', stopped: false }));
     const q = await queued(store);
     expect(waiting(q)).toBe(1);
-    // c: an entry an earlier build stored as blocked in this browser is still listed
+    // it is read as couldn't reach, and listed with the rest
+    expect(q.map((e) => e.why)).toEqual(['offline', 'reach', 'reach']);
     expect(failed(q).map((e) => e.id)).toEqual(['b', 'c']);
     expect([whyNot(true), whyNot(false)]).toEqual(['reach', 'offline']);
   });
@@ -474,7 +476,10 @@ describe('the toast', () => {
     expect(toastCopy({ ...s, kind: 'saving', link: true })).toMatchObject({ sub: 'example.com', timed: false });
   });
   test('the refusal and the failures', () => {
-    expect(toastCopy({ ...s, kind: 'full' }).title).toBe(`Not saved: ${QUEUE_MAX} are already waiting`);
+    // decision 119: eight really waiting opens the Couldn't send list; a save neither sent nor kept says only that
+    expect(toastCopy({ ...s, kind: 'full' })).toMatchObject({ title: `Not saved: ${QUEUE_MAX} are already waiting`, action: 'Options', tile: 'alert', tone: 'bad', timed: true });
+    expect(toastCopy({ ...s, kind: 'unsent' })).toMatchObject({ title: 'Couldn’t send this save', sub: 'Save this again.', tile: 'alert', tone: 'bad', timed: true, say: 'Couldn’t send this save. Save this again.' });
+    expect(toastCopy({ ...s, kind: 'unsent' }).action).toBeUndefined();
     expect(toastCopy({ ...s, kind: 'failed' })).toMatchObject({ mark: 'bad', action: 'Options' });
     expect(toastCopy({ ...s, kind: 'offline' }).mark).toBe('off');
     expect(toastCopy({ ...s, kind: 'notext' }).sub).toBe('example.com · your phone will fetch the text');
@@ -613,7 +618,7 @@ describe('Copy debug info (extension spec 11, decision 108)', () => {
     });
     expect(text).toContain('Kefli extension 0.1.0 (beta, abc1234)');
     expect(text).toContain(`Library key: ${PAIRING.user_pubkey.slice(0, 8)}…`);
-    expect(text).toContain('Waiting: 1 (sending 0, offline 0, couldn’t reach 1, blocked 0, stopped 0; most attempts 0)');
+    expect(text).toContain('Waiting: 1 (sending 0, offline 0, couldn’t reach 1, stopped 0; most attempts 0)');
     expect(text).toContain(`page  ${pending.id.slice(0, 8)}  waiting, couldn’t reach`);
     expect(text).toContain('Last look for a move: never');
     for (const secret of ['example.com', 'A private title', (await store.get<string>(KEYS.device))!, dev.pubkey(), PAIRING.user_pubkey, PAIRING.token]) expect(text).not.toContain(secret);

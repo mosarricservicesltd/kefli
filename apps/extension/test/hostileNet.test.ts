@@ -84,6 +84,8 @@ describe('defaults.json from an operator that misbehaves', () => {
     ['mirrors missing', { ...DEFAULTS, mirrors: undefined }],
     ['an operator relay that isn’t a relay', { ...DEFAULTS, operator: { ...DEFAULTS.operator, relay: 'javascript:alert(1)' } }],
     ['an operator API that isn’t an address', { ...DEFAULTS, operator: { ...DEFAULTS.operator, api: { evil: 1 } } }],
+    // decision 119, contract 6: a slash at its end would send every API call through a redirect
+    ['an operator API ending in a slash', { ...DEFAULTS, operator: { ...DEFAULTS.operator, api: 'https://api.example/' } }],
     ['an address longer than any real one', { ...DEFAULTS, operator: { ...DEFAULTS.operator, blossom: `https://b.example/${'x'.repeat(ADDRESS_MAX)}` } }],
     ['more relays than an operator lists', { ...DEFAULTS, relays: Array.from({ length: DEFAULTS_LIST_MAX + 1 }, (_, i) => `wss://r${i}.example`) }],
     ['200,000 relays', { ...DEFAULTS, relays: Array.from({ length: 200_000 }, (_, i) => `wss://r${i}.example`) }],

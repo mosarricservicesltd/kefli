@@ -6,7 +6,7 @@ import { uploadBlob } from '../../../packages/protocol/src/blossom';
 import { acceptSaveRequest, wrapPairAck, type PairAck, type SaveRequest } from '../../../packages/protocol/src/pairing';
 import { LocalSigner, type NostrEvent } from '../../../packages/protocol/src/signer';
 import { unwrap } from '../../../packages/protocol/src/wrap';
-import { linkOnly, type Captured } from '../src/captured';
+import { FIELD_MAX, linkOnly, type Captured } from '../src/captured';
 import { webCrypto } from '../src/crypto';
 import { history } from '../src/debug';
 import { relayRows, type Defaults } from '../src/defaults';
@@ -1530,19 +1530,20 @@ describe('a save the browser’s own parts let down', () => {
     expect(h.toasts.at(-1)!.kind).toBe('undofailed');
   });
 
-  test('a queue storage.local won’t write: the save is still sent, and one that can’t be sent is refused out loud', async () => {
+  test('a queue storage.local won’t write: the save is still sent, and one that can’t be sent says it was neither sent nor kept', async () => {
     const n = net();
     const h = harness({ store: refusing(KEYS.queue), net: n.net });
     expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
     expect(kinds(h.toasts)).toEqual(['saving', 'saved']);
     expect(n.published).toHaveLength(1);
+    // decision 119: nothing waits, so the toast doesn't say eight do
     const down = harness({ store: refusing(KEYS.queue), net: net({ publish: 'down' }).net });
     expect(await ends(down.work.save(PAGE, 1, false))).toBe('ended');
-    expect(kinds(down.toasts)).toEqual(['saving', 'full']);
-    expect((await history(down.store))[0]).toMatchObject({ outcome: 'queue full' });
+    expect(kinds(down.toasts)).toEqual(['saving', 'unsent']);
+    expect((await history(down.store))[0]).toMatchObject({ outcome: 'not sent, not kept' });
   });
 
-  test('a queue storage.local can’t read: the save still ends on its toast, Saved once sent, refused out loud when it can’t be', async () => {
+  test('a queue storage.local can’t read: the save still ends on its toast, Saved once sent, neither sent nor kept when it can’t be', async () => {
     /** storage.local whose reads of the queue fail, as in a profile whose database is damaged. */
     const unreadable = () => {
       const store = memoryStore();
@@ -1562,10 +1563,11 @@ describe('a save the browser’s own parts let down', () => {
     expect(await ends(h.work.undo(h.toasts[1].id!, 1))).toBe('ended');
     expect(h.toasts.at(-1)!.kind).toBe('undone');
     expect(n.published.filter((e) => e.kind === 5)).toHaveLength(1);
-    // one that can't be sent either isn't left at Saving…, and the alarm stays on for the next minute's look
+    // one that can't be sent either isn't left at Saving…, says it was neither sent nor kept (decision 119), and the
+    // alarm stays on for the next minute's look
     const down = harness({ store: unreadable(), online: false });
     expect(await ends(down.work.save(PAGE, 1, false))).toBe('ended');
-    expect(kinds(down.toasts)).toEqual(['saving', 'full']);
+    expect(kinds(down.toasts)).toEqual(['saving', 'unsent']);
     expect(down.alarm.on).toBe(true);
   });
 
@@ -1753,10 +1755,16 @@ describe('the queue in storage.local’s 10 MB', () => {
     expect(q.reduce((n, e) => n + (e.blob?.length ?? 0), 0)).toBeLessThanOrEqual(BLOBS_KEEP_MAX);
   });
 
-  test('a save on its first send past ENTRIES_MAX isn’t kept first', async () => {
+  test('a save on its first send past ENTRIES_MAX isn’t kept first, and one that then can’t be sent says so, not that eight wait', async () => {
     const store = memoryStore();
     for (let i = 0; i < ENTRIES_MAX; i++) expect(await enqueue(store, entry(`s${i}`), 'sending')).toBe('queued');
-    expect(await enqueue(store, entry('one more'), 'sending')).toBe('full');
+    expect(await enqueue(store, entry('one more'), 'sending')).toBe('unkept');
+    // decision 119: the entries are full of saves on their first send, none of them waiting
+    const h = harness({ store, net: net({ publish: 'down' }).net });
+    expect(await ends(h.work.save(PAGE, 1, false))).toBe('ended');
+    expect(kinds(h.toasts)).toEqual(['saving', 'unsent']);
+    expect((await history(store))[0]).toMatchObject({ outcome: 'not sent, not kept' });
+    expect(await queued(store)).toHaveLength(ENTRIES_MAX);
   });
 
   test('a dozen big pages on their first send at once are all kept as they send, with room left for the rest', async () => {
@@ -1834,14 +1842,15 @@ describe('Undo pressed twice (a double click, Enter twice on the toast’s butto
   });
 });
 
-describe('a field no wrap could ever hold (F39, faster)', () => {
-  test('is left out at once, and the page’s other details stay', async () => {
+describe('a field no wrap could ever hold (F39, faster; cut to the phone’s limits since decision 119)', () => {
+  test('is cut at once to what the phone keeps, and the page’s other details stay', async () => {
     const started = Date.now();
     const { pending } = await prepare({ ...PAGE, title: 'T'.repeat(1_000_000), byline: 'A writer', site: `S${'😀'.repeat(300_000)}` }, ctx);
     const req = JSON.parse((await unwrap(user, pending.wrap)).rumor.content) as SaveRequest;
-    expect(req).toMatchObject({ title: null, site: null, byline: 'A writer', lang: 'en' });
+    // the site's hundredth code unit would open a surrogate pair, so the cut stops a unit short
+    expect(req).toMatchObject({ title: 'T'.repeat(FIELD_MAX.title), site: `S${'😀'.repeat(49)}`, byline: 'A writer', lang: 'en' });
     expect(req.html).not.toBeNull();
-    expect(pending.title).toBe('example.com');
+    expect(pending.title).toBe('T'.repeat(FIELD_MAX.title));
     expect(Date.now() - started).toBeLessThan(10_000);
   });
 

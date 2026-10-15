@@ -25,19 +25,26 @@ const HTTP = /^https?:\/\//i;
 const list = (l: unknown, scheme: RegExp) => Array.isArray(l) && l.length <= DEFAULTS_LIST_MAX && l.every((u) => at(u, scheme));
 
 /**
+ * The API's address as the extension joins paths to it (contract 6): one ending in a slash would put a double slash in
+ * every call, which the API answers with a redirect that each call then fails on quietly, so a copy with one is refused
+ * as any unusable copy is (decision 119).
+ */
+const apiBase = (u: unknown) => at(u, HTTP) && !(u as string).endsWith('/');
+
+/**
  * A copy the extension can use, else the kept one stays (contract 3.1: the last copy that parsed). The shape is checked
  * whole, since storage.local keeps it and Advanced lists it: lists that aren't lists of addresses would break the
  * options page, and long ones would fill the storage the queue needs.
  */
 function valid(d: Partial<Defaults> | null | undefined): d is Defaults {
   const o = d?.operator;
-  return !!d && d.v === 1 && !!o && at(o.relay, WS) && at(o.blossom, HTTP) && at(o.api, HTTP) && list(d.relays, WS) && list(d.mirrors, HTTP);
+  return !!d && d.v === 1 && !!o && at(o.relay, WS) && at(o.blossom, HTTP) && apiBase(o.api) && list(d.relays, WS) && list(d.mirrors, HTTP);
 }
 
 export interface RelayRow {
   url: string;
   label: string;
-  /** Kefli's own relay, the one this browser sends to, and the one a block in the browser stops. */
+  /** Kefli's own relay, the one this browser sends to. */
   operator: boolean;
 }
 

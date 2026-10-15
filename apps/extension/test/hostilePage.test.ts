@@ -6,7 +6,7 @@ import { CANONICAL_MAX, type SaveRequest } from '../../../packages/protocol/src/
 import { LocalSigner } from '../../../packages/protocol/src/signer';
 import { unwrap } from '../../../packages/protocol/src/wrap';
 import {
-  ADDRESS_UNWRAPPABLE, fromParse, GUARD_SAMPLE_CHARS, keepHtml, linkOnly, orAfter, PAGE_LIMITS, pageUrl, tooLargeToRead, unread, type PageSize, type Parsed,
+  ADDRESS_UNWRAPPABLE, FIELD_MAX, fitted, fromParse, GUARD_SAMPLE_CHARS, keepHtml, linkOnly, orAfter, PAGE_LIMITS, pageUrl, tooLargeToRead, unread, type PageSize, type Parsed,
 } from '../src/captured';
 import { baseOf, capture } from '../src/capture';
 import { webCrypto } from '../src/crypto';
@@ -168,6 +168,37 @@ describe('a canonical longer than the phone keeps is left out (CANONICAL_MAX)', 
     expect(req).toMatchObject({ url: amp, canonical: null, title: 'A story', site: 'News', byline: 'A writer', lang: 'en', hero });
     expect(req.html).not.toBeNull();
     expect(pending.hash).toBe(itemHash(amp));
+  });
+});
+
+describe("a capture's fields are cut to the phone's limits before the wrap (FIELD_MAX, decision 119)", () => {
+  const amp = 'https://amp.news.example/2026/10/story';
+  const hero = 'https://cdn.example/h.jpg';
+  /** The request as the phone reads it from the wrap. */
+  const sent = async (details: Partial<Parsed>) => JSON.parse((await unwrap(user, (await prepare(captured(amp, story, details), ctx)).pending.wrap)).rumor.content) as SaveRequest;
+
+  test('a 1,000-character title arrives cut to 300, with the picture, byline, site, language and text intact', async () => {
+    const req = await sent({ title: 'T'.repeat(1_000), site: 'News', byline: 'A writer', lang: 'en', hero });
+    expect(req.title).toBe('T'.repeat(FIELD_MAX.title));
+    expect(req).toMatchObject({ url: amp, canonical: story, site: 'News', byline: 'A writer', lang: 'en', hero });
+    expect(req.html).not.toBeNull();
+  });
+
+  test('a byline and a site are cut at theirs; a language tag or a picture address past its length is left out', async () => {
+    const req = await sent({ title: 'A story', site: 's'.repeat(101), byline: 'b'.repeat(201), lang: 'x'.repeat(36), hero: `https://cdn.example/${'h'.repeat(FIELD_MAX.hero)}.jpg` });
+    expect(req).toMatchObject({ title: 'A story', site: 's'.repeat(FIELD_MAX.site), byline: 'b'.repeat(FIELD_MAX.byline), lang: null, hero: null });
+    const kept = await sent({ title: 'A story', lang: 'x'.repeat(FIELD_MAX.lang), hero: `https://cdn.example/${'h'.repeat(FIELD_MAX.hero - 24)}.jpg` });
+    expect(kept.lang).toHaveLength(FIELD_MAX.lang);
+    expect(kept.hero).toHaveLength(FIELD_MAX.hero);
+  });
+
+  test('a cut never lands inside a surrogate pair, and trailing spaces go with the cut, as the phone cuts', () => {
+    const title = `${'t'.repeat(FIELD_MAX.title - 5)}    😀`;
+    expect(fitted({ ...linkOnly(amp), title }).title).toBe('t'.repeat(FIELD_MAX.title - 5));
+    const pair = `${'t'.repeat(FIELD_MAX.title - 1)}😀`;
+    expect(fitted({ ...linkOnly(amp), title: pair }).title).toBe('t'.repeat(FIELD_MAX.title - 1));
+    expect(fitted({ ...linkOnly(amp), title: ' '.repeat(FIELD_MAX.title + 1) }).title).toBeNull();
+    expect(fitted(linkOnly(amp))).toEqual(linkOnly(amp));
   });
 });
 

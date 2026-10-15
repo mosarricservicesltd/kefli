@@ -74,6 +74,35 @@ export function keptCanonical(url: string, canonical: string | null | undefined)
 }
 
 /**
+ * The longest the phone keeps of a request's fields, in UTF-16 code units (its FIELD_MAX, apps/mobile/src/services/page.ts,
+ * which fits a browser's fields as it fits its own parse's): a title, byline or site past its length is cut at it; a
+ * language tag or a picture address past it is left out, since a cut address is a wrong one. The picture's is the phone's
+ * limit on any address, the canonical's (CANONICAL_MAX). Applied before the wrap (decision 119): sent whole, a page's
+ * 1,000-character title took the wrap over its 8 KB, and the request lost its picture, byline, site and language to fit,
+ * only for the phone to cut the title to 300 anyway.
+ */
+export const FIELD_MAX = { title: 300, byline: 200, site: 100, lang: 35, hero: CANONICAL_MAX } as const;
+
+/** s cut to at most max code units, never inside a surrogate pair, and trimmed, as the phone cuts; null stays null. */
+function cut(s: string | null, max: number): string | null {
+  if (s === null || s.length <= max) return s;
+  const end = /[\uD800-\uDBFF]/.test(s[max - 1]) ? max - 1 : max;
+  return s.slice(0, end).trimEnd() || null;
+}
+
+/** s if it is at most max code units, else null. */
+const upTo = (s: string | null, max: number): string | null => (s !== null && s.length > max ? null : s);
+
+/** A capture's fields fitted to FIELD_MAX, as the phone will keep them. */
+export function fitted(c: Captured): Captured {
+  return {
+    ...c,
+    canonical: upTo(c.canonical, CANONICAL_MAX), title: cut(c.title, FIELD_MAX.title), site: cut(c.site, FIELD_MAX.site), byline: cut(c.byline, FIELD_MAX.byline),
+    lang: upTo(c.lang, FIELD_MAX.lang), hero: upTo(c.hero, FIELD_MAX.hero),
+  };
+}
+
+/**
  * How much of a page's Markdown the guard counts words in, when the page isn't readerable. 120 words of prose take a
  * kilobyte, of links several. The count runs in the page's own thread, and parses the Markdown before it counts. The
  * spoken projection after the parse is linear, so 3 MB of prose counts in a second, but the parse costs more than its

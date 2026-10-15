@@ -260,8 +260,9 @@ export function background(b: Browser) {
   /**
    * A save's first send, from the queue (F23). Storage that won't take the save (storage.local full, or broken) doesn't
    * stop it: it is sent all the same, and one that can't be sent is kept smaller if it can be, else refused as the ninth
-   * is, so it never sits at Saving… unkept. A settle that can't be written leaves the save queued as sending, for the
-   * next flush to send. The send may put the save under a new wrap (takePlace), which is the one kept.
+   * is when eight wait, and otherwise as neither sent nor kept (unkept, decision 119), so it never sits at Saving…
+   * unkept. A settle that can't be written leaves the save queued as sending, for the next flush to send. The send may
+   * put the save under a new wrap (takePlace), which is the one kept.
    */
   async function firstSend(pending: Pending, ctx: SaveContext): Promise<{ d: Delivery; s: Settled; online: boolean }> {
     const kept = await enqueue(b.store, pending, 'sending').then((r) => r === 'queued', () => false);
@@ -272,7 +273,7 @@ export function background(b: Browser) {
     if (d === 'sent') return { d, online, s: 'sent' };
     // with the mark a save whose HTML the operator refused carries in the queue, for whichever background sends it
     const smaller = { ...pending, blob: null, ...(textless.has(pending.id) ? { textless: true as const } : {}) };
-    const s = await enqueue(b.store, smaller, whyNot(online)).catch((): Settled => 'full');
+    const s = await enqueue(b.store, smaller, whyNot(online)).catch((): Settled => 'unkept');
     return { d, online, s };
   }
 
@@ -323,15 +324,19 @@ export function background(b: Browser) {
     if (where === 'popup') await b.tick();
   }
 
-  /** A save that didn't go at once: taken off the queue meanwhile, refused as the ninth, or waiting, and why. */
+  /**
+   * A save that didn't go at once: taken off the queue meanwhile, refused as the ninth, neither sent nor kept, or
+   * waiting, and why. The toast says only what is so (decision 119): that eight wait, with Options opening the
+   * Couldn't send list, only when they do; otherwise that this save couldn't be sent and isn't here, so save it again.
+   */
   async function waits(pending: Pending, where: Where, link: boolean, r: { s: Settled; online: boolean }): Promise<void> {
     await queueChanged();
     const base = toasted(pending, link);
     // taken off the queue while it was sending: Disconnect deleted it, as its confirm said
     if (r.s === 'gone') return toast(where, { ...base, kind: 'unqueued' });
-    if (r.s === 'full') {
-      await note(pending.id, 'queue full', link);
-      return toast(where, { ...base, kind: 'full' });
+    if (r.s === 'full' || r.s === 'unkept') {
+      await note(pending.id, r.s === 'full' ? 'queue full' : 'not sent, not kept', link);
+      return toast(where, { ...base, kind: r.s === 'full' ? 'full' : 'unsent' });
     }
     const why = whyNot(r.online);
     await note(pending.id, WAITING[why], link);

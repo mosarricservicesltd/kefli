@@ -62,12 +62,12 @@ export const ENTRIES_MAX = 64;
 export interface Queued extends Omit<Pending, (typeof PLAIN)[number]> {
   /**
    * Why it hasn't sent: the browser is offline (it waits, and counts on the badge), or Kefli's server couldn't be reached,
-   * or refused it, while online, listed as Couldn't send. 'blocked', something in the browser refusing it (spec 6,
-   * Brave), is read only from an entry an earlier build stored: what a page sees of a socket the browser blocks is a
-   * connection that failed, as over a network that is down, and the relay's own refusals were read as it (whyNot).
+   * or refused it, while online, listed as Couldn't send. An earlier build also stored 'blocked', something in the
+   * browser refusing it (Brave's Shields): what a page sees of a socket the browser blocks is a connection that failed,
+   * as over a network that is down, so the state is retired (decision 119) and such an entry is read as 'reach'.
    * 'sending' is a save whose first send hasn't ended; it is neither counted nor listed, and isn't one of the eight.
    */
-  why: 'sending' | 'offline' | 'reach' | 'blocked';
+  why: 'sending' | 'offline' | 'reach';
   stopped: boolean;
   /**
    * Its request goes without the HTML the operator refused (v1.12), so Copy debug info says it went with no text whichever
@@ -76,10 +76,15 @@ export interface Queued extends Omit<Pending, (typeof PLAIN)[number]> {
   textless?: true;
 }
 
+/** An entry as this build reads it: one an earlier build stored as blocked in this browser waits as couldn't reach. */
+function readable<T extends { why: string }>(e: T): T {
+  return e.why === 'blocked' ? { ...e, why: 'reach' } : e;
+}
+
 export async function queued(store: Store): Promise<Queued[]> {
   const kept = await store.get<Queued[]>(KEYS.queue);
   // anything else there (a value no version of the queue writes) would stop every save, flush and the options page
-  return Array.isArray(kept) ? kept.filter((e) => typeof e?.id === 'string').map(sealedOnly) : [];
+  return Array.isArray(kept) ? kept.filter((e) => typeof e?.id === 'string').map((e) => readable(sealedOnly(e))) : [];
 }
 
 /** Reads, changes in place and writes back the queue under its lock, so no change made meanwhile is overwritten (F41). */
@@ -102,12 +107,14 @@ function keepable(blob: string | null, q: Queued[], but?: string): string | null
 const taken = (q: Queued[], but?: string) => q.filter((e) => e.why !== 'sending' && e.id !== but).length;
 
 /**
- * 'full' when eight already wait (decision 31), or when ENTRIES_MAX entries are kept. A save going in for its first send
- * is otherwise always taken; settle decides.
+ * 'full' when eight already wait (decision 31), and 'unkept' when ENTRIES_MAX entries are kept, so the save is neither
+ * sent nor kept and its toast says so rather than that eight wait (decision 119). A save going in for its first send is
+ * otherwise always taken; settle decides.
  */
-export async function enqueue(store: Store, p: Pending, why: Queued['why']): Promise<'queued' | 'full'> {
+export async function enqueue(store: Store, p: Pending, why: Queued['why']): Promise<'queued' | 'full' | 'unkept'> {
   return changeQueue(store, (q) => {
-    if ((why !== 'sending' && taken(q) >= QUEUE_MAX) || q.length >= ENTRIES_MAX) return 'full';
+    if (why !== 'sending' && taken(q) >= QUEUE_MAX) return 'full';
+    if (q.length >= ENTRIES_MAX) return 'unkept';
     q.push({ ...sealedOnly(p), blob: keepable(p.blob, q), why, stopped: false });
     return 'queued';
   });
@@ -135,7 +142,12 @@ export async function dequeue(store: Store, id: string): Promise<boolean> {
   });
 }
 
-export type Settled = 'sent' | 'queued' | 'full' | 'gone';
+/**
+ * What became of a save that didn't go at once: it waits; eight already wait, so it was refused; it was neither sent nor
+ * kept, by storage that refused it or couldn't be read, or ENTRIES_MAX entries already kept (unkept); or it had already
+ * left the queue.
+ */
+export type Settled = 'sent' | 'queued' | 'full' | 'unkept' | 'gone';
 
 /**
  * What a send did to its entry: a sent one leaves; one that didn't send counts an attempt, says why and stops at 200.
