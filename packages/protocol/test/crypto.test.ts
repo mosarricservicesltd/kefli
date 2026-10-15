@@ -34,7 +34,7 @@ describe('keys (C§2)', () => {
     }
     // each mnemonic's seed is 2,048 rounds of PBKDF2-SHA512 in plain JavaScript in nostr-tools, and its key five steps
     // of secp256k1 there too: 0.6 s for the three on an idle machine, past Jest's default 5 s on one running every suite
-    // under coverage with others. The work is the point, so the limit is generous instead
+    // under coverage with others. The comparison needs that work, so its limit is generous instead
   }, 60_000);
 
   test('typed words are cleaned, and bad ones refused', () => {
