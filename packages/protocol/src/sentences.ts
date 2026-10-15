@@ -36,7 +36,8 @@ const ABBREVIATIONS = new Set([
  * The longest a sentence runs, in characters, before it is split at a word: the system voice takes at most 4,000
  * characters at a time (Android's getMaxSpeechInputLength), and the rest of a longer sentence went unspoken. A block
  * that never ends a sentence (a PDF's paragraph without a stop, a long list in one line, a code block) is read whole
- * this way. A single word longer than this stays one sentence.
+ * this way. A single word longer than this stays one sentence, and kefli-voice speaks it a piece at a time, as it does
+ * any sentence longer than the engine takes at once (Pieces, in its VoiceAudio.kt), so none of it goes unheard.
  */
 export const MAX_SENTENCE_CHARS = 3_000;
 
