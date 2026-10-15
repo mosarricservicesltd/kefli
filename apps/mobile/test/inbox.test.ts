@@ -816,8 +816,8 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
       if (refuse-- > 0) throw new Error('disk full');
       return stage(sha, bytes);
     };
-    // one retry stays as it was, the other and the new wrap go on
-    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 2 });
+    // one retry is kept as a blob that failed, the other and the new wrap go on
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 2, failed_blob: 1 });
     const left = w.db.all<{ hash: string }>("SELECT hash FROM inbox_seen WHERE outcome = 'failed_blob'");
     expect(left).toHaveLength(1);
     expect(w.item(left[0].hash)?.text_state).toBe('fetching');
@@ -827,30 +827,63 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     expect(['a', 'b'].map((p) => w.item(itemHash(`https://example.com/${p}`))?.text_state)).toEqual(['cached', 'cached']);
   });
 
-  test('a new wrap whose taking fails part way waits for the next drain, and is filed as not ours after a week (F3)', async () => {
+  test('a new wrap whose taking fails part way before its save is made waits for the next drain, and is filed as not ours after a week (F3)', async () => {
     const w = world();
-    const { html } = await w.withHtml('<h1>Full disk</h1>');
-    await w.send(w.request({ html }));
-    const stage = w.ports.stage;
-    w.ports.stage = () => {
-      throw new Error('disk full');
+    await w.send(w.request({ html: (await w.withHtml('<h1>No targets</h1>')).html }));
+    const targets = w.ports.targets;
+    w.ports.targets = async () => {
+      throw new Error('database locked');
     };
     expect(await drainInbox(w.ports, w.owner)).toEqual({});
     expect(w.db.get("SELECT 1 FROM inbox_seen WHERE outcome != 'waiting'")).toBeUndefined();
     expect(w.db.get("SELECT 1 FROM sync_cursors WHERE stream = 'inbox'")).toBeUndefined();
-    w.ports.stage = stage;
-    expect(await drainInbox(w.ports, w.owner)).toEqual({ merged: 1 });
+    expect(w.item(itemHash('https://example.com/a'))).toBeUndefined();
+    w.ports.targets = targets;
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
     expect(w.item(itemHash('https://example.com/a'))?.text_state).toBe('cached');
 
     const late = world();
     await late.send(late.request({ html: (await late.withHtml('<h1>Never</h1>')).html }));
-    late.ports.stage = () => {
-      throw new Error('disk full');
+    late.ports.targets = async () => {
+      throw new Error('database locked');
     };
     expect(await drainInbox(late.ports, late.owner)).toEqual({});
     late.tick(8 * 86_400);
     expect(await drainInbox(late.ports, late.owner)).toEqual({ ignored_foreign: 1 });
     expect(late.db.get("SELECT 1 AS n FROM sync_cursors WHERE stream = 'inbox'")).toEqual({ n: 1 });
+  });
+
+  test('a capture whose taking fails part way once its save is made is a blob that failed: read again, then its page fetched', async () => {
+    const w = world();
+    await w.send(w.request({ html: (await w.withHtml('<h1>Full disk</h1>')).html }));
+    const stage = w.ports.stage;
+    w.ports.stage = () => {
+      throw new Error('disk full');
+    };
+    // the save is made and waits for its text; the capture is kept to be read again, so the cursor moves on
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_blob: 1 });
+    expect(w.item(itemHash('https://example.com/a'))?.text_state).toBe('fetching');
+    expect(w.db.get("SELECT 1 AS n FROM sync_cursors WHERE stream = 'inbox'")).toEqual({ n: 1 });
+    w.ports.stage = stage;
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    expect(w.item(itemHash('https://example.com/a'))?.text_state).toBe('cached');
+
+    // a disk that keeps refusing: past the week a wrap may wait, it is still this save's capture, never someone else's
+    // message, and once its 14 days are past the save fetches its page, rather than staying at "Getting the text…"
+    const late = world();
+    await late.send(late.request({ html: (await late.withHtml('<h1>Never</h1>')).html }));
+    late.ports.stage = () => {
+      throw new Error('disk full');
+    };
+    expect(await drainInbox(late.ports, late.owner)).toEqual({ failed_blob: 1 });
+    late.tick(8 * 86_400);
+    expect(await drainInbox(late.ports, late.owner)).toEqual({ failed_blob: 1 });
+    expect(late.item(itemHash('https://example.com/a'))?.text_state).toBe('fetching');
+    late.tick(7 * 86_400);
+    expect(await drainInbox(late.ports, late.owner)).toEqual({ created: 1 });
+    expect(late.item(itemHash('https://example.com/a'))?.text_state).toBe('queued');
+    expect(pendingParses(late.db, late.owner).map((p) => p.url)).toEqual(['https://example.com/a']);
+    expect(late.ops()).toContain('delete_wrap');
   });
 
   test("a relay that can't be reached leaves the cursor where it was, and the retries still run", async () => {
@@ -978,7 +1011,8 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
       return targets();
     };
     await w.send(w.request({ url: 'https://example.com/b' }));
-    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    // the retry is kept as a blob that failed again, and the new save arrives
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1, failed_blob: 1 });
     expect(w.item(itemHash('https://example.com/b'))).toBeDefined();
     expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
     expect(w.item(itemHash('https://example.com/a'))?.text_state).toBe('cached');

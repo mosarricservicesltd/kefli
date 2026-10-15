@@ -8,11 +8,12 @@
 // capped and checked against its sha256: Readability's content HTML, which the canonical Markdown conversion
 // (kefliMarkdown) turns into the save's text, with the title and the rest as the extension read them; a blob that can't be read is failed_blob and
 // tried again from wrap_json at each drain, for the save that drain made as it stands by then, and so is one the parser
-// couldn't convert because its renderer had gone; past the blob's 14 days the save fetches its page instead. One the
-// operator answers 404 for is gone (v1.12) and one that can't be this capture is given up: either way the save fetches
-// its page at once. Only created, merged and unarchived queue delete_wrap, and with it the delete of the request's inbox blob
-// (v1.12); every other wrap is left, so a phone without the record yet can't remove a save another phone still
-// needs. A request whose save waits on its delete's Undo waits for the next drain.
+// couldn't convert because its renderer had gone, or whose taking failed part way once its save was made; past the
+// blob's 14 days the save fetches its page instead. One the operator answers 404 for is gone (v1.12) and one that
+// can't be this capture is given up: either way the save fetches its page at once. Only created, merged and
+// unarchived queue delete_wrap, and with it the delete of the request's inbox blob (v1.12); every other wrap is left,
+// so a phone without the record yet can't remove a save another phone still needs. A request whose save waits on its
+// delete's Undo waits for the next drain.
 //
 // RULED: a request naming another server for its HTML is taken without it, and the page is fetched instead, so a
 // save from a connected browser is never lost to a bad field.
@@ -195,12 +196,22 @@ async function converted(p: InboxPorts, owner: string, item: Pending, r: SaveReq
  * A capture the parser couldn't convert, its renderer gone (killed for memory, or never loaded), failed in the same
  * way: kept and read again at each drain, and once its 14 days are past its save fetches its page instead (blobOrPage),
  * so the save ends parsed or failed with its link. Thrown, as it was, it held its wrap a week, then the wrap was filed
- * as someone else's message and its save stayed at "Getting the text…" for good. A save deleted while its capture was
- * read, its delete waiting on Undo, takes nothing from it (data/pending), so the read counts as failed: the wrap is
- * kept with its capture for the retry, which waits with the save (retake). Closed then, with its capture deleted, it
- * left a save shown again at "Getting the text…" for good.
+ * as someone else's message and its save stayed at "Getting the text…" for good; so did one whose taking failed part
+ * way once its save was made (a full disk at the stage, the database), which fails the same way now. A save deleted
+ * while its capture was read, its delete waiting on Undo, takes nothing from it (data/pending), so the read counts as
+ * failed: the wrap is kept with its capture for the retry, which waits with the save (retake). Closed then, with its
+ * capture deleted, it left a save shown again at "Getting the text…" for good.
  */
 async function textFromBlob(p: InboxPorts, owner: string, hash: string, r: SaveRequest, drain: Drain): Promise<BlobRead> {
+  try {
+    return await captureText(p, owner, hash, r, drain);
+  } catch {
+    return FAILED;
+  }
+}
+
+/** The capture read and converted for its save (textFromBlob), which throws when a part of the phone fails part way. */
+async function captureText(p: InboxPorts, owner: string, hash: string, r: SaveRequest, drain: Drain): Promise<BlobRead> {
   if (drain.parserGone) return FAILED;
   const read = await readCapture(p, owner, hash, r, drain);
   if (read.kind !== 'html') return read;
@@ -444,9 +455,10 @@ function notOurs(p: InboxPorts, owner: string, w: NostrEvent): Outcome {
 /**
  * One wrap opened and judged (4.7), or held for the next drain. The signer couldn't answer (out of sight, timed out,
  * declined): the wrap waits, and unless the signer is still answering (stillAnswering), the drain's other wraps wait
- * unasked. Taking it failed part way (a signer, the network, the database), or its save waits on its delete's Undo:
- * it is tried again at the next drain. Either way, one still waiting a week after its first try is filed as not ours,
- * and so is one this key doesn't open.
+ * unasked. Taking it failed part way before its save was made (the network, the database), or its save waits on its
+ * delete's Undo: it is tried again at the next drain; once the save is made, a capture that fails part way is a blob
+ * that failed (textFromBlob). Either way, one still waiting a week after its first try is filed as not ours, and so is
+ * one this key doesn't open.
  */
 async function openOne(p: InboxPorts, owner: string, w: NostrEvent, blossom: string, drain: Drain): Promise<Outcome | typeof HELD> {
   drain.opens++;
