@@ -22,7 +22,8 @@ relay {
     # The most events one filter is answered with. The phone's inbox reads its gift wraps 500 at a time and takes an
     # answer of fewer than 500 as the whole window (apps/mobile/src/services/inbox.ts): set lower, a full answer would
     # pass for the whole window and the browser saves beneath it would be missed. 500 is strfry's own default, set here
-    # so that a later strfry's default can't change it.
+    # so that a later strfry's default can't change it. It belongs in this block: strfry passes over the key anywhere
+    # else without a word, and test.sh checks that strfry reads it here.
     maxFilterLimit = 500
 
     auth {
