@@ -270,6 +270,29 @@ describe('a nostr user’s deletion (contract 4.7)', () => {
     expect(down.lists.map((e) => e.tags)).toEqual([[['r', 'wss://mine']], [['server', 'https://my.blossom']]]);
   });
 
+  test('a relay holding a newer list from another app, or one that keeps no lists, is confirmed by its answers to the kind 5s alone', async () => {
+    const w = world();
+    w.db.run("UPDATE identities SET provider = 'nip55'");
+    w.db.run("INSERT INTO relays (url, owner, read, write, source, added_by_app) VALUES ('wss://mine', ?, 1, 0, 'user', 0)", w.pk);
+    w.db.run("INSERT INTO servers (url, owner, role, in_10063, added_by_app) VALUES ('https://my.blossom', ?, 'user', 1, 0)", w.pk);
+    const lists: string[] = [];
+    const p: DelPorts = {
+      ...w.p,
+      publish: async (relay, e) => {
+        if (e.kind !== 5) lists.push(`${relay} ${e.kind}`);
+        // another app's 10002, newer than the rewrite signed before the deletion ran, reached this relay meanwhile
+        if (relay === 'ws://a' && e.kind === 10002) return { ok: false, reason: 'replaced: have newer event' };
+        if (relay === 'ws://b' && e.kind !== 5) return { ok: false, reason: 'blocked: lists are not kept here' };
+        return w.p.publish(relay, e);
+      },
+    };
+    let last: Progress | null = null;
+    expect(await deleteEverything(p, (pr) => (last = pr))).toBe('done');
+    expect(last!.others).toMatchObject({ 'ws://a': 'done', 'ws://b': 'done' });
+    // and the other list still went to the relay that held a newer one of the first
+    expect(lists).toEqual(expect.arrayContaining(['ws://a 10002', 'ws://a 10063', 'ws://b 10002', 'ws://b 10063']));
+  });
+
   test('a list of theirs too long for one event is left as it is; the deletion and the other list go on', async () => {
     const w = world();
     const huge = Array.from({ length: 1000 }, (_, i) => ['r', `wss://relay-number-${i}.example`]);

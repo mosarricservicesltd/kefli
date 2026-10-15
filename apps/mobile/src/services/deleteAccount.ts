@@ -19,7 +19,7 @@ import type { SqlDb } from '../data/db';
 import { deletesOwed, itemAddresses, newestVersion } from '../data/libraryKey';
 import { bare, indexerRelays, nextListTime, relayEntries, relayListTags, serverListTags } from '../data/lists';
 import { SERVER_TIMEOUT_MS, apiFetch, serverFetch, serverHops } from '../net/http';
-import type { RelayAnswer } from './send';
+import { holdsAlready, type RelayAnswer } from './send';
 import { pageStream, takeNewerLists, type Filter } from './sync';
 
 export type DelPorts = {
@@ -312,11 +312,15 @@ export async function signDeletion(p: DelPorts): Promise<Signed> {
   return { wraps, items, lists: [deletion], empties: await emptyLists(p, deletion), ...extra };
 }
 
-/** Sends every event to a relay; true when it answered OK to each (a relay that refuses one hasn't confirmed). */
+/**
+ * Sends every event to a relay; true when it took each, or holds it, a newer version or its deletion already
+ * (send.ts holdsAlready, C§3.1): a relay that refuses one hasn't confirmed. Read as refusals, as they were, strfry's
+ * replaced: and deleted: had a relay that took every kind 5 reported as not confirming the deletion.
+ */
 async function sendAll(p: DelPorts, relay: string, events: NostrEvent[]): Promise<boolean> {
   for (const e of events) {
     const a = await p.publish(relay, e);
-    if (!a.ok && !/^duplicate:/.test(a.reason)) return false;
+    if (!a.ok && !holdsAlready(a.reason)) return false;
   }
   return true;
 }
@@ -353,10 +357,19 @@ async function stepOperator(p: DelPorts, owner: string, signed: Signed): Promise
   });
 }
 
+/**
+ * One other server's part of step 2. A relay is confirmed by its answers to the kind 5s alone (C§4.7), a generated
+ * identity's lists' deletion among them; a nostr user's lists republished go after them, as a generated identity's
+ * emptied lists do, their answers counting for nothing. Counted, a relay that took every kind 5 but turned a list away,
+ * holding a newer one from another app or keeping no lists, was named as not having confirmed the deletion, and the
+ * other list never reached it.
+ */
 async function stepOther(p: DelPorts, owner: string, t: Target, signed: Signed): Promise<boolean> {
   if (t.kind === 'server') return withinMinute(p, () => deleteBlobs(p, t.url, allBlobs(p, owner, signed)));
-  const confirmed = await withinMinute(p, () => sendAll(p, t.url, [...signed.items, ...signed.lists]));
-  await Promise.all((signed.empties ?? []).map((e) => p.publish(t.url, e).catch(() => undefined)));
+  const kind5s = [...signed.items, ...signed.lists].filter((e) => e.kind === KIND.deletion);
+  const after = [...signed.lists.filter((e) => e.kind !== KIND.deletion), ...(signed.empties ?? [])];
+  const confirmed = await withinMinute(p, () => sendAll(p, t.url, kind5s));
+  await Promise.all(after.map((e) => p.publish(t.url, e).catch(() => undefined)));
   return confirmed;
 }
 
