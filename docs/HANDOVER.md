@@ -164,6 +164,10 @@ Richard asked for monitoring and the uptime probe. Backend spec 3.9 wanted Prome
 
 `docs/store/google-play.md` has the Play Console entries field by field, as the Chrome, Firefox and Edge listings do: the account (register as the organisation, since a personal account must run a 14-day closed test with 12 testers first), Play App Signing from the shared release key through PEPK, the bundle build, the store listing text, the policy declarations, the data safety answers (the library's key, the browsers' keys and the encrypted saves, collected and deletable, nothing shared), the foreground-service declaration and its video, the deletion page, and the internal-testing-first release. `apps/mobile/scripts/play-screenshots.mjs` makes the 9:16 screenshots Play takes from the Pixel's 1080 × 2424 captures (`apps/mobile/store/play/`). The Pixel screenshots, and the website's app images made from them, are retaken after every build a listing should show.
 
+## Version 1.0.0 (15 October 2026)
+
+Richard decided that the build the beta tests is the one launch promotes, so everything a person sees is 1.0.0 from here: the app (`app.json`, versionCode 9), the extension (its store packages and the self-hosted beta), Zapstore's release and the website's download label, which drops "Beta". The internal packages, the contract (1.12) and the design tokens keep their own numbers. The 0.1.2 store packages built earlier the same day are superseded by 1.0.0's.
+
 ## For Richard to decide
 
 Every question the reports leave for Richard, with the options they give and what they recommend.

@@ -1,6 +1,6 @@
 # Google Play listing
 
-The Kefli app's Play Console entries (mobile spec 10, "Play Console"), field by field as the console asks for them, with the answers the app's own behaviour gives. Written on 15 October 2026 against app 0.0.8 (contract 1.12 on the `hostile-saves-and-fair-use` branch); the first upload is the release built from the merged commit. The Chrome, Firefox and Edge listings are beside this file and share its wording where the stores allow.
+The Kefli app's Play Console entries (mobile spec 10, "Play Console"), field by field as the console asks for them, with the answers the app's own behaviour gives. Written on 15 October 2026 against app 1.0.0 (contract 1.12 on the `hostile-saves-and-fair-use` branch); the first upload is the release built from the merged commit, and the beta tests that same build, which launch promotes. The Chrome, Firefox and Edge listings are beside this file and share its wording where the stores allow.
 
 ## Before the console
 
@@ -8,7 +8,7 @@ The Kefli app's Play Console entries (mobile spec 10, "Play Console"), field by 
 
 **App signing.** Every channel shares one signing key, `~/keystores/kefli-release.keystore` (alias `kefli`, SHA-256 `94:13:53:66:…:C9:79`), so an APK from Zapstore or kefli.app updates a Play install and the reverse. Play App Signing must therefore use that key, not one Google makes: when the console first asks, choose to export and upload a key from a Java keystore, run its PEPK tool on `kefli-release.keystore`, and upload the result. The same keystore then serves as the upload key. Nothing on the box or in the repository holds the keystore or its passwords (`KEFLI_RELEASE_*` in `~/.gradle/gradle.properties`).
 
-**The bundle.** Play takes an Android App Bundle. From `apps/mobile`, with `KEFLI_DEFAULTS_URL=https://api.kefli.app/defaults.json` set as `build-release.sh` sets it, `npx expo prebuild --platform android --clean` and then `./gradlew bundleRelease` in `android/`; the release signing config (`plugins/with-release-signing.js`) applies to the bundle as to the APK. The bundle is `android/app/build/outputs/bundle/release/app-release.aab`. `versionCode` must rise with every upload (`app.json`, now 8); `version` is what the listing shows.
+**The bundle.** Play takes an Android App Bundle. From `apps/mobile`, with `KEFLI_DEFAULTS_URL=https://api.kefli.app/defaults.json` set as `build-release.sh` sets it, `npx expo prebuild --platform android --clean` and then `./gradlew bundleRelease` in `android/`; the release signing config (`plugins/with-release-signing.js`) applies to the bundle as to the APK. The bundle is `android/app/build/outputs/bundle/release/app-release.aab`. `versionCode` must rise with every upload (`app.json`, now 9); `version` is what the listing shows.
 
 **Screenshots.** The console takes phone screenshots at 16:9 or 9:16 only, each side 320 to 3,840 px, and the Pixel 10a's are 1080 × 2424. `node apps/mobile/scripts/play-screenshots.mjs` fits each of `apps/mobile/store/screenshots/*.png`, whole, onto a 1080 × 1920 canvas in the screenshot's own ground colour, into `apps/mobile/store/play/`. Retake the Pixel screenshots after every build the listing should show (they are the running app in Android's demo mode), then run the script again; the website's four app images come from the same captures (`apps/web/public/media/SOURCES.md`).
 
@@ -130,7 +130,7 @@ The console's deletion URL is https://kefli.app/delete-account/. The app deletes
 
 ## Releases
 
-1. **Internal testing** first, with Richard's own account and any tester's Google account on its list: upload the bundle, set the release name to the version (`0.0.9`), and paste the release notes. The internal track needs no review and gives a Play-signed install to compare against the Zapstore and website APKs (the signature must match, or the three can't update one another).
+1. **Internal testing** first, with Richard's own account and any tester's Google account on its list: upload the bundle, set the release name to the version (`1.0.0`), and paste the release notes. The internal track needs no review and gives a Play-signed install to compare against the Zapstore and website APKs (the signature must match, or the three can't update one another).
 2. **Production** when the checklist's Pixel checks and the beta are done: the same bundle promoted, countries all, and the release reviewed by Google, which takes hours to days for a first submission.
 
 **Release notes** (500 characters at most), for the first release:
