@@ -1,7 +1,8 @@
 // The Saved sheet (mobile spec 5.4, FD 38, FD 39, FD 78, FD 89; prototype share, share-undone, share-again,
-// share-offline, share-nolink, share-checking, share-noarticle, share-embedfail), on the share activity's own
-// surface over the app shared from. The save runs as the sheet rises: it says Saved at once, its cover drawing
-// from the shared address, while the page is fetched behind it; an X post is checked first, with nothing written.
+// share-offline, share-nolink, share-checking, share-noarticle, share-embedfail, share-failed, share-full,
+// share-daily), on the share activity's own surface over the app shared from. The save runs as the sheet rises: it
+// says Saved at once, its cover drawing from the shared address, while the page is fetched behind it; an X post is
+// checked first, with nothing written.
 //
 // - Saved: Undo and Read now; the countdown, getRecommendedTimeoutMillis(4000) along the top edge in the
 //   article's ink, then back to the host app. It pauses while touched and never runs with a screen reader on.

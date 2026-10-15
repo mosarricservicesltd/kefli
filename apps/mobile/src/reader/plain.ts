@@ -3,7 +3,8 @@
 // Paragraphs run between blank lines, and a list item starts one; # headings and fenced code keep their kind, code
 // as written; a line's indentation and quote markers go; a backslash escape reads as the character it escapes; a
 // line that is only an image stays an image. One pass over the lines with nothing that backtracks, so its time is
-// linear whatever the Markdown holds. Words are the spoken text's whitespace-separated runs, as in C§7.
+// linear whatever the Markdown holds. Words are the spoken text's whitespace-separated runs, as C§4.2 counts them for
+// a text read plain.
 import type { Sentence } from '@kefli/protocol';
 import type { Block } from './blocks';
 import { LIMITS } from './limits';
