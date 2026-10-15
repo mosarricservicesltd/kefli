@@ -11,10 +11,13 @@
 // to a loopback or link-local address; and since each hop followed here is a fresh request, which expo/fetch answers
 // from the phone's own files when its address begins http://filesystem.local (fromFiles), such a host is refused at
 // every hop as at the first (services/page.ts fetchable). A fetch that follows redirects anyway (React Native's own,
-// under EXPO_PUBLIC_USE_RN_FETCH) has its answer refused when it says it ended somewhere a hop couldn't go. A text's
-// blob servers, the inbox's and Kefli's API take the same hops (serverHops), so a mirror, a server another app named
-// or a save's text.servers can't send the phone into its own network either; and a hop to another origin is asked
-// without the request's Authorization, as OkHttp's own following and browsers leave it out (RFC 9110, 15.4).
+// under EXPO_PUBLIC_USE_RN_FETCH) has its answer refused when it says it ended somewhere a hop couldn't go. Every
+// request the phone makes to a server takes the same hops (serverHops): a text's blob servers, the inbox's, the
+// mirrors, and Kefli's API in every call (the outbox's, Delete my data's, the move's, Connect's and pairing a phone's),
+// through open or, for calls written against a fetch (the protocol's Blossom calls), serverFetch; so a mirror, a server
+// another app named or a save's text.servers can't send the phone into its own network either. A hop to another origin
+// is asked without the request's Authorization, as OkHttp's own following and browsers leave it out (RFC 9110, 15.4),
+// and a 303, or a 301 or 302 to a POST, is followed with a GET and no body, as the Fetch Standard has it.
 //
 // Cleartext (7.1): release builds allow none, and OkHttp refuses plain http before it connects. That refusal fails
 // what was asked for (Blocked); read as the network, as it was, it left a save waiting for good. A read that follows
@@ -158,19 +161,25 @@ function failure(e: unknown, late: boolean): unknown {
   return CLEARTEXT.test(String((e as Error | undefined)?.message ?? '')) ? new Blocked('cleartext') : e;
 }
 
-// an http address's host and port as written, with no user info: a string, as the code gate misreads regex literals
-const PLAIN_HOST = new RegExp('^http://(?:[^@/?#]*@)?([^/?#]*)', 'i');
+// an http address as written up to its path: its user info, its host (an IPv6 one in its brackets) and any port; a
+// string, as the code gate misreads regex literals
+const PLAIN_AUTHORITY = new RegExp('^http://([^@/?#]*@)?(\\[[^\\]/?#]*\\]|[^:/?#]+)(?::([^/?#]*))?', 'i');
+// a port as written that the URL parser reads as http's own, and drops: 80, with any leading zeros, or none at all
+const HTTP_PORT = new RegExp('^(?:0*80)?$');
 
 /**
  * RULED (services/save.ts, for shares): a public http:// address is fetched over https, as browsers now try first,
- * since release builds allow no cleartext. One with a port, and a local one (the local stack's own pages), keep their
- * http. A share's page, and a pending parse's, are asked over https alone, so one with no https waits as any page
- * that can't be had does, and the save keeps the address it has until its page parses. The hops after it, and an
- * article's images, fall back to the address itself (asked).
+ * since release builds allow no cleartext. One with another port, and a local one (the local stack's own pages), keep
+ * their http. http's own port written out (http://host:80/) is no port, as the URL parser reads it: the address goes
+ * over https without it, where kept as a port its save failed at once on cleartext. A share's page, and a pending
+ * parse's, are asked over https alone, so one with no https waits as any page that can't be had does, and the save
+ * keeps the address it has until its page parses. The hops after it, and an article's images, fall back to the
+ * address itself (asked).
  */
 export function overHttps(url: string): string {
-  const host = PLAIN_HOST.exec(url)?.[1];
-  return host && !host.includes(':') && isPublicWebUrl(url) ? `https://${url.slice('http://'.length)}` : url;
+  const m = PLAIN_AUTHORITY.exec(url);
+  if (!m || !HTTP_PORT.test(m[3] ?? '') || !isPublicWebUrl(url)) return url;
+  return `https://${m[1] ?? ''}${m[2]}${url.slice(m[0].length)}`;
 }
 
 /** The request a read is on: its controller changes with each hop, and the deadline lets go of the one current. */
@@ -210,14 +219,33 @@ function originOf(url: string): string {
 }
 
 /**
- * The request as a hop from at to next asks it: an Authorization header goes no further than its own origin (RFC 9110,
- * 15.4), as OkHttp's own following and browsers drop it, so a redirect can't hand a NIP-98 header to another server.
+ * Whether a redirect of this status turns a request of this method into a GET (the Fetch Standard, HTTP-redirect fetch):
+ * a 303 does so to anything but a GET or a HEAD, and a 301 or 302 to a POST; a 307 or 308 never does.
  */
-function onwards(init: RequestInit, at: string, next: string): RequestInit {
+function asGet(method: string, status: number): boolean {
+  if (status === 303) return method !== 'GET' && method !== 'HEAD';
+  return (status === 301 || status === 302) && method === 'POST';
+}
+
+// the headers that describe a request's body, which go when the body does (the Fetch Standard's request-body-header
+// names)
+const BODY_HEADERS = ['content-encoding', 'content-language', 'content-location', 'content-type'];
+
+/**
+ * The request as a hop from at to next asks it, after an answer of this status. An Authorization header goes no
+ * further than its own origin (RFC 9110, 15.4), as OkHttp's own following and browsers drop it, so a redirect can't
+ * hand a NIP-98 header to another server. A redirect that turns the request into a GET (asGet) asks without the body
+ * or the headers that describe it, as browsers do: sent again, a POST to Kefli's API answered 303 went on as a POST.
+ */
+function onwards(init: RequestInit, status: number, at: string, next: string): RequestInit {
   const headers = new Headers(init.headers);
-  if (!headers.has('authorization') || originOf(at) === originOf(next)) return init;
-  headers.delete('authorization');
-  return { ...init, headers };
+  const away = headers.has('authorization') && originOf(at) !== originOf(next);
+  const get = asGet((init.method ?? 'GET').toUpperCase(), status);
+  if (!away && !get) return init;
+  if (away) headers.delete('authorization');
+  if (!get) return { ...init, headers };
+  for (const name of BODY_HEADERS) headers.delete(name);
+  return { ...init, method: 'GET', headers, body: null };
 }
 
 /** The answer at the end of the redirects, each hop asked for afresh under the line; without hops, the fetch's own. */
@@ -236,7 +264,7 @@ async function arrive(f: typeof fetch, url: string, init: RequestInit, line: Lin
     if (!hops!.allow(next)) throw new Blocked('redirect');
     if (line.late) throw new TimedOut();
     line.ctl = new AbortController();
-    ask = onwards(ask, got.at, next);
+    ask = onwards(ask, got.res.status, got.at, next);
     from = got.at;
     at = next;
   }
@@ -322,4 +350,105 @@ async function body(res: Response, maxBytes: number): Promise<Uint8Array> {
     at += c.byteLength;
   }
   return out;
+}
+
+/**
+ * How long a request to a server has for its whole answer, headers and body, when it sends little: Kefli's API in
+ * every call, as GET /account has (services/account.ts ACCOUNT_TIMEOUT_MS), and a blob's deletion. expo/fetch's
+ * OkHttp client has no timeout of its own, so without one a server that takes the connection and never answers held
+ * what asked it for good: the outbox's run, or Delete my data, whose screen swallows Back while it runs.
+ */
+export const SERVER_TIMEOUT_MS = 15_000;
+
+/**
+ * The deadline for a request that moves a blob before it is answered, an upload or a mirror's copy: a server's 15 s
+ * and a second more for every 32 KB, as the extension gives its uploads (its save.ts uploadTimeoutMs), so the largest
+ * text still has a slow uplink's time.
+ */
+export function movingMs(bytes: number): number {
+  return SERVER_TIMEOUT_MS + Math.ceil(bytes / 32_768) * 1000;
+}
+
+/**
+ * The most of a server's answer read, unless the caller reads blobs: a Blossom descriptor or refusal and every answer
+ * of Kefli's API are a few hundred bytes, as the extension reads them too (its save.ts ANSWER_MAX_BYTES).
+ */
+export const ANSWER_MAX_BYTES = 65_536;
+
+/** How a request to a server is made: the hops its redirects may take, its deadline, and the most of its body read. */
+export type ServerAsk = { hops: Hops; timeoutMs: number; maxBytes?: number };
+
+/**
+ * A server's answer with its body read already (serverFetch): the part of Response the phone's calls use, its status
+ * and headers as the last hop sent them and its body as bytes, text or JSON, as often as asked. A body past the cap
+ * fails each read of it (TooLarge), the status and headers still there, so a call that needs only the status has it.
+ * Built here rather than as a Response: React Native's own decodes a body of bytes as Latin-1.
+ */
+class Answer {
+  constructor(private readonly res: Response, readonly url: string, private readonly got: Uint8Array | TooLarge) {}
+
+  get status(): number {
+    return this.res.status;
+  }
+
+  get ok(): boolean {
+    return this.status >= 200 && 300 > this.status;
+  }
+
+  get statusText(): string {
+    return this.res.statusText;
+  }
+
+  get headers(): Headers {
+    return this.res.headers;
+  }
+
+  async bytes(): Promise<Uint8Array> {
+    if (this.got instanceof TooLarge) throw this.got;
+    return this.got.slice();
+  }
+
+  async arrayBuffer(): Promise<ArrayBuffer> {
+    return (await this.bytes()).buffer as ArrayBuffer;
+  }
+
+  async text(): Promise<string> {
+    return new TextDecoder().decode(await this.bytes());
+  }
+
+  async json(): Promise<unknown> {
+    return JSON.parse(await this.text());
+  }
+}
+
+/** The answer o opened, its body read within o's deadline, up to maxBytes; past them, kept as the body's failure. */
+async function answered(o: Opened, maxBytes: number): Promise<Answer> {
+  try {
+    return new Answer(o.res, o.url, await o.read(maxBytes));
+  } catch (e) {
+    if (e instanceof TooLarge) return new Answer(o.res, o.url, e);
+    throw e;
+  }
+}
+
+/** The address a server is asked at: the calls pass a string. A Request's own method, headers and body aren't read here. */
+function addressOf(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input;
+  if (input instanceof URL) return input.href;
+  throw new TypeError('a server is asked by its address');
+}
+
+/**
+ * fetch for a server, for calls written against a fetch (the protocol's uploadBlob, mirrorBlob and deleteBlob, and the
+ * phone's own to Kefli's API): no cookies, each redirect followed here with its address checked first (open, with
+ * ask.hops), and the whole answer, headers and body, had within ask.timeoutMs, at most ask.maxBytes of the body kept. A
+ * hop where none may go rejects (Blocked), as the deadline (TimedOut) and the network do, and each call reads all three
+ * as the server not answering; past the cap, only the body's reads fail.
+ */
+export function serverFetch(f: typeof fetch, ask: ServerAsk): typeof fetch {
+  const get = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const o = await open(f, addressOf(input), init ?? {}, ask.timeoutMs, ask.hops);
+    return (await answered(o, ask.maxBytes ?? ANSWER_MAX_BYTES)) as unknown as Response;
+  };
+  return get as typeof fetch;
 }

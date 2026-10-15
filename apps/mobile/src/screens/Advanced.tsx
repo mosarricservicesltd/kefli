@@ -21,7 +21,7 @@ import { notBackedUp } from '../data/backup';
 import { relayRows, removeRelay, type RelayRow } from '../data/lists';
 import { checkAccount } from '../services/account';
 import { useApp } from '../services/app';
-import { loadDefaults } from '../services/config';
+import { LOCAL_STACK, loadDefaults } from '../services/config';
 import { exportSaves } from '../services/export';
 import { currentSigner } from '../services/identity';
 import { relayStatus, runOutbox } from '../services/runner';
@@ -131,6 +131,8 @@ function useAccountCheck(owner: string, online: boolean): Check {
     checkAccount({
       db: store(), now: nowSec, owner, api: async () => (await loadDefaults()).operator.api,
       signer: currentSigner, fetch, crypto: phoneCrypto,
+      // the API's redirect to loopback is followed on the local stack only, where its servers are (net/http serverHops)
+      localStack: LOCAL_STACK,
     }).then((r) => live && setCheck(r));
     return () => {
       live = false;

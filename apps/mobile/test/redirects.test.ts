@@ -1,7 +1,9 @@
 // Redirects followed by hand (mobile spec 5.4, 7.1): a page, an image or X's embed is fetched one hop at a time, each
 // hop's address checked before the phone asks for it, ten at most; a hop that fails ends the fetch as a failed one.
+import { readFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { join } from 'node:path';
 import { LocalSigner, encryptText, normaliseMarkdown, xEmbedUrl } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import { MB, accountFigures } from '../src/data/account';
@@ -473,6 +475,66 @@ describe("a text's blob servers, the inbox's and Kefli's API take the hops too (
     const same = accountWorld({ 'https://api.example/account': { status: 308, location: '/v1/account' }, 'https://api.example/v1/account': { body: FIGURES } });
     expect(await checkAccount(same.ports)).toBe('ok');
     expect(same.w.asked.map((a) => [a.url, authorised(a.init)])).toEqual([['https://api.example/account', true], ['https://api.example/v1/account', true]]);
+  });
+});
+
+describe("the local stack's loopback hops are wired where its servers are asked, and only there", () => {
+  const source = (path: string) => readFileSync(join(__dirname, '..', 'src', path), 'utf8');
+  /** The text of what follows from in src, to the end of the braces it opens next. */
+  function block(src: string, from: string): string {
+    const at = src.indexOf(from);
+    if (at === -1) throw new Error(`no ${from}`);
+    let depth = 0;
+    for (let i = src.indexOf('{', at); src.length > i; i++) {
+      if (src[i] === '{') depth++;
+      if (src[i] === '}' && --depth === 0) return src.slice(at, i + 1);
+    }
+    throw new Error(`no end to ${from}`);
+  }
+  const WIRED = 'localStack: LOCAL_STACK';
+
+  test("the runner's ports pass the build's own word, so a release build's never allow loopback", () => {
+    // services/config.ts LOCAL_STACK is true only in the local stack's build (app.config.js KEFLI_VARIANT=local)
+    const runner = source('services/runner.ts');
+    const ports = {
+      sync: block(runner, 'function syncPorts('),
+      inbox: block(runner, 'export function runInbox('),
+      moveInbox: block(runner, 'drainSourceInbox:'),
+      outbox: block(runner, 'return await drain({'),
+      move: block(runner, 'const r = await runMove({'),
+      connect: block(runner, 'export function connectPorts('),
+    };
+    // left out, as they were, the local stack's servers redirecting on loopback failed its sync, inbox and move
+    for (const [name, text] of Object.entries(ports)) expect([name, text.includes(WIRED)]).toEqual([name, true]);
+    // Advanced's check of the library's figures too
+    expect(block(source('screens/Advanced.tsx'), 'checkAccount({').includes(WIRED)).toBe(true);
+    expect(source('services/config.ts')).toContain("export const LOCAL_STACK = build.variant === 'local';");
+  });
+});
+
+describe('a request that is not a GET, redirected (the Fetch Standard, HTTP-redirect fetch)', () => {
+  /** Each hop as asked: its method, address, body and Content-Type. */
+  async function hops(method: string, status: number) {
+    const w = web({ 'https://api.example/register': { status, location: '/registered' }, 'https://api.example/registered': { body: '{}' } });
+    const init = { method, body: '{"v":1}', headers: { 'Content-Type': 'application/json', Authorization: 'Nostr x' } };
+    const o = await open(w.f, 'https://api.example/register', init, 5_000, serverHops(false));
+    o.done();
+    return w.asked.map((a) => [a.init.method, a.url, a.init.body ?? null, new Headers(a.init.headers).get('content-type'), new Headers(a.init.headers).has('authorization')]);
+  }
+
+  test("a 303, or a 301 or 302 to a POST, is followed with a GET and without the body or what describes it", async () => {
+    // sent again as it was, a POST to Kefli's API answered 303 went on as a POST, its body with it
+    for (const [method, status] of [['POST', 303], ['PUT', 303], ['DELETE', 303], ['POST', 301], ['POST', 302]] as const) {
+      expect([method, status, (await hops(method, status))[1]]).toEqual([method, status, ['GET', 'https://api.example/registered', null, null, true]]);
+    }
+  });
+
+  test('a 307 or 308 keeps the method and body, and so does a 301 or 302 to anything but a POST', async () => {
+    for (const [method, status] of [['POST', 307], ['POST', 308], ['PUT', 301], ['PUT', 302], ['DELETE', 302]] as const) {
+      expect([method, status, (await hops(method, status))[1]]).toEqual([method, status, [method, 'https://api.example/registered', '{"v":1}', 'application/json', true]]);
+    }
+    // a GET or a HEAD answered 303 stays as it was
+    expect((await hops('HEAD', 303))[1]).toEqual(['HEAD', 'https://api.example/registered', '{"v":1}', 'application/json', true]);
   });
 });
 

@@ -12,10 +12,12 @@ import { absorbRecord } from '../src/data/devices';
 import { commitDelete, deleteItem, setArchived, setPosition } from '../src/data/library';
 import { notBackedUp } from '../src/data/backup';
 import { drain } from '../src/services/send';
-import { syncOwner, type Filter } from '../src/services/sync';
+import { TEXT_TIMEOUT_MS, syncOwner, type Filter } from '../src/services/sync';
 import { runMove, type MovePorts } from '../src/services/move';
 import type { Defaults } from '../src/services/config';
+import { SERVER_TIMEOUT_MS } from '../src/net/http';
 import { memoryDb } from './sqlite';
+import { inward, silent, watch } from './inward';
 
 const D: Defaults = {
   v: 1, operator: { relay: 'ws://op', blossom: 'http://blossom', api: 'http://api' },
@@ -575,5 +577,59 @@ describe('The move (contract 4.8, mobile spec 4.10)', () => {
     expect(db.get<{ value: string }>("SELECT value FROM settings WHERE key = 'lists.keep_copies'")?.value).toBe('0');
     expect(db.get('SELECT 1 FROM relays WHERE owner = ?', 'b'.repeat(64))).toBeTruthy();
     expect(moveJob(db)).toMatchObject({ from: 'a'.repeat(64), to: 'b'.repeat(64), step: 0 });
+  });
+});
+
+describe("the move's calls to servers take the hops, each with a deadline (7.1)", () => {
+  afterEach(() => jest.useRealTimers());
+  const blobAt = (url: string) => /\/[0-9a-f]{64}$/.test(url);
+
+  test("S's servers sending the text's GET and HEAD into the phone's network: nothing is asked there, and the move waits", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    const net = inward(w.p.fetch, (m, url) => (m === 'GET' || m === 'HEAD') && blobAt(url));
+    // followed as OkHttp followed it, S's text was asked for at 192.168.1.1
+    expect(await runMove({ ...w.p, fetch: net.f })).toBe('waiting');
+    expect(net.asked).toEqual([]);
+    expect(moveJob(w.db)?.step).toBe(2);
+    expect(rowsOf(w, w.T.pubkey())).toEqual([]);
+  });
+
+  test("the API sending S's DELETE /account into the phone's network: nothing is asked there, and S stays to retire later", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    const net = inward(w.p.fetch, (m, url) => m === 'DELETE' && url.endsWith('/account'));
+    expect(await runMove({ ...w.p, fetch: net.f })).toBe('waiting');
+    expect(net.asked).toEqual([]);
+    expect(moveJob(w.db)?.step).toBe(5);
+    expect(w.keysRetired()).toBe(false);
+  });
+
+  test('a server too slow to send the text in its time makes the move wait: the text is never copied as missing', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    const w = world();
+    await w.save(w.S, 1);
+    const base = w.p.fetch;
+    // the servers answer a HEAD at once, but never send the text itself
+    const slow = (async (url: string, init: RequestInit) => ((init.method ?? 'GET') === 'GET' && blobAt(url) ? silent(url, init) : base(url, init))) as typeof fetch;
+    const run = watch(runMove({ ...w.p, fetch: slow }));
+    await jest.advanceTimersByTimeAsync(4 * TEXT_TIMEOUT_MS);
+    // without a deadline it waited for ever; read as missing, the HEAD's answer had T's copy made without its text,
+    // and S's retirement took the text with it
+    expect(run).toMatchObject({ settled: true, value: 'waiting' });
+    expect(moveJob(w.db)?.step).toBe(2);
+    expect(w.db.get("SELECT 1 FROM items WHERE fail_reason = 'blob_missing'")).toBeUndefined();
+  });
+
+  test('an API that takes DELETE /account and never answers is let go at its deadline; S stays to retire later', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    const w = world();
+    await w.save(w.S, 1);
+    const base = w.p.fetch;
+    const stalls = (async (url: string, init: RequestInit) => (init.method === 'DELETE' && url.endsWith('/account') ? silent(url, init) : base(url, init))) as typeof fetch;
+    const run = watch(runMove({ ...w.p, fetch: stalls }));
+    await jest.advanceTimersByTimeAsync(SERVER_TIMEOUT_MS + 1_000);
+    expect(run).toMatchObject({ settled: true, value: 'waiting' });
+    expect(moveJob(w.db)?.step).toBe(5);
   });
 });

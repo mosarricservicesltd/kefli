@@ -10,7 +10,10 @@ import { commitDelete, deleteItem, setArchived } from '../src/data/library';
 import type { Defaults } from '../src/services/config';
 import { heldFor, notBackedUp } from '../src/data/backup';
 import { textsWaiting } from '../src/data/account';
+import { getSetting } from '../src/data/settings';
+import { SERVER_TIMEOUT_MS, movingMs } from '../src/net/http';
 import { memoryDb } from './sqlite';
+import { inward, silent, watch } from './inward';
 
 const D: Defaults = {
   v: 1, operator: { relay: 'ws://op', blossom: 'http://blossom', api: 'http://api' },
@@ -265,6 +268,11 @@ describe('sending a save (mobile spec 4.3)', () => {
   test.each([
     [{ ok: true } as RelayAnswer, 'ok'],
     [{ ok: false, reason: 'duplicate: have it' } as RelayAnswer, 'ok'],
+    // strfry's OK false for an older version of a replaceable or addressable event than the one it holds: nothing
+    // more to send it, where a retry sent the same event for ever when it went as already signed
+    [{ ok: false, reason: 'replaced: have newer event' } as RelayAnswer, 'ok'],
+    // and its OK false for an event its author's kind 5 removed, which no later try changes
+    [{ ok: false, reason: 'deleted: user requested deletion' } as RelayAnswer, 'ok'],
     [{ ok: false, reason: 'rate-limited: slow down' } as RelayAnswer, 'retry'],
     [{ ok: false, reason: 'blocked: not on the list' } as RelayAnswer, 'rejected'],
     [{ ok: false, reason: 'invalid: bad' } as RelayAnswer, 'rejected'],
@@ -920,6 +928,22 @@ describe('deleting makes room (C§5, v1.12)', () => {
     expect(by.get(b.sha)).toMatchObject({ last_error: 'quota', operator_at: null });
     expect(by.get(c.sha)).toMatchObject({ last_error: 'quota', operator_at: null });
   });
+
+  test('a deletion of a blob whose size the phone doesn’t know gives back a block, as the operator counts it', async () => {
+    // z's size isn't known here, as for a capture the phone never read (data/inbox): the operator still frees a block
+    // at least (C§5), room for a (300 bytes, so a block); noted not at all, the 100 bytes left fitted nothing
+    const { w, z, a, b, c } = await full({ sizes: [1_000, 300, 900, 200], room: 100, refuseAfter: 1 });
+    w.db.run('UPDATE blobs SET size = NULL WHERE sha256 = ?', z.sha);
+    const up = w.db.get<{ operator_at: number }>('SELECT operator_at FROM blobs WHERE sha256 = ?', z.sha)!.operator_at;
+    const before = w.calls.length;
+    commitDelete(w.db, w.signer.pubkey(), z.hash, deleteItem(w.db, w.now(), w.signer.pubkey(), z.hash).held);
+    await drain(w.ports);
+    expect(JSON.parse(getSetting(w.db, `space.freed.${w.signer.pubkey()}`) ?? '[]')).toEqual([{ at: w.now(), size: 4_096, up }]);
+    expect(tries(w, before)).toBe(1);
+    const by = new Map(waiting(w).map((x) => [x.sha256, x]));
+    expect(by.get(a.sha)).toMatchObject({ last_error: null, operator_at: expect.any(Number) });
+    expect([by.get(b.sha)?.operator_at, by.get(c.sha)?.operator_at]).toEqual([null, null]);
+  });
 });
 
 describe('a refusal for room or the day holds the library’s other texts (C§5, v1.12)', () => {
@@ -1173,6 +1197,167 @@ describe('a save from before its page’s fields were fitted (C§3.3)', () => {
       .toEqual({ state: 'dead', last_error: 'too large for its event' });
     expect(w.db.get('SELECT 1 AS kept FROM items')).toEqual({ kept: 1 });
     expect(notBackedUp(w.db, w.signer.pubkey())).toBe(1);
+  });
+});
+
+describe('every call to a server takes its hops, and has a deadline (7.1)', () => {
+  afterEach(() => jest.useRealTimers());
+  const registered = (w: W) => {
+    ensureIdentityRow(w.db, w.now(), w.signer.pubkey(), 'early_share', true);
+    w.db.run('UPDATE identities SET registered_at = 1');
+  };
+
+  test("Kefli's API sending a call into the phone's network: nothing is asked there, and the call waits as for an API not answering", async () => {
+    const w = world();
+    const net = inward(w.ports.fetch, (_m, url) => url.startsWith('http://api/'));
+    w.ports.fetch = net.f;
+    release(w.db, (await save(w)).held);
+    await drain(w.ports);
+    // followed as OkHttp followed it, the phone took whatever answers at 192.168.1.1 for the API registering it
+    expect(net.asked).toEqual([]);
+    expect(tried(w)).toMatchObject({ state: 'queued', last_error: 'blocked: redirect' });
+    expect(w.published()).toEqual([]);
+    // a browser's removal goes the same way
+    const v = world();
+    registered(v);
+    const away = inward(v.ports.fetch, (_m, url) => url.startsWith('http://api/'));
+    v.ports.fetch = away.f;
+    enqueue(v.db, v.now(), { op: 'delete_device', signer: v.signer.pubkey(), subject: 'ab'.repeat(32), targets: [`http://api/devices/${'ab'.repeat(32)}`] });
+    await drain(v.ports);
+    expect(away.asked).toEqual([]);
+    expect(tried(v)).toMatchObject({ state: 'queued', last_error: 'blocked: redirect' });
+  });
+
+  test("a blob server sending an upload, a mirror's copy or a deletion into the phone's network: nothing is asked there; each waits", async () => {
+    const w = world();
+    registered(w);
+    const blobServer = (url: string) => url.startsWith('http://blossom/') || url.startsWith('http://m1/');
+    let sends: (method: string, url: string) => boolean = (_m, url) => blobServer(url);
+    const net = inward(w.ports.fetch, (m, url) => sends(m, url));
+    w.ports.fetch = net.f;
+    const { held, sha } = await save(w);
+    release(w.db, held);
+    await drain(w.ports);
+    expect(tried(w)).toMatchObject({ state: 'queued', last_error: 'blocked: redirect' });
+    // the operator takes the text; the mirror sends its copy on
+    sends = (m, url) => m === 'PUT' && url === 'http://m1/mirror';
+    w.tick(86_400);
+    await drain(w.ports);
+    expect(w.db.get('SELECT operator_at, mirror_at FROM blobs WHERE sha256 = ?', sha!)).toEqual({ operator_at: expect.any(Number), mirror_at: null });
+    expect(tried(w)).toMatchObject({ last_error: 'blocked: redirect' });
+    // the save goes, and its text's deletion from the operator is sent on too
+    sends = (m) => m === 'DELETE';
+    w.tick(86_400);
+    await drain(w.ports);
+    commitDelete(w.db, w.signer.pubkey(), HASH, deleteItem(w.db, w.now(), w.signer.pubkey(), HASH).held);
+    await drain(w.ports);
+    expect(net.asked).toEqual([]);
+    expect(w.db.get("SELECT t.last_error FROM outbox o JOIN outbox_targets t ON t.outbox_id = o.id WHERE o.op = 'delete_blob' AND t.target = 'http://blossom'"))
+      .toEqual({ last_error: 'blocked: redirect' });
+  });
+
+  test("a blob server's redirect to its own other address is followed; to loopback only on the local stack", async () => {
+    /** A text for v's operator at blossom, its rows released; and v's fetch, whose server at from sends uploads to to. */
+    async function textTo(v: W, blossom: string, from: string, to: string) {
+      v.ports.defaults = () => ({ ...D, operator: { ...D.operator, blossom } });
+      const enc = await encryptText(normaliseMarkdown('# Moved\n\nWords.'), nodeCrypto);
+      v.blobs.set(enc.text.sha256, enc.blob);
+      release(v.db, queueSave(v.db, v.now(), {
+        owner: v.signer.pubkey(), hash: HASH, url: 'https://example.com/a', canonical: null, title: 'Moved', site: null, byline: null, savedAt: v.now(),
+        words: 1, lang: 'en', hero: null, text: enc.text, textHash: null, textState: 'cached', origin: 'share',
+      }, { sha256: enc.text.sha256, size: enc.blob.length, path: '/staged' }, { api: D.operator.api, blossom, mirror: D.mirrors[0] }));
+      const base = v.ports.fetch;
+      const asked: string[] = [];
+      v.ports.fetch = (async (url: string, init: RequestInit) => {
+        asked.push(`${init.method} ${url} ${new Headers(init.headers).has('authorization')}`);
+        if (url === from) return new Response('', { status: 308, headers: { location: to } });
+        return base(url === to ? 'http://blossom/upload' : url, init);
+      }) as typeof fetch;
+      return asked;
+    }
+    const uploads = (asked: string[]) => asked.filter((a) => a.includes('/upload'));
+    // the operator's upload moved to /v2/upload on its own origin: followed, its Authorization kept there
+    const w = world();
+    registered(w);
+    const asked = await textTo(w, 'https://op.example', 'https://op.example/upload', 'https://op.example/v2/upload');
+    await drain(w.ports);
+    expect(uploads(asked)).toEqual(['PUT https://op.example/upload true', 'PUT https://op.example/v2/upload true']);
+    expect(w.db.get('SELECT operator_at FROM blobs')).toEqual({ operator_at: expect.any(Number) });
+    // the local stack's operator, on loopback, sends its upload on to its own other address: followed there only
+    for (const localStack of [true, false]) {
+      const v = world();
+      registered(v);
+      v.ports.localStack = localStack;
+      const hops = await textTo(v, 'http://localhost:3447', 'http://localhost:3447/upload', 'http://localhost:3447/v2/upload');
+      await drain(v.ports);
+      expect([localStack, uploads(hops).map((h) => h.split(' ')[1])])
+        .toEqual([localStack, localStack ? ['http://localhost:3447/upload', 'http://localhost:3447/v2/upload'] : ['http://localhost:3447/upload']]);
+      expect([localStack, v.db.get<{ at: number | null }>('SELECT operator_at AS at FROM blobs')?.at !== null]).toEqual([localStack, localStack]);
+    }
+  });
+
+  test('an API that takes the call and never answers holds the outbox for its deadline, then the call waits', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    const w = world();
+    w.ports.fetch = silent;
+    release(w.db, (await save(w)).held);
+    // without a deadline, register waited for ever, and every save behind it with it
+    const run = watch(drain(w.ports));
+    await jest.advanceTimersByTimeAsync(SERVER_TIMEOUT_MS - 1_000);
+    expect(run.settled).toBe(false);
+    await jest.advanceTimersByTimeAsync(2_000);
+    expect(run).toMatchObject({ settled: true, value: expect.any(Number) });
+    expect(tried(w)).toMatchObject({ state: 'queued', last_error: 'timed out' });
+  });
+
+  test('an upload has a second more for every 32 KB it sends, so a stalled one ends and a slow one has its time', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    const w = world();
+    registered(w);
+    const { held, sha } = await save(w);
+    // a text of 1 MB, which the deadline gives 32 s more than the API's 15
+    w.blobs.set(sha!, new Uint8Array(1_048_576));
+    w.ports.fetch = silent;
+    release(w.db, held);
+    expect(movingMs(1_048_576)).toBe(SERVER_TIMEOUT_MS + 32_000);
+    const run = watch(drain(w.ports));
+    await jest.advanceTimersByTimeAsync(movingMs(1_048_576) - 1_000);
+    expect(run.settled).toBe(false);
+    await jest.advanceTimersByTimeAsync(2_000);
+    expect(run).toMatchObject({ settled: true, value: expect.any(Number) });
+    expect(tried(w)).toMatchObject({ state: 'queued', last_error: 'timed out' });
+  });
+
+  test("a mirror's copy has an upload's time for its text, or for 8 MB when its size isn't known; a deletion has the API's", async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    const sha = 'ef'.repeat(32);
+    /** How long the one row queued for op on w took to let go of a server that never answers, to the second. */
+    async function lettingGo(w: W, op: 'mirror_blob' | 'delete_blob', target: string, payload: object): Promise<number> {
+      registered(w);
+      enqueue(w.db, w.now(), { op, signer: w.signer.pubkey(), subject: sha, payload, targets: [target] });
+      w.ports.fetch = silent;
+      const run = watch(drain(w.ports));
+      let ms = 0;
+      while (!run.settled && 600_000 > ms) {
+        await jest.advanceTimersByTimeAsync(1_000);
+        ms += 1_000;
+      }
+      expect(tried(w)).toMatchObject({ state: 'queued', last_error: 'timed out' });
+      return ms;
+    }
+    // the mirror fetches the text from the operator before it answers, so a large text has the time its upload would;
+    // given the API's 15 s alone, a large text was never mirrored from a mirror that takes longer, and never backed up
+    const known = world();
+    known.db.run('INSERT INTO blobs (sha256, owner, size, operator_at) VALUES (?, ?, ?, ?)', sha, known.signer.pubkey(), 2_097_152, 1);
+    const took = [
+      await lettingGo(known, 'mirror_blob', 'http://m1', { sha256: sha }),
+      await lettingGo(world(), 'mirror_blob', 'http://m1', { sha256: sha }),
+      await lettingGo(world(), 'delete_blob', 'http://blossom', { sha256: sha, size: 2_097_152 }),
+    ];
+    // to within the second the loop above steps by
+    const meant = [movingMs(2_097_152), movingMs(8_388_608), SERVER_TIMEOUT_MS];
+    expect(took.map((ms, i) => ms >= meant[i] && meant[i] + 1_000 >= ms)).toEqual([true, true, true]);
+    expect(meant).toEqual([SERVER_TIMEOUT_MS + 64_000, SERVER_TIMEOUT_MS + 256_000, SERVER_TIMEOUT_MS]);
   });
 });
 

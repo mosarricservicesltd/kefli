@@ -13,11 +13,12 @@
 // Each step's result is kept in a delete_account job, so a deletion cut short resumes where it stopped.
 import {
   DEVICES_D, EventTooLargeError, ITEM_D_PREFIX, KIND, LIBRARY_KEY_D, T_TAG, buildDeletions, buildRelayList, buildServerList, deleteBlob, httpAuth,
-  readItemEvent, signWithinCeiling, type CryptoPort, type NostrEvent, type Signer,
+  readItemEvent, signWithinCeiling, withoutTrailingSlashes, type CryptoPort, type NostrEvent, type Signer,
 } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { deletesOwed, itemAddresses, newestVersion } from '../data/libraryKey';
 import { bare, indexerRelays, nextListTime, relayEntries, relayListTags, serverListTags } from '../data/lists';
+import { SERVER_TIMEOUT_MS, serverFetch, serverHops } from '../net/http';
 import type { RelayAnswer } from './send';
 import { pageStream, takeNewerLists, type Filter } from './sync';
 
@@ -36,7 +37,21 @@ export type DelPorts = {
   wipePhone: () => Promise<void>;
   /** Each server's minute (spec 7.2). */
   budgetMs?: number;
+  /** The local stack's build (services/config.ts LOCAL_STACK), whose servers a redirect may reach on loopback. */
+  localStack?: boolean;
 };
+
+/**
+ * p's fetch for a server, Kefli's API or a blob server (net/http serverFetch): each redirect followed a hop at a time,
+ * never into the phone's own network (on the local stack, loopback too), and each answer had within the API's 15 s.
+ * Left to OkHttp, a redirect sent DELETE /account, or a blob's deletion, on to whatever answered at 192.168.1.1 (its
+ * authorisation left behind, as OkHttp does at another host), whose 2xx the phone then took for the operator's; and an
+ * API that took DELETE /account and never answered held the screen, which swallows Back while the deletion runs, for
+ * good.
+ */
+function toServer(p: DelPorts): typeof fetch {
+  return serverFetch(p.fetch, { hops: serverHops(p.localStack === true), timeoutMs: SERVER_TIMEOUT_MS });
+}
 
 /** What the screen hands deletePorts: the relay pool among them, which both publishes and reads. */
 export type DelDeps = Omit<DelPorts, 'now' | 'publish' | 'query' | 'sleep'> & {
@@ -60,6 +75,8 @@ export type Target = { url: string; kind: 'relay' | 'server'; host: string; own:
 export type Result = 'wait' | 'done' | 'fail';
 export type Progress = { operator: Result; others: Record<string, Result>; phone: Result };
 export type Outcome = 'done' | 'partial' | 'failed';
+/** The screen's view of the deletion, told each step as it resolves. A named type, so the code gate reads deleteEverything whole. */
+export type Report = (prog: Progress) => void;
 
 const host = (u: string) => {
   try {
@@ -102,8 +119,11 @@ function save(p: DelPorts, prog: Progress): void {
   );
 }
 
+/** One try at a step's work: whether it went through. A named type, so the code gate's parser reads withinMinute whole. */
+type Attempt = () => Promise<boolean>;
+
 /** Tries until it succeeds or the minute is spent: 2 s, then doubling. */
-async function withinMinute(p: DelPorts, attempt: () => Promise<boolean>): Promise<boolean> {
+async function withinMinute(p: DelPorts, attempt: Attempt): Promise<boolean> {
   const budget = p.budgetMs ?? 60_000;
   let spent = 0;
   for (let wait = 2000; ; wait *= 2) {
@@ -290,7 +310,8 @@ async function sendAll(p: DelPorts, relay: string, events: NostrEvent[]): Promis
 }
 
 async function deleteBlobs(p: DelPorts, server: string, shas: string[]): Promise<boolean> {
-  for (const s of shas) if (!(await deleteBlob(server, s, p.signer, p.fetch)).ok) return false;
+  const get = toServer(p);
+  for (const s of shas) if (!(await deleteBlob(server, s, p.signer, get)).ok) return false;
   return true;
 }
 
@@ -309,9 +330,10 @@ async function stepOperator(p: DelPorts, owner: string, signed: Signed): Promise
   const shas = allBlobs(p, owner, signed);
   const cleared = reached && (await withinMinute(p, () => deleteBlobs(p, op.blossom, shas)));
   if (!cleared) return false;
-  const url = `${bare(op.api)}/account`;
+  const url = `${withoutTrailingSlashes(op.api)}/account`;
+  const get = toServer(p);
   return withinMinute(p, async () => {
-    const res = await p.fetch(url, { method: 'DELETE', headers: { Authorization: await httpAuth(p.signer, url, 'DELETE', null, p.crypto) } });
+    const res = await get(url, { method: 'DELETE', headers: { Authorization: await httpAuth(p.signer, url, 'DELETE', null, p.crypto) } });
     return res.ok || res.status === 404;
   });
 }
@@ -323,34 +345,50 @@ async function stepOther(p: DelPorts, owner: string, t: Target, signed: Signed):
   return confirmed;
 }
 
-/**
- * Runs or resumes the deletion, reporting each step as it resolves. failed: the operator couldn't be reached or
- * refused, and nothing else ran. partial: some other server didn't confirm; the phone is wiped all the same.
- */
-export async function deleteEverything(p: DelPorts, report: (prog: Progress) => void, presigned?: Signed): Promise<Outcome> {
-  const owner = p.signer.pubkey();
-  const signed = presigned ?? (await signDeletion(p));
-  const targets = deleteTargets(p.db, owner, p.defaults.operator);
-  const prog: Progress = progressOf(p.db) ?? { operator: 'wait', others: Object.fromEntries(targets.map((t) => [t.url, 'wait'])), phone: 'wait' };
-  report(prog);
-  if (prog.operator !== 'done') {
-    prog.operator = (await stepOperator(p, owner, signed)) ? 'done' : 'fail';
-    report({ ...prog });
-    if (prog.operator === 'fail') {
-      p.db.run('DELETE FROM jobs WHERE id = ?', JOB);
-      return 'failed';
-    }
-    save(p, prog);
+/** Step 1, unless a run cut short has done it: false when the operator failed, the job then gone, to start afresh. */
+async function operatorStep(p: DelPorts, owner: string, signed: Signed, prog: Progress, report: Report): Promise<boolean> {
+  if (prog.operator === 'done') return true;
+  prog.operator = (await stepOperator(p, owner, signed)) ? 'done' : 'fail';
+  report({ ...prog });
+  if (prog.operator === 'fail') {
+    p.db.run('DELETE FROM jobs WHERE id = ?', JOB);
+    return false;
   }
-  // the lists go to the indexer as well, unreported: it holds nothing else of this identity. It refuses kind 5, so a
-  // generated identity's lists are emptied there rather than deleted (C§4.7)
+  save(p, prog);
+  return true;
+}
+
+/**
+ * The lists to the indexer as well, unreported: it holds nothing else of this identity. It refuses kind 5, so a
+ * generated identity's lists are emptied there rather than deleted (C§4.7).
+ */
+async function listsToIndexer(p: DelPorts, signed: Signed): Promise<void> {
   const forIndexer = signed.nostr ? signed.lists : signed.empties ?? [];
   await Promise.all(p.defaults.indexer.flatMap((r) => forIndexer.map((e) => p.publish(r, e).catch(() => undefined))));
+}
+
+/** Step 2: every other server still waiting, each saved and reported as it resolves. */
+async function othersStep(p: DelPorts, owner: string, targets: Target[], signed: Signed, prog: Progress, report: Report): Promise<void> {
   await Promise.all(targets.filter((t) => prog.others[t.url] === 'wait').map(async (t) => {
     prog.others[t.url] = (await stepOther(p, owner, t, signed)) ? 'done' : 'fail';
     save(p, prog);
     report({ ...prog, others: { ...prog.others } });
   }));
+}
+
+/**
+ * Runs or resumes the deletion, reporting each step as it resolves. failed: the operator couldn't be reached or
+ * refused, and nothing else ran. partial: some other server didn't confirm; the phone is wiped all the same.
+ */
+export async function deleteEverything(p: DelPorts, report: Report, presigned?: Signed): Promise<Outcome> {
+  const owner = p.signer.pubkey();
+  const signed = presigned ?? (await signDeletion(p));
+  const targets = deleteTargets(p.db, owner, p.defaults.operator);
+  const prog: Progress = progressOf(p.db) ?? { operator: 'wait', others: Object.fromEntries(targets.map((t) => [t.url, 'wait'])), phone: 'wait' };
+  report(prog);
+  if (!(await operatorStep(p, owner, signed, prog, report))) return 'failed';
+  await listsToIndexer(p, signed);
+  await othersStep(p, owner, targets, signed, prog, report);
   await p.wipePhone();
   prog.phone = 'done';
   report({ ...prog });

@@ -3,7 +3,7 @@
 // post_device, pair_ack, delete_device, delete_wrap, copy_relay and publish_library_key.
 import {
   DEVICES_PATH, EventTooLargeError, KIND, buildDeletions, buildDevicesEvent, buildItemEvent, buildLibraryKeyEvent, deleteBlob, httpAuth,
-  isSignerFailure, mirrorBlob, releaseTemplate, sameUrl, savedD, signStatement, signWithinCeiling, uploadBlob, wrapPairAck,
+  isSignerFailure, mirrorBlob, releaseTemplate, sameUrl, savedD, signStatement, signWithinCeiling, uploadBlob, withoutTrailingSlashes, wrapPairAck,
 } from '@kefli/protocol';
 import type { AccountFigures, BlossomOutcome, CryptoPort, NostrEvent, Signer, Statement } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
@@ -20,6 +20,7 @@ import {
 import { backoff, begin, enqueue, finish, nextDue, nextWakeAt, releaseDependents, wake } from '../data/outbox';
 import type { OutboxRow, OutboxTarget, TargetResult } from '../data/outbox';
 import { fitSave, namesText, queueBlobDelete, withdrawText } from '../data/saves';
+import { SERVER_TIMEOUT_MS, movingMs, serverFetch, serverHops } from '../net/http';
 import type { Defaults } from './config';
 import { notYet, pageStream, streamFilter, takeNewerLists, type SyncPorts } from './sync';
 
@@ -45,7 +46,23 @@ export type SendPorts = {
   figures?: (owner: string) => KnownFigures | null;
   /** A 413 quota or daily brought the library's figures (C§5): kept as the last known, by data/account.ts recordFigures. */
   onFigures?: (owner: string, figures: AccountFigures) => void;
+  /** The local stack's build (services/config.ts LOCAL_STACK), whose servers a redirect may reach on loopback. */
+  localStack?: boolean;
 };
+
+/**
+ * p's fetch for a server, Kefli's API or a blob server (net/http serverFetch): each redirect followed a hop at a time,
+ * never into the phone's own network (on the local stack, loopback too, serverHops), and the whole answer had within
+ * timeoutMs. Left to OkHttp, as p.fetch was, a server's redirect sent a call on to 192.168.1.1, an upload's text with
+ * it on a 307 or 308 (OkHttp, as here, leaves the authorisation behind at another host), and took what answered there
+ * as the server's answer; and a server that never answered held the outbox's run for good.
+ */
+function toServer(p: SendPorts, timeoutMs: number): typeof fetch {
+  return serverFetch(p.fetch, { hops: serverHops(p.localStack === true), timeoutMs });
+}
+
+/** The largest blob the operator takes (C§5's too_large), as much as a mirror's copy can move when its size isn't known. */
+const OPERATOR_MAX_BYTES = 8_388_608;
 
 const DAY = 86_400;
 /**
@@ -66,23 +83,47 @@ const err = (e: unknown) => String((e as Error)?.message ?? e);
  */
 const CLOCK = new RegExp('created_at too late|too (?:much|far) in the future|created_at field is out of the acceptable range', 'i');
 
+/** Whether a relay's words refuse an event as dated past its clock (CLOCK), which a later try may get past. */
+export function pastItsClock(reason: string): boolean {
+  return CLOCK.test(reason);
+}
+
+/**
+ * A relay that holds the event already, a newer version of its address, or its author's deletion of it: NIP-01's
+ * duplicate:, and strfry's "replaced: have newer event" and "deleted: user requested deletion", which it answers with
+ * OK false to an older version of a replaceable or addressable event than the one it holds, as when another phone or
+ * app sent it a newer one, and to an event a kind 5 of its author's removed there. Any way there is nothing more to
+ * send it. Read as a retry, as both were, an event sent as already signed (the library's copy to an added relay) went
+ * again at every backoff for ever, and one signed at each send (a save, the lists) went over the version or the
+ * deletion that replaced it once this phone's clock passed that one's date, where a sync keeps the newer (merge.ts).
+ */
+const HELD = new RegExp('^(?:duplicate|replaced|deleted):');
+
+/** Whether a relay's words say it holds the event, a newer version or its deletion already (HELD): as good as taking it. */
+export function holdsAlready(reason: string): boolean {
+  return HELD.test(reason);
+}
+
 /** A relay's OK prefix decides the outcome (4.3); an event refused as dated ahead of the relay's clock is tried again. */
 export function relayResult(target: string, a: RelayAnswer, eventId: string): TargetResult {
-  if (a.ok) return { target, kind: 'ok', eventId };
+  if (a.ok || holdsAlready(a.reason)) return { target, kind: 'ok', eventId };
   const reason = a.reason;
-  if (/^duplicate:/.test(reason)) return { target, kind: 'ok', eventId };
   if (/^rate-limited:/.test(reason)) return { target, kind: 'retry', error: reason, waitSec: 60 };
-  if (CLOCK.test(reason)) return { target, kind: 'retry', error: reason };
+  if (pastItsClock(reason)) return { target, kind: 'retry', error: reason };
   if (/^(invalid|blocked|pow|restricted|error):/.test(reason)) return { target, kind: 'rejected', error: reason };
   return { target, kind: 'retry', error: reason };
 }
 
-/** One signed call to the API (contract 6): ok, retried on 401, 429 and 5xx, otherwise refused. okStatus counts as done too. */
+/**
+ * One signed call to the API (contract 6): ok, retried on 401, 429 and 5xx, otherwise refused. okStatus counts as done
+ * too. Its redirects take the hops and its answer has the API's deadline (toServer); one that goes past either is
+ * retried as an API not answering.
+ */
 async function apiCall(p: SendPorts, signer: Signer, url: string, method: 'POST' | 'DELETE', body: string | null, okStatus?: number): Promise<TargetResult> {
   try {
     const headers: Record<string, string> = { Authorization: await httpAuth(signer, url, method, body ?? '', p.crypto) };
     if (body !== null) headers['Content-Type'] = 'application/json';
-    const res = await p.fetch(url, { method, headers, ...(body === null ? {} : { body }) });
+    const res = await toServer(p, SERVER_TIMEOUT_MS)(url, { method, headers, ...(body === null ? {} : { body }) });
     if (res.ok || res.status === okStatus) return { target: url, kind: 'ok' };
     if (res.status === 401 || res.status === 429 || res.status >= 500) return { target: url, kind: 'retry', error: `HTTP ${res.status}` };
     return { target: url, kind: 'rejected', error: `HTTP ${res.status}` };
@@ -181,7 +222,8 @@ async function sendUpload(p: SendPorts, row: OutboxRow, signer: Signer, t: Outbo
   // the staged text is gone, so it can never be sent: the save goes without it rather than with it (C§4.2)
   if (!blob) return (releaseDependents(p.db, row.id, 'publish_item'), [{ target: t.target, kind: 'rejected', error: 'staged blob missing' }]);
   try {
-    const r = await uploadBlob(t.target, blob, sha256, signer, p.fetch);
+    // a second more for every 32 KB it sends, so a stalled upload ends and a slow one has its time (net/http movingMs)
+    const r = await uploadBlob(t.target, blob, sha256, signer, toServer(p, movingMs(blob.length)));
     return r.ok ? uploaded(p, row.signer, t.target, sha256, blob.length) : refused(p, row, t.target, sha256, r);
   } catch (e) {
     return [{ target: t.target, kind: 'retry', error: err(e) }];
@@ -289,11 +331,16 @@ function nextMirror(p: SendPorts, current: string): { next: string; delaySec: nu
   return { next: mirrors[0], delaySec: DAY };
 }
 
+/**
+ * A mirror's copy of the text (BUD-04): the mirror fetches the blob from the operator before it answers, so the ask has
+ * the time an upload of the blob would (net/http movingMs), of the largest the operator takes when its size is unknown.
+ */
 async function sendMirror(p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
   const { sha256 } = JSON.parse(row.payload ?? '{}') as { sha256: string };
-  const from = `${p.defaults().operator.blossom.replace(/\/+$/, '')}/${sha256}`;
+  const from = `${withoutTrailingSlashes(p.defaults().operator.blossom)}/${sha256}`;
+  const size = p.db.get<{ size: number | null }>('SELECT size FROM blobs WHERE sha256 = ? AND owner = ?', sha256, row.signer)?.size;
   try {
-    const r = await mirrorBlob(t.target, from, sha256, signer, p.fetch);
+    const r = await mirrorBlob(t.target, from, sha256, signer, toServer(p, movingMs(size ?? OPERATOR_MAX_BYTES)));
     if (r.ok) {
       p.db.run('UPDATE blobs SET mirror_at = ?, mirror_url = ?, last_error = NULL WHERE sha256 = ? AND owner = ?', p.now(), t.target, sha256, row.signer);
       republishNaming(p.db, p.now(), row.signer, sha256, t.target, p.defaults().operator.blossom);
@@ -326,16 +373,24 @@ function republishNaming(db: SqlDb, now: number, owner: string, sha256: string, 
 }
 
 /**
+ * The least a blob takes of its library's quota (C§5): a disk block, which its file takes however few bytes it holds,
+ * as Kefli's server counts it (store.Cost) and as data/backup.ts reckons room.
+ */
+const BLOCK = 4096;
+
+/**
  * A blob no save names any more, on each server that held it; a 404 counts as done (4.3). The operator's confirmation
- * gives back room (C§5): it is noted with the blob's size, and a text waiting for room that now fits goes at once.
+ * gives back room (C§5): it is noted with the blob's size, and a text waiting for room that now fits goes at once. A
+ * blob whose size this phone doesn't know (a capture it never read, a row that lost its size) gave back a block at
+ * least, as the server counts it, and is noted as one: left out, as it was, the room it made went unreckoned.
  */
 async function sendDeleteBlob(p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
   const { sha256, size, up } = JSON.parse(row.payload ?? '{}') as { sha256: string; size?: number; up?: number };
   try {
-    const r = await deleteBlob(t.target, sha256, signer, p.fetch);
+    const r = await deleteBlob(t.target, sha256, signer, toServer(p, SERVER_TIMEOUT_MS));
     if (!r.ok) return [httpResult(t.target, r, r.permanent)];
     if (sameUrl(t.target, p.defaults().operator.blossom)) {
-      if (size) noteFreed(p.db, row.signer, { at: p.now(), size, up: up ?? null });
+      noteFreed(p.db, row.signer, { at: p.now(), size: size || BLOCK, up: up ?? null });
       tryRoom(p, row.signer);
     }
     return [{ target: t.target, kind: 'ok' }];
@@ -586,9 +641,10 @@ function newestOfEach(saves: NostrEvent[]): NostrEvent[] {
 }
 
 /**
- * The events to the added relay in turn, as already signed. A refusal stops nothing, and nor does an event refused as
- * dated ahead of the relay's clock (CLOCK), as one signed on a phone running fast is: the rest still go, and the copy
- * is tried again once that event's time has come, for it to go too, the relay answering duplicate for the rest.
+ * The events to the added relay in turn, as already signed. A refusal stops nothing, nor does an event the relay holds
+ * a newer version of (holdsAlready), and nor does one refused as dated ahead of the relay's clock (pastItsClock), as
+ * one signed on a phone running fast is: the rest still go, and the copy is tried again once that event's time has
+ * come, for it to go too, the relay answering duplicate for the rest.
  * Stopping there, as any other retry does, one save dated ahead kept every save after it from the relay, for good
  * when it was dated a year ahead. One dated more than a day past this phone's clock is passed over, as sync leaves it
  * unread (notYet), since a try within a day changes nothing. Any other answer to retry (a relay asking to slow down,
@@ -603,7 +659,7 @@ async function copyEvents(p: SendPorts, t: OutboxTarget, events: NostrEvent[]): 
       const answer = await p.publish(t.target, e);
       const r = relayResult(t.target, answer, e.id);
       if (r.kind !== 'retry') continue;
-      if (answer.ok || !CLOCK.test(answer.reason)) return r;
+      if (answer.ok || !pastItsClock(answer.reason)) return r;
       if (notYet(e, p.now())) continue;
       aheadAt = Math.max(aheadAt, e.created_at);
       aheadError = answer.reason;

@@ -10,6 +10,7 @@ import { KIND } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { addRelay, relayAddress, writeRelays, type DefaultsLike } from '../data/lists';
 import type { RelayAnswer } from '../net/pool';
+import { holdsAlready, pastItsClock } from './send';
 
 export type Check = 'ok' | 'bad' | 'listed' | 'unreachable' | 'refused';
 
@@ -22,19 +23,6 @@ export type AddRelayPorts = {
 };
 
 /**
- * A relay's refusal of an event dated past its clock by more than it allows, in the words send.ts relayResult reads as
- * the clock's (its CLOCK): strfry's "created_at too late", khatru's "event too much in the future" and nostr-rs-relay's
- * "created_at field is out of the acceptable range", which it sends only for a date ahead. The list held is dated by
- * this phone's clock, or after one another device dated so (nextListTime), and a phone running fast found every strfry
- * relay refusing, Kefli's own among them.
- */
-const CLOCK = new RegExp('created_at too late|too (?:much|far) in the future|created_at field is out of the acceptable range', 'i');
-/**
- * A relay that holds this person's list already: the same one (duplicate), or a newer one, which strfry answers
- * "replaced: have newer event" with OK false, as when another app sent it a list since this phone last read theirs.
- */
-const HOLDS = new RegExp('^(?:duplicate|replaced):');
-/**
  * A relay's refusal of an event older than it keeps: strfry's "created_at too early" (by default anything over three
  * years old) and khatru's "event too old". The list held is a nostr user's own as their other apps last wrote it,
  * which Kefli never republishes with Keep backup copies off, and every strfry relay refuses one over three years old
@@ -44,13 +32,17 @@ const HOLDS = new RegExp('^(?:duplicate|replaced):');
 const TOO_OLD = new RegExp('created_at too early|event too old', 'i');
 
 /**
- * Whether the relay's answer to the list leaves it one that takes this person's events: it took the list, or holds it
- * or a newer one already (HOLDS), or turned it away only for its date, ahead of the relay's clock or older than it
- * keeps, an answer that says nothing of the person, as for an identity with no list yet. The lists then go to it as
- * for any relay added, dated now, with the outbox's backoff.
+ * Whether the relay's answer to the list leaves it one that takes this person's events: it took the list, or holds it,
+ * a newer one or their deletion of it already, as strfry says with "replaced: have newer event" when another app sent
+ * it a list since this phone last read theirs (send.ts holdsAlready), or turned it away only for its date, an answer
+ * that says nothing of the person, as for an identity with no list yet: ahead of the relay's clock (send.ts
+ * pastItsClock: the list held is dated by this phone's clock, or after one another device dated so, nextListTime, and
+ * a phone running fast found every strfry relay refusing, Kefli's own among them), or older than it keeps (TOO_OLD).
+ * The words are read by the outbox's own tests, so the check and the sends to the relay read them alike. The lists
+ * then go to it as for any relay added, dated now, with the outbox's backoff.
  */
 function takes(answer: RelayAnswer): boolean {
-  return answer.ok || HOLDS.test(answer.reason) || CLOCK.test(answer.reason) || TOO_OLD.test(answer.reason);
+  return answer.ok || holdsAlready(answer.reason) || pastItsClock(answer.reason) || TOO_OLD.test(answer.reason);
 }
 
 /** Checks the typed address and, when the relay answers and takes the list, adds it. Returns the outcome and the address. */
