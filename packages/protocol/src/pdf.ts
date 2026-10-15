@@ -17,8 +17,12 @@ type Line = { page: number; x: number; y: number; right: number; size: number; t
 /** left and right: the least x and the greatest right of its lines, kept as lines join so a long block stays linear. */
 type Block = { kind: 'p' | 'h' | 'li'; level?: number; size: number; page: number; y: number; lines: Line[]; left: number; right: number };
 
-/** A line that ends a sentence: a stop, optionally closed by a quote or bracket. */
-const TERMINAL = /[.!?:;]["”’)\]]?$/;
+/**
+ * A line that ends a sentence: a stop, optionally closed by a quote or bracket. Built from a string: as a regex
+ * literal, its quote was read by the code gate's parser as the start of a string running on to the next quote in the
+ * file, and most of the functions after it went unscored.
+ */
+const TERMINAL = new RegExp('[.!?:;]["”’)\\]]?$');
 /** A displayed equation's number at the end of its line. */
 const EQUATION_NUMBER = /\(\d{1,3}\)$/;
 /** A line that ends a sentence or a displayed equation. */
@@ -27,8 +31,11 @@ const ends = (t: string) => TERMINAL.test(t) || EQUATION_NUMBER.test(t);
 const ENTRY = /^\[\d{1,3}\]\s/;
 const MARK = /^[\d∗*†‡§¶,\s]+$/;
 const BULLET = /^[•◦▪▫●○■□‣⁃–]\s*/;
-/** A section number: 1, 2.1, 3.2.1. or IV. (a letter alone, as in "A. Reader", is more often an initial). */
-const SECTION = /^(?:\d+(?:\.\d+)*\.?|[IVX]+\.)\s+\S/;
+/**
+ * A section number: 1, 2.1, 3.2.1. or IV. (a letter alone, as in "A. Reader", is more often an initial). Built from a
+ * string: as a regex literal, it left the code gate's parser a level deep, and the file's last function unscored.
+ */
+const SECTION = new RegExp('^(?:\\d+(?:\\.\\d+)*\\.?|[IVX]+\\.)\\s+\\S');
 /**
  * A page number alone: 3, - 3 -, Page 3, 3 of 12, 3/12. Each run of spaces can be read only one way. Written, as it
  * was, with an optional dash between two runs of spaces that may be empty, the pattern tried every split of a long run
@@ -173,6 +180,11 @@ function breaksBefore(prev: Line, cur: Line, block: Block, c: Ctx): boolean {
   // a new page or column: the paragraph goes on unless the last line finished a sentence
   if (cur.page !== prev.page || cur.y < prev.y) return ends(prev.text);
   if (cur.y - prev.y > c.lead * 1.5) return true;
+  return paragraphEnded(prev, cur, block);
+}
+
+/** Within a column, whether the last line ended its paragraph, as its shape against the next line shows. */
+function paragraphEnded(prev: Line, cur: Line, block: Block): boolean {
   if (TERMINAL.test(prev.text) && cur.x > block.left + cur.size * 1.2) return true; // an indented first line
   if (ends(prev.text) && prev.x > cur.x + cur.size * 2) return true; // after a centred line
   return TERMINAL.test(prev.text) && block.lines.length > 1 && prev.right < block.right - cur.size * 4; // a short last line
@@ -251,12 +263,16 @@ function numberedHeading(b: Block, text: string): boolean {
 
 // ---- Markdown
 
+// What escape escapes: inline syntax, a list's number at the start, and a character that would open a block there.
+// Built from strings: as regex literals, their backtick and brackets were read by the code gate's parser as code, and
+// it lost its place, leaving escape and the three functions after it unscored.
+const INLINE_SYNTAX = new RegExp('[\\\\`*_[\\]<>&]', 'g');
+const LIST_NUMBER = new RegExp('^(\\d{1,9})([.)])(?=\\s|$)');
+const BLOCK_OPENER = new RegExp('^([-+#>])');
+
 /** Text as CommonMark reads it back: inline syntax escaped, and nothing at the start that would open a block. */
 function escape(text: string): string {
-  return text
-    .replace(/[\\`*_[\]<>&]/g, '\\$&')
-    .replace(/^(\d{1,9})([.)])(?=\s|$)/, '$1\\$2')
-    .replace(/^([-+#>])/, '\\$1');
+  return text.replace(INLINE_SYNTAX, '\\$&').replace(LIST_NUMBER, '$1\\$2').replace(BLOCK_OPENER, '\\$1');
 }
 
 function headingLevels(blocks: Block[]): Map<number, number> {
@@ -264,7 +280,14 @@ function headingLevels(blocks: Block[]): Map<number, number> {
   return new Map(sizes.map((s, i) => [s, Math.min(i + 1, 3)]));
 }
 
-const sectionDepth = (text: string) => text.match(/^\d+(?:\.\d+)*/)?.[0].split('.').length ?? 1;
+/**
+ * A section number's figures, 2.1 of "2.1 Methods". Built from a string: as a regex literal, it left sectionDepth
+ * unscored by the code gate's parser.
+ */
+const SECTION_FIGURES = new RegExp('^\\d+(?:\\.\\d+)*');
+
+/** How deep a numbered heading's section is: 1 for "2 Methods", 2 for "2.1 Data". */
+const sectionDepth = (text: string) => text.match(SECTION_FIGURES)?.[0].split('.').length ?? 1;
 
 function blockMarkdown(b: Block, text: string, levels: Map<number, number>): string {
   if (b.kind === 'h' && b.lines.length <= 2 && text.length <= 200) return `${'#'.repeat(levels.get(Math.round(b.size)) ?? 3)} ${escape(text)}`;
@@ -293,6 +316,41 @@ const sameTitle = (a: string, b: string) => {
   return key(a) === key(b) || key(a).startsWith(key(b) + ' ');
 };
 
+/** The largest heading on the first page so far: its text, its size, and where its Markdown is. */
+type Heading = { text: string; size: number; at: number };
+
+/** A block the Markdown leaves out: empty, unreadable, a footnote, or a heading whose text is set more than once. */
+function leftOut(b: Block, text: string, c: Ctx, pages: PdfPage[], repeated: Set<string>): boolean {
+  return text === '' || unreadable(b, text, c) || footnote(b, c, pages) || (b.kind === 'h' && repeated.has(text));
+}
+
+/**
+ * Whether a block, as Markdown md, is the largest heading on the first page so far: a heading set larger than the
+ * text, not a numbered section (1. Introduction).
+ */
+function largerHeading(b: Block, md: string, heading: Heading | null): boolean {
+  return b.page === 0 && b.kind === 'h' && md.startsWith('#') && b.size > (heading?.size ?? 0);
+}
+
+/** The blocks' Markdown in order, and the largest heading on the first page among them. */
+type LaidOut = { out: string[]; heading: Heading | null };
+
+/** The blocks as Markdown, each left out or laid out as its kind is (LaidOut). */
+function laidOut(blocks: Block[], c: Ctx, pages: PdfPage[]): LaidOut {
+  const levels = headingLevels(blocks);
+  const repeated = repeatedHeadings(blocks);
+  const out: string[] = [];
+  let heading: Heading | null = null;
+  for (const b of blocks) {
+    const text = joinLines(b.lines);
+    if (leftOut(b, text, c, pages, repeated)) continue;
+    const md = blockMarkdown(b, text, levels);
+    if (largerHeading(b, md, heading)) heading = { text, size: b.size, at: out.length };
+    out.push(md);
+  }
+  return { out, heading };
+}
+
 /**
  * The PDF's text as Markdown (not yet normalised), with a title from the file or the largest heading on its first
  * page. That heading leaves the body when it is the title, or says what the file's title says, since the Reader
@@ -302,19 +360,7 @@ export function pdfMarkdown(doc: PdfRuns): PdfArticle {
   const lines = bodyLines(doc.pages.map(pageLines));
   const body = bodySize(lines);
   const c: Ctx = { body, lead: leading(lines, body), margins: margins(lines, body) };
-  const blocks = blocksOf(lines, c);
-  const levels = headingLevels(blocks);
-  const repeated = repeatedHeadings(blocks);
-  const out: string[] = [];
-  let heading: { text: string; size: number; at: number } | null = null;
-  for (const b of blocks) {
-    const text = joinLines(b.lines);
-    if (text === '' || unreadable(b, text, c) || footnote(b, c, doc.pages) || (b.kind === 'h' && repeated.has(text))) continue;
-    const md = blockMarkdown(b, text, levels);
-    // a heading set larger than the text, not a numbered section (1. Introduction)
-    if (b.page === 0 && b.kind === 'h' && md.startsWith('#') && b.size > (heading?.size ?? 0)) heading = { text, size: b.size, at: out.length };
-    out.push(md);
-  }
+  const { out, heading } = laidOut(blocksOf(lines, c), c, doc.pages);
   const title = usableTitle(doc.title) ?? heading?.text ?? null;
   if (heading && title && sameTitle(title, heading.text)) out.splice(heading.at, 1);
   return { title, byline: doc.author, markdown: out.join('\n\n') + '\n' };
