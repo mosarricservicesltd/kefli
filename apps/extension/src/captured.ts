@@ -20,9 +20,13 @@ export const GUARD_WORDS = 120;
 /** contract 4.4: content HTML over this many bytes as UTF-8 is not sent. */
 export const HTML_MAX_BYTES = 2_097_152;
 
+// built from a string: the code gate's parser reads a regex literal's escaped slashes as a comment, and lost the
+// functions after it
+const WEB_ADDRESS = new RegExp('^https?://', 'i');
+
 /** Whether an address can be saved at all: a web page's, http or https (contract 4.3; decision 100). */
 export function isWebAddress(url: string): boolean {
-  return /^https?:\/\//i.test(url);
+  return WEB_ADDRESS.test(url);
 }
 
 /**
