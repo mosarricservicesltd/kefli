@@ -18,7 +18,7 @@ import { ATTEMPTS_MAX, BLOB_KEEP_MAX, changeQueue, dequeue, enqueue, failed, flu
 import { deliver, prepare, retract, withoutText, type Delivered, type Net, type Pending } from '../src/save';
 import { KEYS, memoryStore, type Pairing } from '../src/store';
 import { applyMove, followMoves } from '../src/move';
-import { SECOND_LOOK_MS, settleUndo, type Found } from '../src/undo';
+import { retracted, SECOND_LOOK_MS, settleUndo, together, type Found, type Retracted } from '../src/undo';
 import { markDelay, toastCopy } from '../src/toastCopy';
 import { debugText, history, HISTORY_MAX, record } from '../src/debug';
 
@@ -533,10 +533,10 @@ describe('following a move (contract 4.4 and 4.8)', () => {
 });
 
 describe('Undo (contract 4.4, decision 101)', () => {
-  const run = async (answers: Found[]) => {
+  const run = async (answers: Found[], r: Retracted = 'taken') => {
     const calls: string[] = [];
     const out = await settleUndo(
-      async () => void calls.push('retract'),
+      async () => (calls.push('retract'), r),
       async () => (calls.push('look'), answers.length ? answers.shift()! : false),
       async (ms) => void calls.push(`wait ${ms}`),
     );
@@ -552,16 +552,31 @@ describe('Undo (contract 4.4, decision 101)', () => {
     expect((await run([false, false])).out).toBe('undone');
   });
   test('a second look the relay doesn’t answer whole can’t tell, so it is reported rather than removed (F40)', async () => {
-    await expect(run([false, null])).rejects.toThrow('no answer');
-    await expect(run([null, null])).rejects.toThrow('no answer');
+    expect((await run([false, null])).out).toBe('failed');
+    expect((await run([null, null])).out).toBe('failed');
     // the second look is the later one: a deletion the first could have found, it finds too
     expect((await run([null, false])).out).toBe('undone');
     expect((await run([null, true])).out).toBe('onphone');
   });
-  test('a refused retraction still finds the save on the phone, and is reported if it isn’t there', async () => {
-    const refusing = async () => { throw new Error('blocked: deletes only a gift wrap of its own that this relay holds'); };
-    expect(await settleUndo(refusing, async () => true, async () => undefined)).toBe('onphone');
-    await expect(settleUndo(refusing, async () => false, async () => undefined)).rejects.toThrow('blocked');
+  test('a refused retraction still finds the save on the phone; otherwise the caller hears that the relay held no such wrap', async () => {
+    expect((await run([true], 'absent')).out).toBe('onphone');
+    expect((await run([false, false], 'absent')).out).toBe('absent');
+  });
+  test('a retraction that couldn’t be made is reported, unless the save is found on the phone', async () => {
+    expect((await run([false, false], 'unreached')).out).toBe('failed');
+    expect((await run([false, true], 'unreached')).out).toBe('onphone');
+  });
+  test('a retraction is read from the relay’s answer: taken, refused as holding no such wrap, or not made', async () => {
+    expect(await retracted(Promise.resolve())).toBe('taken');
+    expect(await retracted(Promise.reject(new Error('blocked: deletes only a gift wrap of its own that this relay holds')))).toBe('absent');
+    for (const e of [new Error('timeout'), new Error('publish timed out'), 'connection failed', new Error('rate-limited: slow down'), new Error('relay connection closed')]) {
+      expect(await retracted(Promise.reject(e))).toBe('unreached');
+    }
+    // the save's own wrap, its last, decides between taken and absent; any that couldn't be made, wherever it is, is reported
+    expect(together(['absent', 'taken'])).toBe('taken');
+    expect(together(['taken', 'absent'])).toBe('absent');
+    expect(together(['unreached', 'taken'])).toBe('unreached');
+    expect(together(['taken', 'unreached'])).toBe('unreached');
   });
 });
 

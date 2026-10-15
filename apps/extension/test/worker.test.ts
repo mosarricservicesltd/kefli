@@ -45,7 +45,7 @@ async function until(ok: () => Promise<boolean> | boolean): Promise<void> {
  * The network: publish answers OK unless told otherwise, and can be held until a gate opens. Uploads are taken, or, given
  * the operator's Blossom server as a fetch, answered by it through the real client (contract 5).
  */
-function net(o: { publish?: 'ok' | 'down'; retract?: 'ok' | 'refused'; hold?: Promise<void>; blossom?: typeof fetch } = {}) {
+function net(o: { publish?: 'ok' | 'down'; retract?: 'ok' | 'refused' | 'down' | 'limited'; hold?: Promise<void>; blossom?: typeof fetch } = {}) {
   const published: NostrEvent[] = [];
   const asked = { n: 0, uploads: 0, removes: 0 };
   const n: Net = {
@@ -59,7 +59,10 @@ function net(o: { publish?: 'ok' | 'down'; retract?: 'ok' | 'refused'; hold?: Pr
     },
     async publish(_relay, e) {
       if (e.kind === 5) {
+        // the relay holds no such wrap (contract 3.2); the network gone; the relay's limit for unregistered keys
         if (o.retract === 'refused') throw new Error('blocked: deletes only a gift wrap of its own that this relay holds');
+        if (o.retract === 'down') throw new Error('timeout');
+        if (o.retract === 'limited') throw new Error('rate-limited: slow down');
         published.push(e);
         return;
       }
@@ -323,6 +326,31 @@ describe('Undo (F24, F40)', () => {
       expect(h.toasts.at(-1)).toMatchObject({ kind: onPhone ? 'onphone' : 'unqueued' });
       expect(await h.session.get(`undo:${id}`)).toBeFalsy();
     }
+  });
+
+  test('Undo on a waiting save a try may have sent, whose retraction can’t be made, says it couldn’t, and keeps the key', async () => {
+    // the network gone as Undo is pressed, or the relay's limit for keys it doesn't know
+    for (const retract of ['down', 'limited'] as const) {
+      const h = harness({ net: net({ publish: 'down', retract }).net, collected: [false, false] });
+      await h.work.save(PAGE, 1, false);
+      // the answer timed out, though the relay may hold the wrap
+      expect(await queued(h.store)).toMatchObject([{ why: 'reach' }]);
+      const id = h.toasts[0].id!;
+      await h.work.undo(id, 1);
+      // off the queue, so it won't go again, but the wrap the try may have sent is still there for the phone
+      expect(await queued(h.store)).toEqual([]);
+      expect(h.toasts.at(-1)).toMatchObject({ kind: 'undofailed', hash: h.toasts[0].hash });
+      expect((await history(h.store)).map((e) => e.outcome).slice(0, 2)).toEqual(['undo: failed', 'undo: off the queue']);
+      expect(await h.session.get(`undo:${id}`)).toBeDefined();
+    }
+  });
+
+  test('one whose retraction the relay refuses as holding no such wrap never reached it, and is removed', async () => {
+    const h = harness({ net: net({ publish: 'down', retract: 'refused' }).net, collected: [false, false] });
+    await h.work.save(PAGE, 1, false);
+    await h.work.undo(h.toasts[0].id!, 1);
+    expect(await queued(h.store)).toEqual([]);
+    expect(h.toasts.at(-1)).toMatchObject({ kind: 'unqueued', title: 'A page' });
   });
 
   test('Undo on a save that never left the browser only takes it off the queue', async () => {
@@ -1847,6 +1875,19 @@ describe('a move while saves wait, their toasts still showing (contract 4.4 and 
       const later = net();
       await harness({ store: h.store, session: h.session, net: later.net }).work.flushQueue();
       expect(later.published).toEqual([]);
+    });
+
+    test('one that went, whose retractions can’t reach the relay as Undo is pressed, says Undo couldn’t, rather than Removed from Kefli', async () => {
+      const { h, held, saving, moved } = await movedMidSend({ retract: 'down' });
+      held.open();
+      await saving;
+      const saved = h.toasts.at(-1)!;
+      expect(saved.kind).toBe('saved');
+      await h.work.undo(saved.id!, 1);
+      // the new wrap is off the queue; the one that went waits on the relay for the phone's last look at the old inbox
+      expect(await queued(h.store)).toEqual([]);
+      expect(h.toasts.at(-1)).toMatchObject({ kind: 'undofailed', hash: h.toasts[0].hash });
+      expect(await h.session.get(`undo:${moved.id}`)).toBeDefined();
     });
 
     test('one that went, which the phone then took in its last look at the old library’s inbox, is on the phone', async () => {

@@ -19,7 +19,7 @@ import {
 } from './save';
 import { KEYS, type Pairing, type Store } from './store';
 import type { ToastKind, ToastState } from './toastCopy';
-import { moveUndoKey, settleUndo, type Earlier, type Found, type Renamed, type UndoKey } from './undo';
+import { moveUndoKey, retracted, settleUndo, together, type Earlier, type Found, type Renamed, type Retracted, type UndoKey, type UndoOutcome } from './undo';
 
 /** Where a save's notices go: the tab's toast, the toolbar popup where no toast can run, or nowhere (a link menu). */
 export type Where = number | 'popup' | null;
@@ -59,10 +59,16 @@ interface UndoOf {
   id: string;
   where: Where;
   kept: UndoKey | undefined;
-  retractIt(): Promise<void>;
+  retractIt(): Promise<Retracted>;
   collected(): Promise<Found>;
   forget(): Promise<void>;
 }
+
+/** How an Undo ends on its toast: removed, found on the phone, or not taken back. */
+type Ended = Exclude<UndoOutcome, 'absent'>;
+
+/** What Copy debug info records of an Undo's end, and the toast that says it. */
+const SAID: Record<Ended, [Outcome, ToastKind]> = { onphone: ['undo: on the phone', 'onphone'], undone: ['undo: retracted', 'undone'], failed: ['undo: failed', 'undofailed'] };
 
 /** A wrap of a save and the library it went to, whose kind 5 for it says the phone took it from that library's inbox. */
 type WentTo = Pick<Earlier, 'id' | 'user'>;
@@ -340,13 +346,23 @@ export function background(b: Browser) {
   }
 
   /**
-   * The save's wraps from before a move retracted, each with its own key (undo.ts Earlier). The relay refuses to retract
-   * one it never took, which changes nothing, so a refusal here doesn't stop Undo; whether the phone took one is looked
-   * for after (collectedEarlier).
+   * One wrap retracted with its own key, and its inbox blob removed (save.ts retract), read as undo.ts reads a retraction.
+   * A key that can't be read can't retract its wrap either, which may then still be on the relay.
    */
-  async function retractEarlier(earlier: Earlier[], ctx: SaveContext): Promise<void> {
+  function retractOne(p: Pick<Pending, 'id' | 'sha256'>, key: string, ctx: SaveContext): Promise<Retracted> {
     const { relay, blossom } = ctx.defaults.operator;
-    for (const e of earlier) await retract({ id: e.id, sha256: null }, hexToBytes(e.key), blossom, relay, ctx.device, b.net, b.now()).catch(() => undefined);
+    return retracted(Promise.resolve().then(() => retract(p, hexToBytes(key), blossom, relay, ctx.device, b.net, b.now())));
+  }
+
+  /**
+   * The save's wraps from before a move, or from before it was made again, retracted, each with its own key (undo.ts
+   * Earlier). The relay refuses to retract one it never took, which changes nothing; one it couldn't be asked to retract
+   * may still be there, which Undo then says (undo.ts together). Whether the phone took one is looked for after.
+   */
+  async function retractEarlier(earlier: Earlier[], ctx: SaveContext): Promise<Retracted[]> {
+    const each: Retracted[] = [];
+    for (const e of earlier) each.push(await retractOne({ id: e.id, sha256: null }, e.key, ctx));
+    return each;
   }
 
   /**
@@ -369,21 +385,33 @@ export function background(b: Browser) {
    * says nothing more.
    */
   function undoOf(id: string, where: Where, kept: UndoKey | undefined, ctx: SaveContext): UndoOf {
-    const { relay, blossom } = ctx.defaults.operator;
     const earlier = kept?.earlier ?? [];
     return {
       id, where, kept,
       retractIt: async () => {
-        await retractEarlier(earlier, ctx);
-        if (!kept) throw new Error('no key');
-        await retract({ id, sha256: kept.sha256 }, hexToBytes(kept.key), blossom, relay, ctx.device, b.net, b.now());
+        const each = await retractEarlier(earlier, ctx);
+        // with no key for the save's own wrap it can't be retracted, so a copy of it on the relay stays there
+        each.push(kept ? await retractOne({ id, sha256: kept.sha256 }, kept.key, ctx) : 'unreached');
+        return together(each);
       },
-      collected: () => collectedAny(relay, [{ id, user: ctx.pairing.user_pubkey }, ...earlier]),
+      collected: () => collectedAny(ctx.defaults.operator.relay, [{ id, user: ctx.pairing.user_pubkey }, ...earlier]),
       forget: async () => {
         undone.add(id);
         await b.session.remove(`undo:${id}`).catch(() => undefined);
       },
     };
+  }
+
+  /**
+   * How an Undo ends, said on the toast and in Copy debug info. A save removed forgets its key, so a second press says
+   * nothing more; one Undo couldn't take back keeps it, so Undo pressed again tries again; one found on the phone is
+   * looked for again.
+   */
+  async function told(u: UndoOf, ended: Ended): Promise<void> {
+    if (ended === 'undone') await u.forget();
+    if (ended === 'onphone') await b.session.remove(`undo:${u.id}`).catch(() => undefined);
+    await note(u.id, SAID[ended][0]);
+    await toast(u.where, { kind: SAID[ended][1], hash: u.kept?.hash, title: '', host: '', link: false });
   }
 
   async function undoNow(id: string, where: Where, ctx: SaveContext): Promise<void> {
@@ -396,28 +424,24 @@ export function background(b: Browser) {
     const q = await queued(b.store).catch((): Queued[] => []);
     const waitingSave = q.find((e) => e.id === id);
     if (waitingSave && (await dequeue(b.store, id))) return unqueue(u, waitingSave, ctx.device);
-    const outcome = await settleUndo(u.retractIt, u.collected, b.wait).catch(() => 'failed' as const);
-    // a failed retraction keeps the key, so Undo pressed again tries again; one found on the phone is looked for again
-    if (outcome === 'undone') await u.forget();
-    if (outcome === 'onphone') await b.session.remove(`undo:${id}`).catch(() => undefined);
-    const said: Record<typeof outcome, [Outcome, ToastKind]> = { onphone: ['undo: on the phone', 'onphone'], undone: ['undo: retracted', 'undone'], failed: ['undo: failed', 'undofailed'] };
-    await note(id, said[outcome][0]);
-    await toast(where, { kind: said[outcome][1], hash: kept?.hash, title: '', host: '', link: false });
+    const outcome = await settleUndo(u.retractIt, u.collected, b.wait).catch((): UndoOutcome => 'failed');
+    // 'absent', for a save that went: its wrap gone from the relay, yet no phone said it took it
+    await told(u, outcome === 'absent' ? 'failed' : outcome);
   }
 
   /**
    * Undo of a save still in the queue: off it, and retracted as well when its send may have reached the relay, under the
-   * wrap it has now or one from before a move (mayBeOnRelay).
+   * wrap it has now or one from before (mayBeOnRelay). The relay refusing a retraction as holding no such wrap means that
+   * wrap never reached it, and the save is removed with its entry; a retraction it couldn't be asked for, out of reach or
+   * refusing it for now, leaves a wrap that did reach it there for the phone to take, so Undo says it couldn't, as it
+   * does for a save that went. Every failure read as removed said Removed from Kefli of a save sent before a move, whose
+   * wrap waited on the relay for the phone's last look at the old library's inbox.
    */
   async function unqueue(u: UndoOf, waitingSave: Queued, device: SaveContext['device']): Promise<void> {
     await note(u.id, 'undo: off the queue');
     await queueChanged();
-    const went = u.kept && mayBeOnRelay(waitingSave, u.kept) ? await settleUndo(u.retractIt, u.collected, b.wait).catch(() => 'undone' as const) : 'undone';
-    if (went === 'onphone') {
-      if (u.kept) await b.session.remove(`undo:${u.id}`).catch(() => undefined);
-      await note(u.id, 'undo: on the phone');
-      return toast(u.where, { kind: 'onphone', hash: u.kept?.hash, title: '', host: '', link: false });
-    }
+    const went = u.kept && mayBeOnRelay(waitingSave, u.kept) ? await settleUndo(u.retractIt, u.collected, b.wait).catch((): UndoOutcome => 'failed') : 'undone';
+    if (went === 'onphone' || went === 'failed') return told(u, went);
     await u.forget();
     // the title and host come from the sealed request; the queue doesn't keep them in the clear (F31)
     const [s] = await shown([waitingSave], device);

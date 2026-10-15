@@ -52,30 +52,54 @@ export async function moveUndoKey(session: Store, was: string, to: string, wrapK
 
 export const SECOND_LOOK_MS = 1500;
 
-export type UndoOutcome = 'undone' | 'onphone';
+/**
+ * What a retraction came to (contract 3.2): the relay took it; it refused it as `blocked:`, its answer to a kind 5 from a
+ * wrap's own key naming a wrap it doesn't hold, so there was nothing there to take back; or it couldn't be made, the relay
+ * out of reach or unanswered, or refusing it for now (rate-limited), so a wrap the relay holds is still there.
+ */
+export type Retracted = 'taken' | 'absent' | 'unreached';
+
+/** A retraction read from the publish of its kind 5. */
+export function retracted(publish: Promise<void>): Promise<Retracted> {
+  return publish.then(
+    (): Retracted => 'taken',
+    (e: unknown): Retracted => (String(e instanceof Error ? e.message : e).startsWith('blocked:') ? 'absent' : 'unreached'),
+  );
+}
+
+/** Several retractions as one: any that couldn't be made, or else the last, the save's own wrap. */
+export function together(each: Retracted[]): Retracted {
+  return each.includes('unreached') ? 'unreached' : (each.at(-1) ?? 'unreached');
+}
+
+/**
+ * How Undo ended. 'absent' is a retraction the relay refused as holding no such wrap, of a save no look found on the
+ * phone, which the caller reads: for a waiting save, a wrap that never reached the relay; for one that went, a wrap gone
+ * from the relay although no phone said it took it.
+ */
+export type UndoOutcome = 'undone' | 'absent' | 'onphone' | 'failed';
 
 /** What a look for the phone's deletion of a wrap found (relay.ts collected): it, not it, or null for no answer. */
 export type Found = boolean | null;
 
 /** Named, since the code gate's parser loses a function at a parameter typed as a function. */
-export type Retract = () => Promise<void>;
+export type Retract = () => Promise<Retracted>;
 export type Look = () => Promise<Found>;
 export type Wait = (ms: number) => Promise<void>;
 
 /**
- * The relay refuses the retraction once the phone has collected the save and deleted its wrap (contract 3.2: a kind 5
- * from an unregistered key may name only a wrap the relay holds), so a refusal still goes on to look; it is reported only
- * when the save isn't on the phone either. A second look the relay doesn't answer whole, unreachable or slow to finish,
- * can't tell whether the phone has the save, so it is reported too, rather than as removed.
+ * Undo's retraction, then its looks for the phone's deletion. The relay refuses the retraction once the phone has
+ * collected the save and deleted its wrap (contract 3.2: a kind 5 from an unregistered key may name only a wrap the relay
+ * holds), so a refusal still goes on to look. 'onphone' when a look finds the deletion; 'failed' when the retraction
+ * couldn't be made, or when the second look got no answer, unreachable or slow to finish, which can't tell whether the
+ * phone has the save; otherwise 'undone' when the relay took the retraction, and 'absent' when it held no such wrap.
  */
 export async function settleUndo(retract: Retract, collected: Look, wait: Wait): Promise<UndoOutcome> {
-  let refused: unknown = null;
-  await retract().catch((e: unknown) => void (refused = e));
+  const r = await retract();
   if ((await collected()) === true) return 'onphone';
   await wait(SECOND_LOOK_MS);
   const last = await collected();
   if (last === true) return 'onphone';
-  if (refused) throw refused;
-  if (last === null) throw new Error('no answer from the relay');
-  return 'undone';
+  if (last === null || r === 'unreached') return 'failed';
+  return r === 'taken' ? 'undone' : 'absent';
 }
