@@ -3,8 +3,8 @@
 // image the Reader can draw. The store stays within 200 MB by evicting archived articles' images first, and an image
 // that won't fit beside the open article's own is left out.
 // A page can name thousands, or images from servers that never answer: an article's first 500 are fetched, a run
-// stops at three time-outs in a row or once it has fetched the store's budget, and an image already on its way isn't
-// asked for twice. Ports, like sync, so this runs in tests.
+// stops at three time-outs in a row or once it has fetched the store's budget, a sync's run once its minute is spent,
+// and an image already on its way isn't asked for twice. Ports, like sync, so this runs in tests.
 import { articleBlocks } from '../reader/blocks';
 import { LIMITS } from '../reader/limits';
 import { drawable, imageKind, imageSize } from '../reader/imageSize';
@@ -33,6 +33,16 @@ export const MAX_ARTICLE_IMAGES = LIMITS.images;
 
 /** Images in a row that time out before a run stops, the rest waiting for the next, as pages do (pending.ts, F12). */
 export const SLOW_RUN = 3;
+
+/**
+ * RULED: the seconds a sync's run spends starting image fetches, as it spends starting parses (pending.ts
+ * RUN_SECONDS); the image under way when they pass finishes, inside its own 20 s. Phase 6 runs inside the sync's
+ * single run, ahead of the pending parses (runner.ts), and went on until the store's 200 MB had come in: fifty
+ * articles of images from servers slow but inside the deadline held every later sync, the outbox and other phones'
+ * saves with it, for as long as they took. What a run has no time for is fetched by the next sync, or when its article
+ * opens, which isn't held to this: the Reader's fetch runs outside the sync.
+ */
+export const RUN_SECONDS = 60;
 
 /** An article's distinct image addresses, in reading order, the first MAX_ARTICLE_IMAGES of them. */
 export function imageUrls(blocks: { kind: string; src?: string }[]): string[] {
@@ -136,22 +146,33 @@ export async function fetchImage(p: ImagePorts, owner: string, url: string, hash
   return r === 'slow' ? 'failed' : r;
 }
 
-/** Fetches the list in order until the network goes, SLOW_RUN time out in a row, or the run has fetched the budget. */
-async function fetchAll(p: ImagePorts, owner: string, list: { url: string; hash: string }[]): Promise<number> {
-  let n = 0;
-  let slow = 0;
-  let fetched = 0;
+/** A run so far: the images it fetched, its time-outs in a row, and the bytes it fetched. */
+type Tally = { n: number; slow: number; bytes: number };
+
+/**
+ * An image's outcome counted into a run's tally; true when the run stops there: the network gone, SLOW_RUN time-outs
+ * in a row, or a whole store's worth fetched, so the next run carries on with the network spared the churn.
+ */
+function stops(p: ImagePorts, t: Tally, url: string, r: Counted): boolean {
+  t.slow = r === 'slow' ? t.slow + 1 : 0;
+  if (r === 'offline' || t.slow >= SLOW_RUN) return true;
+  if (r !== 'ok') return false;
+  t.n++;
+  t.bytes += getImage(p.db, url)?.bytes ?? 0;
+  return t.bytes >= (p.budget ?? MAX_TOTAL_BYTES);
+}
+
+/**
+ * Fetches the list in order until the network goes, SLOW_RUN time out in a row, the run has fetched the budget, or
+ * the clock (p.now, in seconds) reaches until: none is started then.
+ */
+async function fetchAll(p: ImagePorts, owner: string, list: { url: string; hash: string }[], until = Infinity): Promise<number> {
+  const t: Tally = { n: 0, slow: 0, bytes: 0 };
   for (const { url, hash } of list) {
-    const r = await fetchCounted(p, owner, url, hash);
-    slow = r === 'slow' ? slow + 1 : 0;
-    if (r === 'offline' || slow >= SLOW_RUN) break;
-    if (r !== 'ok') continue;
-    n++;
-    // a run that has fetched a whole store's worth stops: the next run carries on, the network spared the churn
-    fetched += getImage(p.db, url)?.bytes ?? 0;
-    if (fetched >= (p.budget ?? MAX_TOTAL_BYTES)) break;
+    if (p.now() >= until) break;
+    if (stops(p, t, url, await fetchCounted(p, owner, url, hash))) break;
   }
-  return n;
+  return t.n;
 }
 
 const urlsOf = (p: ImagePorts) => (hash: string) => imageUrls(p.readArticle(hash)?.blocks ?? []);
@@ -161,9 +182,10 @@ export function fetchArticleImages(p: ImagePorts, owner: string, hash: string): 
   return fetchAll(p, owner, wanted(p.db, [hash], urlsOf(p), p.now()));
 }
 
-/** Phase 6 on an unmetered network: the newest 50 unread articles' images. */
+/** Phase 6 on an unmetered network: the newest 50 unread articles' images, started for RUN_SECONDS at most. */
 export function syncImages(p: ImagePorts, owner: string): Promise<number> {
-  return fetchAll(p, owner, wanted(p.db, keptArticles(p.db, owner), urlsOf(p), p.now()));
+  const until = p.now() + RUN_SECONDS;
+  return fetchAll(p, owner, wanted(p.db, keptArticles(p.db, owner), urlsOf(p), p.now()), until);
 }
 
 /** Images let go: their files, then their rows. */
