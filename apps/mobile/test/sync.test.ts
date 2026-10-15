@@ -416,6 +416,24 @@ describe('inbound sync (mobile spec 4.5)', () => {
     expect(good).toMatchObject({ words: 10, text_servers: '["https://s.example"]', extra: null, position_word: 5 });
   });
 
+  test("another phone's addresses are kept without a user name and password (contract 4.3, ruling 8)", async () => {
+    // another client may publish them with one, as a browser's request or an older row held them: the save's link is
+    // what Original, Open in browser and the save published again from here are given, and its picture is fetched
+    const w = world();
+    const named = { url: 'https://reader:hunter2@example.com/a', canonical: 'https://reader:hunter2@example.com/c', hero: 'https://cdn:secret@img.example.com/h.jpg' };
+    w.publish(await remoteSave(w, h(1), 6000, null, named));
+    await syncInbound(w.ports);
+    const kept = () => w.db.get('SELECT url, canonical, hero, title FROM items WHERE hash = ?', h(1));
+    expect(kept()).toEqual({ url: 'https://example.com/a', canonical: 'https://example.com/c', hero: 'https://img.example.com/h.jpg', title: 'A title' });
+    // so is a newer copy taken over the row
+    w.publish(await remoteSave(w, h(1), 7000, null, { ...named, url: 'https://admin:pw@example.com/b', title: 'Newer' }));
+    await syncInbound(w.ports);
+    expect(kept()).toEqual({ url: 'https://example.com/b', canonical: 'https://example.com/c', hero: 'https://img.example.com/h.jpg', title: 'Newer' });
+    // and an address without them is kept exactly as written
+    const plain = itemColumns(item({ url: 'https://example.com/a?q=1#x', canonical: 'https://example.com/c', hero: 'https://img.example.com/h.jpg' }), { created_at: 1 } as NostrEvent);
+    expect(plain).toMatchObject({ url: 'https://example.com/a?q=1#x', canonical: 'https://example.com/c', hero: 'https://img.example.com/h.jpg' });
+  });
+
   test('no active identity or no signer: nothing to do', async () => {
     const w = world();
     expect(await syncInbound({ ...w.ports, signer: async () => null })).toEqual({ items: 0, deletions: 0, texts: 0, missing: 0, waiting: 0 });
