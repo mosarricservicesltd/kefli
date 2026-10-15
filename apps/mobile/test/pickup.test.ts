@@ -75,6 +75,16 @@ describe('the link a share carries (5.4)', () => {
     expect(firstLink('https://example.com/a​')).toBe('https://example.com/a');
   });
 
+  test('a link that is the whole share but for the marks that show nothing round it is still the whole share', () => {
+    // a right-to-left chat app puts direction marks round a link it shares alone: its own full stop stays, as without them
+    expect(firstLink('\u200fhttps://en.wikipedia.org/wiki/Washington,_D.C.\u200f')).toBe('https://en.wikipedia.org/wiki/Washington,_D.C.');
+    expect(firstLink('\u2066https://en.wikipedia.org/wiki/Washington,_D.C.\u2069\n')).toBe('https://en.wikipedia.org/wiki/Washington,_D.C.');
+    expect(firstLink('\u200b https://example.com/a. \u200e\uFFFC')).toBe('https://example.com/a.');
+    // with words beside it, it is still read as written in a sentence, and the marks still go from its end
+    expect(firstLink('\u200fLook: https://example.com/a.\u200f')).toBe('https://example.com/a');
+    expect(firstLink('\u200fhttps://example.com/a.\u200f \u200fmore\u200f')).toBe('https://example.com/a');
+  });
+
   test('at most the last 16 addresses are tried', () => {
     const bad = (n: number) => 'http://[ '.repeat(n);
     expect(firstLink(`https://good.example/ ${bad(10)}`)).toBe('https://good.example/');

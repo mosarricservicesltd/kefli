@@ -29,7 +29,14 @@ const ADDRESS = new RegExp('https?://[^\\s<>"\\ufffc]+', 'g');
 const PICTURE = new RegExp('\\ufffc', 'g');
 // marks that show nothing: zero-width spaces and joiners, and the direction marks right-to-left chat apps put round a link
 const INVISIBLE = new RegExp('[\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u2064\\u2066-\\u2069\\ufeff]');
+const INVISIBLES = new RegExp(INVISIBLE.source, 'g');
 const SENTENCE_END = '.,;:!?';
+
+/**
+ * Text as it shows, to ask whether a link is the whole share: a picture's mark is a space, and the marks that show
+ * nothing are gone.
+ */
+const shown = (s: string) => s.replace(PICTURE, ' ').replace(INVISIBLES, '').trim();
 
 /** A link Kefli can save: one normalise takes, short enough for its save's event (data/saves addressFits). */
 function savable(url: string): boolean {
@@ -75,13 +82,14 @@ function asWritten(link: string, whole: boolean): string {
  * The link a share carries: the last http(s) address in its text, since apps put their own words first, read as it
  * was written (asWritten). One Kefli can't save ("http://[", a host too long, or an address too long for its event)
  * is passed over for the one before it, the last 16 at most, so such a share says Not a link, rather than failing on
- * the sheet and again at every start from the spool. A picture's mark counts as a space here too, so a link and a
- * picture are still a link that is the whole share.
+ * the sheet and again at every start from the spool. A picture's mark counts as a space here too, and the marks that
+ * show nothing as nothing, so a link and a picture, or a link a right-to-left chat app put direction marks round, are
+ * still a link that is the whole share.
  */
 export function firstLink(text: string | null): string | null {
   if (typeof text !== 'string' || text.length >= SHARE_MAX_CHARS) return null;
   const all = text.match(ADDRESS) ?? [];
-  const whole = all.length === 1 && text.replace(PICTURE, ' ').trim() === all[0];
+  const whole = all.length === 1 && shown(text) === shown(all[0]);
   for (let i = all.length - 1, tries = 0; i >= 0 && tries < SHARE_MAX_TRIES; i--, tries++) {
     const link = asWritten(all[i], whole);
     if (savable(link)) return link;
