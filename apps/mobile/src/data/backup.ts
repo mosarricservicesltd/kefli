@@ -17,14 +17,15 @@ export function markBacked(db: SqlDb, eventId: string): void {
 }
 
 /**
- * Saves that signing out would lose (FD 105): never sent to a relay, with changes not yet sent, or with text no server
- * holds yet. A save waiting only for its mirror isn't counted: Kefli's server has it.
+ * Saves that signing out would lose (FD 105): never sent to a relay, or with a change not yet sent. A save whose text
+ * alone no server holds isn't counted (C§4.2, v1.12): its upload holds back only itself, so the save went out without
+ * the text, link, title and state backed up, and signing out takes only the phone's copy of the text, which signing in
+ * again fetches from the page, as a new phone does (C§1). Counted, as before v1.12, every save past the library's
+ * storage or its day's uploads read as one that hadn't been sent and would be lost.
  */
 export function unsentSaves(db: SqlDb, owner: string): number {
   return db.get<{ n: number }>(
-    `SELECT COUNT(*) AS n FROM items i WHERE i.owner = ? AND i.pending_delete_at IS NULL AND (
-       i.event_id IS NULL OR i.dirty = 1
-       OR EXISTS (SELECT 1 FROM blobs b WHERE b.sha256 = i.text_sha256 AND b.owner = i.owner AND b.operator_at IS NULL AND b.mirror_at IS NULL))`,
+    'SELECT COUNT(*) AS n FROM items WHERE owner = ? AND pending_delete_at IS NULL AND (event_id IS NULL OR dirty = 1)',
     owner,
   )?.n ?? 0;
 }

@@ -2,12 +2,13 @@
 // the target T, any signer. Its steps, each recorded in the move job so a move cut short resumes where it stopped:
 //   0. prepare T: registered, and its lists in place (as at any sign-in);
 //   1. collect both libraries; a save from a newer Kefli in either stops the move here, S untouched;
-//   2. copy each of S's saves to T through the outbox (data/move.ts), S's own unsent rows withdrawn;
+//   2. copy each of S's saves to T through the outbox (data/move.ts), S's own unsent rows withdrawn but the deletions
+//      it owes;
 //   3. move S's connected browsers: POST /devices as T, and a pair-ack sealed by S carrying T and moved_from;
 //   4. confirm: T's outbox empty, then every copied save read back and opened from min(2, n) of T's write relays;
-//   5. retire S: its inbox drained once more (anything found goes back to step 2), what changed under S since the
-//      copy carried to T, kind 5s for its saves and its connected-browsers record to its write relays,
-//      DELETE /account as S, then S off the phone.
+//   5. retire S: its inbox drained once more (anything found goes back to step 2) and the kind 5s for the wraps it
+//      took sent as S, what changed under S since the copy carried to T, kind 5s for its saves and its
+//      connected-browsers record to its write relays, DELETE /account as S, then S off the phone.
 // S stays whole until step 5, so a save is never deleted before its copy exists under T.
 import { bytesToHex } from '@noble/hashes/utils.js';
 import {
@@ -155,9 +156,11 @@ async function withMirror(p: MovePorts, from: string, hash: string, operator: st
  */
 async function copyAll(p: MovePorts, job: MoveJob): Promise<boolean> {
   const t = targetsOf(await p.defaults());
-  // RULED: S's unsent rows go now that the newer check has passed: every save goes out under T instead
-  // except old addresses still to retire (F5), which step 5 names with S's saves
-  p.db.run("DELETE FROM outbox WHERE signer = ? AND state IN ('held','queued','dead') AND NOT (op = 'delete_item' AND subject LIKE 'retire:%')", job.from);
+  // RULED: S's unsent rows go now that the newer check has passed: every save goes out under T instead. The deletions
+  // S owes stay, which only S can sign: its saves' (old addresses still to retire, F5, and saves deleted under S, F20),
+  // which step 5 names with S's saves (deletesOwed), and the kind 5s for wraps its inbox took (wrapsClosed). Withdrawn
+  // here, a save deleted just before the move, or while it waited and the last drain sent it back, stayed on S's relays
+  p.db.run("DELETE FROM outbox WHERE signer = ? AND state IN ('held','queued','dead') AND op NOT IN ('delete_item', 'delete_wrap')", job.from);
   const todo = sourceSaves(p.db, job.from, job.moved);
   const total = job.moved.length + todo.length;
   for (const hash of todo) {
@@ -297,9 +300,37 @@ async function retireRemote(p: MovePorts, job: MoveJob): Promise<boolean> {
   }
 }
 
+/**
+ * Whether the kind 5s for the wraps S's inbox took have gone out under S, or been given up on (C§4.4). A browser that
+ * wrapped a save again for T in the move reads S's kind 5 for the old wrap as the save on the phone when its Undo is
+ * pressed (C§4.4, 4.8 step 5), and once S's account is deleted the operator relay takes none of S's events. Queued by
+ * the last drain and never sent, they left the browser saying a save it never removed was gone from Kefli.
+ */
+function wrapsClosed(db: SqlDb, from: string): boolean {
+  return !db.get("SELECT 1 FROM outbox WHERE signer = ? AND op = 'delete_wrap' AND state IN ('held', 'queued', 'sending')", from);
+}
+
+/**
+ * RULED: S's kind 5s for the wraps its inbox took, due now at the operator relay as defaults.json names it now, where
+ * a browser's Undo reads them (C§4.4). Each try of step 5 tries them once more, a switch's with the person watching
+ * and Back turned off: one the outbox had put off while the relay was out of reach waited for its next try, up to an
+ * hour away (data/outbox backoff), and one queued for a relay defaults.json has since replaced waited for good.
+ */
+function wrapsDue(db: SqlDb, from: string, relay: string, now: number): void {
+  db.run(
+    `UPDATE outbox_targets SET target = ?, next_at = ? WHERE state = 'pending' AND outbox_id IN (
+       SELECT id FROM outbox WHERE signer = ? AND op = 'delete_wrap' AND state = 'queued')`,
+    relay, now, from,
+  );
+}
+
 async function retire(p: MovePorts, job: MoveJob): Promise<'again' | boolean> {
   await p.drainSourceInbox().catch(() => undefined);
   if (sourceSaves(p.db, job.from, job.moved).length) return 'again';
+  // the last drain's kind 5s go out while S may still publish; one that can't yet keeps S for a later run
+  wrapsDue(p.db, job.from, (await p.defaults()).operator.relay, p.now());
+  await p.runOutbox();
+  if (!wrapsClosed(p.db, job.from)) return false;
   // what changed under S since its saves were copied goes to T before S's rows go (F20), marked carried in the same
   // transaction and saved before any of S's retirement goes out, so a later pass reads S's missing rows as retired
   p.db.tx(() => {

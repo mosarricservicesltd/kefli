@@ -1,6 +1,6 @@
 import {
-  LocalSigner, buildLibraryKeyEvent, encryptText, normaliseMarkdown, readItemEvent, releaseTemplate, savedD, statementHolds, textHash, unwrap,
-  type NostrEvent, type Signer,
+  LocalSigner, buildLibraryKeyEvent, encryptText, itemHash, normaliseMarkdown, readItemEvent, releaseTemplate, savedD, statementHolds, textHash, unwrap,
+  wrapSaveRequest, type NostrEvent, type SaveRequest, type Signer,
 } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import { bytesToHex } from '@noble/hashes/utils.js';
@@ -17,6 +17,7 @@ import { pendingParses } from '../src/data/pending';
 import { drain } from '../src/services/send';
 import { TEXT_TIMEOUT_MS, syncOwner, type Filter } from '../src/services/sync';
 import { runMove, type MovePorts } from '../src/services/move';
+import { drainInbox } from '../src/services/inbox';
 import type { Defaults } from '../src/services/config';
 import { SERVER_TIMEOUT_MS } from '../src/net/http';
 import { memoryDb } from './sqlite';
@@ -420,6 +421,45 @@ describe('The move (contract 4.8, mobile spec 4.10)', () => {
     expect(named).toContain(`30078:${S}:${d2}`);
   });
 
+  /** The addresses S's kind 5s name on each of its write relays. */
+  const namedBy = (w: ReturnType<typeof world>) => (relay: string) =>
+    w.relays.get(relay)!.filter((e) => e.kind === 5 && e.pubkey === w.S.pubkey()).flatMap((e) => e.tags).map((t) => t[1]);
+
+  test("a save deleted under S just before the move, its kind 5 waiting on a retry, is deleted on S's relays (C§4.8 step 5)", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    await w.save(w.S, 2);
+    const S = w.S.pubkey();
+    const d2 = w.db.get<{ remote_d: string }>('SELECT remote_d FROM items WHERE owner = ? AND hash = ?', S, h(2))!.remote_d;
+    const del = deleteItem(w.db, w.p.now(), S, h(2));
+    commitDelete(w.db, S, h(2), del.held);
+    // a relay dropped the connection as it went out, and its retry isn't due before the copy withdraws S's rows
+    w.db.run("UPDATE outbox_targets SET attempts = 1, next_at = ? WHERE outbox_id IN (SELECT id FROM outbox WHERE op = 'delete_item' AND signer = ?)", w.p.now() + 3_600, S);
+    expect(await runMove(w.p)).toBe('done');
+    for (const r of ['ws://op', 'ws://a', 'ws://b']) expect([r, namedBy(w)(r)]).toEqual([r, expect.arrayContaining([`30078:${S}:${d2}`])]);
+    expect(rowsOf(w, w.T.pubkey()).map((r) => r.hash)).toEqual([h(1)]);
+  });
+
+  test("a save deleted under S as the move waits stays deleted on S's relays when the last drain sends the move back (F20)", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    await w.save(w.S, 2);
+    await waitAtReadBack(w);
+    const S = w.S.pubkey();
+    const d2 = w.db.get<{ remote_d: string }>('SELECT remote_d FROM items WHERE owner = ? AND hash = ?', S, h(2))!.remote_d;
+    // every relay refused the kind 5 until the outbox gave up on it
+    const del = deleteItem(w.db, 1_100, S, h(2));
+    commitDelete(w.db, S, h(2), del.held);
+    w.db.run("UPDATE outbox SET state = 'dead' WHERE op = 'delete_item' AND signer = ?", S);
+    w.db.run('UPDATE outbox_targets SET next_at = 0');
+    // and the last drain found a save, which sent the move back to the copy
+    let drained = false;
+    const p: MovePorts = { ...w.p, drainSourceInbox: async () => void (drained || ((drained = true), await w.save(w.S, 3))) };
+    expect(await runMove(p)).toBe('done');
+    expect(namedBy(w)('ws://op')).toContain(`30078:${S}:${d2}`);
+    expect(rowsOf(w, w.T.pubkey()).map((r) => r.hash)).toEqual([h(1), h(3)]);
+  });
+
   test('DELETE /account refused: S stays, to try again', async () => {
     const w = world({ accountStatus: 500 });
     await w.save(w.S, 1);
@@ -498,6 +538,143 @@ describe('The move (contract 4.8, mobile spec 4.10)', () => {
     };
     expect(await runMove(p)).toBe('done');
     expect(rowsOf(w, w.T.pubkey()).map((r) => r.hash)).toEqual([h(1), h(2)]);
+  });
+
+  /**
+   * A browser connected to S whose saves are wrapped to S on the operator relay, and the move's last drain of S's inbox
+   * as the phone's runner wires it: the real drain, S's key opening its wraps (C§4.4, 4.8 step 5). deleted says whether
+   * S's kind 5 for a wrap was on the operator relay when S's DELETE /account went.
+   */
+  function browserOfS(w: ReturnType<typeof world>) {
+    const device = new LocalSigner(nodeCrypto.randomBytes(32));
+    const token = 'cd'.repeat(32);
+    absorbRecord(w.db, w.S.pubkey(), { v: 1, devices: [{ device_pubkey: device.pubkey(), label: 'Chrome on a Linux laptop', token, connected_at: 1, revoked_at: null }] }, 'ee'.repeat(32), 1);
+    let n = 0;
+    const send = async (url: string) => {
+      const now = w.p.now();
+      const request: SaveRequest = { v: 1, url, canonical: null, title: 'From the browser', site: 'e.com', byline: null, lang: 'en', hero: null, captured_at: now - 60, token, html: null };
+      // dated when it is sent, rather than up to two days before as NIP-59 has it, which the world's clock can't go back to
+      const { wrap } = await wrapSaveRequest(device, w.S.pubkey(), String(n++), request, now, { now, random: (k) => new Uint8Array(k) });
+      await w.p.publish('ws://op', wrap);
+      return wrap.id;
+    };
+    const drainS = async () => void (await drainInbox({
+      db: w.db, now: w.p.now, signer: w.S, crypto: nodeCrypto, query: w.p.query, fetch: w.p.fetch, defaults: async () => D,
+      markdown: async () => ({ ok: false, reason: 'error' }), stage: w.p.stage, unstage: () => undefined, writeText: () => undefined, targets: async () => T3,
+    }, w.S.pubkey()));
+    const fiveFor = (wrapId: string) => w.relays.get('ws://op')!.some((e) => e.kind === 5 && e.pubkey === w.S.pubkey()
+      && e.tags.some((t) => t[0] === 'e' && t[1] === wrapId) && e.tags.some((t) => t[0] === 'k' && t[1] === '1059'));
+    const atDelete = new Map<string, boolean>();
+    const watching = (wrapIds: () => string[]) => (async (url: string, init: RequestInit = {}) => {
+      if (init.method === 'DELETE' && url.endsWith('/account')) for (const id of wrapIds()) atDelete.set(id, fiveFor(id));
+      return w.p.fetch(url, init);
+    }) as typeof fetch;
+    return { send, drainS, fiveFor, watching, deleted: (id: string) => atDelete.get(id) };
+  }
+
+  test("the last drain's new save goes back through the copy, its wrap's kind 5 out under S before S's account goes", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    const b = browserOfS(w);
+    // the browser saved a page while the move ran: its wrap waits in S's inbox for the last drain
+    const wrap = await b.send('https://e.com/from-the-browser');
+    expect(await runMove({ ...w.p, drainSourceInbox: b.drainS, fetch: b.watching(() => [wrap]) })).toBe('done');
+    expect(rowsOf(w, w.T.pubkey()).map((r) => r.hash)).toEqual(expect.arrayContaining([h(1), itemHash('https://e.com/from-the-browser')]));
+    // the browser's Undo reads S's kind 5 for its old wrap as the save on the phone (C§4.4)
+    expect(b.fiveFor(wrap)).toBe(true);
+    expect(b.deleted(wrap)).toBe(true);
+  });
+
+  test("the last drain's repeat save of one S holds has its wrap's kind 5 out under S before S's account goes", async () => {
+    const w = world();
+    const b = browserOfS(w);
+    // a page the browser saved before the move, taken by S's inbox then, and saved again while the move ran
+    const first = await b.send('https://e.com/again');
+    await b.drainS();
+    await w.p.runOutbox();
+    expect(b.fiveFor(first)).toBe(true);
+    w.tick(10);
+    const again = await b.send('https://e.com/again');
+    expect(await runMove({ ...w.p, drainSourceInbox: b.drainS, fetch: b.watching(() => [again]) })).toBe('done');
+    expect(rowsOf(w, w.T.pubkey()).map((r) => r.hash)).toEqual([itemHash('https://e.com/again')]);
+    expect(b.deleted(again)).toBe(true);
+  });
+
+  test("a wrap's kind 5 the operator relay can't take yet keeps S, whose account goes once it is out", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    const b = browserOfS(w);
+    const first = await b.send('https://e.com/1-again');
+    await b.drainS();
+    w.tick(10);
+    // the relay drops the connection whenever S sends a kind 5 for the wrap the last drain takes
+    let wrap = '';
+    let down = true;
+    const publish: MovePorts['publish'] = (r, e) => (down && e.kind === 5 && e.tags.some((t) => t[1] === wrap) ? Promise.reject(new Error('down')) : w.p.publish(r, e));
+    const outbox = () => drain({ db: w.db, now: w.p.now, signer: async (pk) => (pk === w.S.pubkey() ? w.S : pk === w.T.pubkey() ? w.T : null), fetch: w.p.fetch, crypto: nodeCrypto, defaults: () => D, publish, readBlob: w.p.readStaged });
+    await outbox();
+    expect(b.fiveFor(first)).toBe(true);
+    wrap = await b.send('https://e.com/1-again');
+    const p: MovePorts = { ...w.p, publish, runOutbox: outbox, drainSourceInbox: b.drainS, fetch: b.watching(() => [wrap]) };
+    expect(await runMove(p)).toBe('waiting');
+    expect(moveJob(w.db)?.step).toBe(5);
+    expect(w.log.some((l) => l.startsWith('DELETE http://api/account'))).toBe(false);
+    expect(w.db.get('SELECT 1 AS n FROM identities WHERE pubkey = ?', w.S.pubkey())).toEqual({ n: 1 });
+    down = false;
+    w.tick(60);
+    expect(await runMove(p)).toBe('done');
+    expect(b.deleted(wrap)).toBe(true);
+  });
+
+  test("a wrap's kind 5 the outbox put off for an hour, the operator relay having been out of reach, goes out at once at the end", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    const b = browserOfS(w);
+    // taken by S's inbox before the move, its kind 5 failing while the relay was out of reach, so the outbox's next
+    // try is an hour off (data/outbox backoff)
+    const wrap = await b.send('https://e.com/taken-before');
+    await b.drainS();
+    w.db.run("UPDATE outbox_targets SET attempts = 8, next_at = ? WHERE outbox_id IN (SELECT id FROM outbox WHERE op = 'delete_wrap')", w.p.now() + 3_600);
+    w.tick(10);
+    // the person watches the move with Back turned off: it ends now that the relay answers, rather than in an hour
+    expect(await runMove({ ...w.p, drainSourceInbox: b.drainS, fetch: b.watching(() => [wrap]) })).toBe('done');
+    expect(b.deleted(wrap)).toBe(true);
+  });
+
+  test("a wrap's kind 5 the operator relay refuses for good doesn't hold S: the move ends", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    const b = browserOfS(w);
+    const wrap = await b.send('https://e.com/refused');
+    const publish: MovePorts['publish'] = async (r, e) => (e.kind === 5 && e.tags.some((t) => t[1] === wrap) ? { ok: false, reason: 'blocked: not allowed' } : w.p.publish(r, e));
+    const outbox = () => drain({
+      db: w.db, now: w.p.now, signer: async (pk) => (pk === w.S.pubkey() ? w.S : pk === w.T.pubkey() ? w.T : null),
+      fetch: w.p.fetch, crypto: nodeCrypto, defaults: () => D, publish, readBlob: w.p.readStaged,
+    });
+    expect(await runMove({ ...w.p, publish, runOutbox: outbox, drainSourceInbox: b.drainS })).toBe('done');
+    expect(rowsOf(w, w.T.pubkey()).map((r) => r.hash)).toEqual(expect.arrayContaining([h(1), itemHash('https://e.com/refused')]));
+  });
+
+  test("a wrap's kind 5 queued for an operator relay defaults.json has since replaced goes to the one it names now", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    const b = browserOfS(w);
+    const wrap = await b.send('https://e.com/relay-moved');
+    // S's inbox took it as the move began, its kind 5 queued for the operator relay as defaults.json named it then;
+    // the operator has since moved the relay to a new address, the browser's Undo reading S's kind 5s there, and the
+    // old one answers no more
+    await b.drainS();
+    const now = { ...D, operator: { ...D.operator, relay: 'ws://op2' } };
+    const publish: MovePorts['publish'] = (r, e) => (r === 'ws://op' && e.kind === 5 ? Promise.reject(new Error('gone')) : w.p.publish(r, e));
+    const outbox = () => drain({
+      db: w.db, now: w.p.now, signer: async (pk) => (pk === w.S.pubkey() ? w.S : pk === w.T.pubkey() ? w.T : null),
+      fetch: w.p.fetch, crypto: nodeCrypto, defaults: () => now, publish, readBlob: w.p.readStaged,
+    });
+    const p: MovePorts = { ...w.p, defaults: async () => now, publish, runOutbox: outbox, drainSourceInbox: b.drainS };
+    // waited on at the old address, it held S, and the move, for good
+    expect(await runMove(p)).toBe('done');
+    const at = (relay: string) => (w.relays.get(relay) ?? []).some((e) => e.kind === 5 && e.pubkey === w.S.pubkey() && e.tags.some((t) => t[0] === 'e' && t[1] === wrap));
+    expect([at('ws://op'), at('ws://op2')]).toEqual([false, true]);
   });
 
   /** T's newest copy of a save on a relay the operator doesn't run. */

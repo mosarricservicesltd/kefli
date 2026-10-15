@@ -270,6 +270,27 @@ describe('a nostr user’s deletion (contract 4.7)', () => {
     expect(down.lists.map((e) => e.tags)).toEqual([[['r', 'wss://mine']], [['server', 'https://my.blossom']]]);
   });
 
+  test("a default relay Kefli doesn't write to for this person is read for the newest lists too (C§3.1)", async () => {
+    const w = world();
+    // signed in with Keep backup copies on: Kefli added its own relay and its first default relay, ws://a, not ws://b
+    await signedIn(w, [['r', 'wss://mine']], [['server', 'https://my.blossom']]);
+    expect(w.db.all("SELECT url FROM relays WHERE url = 'ws://b'")).toEqual([]);
+    // since this phone last synced, another app of theirs added a relay, and its list reached Kefli's second default
+    // relay and no other relay this phone reads
+    const newer = await w.p.signer.signEvent({ kind: 10002, created_at: 900, tags: [['r', 'wss://mine'], ['r', 'wss://new.example']], content: '' });
+    const asked: string[] = [];
+    const p: DelPorts = {
+      ...w.p,
+      query: async (relay, filters) => (asked.push(relay), filters[0].kinds.includes(10002) && relay === 'ws://b' ? [newer] : []),
+    };
+    const signed = await signDeletion(p);
+    expect(asked).toEqual(expect.arrayContaining(['ws://idx', 'ws://a', 'ws://b']));
+    // rewritten from the list held, the newer list's relay went from the list their other apps share, by a list dated after it
+    const relayList = signed.lists.find((e) => e.kind === 10002)!;
+    expect(relayList.tags).toEqual([['r', 'wss://mine'], ['r', 'wss://new.example']]);
+    expect(relayList.created_at).toBe(901);
+  });
+
   test('a relay holding a newer list from another app, or one that keeps no lists, is confirmed by its answers to the kind 5s alone', async () => {
     const w = world();
     w.db.run("UPDATE identities SET provider = 'nip55'");

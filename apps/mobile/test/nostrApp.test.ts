@@ -47,17 +47,32 @@ describe('saving without asking, as last checked (FD 104)', () => {
 });
 
 describe('signing out (FD 105)', () => {
-  test('counts the saves it would lose: unsent, changed, or with text no server holds', () => {
+  test('counts the saves it would lose: never sent, or with a change not yet sent', () => {
     const w = world();
     w.add(1); // sent, nothing pending
     w.add(2, { event_id: null }); // never sent
     w.add(3, { dirty: 1 }); // a change not yet sent
-    w.add(4, { text_sha256: 'b'.repeat(64) }); // sent, but its text reached no server (the declined upload)
-    w.blob('b'.repeat(64), null, null);
-    w.add(5, { text_sha256: 'c'.repeat(64) }); // its text on Kefli's server, waiting only for the mirror
-    w.blob('c'.repeat(64), 100, null);
-    w.add(6, { event_id: null, pending_delete_at: 5 }); // being deleted anyway
-    expect(unsentSaves(w.db, PK)).toBe(3);
+    w.add(4, { text_sha256: 'b'.repeat(64) }); // its text on Kefli's server, waiting only for the mirror
+    w.blob('b'.repeat(64), 100, null);
+    w.add(5, { event_id: null, pending_delete_at: 5 }); // being deleted anyway
+    expect(unsentSaves(w.db, PK)).toBe(2);
+  });
+
+  test("a save sent without the text Kefli's server hasn't taken isn't counted: only the phone's copy of its text goes (C§4.2, v1.12)", () => {
+    const w = world();
+    // past the library's storage, a day's uploads, or 8 MB: each save went out at once with text null, its text left here
+    for (const [n, reason] of [[1, 'quota'], [2, 'daily'], [3, 'too_large'], [4, 'http 507']] as const) {
+      w.add(n, { text_sha256: h(100 + n) });
+      w.blob(h(100 + n), null, null);
+      w.db.run('UPDATE blobs SET last_error = ? WHERE sha256 = ?', reason, h(100 + n));
+    }
+    // and another phone's save, sent without text, whose page this phone parsed: its upload waits
+    w.add(5, { text_sha256: h(105) });
+    w.blob(h(105), null, null);
+    expect(unsentSaves(w.db, PK)).toBe(0);
+    // a change to one of them not yet sent is counted, as any other is
+    w.db.run('UPDATE items SET dirty = 1 WHERE hash = ?', h(1));
+    expect(unsentSaves(w.db, PK)).toBe(1);
   });
 
   test('keeps the reader and voice settings across the wipe, and nothing else', () => {
