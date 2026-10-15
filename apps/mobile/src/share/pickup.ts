@@ -21,8 +21,12 @@ export const SHARE_MAX_CHARS = 64 * 1024;
 /** The most addresses in one share that are tried, from the last: a share holds one or two. */
 export const SHARE_MAX_TRIES = 16;
 
-// strings, since the code gate's parser misreads regex literals
-const ADDRESS = new RegExp('https?://[^\\s<>"]+', 'g');
+// strings, since the code gate's parser misreads regex literals. An address ends at a space, < > or ", and at U+FFFC,
+// the mark a picture in styled text leaves in its plain text: ShareText.kt reads it as a space in styled text, but an
+// app that flattens its own styled text sends a plain share with the mark as it is, and it was saved as part of the
+// address beside it, a page that wasn't there.
+const ADDRESS = new RegExp('https?://[^\\s<>"\\ufffc]+', 'g');
+const PICTURE = new RegExp('\\ufffc', 'g');
 // marks that show nothing: zero-width spaces and joiners, and the direction marks right-to-left chat apps put round a link
 const INVISIBLE = new RegExp('[\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u2064\\u2066-\\u2069\\ufeff]');
 const SENTENCE_END = '.,;:!?';
@@ -71,12 +75,13 @@ function asWritten(link: string, whole: boolean): string {
  * The link a share carries: the last http(s) address in its text, since apps put their own words first, read as it
  * was written (asWritten). One Kefli can't save ("http://[", a host too long, or an address too long for its event)
  * is passed over for the one before it, the last 16 at most, so such a share says Not a link, rather than failing on
- * the sheet and again at every start from the spool.
+ * the sheet and again at every start from the spool. A picture's mark counts as a space here too, so a link and a
+ * picture are still a link that is the whole share.
  */
 export function firstLink(text: string | null): string | null {
   if (typeof text !== 'string' || text.length >= SHARE_MAX_CHARS) return null;
   const all = text.match(ADDRESS) ?? [];
-  const whole = all.length === 1 && text.trim() === all[0];
+  const whole = all.length === 1 && text.replace(PICTURE, ' ').trim() === all[0];
   for (let i = all.length - 1, tries = 0; i >= 0 && tries < SHARE_MAX_TRIES; i--, tries++) {
     const link = asWritten(all[i], whole);
     if (savable(link)) return link;

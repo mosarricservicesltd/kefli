@@ -79,8 +79,9 @@ describe('styled text as the spool keeps it (8.5)', () => {
   });
 
   test("a picture's mark beside an address is a space, rather than part of the address saved", () => {
-    // U+FFFC, which a picture leaves in styled text, isn't white space to the sheet's pattern
-    expect(firstLink('https://a.example/x\uFFFCcaption')).toBe('https://a.example/x\uFFFCcaption');
+    // U+FFFC, which a picture leaves in styled text, ends an address for the sheet as a space does (pickup.ts, so a
+    // plain share holding the mark is read the same), and the spool reads it as one in styled text
+    expect(firstLink('https://a.example/x\uFFFCcaption')).toBe('https://a.example/x');
     expect(firstLink('https://a.example/x caption')).toBe('https://a.example/x');
     const st = shareText();
     expect(st).toContain("private const val PICTURE = '\\uFFFC'");

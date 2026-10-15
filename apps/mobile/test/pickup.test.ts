@@ -55,6 +55,17 @@ describe('the link a share carries (5.4)', () => {
     expect(firstLink('[x] https://example.com/a]')).toBe('https://example.com/a');
   });
 
+  test('an address ends at the mark a picture leaves in plain text (U+FFFC), as at a space', () => {
+    // an app that flattens its own styled text before sharing it sends the mark as it is, beside the link
+    expect(firstLink('A story https://example.com/a￼')).toBe('https://example.com/a');
+    expect(firstLink('https://example.com/a￼Looks good')).toBe('https://example.com/a');
+    expect(firstLink('Look ￼https://example.com￼')).toBe('https://example.com');
+    expect(firstLink('https://a.example/x￼https://b.example/y')).toBe('https://b.example/y');
+    // a link that is the whole share but for the mark is still the whole share, its own full stop kept
+    expect(firstLink('https://en.wikipedia.org/wiki/Washington,_D.C.￼')).toBe('https://en.wikipedia.org/wiki/Washington,_D.C.');
+    expect(firstLink('Look: https://example.com/a.￼')).toBe('https://example.com/a');
+  });
+
   test('a link that is the whole share, as a browser shares a page, is taken as it is, but for invisible marks', () => {
     expect(firstLink('https://en.wikipedia.org/wiki/Washington,_D.C.')).toBe('https://en.wikipedia.org/wiki/Washington,_D.C.');
     expect(firstLink('  https://en.wikipedia.org/wiki/Foo_(bar)\n')).toBe('https://en.wikipedia.org/wiki/Foo_(bar)');
