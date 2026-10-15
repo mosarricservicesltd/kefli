@@ -73,6 +73,15 @@ const SAID: Record<Ended, [Outcome, ToastKind]> = { onphone: ['undo: on the phon
 /** A wrap of a save and the library it went to, whose kind 5 for it says the phone took it from that library's inbox. */
 type WentTo = Pick<Earlier, 'id' | 'user'>;
 
+/** What Undo found of a save under one wrap: the session's key for it, and its waiting entry, already off the queue. */
+interface Held {
+  kept: UndoKey | undefined;
+  waiting: Queued | null;
+}
+
+/** The wrap a save goes by now, when another has taken this one's place (undo.ts Renamed), or what Undo found under it. */
+type Finding = Renamed | Held;
+
 const WAITING: Record<ReturnType<typeof whyNot>, Outcome> = { offline: 'waiting, offline', reach: 'waiting, couldn’t reach', blocked: 'waiting, blocked' };
 
 /**
@@ -336,13 +345,47 @@ export function background(b: Browser) {
    * as well as taken off the queue; the relay refuses a retraction of a wrap it doesn't hold, which then changes nothing.
    * Undo first waits for a send of the save under way, which may put it under a new wrap when the operator refuses its
    * HTML (v1.12), and then undoes it under the wrap it has now, so a toast that still names the old wrap undoes it too.
-   * A second Undo of a save already undone, such as a double click, changes and says nothing more.
+   * Each wrap the save went by since is followed under its own lock, a run at a time (undoNow): a wrap found and then
+   * waited on could be made again by the send under way, and Undo, reading the new wrap's name in the old one's place as
+   * a key, sent no retraction and said it couldn't undo while the new wrap reached the phone. Taken under the run it
+   * found the name in, the next wrap's lock would wait on that run, which PerSave.follow gave it. A second Undo of a save
+   * already undone, such as a double click, changes and says nothing more.
    */
   async function undo(id: string, where: Where): Promise<void> {
     const ctx = await b.context();
     if (!ctx) return b.openOptions();
-    const now = await saves.run(id, () => goesBy(id));
-    await saves.run(now, () => undoNow(now, where, ctx));
+    let next: string | null = id;
+    for (let hops = 0; next !== null; hops++) {
+      const now: string = next;
+      next = await saves.run(now, () => undoNow(now, where, ctx, hops >= RENAMED_MAX));
+    }
+  }
+
+  /**
+   * What Undo finds of a save under one wrap, read under the move's lock, so a move wrapping the queue again (move.ts) is
+   * seen whole or not at all: the wrap it goes by now, if another took this one's place, or the session's key for it and
+   * its waiting entry, taken off the queue as it is read. A move between the read of the queue and the dequeue had left
+   * Undo retracting a wrap that never went, saying it couldn't, while the move's wrap waited to go. A queue that can't be
+   * read or written holds no save Undo can take off it there, so Undo retracts, and says if it couldn't.
+   */
+  function findSave(id: string): Promise<Finding> {
+    return exclusive('move', () => heldUnder(id));
+  }
+
+  /** findSave's reads, under the move's lock. */
+  async function heldUnder(id: string): Promise<Finding> {
+    const kept = await b.session.get<UndoKey | Renamed>(`undo:${id}`).catch(() => undefined);
+    if (kept && 'to' in kept) return { to: kept.to };
+    return { kept, waiting: await takeOff(id) };
+  }
+
+  /** The save's waiting entry under this wrap, taken off the queue, or null when the queue holds none there. */
+  async function takeOff(id: string): Promise<Queued | null> {
+    // read on its own line: lizard, which the code gate uses, ends the function at a find called on a bracketed await
+    const q = await queued(b.store).catch((): Queued[] => []);
+    const waiting = q.find((e) => e.id === id);
+    if (!waiting) return null;
+    return (await dequeue(b.store, id).catch(() => false)) ? waiting : null;
   }
 
   /**
@@ -414,19 +457,26 @@ export function background(b: Browser) {
     await toast(u.where, { kind: SAID[ended][1], hash: u.kept?.hash, title: '', host: '', link: false });
   }
 
-  async function undoNow(id: string, where: Where, ctx: SaveContext): Promise<void> {
+  /**
+   * One Undo's run under one wrap: the wrap the save goes by now, for undo() to follow under that wrap's own lock, or
+   * null once the save is undone here. Past RENAMED_MAX wraps, a name in the key's place counts as no key.
+   */
+  async function undoNow(id: string, where: Where, ctx: SaveContext, last: boolean): Promise<string | null> {
     // already undone: its toast says so, and a second press changes and says nothing more
-    if (undone.has(id)) return;
-    const kept = await b.session.get<UndoKey>(`undo:${id}`).catch(() => undefined);
-    const u = undoOf(id, where, kept, ctx);
-    // read on its own line: lizard, which the code gate uses, ends the function at a find called on a bracketed await. A
-    // queue that can't be read holds no save Undo can find there, so it retracts, and says if it couldn't
-    const q = await queued(b.store).catch((): Queued[] => []);
-    const waitingSave = q.find((e) => e.id === id);
-    if (waitingSave && (await dequeue(b.store, id))) return unqueue(u, waitingSave, ctx.device);
+    if (undone.has(id)) return null;
+    const found = await findSave(id);
+    if ('to' in found) return last ? undoUnder(id, where, { kept: undefined, waiting: null }, ctx) : found.to;
+    return undoUnder(id, where, found, ctx);
+  }
+
+  /** Undo of the save under the wrap it goes by now: off the queue if it waited there, else retracted. */
+  async function undoUnder(id: string, where: Where, found: Held, ctx: SaveContext): Promise<null> {
+    const u = undoOf(id, where, found.kept, ctx);
+    if (found.waiting) return unqueue(u, found.waiting, ctx.device).then(() => null);
     const outcome = await settleUndo(u.retractIt, u.collected, b.wait).catch((): UndoOutcome => 'failed');
     // 'absent', for a save that went: its wrap gone from the relay, yet no phone said it took it
     await told(u, outcome === 'absent' ? 'failed' : outcome);
+    return null;
   }
 
   /**

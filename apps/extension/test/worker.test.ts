@@ -995,6 +995,45 @@ describe('a wrap that waited (contract 4.4: the phone reads its inbox from two d
     }
   });
 
+  test('Undo pressed as a send under way makes the wrap again follows it to the wrap that went, under that wrap’s lock', async () => {
+    // a store that holds the next send's read of the pairing (worker.ts forPairing), with that send's run under way
+    const store = memoryStore();
+    const read = store.get.bind(store);
+    const hold = { gate: null as Promise<void> | null, reached: 0 };
+    store.get = async <T,>(k: string) => {
+      if (k === KEYS.pairing && hold.gate) (hold.reached++, await hold.gate);
+      return read<T>(k);
+    };
+    const h = harness({ online: false, store });
+    at(h, NOW);
+    await h.work.save(PAGE, 1, false);
+    const offline = h.toasts.at(-1)!;
+    const o: Parameters<typeof net>[0] = { publish: 'down' };
+    const n = net(o);
+    const online = harness({ store, session: h.session, net: n.net, collected: [false, false] });
+    // the first try makes the wrap again, and its answer times out
+    at(online, NOW + 120);
+    await online.work.flushQueue();
+    const [tried] = await queued(store);
+    // the next try is under way when Undo is pressed on the offline toast, and makes the wrap again before it sends it
+    o.publish = 'ok';
+    at(online, NOW + 240);
+    const held = gate();
+    hold.gate = held.p;
+    const flushing = online.work.flushQueue();
+    await until(() => hold.reached > 0);
+    const undoing = online.work.undo(offline.id!, 1);
+    for (let i = 0; i < 20; i++) await settled();
+    hold.gate = null;
+    held.open();
+    await Promise.all([flushing, undoing]);
+    const went = n.published.find((e) => e.kind === 1059)!;
+    expect(went.id).not.toBe(tried.id);
+    // the wrap that went is retracted with its own key, and the one whose answer timed out with it
+    expect(n.published.filter((e) => e.kind === 5).map((e) => e.tags[0][1])).toEqual([tried.id, went.id]);
+    expect(kinds(online.toasts)).toEqual(['undone']);
+  });
+
   test('a save a stopped worker left mid-send, its upload then refused, is retracted under both wraps', async () => {
     // the first worker uploaded the blob and published the wrap, and was stopped before it could say so
     const held = gate();
@@ -1747,6 +1786,36 @@ describe('a move while saves wait, their toasts still showing (contract 4.4 and 
     expect(await queued(h.store)).toEqual([]);
     expect(n.published).toEqual([]);
     expect((await history(h.store))[0]).toMatchObject({ outcome: 'undo: off the queue', id: moved.id.slice(0, 8) });
+  });
+
+  test('Undo as a move wraps the queue again sees the move whole or not at all, and takes the save off the queue', async () => {
+    // a store whose next read of the queue answers late, as storage.local can
+    const store = memoryStore();
+    const read = store.get.bind(store);
+    const hold = { gate: null as Promise<void> | null, reached: 0 };
+    store.get = async <T,>(k: string) => {
+      const v = await read<T>(k);
+      const g = k === KEYS.queue ? hold.gate : null;
+      if (g) (hold.gate = null, hold.reached++, await g);
+      return v;
+    };
+    const h = harness({ online: false, store });
+    await h.work.save(PAGE, 1, false);
+    const offline = h.toasts.at(-1)!;
+    await store.set(KEYS.pairing, PAIRING);
+    const held = gate();
+    hold.gate = held.p;
+    const undoing = h.work.undo(offline.id!, 1);
+    await until(() => hold.reached > 0);
+    // the half-hourly look takes a move as Undo reads the queue, and wraps the waiting save again for T
+    const moving = applyMove(store, device, ack, NOW, h.session, h.work.follow);
+    for (let i = 0; i < 20; i++) await settled();
+    held.open();
+    await Promise.all([undoing, moving]);
+    // read apart, Undo found the old wrap, couldn't take it off the queue the move had written, and retracted it, while
+    // the move's wrap waited to go to T
+    expect(await queued(store)).toEqual([]);
+    expect(h.toasts.at(-1)).toMatchObject({ kind: 'unqueued', title: 'A page' });
   });
 
   test('Undo’s key follows the new wrap, with the save’s cover and inbox blob, and the old wrap points to it', async () => {
