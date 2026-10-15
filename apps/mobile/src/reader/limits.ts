@@ -1,15 +1,19 @@
-// What the CommonMark parse (micromark, through mdast-util-from-markdown) and the spoken projection take in linear
-// time, and a scan in one pass that says when Markdown goes past it. Measured on 14 October 2026 with hostile
-// Markdown on desktop V8; a phone is slower still:
-// - nesting: each line pays for every container it is in, more than linearly when deep. A list nested 400 deep took
-//   4 s to parse, a 64-deep list 2,000 lines long 4 s; quotes 5,000 deep overflowed the stack.
-// - one block's size: the projection's work on a block grows faster than its length. A code block of 16,000 lines
-//   took 8 s, then overflowed the stack; one paragraph of 50,000 words overflowed it at once.
+// What the CommonMark parse (micromark, through mdast-util-from-markdown) takes in linear time and the Reader lays out,
+// and a scan in one pass that says when Markdown goes past it. The spoken projection walks the tree with a stack of
+// its own, in time linear in the Markdown (packages/protocol), so it sets none of these. Measured with hostile Markdown
+// on desktop V8, on 14 October 2026 and again on 15 October with the projection linear; a phone is slower still:
+// - nesting: each line pays the parse for every container it is in, more than linearly when deep. A list nested 400
+//   deep took 4 s to parse, a 64-deep list 2,000 lines long 3 s. Quotes 5,000 deep parse in a quarter of a second,
+//   but the blocks' own walk (./blocks) takes a call for each level, and overflows the stack on them.
+// - one block's size: the parse and the projection take a block in time linear in its length, a paragraph of a
+//   megabyte in 0.15 s and 0.3 s, a code block of a megabyte in 2 s and 0.7 s. The cost of a long block is the
+//   Reader's: it lays each block out as one Text, and the one the voice is in again at every word it lights (./lit,
+//   where cutting out the lit word alone took 1.3 ms a word in a block of 64 KB, 17 ms in one of a megabyte).
 // - inline marks in one block: emphasis, links, code spans and raw html each look back or ahead for a partner, so
 //   ones that never match cost the square of their number. '*a_ ' 4,000 times took 3.7 s and 10,000 times over a
 //   minute; 10,000 '<!--' in a paragraph, literal text that Turndown leaves as it is, took 17 s.
 // - blocks: about 6 KB of parse state each. 100,000 short paragraphs, under a megabyte, took 800 MB.
-// - length: ordinary Markdown parses at about 4 s a megabyte and 300 MB, on desktop V8.
+// - length: a megabyte of ordinary Markdown took over a second to parse, project and walk, and 175 MB.
 // Real pages sit far inside. The page fixtures, measured as the scan measures: the deepest prefix 8 characters, the
 // longest block 4,103, the most marks in a block 69 (marks times length 283,107), the most blocks 278, escapes and
 // references under 0.7% of the text, the longest article 163 KB.
@@ -19,13 +23,17 @@
 
 export const LIMITS = {
   /**
-   * Characters in all: a megabyte of ordinary Markdown took 4 s to parse and project (and 300 MB) where reading it
-   * plain took a third of a second, a phone is slower still, and a synced text may be 20 MB. About 150,000 words.
+   * Characters in all: a megabyte of ordinary Markdown took over a second to parse, project and walk (and 175 MB) where
+   * reading it plain took a tenth of one, a phone is slower still, and a synced text may be 20 MB. About 150,000 words.
    */
   length: 1_048_576,
   /** Characters of a line's container prefix: its indentation, quote markers and list markers. */
   prefix: 64,
-  /** Characters in one block: a paragraph, a list item's text, a heading or a code block. */
+  /**
+   * Characters in one block: a paragraph, a list item's text, a heading or a code block. The Reader's limit, not the
+   * parse's: a block is one Text, laid out whole, and again at each word the voice lights in it (above). Past it the
+   * article is read plain, which cuts every block into pieces of PLAIN_CHARS (./plain).
+   */
   block: 65_536,
   /** Unescaped inline marks in one block: * _ (not between letters or digits) [ ] backticks, and < before a tag or address. */
   marks: 1_000,
@@ -268,8 +276,8 @@ function textLine(md: string, i: number, end: number, p: Prefix, s: Scan): boole
 }
 
 /**
- * Whether Markdown goes past what the parse and the projection take in linear time: too deep, a block too long or
- * too marked, too many blocks, or too many marks in all. One pass over the characters.
+ * Whether Markdown goes past what the parse takes in linear time or the Reader lays out: too deep, a block too long
+ * or too marked, too many blocks, or too many marks in all. One pass over the characters.
  */
 export function beyondLimits(md: string): boolean {
   if (md.length > LIMITS.length) return true;

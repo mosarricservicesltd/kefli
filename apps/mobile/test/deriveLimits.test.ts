@@ -1,6 +1,6 @@
 // Hostile and outsized Markdown through the Reader's derive (mobile spec 6.7): every save's text goes through
 // deriveArticle on the JS thread (a phone's parse, a browser's save, sync, the Reader's own re-derive), so it must
-// neither throw nor take minutes. Past what the CommonMark parse and the spoken projection take in linear time, the
+// neither throw nor take minutes. Past what the CommonMark parse takes in linear time, or the Reader lays out, the
 // text is read plain: kept whole, as paragraphs, every word in a block and a sentence.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';

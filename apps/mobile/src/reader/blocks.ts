@@ -191,9 +191,10 @@ function richArticle(markdown: string): Derived {
 }
 
 /**
- * The article's blocks, words and sentences. Markdown the parse or the projection can't take in linear time
- * (./limits), or that overflows the stack all the same, is read plain (./plain): the save keeps all its text, as
- * paragraphs, headings and code, and nothing hangs the phone or throws out of a save, a sync or the Reader.
+ * The article's blocks, words and sentences. Markdown past ./limits (what the parse takes in linear time, the walk
+ * above in its stack, and the Reader lays out), or that throws all the same, is read plain (./plain): the save keeps
+ * all its text, as paragraphs, headings and code, and nothing hangs the phone or throws out of a save, a sync or the
+ * Reader.
  */
 export function deriveArticle(markdown: string): Derived {
   return fewerImages(readable(markdown));
