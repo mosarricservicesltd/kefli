@@ -107,12 +107,14 @@ function keepable(blob: string | null, q: Queued[], but?: string): string | null
 const taken = (q: Queued[], but?: string) => q.filter((e) => e.why !== 'sending' && e.id !== but).length;
 
 /**
- * 'full' when eight already wait (decision 31), or when ENTRIES_MAX entries are kept. A save going in for its first send
- * is otherwise always taken; settle decides.
+ * 'full' when eight already wait (decision 31), and 'unkept' when ENTRIES_MAX entries are kept, so the save is neither
+ * sent nor kept and its toast says so rather than that eight wait (decision 119). A save going in for its first send is
+ * otherwise always taken; settle decides.
  */
-export async function enqueue(store: Store, p: Pending, why: Queued['why']): Promise<'queued' | 'full'> {
+export async function enqueue(store: Store, p: Pending, why: Queued['why']): Promise<'queued' | 'full' | 'unkept'> {
   return changeQueue(store, (q) => {
-    if ((why !== 'sending' && taken(q) >= QUEUE_MAX) || q.length >= ENTRIES_MAX) return 'full';
+    if (why !== 'sending' && taken(q) >= QUEUE_MAX) return 'full';
+    if (q.length >= ENTRIES_MAX) return 'unkept';
     q.push({ ...sealedOnly(p), blob: keepable(p.blob, q), why, stopped: false });
     return 'queued';
   });
@@ -140,7 +142,12 @@ export async function dequeue(store: Store, id: string): Promise<boolean> {
   });
 }
 
-export type Settled = 'sent' | 'queued' | 'full' | 'gone';
+/**
+ * What became of a save that didn't go at once: it waits; eight already wait, so it was refused; it was neither sent nor
+ * kept, by storage that refused it or couldn't be read, or ENTRIES_MAX entries already kept (unkept); or it had already
+ * left the queue.
+ */
+export type Settled = 'sent' | 'queued' | 'full' | 'unkept' | 'gone';
 
 /**
  * What a send did to its entry: a sent one leaves; one that didn't send counts an attempt, says why and stops at 200.

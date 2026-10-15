@@ -476,7 +476,10 @@ describe('the toast', () => {
     expect(toastCopy({ ...s, kind: 'saving', link: true })).toMatchObject({ sub: 'example.com', timed: false });
   });
   test('the refusal and the failures', () => {
-    expect(toastCopy({ ...s, kind: 'full' }).title).toBe(`Not saved: ${QUEUE_MAX} are already waiting`);
+    // decision 119: eight really waiting opens the Couldn't send list; a save neither sent nor kept says only that
+    expect(toastCopy({ ...s, kind: 'full' })).toMatchObject({ title: `Not saved: ${QUEUE_MAX} are already waiting`, action: 'Options', tile: 'alert', tone: 'bad', timed: true });
+    expect(toastCopy({ ...s, kind: 'unsent' })).toMatchObject({ title: 'Couldn’t send this save', sub: 'Save this again.', tile: 'alert', tone: 'bad', timed: true, say: 'Couldn’t send this save. Save this again.' });
+    expect(toastCopy({ ...s, kind: 'unsent' }).action).toBeUndefined();
     expect(toastCopy({ ...s, kind: 'failed' })).toMatchObject({ mark: 'bad', action: 'Options' });
     expect(toastCopy({ ...s, kind: 'offline' }).mark).toBe('off');
     expect(toastCopy({ ...s, kind: 'notext' }).sub).toBe('example.com · your phone will fetch the text');

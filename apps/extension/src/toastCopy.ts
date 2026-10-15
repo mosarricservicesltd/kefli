@@ -3,7 +3,7 @@
 // sentence sub-lines do. `say` is what the live region announces, text only.
 import { QUEUE_MAX } from './queue';
 
-export type ToastKind = 'saving' | 'saved' | 'notext' | 'offline' | 'undone' | 'unqueued' | 'full' | 'failed' | 'browserpage' | 'onphone' | 'undofailed' | 'toolong';
+export type ToastKind = 'saving' | 'saved' | 'notext' | 'offline' | 'undone' | 'unqueued' | 'full' | 'unsent' | 'failed' | 'browserpage' | 'onphone' | 'undofailed' | 'toolong';
 
 export interface ToastState {
   kind: ToastKind;
@@ -41,7 +41,11 @@ const COPY: Record<ToastKind, Make> = {
   offline: (s, line) => ({ cover: s.hash, mark: 'off', title: 'Saved — will send when you’re online', sub: line, action: 'Undo', timed: true, say: 'Saved. It will send when you’re online.' }),
   undone: () => ({ tile: 'undo', title: 'Removed from Kefli', sub: 'If your phone already has it, remove it there.', wrap: true, timed: true, say: 'Removed from Kefli. If your phone already has it, remove it there.' }),
   unqueued: (_s, line) => ({ tile: 'undo', title: 'Removed from Kefli', sub: line, timed: true, say: 'Removed from Kefli' }),
-  full: () => ({ tile: 'alert', tone: 'bad', title: `Not saved: ${QUEUE_MAX} are already waiting`, sub: 'They’ll send when you’re online. Save this again then.', wrap: true, timed: true, say: `Not saved: ${QUEUE_MAX} are already waiting. They’ll send when you’re online. Save this again then.` }),
+  // decision 119: shown only when eight really wait; Options opens the Couldn't send list, with Retry
+  full: () => ({ tile: 'alert', tone: 'bad', title: `Not saved: ${QUEUE_MAX} are already waiting`, sub: 'They’ll send when you’re online. Save this again then.', wrap: true, action: 'Options', timed: true, say: `Not saved: ${QUEUE_MAX} are already waiting. They’ll send when you’re online. Save this again then.` }),
+  // decision 119: the save was neither sent nor kept (storage refused it or can't be read, or the entries are full), so
+  // nothing here will send it; the same line for a save made while the extension's storage can't be read
+  unsent: () => ({ tile: 'alert', tone: 'bad', title: 'Couldn’t send this save', sub: 'Save this again.', wrap: true, timed: true, say: 'Couldn’t send this save. Save this again.' }),
   failed: (s) => ({ cover: s.hash, mark: 'bad', title: 'Couldn’t send this save', sub: 'It’s kept here, and Kefli will keep trying.', wrap: true, action: 'Options', timed: true, say: 'Couldn’t send this save. It’s kept here, and Kefli will keep trying.' }),
   // contract 4.4, decision 101: Undo found the phone had already collected the save, so it is in the library
   onphone: (s) => ({ cover: s.hash, mark: 'ok', title: 'Already on your phone', sub: 'Remove it from your phone’s Saves.', wrap: true, timed: true, say: 'Already on your phone. Remove it from your phone’s Saves.' }),
