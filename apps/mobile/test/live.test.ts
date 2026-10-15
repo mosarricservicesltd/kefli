@@ -31,6 +31,14 @@ describe('the live list asks as the share asks (mobile spec 11.3, 5.4)', () => {
     expect(asked).toEqual(['https://news.example/story']);
   });
 
+  test("an X post's embed is asked about without a user name and password, as the share asks (contract 4.3, ruling 8)", async () => {
+    const asked: string[] = [];
+    const x: XPorts = { fetch: (async (u: string) => (asked.push(u), Promise.reject(new Error('offline')))) as never };
+    expect((await liveOutcome(releaseBuild(new Set()).page, x, 'https://reader:hunter2@x.com/someone/status/1')).got).toBe('offline');
+    expect(asked).toHaveLength(1);
+    expect(decodeURIComponent(asked[0])).toContain('url=https://x.com/someone/status/1');
+  });
+
   test('one whose site has no https waits, as a share of it does, rather than failing on its plain http', async () => {
     // left to net/http, the address itself was asked for next, and the build's refusal of it scored a failure the
     // share never meets: its sheet says the save waits
