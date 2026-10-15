@@ -476,6 +476,32 @@ describe("a text's blob servers, the inbox's and Kefli's API take the hops too (
   });
 });
 
+describe('a request that is not a GET, redirected (the Fetch Standard, HTTP-redirect fetch)', () => {
+  /** Each hop as asked: its method, address, body and Content-Type. */
+  async function hops(method: string, status: number) {
+    const w = web({ 'https://api.example/register': { status, location: '/registered' }, 'https://api.example/registered': { body: '{}' } });
+    const init = { method, body: '{"v":1}', headers: { 'Content-Type': 'application/json', Authorization: 'Nostr x' } };
+    const o = await open(w.f, 'https://api.example/register', init, 5_000, serverHops(false));
+    o.done();
+    return w.asked.map((a) => [a.init.method, a.url, a.init.body ?? null, new Headers(a.init.headers).get('content-type'), new Headers(a.init.headers).has('authorization')]);
+  }
+
+  test("a 303, or a 301 or 302 to a POST, is followed with a GET and without the body or what describes it", async () => {
+    // sent again as it was, a POST to Kefli's API answered 303 went on as a POST, its body with it
+    for (const [method, status] of [['POST', 303], ['PUT', 303], ['DELETE', 303], ['POST', 301], ['POST', 302]] as const) {
+      expect([method, status, (await hops(method, status))[1]]).toEqual([method, status, ['GET', 'https://api.example/registered', null, null, true]]);
+    }
+  });
+
+  test('a 307 or 308 keeps the method and body, and so does a 301 or 302 to anything but a POST', async () => {
+    for (const [method, status] of [['POST', 307], ['POST', 308], ['PUT', 301], ['PUT', 302], ['DELETE', 302]] as const) {
+      expect([method, status, (await hops(method, status))[1]]).toEqual([method, status, [method, 'https://api.example/registered', '{"v":1}', 'application/json', true]]);
+    }
+    // a GET or a HEAD answered 303 stays as it was
+    expect((await hops('HEAD', 303))[1]).toEqual(['HEAD', 'https://api.example/registered', '{"v":1}', 'application/json', true]);
+  });
+});
+
 describe('the hops against a real server and a real fetch', () => {
   let server: Server;
   let base = '';
