@@ -297,6 +297,119 @@ func TestTheBodysEndLiftsItsDeadline(t *testing.T) {
 	}
 }
 
+// held is a route that keeps each request until let go, saying when one has come in.
+type held struct {
+	in      chan struct{}
+	release chan struct{}
+}
+
+func newHeld() *held {
+	return &held{in: make(chan struct{}, 64), release: make(chan struct{})}
+}
+
+func (h *held) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Hold") != "" {
+		h.in <- struct{}{}
+		<-h.release
+	}
+}
+
+// from sends a GET to addr as Caddy passes on a client at ip, holding it in the route when hold is set; it returns at
+// once for a held request, whose answer comes on the channel.
+func from(t *testing.T, addr, ip string, hold bool) chan int {
+	t.Helper()
+	req := must(http.NewRequest("GET", "http://"+addr+"/x", nil))
+	req.Header.Set("X-Forwarded-For", ip)
+	if hold {
+		req.Header.Set("Hold", "1")
+	}
+	out := make(chan int, 1)
+	go func() {
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			out <- 0
+			return
+		}
+		_ = res.Body.Close()
+		out <- res.StatusCode
+	}()
+	return out
+}
+
+// Nothing limited how many requests one client had in keflid at once, so requests that each took long, a blob read
+// slowly or a body that took its time, could hold its memory and Caddy's connections to it without end. An address,
+// an IPv4 address or an IPv6 /64, now has MaxAddress in flight at once and an IPv6 /48 MaxBlock, and a request past
+// either gets 429 rate with Retry-After at once, its body unread and its connection closed; everyone else is served.
+func TestRequestsInFlightAreCountedPerClient(t *testing.T) {
+	g := fast()
+	g.MaxAddress, g.MaxBlock = 2, 3
+	h := newHeld()
+	addr, closed := serving(t, g, h)
+	var waiting []chan int
+	hold := func(ip string) {
+		waiting = append(waiting, from(t, addr, ip, true))
+		<-h.in
+	}
+	status := func(ip string) int { return <-from(t, addr, ip, false) }
+	hold("192.0.2.1")
+	hold("192.0.2.1")
+	if got := status("192.0.2.1"); got != http.StatusTooManyRequests {
+		t.Fatalf("a third request from one address: %d", got)
+	}
+	if got := status("192.0.2.2"); got != http.StatusOK {
+		t.Fatalf("the next address, in the same /24: %d", got)
+	}
+	// an IPv6 client by its /64, and its /48 as well
+	hold("2001:db8:1:1::1")
+	hold("2001:db8:1:1::2")
+	if got := status("2001:db8:1:1::3"); got != http.StatusTooManyRequests {
+		t.Fatalf("a third from one /64: %d", got)
+	}
+	hold("2001:db8:1:2::1")
+	if got := status("2001:db8:1:3::1"); got != http.StatusTooManyRequests {
+		t.Fatalf("a fourth from one /48: %d", got)
+	}
+	if got := status("2001:db8:2::1"); got != http.StatusOK {
+		t.Fatalf("the next /48: %d", got)
+	}
+	// past the cap with a body: refused unread, and its connection closed at once
+	before := closed.Load()
+	c := dial(t, addr, "POST /x HTTP/1.1\r\nHost: k\r\nX-Forwarded-For: 192.0.2.1\r\nContent-Length: 100\r\n\r\n0123456789")
+	res := answerOf(t, c, time.Second)
+	refusal(t, res, http.StatusTooManyRequests, "rate")
+	if res.Header.Get("Retry-After") != "10" || !res.Close {
+		t.Fatalf("Retry-After %q, closing %v", res.Header.Get("Retry-After"), res.Close)
+	}
+	waitClosed(t, closed, before+1, time.Second)
+	close(h.release)
+	for _, w := range waiting {
+		if got := <-w; got != http.StatusOK {
+			t.Fatalf("a held request: %d", got)
+		}
+	}
+	if got := status("192.0.2.1"); got != http.StatusOK {
+		t.Fatalf("once its requests ended: %d", got)
+	}
+	if g.mu.Lock(); len(g.held) != 0 {
+		t.Fatalf("counts left behind: %v", g.held)
+	}
+	g.mu.Unlock()
+}
+
+// A route that panics, which Go's server recovers from, gives its count back.
+func TestAPanicGivesItsCountBack(t *testing.T) {
+	g := fast()
+	addr, _ := serving(t, g, http.HandlerFunc(func(http.ResponseWriter, *http.Request) { panic("a route's fault") }))
+	if _, err := http.Get("http://" + addr + "/x"); err == nil {
+		t.Fatal("a panic was answered")
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if len(g.held) != 0 {
+		t.Fatalf("counts left behind: %v", g.held)
+	}
+}
+
 // The guard's ResponseWriter stays the server's own underneath: a blob's file is sent whole through its ReadFrom, an
 // interim 1xx answer leaves the answer to begin with the final one, and http.ResponseController reaches the server's
 // writer to flush.

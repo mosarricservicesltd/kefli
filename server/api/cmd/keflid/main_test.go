@@ -242,6 +242,28 @@ func TestBodiesNoRouteReadsAreLetGo(t *testing.T) {
 	}
 }
 
+// Nothing limited how many requests one client had waiting in keflid (r5): each address may now have guard's
+// MaxInFlight at once, its API's and its blob store's together, and one more gets 429 at once, a GET as any other.
+func TestRequestsInFlightAreCapped(t *testing.T) {
+	api, blob := "127.0.0.1:18467", "127.0.0.1:13467"
+	started(t, api, blob)
+	var held []net.Conn
+	for i := 0; i < guard.MaxInFlight; i++ {
+		held = append(held, sent(t, api, "POST /register HTTP/1.1\r\nHost: a\r\nContent-Length: 100\r\n\r\n{\"v\":1"))
+	}
+	time.Sleep(200 * time.Millisecond)
+	if got, _ := status(t, sent(t, blob, "GET /"+strings.Repeat("ab", 32)+" HTTP/1.1\r\nHost: b\r\n\r\n"), 3*time.Second); got != "HTTP/1.1 429 Too Many Requests" {
+		t.Fatalf("one request past the cap: %q", got)
+	}
+	for _, c := range held {
+		c.Close()
+	}
+	time.Sleep(200 * time.Millisecond)
+	if res, err := http.Get("http://" + api + "/health"); err != nil || res.StatusCode != 200 {
+		t.Fatalf("once they were let go: %v", err)
+	}
+}
+
 // serve reports an address it can't listen on.
 func TestServeFailsOnABusyAddress(t *testing.T) {
 	busy, err := net.Listen("tcp", "127.0.0.1:0")

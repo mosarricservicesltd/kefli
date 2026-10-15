@@ -1,9 +1,10 @@
-// Package guard is what every request to keflid passes before its route (backend spec 5). No route reads the body of
-// anything but a POST or a PUT, so any other request that carries one is refused at once. A body that is read must
-// keep a pace (Pace) that no phone or browser comes near. And an answer written before its request's body is in, as a
-// refusal is, closes the connection, which is let go within a second: Go's server read the rest of a body under
-// 256 KB before it answered, so a body that never came kept its request in keflid, a goroutine and about 31 KB, until
-// the server's two-minute deadline, on routes that count against nothing.
+// Package guard is what every request to keflid passes before its route (backend spec 5). One client, an IPv4 address
+// or an IPv6 /64, has at most MaxInFlight requests in keflid at once, and an IPv6 /48 MaxBlockInFlight, on every route,
+// reads included. No route reads the body of anything but a POST or a PUT, so any other request that carries one is
+// refused at once. A body that is read must keep a pace (Pace) that no phone or browser comes near. And an answer
+// written before its request's body is in, as a refusal is, closes the connection, which is let go within a second:
+// Go's server read the rest of a body under 256 KB before it answered, so a body that never came kept its request in
+// keflid, a goroutine and about 31 KB, until the server's two-minute deadline, on routes that count against nothing.
 package guard
 
 import (
@@ -12,8 +13,22 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
+	"sync"
 	"time"
+
+	"github.com/richardminton-glitch/Kefli/server/api/internal/limit"
 )
+
+// MaxInFlight is how many requests one address, an IPv4 address or an IPv6 /64, may have in keflid at once, its two
+// servers together. A phone sends one request at a time, and so does a browser, and a mirror copies a text in under a
+// second, so the many people one carrier address can stand for stay far below it. Each request held costs keflid a
+// goroutine and about 31 KB, and Caddy a connection to keflid.
+const MaxInFlight = 32
+
+// MaxBlockInFlight is the same for an IPv6 /48, whose 65,536 /64s would otherwise each hold MaxInFlight: four /64s'
+// worth, as the API's offers per /48 are.
+const MaxBlockInFlight = 4 * MaxInFlight
 
 // Pace is how a request's body must arrive: in its first Grace it may bring nothing at all, from then on it must have
 // brought at least Floor bytes a second on average since it began, and no one read may wait longer than Stall for a
@@ -60,7 +75,7 @@ func write(w http.ResponseWriter, status int, reason string) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"v": 1, "error": reason})
 }
 
-// Guard holds the figures every request is held to.
+// Guard holds the requests in flight from each client, and the figures every request is held to.
 type Guard struct {
 	// TrustProxy reads the client's address from X-Forwarded-For, which Caddy in front sets outright.
 	TrustProxy bool
@@ -74,16 +89,29 @@ type Guard struct {
 	// a body already on its way, from a client that sends its whole request before it reads, arrives within it and the
 	// connection closes cleanly, and one that never comes holds nothing longer.
 	Drain time.Duration
+	// MaxAddress and MaxBlock are how many requests one address, and one IPv6 /48, may have in flight at once.
+	MaxAddress, MaxBlock int
+
+	mu   sync.Mutex
+	held map[string]int
 }
 
 // New is a guard with Kefli's figures.
 func New(trustProxy bool) *Guard {
-	return &Guard{TrustProxy: trustProxy, Pace: Default, Answer: 2 * time.Minute, Drain: time.Second}
+	return &Guard{TrustProxy: trustProxy, Pace: Default, Answer: 2 * time.Minute, Drain: time.Second,
+		MaxAddress: MaxInFlight, MaxBlock: MaxBlockInFlight, held: map[string]int{}}
 }
 
 // Wrap puts the guard in front of next.
 func (g *Guard) Wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cs := g.counts(r)
+		if !g.take(cs) {
+			w.Header().Set("Retry-After", "10")
+			g.refuse(w, r, http.StatusTooManyRequests, "rate")
+			return
+		}
+		defer g.release(cs)
 		if r.ContentLength != 0 && r.Method != http.MethodPost && r.Method != http.MethodPut {
 			g.refuse(w, r, http.StatusBadRequest, "body")
 			return
@@ -92,9 +120,55 @@ func (g *Guard) Wrap(next http.Handler) http.Handler {
 	})
 }
 
+// count is one limit a request in flight counts against: its key and the most it may hold.
+type count struct {
+	key string
+	max int
+}
+
+// counts are what a request counts against: its address, an IPv6 address by its /64, and an IPv6 address's /48 too.
+// An IPv4 /24 isn't one site, as a carrier's addresses sit many people in one, and has no such limit.
+func (g *Guard) counts(r *http.Request) []count {
+	ip := limit.ClientIP(r, g.TrustProxy)
+	cs := []count{{"address " + limit.Addr(ip, 64), g.MaxAddress}}
+	if block := limit.Block(ip); strings.Contains(block, ":") {
+		cs = append(cs, count{"block " + block, g.MaxBlock})
+	}
+	return cs
+}
+
+// take counts a request against each of cs, unless one of them is already at its most.
+func (g *Guard) take(cs []count) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for _, c := range cs {
+		if g.held[c.key] >= c.max {
+			return false
+		}
+	}
+	for _, c := range cs {
+		g.held[c.key]++
+	}
+	return true
+}
+
+// release ends a request taken against cs; a key with nothing in flight is forgotten, so the counts hold only the
+// requests keflid has now.
+func (g *Guard) release(cs []count) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for _, c := range cs {
+		g.held[c.key]--
+		if g.held[c.key] <= 0 {
+			delete(g.held, c.key)
+		}
+	}
+}
+
 // refuse answers a request the guard turns away before its route sees it. One with a body closes its connection with
 // the answer and has none of the body read: a client sending such requests as fast as it could would otherwise have
-// each kept while the server read on. No phone or browser sends one.
+// each kept while the server read on, past the count of requests in flight. No phone or browser sends one, unless a
+// crowd behind one address has reached its cap, and that request is sent again later, as any 429 is.
 func (g *Guard) refuse(w http.ResponseWriter, r *http.Request, status int, reason string) {
 	if r.ContentLength != 0 {
 		w.Header().Set("Connection", "close")
