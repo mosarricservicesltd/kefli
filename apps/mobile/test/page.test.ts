@@ -7,7 +7,10 @@ import { base64 } from '@scure/base';
 import { buildItemEvent, itemHash, LocalSigner, parseItem, type PdfRuns } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import * as blocks from '../src/reader/blocks';
-import { FIELD_MAX, fetchPage, isPdf, parsedOutcome, PDF_MAX_BYTES, PDF_MAX_RUNS, renderAnswer, TEXT_MAX_BYTES, toBase64, type PagePorts, type ParserResult } from '../src/services/page';
+import {
+  FIELD_MAX, PAGE_MAX_BYTES, PDF_MAX_BYTES, PDF_MAX_RUNS, TEXT_MAX_BYTES, capFor, fetchPage, isPdf, parsedOutcome, renderAnswer, toBase64, type PagePorts,
+  type ParserResult,
+} from '../src/services/page';
 import { failNotice } from '../src/screens/failNotice';
 import { S } from '../src/ui/strings';
 
@@ -78,6 +81,19 @@ describe('a linked PDF (contract 4.2, flow decision 103)', () => {
       const { p } = ports(PDF_BYTES, { 'content-type': type, 'content-length': six }, runs('report-one-column'));
       expect((await fetchPage(p, 'https://example.com/report')).kind).toBe('parsed');
     }
+  });
+
+  test('the cap by declared type: a page’s for a type that names anything but a PDF, a PDF’s for a body that may be one', () => {
+    const port = { pdf: async () => ({ ok: false as const, reason: 'error' }) };
+    const page = ['text/html; charset=utf-8', ' TEXT/PLAIN', 'image/png', 'video/mp4', 'audio/mpeg', 'font/woff2', 'model/gltf+json',
+      'multipart/form-data', 'application/xhtml+xml', 'application/zip', 'application/gzip', 'application/x-tar', 'application/x-7z-compressed',
+      'application/vnd.rar'];
+    for (const type of page) expect([type, capFor(port, type)]).toEqual([type, PAGE_MAX_BYTES]);
+    const maybe = ['application/pdf', 'application/x-pdf', 'application/octet-stream', 'binary/octet-stream', 'application/force-download', '',
+      'application/zipped', 'application/vnd.rarity'];
+    for (const type of maybe) expect([type, capFor(port, type)]).toEqual([type, PDF_MAX_BYTES]);
+    // without the pdf port nothing is read as a PDF
+    expect(capFor({}, 'application/pdf')).toBe(PAGE_MAX_BYTES);
   });
 
   test('without the pdf port, a PDF is still not a page', async () => {

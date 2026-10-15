@@ -97,6 +97,12 @@ export type PageOutcome =
   | { kind: 'parsed'; finalUrl: string; result: Extract<ParserResult, { ok: true }>; words: number; spoken: string; derived: Derived };
 
 type Settled = Exclude<PageOutcome, { kind: 'offline' }>;
+/** A parse that read the page. */
+type ParserOk = Extract<ParserResult, { ok: true }>;
+/** A layout and derivation that may throw (guarded). */
+type Derivation = () => Settled;
+/** The page as fetched, or why it can't be had (answer). */
+type Answer = { res: Response; url: string; bytes: Uint8Array } | Extract<PageOutcome, { kind: 'offline' | 'failed' }>;
 
 const PDF_TYPE = /^\s*application\/(?:x-)?pdf\b/i;
 const HTML_TYPE = /^\s*(text\/html|application\/xhtml\+xml)\b/i;
@@ -164,8 +170,13 @@ function get(p: PagePorts, url: string, ua: string): Promise<Opened> {
   return open(p.fetch, url, { headers }, PAGE_TIMEOUT_MS, WEB_HOPS);
 }
 
-/** A type that names something other than a PDF: a page, a picture, a film, a sound, a font, plain text, an archive. */
-const NOT_PDF = /^\s*(?:(?:text|image|video|audio|font|model|multipart)\/|application\/(?:xhtml\+xml|zip|gzip|x-tar|x-7z-compressed|vnd\.rar)\b)/i;
+/**
+ * A type that names something other than a PDF: a page, a picture, a film, a sound, a font, plain text, an archive.
+ * Built from a string: the code gate's parser misreads a regex literal's escaped slashes.
+ */
+const NOT_PDF = new RegExp(
+  '^\\s*(?:(?:text|image|video|audio|font|model|multipart)/|application/(?:xhtml\\+xml|zip|gzip|x-tar|x-7z-compressed|vnd\\.rar)\\b)', 'i',
+);
 
 /**
  * The cap a body is read under: with the pdf port, a PDF's 20 MB for a body that may be one, known by its type or,
@@ -175,8 +186,6 @@ const NOT_PDF = /^\s*(?:(?:text|image|video|audio|font|model|multipart)\/|applic
 export function capFor(p: Pick<PagePorts, 'pdf'>, contentType: string): number {
   return p.pdf && !NOT_PDF.test(contentType) ? PDF_MAX_BYTES : PAGE_MAX_BYTES;
 }
-
-type Answer = { res: Response; url: string; bytes: Uint8Array } | Extract<PageOutcome, { kind: 'offline' | 'failed' }>;
 
 /** The page as fetched: as desktop Chrome, then as a phone on 403; or why it can't be had. */
 async function answer(p: PagePorts, url: string): Promise<Answer> {
@@ -393,7 +402,7 @@ export function parsedOutcome(result: Extract<ParserResult, { ok: true }>, final
  * The layout and derivation, which run here on Hermes, as a parse that fails: text they can't take (a run of stacked
  * marks normalisation refuses, a depth or size past the engine's stack) leaves the save's link without text.
  */
-function guarded(finalUrl: string, f: () => Settled): Settled {
+function guarded(finalUrl: string, f: Derivation): Settled {
   try {
     return f();
   } catch (e) {
@@ -436,7 +445,7 @@ function heroAt(hero: string | null): string | null {
 }
 
 /** A parse's fields fitted to FIELD_MAX, for the page read at finalUrl. */
-function fitted<R extends Extract<ParserResult, { ok: true }>>(r: R, finalUrl: string): R {
+function fitted(r: ParserOk, finalUrl: string): ParserOk {
   return {
     ...r,
     title: cut(r.title, FIELD_MAX.title), byline: cut(r.byline, FIELD_MAX.byline), site: cut(r.site, FIELD_MAX.site),

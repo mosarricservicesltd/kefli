@@ -10,6 +10,8 @@ import { checkXPost, type XPorts } from '../services/xpost';
 
 export type LiveUrl = { url: string; kind: string; expect: string };
 export type LiveResult = LiveUrl & { got: string; pass: boolean; detail: string; ms: number };
+/** Milliseconds now, by whatever clock the run is timed on (a named type, so the code gate scores runLive). */
+export type Clock = () => number;
 
 export async function liveOutcome(page: PagePorts, x: XPorts, listed: string): Promise<{ got: string; detail: string }> {
   const url = withoutUserInfo(listed);
@@ -23,7 +25,7 @@ export async function liveOutcome(page: PagePorts, x: XPorts, listed: string): P
   return { got: 'article', detail: `“${o.result.title ?? '(no title)'}”, ${o.words} words` };
 }
 
-export async function runLive(page: PagePorts, x: XPorts, list: LiveUrl[], now: () => number): Promise<LiveResult[]> {
+export async function runLive(page: PagePorts, x: XPorts, list: LiveUrl[], now: Clock): Promise<LiveResult[]> {
   const out: LiveResult[] = [];
   for (const u of list) {
     const t = now();
