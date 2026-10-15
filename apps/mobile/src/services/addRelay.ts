@@ -26,7 +26,7 @@ export type AddRelayPorts = {
  * the clock's (its CLOCK): strfry's "created_at too late", khatru's "event too much in the future" and nostr-rs-relay's
  * "created_at field is out of the acceptable range", which it sends only for a date ahead. The list held is dated by
  * this phone's clock, or after one another device dated so (nextListTime), and a phone running fast found every strfry
- * relay refusing, Kefli's own among them. A refusal of a date too early stays a refusal, as the outbox reads it.
+ * relay refusing, Kefli's own among them.
  */
 const CLOCK = new RegExp('created_at too late|too (?:much|far) in the future|created_at field is out of the acceptable range', 'i');
 /**
