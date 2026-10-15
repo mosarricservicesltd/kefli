@@ -5,12 +5,14 @@
 import { base64 } from '@scure/base';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
 import { KIND } from './constants';
+import { withoutTrailingSlashes } from './lists';
 import type { Signer } from './signer';
 
 export type BlossomVerb = 'upload' | 'delete';
 
 const SHA = /^[0-9a-f]{64}$/;
-const trim = (server: string) => server.replace(/\/+$/, '');
+/** A server's address without the slashes at its end, which a path then joins with one. */
+const trim = withoutTrailingSlashes;
 
 /** The Authorization header for one call: kind 24242 with t, x and a one-hour expiration. */
 export async function blossomAuth(signer: Signer, verb: BlossomVerb, sha256: string, now = Math.floor(Date.now() / 1000)): Promise<string> {

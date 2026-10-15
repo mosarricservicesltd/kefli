@@ -250,6 +250,40 @@ describe('the user’s own nostr app (contract 2)', () => {
     }
   });
 
+  test("bookmarks: a link's user name and password are no part of its save, as they are none of its address (ruling 8)", () => {
+    const links = [
+      ev([['r', 'https://user:hunter2@example.com/private/a'], ['r', 'https://:hunter2@example.com/b?x=1#f'], ['r', 'https://user@example.org/c']]),
+      { ...ev([['d', 'user:hunter2@example.net/d']]), kind: 39701 },
+    ];
+    const want = [
+      { url: 'https://example.com/private/a', hash: itemHash('https://example.com/private/a') },
+      { url: 'https://example.com/b?x=1#f', hash: itemHash('https://example.com/b?x=1') },
+      { url: 'https://example.org/c', hash: itemHash('https://example.org/c') },
+      { url: 'https://example.net/d', hash: itemHash('https://example.net/d') },
+    ];
+    expect(bookmarkSaves(links, PK)).toEqual(want);
+    // and on the phone's URL, Expo's
+    const real = globalThis.URL;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    globalThis.URL = require('whatwg-url-minimum').URL;
+    try {
+      expect(bookmarkSaves(links, PK)).toEqual(want);
+    } finally {
+      globalThis.URL = real;
+    }
+    // the same page bookmarked with them and without them is one save, kept as the first link names it
+    expect(bookmarkLinks([ev([['r', 'https://u:p@example.com/a'], ['r', 'https://example.com/a']])], PK)).toEqual(['https://example.com/a']);
+  });
+
+  test('bookmarks: a 39701 whose d holds its scheme anyway, written in any case, is imported as https://<d> without it', () => {
+    // with the scheme in capitals kept, HTTPS://u:p@example.net/k was imported as https://https//u:p@example.net/k, a
+    // link to nowhere whose user name and password sat in its path, where withoutUserInfo can't see them
+    const d = (value: string) => ({ ...ev([['d', value]]), kind: 39701 });
+    expect(bookmarkSaves([d('HTTPS://u:p@example.net/k'), d('Http://example.net/m'), d('https://example.net/n'), d('example.net/o')], PK)).toEqual(
+      ['k', 'm', 'n', 'o'].map((p) => ({ url: `https://example.net/${p}`, hash: itemHash(`https://example.net/${p}`) })),
+    );
+  });
+
   // The time it saves (30 s for 40,000 links, 4.6 s now, on Node) is measured by a probe, not here: a bound on time
   // here failed under the whole suite's load.
   test('bookmarks: every link once across many lists, each found in a set rather than a list', () => {

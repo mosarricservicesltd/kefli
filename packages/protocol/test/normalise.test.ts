@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { NotALinkError, isItemD, itemD, itemHash, normalise, ownCanonical, withoutUserInfo } from '../src';
+import { NotALinkError, SHARED_HOSTING, isItemD, itemD, itemHash, normalise, ownCanonical, urlParts, withoutUserInfo } from '../src';
 
 type Case = { name: string; url: string; canonical?: string; expect: string | null };
 const fixtures: { cases: Case[] } = JSON.parse(
@@ -89,6 +89,40 @@ describe("a page's canonical counts only from its own site (ruling 11)", () => {
   });
 });
 
+describe("on shared hosting a canonical counts only from the page's own host (ruling 12)", () => {
+  const post = 'https://www.tumblr.com/victim/123';
+
+  test("a user's site at an m. or amp. name can't take another user's post's address and land on its save", () => {
+    expect(itemHash('https://amp.tumblr.com/post/1', post)).not.toBe(itemHash(post));
+    expect(itemHash('https://amp.tumblr.com/post/1', post)).toBe(itemHash('https://amp.tumblr.com/post/1'));
+    expect(ownCanonical('https://amp.tumblr.com/post/1', post)).toBeNull();
+    expect(ownCanonical('https://m.medium.com/a', 'https://medium.com/@victim/b')).toBeNull();
+    // nor can a site's www. form, which there is another host
+    expect(ownCanonical('https://www.victim.github.io/a', 'https://victim.github.io/a')).toBeNull();
+  });
+
+  test("a site's own AMP page still joins its article's save", () => {
+    const amp = 'https://victim.wordpress.com/2026/10/story/amp/';
+    const article = 'https://victim.wordpress.com/2026/10/story/';
+    expect(itemHash(amp, article)).toBe(itemHash(article));
+    expect(ownCanonical(amp, article)).toBe(article);
+  });
+
+  test('every shared hosting domain has a fixture of its own, an m. or amp. name under it keeping its address', () => {
+    for (const domain of SHARED_HOSTING) {
+      const pinned = fixtures.cases.some((c) => c.name.includes('ruling 12') && c.canonical && c.expect === normalise(c.url)
+        && /^(m|amp)\./.test(urlParts(c.url)?.hostname ?? '') && urlParts(c.url)?.hostname.endsWith(`.${domain}`));
+      expect([domain, pinned]).toEqual([domain, true]);
+    }
+  });
+
+  test('the list holds each domain once, in lowercase ASCII, and can’t be changed while the app runs', () => {
+    expect(Object.isFrozen(SHARED_HOSTING)).toBe(true);
+    expect(new Set(SHARED_HOSTING).size).toBe(SHARED_HOSTING.length);
+    for (const domain of SHARED_HOSTING) expect(domain).toMatch(/^[a-z0-9-]+(\.[a-z0-9-]+)+$/);
+  });
+});
+
 describe("an address's user info is no part of its save (ruling 8)", () => {
   test('a page saved with a user name and password and without them is one save, whose hash holds neither', () => {
     const plain = itemHash('https://example.com/private/a');
@@ -115,10 +149,27 @@ describe("an address's user info is no part of its save (ruling 8)", () => {
     expect(withoutUserInfo('https://www.bank.example@evil.example/a')).toBe('https://evil.example/a');
   });
 
+  test('an address without an @ holds no user info, and comes back at once however long it is', () => {
+    // whatwg-url reads an address a code point at a time: this one took 8 s, on every save of a link the browser made
+    const long = `https://example.com/?q=${'x'.repeat(2_000_000)}`;
+    const started = Date.now();
+    expect(withoutUserInfo(long)).toBe(long);
+    expect(Date.now() - started).toBeLessThan(1_000);
+    // only an @ ends user info, so every other address comes back as written, as the URL Standard's reading gives it
+    for (const c of fixtures.cases.filter((k) => !k.url.includes('@'))) expect(withoutUserInfo(c.url)).toBe(c.url);
+    expect(withoutUserInfo(`https://u:p@example.com/?q=${'x'.repeat(1_000)}`)).toBe(`https://example.com/?q=${'x'.repeat(1_000)}`);
+  });
+
   test('withoutUserInfo leaves an address without any, and anything that isn’t a link, exactly as it was', () => {
     for (const u of ['https://Example.com/a b?utm_source=x#f', 'mailto:someone@example.com', 'not a url', 'ftp://u:p@example.com/', `https://u:p@${'a'.repeat(2_000)}.example/`]) {
       expect(withoutUserInfo(u)).toBe(u);
     }
+  });
+
+  test('a value that isn’t a string is no link either, and comes back as it was given rather than throwing', () => {
+    // as it did before an address without an @ came back unread: a field read from a store or a message can be anything
+    const odd = [undefined, null, 5, true, {}, { includes: () => true }, ['@'], ['https://u:p@example.com/']] as unknown as string[];
+    for (const v of odd) expect(withoutUserInfo(v)).toBe(v);
   });
 });
 

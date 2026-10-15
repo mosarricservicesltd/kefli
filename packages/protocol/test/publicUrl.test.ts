@@ -15,6 +15,26 @@ describe('inbox fetches stay off private addresses (mobile spec 7.1)', () => {
     `https://${'a'.repeat(2000)}.example/`,
   ])('refused: %s', (u) => expect(isPublicWebUrl(u)).toBe(false));
 
+  // expo/fetch's OkHttp client reads any address whose text begins http://filesystem.local from the phone's own files,
+  // http://filesystem.localdata/data/app.kefli/… as /data/data/app.kefli/…, before the network: no such host is
+  // public over http, however it is written
+  test.each([
+    'http://filesystem.localdata/data/app.kefli/files/kefli/a.html', 'http://FileSystem.LocalData:80/user/0/app.kefli/databases/kefli.db',
+    'http://ｆｉｌｅｓｙｓｔｅｍ.ｌｏｃａｌｄａｔａ/data/app.kefli/x', 'http://filesystem.local-x/', 'http://filesystem.local0./etc/hosts',
+    'http://filesystem%2Elocaldata/x', 'http://filesystem.local.example.com/x', 'http://a@filesystem.localdata/x', 'HTTP://filesystem.localdata/x',
+    ' http://filesystem.localdata/x', 'ht\ttp://filesystem.localdata/x', 'http:\\\\filesystem.localdata\\x', 'http:///filesystem.localdata/x',
+    'http://filesystem.local/x', 'https://filesystem.local/x', 'https://FILESYSTEM.LOCAL./x',
+  ])("refused, as the phone's fetch reads it from its own files: %s", (u) => expect(isPublicWebUrl(u)).toBe(false));
+
+  test("over https only the stand-in itself is refused, and an address that only holds its words is the web's", () => {
+    for (const u of [
+      'https://filesystem.localdata/x', 'https://filesystem.local.example.com/x', 'http://www.filesystem.localdata/x',
+      'http://example.com/filesystem.local', 'http://example.com/?u=http://filesystem.localdata/', 'http://filesystemlocal.example/',
+    ]) {
+      expect([u, isPublicWebUrl(u)]).toEqual([u, true]);
+    }
+  });
+
   // the phone's URL is Expo's, with no Unicode step: it leaves these as written, and OkHttp maps them to the
   // private addresses they spell
   const phoneUrl = (f: () => void) => {

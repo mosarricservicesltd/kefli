@@ -29,7 +29,21 @@ const MARK = /^[\d∗*†‡§¶,\s]+$/;
 const BULLET = /^[•◦▪▫●○■□‣⁃–]\s*/;
 /** A section number: 1, 2.1, 3.2.1. or IV. (a letter alone, as in "A. Reader", is more often an initial). */
 const SECTION = /^(?:\d+(?:\.\d+)*\.?|[IVX]+\.)\s+\S/;
-const PAGE_NUMBER = /^(?:page\s*)?[-–—]?\s*\d{1,4}\s*[-–—]?(?:\s*(?:of|\/)\s*\d{1,4})?$/i;
+/**
+ * A page number alone: 3, - 3 -, Page 3, 3 of 12, 3/12. Each run of spaces can be read only one way. Written, as it
+ * was, with an optional dash between two runs of spaces that may be empty, the pattern tried every split of a long run
+ * when the line went on past it, and a line of page, 20,000 spaces and x took 2.3 s, four times the spaces sixteen
+ * times as long. A file can space a line so: each run holding only a soft hyphen, which clean empties, adds a space.
+ * Built from a string, as the code gate's parser reads a regex literal's escaped slash as a comment.
+ */
+const PAGE_NUMBER = new RegExp(
+  '^(?:page\\s*(?:[-–—]\\s*)?|[-–—]?\\s*)\\d{1,4}\\s*(?:[-–—](?:\\s*(?:of|/)\\s*\\d{1,4})?|(?:of|/)\\s*\\d{1,4})?$',
+  'i',
+);
+
+/** Whether a line of a PDF's text is a page number alone, which pdfMarkdown leaves out (PAGE_NUMBER). */
+export const isPageNumber = (text: string): boolean => PAGE_NUMBER.test(text);
+
 const LIGATURES: Record<string, string> = { 'ﬀ': 'ff', 'ﬁ': 'fi', 'ﬂ': 'fl', 'ﬃ': 'ffi', 'ﬄ': 'ffl', 'ﬅ': 'st', 'ﬆ': 'st' };
 
 function clean(s: string): string {
@@ -101,7 +115,7 @@ function runningLines(pages: Line[][]): Set<string> {
 
 function bodyLines(pages: Line[][]): Line[] {
   const running = runningLines(pages);
-  return pages.flat().filter((l) => !running.has(lineKey(l)) && !PAGE_NUMBER.test(l.text));
+  return pages.flat().filter((l) => !running.has(lineKey(l)) && !isPageNumber(l.text));
 }
 
 // ---- sizes and spacing
