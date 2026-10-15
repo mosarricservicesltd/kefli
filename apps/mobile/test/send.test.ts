@@ -10,6 +10,7 @@ import { commitDelete, deleteItem, setArchived } from '../src/data/library';
 import type { Defaults } from '../src/services/config';
 import { heldFor, notBackedUp } from '../src/data/backup';
 import { textsWaiting } from '../src/data/account';
+import { getSetting } from '../src/data/settings';
 import { memoryDb } from './sqlite';
 
 const D: Defaults = {
@@ -922,6 +923,22 @@ describe('deleting makes room (C§5, v1.12)', () => {
     expect(by.get(a.sha)).toMatchObject({ last_error: null, operator_at: expect.any(Number) });
     expect(by.get(b.sha)).toMatchObject({ last_error: 'quota', operator_at: null });
     expect(by.get(c.sha)).toMatchObject({ last_error: 'quota', operator_at: null });
+  });
+
+  test('a deletion of a blob whose size the phone doesn’t know gives back a block, as the operator counts it', async () => {
+    // z's size isn't known here, as for a capture the phone never read (data/inbox): the operator still frees a block
+    // at least (C§5), room for a (300 bytes, so a block); noted not at all, the 100 bytes left fitted nothing
+    const { w, z, a, b, c } = await full({ sizes: [1_000, 300, 900, 200], room: 100, refuseAfter: 1 });
+    w.db.run('UPDATE blobs SET size = NULL WHERE sha256 = ?', z.sha);
+    const up = w.db.get<{ operator_at: number }>('SELECT operator_at FROM blobs WHERE sha256 = ?', z.sha)!.operator_at;
+    const before = w.calls.length;
+    commitDelete(w.db, w.signer.pubkey(), z.hash, deleteItem(w.db, w.now(), w.signer.pubkey(), z.hash).held);
+    await drain(w.ports);
+    expect(JSON.parse(getSetting(w.db, `space.freed.${w.signer.pubkey()}`) ?? '[]')).toEqual([{ at: w.now(), size: 4_096, up }]);
+    expect(tries(w, before)).toBe(1);
+    const by = new Map(waiting(w).map((x) => [x.sha256, x]));
+    expect(by.get(a.sha)).toMatchObject({ last_error: null, operator_at: expect.any(Number) });
+    expect([by.get(b.sha)?.operator_at, by.get(c.sha)?.operator_at]).toEqual([null, null]);
   });
 });
 
