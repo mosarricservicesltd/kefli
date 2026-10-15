@@ -110,14 +110,18 @@ async function xChecked(p: PendingPorts, owner: string, item: Pending): Promise<
 }
 
 /**
- * A waiting save's page. One a browser asked for is never fetched from a private, loopback or link-local address
- * (7.1); a share made offline, an import or another phone's save naming a public http address is fetched over https
- * alone, as a share is, so a site with none waits as a page that can't be had (left to net/http open, its http would
- * be asked next and fail the save at once), until noHttps fails it.
+ * A waiting save's page. RULED: only a share made on this phone is fetched from a private, loopback or link-local
+ * address (7.1), the person having chosen it here; a browser's request, an import and another phone's save never are
+ * (contract 4.4), failing as a page that can't be read. A save reaches every other phone of its library, and this one
+ * after a restore, as another phone's (origin sync), which can't say a browser named it: the phone a hostile browser
+ * asked refused to fetch https://10.0.0.1/admin and published the save without text, and every other phone then
+ * fetched it on its own network. A public http address is fetched over https alone, as a share is, so a site with
+ * none waits as a page that can't be had (left to net/http open, its http would be asked next and fail the save at
+ * once), until it has waited as long as it may (page.ts waitedForHttps).
  */
 async function pageOf(p: PendingPorts, item: Pending): Promise<PageOutcome> {
-  const fromBrowser = p.db.get<{ origin: string }>('SELECT origin FROM items WHERE id = ?', item.id)?.origin === 'browser';
-  if (fromBrowser && !isPublicWebUrl(item.url)) return { kind: 'failed', reason: 'http', finalUrl: item.url };
+  const shared = p.db.get<{ origin: string }>('SELECT origin FROM items WHERE id = ?', item.id)?.origin === 'share';
+  if (!shared && !isPublicWebUrl(item.url)) return { kind: 'failed', reason: 'http', finalUrl: item.url };
   return fetchPage(p.page, overHttps(item.url));
 }
 

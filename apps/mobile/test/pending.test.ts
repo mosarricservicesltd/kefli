@@ -165,6 +165,27 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     expect(w.db.get<{ text_state: string }>("SELECT text_state FROM items WHERE url = 'http://192.168.1.1/admin'")?.text_state).toBe('failed');
   });
 
+  test("another phone's save or an import naming a private address is never fetched either: only this phone's share is", async () => {
+    // the phone a browser asked publishes such a save without text; every other phone of the library, and this one
+    // after a restore, takes it as another phone's save, and an import's address was chosen elsewhere too
+    const w = world({ 'https://10.0.0.1/admin?action=reboot': {}, 'https://intranet.local/wiki': {}, 'https://c.com/a': {} });
+    w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, published, event_id) VALUES (?, ?, 'https://10.0.0.1/admin?action=reboot', 4000, 'unread', 'queued', 'sync', 1, 'e1')", PK, itemHash('https://10.0.0.1/admin?action=reboot'));
+    queueImported(w.db, PK, ['https://intranet.local/wiki'], 4000, T);
+    w.share('https://c.com/a');
+    const asked: string[] = [];
+    const fetch = w.ports.page.fetch;
+    w.ports.page.fetch = ((url: string, init: RequestInit) => (asked.push(url), fetch(url, init))) as never;
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ parsed: 1, failed: 2, waiting: 0 });
+    expect(asked).toEqual(['https://c.com/a']);
+    const state = (url: string) => w.db.get<{ text_state: string; fail_reason: string; dirty: number }>('SELECT text_state, fail_reason, dirty FROM items WHERE url = ?', url);
+    // another phone's save fails on this phone alone, as one whose page can't be read does; the import goes out without text
+    expect(state('https://10.0.0.1/admin?action=reboot')).toEqual({ text_state: 'failed', fail_reason: 'http', dirty: 0 });
+    expect(state('https://intranet.local/wiki')).toEqual({ text_state: 'failed', fail_reason: 'http', dirty: 1 });
+    expect(w.outbox().filter((o) => o.op === 'publish_item').map((o) => o.subject)).toEqual(
+      expect.arrayContaining([itemHash('https://intranet.local/wiki'), itemHash('https://c.com/a')]),
+    );
+  });
+
   test('a re-keyed share that turns out to be a save already here joins it', async () => {
     const w = world({ 'https://t.co/y': { finalUrl: 'https://news.com/old' } });
     w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin) VALUES (?, ?, 'https://news.com/old', 10, 'archived', 'cached', 'share')", PK, itemHash('https://news.com/old'));
