@@ -13,6 +13,7 @@ import { absorbRecord } from '../src/data/devices';
 import { commitDelete, deleteItem, setArchived, setPosition } from '../src/data/library';
 import { notBackedUp } from '../src/data/backup';
 import { libraryKey } from '../src/data/libraryKey';
+import { pendingParses } from '../src/data/pending';
 import { drain } from '../src/services/send';
 import { TEXT_TIMEOUT_MS, syncOwner, type Filter } from '../src/services/sync';
 import { runMove, type MovePorts } from '../src/services/move';
@@ -573,6 +574,18 @@ describe('The move (contract 4.8, mobile spec 4.10)', () => {
     expect(await runMove(w.p)).toBe('done');
     expect((await tCopy(w, h(9))).text).toMatchObject({ sha256: enc.text.sha256, servers: ['http://m2'] });
     expect(w.db.get('SELECT mirror_url FROM blobs')).toEqual({ mirror_url: 'http://m2' });
+  });
+
+  test("a browser save still waiting to read its capture under S is copied for T to fetch its page itself", async () => {
+    const w = world();
+    const T = w.T.pubkey();
+    // the capture couldn't be read yet (the server answered 5xx, or the parser's renderer had gone): S's row waits on a
+    // wrap in S's inbox, which T never reads, and whose capture S's last drain would read into S's row alone
+    w.db.run(`INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, words) VALUES (?, ?, 'https://e.com/7', 5, 'unread', 'fetching', 'browser', 132)`,
+      w.S.pubkey(), h(7));
+    expect(await runMove(w.p)).toBe('done');
+    expect(w.db.get('SELECT text_state, text_sha256, words FROM items WHERE owner = ? AND hash = ?', T, h(7))).toEqual({ text_state: 'queued', text_sha256: null, words: 132 });
+    expect(pendingParses(w.db, T).map((r) => r.hash)).toEqual([h(7)]);
   });
 
   test("a switch's target learns its library key through its own signer, though the sync's answers only for the phone's identity, S", async () => {

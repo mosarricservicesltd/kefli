@@ -11,6 +11,7 @@ import { ensureIdentityRow } from './saves';
 import { commitDelete, deleteItem } from './library';
 import { libraryKey } from './libraryKey';
 import { forgetFreed } from './backup';
+import { giveUpBlob } from './inbox';
 import { KEEP_COPIES, setSetting } from './settings';
 import { settleUserLists, type UserLists } from '../services/nostrSignIn';
 
@@ -98,8 +99,10 @@ function sourceMirror(db: SqlDb, from: string, hash: string, operator: string): 
 
 /**
  * One save from S to T (C§4.8 step 3). blob is S's staged ciphertext, or null for a save without text (or one whose
- * blob T must fetch first, which the caller stages); T's blob records the mirror that holds S's, if one does. Returns
- * what happened.
+ * blob T must fetch first, which the caller stages); T's blob records the mirror that holds S's, if one does. A browser
+ * save still waiting to read its capture waits on a wrap in S's inbox, which T never reads and whose capture S's last
+ * drain reads into S's row alone, so T's copy fetches its page itself, as one whose capture is gone does (giveUpBlob):
+ * copied as it was, it stayed at Getting the text… for good. Returns what happened.
  */
 export function copySave(db: SqlDb, now: number, job: MoveJob, hash: string, blob: StagedBlob | null, t: SaveTargets): Copied {
   return db.tx(() => {
@@ -119,6 +122,7 @@ export function copySave(db: SqlDb, now: number, job: MoveJob, hash: string, blo
       job.to, now, s.id,
     );
     db.run('INSERT OR IGNORE INTO listen_history (item, last_played_at) SELECT ?, last_played_at FROM listen_history WHERE item = ?', r.lastInsertRowId, s.id);
+    giveUpBlob(db, job.to, hash);
     queueSends(db, now, job.to, hash, blob && { ...blob, mirror }, t, false, null);
     return 'copied';
   });
