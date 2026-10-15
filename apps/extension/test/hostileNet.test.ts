@@ -154,6 +154,19 @@ describe('lists from the phone that aren’t lists of addresses', () => {
     expect(relayRows(junk, null).map((r) => r.url)).toEqual(['wss://ok.example']);
   });
 
+  test('Advanced draws relays whose addresses hold long runs of slashes in good time, and still finds Kefli’s', () => {
+    // a hundred of the longest addresses a pairing keeps, each a run of slashes and then a letter: the pattern for a
+    // trailing run was tried from every slash of it, 5 to 14 ms an address, and Advanced drew these in 2 to 6 s
+    const runs = Array.from({ length: LIST_MAX - 1 }, (_, i) => `wss://r${i}.example/${'/'.repeat(ADDRESS_MAX - 40)}x`);
+    const kefli = `wss://relay.example${'/'.repeat(ADDRESS_MAX - 19)}`;
+    const started = Date.now();
+    const rows = relayRows([...runs, kefli], DEFAULTS);
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(rows[0]).toEqual({ url: kefli, label: 'Kefli', operator: true });
+    expect(rows.slice(1).map((r) => r.url)).toEqual(runs);
+    expect(rows.slice(1).every((r) => r.label === 'Your relay')).toBe(true);
+  });
+
   test('a move’s pairing is kept the same way', async () => {
     const store = memoryStore();
     await store.set(KEYS.pairing, PAIRING);

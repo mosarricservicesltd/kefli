@@ -1,5 +1,6 @@
 // The operator's defaults.json (contract 3.1), fetched from the flavour's address and kept, so a save made offline
 // still knows the operator relay and Blossom server.
+import { withoutTrailingSlashes } from '../../../packages/protocol/src/lists';
 import { ANSWER_MAX_BYTES, capped, timed } from './save';
 import { addresses, ADDRESS_MAX, KEYS, type Store } from './store';
 
@@ -40,7 +41,12 @@ export interface RelayRow {
   operator: boolean;
 }
 
-const sameRelay = (a: string, b: string) => a.replace(/\/+$/, '').toLowerCase() === b.replace(/\/+$/, '').toLowerCase();
+/**
+ * Relay addresses compare without the slashes at their end and without case. The slashes are counted back from the end
+ * (withoutTrailingSlashes): the pattern for them was tried from every slash of a run that something else follows, so a
+ * pairing's hundred longest addresses, each such a run, held Advanced for 2 to 6 s.
+ */
+const sameRelay = (a: string, b: string) => withoutTrailingSlashes(a).toLowerCase() === withoutTrailingSlashes(b).toLowerCase();
 
 /**
  * Advanced's relays (F43): Kefli's own first, found by its address rather than its place, since a nostr user's list starts
