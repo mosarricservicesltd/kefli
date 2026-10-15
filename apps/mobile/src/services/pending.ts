@@ -2,8 +2,8 @@
 // spent. Each is fetched and parsed as a share is (page.ts), a public http address over https alone (net/http
 // overHttps); one whose site has no https fails once it is over three days old (page.ts HTTPS_WAIT_SECONDS), and one
 // whose page never answers once it is over 14 days old and tried again (page.ts ANSWER_WAIT_SECONDS). Its text is
-// encrypted under a fresh key, staged, written and indexed, and its sends queued (data/pending.ts). Ports, so this
-// runs in tests.
+// encrypted under a fresh key, staged and written, and only then is the save marked as having it, indexed and its
+// sends queued (data/pending.ts). Ports, so this runs in tests.
 import { encryptText, isPublicWebUrl, itemHash, textHash, withoutUserInfo, type CryptoPort } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { applyFailed, applyParsed, pendingParses, timedOut, xFound, xNoArticle, type Pending } from '../data/pending';
@@ -236,8 +236,11 @@ function waiting(db: SqlDb, item: Pending): boolean {
 
 /**
  * A parse's result applied to a waiting save, for pending parses and the inbox (4.7): failed goes out without
- * text; parsed has its text encrypted under a fresh key, staged, written and indexed, unless it joined a save
- * already here, which keeps its own text.
+ * text; parsed has its text encrypted under a fresh key, staged and written, and only then is the save marked as
+ * having it, indexed and its sends queued, unless it joined a save already here, which keeps its own text. RULED: a
+ * text that can't be written, on a full disk, throws with nothing applied (data/pending applyParsed), and the save
+ * waits for its parse, the queue trying it again as one that couldn't be had; marked first, it read as cached with no
+ * text on the phone, its upload queued.
  */
 export async function settle(
   p: Pick<PendingPorts, 'db' | 'now' | 'crypto' | 'stage' | 'unstage' | 'writeText' | 'targets'>, owner: string, item: Pending,
@@ -259,18 +262,14 @@ export async function settle(
       hash: itemHash(outcome.finalUrl, result.canonical), url: outcome.finalUrl, canonical: result.canonical, title: result.title,
       site: result.site, byline: result.byline, lang: result.lang, hero: result.hero, words: outcome.words,
       text: enc.text, textHash: textHash(result.markdown, p.crypto),
-    }, { sha256: enc.text.sha256, size: enc.blob.length, path }, t);
+    }, { sha256: enc.text.sha256, size: enc.blob.length, path }, t, (hash) => p.writeText(hash, result.markdown, outcome.derived));
   } catch (e) {
     // nothing names the staged blob, so it goes, rather than a new one staying behind at each try
     p.unstage(path);
     throw e;
   }
-  if (applied.merged) {
-    p.unstage(path);
-  } else {
-    p.writeText(applied.hash, result.markdown, outcome.derived);
-    indexStored(p.db, item.id, outcome.spoken);
-  }
+  if (applied.merged) p.unstage(path);
+  else indexStored(p.db, item.id, outcome.spoken);
   return 'parsed';
 }
 

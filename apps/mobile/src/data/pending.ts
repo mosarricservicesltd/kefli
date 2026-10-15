@@ -53,6 +53,9 @@ export type Parsed = {
 
 export type Applied = { hash: string; merged: boolean };
 
+/** Puts a parse's text on the phone for the save at hash (services/pending.ts), throwing when it can't. */
+export type WriteText = (hash: string) => void;
+
 /**
  * Moves an unpublished save to its final hash (FD 80): its row, search entry and cover record, so the cover
  * crossfades once without drawing again. If that hash is already a save, the provisional row goes and the existing
@@ -98,9 +101,14 @@ function fittedAt(url: string, parsed: Parsed): PageFields {
  * a newer copy from another phone is taken over it, the text kept by the merge (data/sync.ts). RULED: the page's
  * fields are fitted under the event ceiling (data/saves fitSave), and a final address too long for the event isn't
  * adopted, so the save keeps the address it has, and its hash, with the text. Whichever it keeps, it keeps without
- * a user name and password (contract 4.3, ruling 8), as a browser's request or an older row may hold them.
+ * a user name and password (contract 4.3, ruling 8), as a browser's request or an older row may hold them. The text is
+ * written (write) before the row says it has it, at the hash the save is kept at: a write that fails, as on a full
+ * disk, throws, and the transaction takes the re-key back with everything else, so the save waits for its parse
+ * rather than reading as cached with no text on the phone.
  */
-export function applyParsed(db: SqlDb, now: number, owner: string, p: Pending, parsed: Parsed, blob: StagedBlob, t: SaveTargets): Applied {
+export function applyParsed(
+  db: SqlDb, now: number, owner: string, p: Pending, parsed: Parsed, blob: StagedBlob, t: SaveTargets, write: WriteText,
+): Applied {
   return db.tx(() => {
     // deleted while its page was fetched, or waiting on its delete's Undo: the row takes nothing, as one that joined
     // another save takes nothing, so the caller drops the staged text
@@ -111,6 +119,7 @@ export function applyParsed(db: SqlDb, now: number, owner: string, p: Pending, p
     const page = fittedAt(adopted ? final : withoutUserInfo(p.url), parsed);
     const where = adopted && parsed.hash !== p.hash ? rekey(db, now, owner, p, parsed.hash) : { hash: p.hash, merged: false };
     if (where.merged) return where;
+    write(where.hash);
     // a save not yet published is marked changed for its sends; one already out stays clean (above)
     const changed = Number(unpublished);
     db.run(

@@ -259,6 +259,37 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 1, failed: 0, waiting: 0, xWaiting: 0 });
   });
 
+  test('a text that can’t be written, as on a full disk, leaves its save waiting for its parse: nothing marked, queued or kept', async () => {
+    // written after the row was marked, a failed write left a save cached with no text on the phone, its upload queued
+    const w = world({ 'https://t.co/x': { finalUrl: 'https://news.com/story' }, 'https://b.com/two': {} });
+    for (const u of ['https://t.co/x', 'https://b.com/two']) w.share(u);
+    const write = w.ports.writeText;
+    let full = true;
+    w.ports.writeText = (hash, md, derived) => {
+      if (full) throw new Error('ENOSPC (No space left on device)');
+      write(hash, md, derived);
+    };
+    const before = w.outbox();
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 0, waiting: 2, xWaiting: 0 });
+    // each at the address shared, not re-keyed, still waiting; no text, upload, publish, staged blob or search entry
+    expect(w.db.all('SELECT hash, url, text_state, text_sha256 FROM items ORDER BY id')).toEqual([
+      { hash: itemHash('https://t.co/x'), url: 'https://t.co/x', text_state: 'queued', text_sha256: null },
+      { hash: itemHash('https://b.com/two'), url: 'https://b.com/two', text_state: 'queued', text_sha256: null },
+    ]);
+    expect(w.texts.size).toBe(0);
+    expect(w.outbox()).toEqual(before);
+    expect(w.db.all('SELECT sha256 FROM blobs')).toEqual([]);
+    expect(w.staged.size).toBe(0);
+    expect(w.db.all("SELECT rowid FROM items_fts WHERE items_fts MATCH 'word42'")).toEqual([]);
+    // with room again, the next run parses them as ever
+    full = false;
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 2, failed: 0, waiting: 0, xWaiting: 0 });
+    expect(w.db.all('SELECT hash, text_state FROM items ORDER BY id')).toEqual([
+      { hash: itemHash('https://news.com/story'), text_state: 'cached' }, { hash: itemHash('https://b.com/two'), text_state: 'cached' },
+    ]);
+    expect([...w.texts.keys()].sort()).toEqual([itemHash('https://news.com/story'), itemHash('https://b.com/two')].sort());
+  });
+
   test('two runs at once (a sync and the inbox) parse each save once, and keep it', async () => {
     // the inbox runs pending parses when it saves something, whatever a sync is doing: before, both read the same
     // queue, and the second to apply its parse re-keyed a save the first had already re-keyed, found it already

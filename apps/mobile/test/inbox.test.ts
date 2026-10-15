@@ -560,6 +560,29 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     expect(w2.item(hash)?.text_state).toBe('queued');
   });
 
+  test('a capture whose text can’t be written, as on a full disk, leaves its save getting the text and its wrap to read again', async () => {
+    // written after the row was marked, a failed write left the save cached with no text on the phone, its upload queued
+    const w = world();
+    const { html } = await w.withHtml('<html><h1>Read later</h1><p>…</p></html>');
+    await w.send(w.request({ html }));
+    const write = w.ports.writeText;
+    w.ports.writeText = () => {
+      throw new Error('ENOSPC (No space left on device)');
+    };
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_blob: 1 });
+    const hash = itemHash('https://example.com/a');
+    expect(w.item(hash)?.text_state).toBe('fetching');
+    expect(w.texts.size).toBe(0);
+    expect(w.ops()).not.toContain('upload_blob');
+    expect(w.ops()).not.toContain('delete_wrap');
+    // with room again, the next drain reads the capture again and the save takes its text
+    w.ports.writeText = write;
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    expect(w.item(hash)?.text_state).toBe('cached');
+    expect([...w.texts.keys()]).toEqual([hash]);
+    expect(w.ops()).toContain('upload_blob');
+  });
+
   test('a capture the operator answers 404 for is gone: its page is fetched at once, not after 14 days (C§4.4, v1.12)', async () => {
     const w = world();
     const gone = await w.withHtml('<h1>Gone</h1>', false);
