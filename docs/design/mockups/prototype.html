@@ -3037,8 +3037,10 @@ function readerScreen(){
   if (S.readerMode === 'error' || S.readerMode === 'original') {
     // the in-app browser view of a save keeps Kefli's article actions: ⋯ and the floating Archive (fix 26). It is Kefli's
     // own view, a WebView under Kefli's bar (decision 81). While the page loads, the Reader's skeleton sits under the bar;
-    // a page that won't load (an HTTP or TLS error, or a site that refuses to open in an app) gets a notice pointing to
-    // Open in browser; offline, the view says it needs a connection (G4). The bar, ⋯ and Archive stay throughout.
+    // a page that won't load (a TLS error, or a site that refuses to open in an app) gets a notice pointing to
+    // Open in browser; offline, the view says it needs a connection (G4). The bar, ⋯ and Archive stay throughout. A
+    // save whose page https refused never reaches this view: opening it, or Open original, hands its address to the
+    // browser instead (decision 119, openItem and data-orig below), so the failed state is only ever the view's own.
     const st = !S.online ? 'off' : S.readerMode === 'original' ? S.iab : 'page';
     const slot = st === 'off' ? offlineNotice('Opening the original needs a connection')
       : st === 'failed' ? `<div class="iabslot"><div class="errline">${ic('alert', 16)}<span>This page won’t load here. Your browser may still open it.</span></div><button class="btn primary full" data-openbrowser>${ic('ext', 18)}Open in browser</button></div>`
@@ -4597,6 +4599,9 @@ function reopenReader(id, back, word){
 function openItem(id, back){
   const it = S.items.find(i => i.id === id);
   if (!it) return;
+  // a save whose page https refused (status failed, refused) has no view to open: its address goes to the browser
+  // and the list stays where it is (decision 119)
+  if (it.status === 'failed' && it.refused) { showToast('Would open in your browser', null, it); return; }
   S.readerBack = back || null;
   S.readerId = id;
   S.readerMode = modeFor(it);
@@ -4666,7 +4671,9 @@ vp.addEventListener('click', e => {
   }
   if (d.orig !== undefined) {
     // the page loads under Kefli's bar with the Reader's skeleton, then crossfades in (decision 81); offline, the view says
-    // it needs a connection instead (G4)
+    // it needs a connection instead (G4); a save whose page https refused goes to the browser instead (decision 119)
+    const oi = S.items.find(i => i.id === S.readerId);
+    if (oi && oi.status === 'failed' && oi.refused) { S.sheet = null; showToast('Would open in your browser', null, oi); render(); return; }
     S.sheet = null; S.readerMode = 'original'; S.iab = 'loading';
     const id = S.readerId; later(() => { if (S.screen === 'reader' && S.readerId === id && S.readerMode === 'original' && S.iab === 'loading' && S.online) { S.iab = 'page'; render(); } }, 900);
   }

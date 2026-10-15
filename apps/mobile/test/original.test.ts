@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { transformSync } from '@babel/core';
 import { originalMayLoad } from '../src/net/navigation';
+import { browserInstead } from '../src/screens/failNotice';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { stripConsole } = require('../babel.config.js');
 
@@ -22,11 +23,27 @@ describe('the Original view stays on the web and opens no other app (F25)', () =
     expect(src).toContain('onShouldStartLoadWithRequest={(r) => originalMayLoad(r.url)}');
     // incognito, and the jar held while it is open and emptied as it closes (F27)
     expect(src).toMatch(/\n\s+incognito\n/);
-    expect(src).toContain('useEffect(() => holdJar(), [])');
+    expect(src).toContain('useEffect(() => (toBrowser ? undefined : holdJar()), [toBrowser]);');
     const cookies = readFileSync(join(__dirname, '..', 'src', 'net', 'cookies.ts'), 'utf8');
     const hold = cookies.slice(cookies.indexOf('export function holdJar('), cookies.indexOf('export function clearCookies('));
     expect(hold.indexOf('KefliParser.holdJar(true)')).toBeLessThan(hold.indexOf('return () =>'));
     expect(hold).toMatch(/KefliParser\.holdJar\(false\);\s+void clearCookies\(\);/);
+  });
+
+  test('a save whose page https refused goes to the browser instead of the dead view; every other failure keeps it (FD 119)', () => {
+    expect(browserInstead('http')).toBe(true);
+    for (const reason of ['not_html', 'too_large', 'not_readable', 'pdf_no_text', 'pdf_locked', 'offline', null]) expect(browserInstead(reason)).toBe(false);
+    const src = readFileSync(join(__dirname, '..', 'src', 'screens', 'Original.tsx'), 'utf8');
+    // only a failed save's reason counts, the address goes to the browser as the view opens, the view goes back, and
+    // nothing of the WebView is drawn meanwhile: the jar isn't held and the early return comes before the bar
+    expect(src).toContain('const toBrowser = failedSave && browserInstead(row.fail_reason);');
+    expect(src).toContain("import * as Linking from 'expo-linking';");
+    const effect = src.slice(src.indexOf('if (!toBrowser) return;'), src.indexOf('}, [toBrowser]);'));
+    expect(effect.indexOf('Linking.openURL(row.url).catch(() => undefined);')).toBeGreaterThan(0);
+    expect(effect.indexOf('leave();')).toBeGreaterThan(effect.indexOf('Linking.openURL(row.url)'));
+    expect(src.indexOf('if (toBrowser) return <View style={{ flex: 1, backgroundColor: c.background }} />;')).toBeLessThan(src.indexOf('const menu = () =>'));
+    // the line stays for the failures that still show the view
+    expect(src).toContain('{S.reader.pageFailed}');
   });
 
   test('a renderer the system or Kefli ends leaves the view in its failure state, not a blank page', () => {
