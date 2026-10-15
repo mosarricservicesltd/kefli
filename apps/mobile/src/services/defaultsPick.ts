@@ -18,10 +18,14 @@ const TIMEOUT = 10_000;
 
 const strings = (xs: unknown, min: number) => Array.isArray(xs) && xs.length >= min && xs.every((x) => typeof x === 'string' && x.length > 0);
 
-/** A defaults.json as contract 3.1 describes it: relays at least two, indexer and mirrors at least one. */
+/**
+ * A defaults.json as contract 3.1 describes it: relays at least two, indexer and mirrors at least one, and
+ * operator.api without a trailing slash (contract 6, FD 119), since with one every API call went to a doubled slash
+ * and failed quietly on the redirect; such a file is refused as any invalid one is, the kept or baked copy standing.
+ */
 export function validDefaults(d: unknown): d is Defaults {
   const x = d as Partial<Defaults> | null;
-  return !!x && x.v === 1 && !!x.operator?.relay && !!x.operator.blossom && !!x.operator.api
+  return !!x && x.v === 1 && !!x.operator?.relay && !!x.operator.blossom && !!x.operator.api && !x.operator.api.endsWith('/')
     && strings(x.relays, 2) && strings(x.indexer, 1) && strings(x.mirrors, 1);
 }
 

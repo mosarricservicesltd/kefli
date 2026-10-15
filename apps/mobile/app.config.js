@@ -14,6 +14,8 @@ function bakedDefaults(file, defaultsUrl) {
   const ok = d && d.v === 1 && d.operator && d.operator.relay && d.operator.blossom && d.operator.api
     && urls(d.relays) && d.relays.length >= 2 && urls(d.indexer) && d.indexer.length >= 1 && urls(d.mirrors) && d.mirrors.length >= 1;
   if (!ok) throw new Error(`${file} isn't a defaults.json as contract 3.1 describes it`);
+  // the phone refuses a copy with one (services/defaultsPick.ts validDefaults), so a build must not bake one in (contract 6, FD 119)
+  if (/\/$/.test(d.operator.api)) throw new Error(`${file} names the API ${d.operator.api} with a trailing slash, which contract 6 forbids`);
   if (new URL(d.operator.api).origin !== new URL(defaultsUrl).origin) {
     throw new Error(`${file} names the API ${d.operator.api}, but KEFLI_DEFAULTS_URL is ${defaultsUrl}`);
   }
