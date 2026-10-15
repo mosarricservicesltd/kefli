@@ -76,7 +76,7 @@ export function renderAnswer(r: { ok: true; url: string; html: string } | { ok: 
 /**
  * The parser WebView's word (kefli-parser) for a renderer the system killed (for memory, often with Kefli in the
  * background) or one that never loaded the bundle: nothing about the page is known, so it waits and is tried again as
- * a page that timed out is. The inbox reads a browser's capture the same way (inbox.ts fromBrowser).
+ * a page that timed out is (PARSER_GONE). The inbox reads a browser's capture the same way (inbox.ts fromBrowser).
  */
 export const RENDERER_GONE = 'renderer_gone';
 
@@ -90,9 +90,11 @@ export type PageOutcome =
   /**
    * timedOut: the server or the network was too slow, against the 20 s deadline, rather than not there. refused:
    * nothing answered with a page, but something refused the connection (REFUSED), as an address asked for over https
-   * alone meets when its site has none; such a save waits like any other, until the rule below fails it.
+   * alone meets when its site has none; such a save waits like any other, until the rule below fails it. answered: the
+   * page came whole, but the parser's renderer had gone before it read it (PARSER_GONE), so the save waits as a page
+   * that timed out does, and is no page that never answers (ANSWER_WAIT_SECONDS).
    */
-  | { kind: 'offline'; timedOut?: true; refused?: true }
+  | { kind: 'offline'; timedOut?: true; refused?: true; answered?: true }
   | { kind: 'failed'; reason: FailReason; finalUrl: string }
   | { kind: 'parsed'; finalUrl: string; result: Extract<ParserResult, { ok: true }>; words: number; spoken: string; derived: Derived };
 
@@ -103,6 +105,14 @@ type ParserOk = Extract<ParserResult, { ok: true }>;
 type Derivation = () => Settled;
 /** The page as fetched, or why it can't be had (answer). */
 type Answer = { res: Response; url: string; bytes: Uint8Array } | Extract<PageOutcome, { kind: 'offline' | 'failed' }>;
+
+/**
+ * A page whose parse met RENDERER_GONE. RULED: its page answered, so its save waits at any age, the 14-day rule being
+ * for a page that never answers (ANSWER_WAIT_SECONDS); read as one, a save past its 14 days whose page came whole was
+ * failed for good whenever the system killed the parser's renderer, as it does for memory with Kefli in the
+ * background, where pending parses run.
+ */
+const PARSER_GONE: PageOutcome = { kind: 'offline', answered: true };
 
 const PDF_TYPE = /^\s*application\/(?:x-)?pdf\b/i;
 const HTML_TYPE = /^\s*(text\/html|application\/xhtml\+xml)\b/i;
@@ -265,14 +275,15 @@ export function waitedForHttps(url: string, outcome: PageOutcome, savedAt: numbe
  * that drops packets so every try times out. Such a save waited unpublished for good, never backed up and tried at
  * every sync. Past this, a try that times out or meets the network once more, with the phone on the internet, fails the
  * save as a page that can't be read: published without its text, its link kept (pending.ts). Under it the save waits as
- * before, so a slow network, a site down for a few days or a fortnight away from a signal can't fail it. A share is
- * new, so the rule reaches only saves waiting in the pending queue.
+ * before, so a slow network, a site down for a few days or a fortnight away from a signal can't fail it. A page that
+ * came, its parser's renderer gone (PARSER_GONE), answered and waits at any age. A share is new, so the rule reaches
+ * only saves waiting in the pending queue.
  */
 export const ANSWER_WAIT_SECONDS = 14 * 86_400;
 
 /** Whether a save saved at savedAt, whose page came to outcome, has waited as long as it may for its page to answer. */
 export function waitedForAnswer(outcome: PageOutcome, savedAt: number, now: number): boolean {
-  return outcome.kind === 'offline' && now - savedAt > ANSWER_WAIT_SECONDS;
+  return outcome.kind === 'offline' && !outcome.answered && now - savedAt > ANSWER_WAIT_SECONDS;
 }
 
 /**
@@ -346,7 +357,7 @@ function overRuns(read: PdfRuns): boolean {
 /** A PDF's runs laid out as Markdown (contract 4.2, PDFs): the same text, derivation and blob as a page's after this. */
 export async function parsePdf(p: Pick<PagePorts, 'pdf'>, bytes: Uint8Array, finalUrl: string): Promise<PageOutcome> {
   const read = await p.pdf!(toBase64(bytes)).catch(() => ({ ok: false as const, reason: 'error' }));
-  if (!read.ok && read.reason === RENDERER_GONE) return { kind: 'offline', timedOut: true };
+  if (!read.ok && read.reason === RENDERER_GONE) return PARSER_GONE;
   if (!read.ok) return { kind: 'failed', reason: PDF_FAILURES[read.reason] ?? 'not_readable', finalUrl };
   if (overRuns(read)) return { kind: 'failed', reason: 'too_large', finalUrl };
   return guarded(finalUrl, () => {
@@ -380,7 +391,7 @@ async function rendered403(p: PagePorts, url: string): Promise<PageOutcome | nul
 /** The parse and contract 4.2's guard, for a fetched page and for a browser's own HTML (4.7). */
 export async function parseHtml(p: Pick<PagePorts, 'parse'>, bytes: Uint8Array, contentType: string, finalUrl: string): Promise<PageOutcome> {
   const result = await p.parse(toBase64(bytes), contentType, finalUrl).catch((): ParserResult => ({ ok: false, reason: 'error' }));
-  if (!result.ok && result.reason === RENDERER_GONE) return { kind: 'offline', timedOut: true };
+  if (!result.ok && result.reason === RENDERER_GONE) return PARSER_GONE;
   if (!result.ok) return { kind: 'failed', reason: result.reason === 'too_large' ? 'too_large' : 'not_readable', finalUrl };
   return parsedOutcome(result, finalUrl);
 }

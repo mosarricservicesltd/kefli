@@ -206,7 +206,8 @@ describe('what a page hands back is taken only as far as a save can hold it', ()
   });
 
   test('a parse whose renderer the system killed waits, as a page that timed out does; a crash is a page not read', async () => {
-    expect(await fetchPage(parsing({ ok: false, reason: 'renderer_gone' }), 'https://e.com/a')).toEqual({ kind: 'offline', timedOut: true });
+    // its page answered, so the save waits at any age: it is no page that never answers (pending.ts)
+    expect(await fetchPage(parsing({ ok: false, reason: 'renderer_gone' }), 'https://e.com/a')).toEqual({ kind: 'offline', answered: true });
     expect(await fetchPage(parsing({ ok: false, reason: 'error' }), 'https://e.com/a')).toMatchObject({ kind: 'failed', reason: 'not_readable' });
   });
 
@@ -456,7 +457,7 @@ describe('a PDF is handed over and read only as far as a save can hold it', () =
   });
 
   test('a PDF read whose renderer the system killed waits; one the parser stopped for its size is too large', async () => {
-    expect(await fetchPage(pdfPorts({ ok: false, reason: 'renderer_gone' }), 'https://e.com/a.pdf')).toEqual({ kind: 'offline', timedOut: true });
+    expect(await fetchPage(pdfPorts({ ok: false, reason: 'renderer_gone' }), 'https://e.com/a.pdf')).toEqual({ kind: 'offline', answered: true });
     expect(await fetchPage(pdfPorts({ ok: false, reason: 'pdf_too_long' }), 'https://e.com/a.pdf')).toMatchObject({ kind: 'failed', reason: 'too_large' });
     expect(await fetchPage(pdfPorts({ ok: false, reason: 'too_large' }), 'https://e.com/a.pdf')).toMatchObject({ kind: 'failed', reason: 'too_large' });
   });

@@ -1404,7 +1404,8 @@ describe('the browser’s HTML takes the guards a parsed page’s text takes (C�
     // the inbox kept a copy of its own, so a change to either left the other reading a gone renderer as a failed parse
     const gone = { ok: false, reason: RENDERER_GONE } as const;
     expect(await fromBrowser({ markdown: async () => gone }, world().request(), '<p>x</p>')).toEqual({ kind: 'offline', timedOut: true });
-    expect(await parseHtml({ parse: async () => gone }, new Uint8Array([60]), 'text/html', 'https://example.com/a')).toEqual({ kind: 'offline', timedOut: true });
+    // both wait to be read again; a page's says it answered, so the pending queue never takes it for one that didn't
+    expect(await parseHtml({ parse: async () => gone }, new Uint8Array([60]), 'text/html', 'https://example.com/a')).toEqual({ kind: 'offline', answered: true });
     const parser = readFileSync(join(__dirname, '..', 'modules', 'kefli-parser', 'android', 'src', 'main', 'java', 'app', 'kefli', 'parser', 'Parser.kt'), 'utf8');
     expect(parser).toContain(`"${RENDERER_GONE}"`);
     expect(readFileSync(join(__dirname, '..', 'src', 'services', 'inbox.ts'), 'utf8')).not.toContain(`'${RENDERER_GONE}'`);

@@ -9,7 +9,7 @@ import * as pendingData from '../src/data/pending';
 import { pendingParses } from '../src/data/pending';
 import { commitDelete, deleteItem } from '../src/data/library';
 import { search } from '../src/data/search';
-import { DESKTOP_UA, MOBILE_UA, PAGE_MAX_BYTES, RENDER_MAX_BYTES, fetchPage, parsedOutcome, refusal, type ParserResult } from '../src/services/page';
+import { DESKTOP_UA, MOBILE_UA, PAGE_MAX_BYTES, RENDERER_GONE, RENDER_MAX_BYTES, fetchPage, parsedOutcome, refusal, type ParserResult } from '../src/services/page';
 import { AGAIN_MS, RUN_SECONDS, nextRunIn, runPendingParses, settle, type PendingPorts, type PendingResult } from '../src/services/pending';
 import { TimedOut } from '../src/net/http';
 import { memoryDb } from './sqlite';
@@ -720,6 +720,32 @@ describe('a save whose page never answers (RULED: past 14 days, tried again with
       at(w, 30 * DAY);
       for (let i = 0; 3 > i; i++) expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 0, waiting: 1 });
       expect(publishes(w)).toEqual([]);
+    }
+  });
+
+  test('a page that answered, its parser’s renderer gone, is no page that never answers: it waits at any age, a PDF too', async () => {
+    // the system kills the parser's renderer for memory, often with Kefli in the background where pending parses run;
+    // read as a page that never answered, a save whose page came whole was failed for good past its 14 days
+    const prose = 'Saved articles are read on the train and kept for later, every word of them. '.repeat(4);
+    const read = { ok: true as const, title: 'A report', author: null, pages: [{ w: 595, h: 842, runs: [[prose, 72, 100, 10, 400, 0] as [string, number, number, number, number, number]] }] };
+    for (const pdf of [false, true]) {
+      const w = world({ 'https://ok.example/a': pdf ? { type: 'application/pdf', body: '%PDF-1.7\n' } : {} });
+      let gone = true;
+      const parse = w.ports.page.parse;
+      w.ports.page.parse = async (b, t, u) => (gone ? { ok: false, reason: RENDERER_GONE } : parse(b, t, u));
+      w.ports.page.pdf = async () => (gone ? { ok: false, reason: RENDERER_GONE } : read);
+      w.ports.online = async () => true;
+      w.share('https://ok.example/a');
+      for (const day of [1, 15, 15, 30]) {
+        at(w, day * DAY);
+        expect([pdf, await runPendingParses(w.ports, PK)]).toEqual([pdf, { parsed: 0, failed: 0, waiting: 1, xWaiting: 0 }]);
+      }
+      expect(w.db.get('SELECT text_state, fail_reason FROM items')).toEqual({ text_state: 'queued', fail_reason: null });
+      expect(publishes(w)).toEqual([]);
+      // its renderer back, the page is read
+      gone = false;
+      expect([pdf, await runPendingParses(w.ports, PK)]).toEqual([pdf, { parsed: 1, failed: 0, waiting: 0, xWaiting: 0 }]);
+      expect(w.db.get('SELECT text_state FROM items')).toEqual({ text_state: 'cached' });
     }
   });
 });
