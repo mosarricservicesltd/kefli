@@ -46,6 +46,10 @@ const stale = (p: InboxPorts, owner: string, wrapId: string) => p.now() - waitin
 
 export type InboxPorts = Pick<PendingPorts, 'db' | 'now' | 'crypto' | 'stage' | 'unstage' | 'writeText' | 'targets'> & {
   signer: Signer;
+  /**
+   * The events matching filters once the relay has sent EOSE; throws when the relay can't be reached or doesn't finish
+   * its answer (net/pool CutShort), so a read is either whole or fails, and only a whole one moves the cursor or the scan.
+   */
   query: (relay: string, filters: Filter[]) => Promise<NostrEvent[]>;
   fetch: typeof fetch;
   /** kefliMarkdown in the parser WebView (C§4.4). */
@@ -369,7 +373,11 @@ const oldestOf = (page: NostrEvent[]) => page.reduce((t, e) => Math.min(t, e.cre
 
 /**
  * The window's wraps, newest answer first, paged back by until as sync pages (NIP-01). The newest answer is always
- * read; one short of PAGE is the whole window, the operator's strfry answering at most PAGE (its maxFilterLimit).
+ * read; one short of PAGE is the whole window, the operator's strfry answering at most PAGE (its maxFilterLimit, which
+ * strfryLimit.test.ts holds at PAGE or more). An answer is short only as the relay sent it: one the relay doesn't
+ * finish fails the read (net/pool CutShort) as a relay that can't be reached does, so the cursor and the scan stay as
+ * they were. Taken as whole, an answer cut at nostr-tools' own EOSE timer moved the cursor to now and ended the scan,
+ * and the wraps beneath the cut were never read.
  * While the last deep read is old enough, up to INBOX_PAGES - 1 more answers go on down the window from where the
  * last deep read stopped (InboxScan), so every part of a window too large for one deep read is read in turn. A full
  * answer that brings nothing new is a second holding more wraps than an answer, as a flood all dated to one second
@@ -410,7 +418,7 @@ async function readWindow(p: InboxPorts, relay: string, owner: string, since: nu
 
 /**
  * This identity's wraps on the operator relay (readWindow), from 172,800 + 300 seconds before the last drain or,
- * before the first, all of them (4.7); null when the relay can't be reached.
+ * before the first, all of them (4.7); null when the relay can't be reached or cuts an answer short.
  */
 async function windowSince(p: InboxPorts, relay: string, owner: string, now: number): Promise<WindowRead | null> {
   const since = getCursor(p.db, relay, 'inbox', owner)?.since;
@@ -538,7 +546,7 @@ export async function drainInbox(p: InboxPorts, owner: string): Promise<InboxRes
   await retryBlobs(p, owner, d.operator.blossom, out, drain);
   const startedAt = p.now();
   const read = await windowSince(p, relay, owner, startedAt);
-  if (!read) return out; // unreachable: the cursor stays
+  if (!read) return out; // unreachable, or an answer cut short: the cursor and the scan stay
   // wraps read but let go (more than a drain opens) are left unopened as much as those the budget stops at
   let held = read.over;
   for (const w of read.wraps) {
