@@ -66,13 +66,32 @@ const err = (e: unknown) => String((e as Error)?.message ?? e);
  */
 const CLOCK = new RegExp('created_at too late|too (?:much|far) in the future|created_at field is out of the acceptable range', 'i');
 
+/** Whether a relay's words refuse an event as dated past its clock (CLOCK), which a later try may get past. */
+export function pastItsClock(reason: string): boolean {
+  return CLOCK.test(reason);
+}
+
+/**
+ * A relay that holds the event already, or a newer version of its address: NIP-01's duplicate:, and strfry's
+ * "replaced: have newer event", which it answers with OK false to an older version of a replaceable or addressable
+ * event than the one it holds, as when another phone or app sent it a newer one. Either way there is nothing more to
+ * send it. Read as a retry, as "replaced:" was, an event sent as already signed (the library's copy to an added relay)
+ * went again at every backoff for ever, and one signed at each send (a save, the lists) went over the version that
+ * replaced it once this phone's clock passed that version's date, which a sync would have kept (merge.ts mergeItem).
+ */
+const HELD = new RegExp('^(?:duplicate|replaced):');
+
+/** Whether a relay's words say it holds the event, or a newer version of it, already (HELD): as good as taking it. */
+export function holdsAlready(reason: string): boolean {
+  return HELD.test(reason);
+}
+
 /** A relay's OK prefix decides the outcome (4.3); an event refused as dated ahead of the relay's clock is tried again. */
 export function relayResult(target: string, a: RelayAnswer, eventId: string): TargetResult {
-  if (a.ok) return { target, kind: 'ok', eventId };
+  if (a.ok || holdsAlready(a.reason)) return { target, kind: 'ok', eventId };
   const reason = a.reason;
-  if (/^duplicate:/.test(reason)) return { target, kind: 'ok', eventId };
   if (/^rate-limited:/.test(reason)) return { target, kind: 'retry', error: reason, waitSec: 60 };
-  if (CLOCK.test(reason)) return { target, kind: 'retry', error: reason };
+  if (pastItsClock(reason)) return { target, kind: 'retry', error: reason };
   if (/^(invalid|blocked|pow|restricted|error):/.test(reason)) return { target, kind: 'rejected', error: reason };
   return { target, kind: 'retry', error: reason };
 }
@@ -586,9 +605,10 @@ function newestOfEach(saves: NostrEvent[]): NostrEvent[] {
 }
 
 /**
- * The events to the added relay in turn, as already signed. A refusal stops nothing, and nor does an event refused as
- * dated ahead of the relay's clock (CLOCK), as one signed on a phone running fast is: the rest still go, and the copy
- * is tried again once that event's time has come, for it to go too, the relay answering duplicate for the rest.
+ * The events to the added relay in turn, as already signed. A refusal stops nothing, nor does an event the relay holds
+ * a newer version of (holdsAlready), and nor does one refused as dated ahead of the relay's clock (pastItsClock), as
+ * one signed on a phone running fast is: the rest still go, and the copy is tried again once that event's time has
+ * come, for it to go too, the relay answering duplicate for the rest.
  * Stopping there, as any other retry does, one save dated ahead kept every save after it from the relay, for good
  * when it was dated a year ahead. One dated more than a day past this phone's clock is passed over, as sync leaves it
  * unread (notYet), since a try within a day changes nothing. Any other answer to retry (a relay asking to slow down,
@@ -603,7 +623,7 @@ async function copyEvents(p: SendPorts, t: OutboxTarget, events: NostrEvent[]): 
       const answer = await p.publish(t.target, e);
       const r = relayResult(t.target, answer, e.id);
       if (r.kind !== 'retry') continue;
-      if (answer.ok || !CLOCK.test(answer.reason)) return r;
+      if (answer.ok || !pastItsClock(answer.reason)) return r;
       if (notYet(e, p.now())) continue;
       aheadAt = Math.max(aheadAt, e.created_at);
       aheadError = answer.reason;

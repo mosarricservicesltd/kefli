@@ -6,6 +6,7 @@ import { addRelay, listServers, recordList, relayAddress, relayEntries, relayRow
 import { begin, enqueue, finish } from '../src/data/outbox';
 import { commitDelete, deleteItem } from '../src/data/library';
 import { addTypedRelay, type AddRelayPorts } from '../src/services/addRelay';
+import * as send from '../src/services/send';
 import { drain, relayResult, type SendPorts } from '../src/services/send';
 import type { RelayAnswer } from '../src/net/pool';
 import { memoryDb } from './sqlite';
@@ -192,6 +193,26 @@ describe('sending what adding a relay queues (FD 113)', () => {
     expect(w.db.get("SELECT 1 FROM outbox WHERE op = 'copy_relay'")).toBeUndefined();
   });
 
+  test('an added relay that holds a newer version of a save already has it: the copy goes on past it, and is done', async () => {
+    const w = world();
+    seedGeneratedLists(w.db, w.pk, D);
+    item(w.db, w.pk, 'h1');
+    // the person's other phone sent the added relay a newer version of h1 than the write relays hold
+    const older = await save(w, 'h1', 100, 'unread');
+    const rest = await Promise.all(['h2', 'h3'].map((h, i) => save(w, h, 200 + i, 'unread')));
+    const { p, sent } = ports(w, { [D.relays[0]]: [older, ...rest] });
+    p.publish = async (url, event) => {
+      sent.push({ url, event });
+      // strfry's answer to an older version of an address it holds a newer one of: OK false
+      return url === MINE && event.id === older.id ? { ok: false, reason: 'replaced: have newer event' } : { ok: true };
+    };
+    addRelay(w.db, 10, w.pk, MINE, D);
+    await drain(p);
+    expect(sent.filter((s) => s.url === MINE && s.event.kind === 30078).map((s) => s.event.id).sort()).toEqual([older, ...rest].map((e) => e.id).sort());
+    // read as a retry, the copy stopped at it and sent it again at every backoff, for ever, since it goes as signed
+    expect(w.db.get("SELECT 1 FROM outbox WHERE op = 'copy_relay'")).toBeUndefined();
+  });
+
   test('waits while no other relay answers', async () => {
     const w = world();
     seedGeneratedLists(w.db, w.pk, D);
@@ -337,6 +358,8 @@ describe('checking a typed relay (FD 113)', () => {
     recordList(v.db, v.pk, 10002, list.id, 5, JSON.stringify(list));
     expect(await addTypedRelay(ports(v, { answer: { ok: false, reason: 'replaced: have newer event' } }).p, v.pk, MINE)).toEqual({ check: 'ok', url: MINE });
     expect(writeRelays(v.db, v.pk)).toContain(MINE);
+    // and the sends to it read the same words the same way: nothing more to send it
+    expect(relayResult(MINE, { ok: false, reason: 'replaced: have newer event' }, list.id).kind).toBe('ok');
     for (const reason of ['restricted: not on the allow list', 'pow: difficulty 28 is required', 'blocked: you are banned', 'invalid: bad signature']) {
       const v = world();
       seedGeneratedLists(v.db, v.pk, D);
@@ -344,6 +367,26 @@ describe('checking a typed relay (FD 113)', () => {
       expect([reason, (await addTypedRelay(ports(v, { answer: { ok: false, reason } }).p, v.pk, MINE)).check]).toEqual([reason, 'refused']);
       expect(writeRelays(v.db, v.pk)).not.toContain(MINE);
       expect(relayResult(MINE, { ok: false, reason }, list.id).kind).toBe('rejected');
+    }
+  });
+
+  test("the check reads a relay's words by the outbox's own tests, so the two can't drift apart", async () => {
+    // copies of their own here had already parted once: the check took "replaced:" while the sends retried it
+    const holds = jest.spyOn(send, 'holdsAlready');
+    const clock = jest.spyOn(send, 'pastItsClock');
+    try {
+      for (const reason of ['replaced: have newer event', 'invalid: created_at too late']) {
+        const w = world();
+        seedGeneratedLists(w.db, w.pk, D);
+        const list = await buildRelayList(w.s, relayEntries(w.db, w.pk), 5);
+        recordList(w.db, w.pk, 10002, list.id, 5, JSON.stringify(list));
+        expect(await addTypedRelay(ports(w, { answer: { ok: false, reason } }).p, w.pk, MINE)).toEqual({ check: 'ok', url: MINE });
+      }
+      expect(holds).toHaveBeenCalledWith('replaced: have newer event');
+      expect(clock).toHaveBeenCalledWith('invalid: created_at too late');
+    } finally {
+      holds.mockRestore();
+      clock.mockRestore();
     }
   });
 });
