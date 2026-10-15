@@ -30,6 +30,7 @@ const (
 	device  = "dd"
 	throw   = "ee"
 	nobody  = "ff"
+	removed = "cc" // a user DELETE /account removed: keflid holds it disabled, so Registered says no
 	address = "203.0.113.9"
 )
 
@@ -40,7 +41,7 @@ func line(t *testing.T, ev Event, pad int) Input {
 }
 
 func setup() (*Policy, *fake, *time.Time) {
-	f := &fake{users: map[string]bool{user: true, "bb": true}, devices: map[string]string{device: user}, wraps: map[string]Wrap{"w1": {ID: "w1", Author: throw, P: user}}}
+	f := &fake{users: map[string]bool{user: true, "bb": true, removed: false}, devices: map[string]string{device: user}, wraps: map[string]Wrap{"w1": {ID: "w1", Author: throw, P: user}}}
 	now := time.Unix(1_791_600_000, 0)
 	return New(f, func() time.Time { return now }), f, &now
 }
@@ -219,6 +220,46 @@ func TestTheRelayKeepsItsFloor(t *testing.T) {
 	full = false
 	if v := p.Decide(line(t, Event{ID: "8", Pubkey: user, Kind: KindAppData}, 100)); v.Out.Action != "accept" {
 		t.Fatalf("with room again: %+v", v)
+	}
+}
+
+// Decision 119: every wrap gets the recipient test, whoever signs it. A registered author's own kind 1059, which no
+// Kefli client sends, was taken to any key, a removed or unknown one included, and counted only against its author's
+// 60 a minute, so one registered key could put 3,600 wraps an hour into one inbox.
+func TestARegisteredAuthorsWrapIsTestedAsAnyones(t *testing.T) {
+	p, _, _ := setup()
+	for name, to := range map[string]string{"a removed key": removed, "an unknown key": nobody} {
+		v := p.Decide(line(t, Event{ID: "w", Pubkey: user, Kind: KindWrap, Tags: [][]string{{"p", to}}}, 10))
+		if v.Out.Action != "reject" || !strings.HasPrefix(v.Out.Msg, "blocked:") || v.Record != nil {
+			t.Fatalf("a registered author's wrap to %s: %+v", name, v)
+		}
+	}
+	n := 0
+	for i := 0; i < AddrMax; i++ {
+		v := p.Decide(line(t, Event{ID: "w", Pubkey: user, Kind: KindWrap, Tags: [][]string{{"p", "bb"}}}, 10))
+		if v.Out.Action != "accept" {
+			if !strings.HasPrefix(v.Out.Msg, "rate-limited:") {
+				t.Fatalf("wrap %d: %+v", i, v)
+			}
+			break
+		}
+		if v.Record == nil || v.Record.Author != user || v.Record.P != "bb" {
+			t.Fatalf("wrap %d not recorded: %+v", i, v)
+		}
+		n++
+	}
+	if n != ToAddrMax {
+		t.Fatalf("a registered author sent %d wraps to one inbox from one address, want %d", n, ToAddrMax)
+	}
+	// they counted against its address, so its own 60 a minute is untouched
+	if v := p.Decide(line(t, Event{ID: "s", Pubkey: user, Kind: KindAppData}, 10)); v.Out.Action != "accept" {
+		t.Fatalf("the author's own save after its wraps: %+v", v)
+	}
+	// sent AUTHed as the recipient's side, it counts only against that key, as any wrap does
+	in := line(t, Event{ID: "ack", Pubkey: user, Kind: KindWrap, Tags: [][]string{{"p", device}}}, 10)
+	in.Authed = user
+	if v := p.Decide(in); v.Out.Action != "accept" || v.Record == nil {
+		t.Fatalf("the user's wrap to its own browser, AUTHed: %+v", v)
 	}
 }
 
