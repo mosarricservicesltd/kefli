@@ -561,7 +561,7 @@ describe('a capture the operator refuses (contract 4.4 and 5, v1.12)', () => {
     expect(await h.session.get(`undo:${w.id}`)).toMatchObject({ sha256: null });
   });
 
-  test('a move taken while the operator refuses the upload: the save still goes, and Undo on its toast reaches both its wraps', async () => {
+  test.each([['', false], [', with storage.session slow to write', true]])('a move taken while the operator refuses the upload%s: the save still goes, and Undo on its toast reaches both its wraps', async (_name, slowSession) => {
     const T = new LocalSigner(hexToBytes('33'.repeat(32)));
     const ack: PairAck = { v: 1, user_pubkey: T.pubkey(), write_relays: ['wss://relay.example'], blossom_servers: ['https://blossom.example'], token: 'cd'.repeat(32), moved_from: user.pubkey() };
     const held = gate();
@@ -571,15 +571,21 @@ describe('a capture the operator refuses (contract 4.4 and 5, v1.12)', () => {
       return refusing(input, init);
     }) as typeof fetch;
     const n = net({ blossom: slow });
-    const h = harness({ net: n.net, collected: [false, false] });
+    const session = memoryStore();
+    const set = session.set.bind(session);
+    if (slowSession) session.set = async (k, v) => (await new Promise((r) => setTimeout(r, 50)), set(k, v));
+    const h = harness({ net: n.net, session, collected: [false, false] });
     const saving = h.work.save(PAGE, 1, false);
     await until(() => n.asked.uploads === 1);
-    // the background finds the move while the upload waits on the operator, which then refuses it
+    // the background finds the move while the upload waits on the operator, which then refuses it; with a slow session,
+    // the refusal comes before Undo's key has followed the move
     await h.store.set(KEYS.pairing, PAIRING);
-    await applyMove(h.store, device, ack, NOW, h.session, h.work.follow);
+    const moving = applyMove(h.store, device, ack, NOW, h.session, h.work.follow);
+    if (!slowSession) await moving;
+    else await until(async () => (await queued(h.store))[0]?.wrap.tags[0][1] === T.pubkey());
     const [moved] = await queued(h.store);
     held.open();
-    await saving;
+    await Promise.all([saving, moving]);
     expect(kinds(h.toasts)).toEqual(['saving', 'notext']);
     expect(n.published.filter((e) => e.kind === 1059)).toHaveLength(1);
     // Undo reaches the wrap that went and the one the move made, which would otherwise go to the new library later
