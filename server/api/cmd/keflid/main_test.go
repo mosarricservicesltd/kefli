@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"io"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/richardminton-glitch/Kefli/server/api/internal/blossom"
+	"github.com/richardminton-glitch/Kefli/server/api/internal/guard"
 	"github.com/richardminton-glitch/Kefli/server/api/internal/store"
 )
 
@@ -140,7 +142,7 @@ func TestServerHeadersAreBounded(t *testing.T) {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {})
-	s := server(l.Addr().String(), mux)
+	s := server(l.Addr().String(), guard.New(false), mux)
 	go s.Serve(l)
 	defer s.Close()
 	for _, c := range []struct {
@@ -159,6 +161,87 @@ func TestServerHeadersAreBounded(t *testing.T) {
 	}
 }
 
+// started runs keflid from the environment on the given ports until the test ends, once its API answers.
+func started(t *testing.T, api, blob string) {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("KEFLID_DEFAULTS", write(t, "d.json", `{"v":1,"operator":{"relay":"wss://r","blossom":"https://b","api":"https://a"}}`))
+	t.Setenv("KEFLID_DB", filepath.Join(dir, "k.db"))
+	t.Setenv("KEFLID_BLOBS", filepath.Join(dir, "blobs"))
+	t.Setenv("KEFLID_API_ADDR", api)
+	t.Setenv("KEFLID_BLOSSOM_ADDR", blob)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, slog.New(slog.NewTextHandler(io.Discard, nil))) }()
+	t.Cleanup(func() { cancel(); <-done })
+	for i := 0; i < 50; i++ {
+		if res, err := http.Get("http://" + api + "/health"); err == nil {
+			res.Body.Close()
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("keflid didn't start")
+}
+
+// sent opens a connection and sends head, the start of a request whose body never finishes arriving.
+func sent(t *testing.T, addr, head string) net.Conn {
+	t.Helper()
+	c, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { c.Close() })
+	if _, err := io.WriteString(c, head); err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+// status reads the status line of c's answer within limit.
+func status(t *testing.T, c net.Conn, limit time.Duration) (string, *bufio.Reader) {
+	t.Helper()
+	_ = c.SetReadDeadline(time.Now().Add(limit))
+	r := bufio.NewReader(c)
+	line, err := r.ReadString('\n')
+	if err != nil {
+		t.Fatalf("no answer within %v: %v", limit, err)
+	}
+	return strings.TrimSpace(line), r
+}
+
+// letGo waits, within limit, for keflid to close the connection whose answer r has begun to read.
+func letGo(t *testing.T, c net.Conn, r *bufio.Reader, limit time.Duration) {
+	t.Helper()
+	_ = c.SetReadDeadline(time.Now().Add(limit))
+	if _, err := io.Copy(io.Discard, r); err != nil {
+		t.Fatalf("the connection was still held after %v: %v", limit, err)
+	}
+}
+
+// A request whose small body never finishes arriving waited in keflid for its two-minute ReadTimeout on any route that
+// answers without reading it, and each held a goroutine and about 31 KB (r5): a GET of a blob or of defaults.json, a
+// refused upload, a DELETE. Now a body where no route reads one is refused at once, an answer written before the body
+// is in goes at once, and either way the connection is let go.
+func TestBodiesNoRouteReadsAreLetGo(t *testing.T) {
+	api, blob := "127.0.0.1:18457", "127.0.0.1:13457"
+	started(t, api, blob)
+	sha := strings.Repeat("ab", 32)
+	for _, c := range []struct{ name, addr, head, want string }{
+		{"GET /defaults.json", api, "GET /defaults.json HTTP/1.1\r\nHost: a\r\nContent-Length: 100\r\n\r\n0123456789", "HTTP/1.1 400 Bad Request"},
+		{"GET of a blob", blob, "GET /" + sha + " HTTP/1.1\r\nHost: b\r\nContent-Length: 100\r\n\r\n0123456789", "HTTP/1.1 400 Bad Request"},
+		{"DELETE of a blob", blob, "DELETE /" + sha + " HTTP/1.1\r\nHost: b\r\nAuthorization: Nostr x\r\nContent-Length: 100\r\n\r\n0123456789", "HTTP/1.1 400 Bad Request"},
+		{"an upload refused", blob, "PUT /upload HTTP/1.1\r\nHost: b\r\nX-SHA-256: " + sha + "\r\nAuthorization: Nostr x\r\nContent-Length: 100\r\n\r\n0123456789", "HTTP/1.1 401 Unauthorized"},
+	} {
+		conn := sent(t, c.addr, c.head)
+		got, r := status(t, conn, 3*time.Second)
+		if got != c.want {
+			t.Fatalf("%s: %q, want %q", c.name, got, c.want)
+		}
+		letGo(t, conn, r, 3*time.Second)
+	}
+}
+
 // serve reports an address it can't listen on.
 func TestServeFailsOnABusyAddress(t *testing.T) {
 	busy, err := net.Listen("tcp", "127.0.0.1:0")
@@ -166,7 +249,7 @@ func TestServeFailsOnABusyAddress(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer busy.Close()
-	if err := serve(context.Background(), []*http.Server{server(busy.Addr().String(), http.NewServeMux())}, slog.New(slog.NewTextHandler(io.Discard, nil))); err == nil {
+	if err := serve(context.Background(), []*http.Server{server(busy.Addr().String(), guard.New(false), http.NewServeMux())}, slog.New(slog.NewTextHandler(io.Discard, nil))); err == nil {
 		t.Fatal("served on a busy address")
 	}
 }

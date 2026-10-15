@@ -21,6 +21,7 @@ import (
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/richardminton-glitch/Kefli/server/api/internal/auth"
+	"github.com/richardminton-glitch/Kefli/server/api/internal/guard"
 	"github.com/richardminton-glitch/Kefli/server/api/internal/limit"
 	"github.com/richardminton-glitch/Kefli/server/api/internal/store"
 )
@@ -206,9 +207,8 @@ func (a *API) authed(w http.ResponseWriter, r *http.Request) (*request, bool) {
 	if !a.callAllowed(w, r) {
 		return nil, false
 	}
-	raw, err := io.ReadAll(io.LimitReader(r.Body, maxBody+1))
-	if err != nil || len(raw) > maxBody {
-		fail(w, http.StatusRequestEntityTooLarge, "too_large")
+	raw, ok := readBody(w, r)
+	if !ok {
 		return nil, false
 	}
 	ev, err := auth.HTTP(r.Header.Get("Authorization"), a.cfg.Base+r.URL.RequestURI(), r.Method, raw, a.now())
@@ -225,6 +225,22 @@ func (a *API) authed(w http.ResponseWriter, r *http.Request) (*request, bool) {
 		return nil, false
 	}
 	return a.parsed(w, ev, raw)
+}
+
+// readBody reads a request's body, at most maxBody, answering the request itself when it can't: 503 timeout for a
+// body that fell behind the guard's pace (internal/guard), which the phone sends again as it does any 5xx, where the
+// 413 it got before would have ended a registration for good; and 413 too_large for one over maxBody or broken off.
+func readBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
+	raw, err := io.ReadAll(io.LimitReader(r.Body, maxBody+1))
+	switch {
+	case errors.Is(err, guard.ErrSlow):
+		guard.TooSlow(w)
+	case err != nil || len(raw) > maxBody:
+		fail(w, http.StatusRequestEntityTooLarge, "too_large")
+	default:
+		return raw, true
+	}
+	return nil, false
 }
 
 // callAllowed counts a request against its IPv6 /48, then its address, before its body is read or its signature
