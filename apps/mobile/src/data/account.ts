@@ -9,8 +9,10 @@ import type { SqlDb } from './db';
 /** A megabyte as Kefli's server counts it. */
 export const MB = 1_048_576;
 /**
- * The least a text counts for against the quota (C§5): a disk block, which its file takes however few bytes it holds.
- * Kefli's server counts each blob so, and data/backup.ts reckons the room left the same way.
+ * The least a text counts for against the quota and the day (C§5): a disk block, which its file takes however few
+ * bytes it holds. Kefli's server counts each blob so (store.Cost), in its figures too, and the phone the same way, from
+ * this one figure: Backup space's Full, data/backup.ts's reckoning of the room left, and the room a deletion of a blob
+ * whose size the phone doesn't know gives back (services/send.ts).
  */
 export const BLOCK = 4096;
 /** The defaults (C§5), which Backup space shows until Kefli's server has given the library's own. */

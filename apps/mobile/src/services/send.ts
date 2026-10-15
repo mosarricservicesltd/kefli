@@ -6,6 +6,7 @@ import {
   isSignerFailure, mirrorBlob, releaseTemplate, sameUrl, savedD, signStatement, signWithinCeiling, uploadBlob, withoutTrailingSlashes, wrapPairAck,
 } from '@kefli/protocol';
 import type { AccountFigures, BlossomOutcome, CryptoPort, NostrEvent, Signer, Statement } from '@kefli/protocol';
+import { BLOCK } from '../data/account';
 import type { SqlDb } from '../data/db';
 import { hasDevices, localRecord, noteRecord, pairAcked, recordCreatedAt, type DeviceProof, type PairPayload } from '../data/devices';
 import { getItem, itemJson, markPublished, textServers, type ItemRow } from '../data/items';
@@ -372,12 +373,6 @@ function republishNaming(db: SqlDb, now: number, owner: string, sha256: string, 
   );
   for (const { hash } of stale) enqueue(db, now, { op: 'publish_item', signer: owner, subject: hash, targets: writeRelays(db, owner) });
 }
-
-/**
- * The least a blob takes of its library's quota (C§5): a disk block, which its file takes however few bytes it holds,
- * as Kefli's server counts it (store.Cost) and as data/backup.ts reckons room.
- */
-const BLOCK = 4096;
 
 /**
  * A blob no save names any more, on each server that held it; a 404 counts as done (4.3). The operator's confirmation

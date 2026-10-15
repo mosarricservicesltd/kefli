@@ -944,6 +944,27 @@ describe('deleting makes room (C§5, v1.12)', () => {
     expect(by.get(a.sha)).toMatchObject({ last_error: null, operator_at: expect.any(Number) });
     expect([by.get(b.sha)?.operator_at, by.get(c.sha)?.operator_at]).toEqual([null, null]);
   });
+
+  test("the block such a deletion gives back is data/account's, the one figure the reckoning of room reads too", async () => {
+    // a copy of its own here could drift from the figure data/backup.ts reckons the room it gave back by
+    const ACCOUNT = '../src/data/account';
+    const w = world();
+    ensureIdentityRow(w.db, w.now(), w.signer.pubkey(), 'early_share', true);
+    w.db.run('UPDATE identities SET registered_at = 1');
+    const sha = 'ef'.repeat(32);
+    enqueue(w.db, w.now(), { op: 'delete_blob', signer: w.signer.pubkey(), subject: sha, payload: { sha256: sha }, targets: [D.operator.blossom] });
+    try {
+      let fresh: typeof import('../src/services/send') | undefined;
+      jest.isolateModules(() => {
+        jest.doMock(ACCOUNT, () => ({ ...jest.requireActual(ACCOUNT), BLOCK: 8_192 }));
+        fresh = require('../src/services/send');
+      });
+      await fresh!.sendOne(w.ports);
+    } finally {
+      jest.dontMock(ACCOUNT);
+    }
+    expect(JSON.parse(getSetting(w.db, `space.freed.${w.signer.pubkey()}`) ?? '[]')).toEqual([{ at: w.now(), size: 8_192, up: null }]);
+  });
 });
 
 describe('a refusal for room or the day holds the library’s other texts (C§5, v1.12)', () => {
