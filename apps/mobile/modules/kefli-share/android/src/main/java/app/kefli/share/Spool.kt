@@ -93,7 +93,9 @@ object Spool {
   fun read(context: Context, id: String): String? = File(dir(context), "$id.json").takeIf { it.exists() }?.readText() ?: unwritten[id]
 
   /** Whether a spool is still there for its sheet: on disk, or held in memory for want of room to write it (read). */
-  fun has(context: Context, id: String): Boolean = unwritten.containsKey(id) || File(dir(context), "$id.json").exists()
+  fun has(context: Context, id: String): Boolean {
+    return unwritten.containsKey(id) || File(dir(context), "$id.json").exists()
+  }
 
   fun delete(context: Context, id: String): Boolean {
     val held = unwritten.remove(id) != null

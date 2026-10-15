@@ -30,8 +30,9 @@ class ShareActivity : ReactActivity() {
    * from the disk: a sheet brought back after either opened on nothing and said That didn't save. Spooled again, the
    * first is saved, and the second is Already saved.
    */
-  private fun spool(kept: String?): String =
-    kept?.takeIf { Spool.has(this, it) } ?: Spool.write(this, intent, referrer?.toString())
+  private fun spool(kept: String?): String {
+    return kept?.takeIf { Spool.has(this, it) } ?: Spool.write(this, intent, referrer?.toString())
+  }
 
   override fun onDestroy() {
     spoolId?.let { if (live[it]?.get() === this) live.remove(it) }
