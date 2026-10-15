@@ -15,6 +15,8 @@ import { failNotice } from '../src/screens/failNotice';
 import { S } from '../src/ui/strings';
 
 
+// the URL parser's own exports, through which normalise calls it (an import * of a CommonJS module is a copy of them)
+const urlParser = require('whatwg-url/lib/url-state-machine') as typeof import('whatwg-url/lib/url-state-machine');
 const PDFS = join(__dirname, '..', '..', '..', 'shared', 'fixtures', 'pdfs');
 const runs = (id: string) => JSON.parse(readFileSync(join(PDFS, `${id}.runs.json`), 'utf8'));
 const expected = (id: string) => (JSON.parse(readFileSync(join(PDFS, 'expected.json'), 'utf8')) as { pdfs: { id: string; markdown?: string; title?: string; words?: number }[] }).pdfs.find((p) => p.id === id)!;
@@ -303,12 +305,18 @@ describe("a page's canonical link is kept only from its own site (contract 4.3, 
 
   test('a canonical past the longest kept is left out before it is read, however long the page made it', async () => {
     // whatwg-url reads an address a code point at a time: on Node a canonical on the page's own site took 3 to 8 s to
-    // judge at a megabyte and 51 s at 5 MB, longer still in the phone's JavaScript, with the share waiting on it
+    // judge at a megabyte and 51 s at 5 MB, longer still in the phone's JavaScript, with the share waiting on it. What
+    // the URL parser is given is counted, not timed, so a busy machine can't fail it
     const huge = 'https://news.example/' + 'c'.repeat(2 * 1024 * 1024);
-    const t = Date.now();
-    const o = await fetchPage(naming(huge), 'https://amp.news.example/2026/10/story');
-    expect(Date.now() - t).toBeLessThan(2_000);
-    expect(o).toMatchObject({ kind: 'parsed', finalUrl: 'https://amp.news.example/2026/10/story', result: { canonical: null } });
+    const read = jest.spyOn(urlParser, 'basicURLParse');
+    try {
+      const o = await fetchPage(naming(huge), 'https://amp.news.example/2026/10/story');
+      expect(o).toMatchObject({ kind: 'parsed', finalUrl: 'https://amp.news.example/2026/10/story', result: { canonical: null } });
+      expect(read).toHaveBeenCalled();
+      expect(Math.max(...read.mock.calls.map(([input]) => String(input).length))).toBeLessThanOrEqual(FIELD_MAX.url);
+    } finally {
+      read.mockRestore();
+    }
   }, 60_000);
 });
 
