@@ -15,6 +15,20 @@ describe('inbox fetches stay off private addresses (mobile spec 7.1)', () => {
     `https://${'a'.repeat(2000)}.example/`,
   ])('refused: %s', (u) => expect(isPublicWebUrl(u)).toBe(false));
 
+  // an IPv4-translated address (::ffff:0:a.b.c.d, RFC 2765) reaches the IPv4 address in its last 32 bits, as a mapped
+  // one does; NAT64's prefix for a network's own use (64:ff9b:1::/48, RFC 8215) reaches one its network chooses, at a
+  // place in the address its network chooses, so none of it is public
+  test.each([
+    'http://[::ffff:0:127.0.0.1]/', 'http://[::ffff:0:7f00:1]/', 'http://[0:0:0:0:ffff:0:a00:1]/', 'http://[::ffff:0:192.168.1.1]/admin',
+    'http://[::ffff:0:a9fe:a9fe]/latest/', 'http://[::ffff:0:0.0.0.0]/', 'http://[64:ff9b:1::a00:1]/', 'https://[64:ff9b:1::808:808]/',
+    'https://[64:ff9b:1:ffff:ffff:ffff:ffff:ffff]/', 'https://[64:ff9b:1::]/', 'https://[64:ff9b:1:c0a8:1:100::]/',
+  ])('refused, as an address that reaches a private IPv4 one or a local NAT64: %s', (u) => expect(isPublicWebUrl(u)).toBe(false));
+
+  test.each([
+    'https://[::ffff:0:808:808]/', 'https://[::ffff:0:8.8.4.4]/', 'https://[64:ff9b::1.1.1.1]/', 'https://[64:ff9b:2::808:808]/',
+    'https://[64:ff9b:0:1::808:808]/',
+  ])('public, as one that reaches a public IPv4 address, or lies outside the local NAT64 prefix: %s', (u) => expect(isPublicWebUrl(u)).toBe(true));
+
   // expo/fetch's OkHttp client reads any address whose text begins http://filesystem.local from the phone's own files,
   // http://filesystem.localdata/data/app.kefli/… as /data/data/app.kefli/…, before the network: no such host is
   // public over http, however it is written

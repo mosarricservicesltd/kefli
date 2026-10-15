@@ -54,15 +54,46 @@ function pieces(h: string): number[] | null {
 /** The IPv4 address in the last 32 bits. */
 const v4Of = (p: number[]): number[] => [p[6] >> 8, p[6] & 255, p[7] >> 8, p[7] & 255];
 
+/**
+ * The IPv6 prefixes, each a /96 written as its first six pieces, whose addresses reach the IPv4 address in their last
+ * 32 bits: such an address is as private as that IPv4 address.
+ */
+const CARRIERS = [
+  [0, 0, 0, 0, 0, 0xffff], // mapped, ::ffff:a.b.c.d
+  [0, 0, 0, 0, 0xffff, 0], // translated, ::ffff:0:a.b.c.d (RFC 2765)
+  [0, 0, 0, 0, 0, 0], // compatible, ::a.b.c.d, as written before RFC 4291 retired it
+  [0x64, 0xff9b, 0, 0, 0, 0], // NAT64's well-known prefix, 64:ff9b::/96 (RFC 6052)
+];
+
+/**
+ * NAT64's prefix for a network's own use, 64:ff9b:1::/48 (RFC 8215), as its first three pieces: it reaches an IPv4
+ * address its network chooses, at a place in the address its network chooses, so none of it is public.
+ */
+const LOCAL_NAT64 = [0x64, 0xff9b, 1];
+
+/** Whether an IPv6 address's first n pieces are all zero. */
+function zeros(p: number[], n: number): boolean {
+  return p.slice(0, n).every((x) => x === 0);
+}
+
+/** Whether an IPv6 address begins with these pieces. */
+function begins(p: number[], head: number[]): boolean {
+  return head.every((x, i) => p[i] === x);
+}
+
+/** The IPv4 address an IPv6 one reaches (CARRIERS), or null. */
+function carried(p: number[]): number[] | null {
+  return CARRIERS.some((c) => begins(p, c)) ? v4Of(p) : null;
+}
+
 function privateV6(host: string): boolean {
   const p = pieces(host.replace(/^\[|\]$/g, '').toLowerCase());
   if (!p) return true;
-  const zeros = (n: number) => p.slice(0, n).every((x) => x === 0);
-  // :: and ::1; an IPv4 address mapped (::ffff:a.b.c.d) or, as written before RFC 4291 retired it, compatible (::a.b.c.d)
-  if (zeros(7) && p[7] <= 1) return true;
-  if ((zeros(5) && p[5] === 0xffff) || zeros(6)) return privateV4(v4Of(p));
-  // NAT64's well-known prefix (64:ff9b::/96) reaches the IPv4 address in its last 32 bits
-  if (p[0] === 0x64 && p[1] === 0xff9b && p.slice(2, 6).every((x) => x === 0)) return privateV4(v4Of(p));
+  // :: and ::1
+  if (zeros(p, 7) && p[7] <= 1) return true;
+  const v4 = carried(p);
+  if (v4) return privateV4(v4);
+  if (begins(p, LOCAL_NAT64)) return true;
   // unique local fc00::/7, link-local fe80::/10, multicast ff00::/8
   return (p[0] & 0xfe00) === 0xfc00 || (p[0] & 0xffc0) === 0xfe80 || (p[0] & 0xff00) === 0xff00;
 }

@@ -33,6 +33,23 @@ object PublicWeb {
   private val DECIMAL = Regex("(0|[1-9]\\d{0,2})(\\.(0|[1-9]\\d{0,2})){3}")
 
   /**
+   * The IPv6 prefixes, each a /96 written as its first six pieces, whose addresses reach the IPv4 address in their last
+   * 32 bits: such an address is as private as that IPv4 address.
+   */
+  private val CARRIERS = listOf(
+    intArrayOf(0, 0, 0, 0, 0, 0xffff), // mapped, ::ffff:a.b.c.d
+    intArrayOf(0, 0, 0, 0, 0xffff, 0), // translated, ::ffff:0:a.b.c.d (RFC 2765)
+    intArrayOf(0, 0, 0, 0, 0, 0), // compatible, ::a.b.c.d, as written before RFC 4291 retired it
+    intArrayOf(0x64, 0xff9b, 0, 0, 0, 0), // NAT64's well-known prefix, 64:ff9b::/96 (RFC 6052)
+  )
+
+  /**
+   * NAT64's prefix for a network's own use, 64:ff9b:1::/48 (RFC 8215), as its first three pieces: it reaches an IPv4
+   * address its network chooses, at a place in the address its network chooses, so none of it is public.
+   */
+  private val LOCAL_NAT64 = intArrayOf(0x64, 0xff9b, 1)
+
+  /**
    * True for an http(s) URL whose host is neither local by name nor a private, loopback or link-local address, nor
    * one the phone's fetch reads from its own files.
    */
@@ -136,8 +153,19 @@ object PublicWeb {
     return intArrayOf(p[6] shr 8, p[6] and 255, p[7] shr 8, p[7] and 255)
   }
 
+  /** Whether an IPv6 address's first n pieces are all zero. */
   private fun zeros(p: IntArray, n: Int): Boolean {
     return (0 until n).all { p[it] == 0 }
+  }
+
+  /** Whether an IPv6 address begins with these pieces. */
+  private fun begins(p: IntArray, head: IntArray): Boolean {
+    return head.indices.all { p[it] == head[it] }
+  }
+
+  /** The IPv4 address an IPv6 one reaches (CARRIERS), or null. */
+  private fun carried(p: IntArray): IntArray? {
+    return if (CARRIERS.any { begins(p, it) }) v4Of(p) else null
   }
 
   private fun privateV6(host: String): Boolean {
@@ -146,17 +174,8 @@ object PublicWeb {
     if (zeros(p, 7) && p[7] <= 1) return true
     val v4 = carried(p)
     if (v4 != null) return privateV4(v4)
+    if (begins(p, LOCAL_NAT64)) return true
     // unique local fc00::/7, link-local fe80::/10, multicast ff00::/8
     return (p[0] and 0xfe00) == 0xfc00 || (p[0] and 0xffc0) == 0xfe80 || (p[0] and 0xff00) == 0xff00
-  }
-
-  /**
-   * The IPv4 address an IPv6 one reaches, or null: mapped (::ffff:a.b.c.d) or, as written before RFC 4291 retired
-   * it, compatible (::a.b.c.d); or behind NAT64's well-known prefix (64:ff9b::/96), in its last 32 bits.
-   */
-  private fun carried(p: IntArray): IntArray? {
-    val mapped = (zeros(p, 5) && p[5] == 0xffff) || zeros(p, 6)
-    val nat64 = p[0] == 0x64 && p[1] == 0xff9b && (2 until 6).all { p[it] == 0 }
-    return if (mapped || nat64) v4Of(p) else null
   }
 }
