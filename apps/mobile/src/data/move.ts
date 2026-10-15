@@ -73,8 +73,10 @@ export function sourceSaves(db: SqlDb, from: string, moved: string[]): string[] 
     .map((r) => r.hash).filter((h) => !done.has(h));
 }
 
-// Columns copied as they are; the row's identity, its events and its send state are T's own.
-const OWN = new Set(['id', 'owner', 'event_id', 'event_created_at', 'published', 'dirty', 'backed_event', 'modified_at', 'text_servers']);
+// Columns copied as they are; the row's identity, its events and its send state are T's own. So is its address
+// (remote_d, F5): copied, T's first publish retired S's address with a kind 5 under T, naming on T's relays the d of S's
+// events, which tied the two keys together save by save, or the plain hash of a save S held from before v1.10.
+const OWN = new Set(['id', 'owner', 'event_id', 'event_created_at', 'published', 'dirty', 'backed_event', 'modified_at', 'text_servers', 'remote_d']);
 
 function columns(db: SqlDb): string[] {
   return db.all<{ name: string }>('PRAGMA table_info(items)').map((c) => c.name).filter((n) => !OWN.has(n));

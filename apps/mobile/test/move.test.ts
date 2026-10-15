@@ -576,6 +576,22 @@ describe('The move (contract 4.8, mobile spec 4.10)', () => {
     expect(w.db.get('SELECT mirror_url FROM blobs')).toEqual({ mirror_url: 'http://m2' });
   });
 
+  test("T's copies start at no address of S's: T sends no kind 5, and names none of S's addresses under its own key", async () => {
+    const w = world();
+    const T = w.T.pubkey();
+    await w.save(w.S, 1);
+    await w.save(w.S, 2);
+    // one S still held at its unkeyed address from before v1.10, its move to the keyed one not yet out
+    w.db.run('UPDATE items SET remote_d = ? WHERE owner = ? AND hash = ?', `kefli/item/${h(2)}`, w.S.pubkey(), h(2));
+    expect(await runMove(w.p)).toBe('done');
+    for (const r of ['ws://op', 'ws://a', 'ws://b']) expect(w.relays.get(r)!.filter((e) => e.kind === 5 && e.pubkey === T)).toEqual([]);
+    const key = libraryKey(w.db, T)!;
+    expect(w.db.all('SELECT hash, remote_d FROM items WHERE owner = ? ORDER BY hash', T)).toEqual([
+      { hash: h(1), remote_d: savedD(key, h(1)) },
+      { hash: h(2), remote_d: savedD(key, h(2)) },
+    ]);
+  });
+
   test("a browser save still waiting to read its capture under S is copied for T to fetch its page itself", async () => {
     const w = world();
     const T = w.T.pubkey();
