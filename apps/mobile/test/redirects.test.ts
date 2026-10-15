@@ -158,7 +158,8 @@ describe("a page's redirects are followed by hand, never onto the phone's own ne
       'http://filesystem%2Elocal/x', 'http://a@filesystem.local/x', 'https://filesystem.local/x', 'http:\\\\filesystem.local\\x',
     ]) {
       expect([url, fetchable(url)]).toEqual([url, false]);
-      expect(await fetchPage(pages(w.f), url)).toEqual({ kind: 'failed', reason: 'http', finalUrl: url });
+      // the link a failed save keeps has no user name and password in it (contract 4.3, ruling 8)
+      expect(await fetchPage(pages(w.f), url)).toEqual({ kind: 'failed', reason: 'http', finalUrl: url.replace('a@', '') });
     }
     expect(w.asked).toEqual([]);
     expect(fetchable('https://filesystem.local.example.com/x')).toBe(true);

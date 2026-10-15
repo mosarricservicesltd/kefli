@@ -296,6 +296,101 @@ describe("a page's canonical link is kept only from its own site (contract 4.3, 
   }, 60_000);
 });
 
+describe('a user name and password are never asked for or kept in an address (contract 4.3, ruling 8)', () => {
+  /** Page ports answering status, as from landed when given (a redirect's end), recording each address asked for. */
+  const answering = (asked: string[], status = 200, landed?: string, headers: Record<string, string> = {}): PagePorts => ({
+    fetch: (async (url: string) => {
+      asked.push(url);
+      const r = new Response('<p>x</p>', { status, headers: { 'content-type': 'text/html', ...headers } });
+      return Object.defineProperty(r, 'url', { value: landed ?? url });
+    }) as never,
+    parse: async () => parsed(),
+  });
+
+  test('the address asked for goes without them, and a page that parses is kept without them', async () => {
+    const asked: string[] = [];
+    expect(await fetchPage(answering(asked), 'https://reader:hunter2@news.example/a')).toMatchObject({ kind: 'parsed', finalUrl: 'https://news.example/a' });
+    expect(asked).toEqual(['https://news.example/a']);
+  });
+
+  test('where a redirect ends, parsed or not, too large or not fetched at all', async () => {
+    const landed = 'https://admin:pw@landing.example/b';
+    expect(await fetchPage(answering([], 200, landed), 'https://news.example/a')).toMatchObject({ kind: 'parsed', finalUrl: 'https://landing.example/b' });
+    expect(await fetchPage(answering([], 404, landed), 'https://news.example/a')).toMatchObject({ kind: 'failed', reason: 'http', finalUrl: 'https://landing.example/b' });
+    const huge = { 'content-length': String(50 * 1024 * 1024) };
+    expect(await fetchPage(answering([], 200, landed, huge), 'https://news.example/a')).toMatchObject({ kind: 'failed', reason: 'too_large', finalUrl: 'https://landing.example/b' });
+    const asked: string[] = [];
+    expect(await fetchPage(answering(asked), 'http://reader:hunter2@filesystem.local/data/x')).toEqual({ kind: 'failed', reason: 'http', finalUrl: 'http://filesystem.local/data/x' });
+    expect(asked).toEqual([]);
+  });
+
+  test('a page loaded in a browser engine, and the picture a page names', async () => {
+    const engine: PagePorts = {
+      ...answering([], 403),
+      parse: async () => parsed({ hero: 'https://cdn:secret@img.example/hero.jpg' }),
+      render: async () => ({ url: 'https://admin:pw@landing.example/b', html: '<p>rendered</p>' }),
+    };
+    expect(await fetchPage(engine, 'https://news.example/a')).toMatchObject({
+      kind: 'parsed', finalUrl: 'https://landing.example/b', result: { hero: 'https://img.example/hero.jpg' },
+    });
+  });
+});
+
+describe('a page that can’t be had: the network, or something that refused it (pending.ts, an http site with no https)', () => {
+  // as expo/fetch rejects on Android: "fetch failed: " and the Java exception OkHttp ended the request with
+  const failing = (message: string, after?: Response): PagePorts => {
+    let n = 0;
+    return {
+      fetch: (async () => {
+        if (after && n++ === 0) return after;
+        throw new Error(message);
+      }) as never,
+      parse: async () => parsed(),
+    };
+  };
+  const TLS = 'fetch failed: javax.net.ssl.SSLPeerUnverifiedException: Hostname old.example not verified:';
+  const REFUSED = 'fetch failed: java.net.ConnectException: Failed to connect to old.example/203.0.113.7:443';
+
+  test('a TLS failure, or a connection refused or reset, is something refusing the page', async () => {
+    for (const m of [TLS, 'fetch failed: javax.net.ssl.SSLHandshakeException: Chain validation failed', REFUSED, 'fetch failed: java.net.SocketException: Connection reset']) {
+      expect([m, await fetchPage(failing(m), 'https://old.example/post')]).toEqual([m, { kind: 'offline', refused: true }]);
+    }
+  });
+
+  test("a firewall that turns port 443 away as host unreachable refuses it too, and so does a reset in Android's own words", async () => {
+    // RHEL's and CentOS's default firewall rejects a closed port with ICMP host-prohibited: Android's socket reports
+    // it as NoRouteToHostException, which OkHttp throws as it is (it rewords a ConnectException only), and a reset
+    // read off a plain socket says "recvfrom failed: ECONNRESET" there, not "Connection reset"
+    for (const m of [
+      'fetch failed: java.net.NoRouteToHostException: Host unreachable',
+      'fetch failed: java.net.SocketException: recvfrom failed: ECONNRESET (Connection reset by peer)',
+    ]) {
+      expect([m, await fetchPage(failing(m), 'https://old.example/post')]).toEqual([m, { kind: 'offline', refused: true }]);
+    }
+    // the phone's own network going mid-request is the network
+    const abort = 'fetch failed: java.net.SocketException: Software caused connection abort';
+    expect(await fetchPage(failing(abort), 'https://old.example/post')).toEqual({ kind: 'offline' });
+  });
+
+  test('a name that resolves nowhere is the network, however the host is named; so is any other failure', async () => {
+    for (const m of [
+      'fetch failed: java.net.UnknownHostException: Unable to resolve host "javax.net.ssl.example": No address associated with hostname',
+      'fetch failed: java.io.IOException: unexpected end of stream', 'Network request failed', 'offline',
+    ]) {
+      expect([m, await fetchPage(failing(m), 'https://old.example/post')]).toEqual([m, { kind: 'offline' }]);
+    }
+  });
+
+  test('a site that answered first has its https: a refusal after that is the network, not the site', async () => {
+    // turned away with 403 as desktop Chrome, then refused as a phone
+    expect(await fetchPage(failing(TLS, new Response('', { status: 403 })), 'https://old.example/post')).toEqual({ kind: 'offline' });
+    // or its body broken off after the headers came
+    const reset = new ReadableStream({ pull: (c) => c.error(new Error('fetch failed: java.net.SocketException: Connection reset')) });
+    const cut: PagePorts = { fetch: (async () => new Response(reset, { status: 200, headers: { 'content-type': 'text/html' } })) as never, parse: async () => parsed() };
+    expect(await fetchPage(cut, 'https://old.example/post')).toEqual({ kind: 'offline' });
+  });
+});
+
 describe('a PDF is handed over and read only as far as a save can hold it', () => {
   const pdfPorts = (read: ({ ok: true } & PdfRuns) | { ok: false; reason: string }, seen: { body?: string } = {}): PagePorts => ({
     fetch: (async () => new Response(PDF_BYTES, { status: 200, headers: { 'content-type': 'application/pdf' } })) as unknown as typeof fetch,

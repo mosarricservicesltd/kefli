@@ -2,6 +2,7 @@
 // A share made offline waits here keyed by its shared address; once parsed, an unpublished save is re-keyed by its
 // final address and canonical (FD 80), joining the existing save if there is one (the repeat-save rule, G2), and
 // then its text and save go out. A page that definitely can't be read is published without text.
+import { withoutUserInfo } from '@kefli/protocol';
 import type { SqlDb } from './db';
 import { enqueue } from './outbox';
 import { addressFits, fitSave, registerFirst, queueSends, queueText, type PageFields, type SaveTargets, type StagedBlob } from './saves';
@@ -11,18 +12,21 @@ export type Pending = {
   id: number; hash: string; url: string; shared_url: string | null; published: number; event_id: string | null; x_state: string | null;
   /** When it was last tried and couldn't be had (F12), as pendingParses reads it; null for one never tried. */
   timed_out_at?: number | null;
+  /** The save's own time (C§4.1), as pendingParses reads it: how long an http one has waited for https (page.ts). */
+  saved_at?: number;
 };
 
 /**
  * Saves waiting for their parse: those that haven't timed out first, oldest first, then those that have, the one
  * that timed out longest ago first (F12). RULED: plain http pages come after all the rest. Each is fetched over https
- * first (net/http overHttps), and an old site with no https can take the whole 20 s to fail there, so an import of
- * old bookmarks spends its slowest last; one that only cleartext could fetch fails at once (net/http Blocked).
+ * alone (net/http overHttps), and an old site with no https can take the whole 20 s to fail there, so an import of
+ * old bookmarks spends its slowest last; one refused there waits until it is three days old, then fails (page.ts
+ * HTTPS_WAIT_SECONDS), and one that only cleartext could fetch fails at once (net/http Blocked).
  */
 export function pendingParses(db: SqlDb, owner: string): Pending[] {
   return db.all<Pending>(
     // the person's own saves before an import's, which may run to thousands and take days past the day's 20 MB (FD 117)
-    `SELECT id, hash, url, shared_url, published, event_id, x_state, timed_out_at FROM items WHERE owner = ? AND text_state = 'queued' AND pending_delete_at IS NULL
+    `SELECT id, hash, url, shared_url, published, event_id, x_state, timed_out_at, saved_at FROM items WHERE owner = ? AND text_state = 'queued' AND pending_delete_at IS NULL
      ORDER BY lower(substr(url, 1, 7)) = 'http://', COALESCE(timed_out_at, 0), origin = 'import', saved_at, id`,
     owner,
   );
@@ -86,7 +90,8 @@ function fittedAt(url: string, parsed: Parsed): PageFields {
  * mirror's republish (send.ts), since a refusal leaves it nothing new to send (C§4.2, v1.12). The row stays clean, so
  * a newer copy from another phone is taken over it, the text kept by the merge (data/sync.ts). RULED: the page's
  * fields are fitted under the event ceiling (data/saves fitSave), and a final address too long for the event isn't
- * adopted, so the save keeps the address it has, and its hash, with the text.
+ * adopted, so the save keeps the address it has, and its hash, with the text. Whichever it keeps, it keeps without
+ * a user name and password (contract 4.3, ruling 8), as a browser's request or an older row may hold them.
  */
 export function applyParsed(db: SqlDb, now: number, owner: string, p: Pending, parsed: Parsed, blob: StagedBlob, t: SaveTargets): Applied {
   return db.tx(() => {
@@ -94,8 +99,9 @@ export function applyParsed(db: SqlDb, now: number, owner: string, p: Pending, p
     // another save takes nothing, so the caller drops the staged text
     if (!live(db, p)) return { hash: p.hash, merged: true };
     const unpublished = !p.published && !p.event_id;
-    const adopted = unpublished && addressFits(parsed.url);
-    const page = fittedAt(adopted ? parsed.url : p.url, parsed);
+    const final = withoutUserInfo(parsed.url);
+    const adopted = unpublished && addressFits(final);
+    const page = fittedAt(adopted ? final : withoutUserInfo(p.url), parsed);
     const where = adopted && parsed.hash !== p.hash ? rekey(db, now, owner, p, parsed.hash) : { hash: p.hash, merged: false };
     if (where.merged) return where;
     // a save not yet published is marked changed for its sends; one already out stays clean (above)
@@ -115,18 +121,29 @@ export function applyParsed(db: SqlDb, now: number, owner: string, p: Pending, p
 }
 
 /**
+ * The link a save keeps as its row now holds it, without a user name and password (contract 4.3, ruling 8): read in
+ * the transaction that writes it, so a newer copy merged while the page was fetched keeps its address.
+ */
+function linkKept(db: SqlDb, id: number): string {
+  return withoutUserInfo(db.get<{ url: string }>('SELECT url FROM items WHERE id = ?', id)!.url);
+}
+
+/**
  * A page that can't be read (an HTTP error, not HTML, too large, not readable): the save goes out without text. One
  * already published, as another phone's without text, has nothing new to send, its text still null (C§4.2, v1.12):
  * only this phone notes that the page couldn't be read, so a phone that holds the text isn't asked to send it again.
+ * RULED: either keeps its link without a user name and password, as a browser's request or an older row may hold
+ * them: the link is what Original, Open in browser and the published item are given.
  */
 export function applyFailed(db: SqlDb, now: number, owner: string, p: Pending, reason: string, t: SaveTargets): void {
   db.tx(() => {
     if (!live(db, p)) return;
+    const url = linkKept(db, p.id);
     if (p.published || p.event_id) {
-      db.run("UPDATE items SET text_state = 'failed', fail_reason = ? WHERE id = ?", reason, p.id);
+      db.run("UPDATE items SET url = ?, text_state = 'failed', fail_reason = ? WHERE id = ?", url, reason, p.id);
       return;
     }
-    db.run("UPDATE items SET text_state = 'failed', fail_reason = ?, modified_at = ?, dirty = 1 WHERE id = ?", reason, now, p.id);
+    db.run("UPDATE items SET url = ?, text_state = 'failed', fail_reason = ?, modified_at = ?, dirty = 1 WHERE id = ?", url, reason, now, p.id);
     queueSends(db, now, owner, p.hash, null, t, false, registerFirst(db, now, owner, t));
   });
 }
@@ -134,9 +151,11 @@ export function applyFailed(db: SqlDb, now: number, owner: string, p: Pending, r
 /**
  * An X post's check found its article (5.4): the save now parses that address, and is re-keyed by it (FD 80). RULED:
  * an article address too long for the save's event (data/saves addressFits) is no article Kefli can keep, as on the
- * sheet: the save keeps the post's address and is read as the post, so it is never left at one it can't publish.
+ * sheet: the save keeps the post's address and is read as the post, so it is never left at one it can't publish. The
+ * article's address is kept without a user name and password (contract 4.3, ruling 8).
  */
-export function xFound(db: SqlDb, p: Pending, article: string): Pending {
+export function xFound(db: SqlDb, p: Pending, found: string): Pending {
+  const article = withoutUserInfo(found);
   if (!addressFits(article)) {
     db.run("UPDATE items SET x_state = 'none' WHERE id = ?", p.id);
     return { ...p, x_state: 'none' };

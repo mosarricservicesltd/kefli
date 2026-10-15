@@ -9,7 +9,7 @@ import * as pendingData from '../src/data/pending';
 import { pendingParses } from '../src/data/pending';
 import { commitDelete, deleteItem } from '../src/data/library';
 import { search } from '../src/data/search';
-import { DESKTOP_UA, MOBILE_UA, PAGE_MAX_BYTES, RENDER_MAX_BYTES, fetchPage, refusal, type ParserResult } from '../src/services/page';
+import { DESKTOP_UA, MOBILE_UA, PAGE_MAX_BYTES, RENDER_MAX_BYTES, fetchPage, parsedOutcome, refusal, type ParserResult } from '../src/services/page';
 import { AGAIN_MS, RUN_SECONDS, nextRunIn, runPendingParses, settle, type PendingPorts, type PendingResult } from '../src/services/pending';
 import { TimedOut } from '../src/net/http';
 import { memoryDb } from './sqlite';
@@ -462,6 +462,223 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     const sends = w.outbox().filter((r) => ['upload_blob', 'mirror_blob', 'publish_item'].includes(r.op));
     expect(sends.map((r) => r.op).sort()).toEqual(['mirror_blob', 'mirror_blob', 'publish_item', 'upload_blob', 'upload_blob']);
     expect(sends.filter((r) => r.op === 'publish_item').map((r) => r.subject)).toEqual([itemHash('https://f.com/new')]);
+  });
+});
+
+describe('a save at an http address whose site has no https (RULED: past three days it fails as a page that can’t be read)', () => {
+  const DAY = 86_400;
+  const TLS = () => new Error('fetch failed: javax.net.ssl.SSLPeerUnverifiedException: Hostname old.example not verified:');
+  const REFUSED = () => new Error('fetch failed: java.net.ConnectException: Failed to connect to old.example/203.0.113.7:443');
+  const NO_NAME = () => new Error('fetch failed: java.net.UnknownHostException: Unable to resolve host "old.example": No address associated with hostname');
+
+  /**
+   * The world as a release build on a network: plain http refused before it connects, old.example's https failing
+   * as fail makes it, and every other site as the world has it. Returns every address asked for.
+   */
+  function noHttps(w: ReturnType<typeof world>, fail: () => Error): string[] {
+    const asked = releaseBuild(w);
+    const inner = w.ports.page.fetch;
+    w.ports.page.fetch = (async (url: string, init: RequestInit) => {
+      if (!url.startsWith('https://old.example/')) return inner(url, init);
+      asked.push(url);
+      throw fail();
+    }) as never;
+    return asked;
+  }
+  const at = (w: ReturnType<typeof world>, seconds: number) => (w.ports.now = () => 1000 + seconds);
+  const publishes = (w: ReturnType<typeof world>) => w.outbox().filter((o) => o.op === 'publish_item').map((o) => o.subject);
+
+  test('more than three days old, its https refused with the phone online: sent without its text, its link kept', async () => {
+    const w = world({ 'https://ok.example/a': {} });
+    const asked = noHttps(w, TLS);
+    let asks = 0;
+    w.ports.online = async () => (asks++, true);
+    w.share('http://old.example/post');
+    w.share('https://ok.example/a');
+    at(w, 3 * DAY + 1);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 1, failed: 1, waiting: 0, xWaiting: 0 });
+    expect(asked).toEqual(['https://ok.example/a', 'https://old.example/post']);
+    expect(w.db.get('SELECT hash, url, text_state, fail_reason FROM items WHERE url = ?', 'http://old.example/post')).toEqual({
+      hash: itemHash('http://old.example/post'), url: 'http://old.example/post', text_state: 'failed', fail_reason: 'http',
+    });
+    expect(publishes(w)).toContain(itemHash('http://old.example/post'));
+    expect(pendingParses(w.db, PK)).toEqual([]);
+    // the network's state was asked once, for the one save the rule could fail
+    expect(asks).toBe(1);
+  });
+
+  test('so is one whose connection is refused on port 443', async () => {
+    const w = world();
+    noHttps(w, REFUSED);
+    w.ports.online = async () => true;
+    w.share('http://old.example/post');
+    at(w, 10 * DAY);
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 1, waiting: 0 });
+  });
+
+  test("so is one whose firewall turns port 443 away as host unreachable, RHEL's and CentOS's default", async () => {
+    // left waiting, a site whose server has only port 80 open behind that firewall was never read nor backed up
+    const w = world();
+    noHttps(w, () => new Error('fetch failed: java.net.NoRouteToHostException: Host unreachable'));
+    w.ports.online = async () => true;
+    w.share('http://old.example/post');
+    at(w, 10 * DAY);
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 1, waiting: 0 });
+    expect(w.db.get('SELECT text_state, fail_reason FROM items')).toEqual({ text_state: 'failed', fail_reason: 'http' });
+    expect(publishes(w)).toEqual([itemHash('http://old.example/post')]);
+  });
+
+  test('three days old or less it waits, as its share did: a captive portal or a TLS hiccup can’t fail it', async () => {
+    const w = world();
+    noHttps(w, TLS);
+    w.ports.online = async () => true;
+    w.share('http://old.example/post');
+    at(w, 3 * DAY);
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 0, waiting: 1 });
+    expect(w.db.get('SELECT text_state FROM items')).toEqual({ text_state: 'queued' });
+    expect(publishes(w)).toEqual([]);
+  });
+
+  test('at any age it waits while the phone is off the internet, or can’t say it is on it', async () => {
+    // Android doesn't count a network behind a captive portal as reaching the internet (expo-network isInternetReachable)
+    for (const online of [async () => false, async () => Promise.reject(new Error('no state')), undefined]) {
+      const w = world();
+      noHttps(w, TLS);
+      w.ports.online = online;
+      w.share('http://old.example/post');
+      at(w, 30 * DAY);
+      expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 0, waiting: 1 });
+      expect(publishes(w)).toEqual([]);
+    }
+  });
+
+  test('at any age it waits when its https attempt met the network: a name that resolves nowhere, or a time-out', async () => {
+    for (const fail of [NO_NAME, () => new TimedOut()]) {
+      const w = world();
+      noHttps(w, fail);
+      w.ports.online = async () => true;
+      w.share('http://old.example/post');
+      at(w, 30 * DAY);
+      expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 0, waiting: 1 });
+    }
+  });
+
+  test('a save at an https address whose TLS is refused waits at any age: only an http one is asked over https alone', async () => {
+    const w = world();
+    noHttps(w, TLS);
+    w.ports.online = async () => true;
+    w.share('https://old.example/post');
+    at(w, 30 * DAY);
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 0, waiting: 1 });
+  });
+
+  test("the runner gives the queue Android's own judgement of the internet (runner.ts can't load in Node)", () => {
+    // without the port no save is ever failed for want of https, so the rule would never reach the phone
+    const src = readFileSync(join(__dirname, '..', 'src', 'services', 'runner.ts'), 'utf8');
+    const fn = src.slice(src.indexOf('async function parsePending('), src.indexOf('let xFailures'));
+    expect(fn).toMatch(/\bonline: async \(\) => \(await getNetworkStateAsync\(\)\)\.isInternetReachable === true,/);
+  });
+
+  test("another phone's save at such an address is marked failed here, with nothing new to send (C§4.2)", async () => {
+    const w = world();
+    noHttps(w, TLS);
+    w.ports.online = async () => true;
+    w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, published, event_id, modified_at) VALUES (?, ?, 'http://old.example/post', 10, 'unread', 'queued', 'sync', 1, 'e1', 7)", PK, itemHash('http://old.example/post'));
+    at(w, 30 * DAY);
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 1 });
+    expect(w.db.get('SELECT text_state, fail_reason, dirty, modified_at FROM items')).toEqual({ text_state: 'failed', fail_reason: 'http', dirty: 0, modified_at: 7 });
+    expect(w.outbox()).toEqual([]);
+  });
+});
+
+describe('a user name and password are never kept in a stored address (contract 4.3, ruling 8)', () => {
+  // the hash leaves them out, but the stored address is what Original, Open in browser and X's embed query are given
+  test('an imported link is queued without them', () => {
+    const w = world();
+    expect(queueImported(w.db, PK, ['https://reader:hunter2@old.example/post', 'https://medium.example/@writer/essay'], 900, T)).toBe(2);
+    expect(w.db.all('SELECT url, shared_url FROM items ORDER BY id')).toEqual([
+      { url: 'https://old.example/post', shared_url: 'https://old.example/post' },
+      { url: 'https://medium.example/@writer/essay', shared_url: 'https://medium.example/@writer/essay' },
+    ]);
+  });
+
+  test("a parse whose address has them, as a browser's request may, is stored without them", async () => {
+    const w = world();
+    w.share('https://news.example/a');
+    const [item] = pendingParses(w.db, PK);
+    const outcome = parsedOutcome({ ok: true, title: 'T', byline: null, site: null, lang: null, hero: null, canonical: null, readerable: true, markdown: `${LONG}\n` }, 'https://reader:hunter2@news.example/a');
+    expect(await settle(w.ports, PK, item, outcome)).toBe('parsed');
+    expect(w.db.all('SELECT hash, url, text_state FROM items')).toEqual([{ hash: itemHash('https://news.example/a'), url: 'https://news.example/a', text_state: 'cached' }]);
+  });
+
+  test("a page that can't be read keeps its link without them, and the save goes out without them", async () => {
+    // as a browser's request from an extension before ruling 8, or a row stored before it, may hold them: the link a
+    // failed save keeps is what Original, Open in browser and its published item are given
+    const w = world({ 'https://news.example/a': { status: 404 } });
+    w.share('https://reader:hunter2@news.example/a');
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 1 });
+    expect(w.db.get('SELECT url, text_state, fail_reason, dirty FROM items')).toEqual({ url: 'https://news.example/a', text_state: 'failed', fail_reason: 'http', dirty: 1 });
+    expect(w.outbox().filter((o) => o.op === 'publish_item').map((o) => o.subject)).toEqual([itemHash('https://news.example/a')]);
+  });
+
+  test('so does an http save past three days whose site has no https', async () => {
+    const w = world();
+    const asked: string[] = [];
+    w.ports.page.fetch = (async (url: string) => {
+      asked.push(url);
+      throw new Error('fetch failed: java.net.ConnectException: Failed to connect to old.example/203.0.113.7:443');
+    }) as never;
+    w.ports.online = async () => true;
+    w.ports.now = () => 1000 + 4 * 86_400;
+    w.share('http://reader:hunter2@old.example/post');
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ failed: 1 });
+    expect(asked).toEqual(['https://old.example/post']);
+    expect(w.db.get('SELECT url, text_state, fail_reason FROM items')).toEqual({ url: 'http://old.example/post', text_state: 'failed', fail_reason: 'http' });
+  });
+
+  test("another phone's save stored with them keeps its link without them once its page fails here, with nothing sent", async () => {
+    const w = world({ 'https://c.com/a': { status: 404 } });
+    w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, published, event_id, modified_at) VALUES (?, ?, 'https://reader:hunter2@c.com/a', 10, 'unread', 'queued', 'sync', 1, 'e1', 7)", PK, itemHash('https://c.com/a'));
+    await runPendingParses(w.ports, PK);
+    expect(w.db.get('SELECT url, text_state, dirty, modified_at FROM items')).toEqual({ url: 'https://c.com/a', text_state: 'failed', dirty: 0, modified_at: 7 });
+    expect(w.outbox()).toEqual([]);
+  });
+
+  test('the link kept is the one the row holds when the failure is written, as a copy merged during the fetch left it', async () => {
+    const w = world();
+    w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, published, event_id, modified_at) VALUES (?, ?, 'https://c.com/a', 10, 'unread', 'queued', 'sync', 1, 'e1', 7)", PK, itemHash('https://c.com/a'));
+    w.ports.page.fetch = (async () => {
+      // another phone's newer copy, taken while this page was fetched, names the save's address as it now has it
+      w.db.run("UPDATE items SET url = 'https://reader:hunter2@c.com/a?page=1'");
+      return new Response('', { status: 404 });
+    }) as never;
+    await runPendingParses(w.ports, PK);
+    expect(w.db.get('SELECT url, text_state FROM items')).toEqual({ url: 'https://c.com/a?page=1', text_state: 'failed' });
+  });
+
+  test("another phone's save stored with them keeps its address without them once parsed here", async () => {
+    const w = world({ 'https://c.com/a': {} });
+    w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, published, event_id) VALUES (?, ?, 'https://reader:hunter2@c.com/a', 10, 'unread', 'queued', 'sync', 1, 'e1')", PK, itemHash('https://c.com/a'));
+    await runPendingParses(w.ports, PK);
+    expect(w.db.get('SELECT hash, url, text_state FROM items')).toEqual({ hash: itemHash('https://c.com/a'), url: 'https://c.com/a', text_state: 'cached' });
+  });
+
+  test("X's embed is asked about a waiting post without them, as a row stored before ruling 8 holds them", async () => {
+    const w = world();
+    const asked: string[] = [];
+    w.ports.x = { fetch: (async (u: string) => (asked.push(u), Promise.reject(new Error('offline')))) as never };
+    w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, x_state) VALUES (?, ?, 'https://reader:hunter2@x.com/someone/status/1', 10, 'unread', 'queued', 'share', 'pending')", PK, itemHash('https://x.com/someone/status/1'));
+    expect(await runPendingParses(w.ports, PK)).toMatchObject({ waiting: 1 });
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).not.toMatch(/reader|hunter2/);
+  });
+
+  test("an X post's article address is taken without them", () => {
+    const w = world();
+    w.share('https://x.com/someone/status/1');
+    const [item] = pendingParses(w.db, PK);
+    expect(pendingData.xFound(w.db, item, 'https://reader:hunter2@news.example/story').url).toBe('https://news.example/story');
+    expect(w.db.get('SELECT url FROM items')).toEqual({ url: 'https://news.example/story' });
   });
 });
 

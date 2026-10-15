@@ -339,6 +339,8 @@ async function parsePending(owner: string): Promise<void> {
       const d = await loadDefaults();
       return { api: d.operator.api, blossom: d.operator.blossom, mirror: d.mirrors[0], interim: interimRelays(d) };
     },
+    // Android's own judgement, which a network behind a captive portal fails (NET_CAPABILITY_VALIDATED)
+    online: async () => (await getNetworkStateAsync()).isInternetReachable === true,
   }, owner);
   if (r.parsed + r.failed > 0) await runOutbox().catch(() => 0);
   // X posts whose check X didn't answer are tried again from 30 s, doubling to an hour (G3); parses a run had no

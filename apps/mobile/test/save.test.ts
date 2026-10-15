@@ -33,7 +33,9 @@ jest.mock('expo-modules-core', () => ({
 }), { virtual: true });
 
 // eslint-disable-next-line import/first
-import { overHttps, saveLink } from '../src/services/save';
+import * as http from '../src/net/http';
+// eslint-disable-next-line import/first
+import { saveLater, saveLink } from '../src/services/save';
 // eslint-disable-next-line import/first
 import { pickUpSpools } from '../src/share/pickup';
 
@@ -146,6 +148,22 @@ describe('a share too large for its event (C§3.3)', () => {
     await expect(buildItemEvent(mockWorld.signer, row.hash, itemJson(row, servers), 1_760_000_000, key)).resolves.toBeDefined();
   });
 
+  test('an X post linking to an article too long to publish saves nothing, as one linking to none', async () => {
+    setUp();
+    const fetched: string[] = [];
+    mockWorld.page = pageOf({}, fetched);
+    const realFetch = globalThis.fetch;
+    const embed = { html: `<a href="https://news.example/?q=${'x'.repeat(10_000)}">the story</a>` };
+    globalThis.fetch = (async () => new Response(JSON.stringify(embed), { status: 200, headers: { 'content-type': 'application/json' } })) as never;
+    try {
+      expect(await saveLink('https://x.com/someone/status/123', () => undefined)).toMatchObject({ kind: 'noarticle', hash: null, held: [] });
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    expect(fetched).toEqual([]);
+    expect(mockWorld.db.all('SELECT 1 FROM items')).toEqual([]);
+  });
+
   test('a shared address too long to publish is refused before anything is fetched', async () => {
     setUp();
     const fetched: string[] = [];
@@ -174,13 +192,96 @@ describe('a plain http link (release builds allow no cleartext)', () => {
     expect(getItem(mockWorld.db, owner, r.hash!)).toMatchObject({ url: 'https://news.example/story', shared_url: 'http://news.example/story', text_state: 'cached' });
   });
 
-  test('a local one, or one with a port, keeps its http; https stays as it is', () => {
-    expect(overHttps('http://news.example/a?b=1#c')).toBe('https://news.example/a?b=1#c');
-    expect(overHttps('HTTP://news.example/a')).toBe('https://news.example/a');
-    expect(overHttps('http://localhost:8080/a')).toBe('http://localhost:8080/a');
-    expect(overHttps('http://192.168.1.1/')).toBe('http://192.168.1.1/');
-    expect(overHttps('http://news.example:8080/a')).toBe('http://news.example:8080/a');
-    expect(overHttps('https://news.example/a')).toBe('https://news.example/a');
+  test('a share of one whose site has no https waits, as a pending parse under three days old does', async () => {
+    // a share is new, so the queue's rule that fails such a save past three days (page.ts HTTPS_WAIT_SECONDS) can't
+    // reach it here: a captive portal or a TLS hiccup at the moment of sharing never fails it
+    const owner = setUp();
+    mockWorld.page = {
+      fetch: (async () => Promise.reject(new Error('fetch failed: javax.net.ssl.SSLPeerUnverifiedException: Hostname old.example not verified:'))) as never,
+      parse: async () => ({ ok: false, reason: 'error' }),
+    };
+    const r = await saveLink('http://old.example/post', () => undefined);
+    expect(r).toMatchObject({ kind: 'offline', held: [] });
+    expect(getItem(mockWorld.db, owner, r.hash!)).toMatchObject({ url: 'http://old.example/post', text_state: 'queued' });
+  });
+
+  test("the share asks by net/http's one rule, which pending parses and images follow too", async () => {
+    // a copy of its own here could drift from the rule the queue behind it keeps (net/http overHttps, its cases there)
+    setUp();
+    const rule = jest.spyOn(http, 'overHttps');
+    mockWorld.page = { fetch: (async () => Promise.reject(new Error('offline'))) as never, parse: async () => ({ ok: false, reason: 'error' }) };
+    try {
+      await saveLink('http://news.example:8080/a', () => undefined);
+      expect(rule).toHaveBeenCalledWith('http://news.example:8080/a');
+    } finally {
+      rule.mockRestore();
+    }
+  });
+});
+
+describe('a shared address with a user name and password (contract 4.3, ruling 8)', () => {
+  // the hash leaves them out, but a stored address is what Original, Open in browser and X's embed query are given
+  const SHARED = 'https://reader:hunter2@news.example/story';
+  /** Page ports answering status at each address, recording what was asked for. */
+  const answering = (status: number, fetched: string[]): PagePorts => ({
+    fetch: (async (url: string) => {
+      fetched.push(url);
+      return Object.defineProperty(new Response('<p>x</p>', { status, headers: { 'content-type': 'text/html' } }), 'url', { value: url });
+    }) as never,
+    parse: async () => ({ ok: true, title: 'A story', byline: null, site: null, lang: null, hero: null, canonical: null, readerable: true, markdown: WORDS }),
+  });
+
+  test('a page that parses is asked for, saved and kept without them', async () => {
+    const owner = setUp();
+    const fetched: string[] = [];
+    mockWorld.page = answering(200, fetched);
+    const r = await saveLink(SHARED, () => undefined);
+    expect(fetched).toEqual(['https://news.example/story']);
+    expect(getItem(mockWorld.db, owner, r.hash!)).toMatchObject({ url: 'https://news.example/story', shared_url: 'https://news.example/story', text_state: 'cached' });
+  });
+
+  test("a page that can't be read keeps its link without them", async () => {
+    const owner = setUp();
+    mockWorld.page = answering(404, []);
+    const r = await saveLink(SHARED, () => undefined);
+    expect(getItem(mockWorld.db, owner, r.hash!)).toMatchObject({ url: 'https://news.example/story', shared_url: 'https://news.example/story', text_state: 'failed' });
+  });
+
+  test("an X post's embed is asked for without them, and the post waits without them", async () => {
+    const owner = setUp();
+    const asked: string[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (u: string) => (asked.push(u), Promise.reject(new Error('offline')))) as never;
+    try {
+      const r = await saveLink('https://reader:hunter2@x.com/someone/status/123', () => undefined);
+      expect(r.kind).toBe('offline');
+      expect(asked).toHaveLength(1);
+      expect(asked[0]).not.toMatch(/reader|hunter2/);
+      expect(getItem(mockWorld.db, owner, r.hash!)).toMatchObject({ url: 'https://x.com/someone/status/123', x_state: 'pending' });
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  test("the article an X post links to is kept without them, when its page can't be had yet", async () => {
+    const owner = setUp();
+    mockWorld.page = { fetch: (async () => Promise.reject(new Error('offline'))) as never, parse: async () => ({ ok: false, reason: 'error' }) };
+    const realFetch = globalThis.fetch;
+    const embed = { html: '<blockquote><a href="https://reader:hunter2@news.example/story">the story</a></blockquote>' };
+    globalThis.fetch = (async () => new Response(JSON.stringify(embed), { status: 200, headers: { 'content-type': 'application/json' } })) as never;
+    try {
+      const r = await saveLink('https://x.com/someone/status/123', () => undefined);
+      expect(r.kind).toBe('offline');
+      expect(getItem(mockWorld.db, owner, r.hash!)).toMatchObject({ url: 'https://news.example/story', text_state: 'queued' });
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  test('a share saved for later, as the start-up pickup saves, is kept without them', async () => {
+    const owner = setUp();
+    const r = await saveLater(SHARED, () => undefined);
+    expect(getItem(mockWorld.db, owner, r.hash!)).toMatchObject({ url: 'https://news.example/story', shared_url: 'https://news.example/story', text_state: 'queued' });
   });
 });
 

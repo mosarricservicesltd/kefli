@@ -2,7 +2,7 @@ import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { MAX_IMAGE_BYTES, evictions, getImage, keptArticles, markUsed, needsFetch, recordFailed, recordImage, wanted } from '../src/data/images';
 import { imageKind, imageSize } from '../src/reader/imageSize';
-import { MAX_ARTICLE_IMAGES, SLOW_RUN, articleImages, fetchArticleImages, fetchImage, imageState, removeImages, syncImages, type ImagePorts } from '../src/services/images';
+import { MAX_ARTICLE_IMAGES, RUN_SECONDS, SLOW_RUN, articleImages, fetchArticleImages, fetchImage, imageState, removeImages, syncImages, type ImagePorts } from '../src/services/images';
 import { TimedOut } from '../src/net/http';
 import { memoryDb } from './sqlite';
 
@@ -216,6 +216,27 @@ describe('article images a page can make too many, too big or too slow', () => {
     expect(asked).toHaveLength(SLOW_RUN);
     expect(imageState(w.db, urls[0], w.now())).toBe('failed');
     expect(imageState(w.db, urls[SLOW_RUN], w.now())).toBe('waiting');
+  });
+
+  test("a sync's run starts image fetches for RUN_SECONDS at most; the next carries on, and an opened article isn't held to it", async () => {
+    // phase 6 runs inside the sync's single run, ahead of the pending parses: a run went on until the store's 200 MB
+    // had come in, so servers slow but under the deadline held every later sync for as long as they took
+    const w = world();
+    w.add(1);
+    w.db.run('UPDATE items SET last_opened_at = 1 WHERE hash = ?', h(1));
+    const urls = Array.from({ length: 10 }, (_, i) => `https://slow.example.com/${i}.png`);
+    w.texts.set(h(1), urls.map((u) => `![](${u})`).join('\n\n'));
+    const asked: string[] = [];
+    // each image takes 15 s to come, inside its 20 s: none times out, so SLOW_RUN never ends the run
+    w.ports.fetch = (async (url: string) => (asked.push(url), w.tick(15), new Response(png(4, 4) as never))) as never;
+    const per = Math.ceil(RUN_SECONDS / 15);
+    expect(await syncImages(w.ports, PK)).toBe(per);
+    expect(asked).toEqual(urls.slice(0, per));
+    expect(imageState(w.db, urls[per], w.now())).toBe('waiting');
+    expect(await syncImages(w.ports, PK)).toBe(per);
+    expect(asked).toEqual(urls.slice(0, 2 * per));
+    // the article opened in the Reader runs outside the sync: its images all come
+    expect(await fetchArticleImages(w.ports, PK, h(1))).toBe(10 - 2 * per);
   });
 
   test('an image whose header claims a size no phone can lay out or decode is left out', async () => {
