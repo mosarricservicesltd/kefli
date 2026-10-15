@@ -175,6 +175,31 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     expect(w.outbox().some((o) => o.op === 'publish_item' && o.subject === itemHash('https://news.com/old'))).toBe(true);
   });
 
+  test('a share whose page lands on a save waiting on its delete’s Undo waits for the delete to be done or undone', async () => {
+    const X = itemHash('https://example.com/article');
+    for (const delete_ of ['done', 'undone'] as const) {
+      const w = world({ 'https://short.example/abc': { finalUrl: 'https://example.com/article' } });
+      w.db.run("INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin) VALUES (?, ?, 'https://example.com/article', 10, 'unread', 'cached', 'share')", PK, X);
+      // shared offline, then X deleted on Saves, its Undo toast still up as a sync parses the share
+      w.share('https://short.example/abc');
+      const del = deleteItem(w.db, 6000, PK, X);
+      await runPendingParses(w.ports, PK);
+      // the share takes nothing, and still waits for its parse at its own address
+      expect(w.db.all('SELECT url, text_state, pending_delete_at IS NOT NULL AS deleting FROM items ORDER BY id')).toEqual([
+        { url: 'https://example.com/article', text_state: 'cached', deleting: 1 },
+        { url: 'https://short.example/abc', text_state: 'queued', deleting: 0 },
+      ]);
+      expect([w.staged.size, w.texts.size]).toEqual([0, 0]);
+      if (delete_ === 'done') commitDelete(w.db, PK, X, del.held);
+      else del.revert();
+      await runPendingParses(w.ports, PK);
+      // done: the share is a new save at the article's address, with its text; undone: it joins X, which keeps its own
+      expect(w.db.all('SELECT hash, text_state FROM items')).toEqual([{ hash: X, text_state: 'cached' }]);
+      expect(w.staged.size).toBe(delete_ === 'done' ? 1 : 0);
+      expect(w.outbox().some((o) => o.op === 'upload_blob')).toBe(delete_ === 'done');
+    }
+  });
+
   test('a page that can never be read goes out without text; offline, the queue waits', async () => {
     const w = world({ 'https://a.com/gone': { status: 410 }, 'https://b.com/later': 'down' });
     w.share('https://a.com/gone');

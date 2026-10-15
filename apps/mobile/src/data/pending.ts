@@ -7,6 +7,7 @@ import type { SqlDb } from './db';
 import { enqueue } from './outbox';
 import { addressFits, fitSave, registerFirst, queueSends, queueText, type PageFields, type SaveTargets, type StagedBlob } from './saves';
 import { writeRelays } from './lists';
+import { waitsOnDelete } from './inbox';
 
 export type Pending = {
   id: number; hash: string; url: string; shared_url: string | null; published: number; event_id: string | null; x_state: string | null;
@@ -104,7 +105,11 @@ function fittedAt(url: string, parsed: Parsed): PageFields {
  * a user name and password (contract 4.3, ruling 8), as a browser's request or an older row may hold them. The text is
  * written (write) before the row says it has it, at the hash the save is kept at: a write that fails, as on a full
  * disk, throws, and the transaction takes the re-key back with everything else, so the save waits for its parse
- * rather than reading as cached with no text on the phone.
+ * rather than reading as cached with no text on the phone. RULED: a save whose page lands on the address of a save waiting
+ * on its delete's Undo takes nothing yet, as a browser's request for such a save waits (services/inbox take): merged
+ * into it, it was deleted with it when the toast closed, though the person never deleted it. It waits for its parse
+ * at its own address, so once the delete is done it becomes a new save there, and once it is undone it joins that one.
+ * The inbox's own parse lands at its request's address (protocol pairing canonicalOf), so this is a pending parse's.
  */
 export function applyParsed(
   db: SqlDb, now: number, owner: string, p: Pending, parsed: Parsed, blob: StagedBlob, t: SaveTargets, write: WriteText,
@@ -117,7 +122,9 @@ export function applyParsed(
     const final = withoutUserInfo(parsed.url);
     const adopted = unpublished && addressFits(final);
     const page = fittedAt(adopted ? final : withoutUserInfo(p.url), parsed);
-    const where = adopted && parsed.hash !== p.hash ? rekey(db, now, owner, p, parsed.hash) : { hash: p.hash, merged: false };
+    const moves = adopted && parsed.hash !== p.hash;
+    if (moves && waitsOnDelete(db, owner, parsed.hash)) return { hash: p.hash, merged: true };
+    const where = moves ? rekey(db, now, owner, p, parsed.hash) : { hash: p.hash, merged: false };
     if (where.merged) return where;
     write(where.hash);
     // a save not yet published is marked changed for its sends; one already out stays clean (above)
