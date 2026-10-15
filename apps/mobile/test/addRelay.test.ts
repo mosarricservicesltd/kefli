@@ -303,7 +303,26 @@ describe('checking a typed relay (FD 113)', () => {
     }
   });
 
-  test('a relay that already holds the list took it before; one that finds it too old, or refuses it otherwise, isn’t added', async () => {
+  test('a relay that turns the list away only as older than it keeps answered: it is added, and the new list goes to it', async () => {
+    // strfry keeps nothing older than three years by default, khatru's policy says "event too old": a nostr user's
+    // list from 2023 that Kefli never republished (Keep backup copies off) is the list held, and the check sends it
+    for (const reason of ['invalid: created_at too early', 'blocked: event too old']) {
+      const w = world('nip55');
+      w.db.run('UPDATE identities SET lists_settled = 1');
+      w.db.run("INSERT INTO relays (url, owner, read, write, source, added_by_app) VALUES ('wss://theirs.example', ?, 1, 1, 'user', 0)", w.pk);
+      const old = await buildRelayList(w.s, [{ url: 'wss://theirs.example', read: true, write: true }], 1_690_000_000);
+      recordList(w.db, w.pk, 10002, old.id, old.created_at, JSON.stringify(old));
+      const r = ports(w, { answer: { ok: false, reason } });
+      expect([reason, await addTypedRelay(r.p, w.pk, MINE)]).toEqual([reason, { check: 'ok', url: MINE }]);
+      expect(r.sent.map((s) => s.event.id)).toEqual([old.id]);
+      expect(writeRelays(w.db, w.pk)).toEqual(['wss://theirs.example', MINE]);
+      // the list that goes to it is a new one, dated now, which it takes; the old list itself stays refused
+      expect(targets(w.db, 'publish_lists', w.pk)).toContain(MINE);
+      expect(relayResult(MINE, { ok: false, reason }, old.id).kind).toBe('rejected');
+    }
+  });
+
+  test('a relay that already holds the list took it before; one that refuses it otherwise isn’t added', async () => {
     const w = world();
     seedGeneratedLists(w.db, w.pk, D);
     const list = await buildRelayList(w.s, relayEntries(w.db, w.pk), 5);
@@ -311,7 +330,7 @@ describe('checking a typed relay (FD 113)', () => {
     const duplicate = { ok: false as const, reason: 'duplicate: have this event' };
     expect(await addTypedRelay(ports(w, { answer: duplicate }).p, w.pk, MINE)).toEqual({ check: 'ok', url: MINE });
     expect(relayResult(MINE, duplicate, list.id).kind).toBe('ok');
-    for (const reason of ['invalid: created_at too early', 'restricted: not on the allow list', 'pow: difficulty 28 is required', 'blocked: you are banned']) {
+    for (const reason of ['restricted: not on the allow list', 'pow: difficulty 28 is required', 'blocked: you are banned', 'invalid: bad signature']) {
       const v = world();
       seedGeneratedLists(v.db, v.pk, D);
       recordList(v.db, v.pk, 10002, list.id, 5, JSON.stringify(list));
