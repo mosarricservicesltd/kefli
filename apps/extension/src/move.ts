@@ -66,12 +66,18 @@ interface Renaming {
   sha256: string | null;
 }
 
+/** Told of each save the move puts under a new wrap, before the queue naming it is written (worker.ts follow). */
+export type Follow = (was: string, to: string) => void;
+
 /** The queue wrapped again for the new user, in place, and the saves that went under a new wrap. */
-async function rewrapQueue(q: Queued[], device: LocalSigner, pairing: Pairing, now: number): Promise<Renaming[]> {
+async function rewrapQueue(q: Queued[], device: LocalSigner, pairing: Pairing, now: number, follow: Follow): Promise<Renaming[]> {
   const renamed: Renaming[] = [];
   for (let i = 0; i < q.length; i++) {
     const { entry, wrapKey } = await rewrap(q[i], device, pairing, now);
-    if (wrapKey) renamed.push({ was: q[i].id, to: entry.id, wrapKey, sha256: entry.sha256 });
+    if (wrapKey) {
+      renamed.push({ was: q[i].id, to: entry.id, wrapKey, sha256: entry.sha256 });
+      follow(q[i].id, entry.id);
+    }
     q[i] = entry;
   }
   return renamed;
@@ -79,16 +85,17 @@ async function rewrapQueue(q: Queued[], device: LocalSigner, pairing: Pairing, n
 
 /**
  * Takes the move: the pairing replaced (its label and date kept) and the queue wrapped again for the new user, under the
- * queue's lock, so a save queued meanwhile isn't overwritten (F41). Undo's key for each save then moves to its new wrap
- * in the session (undo.ts), so Undo on a toast still naming the old one, such as the offline one, takes the save off the
- * queue rather than retracting a wrap that never went and saying it couldn't undo. A session that won't take a key
+ * queue's lock, so a save queued meanwhile isn't overwritten (F41). A save whose send is under way is wrapped again too,
+ * and `follow` is told, so its new wrap waits for that send (worker.ts). Undo's key for each save then moves to its new
+ * wrap in the session (undo.ts), so Undo on a toast still naming the old one, such as the offline one, takes the save off
+ * the queue rather than retracting a wrap that never went and saying it couldn't undo. A session that won't take a key
  * doesn't stop the move; that save's Undo then says it couldn't.
  */
-export async function applyMove(store: Store, device: LocalSigner, ack: PairAck, now: number, session: Store): Promise<Pairing> {
+export async function applyMove(store: Store, device: LocalSigner, ack: PairAck, now: number, session: Store, follow: Follow = () => undefined): Promise<Pairing> {
   const old = await store.get<Pairing>(KEYS.pairing);
   // its lists as the extension keeps them (store.ts addresses)
   const pairing: Pairing = { v: 1, user_pubkey: ack.user_pubkey, write_relays: addresses(ack.write_relays), blossom_servers: addresses(ack.blossom_servers), token: String(ack.token), label: old?.label ?? '', paired_at: old?.paired_at ?? now };
-  const renamed = await changeQueue(store, (q) => rewrapQueue(q, device, pairing, now));
+  const renamed = await changeQueue(store, (q) => rewrapQueue(q, device, pairing, now, follow));
   for (const r of renamed) await moveUndoKey(session, r.was, r.to, r.wrapKey, r.sha256).catch(() => undefined);
   await store.set(KEYS.pairing, pairing);
   return pairing;

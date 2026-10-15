@@ -192,12 +192,25 @@ export function background(b: Browser) {
     await b.flushAlarm(true);
     const online = b.online();
     const d: Delivery = online ? await deliverFor(ctx)(pending) : 'unreachable';
-    if (kept) return { d, online, s: await settle(b.store, pending, d, online, true).catch((): Settled => 'queued') };
+    if (kept) return { d, online, s: await settleFirst(pending, d, online).catch((): Settled => 'queued') };
     if (d === 'sent') return { d, online, s: 'sent' };
     // with the mark a save whose HTML the operator refused carries in the queue, for whichever background sends it
     const smaller = { ...pending, blob: null, ...(textless.has(pending.id) ? { textless: true as const } : {}) };
     const s = await enqueue(b.store, smaller, whyNot(d, online)).catch((): Settled => 'full');
     return { d, online, s };
+  }
+
+  /**
+   * A first send settled in the queue. A move found meanwhile wraps the save again under a new id (move.ts), which Undo
+   * follows (undo.ts): one that didn't go is settled under that id, so it waits there as any save that didn't go does,
+   * rather than its toast saying it was removed. One that went, to the library that moved away, is left queued under its
+   * new wrap for the next flush to send to the new library, since the phone may have read the old one for the last time.
+   */
+  async function settleFirst(pending: Pending, d: Delivery, online: boolean): Promise<Settled> {
+    const s = await settle(b.store, pending, d, online, true);
+    if (s !== 'gone' || d === 'sent') return s;
+    const now = await goesBy(pending.id);
+    return now === pending.id ? s : settle(b.store, { id: now, blob: pending.blob }, d, online, true);
   }
 
   async function save(c: Captured, where: Where, link: boolean): Promise<void> {
@@ -345,5 +358,11 @@ export function background(b: Browser) {
     await b.badge();
   }
 
-  return { save, undo, flushQueue, disconnected };
+  /**
+   * A move put a save under a new wrap (move.ts): while a send under its old id is under way, the new id is busy too, so
+   * a flush leaves it to that send rather than sending it beside it.
+   */
+  const follow = (was: string, to: string): void => saves.follow(was, to);
+
+  return { save, undo, flushQueue, disconnected, follow };
 }

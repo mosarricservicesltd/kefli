@@ -1465,4 +1465,54 @@ describe('a move while saves wait, their toasts still showing (contract 4.4 and 
     expect((await queued(h.store))[0].wrap.tags).toEqual([['p', T.pubkey()]]);
     expect((await h.store.get<Pairing>(KEYS.pairing))?.user_pubkey).toBe(T.pubkey());
   });
+
+  describe('found while a save’s first send is under way', () => {
+    /** A save whose first send is held at the relay, and the move the background finds meanwhile (bg.ts checkMoves). */
+    async function movedMidSend(o: Parameters<typeof net>[0]) {
+      const held = gate();
+      const n = net({ ...o, hold: held.p });
+      const h = harness({ net: n.net, collected: [false, false] });
+      const saving = h.work.save(PAGE, 1, false);
+      await until(() => n.asked.n === 1);
+      await h.store.set(KEYS.pairing, PAIRING);
+      await applyMove(h.store, device, ack, NOW, h.session, h.work.follow);
+      const [moved] = await queued(h.store);
+      return { h, n, held, saving, moved };
+    }
+
+    test('one that then can’t reach the relay waits under its new wrap and says so, rather than Removed from Kefli', async () => {
+      const { h, held, saving, moved } = await movedMidSend({ publish: 'down' });
+      held.open();
+      await saving;
+      expect(kinds(h.toasts)).toEqual(['saving', 'failed']);
+      expect(await queued(h.store)).toMatchObject([{ id: moved.id, why: 'reach', attempts: 0, stopped: false }]);
+      expect((await history(h.store))[0]).toMatchObject({ outcome: 'waiting, couldn’t reach' });
+      // and it goes to the new library from the queue
+      const later = net();
+      await harness({ store: h.store, session: h.session, net: later.net }).work.flushQueue();
+      expect(later.published.map((w) => [w.id, w.tags])).toEqual([[moved.id, [['p', T.pubkey()]]]]);
+    });
+
+    test('a flush meanwhile leaves the new wrap to the send under way, so it isn’t sent beside it', async () => {
+      const { h, n, held, saving, moved } = await movedMidSend({ publish: 'down' });
+      expect(await ends(h.work.flushQueue(), 2000)).toBe('ended');
+      expect(n.asked.n).toBe(1);
+      held.open();
+      await saving;
+      expect(await queued(h.store)).toMatchObject([{ id: moved.id, why: 'reach' }]);
+    });
+
+    test('one that went, to the library that moved away, is Saved, and its new wrap still goes to the new library', async () => {
+      const { h, n, held, saving, moved } = await movedMidSend({});
+      held.open();
+      await saving;
+      expect(kinds(h.toasts)).toEqual(['saving', 'saved']);
+      expect(n.published.map((w) => w.tags)).toEqual([[['p', user.pubkey()]]]);
+      // the phone may have read the old library for the last time already, so the save isn't left to it
+      const later = net();
+      await harness({ store: h.store, session: h.session, net: later.net }).work.flushQueue();
+      expect(later.published.map((w) => [w.id, w.tags])).toEqual([[moved.id, [['p', T.pubkey()]]]]);
+      expect(await queued(h.store)).toEqual([]);
+    });
+  });
 });
