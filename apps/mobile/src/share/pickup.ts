@@ -112,10 +112,11 @@ export function readSpool(id: string): SpoolEntry | null {
 export type SheetLink = { url: string } | { url: null; why: 'failed' | 'nolink' };
 
 /**
- * The link a sheet's spool carries (5.4). A spool gone or unreadable when its sheet opens is a share that didn't save
- * (That didn't save, Try sharing it again): a share held in memory for want of room to write it goes with its process,
- * so a sheet brought back after it finds nothing, and sharing again mends that. A spool that holds no address Kefli
- * can save is Not a link, which sharing the same thing again would not mend.
+ * The link a sheet's spool carries (5.4). A spool gone or unreadable when its sheet opens reads as a share that didn't
+ * save (That didn't save, Try sharing it again): one the start-up pickup took between the sheet's start and its read,
+ * which sharing again finds already in the library, or one cut short. A sheet brought back after its spool went spools
+ * the share again from its intent (ShareActivity). A spool that holds no address Kefli can save is Not a link, which
+ * sharing the same thing again would not mend.
  */
 export function sheetLink(spoolId: string | undefined): SheetLink {
   const entry = spoolId ? readSpool(spoolId) : null;

@@ -218,7 +218,9 @@ export function queueDeleteInboxBlob(db: SqlDb, now: number, owner: string, sha2
  * the phone found it on the operator. The delete's payload carries both, as a delete of the phone's own text carries
  * its size and when the operator took it, for the room reckoned once the operator confirms it (C§5). up is no earlier
  * than the browser's upload, so that room is never reckoned larger than it is. A capture the phone didn't read (a
- * repeat save's, an X post's, one gone or past its 14 days) has neither, and gives back no room the phone counts.
+ * repeat save's, an X post's) has neither: once the operator confirms its delete with a 2xx, it gives back a block,
+ * the least the operator counts a blob for (services/send.ts freedRoom). One gone or past its 14 days, which the
+ * operator answers 404, gives back none.
  */
 export type CaptureRead = { size: number; up: number };
 
