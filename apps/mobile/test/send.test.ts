@@ -11,7 +11,9 @@ import type { Defaults } from '../src/services/config';
 import { heldFor, notBackedUp } from '../src/data/backup';
 import { textsWaiting } from '../src/data/account';
 import { getSetting } from '../src/data/settings';
+import { SERVER_TIMEOUT_MS, movingMs } from '../src/net/http';
 import { memoryDb } from './sqlite';
+import { inward, silent, watch } from './inward';
 
 const D: Defaults = {
   v: 1, operator: { relay: 'ws://op', blossom: 'http://blossom', api: 'http://api' },
@@ -1193,6 +1195,135 @@ describe('a save from before its page’s fields were fitted (C§3.3)', () => {
       .toEqual({ state: 'dead', last_error: 'too large for its event' });
     expect(w.db.get('SELECT 1 AS kept FROM items')).toEqual({ kept: 1 });
     expect(notBackedUp(w.db, w.signer.pubkey())).toBe(1);
+  });
+});
+
+describe('every call to a server takes its hops, and has a deadline (7.1)', () => {
+  afterEach(() => jest.useRealTimers());
+  const registered = (w: W) => {
+    ensureIdentityRow(w.db, w.now(), w.signer.pubkey(), 'early_share', true);
+    w.db.run('UPDATE identities SET registered_at = 1');
+  };
+
+  test("Kefli's API sending a call into the phone's network: nothing is asked there, and the call waits as for an API not answering", async () => {
+    const w = world();
+    const net = inward(w.ports.fetch, (_m, url) => url.startsWith('http://api/'));
+    w.ports.fetch = net.f;
+    release(w.db, (await save(w)).held);
+    await drain(w.ports);
+    // followed as OkHttp followed it, the phone registered with whatever answers at 192.168.1.1, with its NIP-98 header
+    expect(net.asked).toEqual([]);
+    expect(tried(w)).toMatchObject({ state: 'queued', last_error: 'blocked: redirect' });
+    expect(w.published()).toEqual([]);
+    // a browser's removal goes the same way
+    const v = world();
+    registered(v);
+    const away = inward(v.ports.fetch, (_m, url) => url.startsWith('http://api/'));
+    v.ports.fetch = away.f;
+    enqueue(v.db, v.now(), { op: 'delete_device', signer: v.signer.pubkey(), subject: 'ab'.repeat(32), targets: [`http://api/devices/${'ab'.repeat(32)}`] });
+    await drain(v.ports);
+    expect(away.asked).toEqual([]);
+    expect(tried(v)).toMatchObject({ state: 'queued', last_error: 'blocked: redirect' });
+  });
+
+  test("a blob server sending an upload, a mirror's copy or a deletion into the phone's network: nothing is asked there; each waits", async () => {
+    const w = world();
+    registered(w);
+    const blobServer = (url: string) => url.startsWith('http://blossom/') || url.startsWith('http://m1/');
+    let sends: (method: string, url: string) => boolean = (_m, url) => blobServer(url);
+    const net = inward(w.ports.fetch, (m, url) => sends(m, url));
+    w.ports.fetch = net.f;
+    const { held, sha } = await save(w);
+    release(w.db, held);
+    await drain(w.ports);
+    expect(tried(w)).toMatchObject({ state: 'queued', last_error: 'blocked: redirect' });
+    // the operator takes the text; the mirror sends its copy on
+    sends = (m, url) => m === 'PUT' && url === 'http://m1/mirror';
+    w.tick(86_400);
+    await drain(w.ports);
+    expect(w.db.get('SELECT operator_at, mirror_at FROM blobs WHERE sha256 = ?', sha!)).toEqual({ operator_at: expect.any(Number), mirror_at: null });
+    expect(tried(w)).toMatchObject({ last_error: 'blocked: redirect' });
+    // the save goes, and its text's deletion from the operator is sent on too
+    sends = (m) => m === 'DELETE';
+    w.tick(86_400);
+    await drain(w.ports);
+    commitDelete(w.db, w.signer.pubkey(), HASH, deleteItem(w.db, w.now(), w.signer.pubkey(), HASH).held);
+    await drain(w.ports);
+    expect(net.asked).toEqual([]);
+    expect(w.db.get("SELECT t.last_error FROM outbox o JOIN outbox_targets t ON t.outbox_id = o.id WHERE o.op = 'delete_blob' AND t.target = 'http://blossom'"))
+      .toEqual({ last_error: 'blocked: redirect' });
+  });
+
+  test("a blob server's redirect to its own other address is followed; to loopback only on the local stack", async () => {
+    /** A text for v's operator at blossom, its rows released; and v's fetch, whose server at from sends uploads to to. */
+    async function textTo(v: W, blossom: string, from: string, to: string) {
+      v.ports.defaults = () => ({ ...D, operator: { ...D.operator, blossom } });
+      const enc = await encryptText(normaliseMarkdown('# Moved\n\nWords.'), nodeCrypto);
+      v.blobs.set(enc.text.sha256, enc.blob);
+      release(v.db, queueSave(v.db, v.now(), {
+        owner: v.signer.pubkey(), hash: HASH, url: 'https://example.com/a', canonical: null, title: 'Moved', site: null, byline: null, savedAt: v.now(),
+        words: 1, lang: 'en', hero: null, text: enc.text, textHash: null, textState: 'cached', origin: 'share',
+      }, { sha256: enc.text.sha256, size: enc.blob.length, path: '/staged' }, { api: D.operator.api, blossom, mirror: D.mirrors[0] }));
+      const base = v.ports.fetch;
+      const asked: string[] = [];
+      v.ports.fetch = (async (url: string, init: RequestInit) => {
+        asked.push(`${init.method} ${url} ${new Headers(init.headers).has('authorization')}`);
+        if (url === from) return new Response('', { status: 308, headers: { location: to } });
+        return base(url === to ? 'http://blossom/upload' : url, init);
+      }) as typeof fetch;
+      return asked;
+    }
+    const uploads = (asked: string[]) => asked.filter((a) => a.includes('/upload'));
+    // the operator's upload moved to /v2/upload on its own origin: followed, its Authorization kept there
+    const w = world();
+    registered(w);
+    const asked = await textTo(w, 'https://op.example', 'https://op.example/upload', 'https://op.example/v2/upload');
+    await drain(w.ports);
+    expect(uploads(asked)).toEqual(['PUT https://op.example/upload true', 'PUT https://op.example/v2/upload true']);
+    expect(w.db.get('SELECT operator_at FROM blobs')).toEqual({ operator_at: expect.any(Number) });
+    // the local stack's operator, on loopback, sends its upload on to its own other address: followed there only
+    for (const localStack of [true, false]) {
+      const v = world();
+      registered(v);
+      v.ports.localStack = localStack;
+      const hops = await textTo(v, 'http://localhost:3447', 'http://localhost:3447/upload', 'http://localhost:3447/v2/upload');
+      await drain(v.ports);
+      expect([localStack, uploads(hops).map((h) => h.split(' ')[1])])
+        .toEqual([localStack, localStack ? ['http://localhost:3447/upload', 'http://localhost:3447/v2/upload'] : ['http://localhost:3447/upload']]);
+      expect([localStack, v.db.get<{ at: number | null }>('SELECT operator_at AS at FROM blobs')?.at !== null]).toEqual([localStack, localStack]);
+    }
+  });
+
+  test('an API that takes the call and never answers holds the outbox for its deadline, then the call waits', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    const w = world();
+    w.ports.fetch = silent;
+    release(w.db, (await save(w)).held);
+    // without a deadline, register waited for ever, and every save behind it with it
+    const run = watch(drain(w.ports));
+    await jest.advanceTimersByTimeAsync(SERVER_TIMEOUT_MS - 1_000);
+    expect(run.settled).toBe(false);
+    await jest.advanceTimersByTimeAsync(2_000);
+    expect(run).toMatchObject({ settled: true, value: expect.any(Number) });
+    expect(tried(w)).toMatchObject({ state: 'queued', last_error: 'timed out' });
+  });
+
+  test('an upload has a second more for every 32 KB it sends, so a stalled one ends and a slow one has its time', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    const w = world();
+    registered(w);
+    const { held, sha } = await save(w);
+    // a text of 1 MB, which the deadline gives 32 s more than the API's 15
+    w.blobs.set(sha!, new Uint8Array(1_048_576));
+    w.ports.fetch = silent;
+    release(w.db, held);
+    expect(movingMs(1_048_576)).toBe(SERVER_TIMEOUT_MS + 32_000);
+    const run = watch(drain(w.ports));
+    await jest.advanceTimersByTimeAsync(movingMs(1_048_576) - 1_000);
+    expect(run.settled).toBe(false);
+    await jest.advanceTimersByTimeAsync(2_000);
+    expect(run).toMatchObject({ settled: true, value: expect.any(Number) });
+    expect(tried(w)).toMatchObject({ state: 'queued', last_error: 'timed out' });
   });
 });
 

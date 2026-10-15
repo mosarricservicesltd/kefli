@@ -3,7 +3,7 @@
 // post_device, pair_ack, delete_device, delete_wrap, copy_relay and publish_library_key.
 import {
   DEVICES_PATH, EventTooLargeError, KIND, buildDeletions, buildDevicesEvent, buildItemEvent, buildLibraryKeyEvent, deleteBlob, httpAuth,
-  isSignerFailure, mirrorBlob, releaseTemplate, sameUrl, savedD, signStatement, signWithinCeiling, uploadBlob, wrapPairAck,
+  isSignerFailure, mirrorBlob, releaseTemplate, sameUrl, savedD, signStatement, signWithinCeiling, uploadBlob, withoutTrailingSlashes, wrapPairAck,
 } from '@kefli/protocol';
 import type { AccountFigures, BlossomOutcome, CryptoPort, NostrEvent, Signer, Statement } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
@@ -20,6 +20,7 @@ import {
 import { backoff, begin, enqueue, finish, nextDue, nextWakeAt, releaseDependents, wake } from '../data/outbox';
 import type { OutboxRow, OutboxTarget, TargetResult } from '../data/outbox';
 import { fitSave, namesText, queueBlobDelete, withdrawText } from '../data/saves';
+import { SERVER_TIMEOUT_MS, movingMs, serverFetch, serverHops } from '../net/http';
 import type { Defaults } from './config';
 import { notYet, pageStream, streamFilter, takeNewerLists, type SyncPorts } from './sync';
 
@@ -45,7 +46,22 @@ export type SendPorts = {
   figures?: (owner: string) => KnownFigures | null;
   /** A 413 quota or daily brought the library's figures (C§5): kept as the last known, by data/account.ts recordFigures. */
   onFigures?: (owner: string, figures: AccountFigures) => void;
+  /** The local stack's build (services/config.ts LOCAL_STACK), whose servers a redirect may reach on loopback. */
+  localStack?: boolean;
 };
+
+/**
+ * p's fetch for a server, Kefli's API or a blob server (net/http serverFetch): each redirect followed a hop at a time,
+ * never into the phone's own network (on the local stack, loopback too, serverHops), and the whole answer had within
+ * timeoutMs. Left to OkHttp, as p.fetch was, a server's redirect took an upload, its NIP-98 or Blossom authorisation
+ * with it, to 192.168.1.1, and a server that never answered held the outbox's run for good.
+ */
+function toServer(p: SendPorts, timeoutMs: number): typeof fetch {
+  return serverFetch(p.fetch, { hops: serverHops(p.localStack === true), timeoutMs });
+}
+
+/** The largest blob the operator takes (C§5's too_large), as much as a mirror's copy can move when its size isn't known. */
+const OPERATOR_MAX_BYTES = 8_388_608;
 
 const DAY = 86_400;
 /**
@@ -96,12 +112,16 @@ export function relayResult(target: string, a: RelayAnswer, eventId: string): Ta
   return { target, kind: 'retry', error: reason };
 }
 
-/** One signed call to the API (contract 6): ok, retried on 401, 429 and 5xx, otherwise refused. okStatus counts as done too. */
+/**
+ * One signed call to the API (contract 6): ok, retried on 401, 429 and 5xx, otherwise refused. okStatus counts as done
+ * too. Its redirects take the hops and its answer has the API's deadline (toServer); one that goes past either is
+ * retried as an API not answering.
+ */
 async function apiCall(p: SendPorts, signer: Signer, url: string, method: 'POST' | 'DELETE', body: string | null, okStatus?: number): Promise<TargetResult> {
   try {
     const headers: Record<string, string> = { Authorization: await httpAuth(signer, url, method, body ?? '', p.crypto) };
     if (body !== null) headers['Content-Type'] = 'application/json';
-    const res = await p.fetch(url, { method, headers, ...(body === null ? {} : { body }) });
+    const res = await toServer(p, SERVER_TIMEOUT_MS)(url, { method, headers, ...(body === null ? {} : { body }) });
     if (res.ok || res.status === okStatus) return { target: url, kind: 'ok' };
     if (res.status === 401 || res.status === 429 || res.status >= 500) return { target: url, kind: 'retry', error: `HTTP ${res.status}` };
     return { target: url, kind: 'rejected', error: `HTTP ${res.status}` };
@@ -200,7 +220,8 @@ async function sendUpload(p: SendPorts, row: OutboxRow, signer: Signer, t: Outbo
   // the staged text is gone, so it can never be sent: the save goes without it rather than with it (C§4.2)
   if (!blob) return (releaseDependents(p.db, row.id, 'publish_item'), [{ target: t.target, kind: 'rejected', error: 'staged blob missing' }]);
   try {
-    const r = await uploadBlob(t.target, blob, sha256, signer, p.fetch);
+    // a second more for every 32 KB it sends, so a stalled upload ends and a slow one has its time (net/http movingMs)
+    const r = await uploadBlob(t.target, blob, sha256, signer, toServer(p, movingMs(blob.length)));
     return r.ok ? uploaded(p, row.signer, t.target, sha256, blob.length) : refused(p, row, t.target, sha256, r);
   } catch (e) {
     return [{ target: t.target, kind: 'retry', error: err(e) }];
@@ -308,11 +329,16 @@ function nextMirror(p: SendPorts, current: string): { next: string; delaySec: nu
   return { next: mirrors[0], delaySec: DAY };
 }
 
+/**
+ * A mirror's copy of the text (BUD-04): the mirror fetches the blob from the operator before it answers, so the ask has
+ * the time an upload of the blob would (net/http movingMs), of the largest the operator takes when its size is unknown.
+ */
 async function sendMirror(p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
   const { sha256 } = JSON.parse(row.payload ?? '{}') as { sha256: string };
-  const from = `${p.defaults().operator.blossom.replace(/\/+$/, '')}/${sha256}`;
+  const from = `${withoutTrailingSlashes(p.defaults().operator.blossom)}/${sha256}`;
+  const size = p.db.get<{ size: number | null }>('SELECT size FROM blobs WHERE sha256 = ? AND owner = ?', sha256, row.signer)?.size;
   try {
-    const r = await mirrorBlob(t.target, from, sha256, signer, p.fetch);
+    const r = await mirrorBlob(t.target, from, sha256, signer, toServer(p, movingMs(size ?? OPERATOR_MAX_BYTES)));
     if (r.ok) {
       p.db.run('UPDATE blobs SET mirror_at = ?, mirror_url = ?, last_error = NULL WHERE sha256 = ? AND owner = ?', p.now(), t.target, sha256, row.signer);
       republishNaming(p.db, p.now(), row.signer, sha256, t.target, p.defaults().operator.blossom);
@@ -359,7 +385,7 @@ const BLOCK = 4096;
 async function sendDeleteBlob(p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
   const { sha256, size, up } = JSON.parse(row.payload ?? '{}') as { sha256: string; size?: number; up?: number };
   try {
-    const r = await deleteBlob(t.target, sha256, signer, p.fetch);
+    const r = await deleteBlob(t.target, sha256, signer, toServer(p, SERVER_TIMEOUT_MS));
     if (!r.ok) return [httpResult(t.target, r, r.permanent)];
     if (sameUrl(t.target, p.defaults().operator.blossom)) {
       noteFreed(p.db, row.signer, { at: p.now(), size: size || BLOCK, up: up ?? null });
