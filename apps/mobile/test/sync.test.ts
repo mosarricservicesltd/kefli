@@ -10,10 +10,12 @@ import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { addRelay, listServers, nextListTime, seedGeneratedLists, writeRelays } from '../src/data/lists';
 import { TEXT_SERVERS_MAX, applyItem, getCursor, itemColumns, type TextJob } from '../src/data/sync';
-import { SKEW, TEXT_MAX_BYTES, TEXT_TIMEOUT_MS, fetchText, pageStream, streamFilter, syncInbound, takeNewerLists, type Filter, type SyncPorts } from '../src/services/sync';
+import {
+  SKEW, StreamCut, TEXT_MAX_BYTES, TEXT_TIMEOUT_MS, fetchText, pageStream, streamFilter, syncInbound, takeNewerLists, type Filter, type SyncPorts,
+} from '../src/services/sync';
 import { drain, sendOne, type SendPorts } from '../src/services/send';
 import { libraryKey } from '../src/data/libraryKey';
-import { RelayPool } from '../src/net/pool';
+import { CutShort, RelayPool } from '../src/net/pool';
 import { memoryDb } from './sqlite';
 import { WHOLE, relaySockets, type Step } from './relaySocket';
 
@@ -988,6 +990,78 @@ describe('an answer a relay cuts short (net/pool CutShort)', () => {
     w.ports.query = (url, filters) => pool.query(url, filters as never, 1_000);
     return pool;
   }
+
+  /**
+   * A slow link: every answer brings ten events each 400 ms, and the pool lets one take 1,200 ms here, as a weak link
+   * can't bring a page of 500 saves in its minute: a page of 50 is cut after some 30, and one of 20 or fewer is whole.
+   */
+  function slowLink(w: W, drops = (_n: number) => false) {
+    const relay = relaySockets({
+      holds: (url) => w.relays.get(url) ?? [],
+      cap: 50,
+      plan: (url, f, before) => {
+        if (drops(before)) return ['drop'];
+        const n = Math.min(50, (w.relays.get(url) ?? []).filter((e) => matches(e, f as Filter)).length);
+        const steps: Step[] = [];
+        for (let sent = 0; sent < n; sent += 10) steps.push({ send: 10 }, { wait: 400 });
+        return [...steps, 'eose'];
+      },
+    });
+    const pool = new RelayPool({ verify: () => true, signer: async () => null, allowInsecure: true, WebSocket: relay.Socket });
+    const cuts: number[] = [];
+    w.ports.query = (url, filters) => pool.query(url, filters as never, 1_000, 1_200).catch((e: unknown) => {
+      if (e instanceof CutShort) cuts.push(e.events.length);
+      throw e;
+    });
+    return { pool, cuts };
+  }
+
+  test('over a link too slow for a whole page, the cut pages are kept and paged on below: the library comes back in one sync', async () => {
+    const w = world();
+    w.tick(3 * SKEW);
+    for (let i = 0; i < 60; i++) w.publish(await remoteSave(w, h(500 + i), 6000 + i, null), ['ws://op']);
+    const { pool, cuts } = slowLink(w);
+    await syncInbound(w.ports);
+    expect(cuts.length).toBeGreaterThan(0);
+    expect(w.db.get('SELECT COUNT(*) AS n FROM items')).toEqual({ n: 60 });
+    // read through to a whole page, the stream's cursors move as a whole read's do
+    expect(getCursor(w.db, 'ws://op', 'items', w.pk)).not.toBeNull();
+    pool.close();
+  }, 30_000);
+
+  test('a stream the link drops part way keeps what it read, and its cursor, so the next sync reads on', async () => {
+    const w = world();
+    w.tick(3 * SKEW);
+    for (let i = 0; i < 60; i++) w.publish(await remoteSave(w, h(600 + i), 6000 + i, null), ['ws://op']);
+    // the connection goes at each socket's third REQ
+    const { pool } = slowLink(w, (n) => n === 2);
+    await syncInbound(w.ports);
+    const first = w.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM items')!.n;
+    expect(first).toBeGreaterThan(0);
+    expect(first).toBeLessThan(60);
+    expect(getCursor(w.db, 'ws://op', 'items', w.pk)).toBeNull();
+    pool.close();
+    const again = slowLink(w);
+    w.tick(60);
+    await syncInbound(w.ports);
+    expect(w.db.get('SELECT COUNT(*) AS n FROM items')).toEqual({ n: 60 });
+    expect(getCursor(w.db, 'ws://op', 'items', w.pk)).not.toBeNull();
+    again.pool.close();
+  }, 30_000);
+
+  test('a cut answer that didn’t come newest first ends the stream there, with what it brought: nothing below it is skipped', async () => {
+    const w = world();
+    const [older, newer] = [await remoteSave(w, h(700), 6000, null), await remoteSave(w, h(701), 7000, null)];
+    let asked = 0;
+    const query: SyncPorts['query'] = async () => {
+      asked++;
+      throw new CutShort('ws://x', [older, newer], 'no EOSE within 60000 ms');
+    };
+    const got = await pageStream(query, 'ws://x', streamFilter('items', w.pk, null)).catch((e: unknown) => e);
+    expect(got).toBeInstanceOf(StreamCut);
+    expect((got as StreamCut).events.map((e) => e.id).sort()).toEqual([older.id, newer.id].sort());
+    expect(asked).toBe(1);
+  });
 
   test('keeps that relay’s cursor where it was, so the saves beneath the cut arrive at the next sync', async () => {
     const w = world();

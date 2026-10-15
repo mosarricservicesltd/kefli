@@ -60,11 +60,15 @@ export const QUERY_MAX_MS = 60_000;
  * however much was still coming) or the pool's ten seconds ended it, a cut answer moved the inbox's cursor and sync's
  * past the events beneath the cut, which were then never read: against strfry, 428, 131, 189, 150 and 362 of 500 wraps
  * came back as if whole. It counted, too, as a relay answering that a list (C§3.1) or a library key (C§4.3) wasn't there.
+ * events: what came, in the order it came, below which sync pages on when it came newest first (services/sync
+ * pageStream).
  */
 export class CutShort extends Error {
-  constructor(readonly relay: string, readonly received: number, readonly why: string) {
-    super(`${relay} cut its answer short after ${received} events: ${why}`);
+  readonly received: number;
+  constructor(readonly relay: string, readonly events: NostrEvent[], readonly why: string) {
+    super(`${relay} cut its answer short after ${events.length} events: ${why}`);
     this.name = 'CutShort';
+    this.received = events.length;
   }
 }
 
@@ -235,7 +239,7 @@ export class RelayPool {
       await this.authenticate(url, relay);
       got = await answer(relay, filters, quietMs, maxMs);
     }
-    if (!got.eose) throw new CutShort(url, got.events.length, got.why);
+    if (!got.eose) throw new CutShort(url, got.events, got.why);
     return got.events;
   }
 

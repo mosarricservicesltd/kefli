@@ -22,6 +22,7 @@ import { KEEP_COPIES, getSetting } from '../data/settings';
 import { readUserLists, settleUserLists } from './nostrSignIn';
 import { markBacked } from '../data/backup';
 import { TooLarge, open, serverHops } from '../net/http';
+import { CutShort } from '../net/pool';
 import {
   heldServerList, indexerRelays, keepListedRelays, keepListedServers, listServers, recordList, relayEntries, relaysNamed, seedGeneratedLists,
   serversNamed, writeRelays, type DefaultsLike,
@@ -40,7 +41,8 @@ export type SyncPorts = {
   signer: (pubkey: string) => Promise<Signer | null>;
   /**
    * The events matching filters once the relay has sent EOSE; throws when the relay can't be reached or doesn't finish
-   * its answer (net/pool CutShort), so a page is whole or the read fails, and a cursor never moves past a cut.
+   * its answer (net/pool CutShort, carrying what came), so a page is whole or the read fails, and a cursor never moves
+   * past a cut.
    */
   query: (relay: string, filters: Filter[]) => Promise<NostrEvent[]>;
   fetch: typeof fetch;
@@ -77,21 +79,39 @@ export const notYet = (e: { created_at: number }, now: number) => e.created_at >
 const addressOf = (e: NostrEvent) => (e.kind >= 30_000 && e.kind < 40_000 ? `${e.kind}:${e.pubkey}:${e.tags.find((t) => t[0] === 'd')?.[1] ?? ''}` : null);
 
 /**
+ * A stream that ended before its last page: a page couldn't be read, or came cut short with nothing new or out of order
+ * (pageStream). events: what the pages before it, and the cut one, brought, the newest version at each address, which
+ * a sync applies while the stream's cursors stay where they were.
+ */
+export class StreamCut extends Error {
+  constructor(readonly events: NostrEvent[], readonly why: unknown) {
+    super(`stream cut short: ${String((why as Error)?.message ?? why)}`);
+    this.name = 'StreamCut';
+  }
+}
+
+/**
  * A relay's events for base, paged back by until. Of an addressable event, only the newest version read is kept
  * (replaces), which is all any reader of these uses: an archival relay, or a hostile one that kept everything, answered
  * a first read with every version of every save, 30,000 events (57 MB) for 300 saves of 100 versions each, and up to
  * MAX_PAGES answers a relay, all held at once. Every id read is still counted, so paging goes on as before. Given now,
  * an event dated past it by more than SKEW is left out (notYet), so the newest version kept is one that is due. A page
- * the relay cuts short throws here as the query does (net/pool CutShort), rather than passing for an answer: one cut
- * before anything new came was read as the stream's end, and the cursor moved past every event beneath it.
+ * the relay cuts short (net/pool CutShort) is never taken for the stream's end: one cut before anything new came was
+ * read so, and the cursor moved past every event beneath it. Its events are kept, and when they came newest first, as
+ * NIP-01 has a relay send an answer with a limit, so that what it didn't send is no newer than its last, the next page
+ * starts at their oldest: a page of 500 saves, about a megabyte, can't come within the pool's minute below about 130
+ * kbps, and failed whole, every read of the relay asked for the same page again, and a restore over a weak link brought
+ * back nothing. Any other page that isn't whole ends the stream (StreamCut), with what it read.
  */
 export async function pageStream(query: SyncPorts['query'], relay: string, base: Filter, now = Infinity): Promise<NostrEvent[]> {
   const read: StreamRead = { ids: new Set(), kept: new Map() };
   let until: number | undefined;
   for (let i = 0; MAX_PAGES > i; i++) {
-    const page = await query(relay, [{ ...base, limit: PAGE, ...(until === undefined ? {} : { until }) }]);
-    const taken = takePage(read, page, now, until ?? Infinity);
-    if (taken.fresh === 0) break;
+    const page = await pageAt(query, relay, pageFilter(base, until), read);
+    const taken = takePage(read, page.events, now, until ?? Infinity);
+    if (page.whole && taken.fresh === 0) break;
+    // a cut page is paged on below only once it brought something new, and only when it came newest first
+    if (!page.whole && (taken.fresh === 0 || !newestFirst(page.events))) throw new StreamCut([...read.kept.values()], page.why);
     // The next page's until is the oldest seen, inclusive: events sharing that second aren't skipped.
     until = taken.oldest;
   }
@@ -100,6 +120,31 @@ export async function pageStream(query: SyncPorts['query'], relay: string, base:
 
 /** What a stream has read (pageStream): every id, and the newest due version kept at each address. */
 type StreamRead = { ids: Set<string>; kept: Map<string, NostrEvent> };
+
+/** One page asked for: from the newest, or from until down, inclusive. */
+const pageFilter = (base: Filter, until: number | undefined): Filter => (until === undefined ? { ...base, limit: PAGE } : { ...base, limit: PAGE, until });
+
+/** A page as it came: whole, or cut short with some events (net/pool CutShort). */
+type Page = { events: NostrEvent[]; whole: boolean; why?: unknown };
+
+/**
+ * One page of a stream, or a cut one that brought events; anything else (a relay not reached, or one cut with nothing
+ * in it) ends the stream with what it read (StreamCut).
+ */
+async function pageAt(query: SyncPorts['query'], relay: string, filter: Filter, read: StreamRead): Promise<Page> {
+  try {
+    return { events: await query(relay, [filter]), whole: true };
+  } catch (e) {
+    if (e instanceof CutShort && e.events.length) return { events: e.events, whole: false, why: e };
+    throw new StreamCut([...read.kept.values()], e);
+  }
+}
+
+/** Whether a page's events came newest first, each no newer than the one before it. */
+function newestFirst(events: NostrEvent[]): boolean {
+  for (let i = 1; i < events.length; i++) if (events[i].created_at > events[i - 1].created_at) return false;
+  return true;
+}
 
 /** One page taken into what the stream has read: how many of its events were new, and the oldest of them all, or from. */
 function takePage(read: StreamRead, page: NostrEvent[], now: number, from: number): { fresh: number; oldest: number } {
@@ -124,7 +169,8 @@ export function streamFilter(stream: Stream, owner: string, since: number | null
   return since === null ? base : { ...base, since: Math.max(0, since - SKEW) };
 }
 
-type Collected = { relay: string; stream: Stream; events: NostrEvent[] };
+/** One relay's stream as read: whole, or ended part way (StreamCut), whose events apply while its cursors stay. */
+type Collected = { relay: string; stream: Stream; events: NostrEvent[]; whole: boolean };
 
 /** The oldest of the relays' saves cursors, or null while any relay's saves are read from the start. */
 function savesFloor(p: SyncPorts, owner: string, relays: string[]): number | null {
@@ -151,13 +197,14 @@ async function collect(p: SyncPorts, owner: string): Promise<Collected[]> {
   const jobs = relays.flatMap((relay) => (['items', 'deletions'] as Stream[]).map((stream) => ({ relay, stream })));
   const floor = savesFloor(p, owner, relays);
   const results = await Promise.all(
-    jobs.map(async ({ relay, stream }) => {
+    jobs.map(async ({ relay, stream }): Promise<Collected | null> => {
       try {
         const since = readsFrom(p, owner, relay, stream, floor);
         const events = await pageStream(p.query, relay, streamFilter(stream, owner, since), p.now());
-        return { relay, stream, events };
-      } catch {
-        return null; // unreachable, or an answer cut short: its cursor stays, and the next trigger asks again
+        return { relay, stream, events, whole: true };
+      } catch (e) {
+        // unreachable, or ended part way: its cursor stays, and the next trigger asks again; what it read applies
+        return e instanceof StreamCut && e.events.length ? { relay, stream, events: e.events, whole: false } : null;
       }
     }),
   );
@@ -463,9 +510,10 @@ export async function syncOwner(p: SyncPorts, owner: string, signer: Signer): Pr
   const startedAt = p.now();
   const collected = await collect(p, owner);
   const { items, deletions, waiting } = await applyAll(p, owner, signer, collected);
-  if (!waiting) for (const c of collected) setCursor(p.db, startedAt, c.relay, c.stream, owner, startedAt);
+  if (!waiting) for (const c of collected) if (c.whole) setCursor(p.db, startedAt, c.relay, c.stream, owner, startedAt);
   // a save seen on a relay the operator doesn't run is backed up there (FD 93)
-  const operator = (await p.defaults()).operator.relay;
+  const d = await p.defaults();
+  const operator = d.operator.relay;
   for (const c of collected) if (c.stream === 'items' && c.relay !== operator) for (const e of c.events) markBacked(p.db, e.id);
   let texts = 0;
   let missing = 0;
