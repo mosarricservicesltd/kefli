@@ -1,7 +1,7 @@
 // What the capture script hands the background (contract 4.4's save request, before the HTML is encrypted), and the
 // rules it applies that need no page: the address, the canonical, the guard and the cap.
 import { ownCanonical, withoutUserInfo } from '../../../packages/protocol/src/normalise';
-import { CANONICAL_MAX } from '../../../packages/protocol/src/pairing';
+import { CANONICAL_MAX, SAVE_REQUEST_MAX_BYTES } from '../../../packages/protocol/src/pairing';
 import { countWords } from '../../../packages/protocol/src/projection';
 
 export interface Captured {
@@ -46,6 +46,18 @@ export function pageUrl(href: string): string {
   const u = new URL(href);
   u.hash = '';
   return withoutUserInfo(u.href);
+}
+
+/**
+ * The shortest address no save request can carry, in UTF-16 code units (contract 4.4, F39): a wrap has to stay under
+ * SAVE_REQUEST_MAX_BYTES, NIP-44's two layers of base64 make it more than 16/9 of the rumor inside, and the rumor holds
+ * the address at a byte or more a character. So 4,608 characters can never go, whatever the request leaves out.
+ */
+export const ADDRESS_UNWRAPPABLE = Math.ceil((SAVE_REQUEST_MAX_BYTES * 9) / 16);
+
+/** Whether no save request could carry the address (ADDRESS_UNWRAPPABLE): its save is refused before anything is read. */
+export function unwrappableAddress(url: string): boolean {
+  return url.length >= ADDRESS_UNWRAPPABLE;
 }
 
 /**

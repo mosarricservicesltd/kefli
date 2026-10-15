@@ -4,7 +4,7 @@
 // request again without its HTML (v1.12), and a wrap that waited is made again first, so the phone's look at its inbox
 // finds it. Network calls come through Net, so the tests can play the relay and the server.
 import { base64 } from '@scure/base';
-import { bytesToHex } from '@noble/hashes/utils.js';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { finalizeEvent } from 'nostr-tools/pure';
 import { uploadBlob, deleteBlob, type BlossomOutcome } from '../../../packages/protocol/src/blossom';
 import { EventTooLargeError } from '../../../packages/protocol/src/events';
@@ -13,7 +13,7 @@ import { SAVE_REQUEST_MAX_BYTES, wrapSaveRequest, type SaveRequest } from '../..
 import type { CryptoPort } from '../../../packages/protocol/src/ports';
 import type { LocalSigner, NostrEvent } from '../../../packages/protocol/src/signer';
 import { encryptText } from '../../../packages/protocol/src/text';
-import type { Captured } from './captured';
+import { unwrappableAddress, type Captured } from './captured';
 import type { Defaults } from './defaults';
 import type { Pairing } from './store';
 
@@ -169,24 +169,62 @@ function pendingOf(wrap: NostrEvent, sealed: string, request: SaveRequest, enc: 
 /**
  * A field longer than a whole wrap's limit, which could never go in one: it is left out before the first try rather than
  * after a try for each field spared before it. A page's 1 MB title cost five wraps of a megabyte each, seven seconds of
- * the worker's time, and a 2 MB link address eight, fourteen seconds, before it was refused.
+ * the worker's time. The address, which can't be left out, is refused instead (addressFits).
  */
 const unwrappable = (s: string | null) => s !== null && s.length > SAVE_REQUEST_MAX_BYTES;
 const fitting = (s: string | null) => (unwrappable(s) ? null : s);
 
 /**
+ * An address that takes at most this much of a rumor (rumorBytes) always fits a wrap with its token alone: one of 2,576
+ * bytes does, whatever its characters, and one of 2,577 doesn't. Every ordinary address takes less, and goes to its
+ * wrap without the try alone (addressFits).
+ */
+export const ADDRESS_SURE_FIT_BYTES = 2_048;
+
+/** What an address takes of the rumor a wrap seals: its UTF-8 bytes, escaped in the request's JSON and again in the rumor's. */
+export function rumorBytes(url: string): number {
+  return utf8ToBytes(JSON.stringify(JSON.stringify(url))).length;
+}
+
+/** Whether a wrap can hold the request: the wrap is made and let go, and nothing is sent. */
+async function wraps(request: SaveRequest, uuid: string, ctx: SaveContext): Promise<boolean> {
+  try {
+    await wrapSaveRequest(ctx.device, ctx.pairing.user_pubkey, uuid, request, ctx.now);
+    return true;
+  } catch (e) {
+    if (e instanceof EventTooLargeError) return false;
+    throw e;
+  }
+}
+
+/**
+ * Whether any request can carry the address (F39), known before the HTML is encrypted or a wrap tried for each field the
+ * request could spare: by its length for one no request can carry (ADDRESS_UNWRAPPABLE), and for one taking more of a
+ * wrap than any ordinary address by wrapping the request the spare loop would end with, the address and token alone.
+ * An address of 2,600 characters was refused only after its 2 MB of HTML was encrypted and eight wraps were tried.
+ */
+async function addressFits(bare: SaveRequest, uuid: string, ctx: SaveContext): Promise<boolean> {
+  if (unwrappableAddress(bare.url)) return false;
+  if (rumorBytes(bare.url) <= ADDRESS_SURE_FIT_BYTES) return true;
+  return wraps(bare, uuid, ctx);
+}
+
+/**
  * The request and its wrap, the HTML encrypted with a fresh key; nothing is sent yet. A wrap has to stay under 8 KB, so a
- * page with a long address or hero loses what it can spare until it fits; one that still doesn't is AddressTooLongError.
+ * page with a long address or hero loses what it can spare until it fits; one whose address can't fit even alone is
+ * AddressTooLongError, at once.
  */
 export async function prepare(c: Captured, ctx: SaveContext): Promise<Prepared> {
-  if (unwrappable(c.url)) throw new AddressTooLongError();
+  const uuid = bytesToHex(ctx.crypto.randomBytes(16));
+  const bare: SaveRequest = {
+    v: 1, url: c.url, canonical: null, title: null, site: null, byline: null, lang: null, hero: null, captured_at: ctx.now, token: ctx.pairing.token, html: null,
+  };
+  if (!(await addressFits(bare, uuid, ctx))) throw new AddressTooLongError();
   const enc = c.html === null ? null : await encryptText(c.html, ctx.crypto);
   let request: SaveRequest = {
-    v: 1, url: c.url, canonical: fitting(c.canonical), title: fitting(c.title), site: fitting(c.site), byline: fitting(c.byline), lang: fitting(c.lang), hero: fitting(c.hero),
-    captured_at: ctx.now, token: ctx.pairing.token,
+    ...bare, canonical: fitting(c.canonical), title: fitting(c.title), site: fitting(c.site), byline: fitting(c.byline), lang: fitting(c.lang), hero: fitting(c.hero),
     html: enc ? { ...enc.text, server: ctx.defaults.operator.blossom } : null,
   };
-  const uuid = bytesToHex(ctx.crypto.randomBytes(16));
   for (let spared = 0; ; spared++) {
     try {
       const { wrap, wrapKey } = await wrapSaveRequest(ctx.device, ctx.pairing.user_pubkey, uuid, request, ctx.now);
