@@ -95,11 +95,13 @@ CREATE TABLE IF NOT EXISTS used_auth (
   id    TEXT PRIMARY KEY,
   until INTEGER NOT NULL
 );
--- Keys no longer registered or authorised: the relay's sweep drops wraps addressed to them (contract 3.2).
+-- Keys no longer registered or authorised: the relay's sweep drops wraps addressed to them (contract 3.2). The sweep
+-- and the write policy's prune each ask only for the keys whose time came since they last ran, by at.
 CREATE TABLE IF NOT EXISTS gone (
   pubkey TEXT PRIMARY KEY,
   at     INTEGER NOT NULL
 );
+CREATE INDEX IF NOT EXISTS gone_at ON gone(at);
 -- One row per upload that added a blob to the disk, against the library it counts for: what DailyLimit counts (contract
 -- 5), its size the blob's Cost. A blob the server already stores, for anyone, adds no row, and rows go only once a day
 -- old, so deleting a blob gives none of the day back. No hash is kept.
@@ -304,19 +306,22 @@ func (s *Store) DeviceUser(ctx context.Context, device string) (string, bool, er
 	return user, err == nil, err
 }
 
-// Gone lists the keys removed since a time, for the relay's sweep.
+// Gone lists the keys removed since a time.
 func (s *Store) Gone(ctx context.Context, since int64) ([]string, error) {
 	return s.gone(ctx, `SELECT pubkey FROM gone WHERE at >= ?`, since)
 }
 
-// GoneFor lists the keys removed at least a while ago: the relay's sweep drops their own events after 30 days (contract
-// 3.2) and the wraps addressed to them at once.
-func (s *Store) GoneFor(ctx context.Context, age time.Duration) ([]string, error) {
-	return s.gone(ctx, `SELECT pubkey FROM gone WHERE at <= ? ORDER BY pubkey`, s.Now().Add(-age).Unix())
+// GoneFor lists the keys removed at least age ago whose age ran out at or after since, a Unix time (0 for every one):
+// the relay's sweep drops the wraps addressed to a key at once and its own events once it has been gone 30 days
+// (contract 3.2), each for the keys whose time came since its last run, where asking for all of them each night read
+// the whole 60 days' list and swept again for every key on it (F45).
+func (s *Store) GoneFor(ctx context.Context, age time.Duration, since int64) ([]string, error) {
+	secs := int64(age / time.Second)
+	return s.gone(ctx, `SELECT pubkey FROM gone WHERE at <= ? AND at >= ? ORDER BY pubkey`, s.unix()-secs, since-secs)
 }
 
-func (s *Store) gone(ctx context.Context, query string, arg int64) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, query, arg)
+func (s *Store) gone(ctx context.Context, query string, args ...any) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
