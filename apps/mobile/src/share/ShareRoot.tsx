@@ -11,6 +11,8 @@
 // - Already saved and unread (G2): nothing changes; Done and Read now, no Undo.
 // - Offline, or X not answering (G3): saved and waiting; Undo and Done, no countdown.
 // - Not a link; an X post with no article: nothing saved; OK. Checking an X post: Cancel.
+// - That didn't save (Try sharing it again): the save threw, its spool kept for the start-up pickup, or the spool was
+//   gone or unreadable as the sheet opened (pickup.ts sheetLink); OK.
 // - Undo: "Removed from Kefli" for 1.5 s, then back to the host app.
 //
 // The spool goes once the save is written, so a process that dies before then leaves it for the start-up pickup
