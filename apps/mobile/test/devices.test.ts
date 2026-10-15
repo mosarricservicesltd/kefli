@@ -15,7 +15,9 @@ import { connectBrowser, lookupCode, readScan, type ConnectPorts } from '../src/
 import { drain, type RelayAnswer, type SendPorts } from '../src/services/send';
 import { syncInbound, type SyncPorts } from '../src/services/sync';
 import type { Defaults } from '../src/services/config';
+import { SERVER_TIMEOUT_MS } from '../src/net/http';
 import { memoryDb } from './sqlite';
+import { inward, silent, watch } from './inward';
 
 const D: Defaults = {
   v: 1, operator: { relay: 'ws://op', blossom: 'http://blossom', api: 'http://api' },
@@ -141,6 +143,35 @@ describe('connected browsers (mobile spec 5.5, contract 4.4 and 4.9)', () => {
     expect(await lookupCode(w.ports, 'ABCD-EFGH')).toEqual({ problem: 'offline' });
     expect(w.calls[0]).toBe('POST http://api/register');
   });
+
+  test("the API sending a typed code's lookup into the phone's network: nothing is asked there, and it reads as offline", async () => {
+    const w = world();
+    const net = inward(w.ports.fetch, (_m, url) => url.includes('/pair-offers/'));
+    // followed as OkHttp followed it, whatever answered at 192.168.1.1 had the lookup and the NIP-98 header with it
+    expect(await lookupCode({ ...w.ports, fetch: net.f }, 'ABCD-EFGH')).toEqual({ problem: 'offline' });
+    expect(net.asked).toEqual([]);
+  }, 20_000);
+
+  test('an API that takes the lookup and never answers is let go at its deadline: offline, where Connect waited for good', async () => {
+    const w = world();
+    let asked = (): void => undefined;
+    const started = new Promise<void>((ok) => (asked = ok));
+    const stalls = (async (url: string, init: RequestInit) => {
+      if (!url.includes('/pair-offers/')) return w.ports.fetch(url, init);
+      asked();
+      return silent(url, init);
+    }) as typeof fetch;
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    try {
+      const run = watch(lookupCode({ ...w.ports, fetch: stalls }, 'ABCD-EFGH'));
+      // the code is stretched first (scrypt), in real time
+      await started;
+      await jest.advanceTimersByTimeAsync(SERVER_TIMEOUT_MS + 1_000);
+      expect(run).toMatchObject({ settled: true, value: { problem: 'offline' } });
+    } finally {
+      jest.useRealTimers();
+    }
+  }, 20_000);
 
   test('Connect posts the device, wraps the pair-ack to it, and republishes the record', async () => {
     const w = world();

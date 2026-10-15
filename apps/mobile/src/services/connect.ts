@@ -8,6 +8,7 @@ import { checkOffer, derivePairCode, httpAuth, openOffer, readPairCode, type Cry
 import type { SqlDb } from '../data/db';
 import { cancelConnect, connectState, queueConnect } from '../data/devices';
 import { registerFirst } from '../data/saves';
+import { SERVER_TIMEOUT_MS, serverFetch, serverHops } from '../net/http';
 
 export type ConnectPorts = {
   db: SqlDb;
@@ -20,7 +21,19 @@ export type ConnectPorts = {
   runOutbox: () => Promise<unknown>;
   /** BIP-340 verify for the offer's proof; the phone passes its native one, the tests noble's. */
   verify?: SecpPort['verify'];
+  /** The local stack's build (services/config.ts LOCAL_STACK), whose API a redirect may reach on loopback. */
+  localStack?: boolean;
 };
+
+/**
+ * The fetch for Kefli's API from these ports (net/http serverFetch): each redirect followed a hop at a time, never into
+ * the phone's own network (on the local stack, loopback too), and the whole answer had within the API's 15 s; one that
+ * goes past either reads as the API not answering. Left to OkHttp, a redirect handed the lookup and its NIP-98 header
+ * to whatever answered at 192.168.1.1, and an API that never answered held Connect, or a phone's pairing, for good.
+ */
+export function apiFetch(p: Pick<ConnectPorts, 'fetch' | 'localStack'>): typeof fetch {
+  return serverFetch(p.fetch, { hops: serverHops(p.localStack === true), timeoutMs: SERVER_TIMEOUT_MS });
+}
 
 type Operator = { relay: string; api: string };
 
@@ -65,7 +78,7 @@ export async function lookupCode(p: ConnectPorts, typed: string): Promise<OfferR
   const url = `${d.operator.api}/pair-offers/${lookup}`;
   let res: Response;
   try {
-    res = await p.fetch(url, { method: 'GET', headers: { Authorization: await httpAuth(signer, url, 'GET', null, p.crypto) } });
+    res = await apiFetch(p)(url, { method: 'GET', headers: { Authorization: await httpAuth(signer, url, 'GET', null, p.crypto) } });
   } catch {
     return { problem: 'offline' };
   }
