@@ -532,13 +532,18 @@ func (s *Server) makeDir(dir string) error {
 	return s.syncDir(parent)
 }
 
-// syncDir syncs a folder, so the names made in it since, a blob's or a folder's, outlive a power cut.
+// syncDir syncs a folder, so the names made in it since, a blob's or a folder's, outlive a power cut. A filesystem that
+// can't sync a folder at all answers EINVAL or ENOTSUP, as some network and FUSE ones do, and its uploads go ahead, as
+// SQLite's writes do where a folder won't sync: refused, every text would wait on the phones for good.
 func (s *Server) syncDir(dir string) error {
 	d, err := os.Open(dir)
 	if err != nil {
 		return err
 	}
 	err = s.syncFile(d)
+	if errors.Is(err, syscall.EINVAL) || errors.Is(err, syscall.ENOTSUP) {
+		err = nil
+	}
 	if cerr := d.Close(); err == nil {
 		err = cerr
 	}

@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -71,7 +72,7 @@ func (w *syncWatch) install(s *Server, st *store.Store) {
 		held, _ := st.Stored(context.Background(), w.sha)
 		w.seen = append(w.seen, syncSeen{f.Name(), got, err == nil, held})
 		if w.fail != nil && w.fail(f.Name()) {
-			return errors.New("input/output error")
+			return &os.PathError{Op: "sync", Path: f.Name(), Err: syscall.EIO}
 		}
 		return f.Sync()
 	}
@@ -206,5 +207,33 @@ func TestASyncThatFailsLeavesNothing(t *testing.T) {
 	}
 	if got, err := os.ReadFile(s.path(w.sha)); err != nil || !bytes.Equal(got, blob) {
 		t.Fatalf("the blob sent again: %d bytes, %v", len(got), err)
+	}
+}
+
+// A filesystem that can't sync a folder at all answers the folder's sync EINVAL or ENOTSUP, as some network and FUSE
+// ones do: refusing every upload there would keep every text on the phones, so the upload goes ahead, its file synced
+// all the same. Any other failure of a folder's sync is still a 500 (TestASyncThatFailsLeavesNothing).
+func TestAFolderThatCantBeSyncedStillTakesUploads(t *testing.T) {
+	s, st, clock, mux := testServer(t)
+	user := newSigner()
+	if err := st.Register(context.Background(), user.pk); err != nil {
+		t.Fatal(err)
+	}
+	for i, answer := range []error{syscall.EINVAL, syscall.ENOTSUP} {
+		files := 0
+		s.syncFile = func(f *os.File) error {
+			if info, err := f.Stat(); err == nil && info.IsDir() {
+				return &os.PathError{Op: "sync", Path: f.Name(), Err: answer}
+			}
+			files++
+			return f.Sync()
+		}
+		blob := []byte(fmt.Sprintf("a text on a filesystem whose folders can't be synced, %d", i))
+		if rec := putBlob(t, mux, user, blob, *clock); rec.Code != http.StatusOK {
+			t.Fatalf("a folder answering %v: %d %s", answer, rec.Code, rec.Body)
+		}
+		if got, err := os.ReadFile(s.path(hashOf(blob))); err != nil || !bytes.Equal(got, blob) || files != 1 {
+			t.Fatalf("a folder answering %v: %d bytes on the disk, %d files synced, %v", answer, len(got), files, err)
+		}
 	}
 }
