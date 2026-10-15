@@ -74,10 +74,11 @@ export function renderAnswer(r: { ok: true; url: string; html: string } | { ok: 
 }
 
 /**
- * The parser WebView's renderer was killed by the system (for memory, often with Kefli in the background) or never
- * loaded the bundle: nothing about the page is known, so it waits and is tried again as a page that timed out is.
+ * The parser WebView's word (kefli-parser) for a renderer the system killed (for memory, often with Kefli in the
+ * background) or one that never loaded the bundle: nothing about the page is known, so it waits and is tried again as
+ * a page that timed out is. The inbox reads a browser's capture the same way (inbox.ts fromBrowser).
  */
-const RENDERER_GONE = 'renderer_gone';
+export const RENDERER_GONE = 'renderer_gone';
 
 /**
  * Why a save's page can't be read. offline: it never answered for as long as a save waits for its page (pending.ts,

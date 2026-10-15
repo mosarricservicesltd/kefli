@@ -1,5 +1,5 @@
-// An article read plain (mobile spec 6.7), for Markdown past what the CommonMark parse and the spoken projection
-// take in linear time (./limits), or that overflows the stack all the same: all its text, without inline styling.
+// An article read plain (mobile spec 6.7), for Markdown past what the CommonMark parse takes in linear time and the
+// Reader lays out (./limits), or that throws all the same: all its text, without inline styling.
 // Paragraphs run between blank lines, and a list item starts one; # headings and fenced code keep their kind, code
 // as written; a line's indentation and quote markers go; a backslash escape reads as the character it escapes; a
 // line that is only an image stays an image. One pass over the lines with nothing that backtracks, so its time is

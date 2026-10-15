@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { LocalSigner, SAVE_REQUEST_MAX_BYTES, encryptText, giftWrap, itemHash, makeRumor, wrapSaveRequest, type NostrEvent, type SaveRequest } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import { finalizeEvent, generateSecretKey } from 'nostr-tools/pure';
@@ -13,9 +15,9 @@ import { enqueue, release } from '../src/data/outbox';
 import { pendingParses } from '../src/data/pending';
 import { removeItem } from '../src/data/sync';
 import {
-  INBOX_DEEP_EVERY, INBOX_MAX_BYTES, INBOX_TIMEOUT_MS, INBOX_UNWRAPS, drainInbox, judge, readBlob, unjudged, type InboxPorts,
+  INBOX_DEEP_EVERY, INBOX_MAX_BYTES, INBOX_TIMEOUT_MS, INBOX_UNWRAPS, drainInbox, fromBrowser, judge, readBlob, unjudged, type InboxPorts,
 } from '../src/services/inbox';
-import { FIELD_MAX, GUARD_WORDS, TEXT_MAX_BYTES, type ParserResult } from '../src/services/page';
+import { FIELD_MAX, GUARD_WORDS, RENDERER_GONE, TEXT_MAX_BYTES, parseHtml, type ParserResult } from '../src/services/page';
 import * as blocks from '../src/reader/blocks';
 import { sendOne, type SendPorts } from '../src/services/send';
 import type { Filter } from '../src/services/sync';
@@ -1396,6 +1398,16 @@ describe('the browser’s HTML takes the guards a parsed page’s text takes (C�
     expect(pendingParses(w.db, w.owner).map((p) => p.url)).toEqual(['https://example.com/a']);
     expect(w.ops()).toContain('delete_wrap');
     expect(await drainInbox(w.ports, w.owner)).toEqual({});
+  });
+
+  test('a gone renderer is one word, page.ts’s, which the native parser sends and a capture and a page read alike', async () => {
+    // the inbox kept a copy of its own, so a change to either left the other reading a gone renderer as a failed parse
+    const gone = { ok: false, reason: RENDERER_GONE } as const;
+    expect(await fromBrowser({ markdown: async () => gone }, world().request(), '<p>x</p>')).toEqual({ kind: 'offline', timedOut: true });
+    expect(await parseHtml({ parse: async () => gone }, new Uint8Array([60]), 'text/html', 'https://example.com/a')).toEqual({ kind: 'offline', timedOut: true });
+    const parser = readFileSync(join(__dirname, '..', 'modules', 'kefli-parser', 'android', 'src', 'main', 'java', 'app', 'kefli', 'parser', 'Parser.kt'), 'utf8');
+    expect(parser).toContain(`"${RENDERER_GONE}"`);
+    expect(readFileSync(join(__dirname, '..', 'src', 'services', 'inbox.ts'), 'utf8')).not.toContain(`'${RENDERER_GONE}'`);
   });
 
   test('once the renderer has gone, the drain’s other captures wait for the next drain unread, and arrive once it is back', async () => {
