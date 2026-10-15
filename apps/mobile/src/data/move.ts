@@ -85,23 +85,26 @@ function columns(db: SqlDb): string[] {
 export type Copied = 'copied' | 'kept' | 'unarchived';
 
 /**
- * The mirror holding S's blob of a save (C§4.8 step 3, v1.12), which T's copy names while the operator refuses T's
- * upload, so a text backed up under S stays backed up under T: the one this phone's upload under S reached, or, for a
- * text another phone uploaded, the first server other than the operator that S's newest event names. Null when no
- * mirror holds it, as for a text that waited on the phone under S too.
+ * The mirror that may hold S's blob of a save (C§4.8 step 3, v1.12), which T's copy names while the operator refuses
+ * T's upload, so a text backed up under S stays backed up under T: the one this phone's upload under S reached (seen),
+ * or, for a text another phone uploaded, the first server other than the operator that S's newest event names, which
+ * the caller asks before taking it (services/move mirrorHolding). Null when no mirror holds it, as for a text that
+ * waited on the phone under S too.
  */
-function sourceMirror(db: SqlDb, from: string, hash: string, operator: string): string | null {
+export function sourceMirror(db: SqlDb, from: string, hash: string, operator: string): { url: string; seen: boolean } | null {
   const s = db.get<{ text_sha256: string | null; text_servers: string | null }>('SELECT text_sha256, text_servers FROM items WHERE owner = ? AND hash = ?', from, hash);
   if (!s?.text_sha256) return null;
   const mine = blobRow(db, from, s.text_sha256);
-  if (mine) return mine.mirror_at && mine.mirror_url ? mine.mirror_url : null;
+  if (mine) return mine.mirror_at && mine.mirror_url ? { url: mine.mirror_url, seen: true } : null;
   const named = s.text_servers ? (JSON.parse(s.text_servers) as string[]) : [];
-  return named.find((u) => !sameUrl(u, operator)) ?? null;
+  const url = named.find((u) => !sameUrl(u, operator));
+  return url ? { url, seen: false } : null;
 }
 
 /**
  * One save from S to T (C§4.8 step 3). blob is S's staged ciphertext, or null for a save without text (or one whose
- * blob T must fetch first, which the caller stages); T's blob records the mirror that holds S's, if one does. A browser
+ * blob T must fetch first, which the caller stages), with the mirror that holds S's blob, if one is known to (blob.mirror,
+ * services/move mirrorHolding), which T's blob records. A browser
  * save still waiting to read its capture waits on a wrap in S's inbox, which T never reads and whose capture S's last
  * drain reads into S's row alone, so T's copy fetches its page itself, as one whose capture is gone does (giveUpBlob):
  * copied as it was, it stayed at Getting the text… for good. Returns what happened.
@@ -117,7 +120,6 @@ export function copySave(db: SqlDb, now: number, job: MoveJob, hash: string, blo
       enqueue(db, now, { op: 'publish_item', signer: job.to, subject: hash, targets: writeRelays(db, job.to) });
       return 'unarchived';
     }
-    const mirror = blob ? sourceMirror(db, job.from, hash, t.blossom) : null;
     const cols = columns(db);
     const r = db.run(
       `INSERT INTO items (owner, ${cols.join(', ')}, modified_at, dirty, published) SELECT ?, ${cols.join(', ')}, ?, 1, 0 FROM items WHERE id = ?`,
@@ -125,7 +127,7 @@ export function copySave(db: SqlDb, now: number, job: MoveJob, hash: string, blo
     );
     db.run('INSERT OR IGNORE INTO listen_history (item, last_played_at) SELECT ?, last_played_at FROM listen_history WHERE item = ?', r.lastInsertRowId, s.id);
     giveUpBlob(db, job.to, hash);
-    queueSends(db, now, job.to, hash, blob && { ...blob, mirror }, t, false, null);
+    queueSends(db, now, job.to, hash, blob, t, false, null);
     return 'copied';
   });
 }

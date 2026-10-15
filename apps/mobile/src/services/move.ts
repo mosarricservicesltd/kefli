@@ -18,7 +18,7 @@ import { enqueue } from '../data/outbox';
 import { itemAddresses, newestVersion } from '../data/libraryKey';
 import { listServers, writeRelays } from '../data/lists';
 import { indexText } from '../data/sync';
-import { carryChanges, copySave, moveJob, newerInEither, retireLocal, saveMove, sourceMark, sourceSaves, type MoveJob } from '../data/move';
+import { carryChanges, copySave, moveJob, newerInEither, retireLocal, saveMove, sourceMark, sourceMirror, sourceSaves, type MoveJob } from '../data/move';
 import type { SaveTargets, StagedBlob } from '../data/saves';
 import { SERVER_TIMEOUT_MS, TimedOut, apiFetch, serverFetch, serverHops } from '../net/http';
 import { registered } from './connect';
@@ -125,6 +125,30 @@ export async function stagedBlob(p: MovePorts, from: string, hash: string): Prom
 }
 
 /**
+ * The mirror that holds S's blob of a save, for T's copy to name (data/move sourceMirror): the one this phone's upload
+ * under S reached, or the one S's event names once it answers a HEAD for the blob (through the hops, within 15 s).
+ * Another phone's event names its mirror as soon as the operator holds the text, before the mirror's copy has landed,
+ * as when that copy keeps failing with 5xx: taken on its word, T's copy named a mirror that held nothing and counted as
+ * backed up, and S's account deletion then took the operator's copy, leaving the text on this phone alone. Null when
+ * none is known to hold it.
+ */
+async function mirrorHolding(p: MovePorts, from: string, hash: string, operator: string, sha: string): Promise<string | null> {
+  const m = sourceMirror(p.db, from, hash, operator);
+  if (!m || m.seen) return m?.url ?? null;
+  try {
+    const res = await toServer(p, SERVER_TIMEOUT_MS)(`${withoutTrailingSlashes(m.url)}/${sha}`, { method: 'HEAD' });
+    return res.ok ? m.url : null;
+  } catch {
+    return null;
+  }
+}
+
+/** S's blob for T's copy, with the mirror that holds it (mirrorHolding); null for a save without text. */
+async function withMirror(p: MovePorts, from: string, hash: string, operator: string, blob: StagedBlob | null): Promise<StagedBlob | null> {
+  return blob && { ...blob, mirror: await mirrorHolding(p, from, hash, operator, blob.sha256) };
+}
+
+/**
  * RULED: a text no server has (and the phone never staged) can't be owned by T, so its save is copied without
  * text, as a sync leaves a missing blob: the Reader says it couldn't get the text. Unreachable servers wait instead,
  * and so does a server too slow to send the text in its time (stagedBlob's 'slow').
@@ -145,7 +169,8 @@ async function copyAll(p: MovePorts, job: MoveJob): Promise<boolean> {
       blob = null;
     }
     job.marks[hash] = sourceMark(p.db, job.from, hash);
-    if (copySave(p.db, p.now(), job, hash, blob, t) === 'copied') indexCopy(p, job.to, hash);
+    const copy = await withMirror(p, job.from, hash, t.blossom, blob);
+    if (copySave(p.db, p.now(), job, hash, copy, t) === 'copied') indexCopy(p, job.to, hash);
     job.moved.push(hash);
     saveMove(p.db, p.now(), job);
     p.report?.(job.moved.length, total);

@@ -39,7 +39,11 @@ function matches(e: NostrEvent, f: Filter): boolean {
   return true;
 }
 
-function world(o: { down?: Set<string>; accountStatus?: number; refuse?: (author: string) => boolean; dayUsed?: (author: string) => boolean; switch?: boolean } = {}) {
+function world(o: {
+  down?: Set<string>; accountStatus?: number; refuse?: (author: string) => boolean; dayUsed?: (author: string) => boolean; switch?: boolean;
+  /** Whether a mirror holds a blob, as its HEAD answers; every one does when left out. */
+  mirrorHas?: (mirror: string, sha: string) => boolean;
+} = {}) {
   const db = memoryDb();
   migrate(db);
   const S = new LocalSigner(nodeCrypto.randomBytes(32));
@@ -81,6 +85,7 @@ function world(o: { down?: Set<string>; accountStatus?: number; refuse?: (author
     if (url.endsWith('/mirror')) return new Response(JSON.stringify({ sha256: String(JSON.parse(String(init.body)).url).split('/').pop() }), { status: 200 });
     if (url.endsWith('/account')) return new Response('{}', { status: o.accountStatus ?? 200 });
     if (url.endsWith('/devices') && method === 'POST') devicePosts.push({ author: authorOf(init), body: JSON.parse(String(init.body)) });
+    if (method === 'HEAD' && o.mirrorHas && host !== D.operator.blossom) return new Response('', { status: o.mirrorHas(host, sha) ? 200 : 404 });
     if (method === 'GET' && blossom.has(sha)) return new Response(blossom.get(sha)!.bytes as never, { status: 200 });
     if (method === 'GET' || method === 'HEAD') return new Response('', { status: method === 'GET' && /^[0-9a-f]{64}$/.test(sha) ? 404 : 200 });
     return new Response('{}', { status: 200 });
@@ -626,6 +631,26 @@ describe('The move (contract 4.8, mobile spec 4.10)', () => {
       }
       expect(rowsOf(w, T).map((r) => r.hash)).toEqual([h(1), h(2)]);
     }
+  });
+
+  test("a text another phone uploaded, whose mirror holds nothing yet: T's copy names no mirror, and the text counts as not backed up", async () => {
+    let refused = '';
+    const w = world({ refuse: (author) => author === refused, mirrorHas: () => false });
+    refused = w.T.pubkey();
+    const T = w.T.pubkey();
+    const md = normaliseMarkdown('# From another phone\n\nWords.');
+    const enc = await encryptText(md, nodeCrypto);
+    // the other phone's upload reached the operator, and its event named the mirror, whose copy kept failing with 5xx
+    w.blossom.set(enc.text.sha256, { bytes: enc.blob, owners: new Set(['another']) });
+    w.db.run(
+      `INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, text_sha256, text_key, text_nonce, text_hash, text_servers, words)
+       VALUES (?, ?, 'https://e.com/9', 5, 'unread', 'cached', 'sync', ?, ?, ?, ?, ?, 4)`,
+      w.S.pubkey(), h(9), enc.text.sha256, enc.text.key, enc.text.nonce, textHash(md, nodeCrypto), JSON.stringify(['http://blossom', 'http://m1']),
+    );
+    expect(await runMove(w.p)).toBe('done');
+    expect((await tCopy(w, h(9))).text).toBeNull();
+    expect(w.db.get('SELECT mirror_at, mirror_url FROM blobs')).toEqual({ mirror_at: null, mirror_url: null });
+    expect(notBackedUp(w.db, T)).toBe(1);
   });
 
   test('a switch puts T beside S as the target, its lists settled, and queues the move', () => {
