@@ -86,27 +86,35 @@ const addressOf = (e: NostrEvent) => (e.kind >= 30_000 && e.kind < 40_000 ? `${e
  * before anything new came was read as the stream's end, and the cursor moved past every event beneath it.
  */
 export async function pageStream(query: SyncPorts['query'], relay: string, base: Filter, now = Infinity): Promise<NostrEvent[]> {
-  const ids = new Set<string>();
-  const kept = new Map<string, NostrEvent>();
+  const read: StreamRead = { ids: new Set(), kept: new Map() };
   let until: number | undefined;
   for (let i = 0; MAX_PAGES > i; i++) {
     const page = await query(relay, [{ ...base, limit: PAGE, ...(until === undefined ? {} : { until }) }]);
-    let fresh = 0;
-    let oldest = until ?? Infinity;
-    for (const e of page) {
-      oldest = Math.min(oldest, e.created_at);
-      if (ids.has(e.id)) continue;
-      ids.add(e.id);
-      fresh++;
-      const at = addressOf(e) ?? e.id;
-      const held = kept.get(at);
-      if (!notYet(e, now) && (!held || replaces(e, held))) kept.set(at, e);
-    }
-    if (fresh === 0) break;
+    const taken = takePage(read, page, now, until ?? Infinity);
+    if (taken.fresh === 0) break;
     // The next page's until is the oldest seen, inclusive: events sharing that second aren't skipped.
-    until = oldest;
+    until = taken.oldest;
   }
-  return [...kept.values()];
+  return [...read.kept.values()];
+}
+
+/** What a stream has read (pageStream): every id, and the newest due version kept at each address. */
+type StreamRead = { ids: Set<string>; kept: Map<string, NostrEvent> };
+
+/** One page taken into what the stream has read: how many of its events were new, and the oldest of them all, or from. */
+function takePage(read: StreamRead, page: NostrEvent[], now: number, from: number): { fresh: number; oldest: number } {
+  let fresh = 0;
+  let oldest = from;
+  for (const e of page) {
+    oldest = Math.min(oldest, e.created_at);
+    if (read.ids.has(e.id)) continue;
+    read.ids.add(e.id);
+    fresh++;
+    const at = addressOf(e) ?? e.id;
+    const held = read.kept.get(at);
+    if (!notYet(e, now) && (!held || replaces(e, held))) read.kept.set(at, e);
+  }
+  return { fresh, oldest };
 }
 
 export function streamFilter(stream: Stream, owner: string, since: number | null): Filter {
