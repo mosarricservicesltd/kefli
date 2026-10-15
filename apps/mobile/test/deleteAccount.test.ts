@@ -390,7 +390,7 @@ describe('Delete my data asks its servers through the hops, each within a deadli
       const w = world();
       const net = inward(w.p.fetch, sends);
       w.p.fetch = net.f;
-      // followed as OkHttp followed it, the account was deleted by whatever answers at 192.168.1.1, with its NIP-98 header
+      // followed as OkHttp followed it, the phone took whatever answers at 192.168.1.1 for the operator, and wiped itself
       expect(await deleteEverything(w.p, () => undefined)).toBe('failed');
       expect(net.asked).toEqual([]);
       expect(w.wiped()).toBe(false);

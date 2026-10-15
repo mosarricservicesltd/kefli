@@ -1213,7 +1213,7 @@ describe('every call to a server takes its hops, and has a deadline (7.1)', () =
     w.ports.fetch = net.f;
     release(w.db, (await save(w)).held);
     await drain(w.ports);
-    // followed as OkHttp followed it, the phone registered with whatever answers at 192.168.1.1, with its NIP-98 header
+    // followed as OkHttp followed it, the phone took whatever answers at 192.168.1.1 for the API registering it
     expect(net.asked).toEqual([]);
     expect(tried(w)).toMatchObject({ state: 'queued', last_error: 'blocked: redirect' });
     expect(w.published()).toEqual([]);

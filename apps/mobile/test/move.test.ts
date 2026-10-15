@@ -588,7 +588,7 @@ describe("the move's calls to servers take the hops, each with a deadline (7.1)"
     const w = world();
     await w.save(w.S, 1);
     const net = inward(w.p.fetch, (m, url) => (m === 'GET' || m === 'HEAD') && blobAt(url));
-    // followed as OkHttp followed it, T took whatever 192.168.1.1 sent as S's text
+    // followed as OkHttp followed it, S's text was asked for at 192.168.1.1
     expect(await runMove({ ...w.p, fetch: net.f })).toBe('waiting');
     expect(net.asked).toEqual([]);
     expect(moveJob(w.db)?.step).toBe(2);

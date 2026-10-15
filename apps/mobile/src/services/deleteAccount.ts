@@ -44,8 +44,10 @@ export type DelPorts = {
 /**
  * p's fetch for a server, Kefli's API or a blob server (net/http serverFetch): each redirect followed a hop at a time,
  * never into the phone's own network (on the local stack, loopback too), and each answer had within the API's 15 s.
- * Left to OkHttp, a redirect could have the account deleted by whatever answered at 192.168.1.1, and an API that took
- * DELETE /account and never answered held the screen, which swallows Back while the deletion runs, for good.
+ * Left to OkHttp, a redirect sent DELETE /account, or a blob's deletion, on to whatever answered at 192.168.1.1 (its
+ * authorisation left behind, as OkHttp does at another host), whose 2xx the phone then took for the operator's; and an
+ * API that took DELETE /account and never answered held the screen, which swallows Back while the deletion runs, for
+ * good.
  */
 function toServer(p: DelPorts): typeof fetch {
   return serverFetch(p.fetch, { hops: serverHops(p.localStack === true), timeoutMs: SERVER_TIMEOUT_MS });

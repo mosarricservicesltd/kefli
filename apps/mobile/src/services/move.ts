@@ -60,8 +60,10 @@ export type MovePorts = {
 /**
  * p's fetch for a server, a blob server or Kefli's API (net/http serverFetch): each redirect followed a hop at a time,
  * never into the phone's own network (on the local stack, loopback too), and the whole answer, at most maxBytes, had
- * within timeoutMs. Left to OkHttp, a server's redirect had T take whatever answered at 192.168.1.1 as S's text, or
- * S's account deleted there, and a server that never answered held the move, which Back can't leave, for good.
+ * within timeoutMs. Left to OkHttp, a server's redirect sent the ask for S's text, or S's DELETE /account, on to
+ * whatever answered at 192.168.1.1 (its authorisation left behind, as OkHttp does at another host), whose 2xx to the
+ * deletion the phone took for the operator's; and a server that never answered held the move, which Back can't leave,
+ * for good.
  */
 function toServer(p: MovePorts, timeoutMs: number, maxBytes?: number): typeof fetch {
   return serverFetch(p.fetch, { hops: serverHops(p.localStack === true), timeoutMs, ...(maxBytes === undefined ? {} : { maxBytes }) });

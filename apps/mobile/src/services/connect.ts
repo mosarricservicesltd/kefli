@@ -28,8 +28,10 @@ export type ConnectPorts = {
 /**
  * The fetch for Kefli's API from these ports (net/http serverFetch): each redirect followed a hop at a time, never into
  * the phone's own network (on the local stack, loopback too), and the whole answer had within the API's 15 s; one that
- * goes past either reads as the API not answering. Left to OkHttp, a redirect handed the lookup and its NIP-98 header
- * to whatever answered at 192.168.1.1, and an API that never answered held Connect, or a phone's pairing, for good.
+ * goes past either reads as the API not answering. Left to OkHttp, a redirect sent the lookup, or a phone's sealed
+ * offer, on to whatever answered at 192.168.1.1 (its NIP-98 header left behind, as OkHttp does at another host), and
+ * took what answered there as the API's answer; and an API that never answered held Connect, or a phone's pairing,
+ * for good.
  */
 export function apiFetch(p: Pick<ConnectPorts, 'fetch' | 'localStack'>): typeof fetch {
   return serverFetch(p.fetch, { hops: serverHops(p.localStack === true), timeoutMs: SERVER_TIMEOUT_MS });

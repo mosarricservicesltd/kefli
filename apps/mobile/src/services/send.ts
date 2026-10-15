@@ -53,8 +53,9 @@ export type SendPorts = {
 /**
  * p's fetch for a server, Kefli's API or a blob server (net/http serverFetch): each redirect followed a hop at a time,
  * never into the phone's own network (on the local stack, loopback too, serverHops), and the whole answer had within
- * timeoutMs. Left to OkHttp, as p.fetch was, a server's redirect took an upload, its NIP-98 or Blossom authorisation
- * with it, to 192.168.1.1, and a server that never answered held the outbox's run for good.
+ * timeoutMs. Left to OkHttp, as p.fetch was, a server's redirect sent a call on to 192.168.1.1, an upload's text with
+ * it on a 307 or 308 (OkHttp, as here, leaves the authorisation behind at another host), and took what answered there
+ * as the server's answer; and a server that never answered held the outbox's run for good.
  */
 function toServer(p: SendPorts, timeoutMs: number): typeof fetch {
   return serverFetch(p.fetch, { hops: serverHops(p.localStack === true), timeoutMs });

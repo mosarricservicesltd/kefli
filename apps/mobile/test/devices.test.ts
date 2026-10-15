@@ -147,7 +147,7 @@ describe('connected browsers (mobile spec 5.5, contract 4.4 and 4.9)', () => {
   test("the API sending a typed code's lookup into the phone's network: nothing is asked there, and it reads as offline", async () => {
     const w = world();
     const net = inward(w.ports.fetch, (_m, url) => url.includes('/pair-offers/'));
-    // followed as OkHttp followed it, whatever answered at 192.168.1.1 had the lookup and the NIP-98 header with it
+    // followed as OkHttp followed it, whatever answered at 192.168.1.1 had the lookup, and its answer was read as the offer
     expect(await lookupCode({ ...w.ports, fetch: net.f }, 'ABCD-EFGH')).toEqual({ problem: 'offline' });
     expect(net.asked).toEqual([]);
   }, 20_000);
