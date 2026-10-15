@@ -1,0 +1,17 @@
+# The playbook check that main requires (branch protection: node, go, local-stack and playbook) comes from
+# deploy-test.yml, which runs only when the server or its deployment changes. A change elsewhere would then never
+# have a playbook check and could never merge, so this workflow runs on exactly the other changes and reports a
+# passing job of the same name, as GitHub's own guidance has it for a required check behind a path filter.
+name: Playbook test
+
+on:
+  pull_request:
+    paths-ignore: ['server/**', '.github/workflows/deploy-test.yml']
+
+permissions: {}
+
+jobs:
+  playbook:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo "Nothing under server/ changed, so the playbook test has nothing to test."
