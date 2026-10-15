@@ -561,6 +561,38 @@ describe('a capture the operator refuses (contract 4.4 and 5, v1.12)', () => {
     expect(await h.session.get(`undo:${w.id}`)).toMatchObject({ sha256: null });
   });
 
+  test('a move taken while the operator refuses the upload: the save still goes, and Undo on its toast reaches both its wraps', async () => {
+    const T = new LocalSigner(hexToBytes('33'.repeat(32)));
+    const ack: PairAck = { v: 1, user_pubkey: T.pubkey(), write_relays: ['wss://relay.example'], blossom_servers: ['https://blossom.example'], token: 'cd'.repeat(32), moved_from: user.pubkey() };
+    const held = gate();
+    const refusing = operator(413, 'quota');
+    const slow = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      await held.p;
+      return refusing(input, init);
+    }) as typeof fetch;
+    const n = net({ blossom: slow });
+    const h = harness({ net: n.net, collected: [false, false] });
+    const saving = h.work.save(PAGE, 1, false);
+    await until(() => n.asked.uploads === 1);
+    // the background finds the move while the upload waits on the operator, which then refuses it
+    await h.store.set(KEYS.pairing, PAIRING);
+    await applyMove(h.store, device, ack, NOW, h.session, h.work.follow);
+    const [moved] = await queued(h.store);
+    held.open();
+    await saving;
+    expect(kinds(h.toasts)).toEqual(['saving', 'notext']);
+    expect(n.published.filter((e) => e.kind === 1059)).toHaveLength(1);
+    // Undo reaches the wrap that went and the one the move made, which would otherwise go to the new library later
+    await h.work.undo(h.toasts.at(-1)!.id!, 1);
+    expect(n.published.filter((e) => e.kind === 5).map((e) => e.tags[0][1])).toContain(n.published[0].id);
+    expect(h.toasts.at(-1)).toMatchObject({ kind: 'unqueued', title: 'A page' });
+    expect(await queued(h.store)).toEqual([]);
+    expect(moved.id).not.toBe(n.published[0].id);
+    const later = net({ blossom: operator(413, 'quota') });
+    await harness({ store: h.store, session: h.session, net: later.net }).work.flushQueue();
+    expect(later.published).toEqual([]);
+  });
+
   test('a flush that starts while a refused save goes again leaves it to that save, so it goes once, under its own toast', async () => {
     const held = gate();
     const n = net({ blossom: operator(413, 'quota'), hold: held.p });

@@ -128,14 +128,16 @@ export function background(b: Browser) {
    * and the new id is busy for as long as this send runs, as the old one is. A mark that it goes without text follows it.
    * Storage that won't take the change doesn't stop the save: a queue that can't be written leaves it under the wrap the
    * queue still names, so a later send and Undo agree with what went, and a session that can't keep the new key leaves
-   * Undo saying it couldn't undo, rather than holding the save.
+   * Undo saying it couldn't undo, rather than holding the save. A save the queue doesn't hold, never kept, goes under the
+   * new wrap all the same; one a move put under another wrap meanwhile (move.ts) goes as it was, since Undo's key for the
+   * old wrap now points to the move's, which waits in the queue and which Undo must still reach.
    */
   async function takePlace(p: Delivered, again: Again, changed: Partial<Queued>): Promise<void> {
     const was = p.id;
     const next = { id: again.wrap.id, wrap: again.wrap, sealed: again.sealed, wrapped_at: b.now() };
     saves.follow(was, next.id);
-    const placed = await replaceWrap(b.store, was, { ...changed, ...next }).then(() => true, () => false);
-    if (!placed) return;
+    const found = await replaceWrap(b.store, was, { ...changed, ...next }).catch(() => null);
+    if (found === null || (!found && (await goesBy(was)) !== was)) return;
     Object.assign(p, next);
     if (textless.delete(was)) textless.add(p.id);
     await moveUndoKey(b.session, was, p.id, again.wrapKey, p.sha256).catch(() => undefined);
