@@ -255,6 +255,14 @@ async function windowEnd(o: Looking, since: number, newest: Page, read: Map<stri
 
 const oldestOf = (events: NostrEvent[]) => events.reduce((t, e) => Math.min(t, e.created_at), Infinity);
 
+/** Where a deep look starts: beneath the newest answer, which it has just read, and on from the scan held. */
+function scanFrom(held: MovesScan | undefined, newest: NostrEvent[], began: number): MovesScan {
+  return { until: Math.min(held?.until ?? Infinity, oldestOf(newest)), startedAt: held?.startedAt ?? began };
+}
+
+/** Whether a scan can go on from an answer: one the relay finished, or one stopped at WRAPS_MAX; not one cut short. */
+const goesOn = (page: Page) => page.whole || page.full;
+
 /** The events not read yet in this look, added to it; whether there were any. */
 function took(read: Map<string, NostrEvent>, events: NostrEvent[]): boolean {
   const before = read.size;
@@ -272,10 +280,10 @@ function took(read: Map<string, NostrEvent>, events: NostrEvent[]): boolean {
  */
 async function lookDeeper(o: Looking, since: number, newest: NostrEvent[], read: Map<string, NostrEvent>, began: number): Promise<number | null> {
   const held = await o.store.get<MovesScan>(KEYS.movesScan);
-  const scan: MovesScan = { until: Math.min(held?.until ?? Infinity, oldestOf(newest)), startedAt: held?.startedAt ?? began };
+  const scan = scanFrom(held, newest, began);
   for (let i = 1; i < MOVE_PAGES; i++) {
     const page = await o.lookUp(since, scan.until).catch(() => null);
-    if (!page || !(page.whole || page.full)) break;
+    if (!page || !goesOn(page)) break;
     const fresh = took(read, page.events);
     if (page.whole) {
       await o.store.remove(KEYS.movesScan);
