@@ -26,6 +26,12 @@ export type UserLists = {
   relays: RelayEntry[] | null; servers: string[] | null; known: boolean; relayList?: NostrEvent | null; serverList?: NostrEvent | null;
 };
 
+/**
+ * The furthest past this phone's clock a list read here may be dated and still be kept as the list held: the day
+ * sync's read allows another device's clock (services/sync.ts SKEW, notYet), which imports this module.
+ */
+const HELD_AHEAD = 86_400;
+
 /** The newest 10002 and 10063 on the indexer and default relays, and whether a missing one is confirmed absent. */
 export async function readUserLists(p: SignInPorts, pubkey: string): Promise<UserLists> {
   const asked = [...new Set([...p.defaults.indexer, ...p.defaults.relays])];
@@ -75,11 +81,16 @@ export async function checkSignIn(p: SignInPorts, signer: Signer): Promise<Check
  * confirmed absent; published only when Kefli changed them. The copies read are kept whole as the lists held
  * (recordList), so the 10002 and 10063 sent from here are theirs entry for entry (data/lists relayListTags): kept as
  * parsed alone, at most LIST_MAX entries each, the first publish waited for a second read of every relay to bring the
- * lists back, and stayed queued while a relay that held them didn't answer. Returns false while still unknown.
+ * lists back, and stayed queued while a relay that held them didn't answer. A copy dated more than HELD_AHEAD past
+ * this phone's clock gives its entries but isn't kept as held, as sync's read leaves it to wait for its time: kept, it
+ * dated every list sent from here after it (nextListTime), which the relays that check dates refuse, and no list
+ * another app sent later was ever newer. Returns false while still unknown.
  */
 export function settleUserLists(db: SqlDb, now: number, owner: string, d: DefaultsLike, lists: UserLists, keepCopies: boolean): boolean {
   if (!lists.known) return false;
-  for (const e of [lists.relayList, lists.serverList]) if (e) recordList(db, owner, e.kind, e.id, e.created_at, JSON.stringify(e));
+  for (const e of [lists.relayList, lists.serverList]) {
+    if (e && e.created_at <= now + HELD_AHEAD) recordList(db, owner, e.kind, e.id, e.created_at, JSON.stringify(e));
+  }
   if (adoptUserLists(db, owner, d, lists.relays, lists.servers, keepCopies)) queueRecord(db, now, owner);
   markListsSettled(db, now, owner);
   return true;

@@ -2,7 +2,7 @@ import { LocalSigner, buildRelayList, buildServerList, itemHash, type NostrEvent
 import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow, queueImported } from '../src/data/saves';
-import { relayEntries, listServers, listsUnread } from '../src/data/lists';
+import { relayEntries, listServers, listsUnread, nextListTime } from '../src/data/lists';
 import { checkSignIn, queueImport, readUserLists, settleUserLists, takeImport, type SignInPorts } from '../src/services/nostrSignIn';
 import { drain } from '../src/services/send';
 import { memoryDb } from './sqlite';
@@ -74,6 +74,27 @@ describe('signing in with a nostr app (mobile spec 4.6, 5.3)', () => {
     expect(last(10002).tags).toEqual([...relays, ['r', D.operator.relay], ['r', D.relays[0]]]);
     expect(last(10063).tags).toEqual([...servers, ['server', D.operator.blossom], ['server', D.mirrors[0]]]);
     expect(last(10002).created_at).toBe(200);
+  });
+
+  test('a list of theirs dated more than a day ahead is read for its entries, never kept as the list held', async () => {
+    // a device of theirs whose clock said 2100 once published it, and a relay that checks no dates kept it
+    const AHEAD = 4_102_444_800;
+    const w = await world({
+      'ws://idx': async (s) => [await buildRelayList(s, [{ url: 'wss://mine', read: true, write: true }], AHEAD), await buildServerList(s, ['https://my.blossom'], AHEAD)],
+    });
+    const pk = w.s.pubkey();
+    const lists = await readUserLists(w.p, pk);
+    expect(settleUserLists(w.db, 100, pk, D, lists, true)).toBe(true);
+    expect(relayEntries(w.db, pk).map((r) => r.url)).toEqual(['wss://mine', 'ws://op', 'ws://a']);
+    expect(listServers(w.db, pk)).toEqual(['https://my.blossom', 'http://blossom', 'http://m1']);
+    // kept as held, it dated every list sent from here after 2100, which every relay that checks dates refuses, and no
+    // list another app sent later could ever be newer (sync's read leaves such a copy to wait for its time)
+    expect(w.db.all('SELECT kind, created_at FROM lists WHERE owner = ?', pk)).toEqual([]);
+    expect(nextListTime(w.db, pk, 100)).toBe(100);
+    // one dated within the day is the list held, as any other
+    const near = await world({ 'ws://idx': async (s) => [await buildRelayList(s, [{ url: 'wss://mine', read: true, write: true }], 100 + 86_400)] });
+    settleUserLists(near.db, 100, near.s.pubkey(), D, await readUserLists(near.p, near.s.pubkey()), true);
+    expect(near.db.all('SELECT kind, created_at FROM lists')).toEqual([{ kind: 10002, created_at: 100 + 86_400 }]);
   });
 
   test('with the switch off, their lists are only read, never rewritten', async () => {
