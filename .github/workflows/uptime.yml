@@ -3,11 +3,13 @@
 # certificates' days left. A failed probe is a failed workflow run, which GitHub mails to whoever last changed this
 # file. What this can't see from outside, the services, the disk and the 5xx share, the on-box check covers
 # (server/deploy/README.md, "Monitoring"). GitHub runs a schedule only from the default branch, can run it a few
-# minutes late, and turns it off after sixty days without a commit.
+# minutes late, and turns it off after sixty days without a commit. The schedule keeps off the hour and the
+# five-minute marks, where GitHub's queue is most crowded and short crons get dropped (its own advice); the first
+# schedule, on the marks, never started in the hour after it was merged on 15 October 2026.
 name: Uptime
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '3-58/5 * * * *'
   workflow_dispatch:
   pull_request:
     paths: ['.github/workflows/uptime.yml']
