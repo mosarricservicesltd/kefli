@@ -126,7 +126,7 @@ sudo systemctl start kefli-health && journalctl -t kefli-health -n 3
 
 - **The outside probe.** `.github/workflows/uptime.yml` runs every five minutes from GitHub's runners (a schedule runs only from `main`, can run a few minutes late, and is turned off after sixty days without a commit): the relay's NIP-11, `/health` and `defaults.json` on the API, a Blossom HEAD, the website, and each certificate's days left. A failed probe is a failed workflow run, which GitHub mails to whoever last changed the file. It sees the box as the phones do, from outside, which the on-box check can't.
 
-Not built, from the spec's list: Prometheus and a dashboard, ntfy, and the queue and worker alerts, whose worker left v1 with server audio (flow decision 22).
+The role went on the box on 15 October 2026 (`deploy.sh --tags monitor`), and a run passed there the same minute. Not built, from the spec's list: Prometheus and a dashboard, ntfy, and the queue and worker alerts, whose worker left v1 with server audio (flow decision 22).
 
 ## Not yet on the box
 
