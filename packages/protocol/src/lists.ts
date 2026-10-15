@@ -7,8 +7,20 @@ import type { NostrEvent, Signer } from './signer';
 
 export type RelayEntry = { url: string; read: boolean; write: boolean };
 
+const SLASH = 0x2f;
+
+/**
+ * s without the slashes at its end, counted back from the end. The pattern for them, a run of slashes and then the
+ * end, was tried from every slash of a run that something else follows, so 40,000 slashes and a letter took 6 s.
+ */
+export function withoutTrailingSlashes(s: string): string {
+  let end = s.length;
+  while (end > 0 && s.charCodeAt(end - 1) === SLASH) end--;
+  return s.slice(0, end);
+}
+
 /** Relay URLs compare without a trailing slash, as NIP-65 lists write them either way. */
-export const sameUrl = (a: string, b: string) => a.replace(/\/+$/, '') === b.replace(/\/+$/, '');
+export const sameUrl = (a: string, b: string) => withoutTrailingSlashes(a) === withoutTrailingSlashes(b);
 
 export function relayTags(entries: RelayEntry[]): string[][] {
   return entries.filter((e) => e.read || e.write).map((e) => (e.read && e.write ? ['r', e.url] : ['r', e.url, e.read ? 'read' : 'write']));
@@ -32,14 +44,19 @@ export const isRelayUrl = (url: unknown): url is string => usable(url, RELAY_URL
 /** Whether url can be a Blossom server's: http:// or https://, a host, no credentials or spaces. */
 export const isServerUrl = (url: unknown): url is string => usable(url, SERVER_URL);
 
+/** Whether a tag's value is an address of the kind a list holds (named so the code gate's parser reads listed whole). */
+type UrlCheck = (url: unknown) => url is string;
+
 /** The tags named name whose value passes ok, each address once (slash or not), at most LIST_MAX. */
-function listed(event: Pick<NostrEvent, 'tags'>, name: string, ok: (url: unknown) => url is string): string[][] {
+function listed(event: Pick<NostrEvent, 'tags'>, name: string, ok: UrlCheck): string[][] {
   const seen = new Set<string>();
   const out: string[][] = [];
   for (const t of event.tags) {
     if (out.length >= LIST_MAX) break;
-    if (t[0] !== name || !ok(t[1]) || seen.has(t[1].replace(/\/+$/, ''))) continue;
-    seen.add(t[1].replace(/\/+$/, ''));
+    if (t[0] !== name || !ok(t[1])) continue;
+    const bare = withoutTrailingSlashes(t[1]);
+    if (seen.has(bare)) continue;
+    seen.add(bare);
     out.push(t);
   }
   return out;

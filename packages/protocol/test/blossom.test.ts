@@ -79,6 +79,22 @@ describe('Blossom (contract 4.2, 5)', () => {
     expect(await mirrorBlob('http://m', 'x', SHA, signer(), fakeFetch(200, { sha256: 'cd'.repeat(32) }).f)).toMatchObject({ ok: false, status: 502 });
   });
 
+  test("a server's address loses its trailing slashes in linear time, however many it holds before them", async () => {
+    // 40,000 slashes and a letter: the pattern that took them off was tried from each slash, and took 6 s a call
+    const server = `http://b${'/'.repeat(40_000)}x`;
+    const up = fakeFetch(200, { sha256: SHA });
+    const mirror = fakeFetch(200, { sha256: SHA });
+    const del = fakeFetch(200, '');
+    const key = signer();
+    await blossomAuth(key, 'upload', SHA); // the first signature's set-up is no part of the time
+    const t = Date.now();
+    expect(await uploadBlob(`${server}///`, new Uint8Array(), SHA, key, up.f)).toEqual({ ok: true, url: `${server}/${SHA}` });
+    expect(await mirrorBlob(`${server}/`, `http://b/${SHA}`, SHA, key, mirror.f)).toEqual({ ok: true, url: `${server}/${SHA}` });
+    expect(await deleteBlob(server, SHA, key, del.f)).toEqual({ ok: true, url: `${server}/${SHA}` });
+    expect(Date.now() - t).toBeLessThan(3_000);
+    expect([up.calls[0].url, mirror.calls[0].url, del.calls[0].url]).toEqual([`${server}/upload`, `${server}/mirror`, `${server}/${SHA}`]);
+  });
+
   test('delete: done on success or 404', async () => {
     const del = fakeFetch(200, '');
     expect(await deleteBlob('http://b', SHA, signer(), del.f)).toMatchObject({ ok: true });
