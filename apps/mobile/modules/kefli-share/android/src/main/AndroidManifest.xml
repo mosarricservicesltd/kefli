@@ -2,7 +2,10 @@
   <application>
     <!-- The share sheet's target (mobile spec 8.5). Translucent, kept out of Recents, and in the standard launch
          mode so Back returns to the sender (flow decision 39). An empty task affinity keeps it out of Kefli's own task:
-         launched with only NEW_TASK, it would otherwise join that task and be cleared with it. -->
+         launched with only NEW_TASK, it would otherwise join that task and be cleared with it. It takes in place the
+         configuration changes MainActivity does (the phone folded or unfolded, a split screen resized, a WebView
+         update): recreated for one, its old JavaScript read the pause as the sheet leaving the screen and closed it,
+         and the new sheet, opening as that spool went, could say That didn't save. -->
     <activity
       android:name="app.kefli.share.ShareActivity"
       android:exported="true"
@@ -11,7 +14,7 @@
       android:taskAffinity=""
       android:label="Kefli"
       android:theme="@style/Kefli.Share"
-      android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode">
+      android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode|smallestScreenSize|assetsPaths">
       <intent-filter>
         <action android:name="android.intent.action.SEND" />
         <category android:name="android.intent.category.DEFAULT" />

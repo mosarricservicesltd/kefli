@@ -1,6 +1,8 @@
 // The share's spool as kefli-share writes it (mobile spec 8.5), before any JavaScript runs. Node can't run the
 // Kotlin: these read its source, standing in for the check on the phone listed in HANDOVER, and run the sheet's
 // reading of the text the spool holds (pickup.ts firstLink).
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { SHARE_MAX_TRIES, firstLink } from '../src/share/pickup';
 import { kotlinSource, member as memberOf, steps } from './kotlin';
 
@@ -64,6 +66,15 @@ describe("the share's spool (8.5)", () => {
     // the spool it had while that is still there, on disk or held in memory, and otherwise a new one from the intent
     expect(steps(activity, 'spool')).toEqual(['return kept?.takeIf { Spool.has(this, it) } ?: Spool.write(this, intent, referrer?.toString())']);
     expect(steps(kt, 'has')).toEqual(['return unwritten.containsKey(id) || File(dir(context), "$id.json").exists()']);
+  });
+
+  test('a sheet folded, unfolded or resized in a split screen carries on, rather than being recreated', () => {
+    // recreated in place, the old sheet's JavaScript read the pause as the sheet leaving the screen and closed it,
+    // dropping its spool as the new sheet opened, which could then say That didn't save; it takes the changes
+    // MainActivity takes in place (Expo's template), smallestScreenSize and assetsPaths among them
+    const manifest = readFileSync(join(__dirname, '..', 'modules', 'kefli-share', 'android', 'src', 'main', 'AndroidManifest.xml'), 'utf8');
+    const changes = /android:configChanges="([^"]*)"/.exec(manifest)?.[1].split('|') ?? [];
+    expect([...changes].sort()).toEqual(['assetsPaths', 'keyboard', 'keyboardHidden', 'orientation', 'screenLayout', 'screenSize', 'smallestScreenSize', 'uiMode']);
   });
 });
 
