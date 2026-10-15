@@ -47,7 +47,7 @@ export type SendPorts = {
   figures?: (owner: string) => KnownFigures | null;
   /** A 413 quota or daily brought the library's figures (C§5): kept as the last known, by data/account.ts recordFigures. */
   onFigures?: (owner: string, figures: AccountFigures) => void;
-  /** The local stack's build (services/config.ts LOCAL_STACK), whose servers a redirect may reach on loopback. */
+  /** The local stack's build (services/config.ts LOCAL_STACK), whose blob servers a redirect may reach on loopback. */
   localStack?: boolean;
 };
 
@@ -153,7 +153,9 @@ async function sendPostDevice(p: SendPorts, row: OutboxRow, signer: Signer, t: O
     const source = await p.signer(moved_from);
     if (!source) return [{ target: t.target, kind: 'retry', error: 'the source key is not on the phone' }];
     const api = t.target.slice(0, -DEVICES_PATH.length);
-    consent = { release: { pubkey: moved_from, ...(await signStatement(source, releaseTemplate(api, device_pubkey, row.signer, p.now()))) } };
+    // signed apart from the object it goes in: the code gate's parser, given an awaited spread, ended this function there
+    const signed = await signStatement(source, releaseTemplate(api, device_pubkey, row.signer, p.now()));
+    consent = { release: { pubkey: moved_from, ...signed } };
   } else if (proof) {
     consent = { proof };
   } else {
@@ -291,15 +293,20 @@ function refused(p: SendPorts, row: OutboxRow, target: string, sha256: string, r
  * For the day, a text the operator holds already for another library on the phone still goes (holdOn).
  */
 function roomRefused(p: SendPorts, row: OutboxRow, operator: string, why: 'quota' | 'daily', figures: AccountFigures | undefined): void {
-  if (figures) quietly(() => p.onFigures?.(row.signer, figures));
+  // the port taken out before it is called: the code gate's parser loses its place at an optional call (?.())
+  const keep = p.onFigures;
+  if (figures && keep) quietly(() => keep(row.signer, figures));
   holdUploads(p.db, row.signer, { reason: why, until: p.now() + DAY }, row.id, operator);
 }
+
+/** What quietly runs: a named type, since the code gate's parser loses a function at an arrow-typed parameter. */
+type Quiet = () => void;
 
 /**
  * The library's figures, through data/account.ts's ports: they only reckon room early (C§5), so one that fails costs
  * that and never the send it follows, which the operator has already answered.
  */
-function quietly(f: () => void): void {
+function quietly(f: Quiet): void {
   try {
     f();
   } catch {
@@ -317,7 +324,8 @@ function quietly(f: () => void): void {
 function tryRoom(p: SendPorts, owner: string): void {
   quietly(() => {
     if (heldFor(p.db, owner, p.now())?.reason === 'daily') return;
-    const f = p.figures?.(owner);
+    // asked without an optional call (?.()), where the code gate's parser loses its place
+    const f = p.figures ? p.figures(owner) : null;
     const next = f ? nextForRoom(p.db, owner, roomLeft(p.db, owner, f)) : null;
     if (next === null) return;
     releaseHold(p.db, owner);

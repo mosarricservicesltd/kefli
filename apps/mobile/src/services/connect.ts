@@ -50,6 +50,12 @@ const targetsOf = (d: Awaited<ReturnType<ConnectPorts['defaults']>>) => ({ api: 
 /** The row registered reads: a named type, since the code gate's parser, given it inline, ran registered on to lookupCode's end. */
 type Registration = { registered_at: number | null };
 
+/**
+ * GET /pair-offers' answer as read: a named type given as the body's, not a cast, since the code gate's parser, given a
+ * cast of a bracketed await, ended lookupCode there and scored none of what follows it.
+ */
+type Offered = { offer?: unknown } | null;
+
 /** A still-queued register runs first (5.5): GET /pair-offers needs a registered user. */
 export async function registered(p: Pick<ConnectPorts, 'db' | 'now' | 'owner' | 'defaults' | 'runOutbox'>): Promise<boolean> {
   const is = () => !!p.db.get<Registration>('SELECT registered_at FROM identities WHERE pubkey = ?', p.owner)?.registered_at;
@@ -77,7 +83,7 @@ export async function lookupCode(p: ConnectPorts, typed: string): Promise<OfferR
   }
   if (res.status === 404) return { problem: 'wrong' };
   if (!res.ok) return { problem: 'offline' };
-  const body = (await res.json().catch(() => null)) as { offer?: unknown } | null;
+  const body: Offered = await res.json().catch(() => null);
   const offer = typeof body?.offer === 'string' ? await openOffer(body.offer, key, p.crypto) : null;
   return checked(offer, d.operator, p.now(), p.verify);
 }

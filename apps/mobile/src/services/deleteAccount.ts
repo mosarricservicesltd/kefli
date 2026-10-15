@@ -180,7 +180,9 @@ async function onRelays(p: DelPorts, owner: string, held: Set<string>): Promise<
   for (const [d, e] of found) {
     if (held.has(d) || !d.startsWith(ITEM_D_PREFIX)) continue;
     try {
-      const sha = (await readItemEvent(p.signer, e)).item.item.text?.sha256;
+      // opened apart from its read: the code gate's parser, given a bracketed await, lost its place in this function
+      const opened = await readItemEvent(p.signer, e);
+      const sha = opened.item.item.text?.sha256;
       if (typeof sha === 'string') shas.push(sha);
     } catch {
       // not one that opens: its kind 5 goes all the same
@@ -288,9 +290,15 @@ async function emptyLists(p: DelPorts, deletion: NostrEvent): Promise<NostrEvent
  */
 export type Signed = { wraps: NostrEvent[]; items: NostrEvent[]; lists: NostrEvent[]; empties?: NostrEvent[]; blobs?: string[]; nostr: boolean };
 
+/** The row the identity's provider is read from: a named type, so the code gate's parser reads signDeletion whole. */
+type Provider = { provider: string };
+
 export async function signDeletion(p: DelPorts): Promise<Signed> {
   const owner = p.signer.pubkey();
-  const nostr = (p.db.get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local') !== 'local';
+  // read, then compared: bracketed into the comparison, the read lost the code gate's parser its place, and only this
+  // function's first three lines were scored
+  const provider = p.db.get<Provider>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local';
+  const nostr = provider !== 'local';
   if (nostr) await takeNewestLists(p, owner);
   const held = allDs(p.db, owner);
   const remote = await onRelays(p, owner, new Set(held));

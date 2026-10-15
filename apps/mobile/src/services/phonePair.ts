@@ -34,6 +34,12 @@ export async function showPhonePair(p: ShowPorts): Promise<{ qr: PhoneQr; six: s
 /** Scan from my other phone's ports. */
 export type TakePorts = { fetch: typeof fetch; crypto: CryptoPort; api: string };
 
+/**
+ * GET /phone-offers' answer as read: a named type given as the body's, not a cast, since the code gate's parser, given
+ * a cast of a bracketed await, ended takePhonePair there and scored none of its checks of the mnemonic.
+ */
+type Offered = { offer?: unknown } | null;
+
 /** The mnemonic for a scanned QR and its six digits; wrong when no offer opens with them, offline when unreachable. */
 export async function takePhonePair(p: TakePorts, qr: PhoneQr, six: string): Promise<{ mnemonic: string } | 'wrong' | 'offline'> {
   const { lookup, key } = derivePhonePair(qr.secret, six);
@@ -47,7 +53,7 @@ export async function takePhonePair(p: TakePorts, qr: PhoneQr, six: string): Pro
   }
   if (res.status === 404) return 'wrong';
   if (!res.ok) return 'offline';
-  const body = (await res.json().catch(() => null)) as { offer?: unknown } | null;
+  const body: Offered = await res.json().catch(() => null);
   const mnemonic = typeof body?.offer === 'string' ? await openPhoneOffer(body.offer, key, p.crypto) : null;
   if (!mnemonic) return 'wrong';
   // the key must be the QR's, so an offer swapped on the server can't hand over someone else's library
