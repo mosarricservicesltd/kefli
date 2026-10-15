@@ -35,7 +35,7 @@ export type DelPorts = {
   sleep: (ms: number) => Promise<void>;
   /** Step 3, on the phone's storage. */
   wipePhone: () => Promise<void>;
-  /** Each server's minute (spec 7.2). */
+  /** Each server's minute (spec 7.2), in milliseconds of wall time, its tries counted with the waits between them. */
   budgetMs?: number;
   /** The local stack's build (services/config.ts LOCAL_STACK), whose blob servers a redirect may reach on loopback. */
   localStack?: boolean;
@@ -120,15 +120,19 @@ function save(p: DelPorts, prog: Progress): void {
 /** One try at a step's work: whether it went through. A named type, so the code gate's parser reads withinMinute whole. */
 type Attempt = () => Promise<boolean>;
 
-/** Tries until it succeeds or the minute is spent: 2 s, then doubling. */
+/**
+ * Tries until it succeeds or the minute is spent (spec 7.2): 2 s, then doubling. The minute is wall time, the tries as
+ * well as the waits between them, and a try starts only while a request's deadline (net/http SERVER_TIMEOUT_MS) would
+ * still end it within the minute. Counting the waits alone, as it did, five tries of 15 s each held the screen, which
+ * swallows Back while the deletion runs, for 1 min 45 s before the step read as failed.
+ */
 async function withinMinute(p: DelPorts, attempt: Attempt): Promise<boolean> {
   const budget = p.budgetMs ?? 60_000;
-  let spent = 0;
+  const started = Date.now();
   for (let wait = 2000; ; wait *= 2) {
     if (await attempt().catch(() => false)) return true;
-    if (spent + wait > budget) return false;
+    if (Date.now() - started + wait + SERVER_TIMEOUT_MS > budget) return false;
     await p.sleep(wait);
-    spent += wait;
   }
 }
 

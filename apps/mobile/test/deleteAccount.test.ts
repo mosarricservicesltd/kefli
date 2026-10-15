@@ -461,6 +461,53 @@ describe('Delete my data asks its servers through the hops, each within a deadli
     expect(w.wiped()).toBe(false);
   });
 
+  /** w's ports as the screen builds them (deletePorts), whose waits are timers and whose minute is the clock's. */
+  const screenPorts = (w: ReturnType<typeof world>, fetch: typeof globalThis.fetch) => deletePorts({
+    db: w.db, signer: w.p.signer, defaults: D, crypto: nodeCrypto, fetch, wipePhone: w.p.wipePhone,
+    pool: { publish: w.p.publish, query: async () => [] },
+  });
+
+  test('an API that never answers DELETE /account holds the first step a minute at most, its tries counted with its waits', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    const w = world();
+    const base = w.p.fetch;
+    let tries = 0;
+    const ports = screenPorts(w, (async (url: string, init: RequestInit) => {
+      if (!url.endsWith('/account')) return base(url, init);
+      tries++;
+      return silent(url, init);
+    }) as typeof fetch);
+    const run = watch(deleteEverything(ports, () => undefined));
+    let ms = 0;
+    while (!run.settled && 300_000 > ms) {
+      await jest.advanceTimersByTimeAsync(1_000);
+      ms += 1_000;
+    }
+    // the waits alone were counted: five tries of 15 s and 30 s of waits held the screen for 1 min 45 s
+    expect(run).toMatchObject({ settled: true, value: 'failed' });
+    expect(ms).toBeLessThanOrEqual(60_000);
+    expect([tries, w.wiped()]).toEqual([3, false]);
+  });
+
+  test('an operator that fails at once is still tried through its minute, and one that answers by then is done', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    const w = world();
+    const base = w.p.fetch;
+    const at: number[] = [];
+    const t0 = Date.now();
+    // the API unreachable for its first 20 s, then answering
+    const ports = screenPorts(w, (async (url: string, init: RequestInit) => {
+      if (!url.endsWith('/account')) return base(url, init);
+      at.push(Date.now() - t0);
+      if (Date.now() - t0 < 20_000) throw new Error('unreachable');
+      return base(url, init);
+    }) as typeof fetch);
+    const run = watch(deleteEverything(ports, () => undefined));
+    for (let s = 0; 120 > s && !run.settled; s++) await jest.advanceTimersByTimeAsync(1_000);
+    expect(run).toMatchObject({ settled: true, value: 'done' });
+    expect(at).toEqual([0, 2_000, 6_000, 14_000, 30_000]);
+  });
+
   test("a mirror that never answers a deletion is let go at its deadline: it isn't confirmed, and the phone is wiped all the same", async () => {
     jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
     const w = world();
