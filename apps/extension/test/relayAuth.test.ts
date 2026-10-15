@@ -3,10 +3,10 @@
 // that misbehaves: one that never answers, a challenge nostr-tools can't sign, a flood of wraps, an odd CLOSED.
 import { hexToBytes } from '@noble/hashes/utils.js';
 import { useWebSocketImplementation } from 'nostr-tools/relay';
-import { finalizeEvent, verifyEvent } from 'nostr-tools/pure';
+import { finalizeEvent, getPublicKey, verifyEvent } from 'nostr-tools/pure';
 import { LocalSigner, type NostrEvent } from '../../../packages/protocol/src/signer';
 import { listenForAck } from '../src/pair';
-import { AUTH_WAIT_MS, authAs, fetchWraps, publish, PUBLISH_TIMEOUT_MS, WRAPS_MAX } from '../src/relay';
+import { AUTH_WAIT_MS, authAs, collected, fetchWraps, publish, PUBLISH_TIMEOUT_MS, WRAPS_MAX } from '../src/relay';
 
 const device = new LocalSigner(hexToBytes('22'.repeat(32)));
 
@@ -30,6 +30,8 @@ class FakeSocket {
   onerror: (() => void) | null = null;
   /** What the client sent, in order, each EVENT marked with the key its connection had AUTHed as when it came. */
   readonly got: { type: string; event: NostrEvent; authed: string | null }[] = [];
+  /** The filters of each REQ, in order. */
+  readonly asked: unknown[][] = [];
   authed: string | null = null;
   readonly script: Script;
 
@@ -50,7 +52,8 @@ class FakeSocket {
   }
 
   send(raw: string) {
-    const [type, event] = JSON.parse(raw) as [string, NostrEvent];
+    const [type, event, ...filters] = JSON.parse(raw) as [string, NostrEvent, ...unknown[]];
+    if (type === 'REQ') this.asked.push(filters);
     if (type === 'REQ') return (this.script.onReq ?? ((s, sub) => s.say(['EOSE', sub])))(this, event as unknown as string);
     if (type === 'CLOSE') return;
     this.got.push({ type, event, authed: this.authed });
@@ -188,11 +191,13 @@ describe('a relay that misbehaves', () => {
       },
     });
     const started = Date.now();
-    expect((await fetchWraps(url, device, 0)).map((e) => e.id)).toEqual([w.id]);
+    const got = await fetchWraps(url, device, 0);
+    expect(got.events.map((e) => e.id)).toEqual([w.id]);
+    expect(got.whole).toBe(true);
     expect(Date.now() - started).toBeLessThan(10_000);
   }, 30_000);
 
-  test('a flood of wraps is read only as far as WRAPS_MAX', async () => {
+  test('a flood of wraps is read only as far as WRAPS_MAX, and the look isn’t whole', async () => {
     const flood = Array.from({ length: WRAPS_MAX + 20 }, (_, i) => wrapTo(i + 10));
     const url = relay({
       onReq: (s, sub) => {
@@ -200,10 +205,12 @@ describe('a relay that misbehaves', () => {
         s.say(['EOSE', sub]);
       },
     });
-    // a slow machine checks fewer signatures before nostr-tools' own wait for EOSE (4.4 s) ends the look; never more
+    // a slow machine checks fewer signatures before the look's ten seconds end it; never more
     const got = await fetchWraps(url, device, 0);
-    expect(got.length).toBeGreaterThan(0);
-    expect(got.length).toBeLessThanOrEqual(WRAPS_MAX);
+    expect(got.events.length).toBeGreaterThan(0);
+    expect(got.events.length).toBeLessThanOrEqual(WRAPS_MAX);
+    // the wraps past the hundredth went unread, so the look may have stopped above a pair-ack (move.ts)
+    expect(got.whole).toBe(false);
   }, 60_000);
 
   test('a relay that takes the connection and never opens it is given up on, and the socket closed', async () => {
@@ -220,10 +227,95 @@ describe('a relay that misbehaves', () => {
     expect(Date.now() - started).toBeLessThan(3000);
   });
 
-  test('a CLOSED whose reason isn’t a string ends the look at once', async () => {
+  test('a CLOSED whose reason isn’t a string ends the look at once, not whole', async () => {
     const url = relay({ onReq: (s, sub) => s.say(['CLOSED', sub, 42]) });
     const started = Date.now();
-    expect(await fetchWraps(url, device, 0)).toEqual([]);
+    expect(await fetchWraps(url, device, 0)).toMatchObject({ events: [], whole: false });
     expect(Date.now() - started).toBeLessThan(3000);
+  });
+});
+
+describe('an answer is whole only once the relay ends it with EOSE (F40)', () => {
+  const sender = hexToBytes('33'.repeat(32));
+  const userKey = hexToBytes('11'.repeat(32));
+  const user = getPublicKey(userKey);
+  const wrapTo = (i: number) => finalizeEvent({ kind: 1059, created_at: 1_791_600_000 + i, tags: [['p', device.pubkey()]], content: `wrap ${i}` }, sender) as NostrEvent;
+  /** The phone's deletion of a wrap it collected, signed by the user (contract 4.4). */
+  const took = (wrapId: string) => finalizeEvent({ kind: 5, created_at: 1_791_600_100, tags: [['e', wrapId], ['k', '1059']], content: '' }, userKey) as NostrEvent;
+  const later = (ms: number, f: () => void) => void setTimeout(f, ms);
+
+  test('an answer the relay finishes after nostr-tools’ own 4.4 s is waited for: the wraps that came late, and the phone’s deletion', async () => {
+    const [w1, w2] = [wrapTo(1), wrapTo(2)];
+    const wraps = relay({
+      onReq: (s, sub) => {
+        s.say(['EVENT', sub, w1]);
+        later(5_000, () => (s.say(['EVENT', sub, w2]), s.say(['EOSE', sub])));
+      },
+    });
+    const deletions = relay({ onReq: (s, sub) => later(5_000, () => (s.say(['EVENT', sub, took(w1.id)]), s.say(['EOSE', sub]))) });
+    const [look, onPhone] = await Promise.all([fetchWraps(wraps, device, 0), collected(deletions, w1.id, user)]);
+    expect(look.events.map((e) => e.id)).toEqual([w1.id, w2.id]);
+    expect(look.whole).toBe(true);
+    // read at 4.4 s, the answer said the phone hadn't collected the save, and Undo said it was removed
+    expect(onPhone).toBe(true);
+  }, 30_000);
+
+  test('the relay finishing its answer without the phone’s deletion says the phone hasn’t it', async () => {
+    const url = relay({});
+    expect(await collected(url, wrapTo(3).id, user)).toBe(false);
+  });
+
+  test('an answer the relay never finishes is no answer: the look isn’t whole, and the phone may have the save', async () => {
+    const w = wrapTo(4);
+    const wraps = relay({ onReq: (s, sub) => s.say(['EVENT', sub, w]) });
+    const silent = relay({ onReq: () => undefined });
+    const started = Date.now();
+    const [look, onPhone] = await Promise.all([fetchWraps(wraps, device, 0), collected(silent, w.id, user)]);
+    expect(look.events.map((e) => e.id)).toEqual([w.id]);
+    expect(look.whole).toBe(false);
+    expect(onPhone).toBeNull();
+    expect(Date.now() - started).toBeLessThan(PUBLISH_TIMEOUT_MS + 3_000);
+    // a connection that sent nothing at all is let go, so the next look connects afresh; one that answered is kept
+    expect(socketOf(silent).readyState).toBe(FakeSocket.CLOSED);
+    expect(socketOf(wraps).readyState).toBe(FakeSocket.OPEN);
+  }, 30_000);
+
+  test('a CLOSED before EOSE is no answer either', async () => {
+    const url = relay({ onReq: (s, sub) => s.say(['CLOSED', sub, 'error: shutting down']) });
+    const started = Date.now();
+    expect(await collected(url, wrapTo(5).id, user)).toBeNull();
+    expect(Date.now() - started).toBeLessThan(3000);
+  });
+
+  test('a relay that can’t be reached is no answer', async () => {
+    const url = relay({ neverOpens: true });
+    expect(await collected(url, wrapTo(6).id, user)).toBeNull();
+  }, PUBLISH_TIMEOUT_MS + 10_000);
+
+  test('a look reading down the window asks for the wraps before a time, a hundred at most, and says when it stopped at a hundred', async () => {
+    const flood = Array.from({ length: WRAPS_MAX + 20 }, (_, i) => wrapTo(i + 100));
+    const full = relay({ onReq: (s, sub) => flood.forEach((w) => s.say(['EVENT', sub, w])) });
+    const look = await fetchWraps(full, device, 5, 1_791_700_000);
+    expect(socketOf(full).asked).toEqual([[{ kinds: [1059], '#p': [device.pubkey()], since: 5, limit: WRAPS_MAX, until: 1_791_700_000 }]]);
+    expect(look).toMatchObject({ whole: false, full: true });
+    expect(look.events).toHaveLength(WRAPS_MAX);
+    // fewer than a hundred, finished with EOSE: the whole of what the relay holds there
+    const short = relay({ onReq: (s, sub) => (flood.slice(0, 3).forEach((w) => s.say(['EVENT', sub, w])), s.say(['EOSE', sub])) });
+    expect(await fetchWraps(short, device, 5)).toMatchObject({ whole: true, full: false });
+    expect(socketOf(short).asked).toEqual([[{ kinds: [1059], '#p': [device.pubkey()], since: 5, limit: WRAPS_MAX }]]);
+  }, 30_000);
+
+  test('a look the relay closes as auth-required is asked again once AUTHed as the device, and read whole', async () => {
+    const w = wrapTo(7);
+    // strfry sends its challenge on connect, before it answers a REQ
+    const url = relay({
+      challengeAfter: 0,
+      onReq: (s, sub) =>
+        s.authed === device.pubkey() ? (s.say(['EVENT', sub, w]), s.say(['EOSE', sub])) : later(50, () => s.say(['CLOSED', sub, 'auth-required: this relay serves gift wraps to their recipient'])),
+    });
+    const look = await fetchWraps(url, device, 0);
+    expect(look.events.map((e) => e.id)).toEqual([w.id]);
+    expect(look.whole).toBe(true);
+    expect(socketOf(url).got.map((g) => g.type)).toContain('AUTH');
   });
 });

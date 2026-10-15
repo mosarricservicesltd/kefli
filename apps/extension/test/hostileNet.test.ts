@@ -7,7 +7,7 @@ import { LocalSigner } from '../../../packages/protocol/src/signer';
 import { webCrypto } from '../src/crypto';
 import { DEFAULTS_LIST_MAX, loadDefaults, relayRows, type Defaults, type RelayRow } from '../src/defaults';
 import { applyMove } from '../src/move';
-import { newOffer, pairingFrom, postOffer } from '../src/pair';
+import { newOffer, pairingFrom, postOffer, tryPairing, type Offer } from '../src/pair';
 import { ANSWER_MAX_BYTES, fetchNet } from '../src/save';
 import { ADDRESS_MAX, KEYS, LIST_MAX, memoryStore, type Pairing } from '../src/store';
 
@@ -112,6 +112,34 @@ describe('pairing with an operator that misbehaves', () => {
     expect(r.ms).toBeLessThan(5000);
     expect(o.posted).toBe(false);
   });
+
+  test('a post the operator stored though its answer came too late counts as posted at the next try, which the operator answers 409', async () => {
+    // the operator as contract 6 has it: it holds each lookup for five minutes, and answers 409 to a lookup it holds. Its
+    // first answer comes after the page has given up on the post
+    const held = new Set<string>();
+    const posts: number[] = [];
+    const slowFirst = (async (_u: string, init: RequestInit) => {
+      const { lookup } = JSON.parse(String(init.body)) as { lookup: string };
+      const status = held.has(lookup) ? 409 : 200;
+      held.add(lookup);
+      posts.push(status);
+      if (posts.length === 1) return never(_u, init);
+      return new Response(JSON.stringify(status === 409 ? { v: 1, error: 'taken' } : { v: 1 }), { status });
+    }) as unknown as typeof fetch;
+    const last = { offer: null as Offer | null };
+    const attempt = (at: number) =>
+      tryPairing(last, () => newOffer(device, DEFAULTS, 'Chrome on a Mac', webCrypto, NOW), async () => ({ stop: () => undefined }), (o) => postOffer(device, DEFAULTS, o, quickKey, slowFirst, 50), at);
+    await expect(attempt(NOW)).rejects.toBeDefined();
+    expect(last.offer!.posted).toBe(false);
+    // ten seconds on, the page tries again with the same code, which the operator already holds for the phone
+    const { offer } = await attempt(NOW + 10);
+    expect(offer).toBe(last.offer);
+    expect(offer.posted).toBe(true);
+    expect(posts).toEqual([200, 409]);
+    // and the try after that posts nothing more
+    await attempt(NOW + 20);
+    expect(posts).toHaveLength(2);
+  });
 });
 
 describe('Blossom answers that never end', () => {
@@ -181,7 +209,7 @@ describe('lists from the phone that aren’t lists of addresses', () => {
     await store.set(KEYS.pairing, PAIRING);
     const T = new LocalSigner(hexToBytes('33'.repeat(32)));
     const p = await applyMove(store, device, { ...ack({ write_relays: junk }), user_pubkey: T.pubkey(), moved_from: user.pubkey(), nonce: undefined }, NOW, memoryStore());
-    expect(p.write_relays).toEqual(['wss://ok.example']);
+    expect(p?.write_relays).toEqual(['wss://ok.example']);
     expect((await store.get<Pairing>(KEYS.pairing))!.write_relays).toEqual(['wss://ok.example']);
   });
 });

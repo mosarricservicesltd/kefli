@@ -1,6 +1,7 @@
 // The background joined to a browser played by fakes (bg.ts): a page whose capture never returns, a shortcut press on a
-// page too busy to answer, a second press while a page is still being read, and a page where no toast can run. The
-// browser is offline here, so nothing reaches the network; each save ends in the queue, which is what the tests read.
+// page too busy to answer, a second press while a page is still being read, a page where no toast can run, and the look
+// for a move before each save. The browser is offline here, so nothing reaches the network; each save ends in the queue,
+// which is what the tests read.
 import { hexToBytes } from '@noble/hashes/utils.js';
 import { LocalSigner } from '../../../packages/protocol/src/signer';
 import type { Defaults } from '../src/defaults';
@@ -40,15 +41,21 @@ function area() {
   };
 }
 
+/** What a test changes in the background's world: when the last whole look began, and the relay's read of the wraps. */
+interface World {
+  movesChecked?: number;
+  fetchWraps?: (url: string, device: unknown, since: number, until?: number) => Promise<unknown>;
+}
+
 /** The browser bg.ts runs in, with the page it is given, and the background loaded fresh into it. */
-function browser(page: Page) {
+function browser(page: Page, w: World = {}) {
   const on: Record<string, Listener> = {};
   const event = (name: string) => ({ addListener: (f: Listener) => void (on[name] = f) });
   const local = area();
   const session = area();
   const popups = { opened: 0 };
   const injections: string[] = [];
-  void local.set({ pairing: PAIRING, defaults: DEFAULTS, movesChecked: NOW + 3600 });
+  void local.set({ pairing: PAIRING, defaults: DEFAULTS, movesChecked: w.movesChecked ?? NOW + 3600 });
   const g = globalThis as Record<string, unknown>;
   Object.assign(g, { KEFLI_DEFAULTS_URL: 'https://kefli.example/defaults.json', KEFLI_FLAVOUR: 'beta', KEFLI_BROWSER: 'chrome', KEFLI_COMMIT: 'test' });
   g.self = { addEventListener: () => undefined };
@@ -72,7 +79,11 @@ function browser(page: Page) {
       },
     },
   };
-  jest.isolateModules(() => void require('../src/bg'));
+  jest.isolateModules(() => {
+    if (w.fetchWraps) jest.doMock('../src/relay', () => ({ ...jest.requireActual('../src/relay'), fetchWraps: w.fetchWraps }));
+    require('../src/bg');
+  });
+  jest.dontMock('../src/relay');
   const queue = async () => ((await local.get('queue')).queue as Queued[] | undefined) ?? [];
   const popup = async () => ((await session.get('popup')).popup as ToastState | null | undefined)?.kind ?? null;
   return { on, local, session, popups, injections, queue, popup };
@@ -144,4 +155,26 @@ test('a page where no toast can run shows the popup instead, so even a refusal i
   }
   await until(async () => (await b.popup()) === 'full');
   expect(await b.popup()).toBe('full');
+});
+
+test('a look kept from its whole window, the relay slow to finish its answer, still waits its five minutes before a save looks again', async () => {
+  // the relay never finishes its answer within the look's ten seconds, so the window stays unread (move.ts lookForMove)
+  const looks: number[] = [];
+  const b = browser(async (what) => (what === 'capture' ? PAGE : what === 'toast' ? true : undefined), {
+    movesChecked: NOW - 3600,
+    fetchWraps: async (_url, _device, since) => (looks.push(since), { events: [], whole: false, full: false, why: 'timeout' }),
+  });
+  b.on.clicked(TAB as never);
+  await until(async () => (await b.queue()).length === 1);
+  expect(looks).toHaveLength(1);
+  // a minute on, another save: read from the last whole look alone, it looked again, and waited on the relay first
+  await jest.advanceTimersByTimeAsync(60_000);
+  b.on.clicked({ ...TAB, id: 8, url: 'https://example.com/b' } as never);
+  await until(async () => (await b.queue()).length === 2);
+  expect(looks).toHaveLength(1);
+  // past five minutes from the look, a save looks again, from the same place, since none read the window whole
+  await jest.advanceTimersByTimeAsync(5 * 60_000);
+  b.on.clicked({ ...TAB, id: 9, url: 'https://example.com/c' } as never);
+  await until(async () => (await b.queue()).length === 3);
+  expect(looks).toEqual([NOW - 3600 - 172_800 - 300, NOW - 3600 - 172_800 - 300]);
 });

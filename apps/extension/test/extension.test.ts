@@ -18,7 +18,7 @@ import { ATTEMPTS_MAX, BLOB_KEEP_MAX, changeQueue, dequeue, enqueue, failed, flu
 import { deliver, prepare, retract, withoutText, type Delivered, type Net, type Pending } from '../src/save';
 import { KEYS, memoryStore, type Pairing } from '../src/store';
 import { applyMove, followMoves } from '../src/move';
-import { SECOND_LOOK_MS, settleUndo } from '../src/undo';
+import { retracted, SECOND_LOOK_MS, settleUndo, together, type Found, type Retracted } from '../src/undo';
 import { markDelay, toastCopy } from '../src/toastCopy';
 import { debugText, history, HISTORY_MAX, record } from '../src/debug';
 
@@ -332,9 +332,9 @@ describe('delivery', () => {
       expect(f.published.map((w) => w.id)).toEqual([p.id]);
     }
   });
-  test("a relay that times out, and one that refuses", async () => {
+  test('a relay that times out, and one that refuses, which is the relay’s own answer and nothing in the browser', async () => {
     expect((await send({ publish: 'down' })).d).toBe('unreachable');
-    expect((await send({ publish: 'blocked' })).d).toBe('blocked');
+    expect((await send({ publish: 'blocked' })).d).toBe('unreachable');
   });
   test('Undo is a kind 5 by the wrap key, and the inbox blob goes', async () => {
     const { pending, wrapKey } = await prepare(PAGE, ctx);
@@ -387,8 +387,9 @@ describe('the queue (extension spec 4, decisions 30, 31 and 60)', () => {
     await enqueue(store, p('c'), 'blocked');
     const q = await queued(store);
     expect(waiting(q)).toBe(1);
+    // c: an entry an earlier build stored as blocked in this browser is still listed
     expect(failed(q).map((e) => e.id)).toEqual(['b', 'c']);
-    expect([whyNot('blocked', true), whyNot('unreachable', true), whyNot('unreachable', false)]).toEqual(['blocked', 'reach', 'offline']);
+    expect([whyNot(true), whyNot(false)]).toEqual(['reach', 'offline']);
   });
   test('a pass sends what it can, counts attempts, and stops at 200', async () => {
     const store = memoryStore();
@@ -411,10 +412,9 @@ describe('the queue (extension spec 4, decisions 30, 31 and 60)', () => {
     await enqueue(store, p('a'), 'offline');
     for (let i = 0; i <= ATTEMPTS_MAX; i++) await flush(store, async () => 'unreachable', false);
     expect(await queued(store)).toMatchObject([{ id: 'a', why: 'offline', attempts: 0, stopped: false }]);
-    // online, a try that fails counts; a relay that answered and refused counts whatever the browser says
+    // online, a try that fails counts, the relay out of reach or refusing it
     await flush(store, async () => 'unreachable', true);
-    await flush(store, async () => 'blocked', false);
-    expect(await queued(store)).toMatchObject([{ id: 'a', why: 'blocked', attempts: 2 }]);
+    expect(await queued(store)).toMatchObject([{ id: 'a', why: 'reach', attempts: 1 }]);
   });
   test('a stopped save is listed under Couldn’t send, with Retry, whatever it waited on, and isn’t counted as waiting to send', async () => {
     const store = memoryStore();
@@ -533,11 +533,11 @@ describe('following a move (contract 4.4 and 4.8)', () => {
 });
 
 describe('Undo (contract 4.4, decision 101)', () => {
-  const run = async (answers: boolean[]) => {
+  const run = async (answers: Found[], r: Retracted = 'taken') => {
     const calls: string[] = [];
     const out = await settleUndo(
-      async () => void calls.push('retract'),
-      async () => (calls.push('look'), answers.shift() ?? false),
+      async () => (calls.push('retract'), r),
+      async () => (calls.push('look'), answers.length ? answers.shift()! : false),
       async (ms) => void calls.push(`wait ${ms}`),
     );
     return { out, calls };
@@ -551,10 +551,32 @@ describe('Undo (contract 4.4, decision 101)', () => {
   test('otherwise it is removed', async () => {
     expect((await run([false, false])).out).toBe('undone');
   });
-  test('a refused retraction still finds the save on the phone, and is reported if it isn’t there', async () => {
-    const refusing = async () => { throw new Error('blocked: deletes only a gift wrap of its own that this relay holds'); };
-    expect(await settleUndo(refusing, async () => true, async () => undefined)).toBe('onphone');
-    await expect(settleUndo(refusing, async () => false, async () => undefined)).rejects.toThrow('blocked');
+  test('a second look the relay doesn’t answer whole can’t tell, so it is reported rather than removed (F40)', async () => {
+    expect((await run([false, null])).out).toBe('failed');
+    expect((await run([null, null])).out).toBe('failed');
+    // the second look is the later one: a deletion the first could have found, it finds too
+    expect((await run([null, false])).out).toBe('undone');
+    expect((await run([null, true])).out).toBe('onphone');
+  });
+  test('a refused retraction still finds the save on the phone; otherwise the caller hears that the relay held no such wrap', async () => {
+    expect((await run([true], 'absent')).out).toBe('onphone');
+    expect((await run([false, false], 'absent')).out).toBe('absent');
+  });
+  test('a retraction that couldn’t be made is reported, unless the save is found on the phone', async () => {
+    expect((await run([false, false], 'unreached')).out).toBe('failed');
+    expect((await run([false, true], 'unreached')).out).toBe('onphone');
+  });
+  test('a retraction is read from the relay’s answer: taken, refused as holding no such wrap, or not made', async () => {
+    expect(await retracted(Promise.resolve())).toBe('taken');
+    expect(await retracted(Promise.reject(new Error('blocked: deletes only a gift wrap of its own that this relay holds')))).toBe('absent');
+    for (const e of [new Error('timeout'), new Error('publish timed out'), 'connection failed', new Error('rate-limited: slow down'), new Error('relay connection closed')]) {
+      expect(await retracted(Promise.reject(e))).toBe('unreached');
+    }
+    // the save's own wrap, its last, decides between taken and absent; any that couldn't be made, wherever it is, is reported
+    expect(together(['absent', 'taken'])).toBe('taken');
+    expect(together(['taken', 'absent'])).toBe('absent');
+    expect(together(['unreached', 'taken'])).toBe('unreached');
+    expect(together(['taken', 'unreached'])).toBe('unreached');
   });
 });
 

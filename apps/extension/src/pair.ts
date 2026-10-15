@@ -60,14 +60,20 @@ export async function newOffer(device: LocalSigner, defaults: Defaults, label: s
  */
 export const OFFER_POST_TIMEOUT_MS = 15_000;
 
-/** Posts the offer sealed under its typed code with POST /pair-offers, signed by the device key (NIP-98). */
+/**
+ * Posts the offer sealed under its typed code with POST /pair-offers, signed by the device key (NIP-98). The operator
+ * answers 409 when an unexpired offer already has the lookup (contract 6), and a lookup comes from its offer's own random
+ * 40-bit code, so that offer is this one: a post of it the operator stored though the answer came after the page had given
+ * up on it. It counts as posted, so the code is shown; each try made with the offer again (tryPairing) failed on that 409
+ * for the four minutes it is shown again, each post counting against the operator's 30 offers an hour.
+ */
 export async function postOffer(device: LocalSigner, defaults: Defaults, o: Offer, crypto: CryptoPort, get: typeof fetch = fetch, timeoutMs = OFFER_POST_TIMEOUT_MS): Promise<void> {
   const { lookup, key } = await derivePairCode(o.code, crypto);
   const url = `${defaults.operator.api}/pair-offers`;
   const body = JSON.stringify({ v: 1, lookup, offer: await sealOffer(o.offer, key, crypto) });
   const post = timed(timeoutMs, capped(ANSWER_MAX_BYTES, get));
   const res = await post(url, { method: 'POST', body, headers: { Authorization: await httpAuth(device, url, 'POST', body, crypto), 'Content-Type': 'application/json' } });
-  if (!res.ok) throw new Error(`pair-offers answered ${res.status}`);
+  if (!res.ok && res.status !== 409) throw new Error(`pair-offers answered ${res.status}`);
   o.posted = true;
 }
 
