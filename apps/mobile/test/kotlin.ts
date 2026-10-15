@@ -21,3 +21,16 @@ export function member(kt: string, name: string): string {
   }
   return body.join('\n');
 }
+
+/** A function's statements, a line each, as written: its closing braces, comment lines and blank lines gone. */
+export function statements(lines: string[]): string[] {
+  return lines.map((l) => l.trim()).filter((l) => l !== '' && l !== '}' && !l.startsWith('//'));
+}
+
+/**
+ * The statements of a Kotlin function with a block body, after its signature (member): held whole, a line added to it
+ * fails a test that a check for each expected line alone would let pass.
+ */
+export function steps(kt: string, name: string): string[] {
+  return statements(member(kt, name).split('\n').slice(1));
+}

@@ -1,8 +1,10 @@
 // The share's spool as kefli-share writes it (mobile spec 8.5), before any JavaScript runs. Node can't run the
 // Kotlin: these read its source, standing in for the check on the phone listed in HANDOVER, and run the sheet's
 // reading of the text the spool holds (pickup.ts firstLink).
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { SHARE_MAX_TRIES, firstLink } from '../src/share/pickup';
-import { kotlinSource, member as memberOf } from './kotlin';
+import { kotlinSource, member as memberOf, steps } from './kotlin';
 
 jest.mock('expo-modules-core', () => ({ requireNativeModule: () => ({}) }), { virtual: true });
 jest.mock('../src/services/save', () => ({}));
@@ -49,6 +51,30 @@ describe("the share's spool (8.5)", () => {
     // listed with the files alone, a held share whose sheet closed first (Back as it rose, or That didn't save) stayed
     // unsaved until the process went; the pickup leaves a young one, or one a sheet has open (pickup.test.ts)
     expect(member('list')).toMatch(/\.map \{ it\.name\.removeSuffix\("\.json"\) \} \+\s+unwritten\.keys/);
+  });
+
+  test('a sheet brought back after its spool went spools the share again from its intent, so the share is saved', () => {
+    // recreated after its process died, a sheet whose share had been held in memory (no room to write it), or whose
+    // spool the start-up pickup had saved and deleted meanwhile, opened on a spool that was gone and said That didn't
+    // save, though the intent the system keeps for it still held the text
+    const activity = kotlinSource('kefli-share', 'share', 'ShareActivity.kt');
+    // each function whole: a line added to one (an early return of the id it had, say) passed while these lines were
+    // looked for alone, and opened the sheet on a spool that went, as before
+    expect(steps(activity, 'onCreate')).toEqual([
+      'spoolId = spool(savedInstanceState?.getString(SPOOL_KEY))', 'spoolId?.let { live[it] = WeakReference(this) }', 'super.onCreate(null)',
+    ]);
+    // the spool it had while that is still there, on disk or held in memory, and otherwise a new one from the intent
+    expect(steps(activity, 'spool')).toEqual(['return kept?.takeIf { Spool.has(this, it) } ?: Spool.write(this, intent, referrer?.toString())']);
+    expect(steps(kt, 'has')).toEqual(['return unwritten.containsKey(id) || File(dir(context), "$id.json").exists()']);
+  });
+
+  test('a sheet folded, unfolded or resized in a split screen carries on, rather than being recreated', () => {
+    // recreated in place, the old sheet's JavaScript read the pause as the sheet leaving the screen and closed it,
+    // dropping its spool as the new sheet opened, which could then say That didn't save; it takes the changes
+    // MainActivity takes in place (Expo's template), smallestScreenSize and assetsPaths among them
+    const manifest = readFileSync(join(__dirname, '..', 'modules', 'kefli-share', 'android', 'src', 'main', 'AndroidManifest.xml'), 'utf8');
+    const changes = /android:configChanges="([^"]*)"/.exec(manifest)?.[1].split('|') ?? [];
+    expect([...changes].sort()).toEqual(['assetsPaths', 'keyboard', 'keyboardHidden', 'orientation', 'screenLayout', 'screenSize', 'smallestScreenSize', 'uiMode']);
   });
 });
 
