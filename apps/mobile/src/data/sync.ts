@@ -5,7 +5,7 @@
 // removed with its pending sends, since this phone may not write over a version it doesn't understand (C§10);
 // an older one is ignored. A save with no text arrives as text_state 'queued', so this phone tries the parse,
 // unless this phone holds the save's text, which it keeps (C§4.1, v1.12).
-import { ITEM_D_PREFIX, deletedDs, deletionRemoves, isServerUrl, mergeItem, withoutUserInfo, wordReached } from '@kefli/protocol';
+import { ITEM_D_PREFIX, deletedDs, deletionRemoves, isServerUrl, mergeItem, withoutTrailingSlashes, withoutUserInfo, wordReached } from '@kefli/protocol';
 import { addressIndex } from './libraryKey';
 import type { LocalVersion, MergeOutcome, NostrEvent, ParsedItem } from '@kefli/protocol';
 import type { SqlDb } from './db';
@@ -55,12 +55,16 @@ export const isWebAddress = (url: string) => WEB.test(url);
  */
 export const TEXT_SERVERS_MAX = 10;
 
-/** Blob servers as a fetch can use them: http(s) addresses only, without a trailing slash, each once, at most n. */
+/**
+ * Blob servers as a fetch can use them: http(s) addresses only, without a trailing slash, each once, at most n. The
+ * slashes are counted back from the end (withoutTrailingSlashes), as every other server address loses them: the
+ * pattern /\/+$/ was tried from every slash of a run that something else follows, for each server of each save synced.
+ */
 export function blobServers(servers: unknown[], n = TEXT_SERVERS_MAX): string[] {
   const out = new Set<string>();
   for (const s of servers) {
     if (out.size >= n) break;
-    if (isServerUrl(s)) out.add(s.replace(/\/+$/, ''));
+    if (isServerUrl(s)) out.add(withoutTrailingSlashes(s));
   }
   return [...out];
 }

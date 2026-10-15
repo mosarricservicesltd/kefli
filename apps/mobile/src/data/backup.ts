@@ -6,6 +6,7 @@
 // The backup space (C§5, FD 117): the room the library's last known figures leave, for the texts waiting on it, and
 // the hold a refusal for room or the day puts on the library's other texts until its retry.
 import type { AccountFigures } from '@kefli/protocol';
+import { BLOCK } from './account';
 import type { SqlDb } from './db';
 import { releaseDependents, releaseDependentsIn } from './outbox';
 import { getSetting, setSetting } from './settings';
@@ -162,17 +163,11 @@ export function holdUpload(db: SqlDb, owner: string, id: number, sha256: string,
 const counted = (f: KnownFigures) => (e: Freed) => e.at > f.at && !(typeof e.up === 'number' && e.up > f.at);
 
 /**
- * The least a blob counts for against its library's quota and day (C§5): a disk block, which its file takes however
- * few bytes it holds. Kefli's server counts each blob for its size and never less (store.Cost), in its figures too,
- * so the reckoning below counts each the same way, a blob whose size this phone doesn't know as one block.
- */
-const BLOCK = 4096;
-
-/**
  * The room the last known figures leave (C§5): their quota less their use, less what this phone has had the operator
- * take since and plus what it has had deleted since of what they counted, each blob a block at least. Another
- * device's uploads and deletions aren't known here, so the reckoning can be out either way; a text it lets through
- * that doesn't fit is refused, and the refusal brings the next figures.
+ * take since and plus what it has had deleted since of what they counted, each blob a block at least (data/account
+ * BLOCK), as Kefli's server counts it, and one whose size this phone doesn't know as one block. Another device's
+ * uploads and deletions aren't known here, so the reckoning can be out either way; a text it lets through that doesn't
+ * fit is refused, and the refusal brings the next figures.
  */
 export function roomLeft(db: SqlDb, owner: string, f: KnownFigures): number {
   const taken = db.get<{ n: number | null }>('SELECT SUM(MAX(COALESCE(size, 0), ?)) AS n FROM blobs WHERE owner = ? AND operator_at > ?', BLOCK, owner, f.at)?.n ?? 0;

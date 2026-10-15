@@ -152,6 +152,24 @@ describe('connected browsers (mobile spec 5.5, contract 4.4 and 4.9)', () => {
     expect(net.asked).toEqual([]);
   }, 20_000);
 
+  test("the API answering a typed code's lookup with any redirect: offline, never a wrong code, and nothing it names is asked", async () => {
+    // every call to the API is signed for its exact address (C§6), so it never answers through a redirect. Followed, a
+    // 303 to another of its paths, which answers 404, or a 302 to a page that answers 200, read as a wrong code
+    const w = world();
+    for (const [status, location] of [[303, '/pair-offers/elsewhere'], [302, 'https://news.example/'], [300, null]] as const) {
+      const asked: string[] = [];
+      const away = (async (url: string, init: RequestInit = {}) => {
+        if (!url.includes('/pair-offers/') && url.startsWith('http://api/')) return w.ports.fetch(url, init);
+        asked.push(url.replace(/[0-9a-f]{64}$/, '<lookup>'));
+        if (!url.startsWith('http://api/')) return new Response('<p>a page</p>', { status: 200 });
+        return url.endsWith('/elsewhere') ? w.ports.fetch(url, init) : new Response(null, { status, headers: location ? { location } : {} });
+      }) as typeof fetch;
+      expect([status, await lookupCode({ ...w.ports, fetch: away }, 'ABCD-EFGH')]).toEqual([status, { problem: 'offline' }]);
+      expect([status, asked]).toEqual([status, ['http://api/pair-offers/<lookup>']]);
+    }
+    // each lookup runs scrypt at N = 16384 (contract 4.4)
+  }, 30_000);
+
   test('an API that takes the lookup and never answers is let go at its deadline: offline, where Connect waited for good', async () => {
     const w = world();
     let asked = (): void => undefined;

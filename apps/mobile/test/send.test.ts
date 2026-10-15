@@ -944,6 +944,43 @@ describe('deleting makes room (C§5, v1.12)', () => {
     expect(by.get(a.sha)).toMatchObject({ last_error: null, operator_at: expect.any(Number) });
     expect([by.get(b.sha)?.operator_at, by.get(c.sha)?.operator_at]).toEqual([null, null]);
   });
+
+  test('a deletion the operator answers 404, a blob it no longer held, is done but gives back no room, and wakes nothing', async () => {
+    // a 2xx is the operator freeing the blob's room; a 404 says it held no such blob, so freed nothing there. Counted as
+    // freed, as it was, its room went to a waiting text, which the operator then refused again
+    const { w, z } = await full({ sizes: [1_000, 300, 900, 200], room: 100, refuseAfter: 1 });
+    const answers = w.ports.fetch;
+    w.ports.fetch = (async (url: string, init: RequestInit) =>
+      init.method === 'DELETE' && url === `http://blossom/${z.sha}` ? new Response('{}', { status: 404 }) : answers(url, init)) as typeof fetch;
+    const before = w.calls.length;
+    commitDelete(w.db, w.signer.pubkey(), z.hash, deleteItem(w.db, w.now(), w.signer.pubkey(), z.hash).held);
+    await drain(w.ports);
+    expect(w.db.get("SELECT 1 AS n FROM outbox WHERE op = 'delete_blob'")).toBeUndefined();
+    expect(getSetting(w.db, `space.freed.${w.signer.pubkey()}`)).toBeNull();
+    expect(tries(w, before)).toBe(0);
+    // the operator's 2xx still frees the room, as the test above has it
+  });
+
+  test("the block such a deletion gives back is data/account's, the one figure the reckoning of room reads too", async () => {
+    // a copy of its own here could drift from the figure data/backup.ts reckons the room it gave back by
+    const ACCOUNT = '../src/data/account';
+    const w = world();
+    ensureIdentityRow(w.db, w.now(), w.signer.pubkey(), 'early_share', true);
+    w.db.run('UPDATE identities SET registered_at = 1');
+    const sha = 'ef'.repeat(32);
+    enqueue(w.db, w.now(), { op: 'delete_blob', signer: w.signer.pubkey(), subject: sha, payload: { sha256: sha }, targets: [D.operator.blossom] });
+    try {
+      let fresh: typeof import('../src/services/send') | undefined;
+      jest.isolateModules(() => {
+        jest.doMock(ACCOUNT, () => ({ ...jest.requireActual(ACCOUNT), BLOCK: 8_192 }));
+        fresh = require('../src/services/send');
+      });
+      await fresh!.sendOne(w.ports);
+    } finally {
+      jest.dontMock(ACCOUNT);
+    }
+    expect(JSON.parse(getSetting(w.db, `space.freed.${w.signer.pubkey()}`) ?? '[]')).toEqual([{ at: w.now(), size: 8_192, up: null }]);
+  });
 });
 
 describe('a refusal for room or the day holds the library’s other texts (C§5, v1.12)', () => {
@@ -1226,6 +1263,45 @@ describe('every call to a server takes its hops, and has a deadline (7.1)', () =
     await drain(v.ports);
     expect(away.asked).toEqual([]);
     expect(tried(v)).toMatchObject({ state: 'queued', last_error: 'blocked: redirect' });
+  });
+
+  test("Kefli's API answering a call with any redirect, on any build: nothing it names is asked, and the call waits as for an API not answering", async () => {
+    // every call to the API is signed for its exact address (C§6), so it never answers through a redirect. Followed, a
+    // register answered 302 or 303 to any page that answers 200 read as registered, and one answered 300 was refused
+    // for good, every save behind it held
+    const answers: [number, string | null][] = [
+      [302, 'https://news.example/'], [303, 'https://news.example/'], [307, '/v1/register'], [308, 'http://api/v1/register'], [301, null], [300, null],
+    ];
+    for (const localStack of [true, false]) {
+      for (const [status, location] of answers) {
+        const w = world();
+        w.ports.localStack = localStack;
+        const base = w.ports.fetch;
+        const asked: string[] = [];
+        w.ports.fetch = (async (url: string, init: RequestInit) => {
+          asked.push(url);
+          return url === 'http://api/register' ? new Response(null, { status, headers: location ? { location } : {} }) : base(url, init);
+        }) as typeof fetch;
+        release(w.db, (await save(w)).held);
+        await drain(w.ports);
+        const named = [localStack, status, location];
+        expect([...named, tried(w)]).toEqual([...named, expect.objectContaining({ state: 'queued', last_error: 'blocked: redirect' })]);
+        expect([...named, asked]).toEqual([...named, ['http://api/register']]);
+        expect([...named, w.db.get('SELECT registered_at FROM identities')]).toEqual([...named, { registered_at: null }]);
+        expect(w.published()).toEqual([]);
+      }
+    }
+    // a browser's removal answered 303 to a page that answers 200 waits too, where it read as removed
+    const v = world();
+    registered(v);
+    const base = v.ports.fetch;
+    const target = `http://api/devices/${'ab'.repeat(32)}`;
+    v.ports.fetch = (async (url: string, init: RequestInit) =>
+      url === target ? new Response(null, { status: 303, headers: { location: 'https://news.example/' } }) : base(url, init)) as typeof fetch;
+    enqueue(v.db, v.now(), { op: 'delete_device', signer: v.signer.pubkey(), subject: 'ab'.repeat(32), targets: [target] });
+    await drain(v.ports);
+    expect(tried(v)).toMatchObject({ state: 'queued', last_error: 'blocked: redirect' });
+    expect(v.calls).not.toContain('GET https://news.example/');
   });
 
   test("a blob server sending an upload, a mirror's copy or a deletion into the phone's network: nothing is asked there; each waits", async () => {

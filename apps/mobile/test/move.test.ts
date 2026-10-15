@@ -605,6 +605,25 @@ describe("the move's calls to servers take the hops, each with a deadline (7.1)"
     expect(w.keysRetired()).toBe(false);
   });
 
+  test("the API answering S's DELETE /account with any redirect: nothing it names is asked, and S stays to retire later", async () => {
+    // every call to the API is signed for its exact address (C§6), so it never answers through a redirect. Followed, a
+    // 303 to any page that answers 200 read as S's account deleted, and S's keys went with its library still held there
+    for (const [status, location] of [[303, 'https://news.example/'], [307, '/v1/account'], [302, null]] as const) {
+      const w = world();
+      await w.save(w.S, 1);
+      const base = w.p.fetch;
+      const asked: string[] = [];
+      const away = (async (url: string, init: RequestInit = {}) => {
+        if (init.method !== 'DELETE' || !url.endsWith('/account')) return base(url, init);
+        asked.push(url);
+        return url === 'http://api/account' ? new Response(null, { status, headers: location ? { location } : {} }) : new Response('{}', { status: 200 });
+      }) as typeof fetch;
+      expect([status, await runMove({ ...w.p, fetch: away })]).toEqual([status, 'waiting']);
+      expect([status, asked, moveJob(w.db)?.step, w.keysRetired()]).toEqual([status, ['http://api/account'], 5, false]);
+      expect(w.db.get('SELECT 1 AS n FROM identities WHERE pubkey = ?', w.S.pubkey())).toEqual({ n: 1 });
+    }
+  });
+
   test('a server too slow to send the text in its time makes the move wait: the text is never copied as missing', async () => {
     jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
     const w = world();

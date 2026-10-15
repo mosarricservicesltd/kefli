@@ -8,7 +8,7 @@ import { BackHandler, TextInput, View } from 'react-native';
 import { radius } from '@kefli/tokens';
 import { phoneCrypto } from '../crypto/port';
 import { answerDeleted, useApp } from '../services/app';
-import { loadDefaults, type Defaults } from '../services/config';
+import { LOCAL_STACK, loadDefaults, type Defaults } from '../services/config';
 import { deleteEverything, deletePorts, deleteTargets, signDeletion, type Progress, type Result, type Target } from '../services/deleteAccount';
 import { currentSigner, wipeEverything, withScreen } from '../services/identity';
 import { pool } from '../services/runner';
@@ -84,7 +84,9 @@ export default function Delete() {
     const signer = current && withScreen(current);
     if (!signer || !defaults) return;
     const mine = ++attempt.current;
-    const ports = deletePorts({ db: store(), signer, defaults, crypto: phoneCrypto, fetch, pool, wipePhone: wipeEverything });
+    // the blob servers' redirects to loopback are followed on the local stack only, where its servers are (net/http
+    // serverHops); left out, the local stack's operator moving a deletion to its other address failed the first step
+    const ports = deletePorts({ db: store(), signer, defaults, crypto: phoneCrypto, fetch, pool, wipePhone: wipeEverything, localStack: LOCAL_STACK });
     // a nostr user approves in their app first: every deletion is signed before anything is sent, and declining
     // deletes nothing (FD 41, prototype del-nostr, del-declined). A generated identity's signing reads the relays
     // first, some seconds, so the rows show waiting from the press (del-running)

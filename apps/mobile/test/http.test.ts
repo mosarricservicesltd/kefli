@@ -248,12 +248,19 @@ describe('open() against a real server', () => {
     return closed.includes(path);
   };
 
-  test('a trickling body times out and the connection is let go', async () => {
-    const started = Date.now();
-    await expect(open(fetch, `${base}/trickle`, {}, 1000).then((o) => o.read(PAGE_MAX_BYTES))).rejects.toBeInstanceOf(TimedOut);
-    expect(Date.now() - started).toBeLessThan(4000);
+  test('a trickling body is cut at the deadline it was given, though it never stops, and the connection is let go', async () => {
+    // only the deadline's own timer throws TimedOut (open's line.late), so no clock is read here: a bound of 4 s round
+    // the 1 s deadline was what a busy machine's late timers broke. What is checked is that the timer was armed for the
+    // second asked; a read the deadline never ends fails at the test's own limit, the trickle having no end
+    const timers = jest.spyOn(globalThis, 'setTimeout');
+    try {
+      await expect(open(fetch, `${base}/trickle`, {}, 1000).then((o) => o.read(PAGE_MAX_BYTES))).rejects.toBeInstanceOf(TimedOut);
+      expect(timers.mock.calls.some(([, ms]) => ms === 1000)).toBe(true);
+    } finally {
+      timers.mockRestore();
+    }
     expect(await letGo('/trickle')).toBe(true);
-  });
+  }, 30_000);
 
   test('a flood is refused at the cap and the connection is let go', async () => {
     await expect(open(fetch, `${base}/flood`, {}, 10_000).then((o) => o.read(1024 * 1024))).rejects.toBeInstanceOf(TooLarge);

@@ -18,7 +18,7 @@ import {
 import type { SqlDb } from '../data/db';
 import { deletesOwed, itemAddresses, newestVersion } from '../data/libraryKey';
 import { bare, indexerRelays, nextListTime, relayEntries, relayListTags, serverListTags } from '../data/lists';
-import { SERVER_TIMEOUT_MS, serverFetch, serverHops } from '../net/http';
+import { SERVER_TIMEOUT_MS, apiFetch, serverFetch, serverHops } from '../net/http';
 import type { RelayAnswer } from './send';
 import { pageStream, takeNewerLists, type Filter } from './sync';
 
@@ -35,19 +35,17 @@ export type DelPorts = {
   sleep: (ms: number) => Promise<void>;
   /** Step 3, on the phone's storage. */
   wipePhone: () => Promise<void>;
-  /** Each server's minute (spec 7.2). */
+  /** Each server's minute (spec 7.2), in milliseconds of wall time, its tries counted with the waits between them. */
   budgetMs?: number;
-  /** The local stack's build (services/config.ts LOCAL_STACK), whose servers a redirect may reach on loopback. */
+  /** The local stack's build (services/config.ts LOCAL_STACK), whose blob servers a redirect may reach on loopback. */
   localStack?: boolean;
 };
 
 /**
- * p's fetch for a server, Kefli's API or a blob server (net/http serverFetch): each redirect followed a hop at a time,
- * never into the phone's own network (on the local stack, loopback too), and each answer had within the API's 15 s.
- * Left to OkHttp, a redirect sent DELETE /account, or a blob's deletion, on to whatever answered at 192.168.1.1 (its
- * authorisation left behind, as OkHttp does at another host), whose 2xx the phone then took for the operator's; and an
- * API that took DELETE /account and never answered held the screen, which swallows Back while the deletion runs, for
- * good.
+ * p's fetch for a blob server (net/http serverFetch): each redirect followed a hop at a time, never into the phone's own
+ * network (on the local stack, loopback too), and each answer had within the API's 15 s. Left to OkHttp, a redirect
+ * sent a blob's deletion on to whatever answered at 192.168.1.1 (its authorisation left behind, as OkHttp does at
+ * another host), whose 2xx the phone then took for the server's. DELETE /account follows no redirect (stepOperator).
  */
 function toServer(p: DelPorts): typeof fetch {
   return serverFetch(p.fetch, { hops: serverHops(p.localStack === true), timeoutMs: SERVER_TIMEOUT_MS });
@@ -122,15 +120,21 @@ function save(p: DelPorts, prog: Progress): void {
 /** One try at a step's work: whether it went through. A named type, so the code gate's parser reads withinMinute whole. */
 type Attempt = () => Promise<boolean>;
 
-/** Tries until it succeeds or the minute is spent: 2 s, then doubling. */
+/**
+ * Tries until it succeeds or the minute is spent (spec 7.2): 2 s, then doubling. The minute is wall time, the tries as
+ * well as the waits between them, and a try starts only while a request's deadline (net/http SERVER_TIMEOUT_MS) would
+ * still end it within the minute. Counting the waits alone, as it did, five tries of 15 s each held the screen, which
+ * swallows Back while the deletion runs, for 1 min 45 s before the step read as failed. RULED: the time is read from
+ * the steady clock (performance.now), which the phone's clock being set doesn't move: read from Date.now, a phone set
+ * back an hour while a try ran, as a network's time sets one whose clock was wrong, held the screen for 37 minutes.
+ */
 async function withinMinute(p: DelPorts, attempt: Attempt): Promise<boolean> {
   const budget = p.budgetMs ?? 60_000;
-  let spent = 0;
+  const started = performance.now();
   for (let wait = 2000; ; wait *= 2) {
     if (await attempt().catch(() => false)) return true;
-    if (spent + wait > budget) return false;
+    if (performance.now() - started + wait + SERVER_TIMEOUT_MS > budget) return false;
     await p.sleep(wait);
-    spent += wait;
   }
 }
 
@@ -176,7 +180,9 @@ async function onRelays(p: DelPorts, owner: string, held: Set<string>): Promise<
   for (const [d, e] of found) {
     if (held.has(d) || !d.startsWith(ITEM_D_PREFIX)) continue;
     try {
-      const sha = (await readItemEvent(p.signer, e)).item.item.text?.sha256;
+      // opened apart from its read: the code gate's parser, given a bracketed await, lost its place in this function
+      const opened = await readItemEvent(p.signer, e);
+      const sha = opened.item.item.text?.sha256;
       if (typeof sha === 'string') shas.push(sha);
     } catch {
       // not one that opens: its kind 5 goes all the same
@@ -284,9 +290,15 @@ async function emptyLists(p: DelPorts, deletion: NostrEvent): Promise<NostrEvent
  */
 export type Signed = { wraps: NostrEvent[]; items: NostrEvent[]; lists: NostrEvent[]; empties?: NostrEvent[]; blobs?: string[]; nostr: boolean };
 
+/** The row the identity's provider is read from: a named type, so the code gate's parser reads signDeletion whole. */
+type Provider = { provider: string };
+
 export async function signDeletion(p: DelPorts): Promise<Signed> {
   const owner = p.signer.pubkey();
-  const nostr = (p.db.get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local') !== 'local';
+  // read, then compared: bracketed into the comparison, the read lost the code gate's parser its place, and only this
+  // function's first three lines were scored
+  const provider = p.db.get<Provider>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local';
+  const nostr = provider !== 'local';
   if (nostr) await takeNewestLists(p, owner);
   const held = allDs(p.db, owner);
   const remote = await onRelays(p, owner, new Set(held));
@@ -330,8 +342,11 @@ async function stepOperator(p: DelPorts, owner: string, signed: Signed): Promise
   const shas = allBlobs(p, owner, signed);
   const cleared = reached && (await withinMinute(p, () => deleteBlobs(p, op.blossom, shas)));
   if (!cleared) return false;
+  // the API follows no redirect (net/http apiFetch): followed, a 303 to any page that answers 200 read as the account
+  // deleted, and the phone was wiped; and an API that took the call and never answered held the screen, which swallows
+  // Back while the deletion runs, for good
   const url = `${withoutTrailingSlashes(op.api)}/account`;
-  const get = toServer(p);
+  const get = apiFetch(p.fetch);
   return withinMinute(p, async () => {
     const res = await get(url, { method: 'DELETE', headers: { Authorization: await httpAuth(p.signer, url, 'DELETE', null, p.crypto) } });
     return res.ok || res.status === 404;

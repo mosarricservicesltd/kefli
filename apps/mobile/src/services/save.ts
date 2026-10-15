@@ -159,7 +159,10 @@ function savedUnparsed(c: Ctx, target: string, url: string, outcome: Exclude<Pag
  * A share whose page parsed: its text encrypted and staged, the save written with it, the text on the phone from the
  * start and searchable (4.1, 4.9). RULED: the page's fields are fitted under the event ceiling (C§3.3, data/saves
  * fitSave). A final address too long for the event isn't adopted: the save keeps the shared one, with the text, as a
- * failed parse keeps it.
+ * failed parse keeps it. RULED: the text is written before the save says it has it, as a pending parse's is
+ * (services/pending.ts settle): a write that fails, as on a full disk, throws with nothing saved, staged or queued, and
+ * the sheet says the share didn't save, its spool kept for the start-up pickup. Written after, the save read as cached
+ * with no text on the phone, its upload queued.
  */
 async function savedParsed(c: Ctx, target: string, url: string, outcome: Extract<PageOutcome, { kind: 'parsed' }>): Promise<Queued> {
   const { result: parsed, finalUrl, words } = outcome;
@@ -178,6 +181,8 @@ async function savedParsed(c: Ctx, target: string, url: string, outcome: Extract
   // came back as a new save with no prior, so its Undo deleted the first share's save.
   const meanwhile = priorOf(c.db, c.owner, hash);
   if (meanwhile) return repeat(c, hash, page.url, meanwhile);
+  // no save is at this hash, and nothing is awaited from here to the save's write, so the text is this save's alone
+  textFiles.writeText(hash, parsed.markdown, outcome.derived);
   const staged = { sha256: enc.text.sha256, size: enc.blob.length, path: stageBlob(enc.text.sha256, enc.blob) };
   c.say('encrypt', `${enc.blob.length} bytes staged`);
   const held = queueSave(c.db, c.now(), {
@@ -185,10 +190,7 @@ async function savedParsed(c: Ctx, target: string, url: string, outcome: Extract
     words, lang: page.lang, hero: page.hero, text: enc.text, textHash: textHash(parsed.markdown, phoneCrypto),
   }, staged, c.targets);
   const row = getItem(c.db, c.owner, hash);
-  if (row) {
-    textFiles.writeText(hash, parsed.markdown, outcome.derived);
-    indexText(c.db, row, outcome.spoken);
-  }
+  if (row) indexText(c.db, row, outcome.spoken);
   c.say('queued', `${held.length} rows held until the sheet closes`);
   return { hash, held, kind: 'saved', prior: null, title: page.title, site: page.site };
 }

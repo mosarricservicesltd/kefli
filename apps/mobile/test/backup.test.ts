@@ -42,6 +42,25 @@ describe('the room the last known figures leave (C§5)', () => {
     expect(roomLeft(w.db, 'cd'.repeat(32), F)).toBe(10_000);
   });
 
+  test("the block is data/account's, the one figure Backup space's Full and a deletion's room read too", () => {
+    // a copy of its own here could drift from the figure the rest of the phone counts by
+    const ACCOUNT = '../src/data/account';
+    try {
+      jest.isolateModules(() => {
+        jest.doMock(ACCOUNT, () => ({ ...jest.requireActual(ACCOUNT), BLOCK: 8_192 }));
+        const fresh = require('../src/data/backup') as typeof import('../src/data/backup');
+        const w = world();
+        w.blob(1, { size: 100, operator_at: 1_100 });
+        expect(fresh.roomLeft(w.db, PK, F)).toBe(10_000 - 8_192);
+        // and a text of 100 bytes waiting for room waits for that block
+        const waiting = w.blob(2, { size: 100, last_error: 'quota' });
+        expect([fresh.nextForRoom(w.db, PK, 8_191), fresh.nextForRoom(w.db, PK, 8_192)]).toEqual([null, waiting]);
+      });
+    } finally {
+      jest.dontMock(ACCOUNT);
+    }
+  });
+
   test('a blob under a disk block counts as one, taken or deleted, as the operator counts it', () => {
     const w = world();
     // the operator took a text of 100 bytes after the figures: it took a block of the room

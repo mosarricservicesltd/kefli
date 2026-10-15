@@ -19,8 +19,17 @@ jest.mock('../src/services/pagePorts', () => ({ phonePagePorts: () => mockWorld.
 jest.mock('../src/crypto/port', () => ({ phoneCrypto: jest.requireActual('@kefli/protocol/node').nodeCrypto }));
 jest.mock('../src/services/config', () => ({ loadDefaults: async () => mockDefaults }));
 jest.mock('../src/services/identity', () => ({ ensureSigner: async () => mockWorld.signer }));
-jest.mock('../src/services/staging', () => ({ stageBlob: (sha: string) => `/staged/${sha}` }));
-jest.mock('../src/services/textFiles', () => ({ textFiles: { writeText: () => undefined } }));
+/** The phone's files: what was staged and written, and a write that fails while full is set, as on a full disk. */
+const mockFiles = { staged: [] as string[], written: [] as string[], full: false };
+jest.mock('../src/services/staging', () => ({ stageBlob: (sha: string) => (mockFiles.staged.push(sha), `/staged/${sha}`) }));
+jest.mock('../src/services/textFiles', () => ({
+  textFiles: {
+    writeText: (hash: string) => {
+      if (mockFiles.full) throw new Error('ENOSPC (No space left on device)');
+      mockFiles.written.push(hash);
+    },
+  },
+}));
 jest.mock('../src/services/store', () => ({ store: () => mockWorld.db }));
 const mockSpools = new Map<string, string>();
 jest.mock('expo-modules-core', () => ({
@@ -112,6 +121,34 @@ describe('two shares of one link at once (G2, FD 89)', () => {
     expect(r).toMatchObject({ kind: 'saved', prior: null });
     undoSave(mockWorld.db, owner, r.hash!, r.held, r.prior);
     expect(mockWorld.db.all('SELECT 1 FROM items')).toEqual([]);
+  });
+});
+
+describe("a share whose text can't be written, as on a full disk (5.4)", () => {
+  afterEach(() => {
+    mockFiles.full = false;
+  });
+
+  test("nothing is saved, staged or queued, and the share reads as one that didn't save; with room again, it saves whole", async () => {
+    const owner = setUp();
+    const { page, open } = gatedPage(true);
+    mockWorld.page = page;
+    open();
+    mockFiles.full = true;
+    mockFiles.staged.length = 0;
+    // written after the save, the text's failure left a save that read as cached with no text on the phone, its upload
+    // queued, and the sheet said it hadn't saved
+    await expect(saveLink(URL_A, () => undefined)).rejects.toThrow('ENOSPC');
+    expect(mockWorld.db.all('SELECT 1 FROM items')).toEqual([]);
+    expect(mockWorld.db.all('SELECT 1 FROM outbox')).toEqual([]);
+    expect(mockWorld.db.all('SELECT 1 FROM blobs')).toEqual([]);
+    expect(mockFiles.staged).toEqual([]);
+    // the spool the sheet keeps is saved by the start-up pickup, or the share again, once the disk has room
+    mockFiles.full = false;
+    const r = await saveLink(URL_A, () => undefined);
+    expect(r).toMatchObject({ kind: 'saved', prior: null });
+    expect(getItem(mockWorld.db, owner, r.hash!)).toMatchObject({ text_state: 'cached' });
+    expect(mockFiles.written).toContain(r.hash);
   });
 });
 

@@ -226,9 +226,21 @@ describe('a nostr user’s lists as Kefli republishes them (C§3.1)', () => {
     const slashes = `wss://x.example/${'/'.repeat(60_000)}y`;
     recordList(w.db, w.pk, 10002, 'r', 1, JSON.stringify({ tags: [['r', slashes], ['r', 'wss://ok.example/']] }));
     recordList(w.db, w.pk, 10063, 's', 1, JSON.stringify({ tags: [['server', slashes.replace('wss', 'https')]] }));
-    const started = Date.now();
-    expect(relayListTags(w.db, w.pk)).toEqual([['r', slashes], ['r', 'wss://ok.example/']]);
-    expect(serverListTags(w.db, w.pk)).toEqual([['server', slashes.replace('wss', 'https')]]);
-    expect(Date.now() - started).toBeLessThan(1_000);
+    // counted, not timed, so a busy machine can't fail it, as a bound of 1 s could: every pattern runs through exec,
+    // and none may be given the address, whose slashes are counted back from its end
+    const exec = jest.spyOn(RegExp.prototype, 'exec');
+    let relays: string[][] = [];
+    let servers: string[][] = [];
+    let given: number[] = [];
+    try {
+      relays = relayListTags(w.db, w.pk);
+      servers = serverListTags(w.db, w.pk);
+      given = exec.mock.calls.map(([s]) => String(s).length);
+    } finally {
+      exec.mockRestore();
+    }
+    expect(relays).toEqual([['r', slashes], ['r', 'wss://ok.example/']]);
+    expect(servers).toEqual([['server', slashes.replace('wss', 'https')]]);
+    expect(given.filter((n) => n >= 60_000)).toEqual([]);
   });
 });

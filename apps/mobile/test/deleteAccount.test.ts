@@ -397,16 +397,52 @@ describe('Delete my data asks its servers through the hops, each within a deadli
     }
   });
 
-  test('the local stack’s API sending DELETE /account to its own other address on loopback is followed there, and only there', async () => {
+  test("the local stack's operator moving a blob's deletion to its other address on loopback: followed there, and only there", async () => {
     for (const localStack of [true, false]) {
       const w = world();
-      w.p.defaults = { ...D, operator: { ...D.operator, api: 'http://localhost:3449' } };
-      w.p.localStack = localStack;
-      const base = w.p.fetch;
-      w.p.fetch = (async (url: string, init: RequestInit) =>
-        url === 'http://localhost:3449/account' ? new Response('', { status: 307, headers: { location: '/v1/account' } }) : base(url, init)) as typeof fetch;
-      expect([localStack, await deleteEverything(w.p, () => undefined)]).toEqual([localStack, localStack ? 'done' : 'failed']);
-      expect([localStack, w.log.includes('DELETE http://localhost:3449/v1/account')]).toEqual([localStack, localStack]);
+      // as the screen hands them over (screens/Delete.tsx), the build's word with them
+      const ports = deletePorts({
+        db: w.db, signer: w.p.signer, defaults: { ...D, operator: { ...D.operator, blossom: 'http://localhost:3447' } }, crypto: nodeCrypto,
+        fetch: w.p.fetch, wipePhone: w.p.wipePhone, localStack,
+        pool: { publish: w.p.publish, query: async () => [] },
+      });
+      const base = ports.fetch;
+      ports.fetch = (async (url: string, init: RequestInit) => {
+        const moved = /^http:\/\/localhost:3447\/([0-9a-f]{64})$/.exec(url);
+        return moved ? new Response(null, { status: 307, headers: { location: `/v1/${moved[1]}` } }) : base(url, init);
+      }) as typeof fetch;
+      ports.sleep = async () => undefined;
+      ports.budgetMs = 0;
+      expect([localStack, await deleteEverything(ports, () => undefined)]).toEqual([localStack, localStack ? 'done' : 'failed']);
+      expect([localStack, w.log.some((l) => l.startsWith('DELETE http://localhost:3447/v1/')), w.wiped()]).toEqual([localStack, localStack, localStack]);
+    }
+  });
+
+  test('DELETE /account answered by any redirect, on any build, is the API not answering: the step fails and the phone keeps everything', async () => {
+    // every call to the API is signed for its exact address (C§6), so it never answers through a redirect. Followed, a
+    // 303 to any page that answers 200 read as the account deleted, and Delete my data went on to wipe the phone
+    const answers: [number, string | null][] = [
+      [303, 'https://news.example/'], [302, 'https://news.example/'], [301, '/v1/account'], [307, '/v1/account'], [308, 'http://api/v2/account'],
+      [302, null], [300, null], [304, null],
+    ];
+    for (const localStack of [true, false]) {
+      for (const [status, location] of answers) {
+        const w = world();
+        w.p.localStack = localStack;
+        const base = w.p.fetch;
+        const asked: string[] = [];
+        w.p.fetch = (async (url: string, init: RequestInit = {}) => {
+          asked.push(`${init.method ?? 'GET'} ${url}`);
+          if (url === 'http://api/account') return new Response(null, { status, headers: location ? { location } : {} });
+          return base(url, init);
+        }) as typeof fetch;
+        const named = [localStack, status, location];
+        expect([...named, await deleteEverything(w.p, () => undefined)]).toEqual([...named, 'failed']);
+        expect([...named, w.wiped(), progressOf(w.db)]).toEqual([...named, false, null]);
+        // the operator's blob deletions and DELETE /account, tried within the minute; nothing a redirect names
+        expect([...named, asked.filter((a) => !a.startsWith('DELETE http://blossom/') && a !== 'DELETE http://api/account')]).toEqual([...named, []]);
+        expect([...named, asked.includes('DELETE http://api/account')]).toEqual([...named, true]);
+      }
     }
   });
 
@@ -423,6 +459,77 @@ describe('Delete my data asks its servers through the hops, each within a deadli
     await jest.advanceTimersByTimeAsync(2_000);
     expect(run).toMatchObject({ settled: true, value: 'failed' });
     expect(w.wiped()).toBe(false);
+  });
+
+  /** w's ports as the screen builds them (deletePorts), whose waits are timers and whose minute is the clock's. */
+  const screenPorts = (w: ReturnType<typeof world>, fetch: typeof globalThis.fetch) => deletePorts({
+    db: w.db, signer: w.p.signer, defaults: D, crypto: nodeCrypto, fetch, wipePhone: w.p.wipePhone,
+    pool: { publish: w.p.publish, query: async () => [] },
+  });
+
+  test('an API that never answers DELETE /account holds the first step a minute at most, its tries counted with its waits', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    const w = world();
+    const base = w.p.fetch;
+    let tries = 0;
+    const ports = screenPorts(w, (async (url: string, init: RequestInit) => {
+      if (!url.endsWith('/account')) return base(url, init);
+      tries++;
+      return silent(url, init);
+    }) as typeof fetch);
+    const run = watch(deleteEverything(ports, () => undefined));
+    let ms = 0;
+    while (!run.settled && 300_000 > ms) {
+      await jest.advanceTimersByTimeAsync(1_000);
+      ms += 1_000;
+    }
+    // the waits alone were counted: five tries of 15 s and 30 s of waits held the screen for 1 min 45 s
+    expect(run).toMatchObject({ settled: true, value: 'failed' });
+    expect(ms).toBeLessThanOrEqual(60_000);
+    expect([tries, w.wiped()]).toEqual([3, false]);
+  });
+
+  test('an operator that fails at once is still tried through its minute, and one that answers by then is done', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    const w = world();
+    const base = w.p.fetch;
+    const at: number[] = [];
+    const t0 = Date.now();
+    // the API unreachable for its first 20 s, then answering
+    const ports = screenPorts(w, (async (url: string, init: RequestInit) => {
+      if (!url.endsWith('/account')) return base(url, init);
+      at.push(Date.now() - t0);
+      if (Date.now() - t0 < 20_000) throw new Error('unreachable');
+      return base(url, init);
+    }) as typeof fetch);
+    const run = watch(deleteEverything(ports, () => undefined));
+    for (let s = 0; 120 > s && !run.settled; s++) await jest.advanceTimersByTimeAsync(1_000);
+    expect(run).toMatchObject({ settled: true, value: 'done' });
+    expect(at).toEqual([0, 2_000, 6_000, 14_000, 30_000]);
+  });
+
+  test("the phone's clock set back or forward while the first step runs neither stretches nor cuts its minute", async () => {
+    // the minute was read from the wall clock: set back an hour during the first try, as a network's time can set a phone
+    // whose clock was wrong, a never-answering API held the screen, which swallows Back, for 37 minutes of eleven tries
+    for (const step of [-3_600_000, 3_600_000]) {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+      const w = world();
+      const base = w.p.fetch;
+      let tries = 0;
+      const ports = screenPorts(w, (async (url: string, init: RequestInit) => {
+        if (!url.endsWith('/account')) return base(url, init);
+        if (++tries === 1) jest.setSystemTime(Date.now() + step);
+        return silent(url, init);
+      }) as typeof fetch);
+      const run = watch(deleteEverything(ports, () => undefined));
+      let ms = 0;
+      while (!run.settled && 7_200_000 > ms) {
+        await jest.advanceTimersByTimeAsync(1_000);
+        ms += 1_000;
+      }
+      expect([step, run, ms, tries, w.wiped()]).toEqual([step, expect.objectContaining({ settled: true, value: 'failed' }), 51_000, 3, false]);
+      jest.useRealTimers();
+    }
   });
 
   test("a mirror that never answers a deletion is let go at its deadline: it isn't confirmed, and the phone is wiped all the same", async () => {

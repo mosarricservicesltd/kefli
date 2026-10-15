@@ -6,6 +6,7 @@ import {
   isSignerFailure, mirrorBlob, releaseTemplate, sameUrl, savedD, signStatement, signWithinCeiling, uploadBlob, withoutTrailingSlashes, wrapPairAck,
 } from '@kefli/protocol';
 import type { AccountFigures, BlossomOutcome, CryptoPort, NostrEvent, Signer, Statement } from '@kefli/protocol';
+import { BLOCK } from '../data/account';
 import type { SqlDb } from '../data/db';
 import { hasDevices, localRecord, noteRecord, pairAcked, recordCreatedAt, type DeviceProof, type PairPayload } from '../data/devices';
 import { getItem, itemJson, markPublished, textServers, type ItemRow } from '../data/items';
@@ -20,7 +21,7 @@ import {
 import { backoff, begin, enqueue, finish, nextDue, nextWakeAt, releaseDependents, wake } from '../data/outbox';
 import type { OutboxRow, OutboxTarget, TargetResult } from '../data/outbox';
 import { fitSave, namesText, queueBlobDelete, withdrawText } from '../data/saves';
-import { SERVER_TIMEOUT_MS, movingMs, serverFetch, serverHops } from '../net/http';
+import { SERVER_TIMEOUT_MS, apiFetch, movingMs, serverFetch, serverHops } from '../net/http';
 import type { Defaults } from './config';
 import { notYet, pageStream, streamFilter, takeNewerLists, type SyncPorts } from './sync';
 
@@ -46,16 +47,16 @@ export type SendPorts = {
   figures?: (owner: string) => KnownFigures | null;
   /** A 413 quota or daily brought the library's figures (C§5): kept as the last known, by data/account.ts recordFigures. */
   onFigures?: (owner: string, figures: AccountFigures) => void;
-  /** The local stack's build (services/config.ts LOCAL_STACK), whose servers a redirect may reach on loopback. */
+  /** The local stack's build (services/config.ts LOCAL_STACK), whose blob servers a redirect may reach on loopback. */
   localStack?: boolean;
 };
 
 /**
- * p's fetch for a server, Kefli's API or a blob server (net/http serverFetch): each redirect followed a hop at a time,
- * never into the phone's own network (on the local stack, loopback too, serverHops), and the whole answer had within
- * timeoutMs. Left to OkHttp, as p.fetch was, a server's redirect sent a call on to 192.168.1.1, an upload's text with
- * it on a 307 or 308 (OkHttp, as here, leaves the authorisation behind at another host), and took what answered there
- * as the server's answer; and a server that never answered held the outbox's run for good.
+ * p's fetch for a blob server (net/http serverFetch): each redirect followed a hop at a time, never into the phone's own
+ * network (on the local stack, loopback too, serverHops), and the whole answer had within timeoutMs. Left to OkHttp, as
+ * p.fetch was, a server's redirect sent a call on to 192.168.1.1, an upload's text with it on a 307 or 308 (OkHttp, as
+ * here, leaves the authorisation behind at another host), and took what answered there as the server's answer; and a
+ * server that never answered held the outbox's run for good. Kefli's API follows no redirect (apiCall).
  */
 function toServer(p: SendPorts, timeoutMs: number): typeof fetch {
   return serverFetch(p.fetch, { hops: serverHops(p.localStack === true), timeoutMs });
@@ -116,14 +117,15 @@ export function relayResult(target: string, a: RelayAnswer, eventId: string): Ta
 
 /**
  * One signed call to the API (contract 6): ok, retried on 401, 429 and 5xx, otherwise refused. okStatus counts as done
- * too. Its redirects take the hops and its answer has the API's deadline (toServer); one that goes past either is
- * retried as an API not answering.
+ * too. It follows no redirect and its answer has the API's deadline (net/http apiFetch): a 3xx, or a deadline passed,
+ * is retried as an API not answering. Followed, a register or a browser's removal answered 303 or 302 to any page
+ * that answers 200 read as done.
  */
 async function apiCall(p: SendPorts, signer: Signer, url: string, method: 'POST' | 'DELETE', body: string | null, okStatus?: number): Promise<TargetResult> {
   try {
     const headers: Record<string, string> = { Authorization: await httpAuth(signer, url, method, body ?? '', p.crypto) };
     if (body !== null) headers['Content-Type'] = 'application/json';
-    const res = await toServer(p, SERVER_TIMEOUT_MS)(url, { method, headers, ...(body === null ? {} : { body }) });
+    const res = await apiFetch(p.fetch)(url, { method, headers, ...(body === null ? {} : { body }) });
     if (res.ok || res.status === okStatus) return { target: url, kind: 'ok' };
     if (res.status === 401 || res.status === 429 || res.status >= 500) return { target: url, kind: 'retry', error: `HTTP ${res.status}` };
     return { target: url, kind: 'rejected', error: `HTTP ${res.status}` };
@@ -151,7 +153,9 @@ async function sendPostDevice(p: SendPorts, row: OutboxRow, signer: Signer, t: O
     const source = await p.signer(moved_from);
     if (!source) return [{ target: t.target, kind: 'retry', error: 'the source key is not on the phone' }];
     const api = t.target.slice(0, -DEVICES_PATH.length);
-    consent = { release: { pubkey: moved_from, ...(await signStatement(source, releaseTemplate(api, device_pubkey, row.signer, p.now()))) } };
+    // signed apart from the object it goes in: the code gate's parser, given an awaited spread, ended this function there
+    const signed = await signStatement(source, releaseTemplate(api, device_pubkey, row.signer, p.now()));
+    consent = { release: { pubkey: moved_from, ...signed } };
   } else if (proof) {
     consent = { proof };
   } else {
@@ -289,15 +293,20 @@ function refused(p: SendPorts, row: OutboxRow, target: string, sha256: string, r
  * For the day, a text the operator holds already for another library on the phone still goes (holdOn).
  */
 function roomRefused(p: SendPorts, row: OutboxRow, operator: string, why: 'quota' | 'daily', figures: AccountFigures | undefined): void {
-  if (figures) quietly(() => p.onFigures?.(row.signer, figures));
+  // the port taken out before it is called: the code gate's parser loses its place at an optional call (?.())
+  const keep = p.onFigures;
+  if (figures && keep) quietly(() => keep(row.signer, figures));
   holdUploads(p.db, row.signer, { reason: why, until: p.now() + DAY }, row.id, operator);
 }
+
+/** What quietly runs: a named type, since the code gate's parser loses a function at an arrow-typed parameter. */
+type Quiet = () => void;
 
 /**
  * The library's figures, through data/account.ts's ports: they only reckon room early (C§5), so one that fails costs
  * that and never the send it follows, which the operator has already answered.
  */
-function quietly(f: () => void): void {
+function quietly(f: Quiet): void {
   try {
     f();
   } catch {
@@ -315,7 +324,8 @@ function quietly(f: () => void): void {
 function tryRoom(p: SendPorts, owner: string): void {
   quietly(() => {
     if (heldFor(p.db, owner, p.now())?.reason === 'daily') return;
-    const f = p.figures?.(owner);
+    // asked without an optional call (?.()), where the code gate's parser loses its place
+    const f = p.figures ? p.figures(owner) : null;
     const next = f ? nextForRoom(p.db, owner, roomLeft(p.db, owner, f)) : null;
     if (next === null) return;
     releaseHold(p.db, owner);
@@ -373,23 +383,26 @@ function republishNaming(db: SqlDb, now: number, owner: string, sha256: string, 
 }
 
 /**
- * The least a blob takes of its library's quota (C§5): a disk block, which its file takes however few bytes it holds,
- * as Kefli's server counts it (store.Cost) and as data/backup.ts reckons room.
+ * Whether the operator's answer to a deletion gave back room (C§5): a 2xx. A 404 is done as well (4.3), but says the
+ * operator held no such blob, so the deletion freed nothing there; counted as freed, as it was, its room went to a text
+ * waiting for room, which the operator then refused again.
  */
-const BLOCK = 4096;
+function freedRoom(p: SendPorts, server: string, status: number): boolean {
+  return status >= 200 && 300 > status && sameUrl(server, p.defaults().operator.blossom);
+}
 
 /**
  * A blob no save names any more, on each server that held it; a 404 counts as done (4.3). The operator's confirmation
- * gives back room (C§5): it is noted with the blob's size, and a text waiting for room that now fits goes at once. A
- * blob whose size this phone doesn't know (a capture it never read, a row that lost its size) gave back a block at
- * least, as the server counts it, and is noted as one: left out, as it was, the room it made went unreckoned.
+ * gives back room (C§5, freedRoom): it is noted with the blob's size, and a text waiting for room that now fits goes at
+ * once. A blob whose size this phone doesn't know (a capture it never read, a row that lost its size) gave back a
+ * block at least, as the server counts it, and is noted as one: left out, as it was, the room it made went unreckoned.
  */
 async function sendDeleteBlob(p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
   const { sha256, size, up } = JSON.parse(row.payload ?? '{}') as { sha256: string; size?: number; up?: number };
   try {
     const r = await deleteBlob(t.target, sha256, signer, toServer(p, SERVER_TIMEOUT_MS));
     if (!r.ok) return [httpResult(t.target, r, r.permanent)];
-    if (sameUrl(t.target, p.defaults().operator.blossom)) {
+    if (freedRoom(p, t.target, r.status)) {
       noteFreed(p.db, row.signer, { at: p.now(), size: size || BLOCK, up: up ?? null });
       tryRoom(p, row.signer);
     }

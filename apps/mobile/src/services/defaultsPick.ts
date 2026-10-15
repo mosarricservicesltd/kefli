@@ -2,6 +2,7 @@
 // and at least once a day, the last copy that parsed kept, and otherwise the copy baked into the build, so restore,
 // sync and sending all go on with the operator's API unreachable (contract 8). A fetch is tried at most every five
 // minutes after one fails, and gives up after ten seconds.
+import { ANSWER_MAX_BYTES, serverFetch, serverHops } from '../net/http';
 
 export type Defaults = {
   v: 1;
@@ -31,23 +32,30 @@ export type DefaultsPorts = {
   read: () => string | null;
   write: (json: string) => void;
   now: () => number;
+  /** The local stack's build (services/config.ts LOCAL_STACK), whose API a redirect of defaults.json may reach on loopback. */
+  localStack?: boolean;
 };
 
 export type DefaultsState = { fresh: Defaults | null; fetchedAt: number; failedAt: number; inflight: Promise<Defaults | null> | null };
 export const freshState = (): DefaultsState => ({ fresh: null, fetchedAt: 0, failedAt: -Infinity, inflight: null });
 
+/**
+ * A fresh copy, or null. Asked as a blob server is (net/http serverFetch): no cookies, each redirect followed by hand
+ * and never into the phone's own network (on the local stack, loopback too), ten seconds over the headers and the
+ * whole body, raced as well as signalled, and at most an answer's cap of it read, as the extension reads its copy (its
+ * defaults.ts). Asked with the platform's fetch, as it was, it went with the cookies of the jar the WebViews share, its
+ * redirects were followed wherever OkHttp went, the phone's own network included, and its body was read whole, whatever
+ * its size, before it was checked.
+ */
 async function fetchDefaults(p: DefaultsPorts): Promise<Defaults | null> {
   if (!p.url) return null;
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), TIMEOUT);
   try {
-    const res = await p.fetch(p.url, { signal: ctl.signal });
+    const get = serverFetch(p.fetch, { hops: serverHops(p.localStack === true), timeoutMs: TIMEOUT, maxBytes: ANSWER_MAX_BYTES });
+    const res = await get(p.url, { method: 'GET' });
     const d: unknown = res.ok ? await res.json() : null;
     return validDefaults(d) ? d : null;
   } catch {
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -60,21 +68,27 @@ function kept(p: DefaultsPorts): Defaults | null {
   }
 }
 
+/**
+ * A fresh copy asked for when one is due, none having been had for a day, and no ask has failed in the last five
+ * minutes; asks made while one is under way share it. One that answers is kept; one that fails is when the next waits from.
+ */
+async function refresh(p: DefaultsPorts, s: DefaultsState, now: number): Promise<void> {
+  const due = !s.fresh || now - s.fetchedAt >= DAY;
+  if (!due || RETRY > now - s.failedAt) return;
+  s.inflight ??= fetchDefaults(p).finally(() => { s.inflight = null; });
+  const d = await s.inflight;
+  if (d) {
+    s.fresh = d;
+    s.fetchedAt = now;
+    p.write(JSON.stringify(d));
+  } else {
+    s.failedAt = now;
+  }
+}
+
 /** The defaults to use now: a fresh copy when one is due and answers, else the kept copy, else the baked one. */
 export async function pickDefaults(p: DefaultsPorts, s: DefaultsState): Promise<Defaults> {
-  const now = p.now();
-  const due = !s.fresh || now - s.fetchedAt >= DAY;
-  if (due && now - s.failedAt >= RETRY) {
-    s.inflight ??= fetchDefaults(p).finally(() => { s.inflight = null; });
-    const d = await s.inflight;
-    if (d) {
-      s.fresh = d;
-      s.fetchedAt = now;
-      p.write(JSON.stringify(d));
-    } else {
-      s.failedAt = now;
-    }
-  }
+  await refresh(p, s, p.now());
   const d = s.fresh ?? kept(p) ?? p.baked;
   if (!d) throw new Error('no defaults: none fetched, kept or baked into this build');
   return d;
