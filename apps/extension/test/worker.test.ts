@@ -981,6 +981,25 @@ describe('the queue’s lock (F41)', () => {
     expect((await queued(store)).map((e) => e.id).sort()).toEqual(['a', 'b', 'c']);
   });
 
+  test('a move found by two looks at once is taken once: each waiting save is wrapped again once, and its Undo key moved once', async () => {
+    const T = new LocalSigner(hexToBytes('33'.repeat(32)));
+    const ack: PairAck = { v: 1, user_pubkey: T.pubkey(), write_relays: ['wss://relay.example'], blossom_servers: [], token: 'cd'.repeat(32), moved_from: user.pubkey() };
+    const h = harness({ online: false });
+    await h.work.save(PAGE, 1, false);
+    const offline = h.toasts.at(-1)!;
+    const [before] = await queued(h.store);
+    await h.store.set(KEYS.pairing, PAIRING);
+    // two saves made together, or a save as the half-hourly look runs, each look for a move (bg.ts checkMoves)
+    const [a, b] = await Promise.all([applyMove(h.store, device, ack, NOW, h.session), applyMove(h.store, device, ack, NOW, h.session)]);
+    expect(a).toEqual(b);
+    const [moved] = await queued(h.store);
+    expect(await h.session.get(`undo:${before.id}`)).toEqual({ to: moved.id });
+    expect(await h.session.get(`undo:${moved.id}`)).toMatchObject({ hash: offline.hash });
+    // and a later look that finds the same pair-ack again changes nothing
+    await applyMove(h.store, device, ack, NOW + 60, h.session);
+    expect((await queued(h.store)).map((e) => e.id)).toEqual([moved.id]);
+  });
+
   test('a save given a new id mid-run is busy under it until that run ends, and a run under it waits (v1.12)', async () => {
     const saves = new PerSave();
     const held = gate();

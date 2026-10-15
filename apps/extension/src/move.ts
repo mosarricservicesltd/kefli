@@ -6,6 +6,7 @@
 import { acceptPairAck, type PairAck } from '../../../packages/protocol/src/pairing';
 import type { LocalSigner, NostrEvent } from '../../../packages/protocol/src/signer';
 import { unwrap } from '../../../packages/protocol/src/wrap';
+import { exclusive } from './lock';
 import { changeQueue, type Queued } from './queue';
 import { wrapAgain } from './save';
 import { addresses, KEYS, type Pairing, type Store } from './store';
@@ -97,6 +98,9 @@ async function rewrapQueue(q: Queued[], device: LocalSigner, pairing: Pairing, n
   return renamed;
 }
 
+/** Whether the pairing is already the one this move leaves: its user and its token, new at every move. */
+const holds = (p: Pairing, ack: PairAck): boolean => p.user_pubkey === ack.user_pubkey && p.token === String(ack.token);
+
 /**
  * Takes the move: the pairing replaced (its label and date kept) and the queue wrapped again for the new user, under the
  * queue's lock, so a save queued meanwhile isn't overwritten (F41). A save whose send is under way is wrapped again too,
@@ -105,15 +109,20 @@ async function rewrapQueue(q: Queued[], device: LocalSigner, pairing: Pairing, n
  * the queue rather than retracting a wrap that never went and saying it couldn't undo. An old wrap that may be on the
  * relay, tried before or sending now, keeps its key beside the new one, so Undo retracts it as well: the phone's last look
  * at the old library's inbox would otherwise bring the save into the new one. A session that won't take a key doesn't
- * stop the move; that save's Undo then says it couldn't.
+ * stop the move; that save's Undo then says it couldn't. One move at a time, and a move the pairing already holds, its
+ * user and token, isn't taken again: two looks for a move run together when two saves are made at once, or a save as the
+ * half-hourly look runs (bg.ts checkMoves), and each found the same pair-ack and wrapped the queue again.
  */
-export async function applyMove(store: Store, device: LocalSigner, ack: PairAck, now: number, session: Store, follow: Follow = () => false): Promise<Pairing> {
-  const old = await store.get<Pairing>(KEYS.pairing);
-  // its lists as the extension keeps them (store.ts addresses)
-  const pairing: Pairing = { v: 1, user_pubkey: ack.user_pubkey, write_relays: addresses(ack.write_relays), blossom_servers: addresses(ack.blossom_servers), token: String(ack.token), label: old?.label ?? '', paired_at: old?.paired_at ?? now };
-  const renamed = await changeQueue(store, (q) => rewrapQueue(q, device, pairing, now, follow));
-  for (const r of renamed) await moveUndoKey(session, r.was, r.to, r.wrapKey, r.sha256, r.wentTo).catch(() => undefined);
-  await store.set(KEYS.pairing, pairing);
-  return pairing;
+export function applyMove(store: Store, device: LocalSigner, ack: PairAck, now: number, session: Store, follow: Follow = () => false): Promise<Pairing> {
+  return exclusive('move', async () => {
+    const old = await store.get<Pairing>(KEYS.pairing);
+    if (old && holds(old, ack)) return old;
+    // its lists as the extension keeps them (store.ts addresses)
+    const pairing: Pairing = { v: 1, user_pubkey: ack.user_pubkey, write_relays: addresses(ack.write_relays), blossom_servers: addresses(ack.blossom_servers), token: String(ack.token), label: old?.label ?? '', paired_at: old?.paired_at ?? now };
+    const renamed = await changeQueue(store, (q) => rewrapQueue(q, device, pairing, now, follow));
+    for (const r of renamed) await moveUndoKey(session, r.was, r.to, r.wrapKey, r.sha256, r.wentTo).catch(() => undefined);
+    await store.set(KEYS.pairing, pairing);
+    return pairing;
+  });
 }
 
