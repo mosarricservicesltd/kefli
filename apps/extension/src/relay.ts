@@ -90,10 +90,14 @@ export async function publish(url: string, event: NostrEvent, device?: LocalSign
  */
 export const WRAPS_MAX = 100;
 
-/** A REQ's answer: the events that came, each once, and whether the relay ended it with EOSE before the read stopped. */
+/**
+ * A REQ's answer: the events that came, each once, whether the relay ended it with EOSE before the read stopped, and
+ * whether the read stopped at the most events it keeps (full), past which the relay may hold more.
+ */
 export interface Answer {
   events: NostrEvent[];
   whole: boolean;
+  full: boolean;
   /** Why it ended: EOSE, the relay's CLOSED and its reason, so many events, or the time limit. */
   why: string;
 }
@@ -125,7 +129,7 @@ function answer(relay: Relay, filters: Filter[], limits: Limits): Promise<Answer
       clearTimeout(timer);
       if (!closed) sub.close();
       if (!sub.eosed) sub.receivedEose();
-      settle({ events: [...got.values()], whole, why });
+      settle({ events: [...got.values()], whole, full: got.size >= limits.most, why });
     };
     const sub = relay.subscribe(filters, {
       eoseTimeout: limits.ms + 1_000,
@@ -155,18 +159,19 @@ function heard(url: string, got: Answer): Answer {
 }
 
 /**
- * The gift wraps addressed to the device key since a time (contract 4.4), and whether the relay finished its answer.
- * The relay serves them only after NIP-42 AUTH by that key, so a subscription it closes as auth-required authenticates
- * and asks again, all within ten seconds of connecting. An answer stopped at WRAPS_MAX, cut short by the relay or the
+ * The gift wraps addressed to the device key since a time (contract 4.4), and before one (`before`, for a look reading
+ * down past the newest answer, move.ts lookDeeper), newest first, and whether the relay finished its answer. The relay
+ * serves them only after NIP-42 AUTH by that key, so a subscription it closes as auth-required authenticates and asks
+ * again, all within ten seconds of connecting. An answer stopped at WRAPS_MAX (full), cut short by the relay or the
  * connection, or unfinished after ten seconds keeps what came, but isn't whole, so the look doesn't count as having read
- * its window (move.ts lookForMove).
+ * its window (move.ts lookForMove). The relay is asked for WRAPS_MAX at most, which is all a read keeps.
  */
-export async function fetchWraps(url: string, device: LocalSigner, since: number): Promise<Answer> {
+export async function fetchWraps(url: string, device: LocalSigner, since: number, before?: number): Promise<Answer> {
   const relay = await pool.get(url);
   const until = Date.now() + PUBLISH_TIMEOUT_MS;
   const sign = (evt: Parameters<LocalSigner['signEvent']>[0]) => device.signEvent(evt) as never;
   relay.onauth = sign;
-  const filters = [{ kinds: [1059], '#p': [device.pubkey()], since }];
+  const filters: Filter[] = [{ kinds: [1059], '#p': [device.pubkey()], since, limit: WRAPS_MAX, ...(before === undefined ? {} : { until: before }) }];
   const first = heard(url, await answer(relay, filters, { ms: left(until), most: WRAPS_MAX }));
   if (first.whole || !first.why.includes('auth-required')) return first;
   const authed = await within(relay.auth(sign), left(until)).then(() => true, () => false);

@@ -37,13 +37,15 @@ const MOVES_AFTER_SEND = 300;
 /**
  * Following a move (contract 4.4 and 4.8; move.ts lookForMove): a pair-ack from the current user carrying moved_from
  * replaces the pairing and wraps the queue again for the new key. A service worker can't hold a subscription open, so the
- * background looks at start, every half hour and after sending (ruling, extension spec 15).
+ * background looks at start, every half hour and after sending (ruling, extension spec 15). The looks at start and every
+ * half hour are deep: past a newest answer of a hundred wraps they read on down the window (move.ts lookDeeper), which a
+ * save's look leaves to them, so a save never waits on more than one answer.
  */
-async function checkMoves(): Promise<void> {
+async function checkMoves(deep = true): Promise<void> {
   const defaults = (await store.get<Pairing>(KEYS.pairing)) ? await loadDefaults(store, DEFAULTS_URL) : null;
   if (!defaults) return;
   const device = await deviceSigner(store, webCrypto);
-  await lookForMove({ store, session, device, now, follow: work.follow, lookUp: (since) => fetchWraps(defaults.operator.relay, device, since) });
+  await lookForMove({ store, session, device, now, deep, follow: work.follow, lookUp: (since, until) => fetchWraps(defaults.operator.relay, device, since, until) });
 }
 
 async function watchMoves(): Promise<void> {
@@ -53,7 +55,7 @@ async function watchMoves(): Promise<void> {
 
 async function checkMovesSoon(): Promise<void> {
   const last = (await store.get<number>(KEYS.movesChecked)) ?? 0;
-  if (now() - last > MOVES_AFTER_SEND) await checkMoves();
+  if (now() - last > MOVES_AFTER_SEND) await checkMoves(false);
 }
 
 /** What a save needs, or null before pairing; the caller decides whether that opens the options page (F10). */

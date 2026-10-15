@@ -12,8 +12,9 @@ import { history } from '../src/debug';
 import { relayRows, type Defaults } from '../src/defaults';
 import { deviceSigner } from '../src/device';
 import { PerSave } from '../src/lock';
-import { applyMove, followMoves, LOOKBACK, lookForMove, type LookUp } from '../src/move';
+import { applyMove, followMoves, LOOKBACK, lookForMove, MOVE_PAGES, type LookUp, type MovesScan } from '../src/move';
 import { ATTEMPTS_MAX, BLOB_KEEP_MAX, BLOBS_KEEP_MAX, changeQueue, dequeue, enqueue, ENTRIES_MAX, failed, flush, QUEUE_MAX, queued, settle, waiting } from '../src/queue';
+import { WRAPS_MAX } from '../src/relay';
 import { ADDRESS_SURE_FIT_BYTES, AddressTooLongError, fetchNet, prepare, rumorBytes, timed, uploadTimeoutMs, WRAP_FRESH_FOR, type Net, type Pending } from '../src/save';
 import { KEYS, memoryStore, type Pairing, type Store } from '../src/store';
 import { toastCopy, type ToastState } from '../src/toastCopy';
@@ -1237,12 +1238,12 @@ describe('a look for a move (bg.ts checkMoves; contract 4.4 and 4.8)', () => {
     const b = await browser();
     b.clock.now = NOW + 600;
     // a hundred wraps dated now, newer than the pair-ack the phone sent a day ago (relay.ts fetchWraps stops there)
-    await b.look({ events: Array.from({ length: 100 }, (_, i) => junk(i)), whole: false });
+    await b.look({ events: Array.from({ length: 100 }, (_, i) => junk(i)), whole: false, full: true });
     expect(await b.store.get(KEYS.movesChecked)).toBe(NOW);
     expect((await b.store.get<Pairing>(KEYS.pairing))!.user_pubkey).toBe(user.pubkey());
     // a day later the flood has gone, and the look reads from as far back as before
     b.clock.now = NOW + 86_400;
-    await b.look({ events: [wrap], whole: true });
+    await b.look({ events: [wrap], whole: true, full: false });
     expect(b.asked).toEqual([NOW - LOOKBACK, NOW - LOOKBACK]);
     expect((await b.store.get<Pairing>(KEYS.pairing))!.user_pubkey).toBe(T.pubkey());
     // and a whole answer moves the time on, to when that look began
@@ -1257,7 +1258,7 @@ describe('a look for a move (bg.ts checkMoves; contract 4.4 and 4.8)', () => {
     await h.store.set(KEYS.pairing, PAIRING);
     await h.store.set(KEYS.movesChecked, NOW);
     const held = gate();
-    const looking = lookForMove({ store: h.store, session: h.session, device, now: () => NOW + 600, follow: h.work.follow, lookUp: async () => (await held.p, { events: [wrap], whole: true }) });
+    const looking = lookForMove({ store: h.store, session: h.session, device, now: () => NOW + 600, follow: h.work.follow, lookUp: async () => (await held.p, { events: [wrap], whole: true, full: false }) });
     // the options page's Disconnect while the look waits on the relay, then perhaps a pairing with U and a save for it
     await h.store.remove(KEYS.queue);
     await h.store.remove(KEYS.pairing);
@@ -1278,9 +1279,100 @@ describe('a look for a move (bg.ts checkMoves; contract 4.4 and 4.8)', () => {
     const { wrap } = await wrapPairAck(user, device.pubkey(), ack, NOW);
     const b = await browser();
     b.clock.now = NOW + 600;
-    await b.look({ events: [wrap], whole: false });
+    await b.look({ events: [wrap], whole: false, full: false });
     expect((await b.store.get<Pairing>(KEYS.pairing))!.user_pubkey).toBe(T.pubkey());
     expect(await b.store.get(KEYS.movesChecked)).toBe(NOW);
+  });
+
+  describe('a flood that stays on the relay (wraps are kept 30 days, contract 3.2)', () => {
+    /** A stranger's wrap to the device at a given second, which the look can't open. */
+    const junkAt = (i: number, at: number) => ({ ...junk(i), created_at: at });
+    /** The pair-ack, dated exactly `at` (NIP-59 backdating set to nothing). */
+    const ackAt = async (at: number) => (await wrapPairAck(user, device.pubkey(), ack, at, { now: at, random: () => new Uint8Array(4) })).wrap;
+    /**
+     * The relay as strfry answers fetchWraps: every wrap to the device in [since, until], newest first, by id within a
+     * second, WRAPS_MAX an answer, finished with EOSE when fewer remain.
+     */
+    function holding(wraps: NostrEvent[], asked: (number | undefined)[] = []): LookUp {
+      return async (since, until) => {
+        asked.push(until);
+        const all = wraps.filter((e) => e.created_at >= since && (until === undefined || e.created_at <= until)).sort((a, b) => b.created_at - a.created_at || (a.id < b.id ? -1 : 1));
+        return { events: all.slice(0, WRAPS_MAX), whole: all.length < WRAPS_MAX, full: all.length >= WRAPS_MAX };
+      };
+    }
+    /** A browser paired with S, its last whole look at NOW, looking as told: deep (the half-hourly look's) or not (a save's). */
+    async function flooded(lookUp: LookUp) {
+      const b = await browser();
+      const look = (deep: boolean, at: number) => lookForMove({ store: b.store, session: memoryStore(), device, now: () => at, follow: () => false, deep, lookUp });
+      const pairedWith = async () => (await b.store.get<Pairing>(KEYS.pairing))!.user_pubkey;
+      return { ...b, look, pairedWith };
+    }
+
+    test('a hundred and fifty wraps above the pair-ack: a save’s look reads the newest answer alone, and the half-hourly look reads on down to the ack and takes the move', async () => {
+      const asked: (number | undefined)[] = [];
+      const wraps = [await ackAt(NOW + 600), ...Array.from({ length: 150 }, (_, i) => junkAt(i, NOW + 700 + i))];
+      const b = await flooded(holding(wraps, asked));
+      // the newest hundred are all junk; kept as before, the time can't help, since the junk stays there for 30 days
+      await b.look(false, NOW + 1_000);
+      expect(await b.pairedWith()).toBe(user.pubkey());
+      expect(await b.store.get(KEYS.movesChecked)).toBe(NOW);
+      expect(await b.store.get(KEYS.movesScan)).toBeUndefined();
+      await b.look(true, NOW + 1_800);
+      expect(await b.pairedWith()).toBe(T.pubkey());
+      // the second answer, from the oldest of the first down, held the ack and fewer than a hundred: the window's end
+      expect(asked).toEqual([undefined, undefined, NOW + 750]);
+      expect(await b.store.get(KEYS.movesChecked)).toBe(NOW + 1_800);
+      expect(await b.store.get(KEYS.movesScan)).toBeUndefined();
+    });
+
+    test('a window deeper than one look reads is read on from where the last deep look stopped, and the time moves to when the first began', async () => {
+      const asked: (number | undefined)[] = [];
+      const wraps = [await ackAt(NOW + 600), ...Array.from({ length: 1_000 }, (_, i) => junkAt(i, NOW + 700 + i))];
+      const b = await flooded(holding(wraps, asked));
+      await b.look(true, NOW + 2_000);
+      expect(asked).toHaveLength(MOVE_PAGES);
+      const first = await b.store.get<MovesScan>(KEYS.movesScan);
+      // each answer below the first steps down from the oldest second of the one before it
+      expect(first).toEqual({ until: NOW + 1_600 - 4 * 99, startedAt: NOW + 2_000 });
+      expect(await b.pairedWith()).toBe(user.pubkey());
+      await b.look(true, NOW + 3_800);
+      expect(await b.store.get<MovesScan>(KEYS.movesScan)).toEqual({ until: first!.until - 4 * 99, startedAt: NOW + 2_000 });
+      expect(await b.store.get(KEYS.movesChecked)).toBe(NOW);
+      await b.look(true, NOW + 5_600);
+      expect(await b.pairedWith()).toBe(T.pubkey());
+      // read to its end, the window counts from when the scan began, so wraps that came meanwhile are in the next one
+      expect(await b.store.get(KEYS.movesChecked)).toBe(NOW + 2_000);
+      expect(await b.store.get(KEYS.movesScan)).toBeUndefined();
+    });
+
+    test('an answer below the newest that the relay cuts short leaves the scan where it was, for the next deep look', async () => {
+      const wraps = [await ackAt(NOW + 600), ...Array.from({ length: 150 }, (_, i) => junkAt(i, NOW + 700 + i))];
+      const relay = holding(wraps);
+      let cut = true;
+      const b = await flooded(async (since, until) => {
+        const got = await relay(since, until);
+        // the relay's ten seconds run out on the second answer: some of it came, without EOSE
+        if (until !== undefined && cut) return { events: got.events.slice(0, 10), whole: false, full: false };
+        return got;
+      });
+      await b.look(true, NOW + 1_800);
+      expect(await b.pairedWith()).toBe(user.pubkey());
+      expect(await b.store.get<MovesScan>(KEYS.movesScan)).toEqual({ until: NOW + 750, startedAt: NOW + 1_800 });
+      expect(await b.store.get(KEYS.movesChecked)).toBe(NOW);
+      cut = false;
+      await b.look(true, NOW + 3_600);
+      expect(await b.pairedWith()).toBe(T.pubkey());
+      expect(await b.store.get(KEYS.movesChecked)).toBe(NOW + 1_800);
+    });
+
+    test('a second holding more wraps than an answer is stepped past, so a flood all dated to one second can’t hold the look there', async () => {
+      const asked: (number | undefined)[] = [];
+      const wraps = [await ackAt(NOW + 600), ...Array.from({ length: 150 }, (_, i) => junkAt(i, NOW + 700))];
+      const b = await flooded(holding(wraps, asked));
+      await b.look(true, NOW + 1_800);
+      expect(asked).toEqual([undefined, NOW + 700, NOW + 699]);
+      expect(await b.pairedWith()).toBe(T.pubkey());
+    });
   });
 });
 

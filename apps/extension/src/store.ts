@@ -59,4 +59,8 @@ export interface Pairing {
   paired_at: number;
 }
 
-export const KEYS = { device: 'device', pairing: 'pairing', defaults: 'defaults', queue: 'queue', history: 'history', movesChecked: 'movesChecked' } as const;
+/**
+ * movesChecked is when the last look for a move that read its whole window began, which the next reads on from;
+ * movesScan where a deep look stopped (move.ts).
+ */
+export const KEYS = { device: 'device', pairing: 'pairing', defaults: 'defaults', queue: 'queue', history: 'history', movesChecked: 'movesChecked', movesScan: 'movesScan' } as const;

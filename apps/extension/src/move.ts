@@ -174,8 +174,14 @@ async function takeMove(t: Taking): Promise<Pairing | null> {
 /** How far back a look reads from the last one: NIP-59 dates a wrap up to two days back, and five minutes for clocks. */
 export const LOOKBACK = 172_800 + 300;
 
-/** A read of the wraps addressed to the device since a time, and whether the relay finished its answer (relay.ts). */
-export type LookUp = (since: number) => Promise<Pick<Answer, 'events' | 'whole'>>;
+/**
+ * A read of the wraps addressed to the device since a time, newest first, and before one (until) when a deep look reads
+ * down the window; whether the relay finished its answer, and whether it stopped at WRAPS_MAX (relay.ts fetchWraps).
+ */
+export type LookUp = (since: number, until?: number) => Promise<Page>;
+
+/** One answer of a look: its wraps, whether the relay finished it, and whether it stopped at WRAPS_MAX. */
+export type Page = Pick<Answer, 'events' | 'whole' | 'full'>;
 
 /** What a look for a move works with (bg.ts): storage, the device key, the read, the clock and the background's follow. */
 export interface Looking {
@@ -185,16 +191,32 @@ export interface Looking {
   lookUp: LookUp;
   now(): number;
   follow: Follow;
+  /** Whether the look may read down past a full newest answer (lookDeeper): the half-hourly look's and the start's. */
+  deep?: boolean;
+}
+
+/**
+ * How many answers of WRAPS_MAX a deep look reads, the newest among them: 500 wraps, each checked and opened, a few
+ * seconds of the worker's time, and only while more than a hundred wraps are addressed to the browser.
+ */
+export const MOVE_PAGES = 5;
+
+/** A deep look that hasn't reached the window's end: how far down it has read, and when its first look began. */
+export interface MovesScan {
+  until: number;
+  startedAt: number;
 }
 
 /**
  * A look for a move (contract 4.4 and 4.8, extension spec 15): the gift wraps addressed to this browser since the last
  * look, less LOOKBACK, are checked for a pair-ack from the pairing's user carrying moved_from, and one that is found is
- * taken (applyMove). The last look's time moves on, to when this look began, only once the relay has finished its answer
- * (EOSE). One stopped at WRAPS_MAX or at its ten seconds may have stopped above a pair-ack dated up to two days back, which
- * no look would reach once the last look's time had passed that date and five minutes: a hundred wraps dated now, from
- * anyone who saw the device's key in its QR, kept every look from reaching the ack while each moved the time on, and the
- * browser went on saving to the library that had moved away.
+ * taken (applyMove). The last look's time moves on, to when the look began, only once the window has been read to its
+ * end: the newest answer finished by the relay (EOSE) short of WRAPS_MAX, or a deep look's way down it (lookDeeper). One
+ * stopped at WRAPS_MAX or at its ten seconds may have stopped above a pair-ack dated up to two days back, which no look
+ * would reach once the last look's time had passed that date and five minutes: a hundred wraps dated now, from anyone who
+ * saw the device's key in its QR, kept every look from reaching the ack while each moved the time on, and the browser
+ * went on saving to the library that had moved away. The wraps stay on the relay for 30 days, so with the time kept the
+ * newest answer still held only them: a deep look reads on down past them.
  */
 export async function lookForMove(o: Looking): Promise<void> {
   const pairing = await o.store.get<Pairing>(KEYS.pairing);
@@ -202,11 +224,60 @@ export async function lookForMove(o: Looking): Promise<void> {
   const began = o.now();
   // read on its own line: lizard, which the code gate uses, ends a function at a bracketed await
   const last = await o.store.get<number>(KEYS.movesChecked);
-  const look = await o.lookUp((last ?? pairing.paired_at) - LOOKBACK).catch(() => null);
-  if (!look) return;
-  const ack = await followMoves(o.device, look.events, pairing.user_pubkey);
+  const since = (last ?? pairing.paired_at) - LOOKBACK;
+  const newest = await o.lookUp(since).catch(() => null);
+  if (!newest) return;
+  const read = new Map(newest.events.map((e) => [e.id, e]));
+  // storage that won't keep the scan leaves the window unread, and a move found in what came is still taken
+  const upTo = await windowEnd(o, since, newest, read, began).catch(() => null);
+  const ack = await followMoves(o.device, [...read.values()], pairing.user_pubkey);
   // a move not taken, the pairing gone or another library's since the look began, leaves the look unread
   const taken = ack ? await applyMove(o.store, o.device, ack, o.now(), o.session, o.follow, pairing.user_pubkey) : pairing;
-  if (look.whole && taken) await o.store.set(KEYS.movesChecked, began);
+  if (upTo !== null && taken) await o.store.set(KEYS.movesChecked, upTo);
 }
 
+/**
+ * Where the last look's time may move to: when this look began, if its newest answer was the whole window; when a deep
+ * look began, once it reaches the window's end (lookDeeper); otherwise nowhere yet (null).
+ */
+async function windowEnd(o: Looking, since: number, newest: Page, read: Map<string, NostrEvent>, began: number): Promise<number | null> {
+  if (newest.whole) {
+    await o.store.remove(KEYS.movesScan);
+    return began;
+  }
+  return newest.full && o.deep ? lookDeeper(o, since, newest.events, read, began) : null;
+}
+
+const oldestOf = (events: NostrEvent[]) => events.reduce((t, e) => Math.min(t, e.created_at), Infinity);
+
+/** The events not read yet in this look, added to it; whether there were any. */
+function took(read: Map<string, NostrEvent>, events: NostrEvent[]): boolean {
+  const before = read.size;
+  for (const e of events) read.set(e.id, e);
+  return read.size > before;
+}
+
+/**
+ * A deep look's answers beneath the newest, as the phone's inbox reads its own (mobile spec, inbox readDeeper): up to
+ * MOVE_PAGES - 1 of them, down the window by until from where the last deep look stopped (movesScan), so a window of any
+ * depth is read in turn. An answer the relay finishes short of WRAPS_MAX is the window's end: the scan ends, and the last
+ * look's time may move to when it began. A full answer that brings nothing new is a second holding more wraps than an
+ * answer, as a flood all dated to one second makes, and is stepped past. An answer cut short, by the relay or the time,
+ * or a relay out of reach, leaves the scan where it was. Short of the end, the scan is kept for the next deep look.
+ */
+async function lookDeeper(o: Looking, since: number, newest: NostrEvent[], read: Map<string, NostrEvent>, began: number): Promise<number | null> {
+  const held = await o.store.get<MovesScan>(KEYS.movesScan);
+  const scan: MovesScan = { until: Math.min(held?.until ?? Infinity, oldestOf(newest)), startedAt: held?.startedAt ?? began };
+  for (let i = 1; i < MOVE_PAGES; i++) {
+    const page = await o.lookUp(since, scan.until).catch(() => null);
+    if (!page || !(page.whole || page.full)) break;
+    const fresh = took(read, page.events);
+    if (page.whole) {
+      await o.store.remove(KEYS.movesScan);
+      return scan.startedAt;
+    }
+    scan.until = oldestOf(page.events) - (fresh ? 0 : 1);
+  }
+  await o.store.set(KEYS.movesScan, scan);
+  return null;
+}

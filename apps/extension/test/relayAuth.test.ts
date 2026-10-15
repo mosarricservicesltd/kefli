@@ -30,6 +30,8 @@ class FakeSocket {
   onerror: (() => void) | null = null;
   /** What the client sent, in order, each EVENT marked with the key its connection had AUTHed as when it came. */
   readonly got: { type: string; event: NostrEvent; authed: string | null }[] = [];
+  /** The filters of each REQ, in order. */
+  readonly asked: unknown[][] = [];
   authed: string | null = null;
   readonly script: Script;
 
@@ -50,7 +52,8 @@ class FakeSocket {
   }
 
   send(raw: string) {
-    const [type, event] = JSON.parse(raw) as [string, NostrEvent];
+    const [type, event, ...filters] = JSON.parse(raw) as [string, NostrEvent, ...unknown[]];
+    if (type === 'REQ') this.asked.push(filters);
     if (type === 'REQ') return (this.script.onReq ?? ((s, sub) => s.say(['EOSE', sub])))(this, event as unknown as string);
     if (type === 'CLOSE') return;
     this.got.push({ type, event, authed: this.authed });
@@ -288,6 +291,19 @@ describe('an answer is whole only once the relay ends it with EOSE (F40)', () =>
     const url = relay({ neverOpens: true });
     expect(await collected(url, wrapTo(6).id, user)).toBeNull();
   }, PUBLISH_TIMEOUT_MS + 10_000);
+
+  test('a look reading down the window asks for the wraps before a time, a hundred at most, and says when it stopped at a hundred', async () => {
+    const flood = Array.from({ length: WRAPS_MAX + 20 }, (_, i) => wrapTo(i + 100));
+    const full = relay({ onReq: (s, sub) => flood.forEach((w) => s.say(['EVENT', sub, w])) });
+    const look = await fetchWraps(full, device, 5, 1_791_700_000);
+    expect(socketOf(full).asked).toEqual([[{ kinds: [1059], '#p': [device.pubkey()], since: 5, limit: WRAPS_MAX, until: 1_791_700_000 }]]);
+    expect(look).toMatchObject({ whole: false, full: true });
+    expect(look.events).toHaveLength(WRAPS_MAX);
+    // fewer than a hundred, finished with EOSE: the whole of what the relay holds there
+    const short = relay({ onReq: (s, sub) => (flood.slice(0, 3).forEach((w) => s.say(['EVENT', sub, w])), s.say(['EOSE', sub])) });
+    expect(await fetchWraps(short, device, 5)).toMatchObject({ whole: true, full: false });
+    expect(socketOf(short).asked).toEqual([[{ kinds: [1059], '#p': [device.pubkey()], since: 5, limit: WRAPS_MAX }]]);
+  }, 30_000);
 
   test('a look the relay closes as auth-required is asked again once AUTHed as the device, and read whole', async () => {
     const w = wrapTo(7);
