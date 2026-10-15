@@ -5,7 +5,7 @@ import type { PairAck } from '../../../packages/protocol/src/pairing';
 import type { CryptoPort } from '../../../packages/protocol/src/ports';
 import { LocalSigner } from '../../../packages/protocol/src/signer';
 import { webCrypto } from '../src/crypto';
-import { DEFAULTS_LIST_MAX, loadDefaults, relayRows, type Defaults } from '../src/defaults';
+import { DEFAULTS_LIST_MAX, loadDefaults, relayRows, type Defaults, type RelayRow } from '../src/defaults';
 import { applyMove } from '../src/move';
 import { newOffer, pairingFrom, postOffer } from '../src/pair';
 import { ANSWER_MAX_BYTES, fetchNet } from '../src/save';
@@ -154,14 +154,23 @@ describe('lists from the phone that aren’t lists of addresses', () => {
     expect(relayRows(junk, null).map((r) => r.url)).toEqual(['wss://ok.example']);
   });
 
-  test('Advanced draws relays whose addresses hold long runs of slashes in good time, and still finds Kefli’s', () => {
-    // a hundred of the longest addresses a pairing keeps, each a run of slashes and then a letter: the pattern for a
-    // trailing run was tried from every slash of it, 5 to 14 ms an address, and Advanced drew these in 2 to 6 s
+  test('Advanced reads relays whose addresses hold long runs of slashes without a pattern, and still finds Kefli’s', () => {
+    // a hundred of the longest addresses a pairing keeps, each a run of slashes and then a letter. The pattern that took
+    // the slashes off the end, /\/+$/, was tried from every slash of a run, and Advanced drew these in 0.8 to 6 s. What
+    // the patterns are given is counted, not timed, since a bound of 1 s passed without the fix about as often as it
+    // failed. Every pattern runs through exec, and none may be given one of these addresses
     const runs = Array.from({ length: LIST_MAX - 1 }, (_, i) => `wss://r${i}.example/${'/'.repeat(ADDRESS_MAX - 40)}x`);
-    const kefli = `wss://relay.example${'/'.repeat(ADDRESS_MAX - 19)}`;
-    const started = Date.now();
-    const rows = relayRows([...runs, kefli], DEFAULTS);
-    expect(Date.now() - started).toBeLessThan(1_000);
+    const kefli = `WSS://Relay.Example${'/'.repeat(ADDRESS_MAX - 19)}`;
+    const exec = jest.spyOn(RegExp.prototype, 'exec');
+    let rows: RelayRow[] = [];
+    let given: number[] = [];
+    try {
+      rows = relayRows([...runs, kefli], DEFAULTS);
+      given = exec.mock.calls.map(([s]) => String(s).length);
+    } finally {
+      exec.mockRestore();
+    }
+    expect(given.filter((n) => n >= ADDRESS_MAX - 40).length).toBe(0);
     expect(rows[0]).toEqual({ url: kefli, label: 'Kefli', operator: true });
     expect(rows.slice(1).map((r) => r.url)).toEqual(runs);
     expect(rows.slice(1).every((r) => r.label === 'Your relay')).toBe(true);
