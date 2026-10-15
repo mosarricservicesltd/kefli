@@ -209,7 +209,7 @@ describe('lists from the phone that aren’t lists of addresses', () => {
     await store.set(KEYS.pairing, PAIRING);
     const T = new LocalSigner(hexToBytes('33'.repeat(32)));
     const p = await applyMove(store, device, { ...ack({ write_relays: junk }), user_pubkey: T.pubkey(), moved_from: user.pubkey(), nonce: undefined }, NOW, memoryStore());
-    expect(p.write_relays).toEqual(['wss://ok.example']);
+    expect(p?.write_relays).toEqual(['wss://ok.example']);
     expect((await store.get<Pairing>(KEYS.pairing))!.write_relays).toEqual(['wss://ok.example']);
   });
 });

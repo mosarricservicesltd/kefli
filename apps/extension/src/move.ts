@@ -133,18 +133,42 @@ const holds = (p: Pairing, ack: PairAck): boolean => p.user_pubkey === ack.user_
  * stop the move; that save's Undo then says it couldn't. One move at a time, and a move the pairing already holds, its
  * user and token, isn't taken again: two looks for a move run together when two saves are made at once, or a save as the
  * half-hourly look runs (bg.ts checkMoves), and each found the same pair-ack and wrapped the queue again.
+ *
+ * Taken only while the pairing is still the one the look began from, `from` (the ack's own moved_from unless given; a
+ * chain S → T → U is followed from S): a look waits up to twenty seconds on defaults.json and the relay, and a move it
+ * found then wrote a pairing labelled '' over a Disconnect made meanwhile, or replaced a pairing with another library made
+ * meanwhile and wrapped that library's waiting saves again for the move's. Null when it isn't taken for that reason.
  */
-export function applyMove(store: Store, device: LocalSigner, ack: PairAck, now: number, session: Store, follow: Follow = () => false): Promise<Pairing> {
-  return exclusive('move', async () => {
-    const old = await store.get<Pairing>(KEYS.pairing);
-    if (old && holds(old, ack)) return old;
-    // its lists as the extension keeps them (store.ts addresses)
-    const pairing: Pairing = { v: 1, user_pubkey: ack.user_pubkey, write_relays: addresses(ack.write_relays), blossom_servers: addresses(ack.blossom_servers), token: String(ack.token), label: old?.label ?? '', paired_at: old?.paired_at ?? now };
-    await store.set(KEYS.pairing, pairing);
-    const renamed = await changeQueue(store, (q) => rewrapQueue(q, device, pairing, now, follow));
-    for (const r of renamed) await moveUndoKey(session, r.was, r.to, r.wrapKey, r.sha256, r.wentTo).catch(() => undefined);
-    return pairing;
-  });
+export function applyMove(store: Store, device: LocalSigner, ack: PairAck, now: number, session: Store, follow?: Follow, from?: string): Promise<Pairing | null> {
+  return exclusive('move', () => takeMove({ store, device, ack, now, session, follow: follow ?? NO_FOLLOW, from: from ?? ack.moved_from }));
+}
+
+/** A move as applyMove takes it, with the user the look began from. */
+interface Taking {
+  store: Store;
+  device: LocalSigner;
+  ack: PairAck;
+  now: number;
+  session: Store;
+  follow: Follow;
+  from: string | undefined;
+}
+
+/** For a move taken where no background runs: no save's send is under way there. */
+const NO_FOLLOW: Follow = () => false;
+
+/** applyMove's work, under the move's lock. */
+async function takeMove(t: Taking): Promise<Pairing | null> {
+  const old = await t.store.get<Pairing>(KEYS.pairing);
+  if (old && holds(old, t.ack)) return old;
+  if (!old || old.user_pubkey !== t.from) return null;
+  const { ack } = t;
+  // its lists as the extension keeps them (store.ts addresses)
+  const pairing: Pairing = { v: 1, user_pubkey: ack.user_pubkey, write_relays: addresses(ack.write_relays), blossom_servers: addresses(ack.blossom_servers), token: String(ack.token), label: old.label, paired_at: old.paired_at };
+  await t.store.set(KEYS.pairing, pairing);
+  const renamed = await changeQueue(t.store, (q) => rewrapQueue(q, t.device, pairing, t.now, t.follow));
+  for (const r of renamed) await moveUndoKey(t.session, r.was, r.to, r.wrapKey, r.sha256, r.wentTo).catch(() => undefined);
+  return pairing;
 }
 
 /** How far back a look reads from the last one: NIP-59 dates a wrap up to two days back, and five minutes for clocks. */
@@ -181,7 +205,8 @@ export async function lookForMove(o: Looking): Promise<void> {
   const look = await o.lookUp((last ?? pairing.paired_at) - LOOKBACK).catch(() => null);
   if (!look) return;
   const ack = await followMoves(o.device, look.events, pairing.user_pubkey);
-  if (ack) await applyMove(o.store, o.device, ack, o.now(), o.session, o.follow);
-  if (look.whole) await o.store.set(KEYS.movesChecked, began);
+  // a move not taken, the pairing gone or another library's since the look began, leaves the look unread
+  const taken = ack ? await applyMove(o.store, o.device, ack, o.now(), o.session, o.follow, pairing.user_pubkey) : pairing;
+  if (look.whole && taken) await o.store.set(KEYS.movesChecked, began);
 }
 

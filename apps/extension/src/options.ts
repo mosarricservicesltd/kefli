@@ -199,7 +199,8 @@ async function startPairing() {
     const defaults = await loadDefaults(store, DEFAULTS_URL);
     if (!defaults) throw new Error('no defaults');
     const device = await deviceSigner(store, webCrypto);
-    const onAck = (o: Offer) => (ack: PairAck) => void store.set(KEYS.pairing, pairingFrom(ack, o.offer.label, now()));
+    // under the move's lock, so a move a look found as this browser paired again isn't written over it (move.ts applyMove)
+    const onAck = (o: Offer) => (ack: PairAck) => void exclusive('move', () => store.set(KEYS.pairing, pairingFrom(ack, o.offer.label, now())));
     const { offer, listening: l } = await tryPairing(
       last,
       () => newOffer(device, defaults, label(), webCrypto, now()),
@@ -297,11 +298,12 @@ const ACTIONS: Record<string, (id?: string) => void | Promise<void>> = {
   // and the save history with them
   // and the session's Undo keys and last popup save, which would otherwise last until the browser closes (F31);
   // the queue under its lock, so a send the background is finishing can't write it back (F41)
+  // and the pairing under the move's, so a move the background is taking can't write it back either (move.ts applyMove)
   'unpair-yes': async () => {
     await exclusive('queue', () => store.remove(KEYS.queue));
     await store.remove(KEYS.history);
     await chrome.storage.session.clear().catch(() => undefined);
-    await store.remove(KEYS.pairing);
+    await exclusive('move', () => store.remove(KEYS.pairing));
   },
   debug: copyDebug,
   retry: (id) => (id ? retryOne(id) : undefined),

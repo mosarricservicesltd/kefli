@@ -687,7 +687,7 @@ describe('a capture the operator refuses (contract 4.4 and 5, v1.12)', () => {
     const moved = await applyMove(h.store, device, ack, NOW, h.session);
     const n = net({ blossom: operator(413, 'quota') });
     // the background reads the new library's pairing after the move
-    await harness({ store: h.store, net: n.net, pairing: moved }).work.flushQueue();
+    await harness({ store: h.store, net: n.net, pairing: moved! }).work.flushQueue();
     expect(n.asked.uploads).toBe(1);
     const [w] = n.published;
     expect(w.tags).toEqual([['p', T.pubkey()]]);
@@ -1130,6 +1130,31 @@ describe('a look for a move (bg.ts checkMoves; contract 4.4 and 4.8)', () => {
     expect(await b.store.get(KEYS.movesChecked)).toBe(NOW + 86_400);
   });
 
+  test.each(['disconnect', 'pair again'] as const)('a move a look finds isn’t taken after a Disconnect made as it looked, nor over a pairing with another library made meanwhile (%s)', async (meanwhile) => {
+    const { wrap } = await wrapPairAck(user, device.pubkey(), ack, NOW);
+    const U = new LocalSigner(hexToBytes('44'.repeat(32)));
+    const withU: Pairing = { ...PAIRING, user_pubkey: U.pubkey(), token: 'ef'.repeat(32), paired_at: NOW + 300 };
+    const h = harness({ online: false });
+    await h.store.set(KEYS.pairing, PAIRING);
+    await h.store.set(KEYS.movesChecked, NOW);
+    const held = gate();
+    const looking = lookForMove({ store: h.store, session: h.session, device, now: () => NOW + 600, follow: h.work.follow, lookUp: async () => (await held.p, { events: [wrap], whole: true }) });
+    // the options page's Disconnect while the look waits on the relay, then perhaps a pairing with U and a save for it
+    await h.store.remove(KEYS.queue);
+    await h.store.remove(KEYS.pairing);
+    if (meanwhile === 'pair again') {
+      await h.store.set(KEYS.pairing, withU);
+      await harness({ store: h.store, session: h.session, online: false, pairing: withU }).work.save(PAGE, 1, false);
+    }
+    held.open();
+    await looking;
+    expect(await h.store.get<Pairing>(KEYS.pairing)).toEqual(meanwhile === 'disconnect' ? undefined : withU);
+    // U's save waits for U, with U's token, and the look that found S's move doesn't count as read
+    for (const e of await queued(h.store)) expect(e.wrap.tags).toEqual([['p', U.pubkey()]]);
+    expect(await queued(h.store)).toHaveLength(meanwhile === 'disconnect' ? 0 : 1);
+    expect(await h.store.get(KEYS.movesChecked)).toBe(NOW);
+  });
+
   test('one the relay didn’t finish within its ten seconds leaves it too, though a move found in what came is taken', async () => {
     const { wrap } = await wrapPairAck(user, device.pubkey(), ack, NOW);
     const b = await browser();
@@ -1167,7 +1192,7 @@ describe('hardening (F52)', () => {
     const ack = await followMoves(device, [(await wrapPairAck(user, device.pubkey(), listed, NOW)).wrap], user.pubkey());
     expect(ack?.token).toEqual(['cd'.repeat(32)]);
     const moved = await applyMove(h.store, device, ack!, NOW, h.session);
-    expect(moved.token).toBe('cd'.repeat(32));
+    expect(moved?.token).toBe('cd'.repeat(32));
     expect((await h.store.get<Pairing>(KEYS.pairing))?.token).toBe('cd'.repeat(32));
     const [e] = await queued(h.store);
     expect((JSON.parse((await unwrap(T, e.wrap)).rumor.content) as SaveRequest).token).toBe('cd'.repeat(32));
@@ -1874,7 +1899,7 @@ describe('a move while saves wait, their toasts still showing (contract 4.4 and 
     test('one that joins the queue after the move wrapped it again goes to the new library with its token, and Undo follows it', async () => {
       const n = net();
       const toasts: Omit<ToastState, 'shortcut'>[] = [];
-      let moving: Promise<Pairing> | undefined;
+      let moving: Promise<Pairing | null> | undefined;
       // the half-hourly look (bg.ts checkMoves) takes the move while Saving… shows, the save's own look skipped
       const h: ReturnType<typeof harness> = harness({
         net: n.net, collected: [false, false],
@@ -1922,6 +1947,8 @@ describe('a move while saves wait, their toasts still showing (contract 4.4 and 
       await h.store.set(KEYS.pairing, moved);
       await harness({ store: h.store, session: h.session, online: false, pairing: moved }).work.save(PAGE, 1, false);
       const [before] = await queued(h.store);
+      // a move from S carrying another token for T: the save wrapped for T under the token it read is wrapped again
+      await h.store.set(KEYS.pairing, PAIRING);
       await applyMove(h.store, device, { ...ack, token: 'ef'.repeat(32) }, NOW, h.session);
       const [after] = await queued(h.store);
       expect(after.id).not.toBe(before.id);
