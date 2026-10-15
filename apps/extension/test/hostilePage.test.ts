@@ -5,10 +5,12 @@ import { itemHash } from '../../../packages/protocol/src/normalise';
 import { CANONICAL_MAX, type SaveRequest } from '../../../packages/protocol/src/pairing';
 import { LocalSigner } from '../../../packages/protocol/src/signer';
 import { unwrap } from '../../../packages/protocol/src/wrap';
-import { GUARD_SAMPLE_CHARS, keepHtml, linkOnly, orAfter, PAGE_LIMITS, tooLargeToRead, unread, type PageSize, type Parsed } from '../src/captured';
+import {
+  ADDRESS_UNWRAPPABLE, GUARD_SAMPLE_CHARS, keepHtml, linkOnly, orAfter, PAGE_LIMITS, pageUrl, tooLargeToRead, unread, type PageSize, type Parsed,
+} from '../src/captured';
 import { baseOf, capture } from '../src/capture';
 import { webCrypto } from '../src/crypto';
-import { prepare, type SaveContext } from '../src/save';
+import { AddressTooLongError, prepare, type SaveContext } from '../src/save';
 
 describe('a page too large to read in good time (PAGE_LIMITS)', () => {
   // measured in Chrome on the pages themselves (the extension's probes): elements, the body’s text less its scripts and
@@ -107,6 +109,14 @@ const captured = (href: string, canonical: string | null, details: Partial<Parse
   return capture(page, href);
 };
 const story = 'https://news.example/2026/10/story';
+const user = new LocalSigner(hexToBytes('11'.repeat(32)));
+const NOW = 1_791_600_000;
+/** What the background's save has, for the request a capture makes. */
+const ctx: SaveContext = {
+  device: new LocalSigner(hexToBytes('22'.repeat(32))), crypto: webCrypto, now: NOW,
+  defaults: { v: 1, operator: { relay: 'wss://relay.example', blossom: 'https://blossom.example', api: 'https://api.example' }, relays: [], mirrors: [] },
+  pairing: { v: 1, user_pubkey: user.pubkey(), write_relays: [], blossom_servers: [], token: 'ab'.repeat(32), label: 'Chrome on a Mac', paired_at: NOW },
+};
 
 describe("a page's canonical link is kept only from its own site (contract 4.3, ruling 11)", () => {
   test("a page at an amp. host naming another site's address keeps its own, and the save request names none", () => {
@@ -136,13 +146,6 @@ describe('a canonical longer than the phone keeps is left out (CANONICAL_MAX)', 
   const amp = 'https://amp.news.example/2026/10/story';
   /** The story's address, n characters long. */
   const storyOf = (n: number) => `${story}?q=${'x'.repeat(n - story.length - 3)}`;
-  const user = new LocalSigner(hexToBytes('11'.repeat(32)));
-  const NOW = 1_791_600_000;
-  const ctx: SaveContext = {
-    device: new LocalSigner(hexToBytes('22'.repeat(32))), crypto: webCrypto, now: NOW,
-    defaults: { v: 1, operator: { relay: 'wss://relay.example', blossom: 'https://blossom.example', api: 'https://api.example' }, relays: [], mirrors: [] },
-    pairing: { v: 1, user_pubkey: user.pubkey(), write_relays: [], blossom_servers: [], token: 'ab'.repeat(32), label: 'Chrome on a Mac', paired_at: NOW },
-  };
 
   test('past 2,048 characters, as the phone leaves out its own parse’s and a browser’s; one of 2,048 is kept', () => {
     expect(storyOf(CANONICAL_MAX + 1)).toHaveLength(2_049);
@@ -165,6 +168,22 @@ describe('a canonical longer than the phone keeps is left out (CANONICAL_MAX)', 
     expect(req).toMatchObject({ url: amp, canonical: null, title: 'A story', site: 'News', byline: 'A writer', lang: 'en', hero });
     expect(req.html).not.toBeNull();
     expect(pending.hash).toBe(itemHash(amp));
+  });
+});
+
+describe('a page at an address no save request could carry (ADDRESS_UNWRAPPABLE, F39)', () => {
+  test('isn’t read: its address and title go to the background, which refuses the save at once', async () => {
+    const href = `https://news.example/2026/10/story?q=${'x'.repeat(ADDRESS_UNWRAPPABLE)}`;
+    const c = captured(href, story);
+    // read, it was 'A story', with its canonical and its text: the whole page through the parser for a save then refused
+    expect(c).toEqual(unread(pageUrl(href), 'A page'));
+    await expect(prepare(c, ctx)).rejects.toBeInstanceOf(AddressTooLongError);
+  });
+
+  test('one a character shorter is read as any page is', () => {
+    const href = `https://news.example/?q=${'x'.repeat(ADDRESS_UNWRAPPABLE - 25)}`;
+    expect(href).toHaveLength(ADDRESS_UNWRAPPABLE - 1);
+    expect(captured(href, story)).toMatchObject({ title: 'A story', canonical: story, html: '<p>a few words</p>' });
   });
 });
 

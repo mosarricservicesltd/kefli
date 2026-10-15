@@ -2,9 +2,10 @@
 // phone's own parser bundle. It reads the live page as the fixtures read a fetched one: the serialised document through
 // kefliParse (canonical, hero and readerable first, then Readability and the Markdown) and kefliArticle (Readability's
 // content HTML, which is what a save sends). The guard, the 2 MB cap and the canonical's length are applied here, so only
-// what a save needs crosses to the background, and a page too large to read in good time isn't read at all (captured.ts,
-// PAGE_LIMITS). The background calls window.kefliCapture() once both files are in.
-import { keepHtml, keptCanonical, pageUrl, tooLargeToRead, unread, type Captured, type PageSize, type Parsed } from './captured';
+// what a save needs crosses to the background, and a page too large to read in good time, or at an address no save request
+// can carry, isn't read at all (captured.ts, PAGE_LIMITS, ADDRESS_UNWRAPPABLE). The background calls window.kefliCapture()
+// once both files are in.
+import { keepHtml, keptCanonical, pageUrl, tooLargeToRead, unread, unwrappableAddress, type Captured, type PageSize, type Parsed } from './captured';
 declare function kefliParse(bodyBase64: string, contentType: string, url: string): Parsed;
 declare function kefliArticle(bodyBase64: string, contentType: string, url: string): { ok: boolean; content?: string };
 
@@ -63,6 +64,8 @@ export function absoluteFragments(content: string, base: string): string {
 
 export function capture(doc: Document, href: string): Captured {
   const url = pageUrl(href);
+  // an address no save request can carry: the background refuses its save at once, so nothing is read for it (F39)
+  if (unwrappableAddress(url)) return unread(url, doc.title);
   // a page too large to read in good time is saved unread, before anything is serialised (PAGE_LIMITS)
   const size = sizeOf(doc);
   if (tooLargeToRead({ ...size, chars: 0 })) return unread(url, doc.title);
