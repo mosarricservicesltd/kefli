@@ -9,6 +9,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -273,6 +274,36 @@ func TestABodyThatKeepsItsPaceArrivesWhole(t *testing.T) {
 	}
 	if d := took(t, res); d < g.Pace.Grace+g.Pace.Stall || d < g.Answer {
 		t.Fatalf("the body took only %v", d)
+	}
+}
+
+// once is a body that gives its bytes and its end in one read, and fails any read after it.
+type once struct{ done bool }
+
+func (o *once) Read(b []byte) (int, error) {
+	if o.done {
+		return 0, errors.New("read again after its end")
+	}
+	o.done = true
+	return copy(b, "a body"), io.EOF
+}
+
+// A paced body keeps its verdict: once read to its end it answers its end again without a read of the connection,
+// and once behind its pace, which a read finds before it waits on the connection, it answers ErrSlow from then on.
+func TestAPacedBodyKeepsItsVerdict(t *testing.T) {
+	rc := http.NewResponseController(httptest.NewRecorder())
+	whole := &paced{ReadCloser: io.NopCloser(&once{}), rc: rc, pace: Default, start: time.Now()}
+	if got, err := io.ReadAll(whole); err != nil || string(got) != "a body" || !whole.whole {
+		t.Fatalf("%q %v", got, err)
+	}
+	if n, err := whole.Read(make([]byte, 8)); n != 0 || err != io.EOF {
+		t.Fatalf("a read past the end: %d %v", n, err)
+	}
+	late := &paced{ReadCloser: io.NopCloser(strings.NewReader("never read")), rc: rc, pace: Default, start: time.Now().Add(-Default.Grace)}
+	for i := 0; i < 2; i++ {
+		if n, err := late.Read(make([]byte, 8)); n != 0 || !errors.Is(err, ErrSlow) || late.got != 0 {
+			t.Fatalf("a read behind the pace, %d: %d %v", i, n, err)
+		}
 	}
 }
 
