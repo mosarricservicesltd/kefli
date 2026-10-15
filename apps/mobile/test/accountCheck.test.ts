@@ -35,6 +35,21 @@ function world(reply: Reply = { status: 200, body: ANSWER }, opts: { signer?: (s
 const authEvent = (init: RequestInit) =>
   JSON.parse(Buffer.from(String((init.headers as Record<string, string>).Authorization).replace(/^Nostr /, ''), 'base64').toString('utf8')) as NostrEvent;
 
+describe("the check's deadline", () => {
+  test("is the API's own, from the one place every call to the API takes it", () => {
+    // a copy of its own here could drift from the deadline the rest of the API's calls have
+    const HTTP = '../src/net/http';
+    try {
+      jest.isolateModules(() => {
+        jest.doMock(HTTP, () => ({ ...jest.requireActual(HTTP), SERVER_TIMEOUT_MS: 12_345 }));
+        expect((require('../src/services/account') as typeof import('../src/services/account')).ACCOUNT_TIMEOUT_MS).toBe(12_345);
+      });
+    } finally {
+      jest.dontMock(HTTP);
+    }
+  });
+});
+
 describe('GET /account (C§6)', () => {
   test('a GET to the API’s /account, signed with NIP-98 by the library’s own key, with no payload tag', async () => {
     const w = world();

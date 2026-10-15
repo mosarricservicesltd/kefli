@@ -8,7 +8,7 @@
 import { httpAuth, type CryptoPort, type Signer } from '@kefli/protocol';
 import { forgetFigures, recordFigures, type Check } from '../data/account';
 import type { SqlDb } from '../data/db';
-import { NO_HOPS, open } from '../net/http';
+import { NO_HOPS, SERVER_TIMEOUT_MS, open } from '../net/http';
 
 export type AccountPorts = {
   db: SqlDb;
@@ -24,9 +24,10 @@ export type AccountPorts = {
 
 /**
  * The longest a check takes before it counts as failed, from the ask, the signing included (a nostr app reached through
- * a bunker may take its two minutes), and the most of an answer read.
+ * a bunker may take its two minutes): the API's deadline, which every other call to it has (net/http SERVER_TIMEOUT_MS).
  */
-export const ACCOUNT_TIMEOUT_MS = 15_000;
+export const ACCOUNT_TIMEOUT_MS = SERVER_TIMEOUT_MS;
+/** The most of an answer read: the figures come in about a hundred bytes. */
 const MAX_BYTES = 4096;
 
 type Answer = { status: number; body: unknown };
