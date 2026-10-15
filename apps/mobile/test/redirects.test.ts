@@ -594,6 +594,8 @@ describe("the local stack's loopback hops are wired where its servers are asked,
     for (const [name, text] of Object.entries(ports)) expect([name, text.includes(WIRED)]).toEqual([name, true]);
     // and Delete my data's blob deletions, whose first step failed on the local stack's operator moving one
     expect(block(source('screens/Delete.tsx'), 'deletePorts({').includes(WIRED)).toBe(true);
+    // and defaults.json, asked as a server is (services/defaultsPick.ts)
+    expect(block(source('services/config.ts'), 'return pickDefaults({').includes(WIRED)).toBe(true);
     expect(source('services/config.ts')).toContain("export const LOCAL_STACK = build.variant === 'local';");
   });
 

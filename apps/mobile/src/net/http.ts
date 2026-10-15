@@ -14,11 +14,12 @@
 // under EXPO_PUBLIC_USE_RN_FETCH) has its answer refused when it says it ended somewhere a hop couldn't go. Every
 // request the phone makes to a blob server takes the same hops (serverHops): a text's blob servers, the inbox's and
 // the mirrors, through open or, for calls written against a fetch (the protocol's Blossom calls), serverFetch; so a
-// mirror, a server another app named or a save's text.servers can't send the phone into its own network either. A hop
-// to another origin is asked without the request's Authorization, as OkHttp's own following and browsers leave it out
-// (RFC 9110, 15.4), and a 303, or a 301 or 302 to a POST, is followed with a GET and no body, as the Fetch Standard has
-// it. Kefli's API takes no hop at all (NO_HOPS, apiFetch): each call to it is signed for its exact address, and a 3xx
-// in its place fails the call as the API not answering.
+// mirror, a server another app named or a save's text.servers can't send the phone into its own network either; and
+// so does defaults.json (services/defaultsPick.ts), which no signature binds to its address. A hop to another origin
+// is asked without the request's Authorization, as OkHttp's own following and browsers leave it out (RFC 9110, 15.4),
+// and a 303, or a 301 or 302 to a POST, is followed with a GET and no body, as the Fetch Standard has it. Kefli's API
+// takes no hop at all (NO_HOPS, apiFetch): each call to it is signed for its exact address, and a 3xx in its place
+// fails the call as the API not answering.
 //
 // Cleartext (7.1): release builds allow none, and OkHttp refuses plain http before it connects. That refusal fails
 // what was asked for (Blocked); read as the network, as it was, it left a save waiting for good. A read that follows
@@ -117,10 +118,10 @@ export function loopback(url: string): boolean {
 const LOCAL_HOPS: Hops = { max: MAX_REDIRECTS, allow: (url) => publicWeb(url) || loopback(url) };
 
 /**
- * The hops a blob server's answer may take (7.1): a page's (WEB_HOPS), so a mirror, a server another app named in the
- * 10063 or a save's text.servers can't send the phone to 192.168.1.1; and on the local stack only (services/config.ts
- * LOCAL_STACK, which the caller passes in), whose servers are on this machine, to loopback too. Kefli's API takes none
- * (NO_HOPS).
+ * The hops a blob server's answer, or defaults.json's, may take (7.1): a page's (WEB_HOPS), so a mirror, a server
+ * another app named in the 10063 or a save's text.servers can't send the phone to 192.168.1.1; and on the local stack
+ * only (services/config.ts LOCAL_STACK, which the caller passes in), whose servers are on this machine, to loopback too.
+ * Kefli's API takes none (NO_HOPS).
  */
 export function serverHops(localStack: boolean): Hops {
   return localStack ? LOCAL_HOPS : WEB_HOPS;
