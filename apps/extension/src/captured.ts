@@ -49,13 +49,15 @@ export function pageUrl(href: string): string {
 }
 
 /**
- * The shortest address no save request can carry, in UTF-16 code units (contract 4.4, F39): a wrap has to stay under
- * SAVE_REQUEST_MAX_BYTES, NIP-44's two layers of base64 make it more than 16/9 of the rumor inside, and the rumor holds
- * the address at a byte or more a character. So 4,608 characters can never go, whatever the request leaves out.
+ * The length, in UTF-16 code units, from which no save request can carry an address, whatever its characters and
+ * whatever the request leaves out (contract 4.4, F39): a wrap has to stay under SAVE_REQUEST_MAX_BYTES, NIP-44's two
+ * layers of base64 make it more than 16/9 of the rumor inside, and the rumor holds the address at a byte or more a
+ * character. A shorter address can be too long all the same, from about 2,570 plain characters, which only a wrap
+ * tells (save.ts, addressFits).
  */
 export const ADDRESS_UNWRAPPABLE = Math.ceil((SAVE_REQUEST_MAX_BYTES * 9) / 16);
 
-/** Whether no save request could carry the address (ADDRESS_UNWRAPPABLE): its save is refused before anything is read. */
+/** Whether no save request can carry the address by its length alone (ADDRESS_UNWRAPPABLE): its save is refused unread. */
 export function unwrappableAddress(url: string): boolean {
   return url.length >= ADDRESS_UNWRAPPABLE;
 }
