@@ -58,7 +58,7 @@ export const QUERY_MAX_MS = 60_000;
  * relay that can't be reached does. Returned as whole, as it was when nostr-tools' own EOSE timer (4.4 s from the REQ,
  * however much was still coming) or the pool's ten seconds ended it, a cut answer moved the inbox's cursor and sync's
  * past the events beneath the cut, which were then never read: against strfry, 428, 131, 189, 150 and 362 of 500 wraps
- * came back as if whole. It counted, too, as a relay answering that a list or a library key wasn't there (C§3.1).
+ * came back as if whole. It counted, too, as a relay answering that a list (C§3.1) or a library key (C§4.3) wasn't there.
  */
 export class CutShort extends Error {
   constructor(readonly relay: string, readonly received: number, readonly why: string) {
