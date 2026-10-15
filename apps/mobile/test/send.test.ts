@@ -1228,6 +1228,45 @@ describe('every call to a server takes its hops, and has a deadline (7.1)', () =
     expect(tried(v)).toMatchObject({ state: 'queued', last_error: 'blocked: redirect' });
   });
 
+  test("Kefli's API answering a call with any redirect, on any build: nothing it names is asked, and the call waits as for an API not answering", async () => {
+    // every call to the API is signed for its exact address (C§6), so it never answers through a redirect. Followed, a
+    // register answered 302 or 303 to any page that answers 200 read as registered, and one answered 300 was refused
+    // for good, every save behind it held
+    const answers: [number, string | null][] = [
+      [302, 'https://news.example/'], [303, 'https://news.example/'], [307, '/v1/register'], [308, 'http://api/v1/register'], [301, null], [300, null],
+    ];
+    for (const localStack of [true, false]) {
+      for (const [status, location] of answers) {
+        const w = world();
+        w.ports.localStack = localStack;
+        const base = w.ports.fetch;
+        const asked: string[] = [];
+        w.ports.fetch = (async (url: string, init: RequestInit) => {
+          asked.push(url);
+          return url === 'http://api/register' ? new Response(null, { status, headers: location ? { location } : {} }) : base(url, init);
+        }) as typeof fetch;
+        release(w.db, (await save(w)).held);
+        await drain(w.ports);
+        const named = [localStack, status, location];
+        expect([...named, tried(w)]).toEqual([...named, expect.objectContaining({ state: 'queued', last_error: 'blocked: redirect' })]);
+        expect([...named, asked]).toEqual([...named, ['http://api/register']]);
+        expect([...named, w.db.get('SELECT registered_at FROM identities')]).toEqual([...named, { registered_at: null }]);
+        expect(w.published()).toEqual([]);
+      }
+    }
+    // a browser's removal answered 303 to a page that answers 200 waits too, where it read as removed
+    const v = world();
+    registered(v);
+    const base = v.ports.fetch;
+    const target = `http://api/devices/${'ab'.repeat(32)}`;
+    v.ports.fetch = (async (url: string, init: RequestInit) =>
+      url === target ? new Response(null, { status: 303, headers: { location: 'https://news.example/' } }) : base(url, init)) as typeof fetch;
+    enqueue(v.db, v.now(), { op: 'delete_device', signer: v.signer.pubkey(), subject: 'ab'.repeat(32), targets: [target] });
+    await drain(v.ports);
+    expect(tried(v)).toMatchObject({ state: 'queued', last_error: 'blocked: redirect' });
+    expect(v.calls).not.toContain('GET https://news.example/');
+  });
+
   test("a blob server sending an upload, a mirror's copy or a deletion into the phone's network: nothing is asked there; each waits", async () => {
     const w = world();
     registered(w);

@@ -83,6 +83,30 @@ describe('second-phone pairing on the phone (mobile spec 5.3, 5.8)', () => {
     expect(await takePhonePair(w.take, shown.qr, shown.six)).toEqual({ mnemonic: w.words });
   });
 
+  test("the API answering either call with any redirect, its own origin's or another's: that side is offline, and nothing it names is asked", async () => {
+    // every call to the API is signed for its exact address (C§6), so it never answers through a redirect. Followed, a
+    // post answered 302 to a page that answers 200 showed a code whose offer the API never held, and a fetch answered
+    // 303 to another of its paths read as a wrong code
+    const w = await world();
+    for (const [status, location] of [[302, 'https://news.example/'], [303, '/phone-offers/elsewhere'], [307, 'http://api/v1/phone-offers'], [301, null]] as const) {
+      const asked: string[] = [];
+      const away = (f: typeof fetch, method: string) => (async (url: string, init: RequestInit = {}) => {
+        asked.push(`${init.method ?? 'GET'} ${url}`);
+        if (!url.startsWith('http://api/')) return new Response('<p>a page</p>', { status: 200 });
+        if ((init.method ?? 'GET') === method) return new Response(null, { status, headers: location ? { location } : {} });
+        return f(url, init);
+      }) as typeof fetch;
+      expect([status, await showPhonePair({ ...w.show, fetch: away(w.show.fetch, 'POST') })]).toEqual([status, 'offline']);
+      const shown = await showPhonePair(w.show);
+      if (shown === 'offline') throw new Error('offline');
+      expect([status, await takePhonePair({ ...w.take, fetch: away(w.take.fetch, 'GET') }, shown.qr, shown.six)]).toEqual([status, 'offline']);
+      expect([status, asked.map((a) => a.replace(/[0-9a-f]{64}$/, '<lookup>'))])
+        .toEqual([status, ['POST http://api/phone-offers', 'GET http://api/phone-offers/<lookup>']]);
+      // the offer is still held for an answer the phone can take
+      expect(await takePhonePair(w.take, shown.qr, shown.six)).toEqual({ mnemonic: w.words });
+    }
+  });
+
   test('an API that takes either call and never answers is let go at its deadline: offline, where each side waited for good', async () => {
     const w = await world();
     jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });

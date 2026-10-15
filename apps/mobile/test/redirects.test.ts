@@ -10,7 +10,7 @@ import { MB, accountFigures } from '../src/data/account';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { textQueue } from '../src/data/sync';
-import { Blocked, MAX_REDIRECTS, WEB_HOPS, fromFiles, loopback, open, redirectTo, serverHops } from '../src/net/http';
+import { Blocked, MAX_REDIRECTS, NO_HOPS, WEB_HOPS, apiFetch, fromFiles, loopback, open, redirectTo, serverHops } from '../src/net/http';
 import { checkAccount } from '../src/services/account';
 import { fetchArticleImages, imageState, type ImagePorts } from '../src/services/images';
 import { readBlob } from '../src/services/inbox';
@@ -442,13 +442,13 @@ describe("a text's blob servers, the inbox's and Kefli's API take the hops too (
     expect(await readBlob({ fetch: web(routes).f, crypto: nodeCrypto }, local)).toEqual({ kind: 'failed', down: true });
   });
 
-  /** GET /account over a web of routes, as Advanced asks it. */
-  function accountWorld(routes: Record<string, Hop>) {
+  /** GET /account over a web of routes, as Advanced asks it; followAnyway, through a fetch that follows them itself. */
+  function accountWorld(routes: Record<string, Hop>, followAnyway = false) {
     const db = memoryDb();
     migrate(db);
     const own = new LocalSigner(nodeCrypto.randomBytes(32));
     ensureIdentityRow(db, 1_000, own.pubkey(), 'new', true);
-    const w = web(routes);
+    const w = web(routes, followAnyway);
     const ports = { db, now: () => 1_000, owner: own.pubkey(), api: async () => 'https://api.example', signer: async () => own, fetch: w.f, crypto: nodeCrypto };
     return { w, ports, db, owner: own.pubkey() };
   }
@@ -464,17 +464,104 @@ describe("a text's blob servers, the inbox's and Kefli's API take the hops too (
     }
   });
 
-  test("the API's NIP-98 header goes to no other origin a redirect names, as OkHttp's own following left it out; its own keeps it", async () => {
-    const away = accountWorld({ 'https://api.example/account': { status: 307, location: 'https://elsewhere.example/account' }, 'https://elsewhere.example/account': { body: FIGURES } });
-    await checkAccount(away.ports);
-    expect(away.w.asked.map((a) => [a.url, authorised(a.init)])).toEqual([['https://api.example/account', true], ['https://elsewhere.example/account', false]]);
-    // another port or scheme is another origin too
-    const port = accountWorld({ 'https://api.example/account': { status: 308, location: 'https://api.example:8443/account' }, 'https://api.example:8443/account': { body: FIGURES } });
-    await checkAccount(port.ports);
-    expect(port.w.asked.map((a) => authorised(a.init))).toEqual([true, false]);
-    const same = accountWorld({ 'https://api.example/account': { status: 308, location: '/v1/account' }, 'https://api.example/v1/account': { body: FIGURES } });
-    expect(await checkAccount(same.ports)).toBe('ok');
-    expect(same.w.asked.map((a) => [a.url, authorised(a.init)])).toEqual([['https://api.example/account', true], ['https://api.example/v1/account', true]]);
+  test("Kefli's API answering with any redirect, to its own origin or another, fails the check, and nothing it names is asked", async () => {
+    // every call to the API is signed for its exact address (C§6), so it never answers through a redirect. Followed, a
+    // redirect's page was taken for the library's figures, and the NIP-98 header went on to another path of its origin
+    const named: [number, string][] = [
+      [307, 'https://elsewhere.example/account'], [308, 'https://api.example:8443/account'], [308, '/v1/account'], [303, '/v1/account'],
+      [301, 'https://api.example/account/'], [302, 'http://api.example/account'],
+    ];
+    for (const [status, location] of named) {
+      const to = new URL(location, 'https://api.example/account').href;
+      const a = accountWorld({ 'https://api.example/account': { status, location }, [to]: { body: FIGURES } });
+      expect([status, location, await checkAccount(a.ports)]).toEqual([status, location, 'failed']);
+      expect([status, location, a.w.asked.map((x) => [x.url, authorised(x.init), x.init.redirect])])
+        .toEqual([status, location, [['https://api.example/account', true, 'manual']]]);
+      expect(accountFigures(a.db, a.owner)).toBeNull();
+    }
+    // a 3xx that names nowhere, or is no redirect at all, is no answer of the API's either, whatever its body says
+    for (const status of [300, 302, 399]) {
+      const a = accountWorld({ 'https://api.example/account': { status, body: FIGURES } });
+      expect([status, await checkAccount(a.ports)]).toEqual([status, 'failed']);
+      expect(accountFigures(a.db, a.owner)).toBeNull();
+    }
+    // nor is the last hop's answer from a fetch that follows redirects itself, as React Native's own does
+    const rn = accountWorld({ 'https://api.example/account': { status: 308, location: '/v1/account' }, 'https://api.example/v1/account': { body: FIGURES } }, true);
+    expect(await checkAccount(rn.ports)).toBe('failed');
+    expect(accountFigures(rn.db, rn.owner)).toBeNull();
+  });
+
+  test("Kefli's API answering as itself is still read, its address written however the fetch writes it", async () => {
+    const a = accountWorld({ 'https://api.example/account': { body: FIGURES } });
+    expect(await checkAccount(a.ports)).toBe('ok');
+    // OkHttp writes the address it asked in its own way: its host in lower case, a default port left out
+    const answering = (url: string) => (async () => {
+      const res = new Response(FIGURES, { status: 200 });
+      Object.defineProperty(res, 'url', { value: url });
+      return res;
+    }) as unknown as typeof fetch;
+    for (const written of ['https://api.example/account', 'https://API.example:443/account']) {
+      const o = await open(answering(written), 'https://api.example/account', {}, 5_000, NO_HOPS);
+      o.done();
+      expect(o.url).toBe(written);
+    }
+    await expect(open(answering('https://api.example/v1/account'), 'https://api.example/account', {}, 5_000, NO_HOPS)).rejects.toMatchObject({ why: 'redirect' });
+  });
+});
+
+describe("Kefli's API follows no redirect, on any build (contract 6)", () => {
+  type Answer = { status: number; location?: string; redirected?: boolean; url?: string };
+  /** apiFetch over an API that answers every call with a, every address it is asked recorded with how. */
+  function api(a: Answer) {
+    const asked: { url: string; init: RequestInit }[] = [];
+    const f = (async (url: string, init: RequestInit = {}) => {
+      asked.push({ url, init });
+      if (!url.startsWith('https://api.example/')) return new Response('<p>a page</p>', { status: 200 });
+      const res = new Response(null, { status: a.status, headers: a.location ? { location: a.location } : {} });
+      if (a.redirected) Object.defineProperty(res, 'redirected', { value: true });
+      if (a.url) Object.defineProperty(res, 'url', { value: a.url });
+      return res;
+    }) as unknown as typeof fetch;
+    return { f: apiFetch(f), asked };
+  }
+
+  test('every 3xx, with a Location or without, rejects as a refused redirect; nothing it names is asked', async () => {
+    // followed, a DELETE /account answered 303 to any page that answers 200 read as the account deleted, and Delete my
+    // data went on to wipe the phone; a POST answered 301 or 302 went the same way
+    const answers: Answer[] = [
+      { status: 303, location: 'https://news.example/' }, { status: 302, location: 'https://news.example/' }, { status: 301, location: '/v1/account' },
+      { status: 307, location: '/v1/account' }, { status: 308, location: 'https://api.example/v1/account' }, { status: 302 }, { status: 300 },
+      { status: 304 }, { status: 305, location: 'https://proxy.example/' }, { status: 399 },
+    ];
+    for (const a of answers) {
+      for (const method of ['DELETE', 'POST', 'GET']) {
+        const w = api(a);
+        const call = w.f('https://api.example/account', { method, ...(method === 'POST' ? { body: '{"v":1}' } : {}) });
+        await expect(call).rejects.toMatchObject({ name: 'Blocked', why: 'redirect' });
+        expect([a, method, w.asked.map((x) => [x.url, x.init.method, x.init.redirect, x.init.credentials])])
+          .toEqual([a, method, [['https://api.example/account', method, 'manual', 'omit']]]);
+      }
+    }
+  });
+
+  test('an answer a fetch says came through a redirect, or from another address, is refused as one', async () => {
+    for (const a of [{ status: 200, redirected: true }, { status: 200, url: 'https://news.example/' }, { status: 200, url: 'https://api.example/v1/account' }]) {
+      await expect(api(a).f('https://api.example/account', { method: 'DELETE' })).rejects.toBeInstanceOf(Blocked);
+    }
+  });
+
+  test("the API's own answers come back as they are, a refusal's status and a server error's among them", async () => {
+    for (const status of [200, 204, 400, 401, 403, 404, 409, 429, 500, 503]) {
+      const res = await api({ status }).f('https://api.example/account', { method: 'DELETE' });
+      expect([status, res.status, res.ok]).toEqual([status, status, status >= 200 && 300 > status]);
+    }
+  });
+
+  test('no hop is taken on the local stack either, whose API never redirects', async () => {
+    expect([NO_HOPS.max, NO_HOPS.allow('http://localhost:8447/account'), NO_HOPS.allow('https://api.example/account')]).toEqual([0, false, false]);
+    const w = web({ 'http://localhost:8447/account': { status: 307, location: 'http://localhost:8447/v1/account' }, 'http://localhost:8447/v1/account': { body: '{}' } });
+    await expect(apiFetch(w.f)('http://localhost:8447/account', { method: 'DELETE' })).rejects.toMatchObject({ why: 'redirect' });
+    expect(w.urls()).toEqual(['http://localhost:8447/account']);
   });
 });
 
@@ -502,13 +589,17 @@ describe("the local stack's loopback hops are wired where its servers are asked,
       moveInbox: block(runner, 'drainSourceInbox:'),
       outbox: block(runner, 'return await drain({'),
       move: block(runner, 'const r = await runMove({'),
-      connect: block(runner, 'export function connectPorts('),
     };
     // left out, as they were, the local stack's servers redirecting on loopback failed its sync, inbox and move
     for (const [name, text] of Object.entries(ports)) expect([name, text.includes(WIRED)]).toEqual([name, true]);
-    // Advanced's check of the library's figures too
-    expect(block(source('screens/Advanced.tsx'), 'checkAccount({').includes(WIRED)).toBe(true);
     expect(source('services/config.ts')).toContain("export const LOCAL_STACK = build.variant === 'local';");
+  });
+
+  test('ports that reach only the API take no word of the build: it follows no redirect on any', () => {
+    // Connect's, pairing a phone's and Advanced's check ask only the API (net/http NO_HOPS)
+    expect(block(source('services/runner.ts'), 'export function connectPorts(').includes('localStack')).toBe(false);
+    expect(block(source('screens/Advanced.tsx'), 'checkAccount({').includes('localStack')).toBe(false);
+    expect(source('screens/Scan.tsx')).not.toContain('localStack');
   });
 });
 

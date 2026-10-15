@@ -1,14 +1,17 @@
 // Second-phone pairing on the phone (mobile spec 3.3, 5.3, 5.8, contract 2 and 6). The source (Add another
 // device) posts the mnemonic sealed under the QR's secret and six digits; the target (Scan from my other phone)
-// fetches it with a throwaway key, opens it, and refuses a mnemonic whose key isn't the QR's pubkey. Ports keep
-// both ends testable.
+// fetches it with a throwaway key, opens it, and refuses a mnemonic whose key isn't the QR's pubkey. Each end asks the
+// API through net/http apiFetch, which follows no redirect and has the whole answer within the API's 15 s: a 3xx, or
+// an API that never answers, is offline, where a redirect's page was taken for the API's answer. Ports keep both ends
+// testable.
 import {
   LocalSigner, derivePhonePair, httpAuth, newPhonePair, openPhoneOffer, sealPhoneOffer, secretKeyFromMnemonic,
   type CryptoPort, type PhoneQr,
 } from '@kefli/protocol';
-import { apiFetch, registered, type ConnectPorts } from './connect';
+import { apiFetch } from '../net/http';
+import { registered, type ConnectPorts } from './connect';
 
-export type ShowPorts = Pick<ConnectPorts, 'db' | 'now' | 'owner' | 'defaults' | 'signer' | 'fetch' | 'crypto' | 'runOutbox' | 'localStack'> & {
+export type ShowPorts = Pick<ConnectPorts, 'db' | 'now' | 'owner' | 'defaults' | 'signer' | 'fetch' | 'crypto' | 'runOutbox'> & {
   mnemonic: () => Promise<string | null>;
 };
 
@@ -21,15 +24,15 @@ export async function showPhonePair(p: ShowPorts): Promise<{ qr: PhoneQr; six: s
   const body = JSON.stringify({ v: 1, lookup, offer: await sealPhoneOffer(words, key, p.crypto) });
   const url = `${d.operator.api}/phone-offers`;
   try {
-    const res = await apiFetch(p)(url, { method: 'POST', body, headers: { 'Content-Type': 'application/json', Authorization: await httpAuth(signer, url, 'POST', body, p.crypto) } });
+    const res = await apiFetch(p.fetch)(url, { method: 'POST', body, headers: { 'Content-Type': 'application/json', Authorization: await httpAuth(signer, url, 'POST', body, p.crypto) } });
     return res.ok ? { qr, six } : 'offline';
   } catch {
     return 'offline';
   }
 }
 
-/** Scan from my other phone's ports; localStack, the local stack's build (services/config.ts LOCAL_STACK). */
-export type TakePorts = { fetch: typeof fetch; crypto: CryptoPort; api: string; localStack?: boolean };
+/** Scan from my other phone's ports. */
+export type TakePorts = { fetch: typeof fetch; crypto: CryptoPort; api: string };
 
 /** The mnemonic for a scanned QR and its six digits; wrong when no offer opens with them, offline when unreachable. */
 export async function takePhonePair(p: TakePorts, qr: PhoneQr, six: string): Promise<{ mnemonic: string } | 'wrong' | 'offline'> {
@@ -38,7 +41,7 @@ export async function takePhonePair(p: TakePorts, qr: PhoneQr, six: string): Pro
   const throwaway = new LocalSigner(p.crypto.randomBytes(32));
   let res: Response;
   try {
-    res = await apiFetch(p)(url, { method: 'GET', headers: { Authorization: await httpAuth(throwaway, url, 'GET', null, p.crypto) } });
+    res = await apiFetch(p.fetch)(url, { method: 'GET', headers: { Authorization: await httpAuth(throwaway, url, 'GET', null, p.crypto) } });
   } catch {
     return 'offline';
   }

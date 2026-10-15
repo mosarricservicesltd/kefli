@@ -12,12 +12,13 @@
 // from the phone's own files when its address begins http://filesystem.local (fromFiles), such a host is refused at
 // every hop as at the first (services/page.ts fetchable). A fetch that follows redirects anyway (React Native's own,
 // under EXPO_PUBLIC_USE_RN_FETCH) has its answer refused when it says it ended somewhere a hop couldn't go. Every
-// request the phone makes to a server takes the same hops (serverHops): a text's blob servers, the inbox's, the
-// mirrors, and Kefli's API in every call (the outbox's, Delete my data's, the move's, Connect's and pairing a phone's),
-// through open or, for calls written against a fetch (the protocol's Blossom calls), serverFetch; so a mirror, a server
-// another app named or a save's text.servers can't send the phone into its own network either. A hop to another origin
-// is asked without the request's Authorization, as OkHttp's own following and browsers leave it out (RFC 9110, 15.4),
-// and a 303, or a 301 or 302 to a POST, is followed with a GET and no body, as the Fetch Standard has it.
+// request the phone makes to a blob server takes the same hops (serverHops): a text's blob servers, the inbox's and
+// the mirrors, through open or, for calls written against a fetch (the protocol's Blossom calls), serverFetch; so a
+// mirror, a server another app named or a save's text.servers can't send the phone into its own network either. A hop
+// to another origin is asked without the request's Authorization, as OkHttp's own following and browsers leave it out
+// (RFC 9110, 15.4), and a 303, or a 301 or 302 to a POST, is followed with a GET and no body, as the Fetch Standard has
+// it. Kefli's API takes no hop at all (NO_HOPS, apiFetch): each call to it is signed for its exact address, and a 3xx
+// in its place fails the call as the API not answering.
 //
 // Cleartext (7.1): release builds allow none, and OkHttp refuses plain http before it connects. That refusal fails
 // what was asked for (Blocked); read as the network, as it was, it left a save waiting for good. A read that follows
@@ -41,8 +42,9 @@ export class TooLarge extends Error {
 /**
  * A fetch the phone won't make or finish, which asking again would only repeat, so what was asked for fails rather
  * than waiting as offline: a redirect to an address the caller doesn't allow, or one naming nowhere a request can
- * go (redirect); more redirects than the caller follows (redirects); or plain http, which the build refuses before
- * connecting (cleartext), in OkHttp's words "CLEARTEXT communication to ... not permitted by network security policy".
+ * go, or for a caller that follows none (NO_HOPS) any 3xx or an answer that came through a redirect (redirect); more
+ * redirects than the caller follows (redirects); or plain http, which the build refuses before connecting
+ * (cleartext), in OkHttp's words "CLEARTEXT communication to ... not permitted by network security policy".
  */
 export class Blocked extends Error {
   constructor(readonly why: 'redirect' | 'redirects' | 'cleartext') {
@@ -51,8 +53,21 @@ export class Blocked extends Error {
   }
 }
 
-/** How a fetch follows redirects itself: at most max of them, each to an address allow passes. */
+/**
+ * How a fetch follows redirects itself: at most max of them, each to an address allow passes. With max 0 it follows
+ * none, and takes no 3xx as an answer, nor an answer that came through a redirect (NO_HOPS).
+ */
 export type Hops = { max: number; allow: (url: string) => boolean };
+
+/**
+ * No redirect at all: Kefli's API's hops (contract 6), in every call and on every build. Each call is signed with
+ * NIP-98 for its exact address and method, so the API never answers through a redirect: a 3xx in its place, whatever
+ * page it names, is no answer of the API's. Followed, a DELETE /account answered 303 to any page that answers 200 read
+ * as the account deleted, and Delete my data went on to wipe the phone; a POST answered 301 or 302 went the same way.
+ * Each fails the ask (Blocked), which every call reads as the API not answering: the outbox tries it again, and a
+ * screen shows what it shows for the API unreachable.
+ */
+export const NO_HOPS: Hops = { max: 0, allow: () => false };
 
 /** The most redirects a page, an image or X's embed is followed through (5.4); one more fails it. */
 export const MAX_REDIRECTS = 10;
@@ -102,9 +117,10 @@ export function loopback(url: string): boolean {
 const LOCAL_HOPS: Hops = { max: MAX_REDIRECTS, allow: (url) => publicWeb(url) || loopback(url) };
 
 /**
- * The hops a blob server's answer or Kefli's API's may take (7.1): a page's (WEB_HOPS), so a mirror, a server another
- * app named in the 10063 or a save's text.servers can't send the phone to 192.168.1.1; and on the local stack only
- * (services/config.ts LOCAL_STACK, which the caller passes in), whose servers are on this machine, to loopback too.
+ * The hops a blob server's answer may take (7.1): a page's (WEB_HOPS), so a mirror, a server another app named in the
+ * 10063 or a save's text.servers can't send the phone to 192.168.1.1; and on the local stack only (services/config.ts
+ * LOCAL_STACK, which the caller passes in), whose servers are on this machine, to loopback too. Kefli's API takes none
+ * (NO_HOPS).
  */
 export function serverHops(localStack: boolean): Hops {
   return localStack ? LOCAL_HOPS : WEB_HOPS;
@@ -234,8 +250,9 @@ const BODY_HEADERS = ['content-encoding', 'content-language', 'content-location'
 /**
  * The request as a hop from at to next asks it, after an answer of this status. An Authorization header goes no
  * further than its own origin (RFC 9110, 15.4), as OkHttp's own following and browsers drop it, so a redirect can't
- * hand a NIP-98 header to another server. A redirect that turns the request into a GET (asGet) asks without the body
- * or the headers that describe it, as browsers do: sent again, a POST to Kefli's API answered 303 went on as a POST.
+ * hand a blob server's authorisation to another server. A redirect that turns the request into a GET (asGet) asks
+ * without the body or the headers that describe it, as browsers do: sent again, a call answered 303 went on with its
+ * method and its body.
  */
 function onwards(init: RequestInit, status: number, at: string, next: string): RequestInit {
   const headers = new Headers(init.headers);
@@ -260,8 +277,8 @@ async function arrive(f: typeof fetch, url: string, init: RequestInit, line: Lin
     if (next === null) return { res: got.res, url: arrived(got.res, got.at, hops) };
     // the redirect's own answer is let go, its body unread
     line.ctl.abort();
-    if (n >= hops!.max) throw new Blocked('redirects');
     if (!hops!.allow(next)) throw new Blocked('redirect');
+    if (n >= hops!.max) throw new Blocked('redirects');
     if (line.late) throw new TimedOut();
     line.ctl = new AbortController();
     ask = onwards(ask, got.res.status, got.at, next);
@@ -270,11 +287,34 @@ async function arrive(f: typeof fetch, url: string, init: RequestInit, line: Lin
   }
 }
 
-/** Where an answer came from: where the fetch says it ended, refused when that strays (strayed). */
+/**
+ * Where an answer came from: where the fetch says it ended, refused when that strays (strayed) and, for a caller that
+ * follows no redirect, when it is one or came through one (through).
+ */
 function arrived(res: Response, at: string, hops?: Hops): string {
   const said = res.url || at;
-  if (hops && strayed(hops, at, said)) throw new Blocked('redirect');
+  if (hops && (strayed(hops, at, said) || through(hops, res, at, said))) throw new Blocked('redirect');
   return said;
+}
+
+/**
+ * For a caller that follows no redirect (max 0, NO_HOPS): whether an answer is a 3xx of any kind, one with no
+ * Location, a 300 or a 304 as much as a redirect, or came through a redirect, by the fetch's own word (redirected) or
+ * by the address it says it came from, as a fetch that follows redirects itself (React Native's own) hands back the
+ * last hop's answer as if it were the first's. at is the address asked, after any move to https (asked).
+ */
+function through(hops: Hops, res: Response, at: string, said: string): boolean {
+  if (hops.max > 0) return false;
+  return (res.status >= 300 && 400 > res.status) || res.redirected === true || !sameAddress(said, at);
+}
+
+/** Whether two addresses are one as the URL parser writes them, as OkHttp writes the one it asked; else as written. */
+function sameAddress(a: string, b: string): boolean {
+  try {
+    return new URL(a).href === new URL(b).href;
+  } catch {
+    return a === b;
+  }
 }
 
 /**
@@ -440,10 +480,10 @@ function addressOf(input: RequestInfo | URL): string {
 
 /**
  * fetch for a server, for calls written against a fetch (the protocol's uploadBlob, mirrorBlob and deleteBlob, and the
- * phone's own to Kefli's API): no cookies, each redirect followed here with its address checked first (open, with
- * ask.hops), and the whole answer, headers and body, had within ask.timeoutMs, at most ask.maxBytes of the body kept. A
- * hop where none may go rejects (Blocked), as the deadline (TimedOut) and the network do, and each call reads all three
- * as the server not answering; past the cap, only the body's reads fail.
+ * phone's own to Kefli's API, through apiFetch): no cookies, each redirect followed here with its address checked first
+ * (open, with ask.hops), and the whole answer, headers and body, had within ask.timeoutMs, at most ask.maxBytes of the
+ * body kept. A hop where none may go rejects (Blocked), as the deadline (TimedOut) and the network do, and each call
+ * reads all three as the server not answering; past the cap, only the body's reads fail.
  */
 export function serverFetch(f: typeof fetch, ask: ServerAsk): typeof fetch {
   const get = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -451,4 +491,14 @@ export function serverFetch(f: typeof fetch, ask: ServerAsk): typeof fetch {
     return (await answered(o, ask.maxBytes ?? ANSWER_MAX_BYTES)) as unknown as Response;
   };
   return get as typeof fetch;
+}
+
+/**
+ * fetch for Kefli's API (contract 6), in every call the phone makes to it: the outbox's register, browsers' and
+ * removals, GET and DELETE /account (Advanced's check, Delete my data's and a move's), Connect's lookup and pairing a
+ * phone's. serverFetch with no redirect followed or taken (NO_HOPS), on every build, the local stack's included, whose
+ * API never redirects either; the API's deadline; and an answer's cap.
+ */
+export function apiFetch(f: typeof fetch): typeof fetch {
+  return serverFetch(f, { hops: NO_HOPS, timeoutMs: SERVER_TIMEOUT_MS });
 }

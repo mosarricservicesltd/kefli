@@ -20,7 +20,7 @@ import { listServers, writeRelays } from '../data/lists';
 import { indexText } from '../data/sync';
 import { carryChanges, copySave, moveJob, newerInEither, retireLocal, saveMove, sourceMark, sourceSaves, type MoveJob } from '../data/move';
 import type { SaveTargets, StagedBlob } from '../data/saves';
-import { SERVER_TIMEOUT_MS, TimedOut, serverFetch, serverHops } from '../net/http';
+import { SERVER_TIMEOUT_MS, TimedOut, apiFetch, serverFetch, serverHops } from '../net/http';
 import { registered } from './connect';
 import type { RelayAnswer } from './send';
 import type { Filter } from './sync';
@@ -53,17 +53,15 @@ export type MovePorts = {
   /** Step 5's end: S out of the key file, and Block Store given T's mnemonic or emptied. */
   retireKeys: () => Promise<void>;
   report?: (moved: number, total: number) => void;
-  /** The local stack's build (services/config.ts LOCAL_STACK), whose servers a redirect may reach on loopback. */
+  /** The local stack's build (services/config.ts LOCAL_STACK), whose blob servers a redirect may reach on loopback. */
   localStack?: boolean;
 };
 
 /**
- * p's fetch for a server, a blob server or Kefli's API (net/http serverFetch): each redirect followed a hop at a time,
- * never into the phone's own network (on the local stack, loopback too), and the whole answer, at most maxBytes, had
- * within timeoutMs. Left to OkHttp, a server's redirect sent the ask for S's text, or S's DELETE /account, on to
- * whatever answered at 192.168.1.1 (its authorisation left behind, as OkHttp does at another host), whose 2xx to the
- * deletion the phone took for the operator's; and a server that never answered held the move, which Back can't leave,
- * for good.
+ * p's fetch for a blob server (net/http serverFetch): each redirect followed a hop at a time, never into the phone's own
+ * network (on the local stack, loopback too), and the whole answer, at most maxBytes, had within timeoutMs. Left to
+ * OkHttp, a server's redirect sent the ask for S's text on to whatever answered at 192.168.1.1, and a server that never
+ * answered held the move, which Back can't leave, for good. S's DELETE /account follows no redirect (retireRemote).
  */
 function toServer(p: MovePorts, timeoutMs: number, maxBytes?: number): typeof fetch {
   return serverFetch(p.fetch, { hops: serverHops(p.localStack === true), timeoutMs, ...(maxBytes === undefined ? {} : { maxBytes }) });
@@ -265,7 +263,9 @@ async function retireRemote(p: MovePorts, job: MoveJob): Promise<boolean> {
   }));
   const url = `${withoutTrailingSlashes((await p.defaults()).operator.api)}/account`;
   try {
-    const res = await toServer(p, SERVER_TIMEOUT_MS)(url, { method: 'DELETE', headers: { Authorization: await httpAuth(p.source, url, 'DELETE', null, p.crypto) } });
+    // no redirect followed (net/http apiFetch), as no call to the API follows one: followed, a 303 to any page that
+    // answers 200 read as S's account deleted, and S's keys went with its library still on the operator's server
+    const res = await apiFetch(p.fetch)(url, { method: 'DELETE', headers: { Authorization: await httpAuth(p.source, url, 'DELETE', null, p.crypto) } });
     return res.ok || res.status === 404;
   } catch {
     return false;

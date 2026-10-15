@@ -20,7 +20,7 @@ import {
 import { backoff, begin, enqueue, finish, nextDue, nextWakeAt, releaseDependents, wake } from '../data/outbox';
 import type { OutboxRow, OutboxTarget, TargetResult } from '../data/outbox';
 import { fitSave, namesText, queueBlobDelete, withdrawText } from '../data/saves';
-import { SERVER_TIMEOUT_MS, movingMs, serverFetch, serverHops } from '../net/http';
+import { SERVER_TIMEOUT_MS, apiFetch, movingMs, serverFetch, serverHops } from '../net/http';
 import type { Defaults } from './config';
 import { notYet, pageStream, streamFilter, takeNewerLists, type SyncPorts } from './sync';
 
@@ -51,11 +51,11 @@ export type SendPorts = {
 };
 
 /**
- * p's fetch for a server, Kefli's API or a blob server (net/http serverFetch): each redirect followed a hop at a time,
- * never into the phone's own network (on the local stack, loopback too, serverHops), and the whole answer had within
- * timeoutMs. Left to OkHttp, as p.fetch was, a server's redirect sent a call on to 192.168.1.1, an upload's text with
- * it on a 307 or 308 (OkHttp, as here, leaves the authorisation behind at another host), and took what answered there
- * as the server's answer; and a server that never answered held the outbox's run for good.
+ * p's fetch for a blob server (net/http serverFetch): each redirect followed a hop at a time, never into the phone's own
+ * network (on the local stack, loopback too, serverHops), and the whole answer had within timeoutMs. Left to OkHttp, as
+ * p.fetch was, a server's redirect sent a call on to 192.168.1.1, an upload's text with it on a 307 or 308 (OkHttp, as
+ * here, leaves the authorisation behind at another host), and took what answered there as the server's answer; and a
+ * server that never answered held the outbox's run for good. Kefli's API follows no redirect (apiCall).
  */
 function toServer(p: SendPorts, timeoutMs: number): typeof fetch {
   return serverFetch(p.fetch, { hops: serverHops(p.localStack === true), timeoutMs });
@@ -116,14 +116,15 @@ export function relayResult(target: string, a: RelayAnswer, eventId: string): Ta
 
 /**
  * One signed call to the API (contract 6): ok, retried on 401, 429 and 5xx, otherwise refused. okStatus counts as done
- * too. Its redirects take the hops and its answer has the API's deadline (toServer); one that goes past either is
- * retried as an API not answering.
+ * too. It follows no redirect and its answer has the API's deadline (net/http apiFetch): a 3xx, or a deadline passed,
+ * is retried as an API not answering. Followed, a register or a browser's removal answered 303 or 302 to any page
+ * that answers 200 read as done.
  */
 async function apiCall(p: SendPorts, signer: Signer, url: string, method: 'POST' | 'DELETE', body: string | null, okStatus?: number): Promise<TargetResult> {
   try {
     const headers: Record<string, string> = { Authorization: await httpAuth(signer, url, method, body ?? '', p.crypto) };
     if (body !== null) headers['Content-Type'] = 'application/json';
-    const res = await toServer(p, SERVER_TIMEOUT_MS)(url, { method, headers, ...(body === null ? {} : { body }) });
+    const res = await apiFetch(p.fetch)(url, { method, headers, ...(body === null ? {} : { body }) });
     if (res.ok || res.status === okStatus) return { target: url, kind: 'ok' };
     if (res.status === 401 || res.status === 429 || res.status >= 500) return { target: url, kind: 'retry', error: `HTTP ${res.status}` };
     return { target: url, kind: 'rejected', error: `HTTP ${res.status}` };

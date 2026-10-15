@@ -8,7 +8,7 @@
 import { httpAuth, type CryptoPort, type Signer } from '@kefli/protocol';
 import { forgetFigures, recordFigures, type Check } from '../data/account';
 import type { SqlDb } from '../data/db';
-import { open, serverHops } from '../net/http';
+import { NO_HOPS, open } from '../net/http';
 
 export type AccountPorts = {
   db: SqlDb;
@@ -20,8 +20,6 @@ export type AccountPorts = {
   signer: () => Promise<Signer | null>;
   fetch: typeof fetch;
   crypto: CryptoPort;
-  /** The local stack's build (services/config.ts LOCAL_STACK), whose API a redirect may reach on loopback. */
-  localStack?: boolean;
 };
 
 /**
@@ -49,13 +47,13 @@ function parse(text: string): unknown {
 }
 
 /**
- * The ask, its redirects followed only as far as a hop may go (net/http serverHops), never into the phone's own
- * network, and its NIP-98 header sent to no other origin; one that would go further fails the check.
+ * The ask, which follows no redirect (net/http NO_HOPS), as no call to the API does: a 3xx fails the check, so
+ * whatever page it names is never taken for the library's figures, nor its 403 for the account gone.
  */
 async function ask(p: AccountPorts, signer: Signer): Promise<Answer> {
   const url = `${await p.api()}/account`;
   const auth = await httpAuth(signer, url, 'GET', null, p.crypto, p.now());
-  const o = await open(p.fetch, url, { method: 'GET', headers: { Authorization: auth } }, ACCOUNT_TIMEOUT_MS, serverHops(p.localStack === true));
+  const o = await open(p.fetch, url, { method: 'GET', headers: { Authorization: auth } }, ACCOUNT_TIMEOUT_MS, NO_HOPS);
   return { status: o.res.status, body: parse(new TextDecoder().decode(await o.read(MAX_BYTES))) };
 }
 

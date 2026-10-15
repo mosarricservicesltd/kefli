@@ -397,16 +397,31 @@ describe('Delete my data asks its servers through the hops, each within a deadli
     }
   });
 
-  test('the local stack’s API sending DELETE /account to its own other address on loopback is followed there, and only there', async () => {
+  test('DELETE /account answered by any redirect, on any build, is the API not answering: the step fails and the phone keeps everything', async () => {
+    // every call to the API is signed for its exact address (C§6), so it never answers through a redirect. Followed, a
+    // 303 to any page that answers 200 read as the account deleted, and Delete my data went on to wipe the phone
+    const answers: [number, string | null][] = [
+      [303, 'https://news.example/'], [302, 'https://news.example/'], [301, '/v1/account'], [307, '/v1/account'], [308, 'http://api/v2/account'],
+      [302, null], [300, null], [304, null],
+    ];
     for (const localStack of [true, false]) {
-      const w = world();
-      w.p.defaults = { ...D, operator: { ...D.operator, api: 'http://localhost:3449' } };
-      w.p.localStack = localStack;
-      const base = w.p.fetch;
-      w.p.fetch = (async (url: string, init: RequestInit) =>
-        url === 'http://localhost:3449/account' ? new Response('', { status: 307, headers: { location: '/v1/account' } }) : base(url, init)) as typeof fetch;
-      expect([localStack, await deleteEverything(w.p, () => undefined)]).toEqual([localStack, localStack ? 'done' : 'failed']);
-      expect([localStack, w.log.includes('DELETE http://localhost:3449/v1/account')]).toEqual([localStack, localStack]);
+      for (const [status, location] of answers) {
+        const w = world();
+        w.p.localStack = localStack;
+        const base = w.p.fetch;
+        const asked: string[] = [];
+        w.p.fetch = (async (url: string, init: RequestInit = {}) => {
+          asked.push(`${init.method ?? 'GET'} ${url}`);
+          if (url === 'http://api/account') return new Response(null, { status, headers: location ? { location } : {} });
+          return base(url, init);
+        }) as typeof fetch;
+        const named = [localStack, status, location];
+        expect([...named, await deleteEverything(w.p, () => undefined)]).toEqual([...named, 'failed']);
+        expect([...named, w.wiped(), progressOf(w.db)]).toEqual([...named, false, null]);
+        // the operator's blob deletions and DELETE /account, tried within the minute; nothing a redirect names
+        expect([...named, asked.filter((a) => !a.startsWith('DELETE http://blossom/') && a !== 'DELETE http://api/account')]).toEqual([...named, []]);
+        expect([...named, asked.includes('DELETE http://api/account')]).toEqual([...named, true]);
+      }
     }
   });
 

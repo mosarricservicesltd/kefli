@@ -8,7 +8,7 @@ import { checkOffer, derivePairCode, httpAuth, openOffer, readPairCode, type Cry
 import type { SqlDb } from '../data/db';
 import { cancelConnect, connectState, queueConnect } from '../data/devices';
 import { registerFirst } from '../data/saves';
-import { SERVER_TIMEOUT_MS, serverFetch, serverHops } from '../net/http';
+import { apiFetch } from '../net/http';
 
 export type ConnectPorts = {
   db: SqlDb;
@@ -21,21 +21,7 @@ export type ConnectPorts = {
   runOutbox: () => Promise<unknown>;
   /** BIP-340 verify for the offer's proof; the phone passes its native one, the tests noble's. */
   verify?: SecpPort['verify'];
-  /** The local stack's build (services/config.ts LOCAL_STACK), whose API a redirect may reach on loopback. */
-  localStack?: boolean;
 };
-
-/**
- * The fetch for Kefli's API from these ports (net/http serverFetch): each redirect followed a hop at a time, never into
- * the phone's own network (on the local stack, loopback too), and the whole answer had within the API's 15 s; one that
- * goes past either reads as the API not answering. Left to OkHttp, a redirect sent the lookup, or a phone's sealed
- * offer, on to whatever answered at 192.168.1.1 (its NIP-98 header left behind, as OkHttp does at another host), and
- * took what answered there as the API's answer; and an API that never answered held Connect, or a phone's pairing,
- * for good.
- */
-export function apiFetch(p: Pick<ConnectPorts, 'fetch' | 'localStack'>): typeof fetch {
-  return serverFetch(p.fetch, { hops: serverHops(p.localStack === true), timeoutMs: SERVER_TIMEOUT_MS });
-}
 
 type Operator = { relay: string; api: string };
 
@@ -80,7 +66,9 @@ export async function lookupCode(p: ConnectPorts, typed: string): Promise<OfferR
   const url = `${d.operator.api}/pair-offers/${lookup}`;
   let res: Response;
   try {
-    res = await apiFetch(p)(url, { method: 'GET', headers: { Authorization: await httpAuth(signer, url, 'GET', null, p.crypto) } });
+    // no redirect followed, and the whole answer within the API's 15 s (net/http apiFetch): a 3xx, or an API that never
+    // answers, is offline, where a redirect's page was taken for the API's answer and one never answering held Connect
+    res = await apiFetch(p.fetch)(url, { method: 'GET', headers: { Authorization: await httpAuth(signer, url, 'GET', null, p.crypto) } });
   } catch {
     return { problem: 'offline' };
   }
