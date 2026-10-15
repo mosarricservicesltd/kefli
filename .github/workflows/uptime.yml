@@ -1,0 +1,42 @@
+# Kefli's outside probe (backend spec 3.9, which asked for an Uptime Kuma on another provider): every five minutes,
+# from GitHub's runners, the relay's NIP-11, the API's health and defaults.json, a Blossom HEAD, the website, and the
+# certificates' days left. A failed probe is a failed workflow run, which GitHub mails to whoever last changed this
+# file. What this can't see from outside, the services, the disk and the 5xx share, the on-box check covers
+# (server/deploy/README.md, "Monitoring"). GitHub runs a schedule only from the default branch, can run it a few
+# minutes late, and turns it off after sixty days without a commit.
+name: Uptime
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+  pull_request:
+    paths: ['.github/workflows/uptime.yml']
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+permissions: {}
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: The relay, the API, Blossom and the website answer, with certificates good for two weeks
+        run: |
+          set -u
+          failed=0
+          probe() {
+            local want=$1 name=$2 got; shift 2
+            got=$(curl -s -m 15 -o /dev/null -w '%{http_code}' "$@" || true)
+            if [ "$got" = "$want" ]; then echo "ok    $name ($got)"; else echo "FAIL  $name: $got, wanted $want"; failed=1; fi
+          }
+          probe 200 "relay NIP-11"  -H 'Accept: application/nostr+json' https://relay.kefli.app/
+          probe 200 "API health"    https://api.kefli.app/health
+          probe 200 "defaults.json" https://api.kefli.app/defaults.json
+          probe 404 "Blossom"       -I "https://blossom.kefli.app/$(printf %064d 0)"
+          probe 200 "website"       https://kefli.app/
+          for host in kefli.app api.kefli.app relay.kefli.app blossom.kefli.app; do
+            end=$(echo | openssl s_client -connect "$host:443" -servername "$host" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
+            days=$(( ($(date -d "${end:-1970-01-01}" +%s) - $(date +%s)) / 86400 ))
+            if [ "$days" -ge 14 ]; then echo "ok    certificate $host ($days days left)"; else echo "FAIL  certificate $host: $days days left"; failed=1; fi
+          done
+          exit $failed
