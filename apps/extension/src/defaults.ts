@@ -37,7 +37,7 @@ function valid(d: Partial<Defaults> | null | undefined): d is Defaults {
 export interface RelayRow {
   url: string;
   label: string;
-  /** Kefli's own relay, the one this browser sends to, and the one a block in the browser stops. */
+  /** Kefli's own relay, the one this browser sends to. */
   operator: boolean;
 }
 

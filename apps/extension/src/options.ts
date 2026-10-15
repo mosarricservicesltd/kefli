@@ -67,10 +67,8 @@ function list(rows: string[], cls = 'list'): string {
 
 const head = () => `<div class="brandrow"><span class="lg">${LOGO}</span>Kefli</div>`;
 const PIN = `<span class="ic">${icon('puzzle')}</span><span class="t">Pin Kefli to your toolbar: click the puzzle piece, then the pin next to Kefli.</span>`;
-// blocked, and Advanced's Blocked in this browser, show only for a save an earlier build stored as blocked (queue.ts why)
 const WHY = {
   reach: 'Couldn’t reach Kefli’s server. It will keep trying.',
-  blocked: 'Something in this browser is blocking Kefli’s server. See Advanced.',
   stopped: 'Couldn’t reach Kefli’s server. Retry to send it.',
 };
 
@@ -99,7 +97,7 @@ function retryChip(e: Shown): string {
 function failRow(e: Shown): string {
   const done = sent.has(e.id);
   const end = done ? `<span class="sent">${icon('check')}</span>` : retryChip(e);
-  return `<div class="li"><span class="cv" aria-hidden="true">${ShelfCover.svg(e.hash)}</span><span class="t">${esc(e.title)}<small>${esc(e.host)} · ${done ? 'Sent' : WHY[e.stopped ? 'stopped' : e.why === 'blocked' ? 'blocked' : 'reach']}</small></span>${end}</div>`;
+  return `<div class="li"><span class="cv" aria-hidden="true">${ShelfCover.svg(e.hash)}</span><span class="t">${esc(e.title)}<small>${esc(e.host)} · ${done ? 'Sent' : WHY[e.stopped ? 'stopped' : 'reach']}</small></span>${end}</div>`;
 }
 
 function failedHTML(): string {
@@ -128,8 +126,7 @@ function waysHTML(shortcut: string | null): string {
 }
 
 function advancedHTML(p: Pairing, open: boolean): string {
-  const blocked = queue.some((e) => e.why === 'blocked');
-  const relays = relayRows(p.write_relays, kept).map((r) => `<div class="li"><span class="ic">${icon('server')}</span><span class="t">${esc(r.label)}<small>${esc(r.url.replace(/^wss?:\/\//, ''))}</small></span>${r.operator && blocked ? '<span class="sdot bad">Blocked in this browser</span>' : ''}</div>`);
+  const relays = relayRows(p.write_relays, kept).map((r) => `<div class="li"><span class="ic">${icon('server')}</span><span class="t">${esc(r.label)}<small>${esc(r.url.replace(/^wss?:\/\//, ''))}</small></span></div>`);
   const build = `<div class="li"><span class="ic">${icon('info')}</span><span class="t">Kefli ${esc(chrome.runtime.getManifest().version)}<small>${FLAVOUR} · ${esc(COMMIT)}</small></span><button class="chip" data-act="debug">${copied ? 'Copied' : 'Copy debug info'}</button></div>`;
   const body = open
     ? `<section class="sect" style="margin-top:var(--space-8)"><h2>Relays</h2>${list(relays)}<p class="fine">Set by your phone when you connected this browser.</p></section>
