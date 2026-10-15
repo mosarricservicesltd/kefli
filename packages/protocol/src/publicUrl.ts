@@ -2,8 +2,9 @@
 // names a URL the phone then fetches, which must not reach into the phone's own network, nor its own files.
 //
 // RULED: the host as written is checked (names that are local by convention, and IP literals in every form the URL
-// parser accepts); names aren't resolved, and a redirect isn't followed up, since the phone's fetch doesn't expose
-// either. That stops a request naming such an address outright, which is what the control is for.
+// parser accepts); names aren't resolved, since the phone's fetch doesn't expose that. That stops a request naming
+// such an address outright, which is what the control is for; the phone follows each redirect itself and checks
+// every hop with this too (apps/mobile net/http).
 //
 // RULED: the host is read by the protocol's own parser (whatwg-url and tr46, as normalise reads it), never the
 // platform's URL. The phone's URL is Expo's, with no Unicode step, so it left http://１２７.０.０.１/ (fullwidth digits)
