@@ -1,7 +1,11 @@
-import { LocalSigner, nobleSecp } from '@kefli/protocol';
+import { LocalSigner, nobleSecp, type NostrEvent } from '@kefli/protocol';
 import { CutShort, QUERY_MAX_MS, QUERY_QUIET_MS, RelayPool } from '../src/net/pool';
+import { migrate } from '../src/data/schema';
+import { readUserLists } from '../src/services/nostrSignIn';
+import { findLibrary } from '../src/services/recovery';
 import { watch } from './inward';
 import { relaySockets, type Step } from './relaySocket';
+import { memoryDb } from './sqlite';
 
 // The deploy check's probe (r3/deploy-r, 15 October 2026), as a test: how a query ends an answer the relay is slow to
 // send, or doesn't finish. Then, nostr-tools' own EOSE timer (4.4 s from the REQ) ended a slow answer of 500 wraps
@@ -142,5 +146,59 @@ describe('a relay that answers nothing at all is let go of (net/pool)', () => {
     expect(again.value).toHaveLength(500);
     expect(sockets).toHaveLength(1);
     pool.close();
+  });
+});
+
+// Where nothing moves a cursor, an answer taken for whole still decided something for good. With nostr-tools' timer
+// passing for EOSE, an indexer slower than 4.4 s holding a person's 10002 had their list read as absent (C§3.1), and the
+// default list was published over the one their other apps share (FD 76); relays slower than that holding their saves
+// made the recovery code say there was nothing to restore (5.3), with Start fresh beside it.
+describe('what sign-in and the recovery code make of a relay slower than nostr-tools’ timer (net/pool)', () => {
+  beforeEach(() => jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] }));
+  afterEach(() => jest.useRealTimers());
+
+  const D = {
+    operator: { relay: 'wss://op.example', blossom: 'https://blossom.example' }, relays: ['wss://a.example', 'wss://b.example'],
+    indexer: ['wss://idx.example'], mirrors: ['https://mirror.example'],
+  };
+  const person = new LocalSigner(new Uint8Array(32).fill(9), nobleSecp);
+  /** The pool over relays holding what holds gives each, every one answering as plan gives it. */
+  function over(holds: (url: string) => NostrEvent[], plan: (url: string) => Step[]) {
+    const relay = relaySockets({ holds, plan: (url) => plan(url) });
+    return new RelayPool({ verify: () => true, signer: async () => person, WebSocket: relay.Socket });
+  }
+
+  test('a person’s list on a slow indexer is found, and an indexer that never answers leaves the list unknown', async () => {
+    const list = await person.signEvent({ kind: 10002, created_at: 1_700_000_000, tags: [['r', 'wss://theirs.example']], content: '' });
+    const held = (url: string) => (url.includes('idx') ? [list] : []);
+    const slow = over(held, (url): Step[] => (url.includes('idx') ? [{ wait: 6_000 }, {}, 'eose'] : [{}, 'eose']));
+    const db = memoryDb();
+    migrate(db);
+    const read = (pool: RelayPool) => watch(readUserLists({ db, now: () => 1_700_000_100, defaults: D, query: (u, f) => pool.query(u, f as never) }, person.pubkey()));
+    const found = read(slow);
+    await jest.advanceTimersByTimeAsync(7_000);
+    expect(found.value).toMatchObject({ relays: [{ url: 'wss://theirs.example', read: true, write: true }], known: true });
+    slow.close();
+    const silent = over(held, (url): Step[] => (url.includes('idx') ? [] : [{}, 'eose']));
+    const unknown = read(silent);
+    await jest.advanceTimersByTimeAsync(QUERY_QUIET_MS + 1);
+    expect(unknown.value).toMatchObject({ relays: null, known: false });
+    silent.close();
+  });
+
+  test('saves on slow relays are found by the recovery code, and relays that never answer read as offline', async () => {
+    const save = await person.signEvent({ kind: 30078, created_at: 1_700_000_000, tags: [['d', `kefli/item/${'e'.repeat(64)}`], ['t', 'kefli']], content: 'x' });
+    const held = (url: string) => (url.includes('op') ? [save] : []);
+    const slow = over(held, (): Step[] => [{ wait: 6_000 }, {}, 'eose']);
+    const found = watch(findLibrary({ query: (u, f) => slow.query(u, f as never), defaults: D }, person.pubkey()));
+    await jest.advanceTimersByTimeAsync(13_000);
+    expect(found.value).toBe('found');
+    slow.close();
+    const silent = over(held, () => []);
+    const offline = watch(findLibrary({ query: (u, f) => silent.query(u, f as never), defaults: D }, person.pubkey()));
+    // the lists asked, then the saves, each cut once QUERY_QUIET_MS passes
+    await jest.advanceTimersByTimeAsync(2 * QUERY_QUIET_MS + 100);
+    expect(offline.value).toBe('offline');
+    silent.close();
   });
 });
