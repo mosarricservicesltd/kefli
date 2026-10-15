@@ -126,16 +126,34 @@ export function streamFilter(stream: Stream, owner: string, since: number | null
 
 type Collected = { relay: string; stream: Stream; events: NostrEvent[] };
 
+/** The oldest of the relays' saves cursors, or null while any relay's saves are read from the start. */
+function savesFloor(p: SyncPorts, owner: string, relays: string[]): number | null {
+  const saves = relays.map((r) => getCursor(p.db, r, 'items', owner)?.since ?? null);
+  return saves.includes(null) ? null : Math.min(...(saves as number[]));
+}
+
+/**
+ * Where a stream's read starts, null for the start: its own cursor, but a deletions read from no later than the oldest
+ * saves cursor (savesFloor), so a save a relay still holds can't come back past a kind 5 the deletions reads have moved
+ * beyond. While any relay's saves are read from the start (one just added, say), every relay's deletions are too (F35);
+ * while one relay's saves read lags, cut short (net/pool CutShort) or unanswered while the deletions were read whole and
+ * their cursors moved on, they are read from its cursor: read from their own, a save deleted meanwhile came back from
+ * that relay with its kind 5 more than a day before every deletions read.
+ */
+function readsFrom(p: SyncPorts, owner: string, relay: string, stream: Stream, floor: number | null): number | null {
+  const own = getCursor(p.db, relay, stream, owner)?.since ?? null;
+  if (stream === 'items' || own === null) return own;
+  return floor === null ? null : Math.min(own, floor);
+}
+
 async function collect(p: SyncPorts, owner: string): Promise<Collected[]> {
   const relays = readRelays(p.db, owner);
   const jobs = relays.flatMap((relay) => (['items', 'deletions'] as Stream[]).map((stream) => ({ relay, stream })));
-  // while any relay's saves are read from the start (one just added, say), every relay's deletions are too, so a
-  // save it still holds can't come back past a deletion the others got long ago (F35)
-  const backfilling = relays.some((r) => !getCursor(p.db, r, 'items', owner));
+  const floor = savesFloor(p, owner, relays);
   const results = await Promise.all(
     jobs.map(async ({ relay, stream }) => {
       try {
-        const since = stream === 'deletions' && backfilling ? null : getCursor(p.db, relay, stream, owner)?.since ?? null;
+        const since = readsFrom(p, owner, relay, stream, floor);
         const events = await pageStream(p.query, relay, streamFilter(stream, owner, since), p.now());
         return { relay, stream, events };
       } catch {

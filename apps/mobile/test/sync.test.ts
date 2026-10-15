@@ -1021,4 +1021,32 @@ describe('an answer a relay cuts short (net/pool CutShort)', () => {
     expect(libraryKey(w.db, w.pk)).toEqual(theirs);
     pool.close();
   });
+
+  test('a relay whose saves read is cut while the deletions are read whole can’t bring back a save deleted meanwhile', async () => {
+    const w = world();
+    w.tick(10 * SKEW);
+    w.publish(await remoteSave(w, h(420), w.ports.now() - 100, null));
+    // the operator relay's saves read, while told to, cut part way by a CLOSED, as a relay going down sends
+    const cutting = { now: false };
+    const pool = overSockets(w, (url, f) => (cutting.now && url === 'ws://op' && f['#t'] ? [{ send: 1 }, { closed: 'error: shutting down' }] : null));
+    await syncInbound(w.ports);
+    expect(row(w, h(420))).toBeDefined();
+    // deleted on another phone a minute on; these relays keep the save's event beside its kind 5, as one that
+    // honours no a-tag deletion does
+    w.tick(60);
+    const [del] = await buildDeletions(w.signer, [`kefli/item/${h(420)}`], w.ports.now());
+    w.publish(del);
+    // over a day on, the operator relay's saves read is cut and every deletions read is whole: the save goes, the
+    // deletions cursors move a day past its kind 5, and the operator relay's saves cursor stays behind
+    w.tick(SKEW + 100);
+    cutting.now = true;
+    await syncInbound(w.ports);
+    expect(row(w, h(420))).toBeUndefined();
+    // read again from that cursor, the save came back, its kind 5 now before every deletions read
+    cutting.now = false;
+    w.tick(60);
+    await syncInbound(w.ports);
+    expect(row(w, h(420))).toBeUndefined();
+    pool.close();
+  });
 });
