@@ -592,6 +592,8 @@ describe("the local stack's loopback hops are wired where its servers are asked,
     };
     // left out, as they were, the local stack's servers redirecting on loopback failed its sync, inbox and move
     for (const [name, text] of Object.entries(ports)) expect([name, text.includes(WIRED)]).toEqual([name, true]);
+    // and Delete my data's blob deletions, whose first step failed on the local stack's operator moving one
+    expect(block(source('screens/Delete.tsx'), 'deletePorts({').includes(WIRED)).toBe(true);
     expect(source('services/config.ts')).toContain("export const LOCAL_STACK = build.variant === 'local';");
   });
 

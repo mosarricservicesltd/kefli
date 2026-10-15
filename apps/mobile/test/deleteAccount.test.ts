@@ -397,6 +397,27 @@ describe('Delete my data asks its servers through the hops, each within a deadli
     }
   });
 
+  test("the local stack's operator moving a blob's deletion to its other address on loopback: followed there, and only there", async () => {
+    for (const localStack of [true, false]) {
+      const w = world();
+      // as the screen hands them over (screens/Delete.tsx), the build's word with them
+      const ports = deletePorts({
+        db: w.db, signer: w.p.signer, defaults: { ...D, operator: { ...D.operator, blossom: 'http://localhost:3447' } }, crypto: nodeCrypto,
+        fetch: w.p.fetch, wipePhone: w.p.wipePhone, localStack,
+        pool: { publish: w.p.publish, query: async () => [] },
+      });
+      const base = ports.fetch;
+      ports.fetch = (async (url: string, init: RequestInit) => {
+        const moved = /^http:\/\/localhost:3447\/([0-9a-f]{64})$/.exec(url);
+        return moved ? new Response(null, { status: 307, headers: { location: `/v1/${moved[1]}` } }) : base(url, init);
+      }) as typeof fetch;
+      ports.sleep = async () => undefined;
+      ports.budgetMs = 0;
+      expect([localStack, await deleteEverything(ports, () => undefined)]).toEqual([localStack, localStack ? 'done' : 'failed']);
+      expect([localStack, w.log.some((l) => l.startsWith('DELETE http://localhost:3447/v1/')), w.wiped()]).toEqual([localStack, localStack, localStack]);
+    }
+  });
+
   test('DELETE /account answered by any redirect, on any build, is the API not answering: the step fails and the phone keeps everything', async () => {
     // every call to the API is signed for its exact address (C§6), so it never answers through a redirect. Followed, a
     // 303 to any page that answers 200 read as the account deleted, and Delete my data went on to wipe the phone
