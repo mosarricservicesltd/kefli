@@ -945,6 +945,22 @@ describe('deleting makes room (C§5, v1.12)', () => {
     expect([by.get(b.sha)?.operator_at, by.get(c.sha)?.operator_at]).toEqual([null, null]);
   });
 
+  test('a deletion the operator answers 404, a blob it no longer held, is done but gives back no room, and wakes nothing', async () => {
+    // a 2xx is the operator freeing the blob's room; a 404 says it held no such blob, so freed nothing there. Counted as
+    // freed, as it was, its room went to a waiting text, which the operator then refused again
+    const { w, z } = await full({ sizes: [1_000, 300, 900, 200], room: 100, refuseAfter: 1 });
+    const answers = w.ports.fetch;
+    w.ports.fetch = (async (url: string, init: RequestInit) =>
+      init.method === 'DELETE' && url === `http://blossom/${z.sha}` ? new Response('{}', { status: 404 }) : answers(url, init)) as typeof fetch;
+    const before = w.calls.length;
+    commitDelete(w.db, w.signer.pubkey(), z.hash, deleteItem(w.db, w.now(), w.signer.pubkey(), z.hash).held);
+    await drain(w.ports);
+    expect(w.db.get("SELECT 1 AS n FROM outbox WHERE op = 'delete_blob'")).toBeUndefined();
+    expect(getSetting(w.db, `space.freed.${w.signer.pubkey()}`)).toBeNull();
+    expect(tries(w, before)).toBe(0);
+    // the operator's 2xx still frees the room, as the test above has it
+  });
+
   test("the block such a deletion gives back is data/account's, the one figure the reckoning of room reads too", async () => {
     // a copy of its own here could drift from the figure data/backup.ts reckons the room it gave back by
     const ACCOUNT = '../src/data/account';

@@ -375,17 +375,26 @@ function republishNaming(db: SqlDb, now: number, owner: string, sha256: string, 
 }
 
 /**
+ * Whether the operator's answer to a deletion gave back room (C§5): a 2xx. A 404 is done as well (4.3), but says the
+ * operator held no such blob, so the deletion freed nothing there; counted as freed, as it was, its room went to a text
+ * waiting for room, which the operator then refused again.
+ */
+function freedRoom(p: SendPorts, server: string, status: number): boolean {
+  return status >= 200 && 300 > status && sameUrl(server, p.defaults().operator.blossom);
+}
+
+/**
  * A blob no save names any more, on each server that held it; a 404 counts as done (4.3). The operator's confirmation
- * gives back room (C§5): it is noted with the blob's size, and a text waiting for room that now fits goes at once. A
- * blob whose size this phone doesn't know (a capture it never read, a row that lost its size) gave back a block at
- * least, as the server counts it, and is noted as one: left out, as it was, the room it made went unreckoned.
+ * gives back room (C§5, freedRoom): it is noted with the blob's size, and a text waiting for room that now fits goes at
+ * once. A blob whose size this phone doesn't know (a capture it never read, a row that lost its size) gave back a
+ * block at least, as the server counts it, and is noted as one: left out, as it was, the room it made went unreckoned.
  */
 async function sendDeleteBlob(p: SendPorts, row: OutboxRow, signer: Signer, t: OutboxTarget): Promise<TargetResult[]> {
   const { sha256, size, up } = JSON.parse(row.payload ?? '{}') as { sha256: string; size?: number; up?: number };
   try {
     const r = await deleteBlob(t.target, sha256, signer, toServer(p, SERVER_TIMEOUT_MS));
     if (!r.ok) return [httpResult(t.target, r, r.permanent)];
-    if (sameUrl(t.target, p.defaults().operator.blossom)) {
+    if (freedRoom(p, t.target, r.status)) {
       noteFreed(p.db, row.signer, { at: p.now(), size: size || BLOCK, up: up ?? null });
       tryRoom(p, row.signer);
     }

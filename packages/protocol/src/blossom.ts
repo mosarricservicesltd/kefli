@@ -50,7 +50,10 @@ export type BlossomOutcome =
    */
   | { ok: false; status: number; permanent: boolean; reason: string; figures?: AccountFigures };
 
-function outcome(status: number, reason: string): Extract<BlossomOutcome, { ok: false }> {
+/** A call the server refused. */
+type Refused = Extract<BlossomOutcome, { ok: false }>;
+
+function outcome(status: number, reason: string): Refused {
   // Written 500 > status: lizard, which the code-gate uses, reads "status <" as the start of a generic.
   return { ok: false, status, permanent: status >= 400 && 500 > status && status !== 401 && status !== 429, reason };
 }
@@ -65,7 +68,7 @@ function parsed(text: string): Record<string, unknown> | null {
 }
 
 /** A refusal read whole: its reason from X-Reason or the body's error, and the body's figures if it carries them. */
-async function refusal(res: Response): Promise<BlossomOutcome> {
+async function refusal(res: Response): Promise<Refused> {
   const text = await res.text().catch(() => '');
   const body = parsed(text);
   const error = typeof body?.error === 'string' ? body.error : null;
@@ -100,9 +103,15 @@ export async function mirrorBlob(mirror: string, url: string, sha256: string, si
   return { ok: true, url: d.url ?? `${trim(mirror)}/${sha256}` };
 }
 
-/** DELETE /<sha256>; a 404 counts as done (mobile spec 4.3). */
-export async function deleteBlob(server: string, sha256: string, signer: Signer, get: typeof fetch = fetch): Promise<BlossomOutcome> {
+/**
+ * A deletion's outcome: done, with the status the server answered, or refused as any call is. A 404 is done too, the
+ * server holding no such blob, but it freed nothing there, so a caller that counts room (C§5) counts it only for a 2xx.
+ */
+export type DeleteOutcome = { ok: true; url: string; status: number } | Refused;
+
+/** DELETE /<sha256>; a 404 counts as done (mobile spec 4.3), its status kept with it. */
+export async function deleteBlob(server: string, sha256: string, signer: Signer, get: typeof fetch = fetch): Promise<DeleteOutcome> {
   const res = await get(`${trim(server)}/${sha256}`, { method: 'DELETE', headers: { Authorization: await blossomAuth(signer, 'delete', sha256) } });
-  if (res.ok || res.status === 404) return { ok: true, url: `${trim(server)}/${sha256}` };
+  if (res.ok || res.status === 404) return { ok: true, url: `${trim(server)}/${sha256}`, status: res.status };
   return refusal(res);
 }

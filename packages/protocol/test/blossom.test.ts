@@ -90,16 +90,18 @@ describe('Blossom (contract 4.2, 5)', () => {
     const t = Date.now();
     expect(await uploadBlob(`${server}///`, new Uint8Array(), SHA, key, up.f)).toEqual({ ok: true, url: `${server}/${SHA}` });
     expect(await mirrorBlob(`${server}/`, `http://b/${SHA}`, SHA, key, mirror.f)).toEqual({ ok: true, url: `${server}/${SHA}` });
-    expect(await deleteBlob(server, SHA, key, del.f)).toEqual({ ok: true, url: `${server}/${SHA}` });
+    expect(await deleteBlob(server, SHA, key, del.f)).toEqual({ ok: true, url: `${server}/${SHA}`, status: 200 });
     expect(Date.now() - t).toBeLessThan(3_000);
     expect([up.calls[0].url, mirror.calls[0].url, del.calls[0].url]).toEqual([`${server}/upload`, `${server}/mirror`, `${server}/${SHA}`]);
   });
 
-  test('delete: done on success or 404', async () => {
+  test('delete: done on success or 404, with the status the server answered', async () => {
     const del = fakeFetch(200, '');
-    expect(await deleteBlob('http://b', SHA, signer(), del.f)).toMatchObject({ ok: true });
+    expect(await deleteBlob('http://b', SHA, signer(), del.f)).toEqual({ ok: true, url: `http://b/${SHA}`, status: 200 });
     expect(decode((del.calls[0].init.headers as Record<string, string>).Authorization).tags[0]).toEqual(['t', 'delete']);
-    expect(await deleteBlob('http://b', SHA, signer(), fakeFetch(404, '').f)).toMatchObject({ ok: true });
+    expect(await deleteBlob('http://b', SHA, signer(), fakeFetch(202, '').f)).toEqual({ ok: true, url: `http://b/${SHA}`, status: 202 });
+    // a server that held no such blob: done, but nothing was freed there, which a caller counting room must know (C§5)
+    expect(await deleteBlob('http://b', SHA, signer(), fakeFetch(404, '').f)).toEqual({ ok: true, url: `http://b/${SHA}`, status: 404 });
     expect(await deleteBlob('http://b', SHA, signer(), fakeFetch(500, 'x').f)).toMatchObject({ ok: false, permanent: false });
   });
 });
