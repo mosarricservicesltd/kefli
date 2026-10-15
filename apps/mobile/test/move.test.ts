@@ -421,6 +421,45 @@ describe('The move (contract 4.8, mobile spec 4.10)', () => {
     expect(named).toContain(`30078:${S}:${d2}`);
   });
 
+  /** The addresses S's kind 5s name on each of its write relays. */
+  const namedBy = (w: ReturnType<typeof world>) => (relay: string) =>
+    w.relays.get(relay)!.filter((e) => e.kind === 5 && e.pubkey === w.S.pubkey()).flatMap((e) => e.tags).map((t) => t[1]);
+
+  test("a save deleted under S just before the move, its kind 5 waiting on a retry, is deleted on S's relays (C§4.8 step 5)", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    await w.save(w.S, 2);
+    const S = w.S.pubkey();
+    const d2 = w.db.get<{ remote_d: string }>('SELECT remote_d FROM items WHERE owner = ? AND hash = ?', S, h(2))!.remote_d;
+    const del = deleteItem(w.db, w.p.now(), S, h(2));
+    commitDelete(w.db, S, h(2), del.held);
+    // a relay dropped the connection as it went out, and its retry isn't due before the copy withdraws S's rows
+    w.db.run("UPDATE outbox_targets SET attempts = 1, next_at = ? WHERE outbox_id IN (SELECT id FROM outbox WHERE op = 'delete_item' AND signer = ?)", w.p.now() + 3_600, S);
+    expect(await runMove(w.p)).toBe('done');
+    for (const r of ['ws://op', 'ws://a', 'ws://b']) expect([r, namedBy(w)(r)]).toEqual([r, expect.arrayContaining([`30078:${S}:${d2}`])]);
+    expect(rowsOf(w, w.T.pubkey()).map((r) => r.hash)).toEqual([h(1)]);
+  });
+
+  test("a save deleted under S as the move waits stays deleted on S's relays when the last drain sends the move back (F20)", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    await w.save(w.S, 2);
+    await waitAtReadBack(w);
+    const S = w.S.pubkey();
+    const d2 = w.db.get<{ remote_d: string }>('SELECT remote_d FROM items WHERE owner = ? AND hash = ?', S, h(2))!.remote_d;
+    // every relay refused the kind 5 until the outbox gave up on it
+    const del = deleteItem(w.db, 1_100, S, h(2));
+    commitDelete(w.db, S, h(2), del.held);
+    w.db.run("UPDATE outbox SET state = 'dead' WHERE op = 'delete_item' AND signer = ?", S);
+    w.db.run('UPDATE outbox_targets SET next_at = 0');
+    // and the last drain found a save, which sent the move back to the copy
+    let drained = false;
+    const p: MovePorts = { ...w.p, drainSourceInbox: async () => void (drained || ((drained = true), await w.save(w.S, 3))) };
+    expect(await runMove(p)).toBe('done');
+    expect(namedBy(w)('ws://op')).toContain(`30078:${S}:${d2}`);
+    expect(rowsOf(w, w.T.pubkey()).map((r) => r.hash)).toEqual([h(1), h(3)]);
+  });
+
   test('DELETE /account refused: S stays, to try again', async () => {
     const w = world({ accountStatus: 500 });
     await w.save(w.S, 1);

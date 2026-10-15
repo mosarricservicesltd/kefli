@@ -2,7 +2,8 @@
 // the target T, any signer. Its steps, each recorded in the move job so a move cut short resumes where it stopped:
 //   0. prepare T: registered, and its lists in place (as at any sign-in);
 //   1. collect both libraries; a save from a newer Kefli in either stops the move here, S untouched;
-//   2. copy each of S's saves to T through the outbox (data/move.ts), S's own unsent rows withdrawn;
+//   2. copy each of S's saves to T through the outbox (data/move.ts), S's own unsent rows withdrawn but the deletions
+//      it owes;
 //   3. move S's connected browsers: POST /devices as T, and a pair-ack sealed by S carrying T and moved_from;
 //   4. confirm: T's outbox empty, then every copied save read back and opened from min(2, n) of T's write relays;
 //   5. retire S: its inbox drained once more (anything found goes back to step 2) and the kind 5s for the wraps it
@@ -155,13 +156,11 @@ async function withMirror(p: MovePorts, from: string, hash: string, operator: st
  */
 async function copyAll(p: MovePorts, job: MoveJob): Promise<boolean> {
   const t = targetsOf(await p.defaults());
-  // RULED: S's unsent rows go now that the newer check has passed: every save goes out under T instead, except old
-  // addresses still to retire (F5), which step 5 names with S's saves, and the kind 5s for wraps S's inbox took, which
-  // only S can sign (wrapsClosed): withdrawn here when the last drain's new save sent the move back, they never went out
-  p.db.run(
-    "DELETE FROM outbox WHERE signer = ? AND state IN ('held','queued','dead') AND op != 'delete_wrap' AND NOT (op = 'delete_item' AND subject LIKE 'retire:%')",
-    job.from,
-  );
+  // RULED: S's unsent rows go now that the newer check has passed: every save goes out under T instead. The deletions
+  // S owes stay, which only S can sign: its saves' (old addresses still to retire, F5, and saves deleted under S, F20),
+  // which step 5 names with S's saves (deletesOwed), and the kind 5s for wraps its inbox took (wrapsClosed). Withdrawn
+  // here, a save deleted just before the move, or while it waited and the last drain sent it back, stayed on S's relays
+  p.db.run("DELETE FROM outbox WHERE signer = ? AND state IN ('held','queued','dead') AND op NOT IN ('delete_item', 'delete_wrap')", job.from);
   const todo = sourceSaves(p.db, job.from, job.moved);
   const total = job.moved.length + todo.length;
   for (const hash of todo) {
