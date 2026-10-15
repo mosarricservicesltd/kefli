@@ -89,6 +89,8 @@ export function runOutbox(): Promise<number> {
         // the library's last known figures reckon the room a confirmed deletion leaves, and a 413's replace them (C§5)
         figures: (owner) => accountFigures(store(), owner),
         onFigures: (owner, f) => void recordFigures(store(), owner, f, Math.floor(Date.now() / 1000)),
+        // a server's redirect to loopback is followed on the local stack only, where its servers are (net/http serverHops)
+        localStack: LOCAL_STACK,
       });
     } finally {
       running = null;
@@ -169,6 +171,7 @@ function syncPorts(): SyncPorts {
     defaults: loadDefaults,
     files: { ...textFiles, removeAll: removeAllFiles },
     openHash: () => reading,
+    localStack: LOCAL_STACK,
   };
 }
 
@@ -227,9 +230,11 @@ export function runMoveJob(): Promise<MoveOutcome> {
           db: store(), now: () => Math.floor(Date.now() / 1000), signer: source,
           query: (url, filters) => pool.query(url, filters as never), fetch,
           markdown: (html, u) => KefliParser.markdown(html, u) as Promise<ParserResult>, defaults: loadDefaults, ...parserPorts(),
+          localStack: LOCAL_STACK,
         }, job.from)),
         retireKeys: () => retireSourceKeys(job.from, job.to),
         report: (n, m) => moveListeners.forEach((l) => l(n, m)),
+        localStack: LOCAL_STACK,
       }, job);
       console.log(`[kefli-move] ${JSON.stringify({ outcome: r, step: moveJob(store())?.step ?? 'done' })}`);
       if (r === 'done') {
@@ -367,6 +372,7 @@ export function connectPorts(owner: string): ConnectPorts {
     crypto: phoneCrypto,
     runOutbox,
     verify: nativeSecp.verify,
+    localStack: LOCAL_STACK,
   };
 }
 
@@ -408,6 +414,7 @@ export function runInbox(owner: string): Promise<void> {
         markdown: (html, u) => KefliParser.markdown(html, u) as Promise<ParserResult>,
         defaults: loadDefaults,
         ...parserPorts(),
+        localStack: LOCAL_STACK,
       }, owner);
       console.log(`[kefli-inbox] ${JSON.stringify(r)}`);
       if (r.created || r.merged || r.unarchived) {

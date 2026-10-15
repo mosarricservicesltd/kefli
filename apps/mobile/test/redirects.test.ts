@@ -1,7 +1,9 @@
 // Redirects followed by hand (mobile spec 5.4, 7.1): a page, an image or X's embed is fetched one hop at a time, each
 // hop's address checked before the phone asks for it, ten at most; a hop that fails ends the fetch as a failed one.
+import { readFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { join } from 'node:path';
 import { LocalSigner, encryptText, normaliseMarkdown, xEmbedUrl } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import { MB, accountFigures } from '../src/data/account';
@@ -473,6 +475,40 @@ describe("a text's blob servers, the inbox's and Kefli's API take the hops too (
     const same = accountWorld({ 'https://api.example/account': { status: 308, location: '/v1/account' }, 'https://api.example/v1/account': { body: FIGURES } });
     expect(await checkAccount(same.ports)).toBe('ok');
     expect(same.w.asked.map((a) => [a.url, authorised(a.init)])).toEqual([['https://api.example/account', true], ['https://api.example/v1/account', true]]);
+  });
+});
+
+describe("the local stack's loopback hops are wired where its servers are asked, and only there", () => {
+  const source = (path: string) => readFileSync(join(__dirname, '..', 'src', path), 'utf8');
+  /** The text of what follows from in src, to the end of the braces it opens next. */
+  function block(src: string, from: string): string {
+    const at = src.indexOf(from);
+    if (at === -1) throw new Error(`no ${from}`);
+    let depth = 0;
+    for (let i = src.indexOf('{', at); src.length > i; i++) {
+      if (src[i] === '{') depth++;
+      if (src[i] === '}' && --depth === 0) return src.slice(at, i + 1);
+    }
+    throw new Error(`no end to ${from}`);
+  }
+  const WIRED = 'localStack: LOCAL_STACK';
+
+  test("the runner's ports pass the build's own word, so a release build's never allow loopback", () => {
+    // services/config.ts LOCAL_STACK is true only in the local stack's build (app.config.js KEFLI_VARIANT=local)
+    const runner = source('services/runner.ts');
+    const ports = {
+      sync: block(runner, 'function syncPorts('),
+      inbox: block(runner, 'export function runInbox('),
+      moveInbox: block(runner, 'drainSourceInbox:'),
+      outbox: block(runner, 'return await drain({'),
+      move: block(runner, 'const r = await runMove({'),
+      connect: block(runner, 'export function connectPorts('),
+    };
+    // left out, as they were, the local stack's servers redirecting on loopback failed its sync, inbox and move
+    for (const [name, text] of Object.entries(ports)) expect([name, text.includes(WIRED)]).toEqual([name, true]);
+    // Advanced's check of the library's figures too
+    expect(block(source('screens/Advanced.tsx'), 'checkAccount({').includes(WIRED)).toBe(true);
+    expect(source('services/config.ts')).toContain("export const LOCAL_STACK = build.variant === 'local';");
   });
 });
 
