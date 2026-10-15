@@ -10,12 +10,14 @@
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { isWebAddress, type Captured } from './captured';
 import { record, type Outcome } from './debug';
-import { PerSave } from './lock';
+import { exclusive, PerSave } from './lock';
+import { recipient, wrappedFor } from './move';
 import { changeQueue, dequeue, enqueue, flush, queued, replaceWrap, settle, shown, whyNot, type Queued, type Settled } from './queue';
 import {
-  AddressTooLongError, deliver, freshWrap, prepare, retract, withoutText, WRAP_FRESH_FOR, type Again, type Delivered, type Delivery, type Net, type Pending, type SaveContext,
+  AddressTooLongError, deliver, freshWrap, prepare, retract, withoutText, wrapAgain, WRAP_FRESH_FOR, type Again, type Delivered, type Delivery, type Net, type Pending,
+  type SaveContext,
 } from './save';
-import type { Store } from './store';
+import { KEYS, type Pairing, type Store } from './store';
 import type { ToastKind, ToastState } from './toastCopy';
 import { moveUndoKey, settleUndo, type Earlier, type Renamed, type UndoKey } from './undo';
 
@@ -70,6 +72,12 @@ const WAITING: Record<ReturnType<typeof whyNot>, Outcome> = { offline: 'waiting,
  */
 const mayBeOnRelay = (e: Queued, kept: UndoKey) => e.why !== 'offline' || e.attempts > 0 || (kept.earlier?.length ?? 0) > 0;
 
+/**
+ * Whether a save about to go may be on the relay already: a waiting one tried before, or one a stopped worker left on its
+ * first send. A save on its own first send, not a queue entry, has gone nowhere yet.
+ */
+const triedBefore = (p: Delivered & Partial<Queued>) => p.why !== undefined && (p.why !== 'offline' || (p.attempts ?? 0) > 0);
+
 /** What the toast shows of a save, under the id its wrap has now, which Undo names. */
 const toasted = (p: Pending, link: boolean) => ({ id: p.id, hash: p.hash, title: p.title, host: p.host, link });
 
@@ -100,8 +108,10 @@ export function background(b: Browser) {
    * settled under the new wrap even when Undo's key hasn't followed yet (settleFirst).
    */
   const movedMidSend = new Map<string, string>();
-  const deliverFor = (ctx: SaveContext) => (p: Delivered) =>
-    deliver(p, ctx.defaults.operator.blossom, ctx.defaults.operator.relay, ctx.device, b.net, (q, refused) => (refused ? withoutHtml(q, ctx) : freshen(q, ctx)));
+  const deliverFor = (ctx: SaveContext) => async (p: Delivered) => {
+    await forPairing(p, ctx);
+    return deliver(p, ctx.defaults.operator.blossom, ctx.defaults.operator.relay, ctx.device, b.net, (q, refused) => (refused ? withoutHtml(q, ctx) : freshen(q, ctx)));
+  };
 
   /** Each tab's toasts, one after another, so Saved never lands before the Saving… it replaces. */
   const showing = new Map<Where, Promise<void>>();
@@ -137,9 +147,10 @@ export function background(b: Browser) {
    * Undo saying it couldn't undo, rather than holding the save. A save the queue doesn't hold, never kept, goes under the
    * new wrap all the same; one a move put under another wrap meanwhile (move.ts, movedMidSend) goes as it was, since
    * Undo's key for the old wrap points, or is about to point, to the move's, which waits in the queue and which Undo must
-   * still reach.
+   * still reach. With wentTo, the library the old wrap went to when it may be on the relay, Undo keeps its key to retract
+   * it too (undo.ts Earlier).
    */
-  async function takePlace(p: Delivered, again: Again, changed: Partial<Queued>): Promise<void> {
+  async function takePlace(p: Delivered, again: Again, changed: Partial<Queued>, wentTo?: string | null): Promise<void> {
     const was = p.id;
     const next = { id: again.wrap.id, wrap: again.wrap, sealed: again.sealed, wrapped_at: b.now() };
     saves.follow(was, next.id);
@@ -147,7 +158,25 @@ export function background(b: Browser) {
     if (found === null || (!found && movedMidSend.has(was))) return;
     Object.assign(p, next);
     if (textless.delete(was)) textless.add(p.id);
-    await moveUndoKey(b.session, was, p.id, again.wrapKey, p.sha256).catch(() => undefined);
+    await moveUndoKey(b.session, was, p.id, again.wrapKey, p.sha256, wentTo ?? null).catch(() => undefined);
+  }
+
+  /**
+   * Before each try, a save wrapped for a library the pairing no longer names, or with an older token, is wrapped again
+   * for the pairing as it is now, with its token (contract 4.4 and 4.8; takePlace). A save that read the pairing just
+   * before a move was taken, and joined the queue just after the move had wrapped the queue again, went on to the library
+   * that moved away, and every try after made its wrap again for that library from the old wrap's own p tag: refused
+   * there once its account was deleted, until it stopped, or lost under Saved once the phone had read that inbox for the
+   * last time. The pairing is read under the move's lock, so a move is seen whole or not at all; an old wrap that may be
+   * on the relay keeps its key, so Undo retracts it too.
+   */
+  async function forPairing(p: Delivered & Partial<Queued>, ctx: SaveContext): Promise<void> {
+    await exclusive('move', async () => {
+      const pairing = await b.store.get<Pairing>(KEYS.pairing).catch(() => undefined);
+      if (!pairing || (await wrappedFor(p, ctx.device, pairing))) return;
+      const again = await wrapAgain(p.sealed, ctx.device, pairing.user_pubkey, (r) => ({ ...r, token: pairing.token }), b.now()).catch(() => null);
+      if (again) await takePlace(p, again, {}, triedBefore(p) ? recipient(p) : null);
+    });
   }
 
   /**

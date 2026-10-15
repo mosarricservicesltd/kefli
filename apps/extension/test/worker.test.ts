@@ -1801,4 +1801,71 @@ describe('a move while saves wait, their toasts still showing (contract 4.4 and 
       expect(await queued(h.store)).toEqual([]);
     });
   });
+
+  describe('taken while a save is made, after the save read the pairing', () => {
+    const moved: Pairing = { ...PAIRING, user_pubkey: T.pubkey(), token: String(ack.token) };
+    const tokenOf = async (w: NostrEvent) => (JSON.parse((await unwrap(T, w)).rumor.content) as SaveRequest).token;
+
+    test('one that joins the queue after the move wrapped it again goes to the new library with its token, and Undo follows it', async () => {
+      const n = net();
+      const toasts: Omit<ToastState, 'shortcut'>[] = [];
+      let moving: Promise<Pairing> | undefined;
+      // the half-hourly look (bg.ts checkMoves) takes the move while Saving… shows, the save's own look skipped
+      const h: ReturnType<typeof harness> = harness({
+        net: n.net, collected: [false, false],
+        toast: async (_w, s) => {
+          toasts.push(s);
+          if (s.kind === 'saving') await (moving ??= applyMove(h.store, device, ack, NOW, h.session, h.work.follow));
+        },
+      });
+      await h.store.set(KEYS.pairing, PAIRING);
+      await h.work.save(PAGE, 1, false);
+      const [w] = n.published;
+      expect(w.tags).toEqual([['p', T.pubkey()]]);
+      expect(await tokenOf(w)).toBe(ack.token);
+      expect(await queued(h.store)).toEqual([]);
+      expect(toasts.map((t) => t.kind)).toEqual(['saving', 'saved']);
+      expect(toasts[1].id).toBe(w.id);
+      await h.work.undo(w.id, 1);
+      expect(n.published.filter((e) => e.kind === 5).map((e) => e.tags[0])).toEqual([['e', w.id]]);
+    });
+
+    test('one left in the queue wrapped for the library that moved away goes to the new one at its next try; Undo retracts both', async () => {
+      // its first try went to the old library, whose relay refused it, as Kefli's refuses wraps for a deleted account
+      const refusing: Net = { ...net().net, publish: async () => Promise.reject(new Error('blocked: gift wraps here are for Kefli users and their browsers')) };
+      const h = harness({ net: refusing });
+      await h.work.save(PAGE, 1, false);
+      const failedToast = h.toasts.at(-1)!;
+      const [left] = await queued(h.store);
+      expect(left).toMatchObject({ why: 'blocked', wrap: { tags: [['p', user.pubkey()]] } });
+      // the move was written before this save joined the queue, or a worker stopped between its two writes
+      await h.store.set(KEYS.pairing, moved);
+      const n = net();
+      const later = harness({ store: h.store, session: h.session, net: n.net, collected: [false, false] });
+      await later.work.flushQueue();
+      const [w] = n.published;
+      expect(w.tags).toEqual([['p', T.pubkey()]]);
+      expect(await tokenOf(w)).toBe(ack.token);
+      expect(await queued(h.store)).toEqual([]);
+      // the wrap the old library may hold is retracted too, with its own key
+      await later.work.undo(failedToast.id!, 1);
+      expect(n.published.filter((e) => e.kind === 5).map((e) => e.tags[0][1])).toEqual([left.id, w.id]);
+    });
+
+    test('a move written whole leaves a save already wrapped for the new pairing as it is', async () => {
+      const h = harness({ online: false });
+      await h.store.set(KEYS.pairing, moved);
+      await harness({ store: h.store, session: h.session, online: false, pairing: moved }).work.save(PAGE, 1, false);
+      const [before] = await queued(h.store);
+      await applyMove(h.store, device, { ...ack, token: 'ef'.repeat(32) }, NOW, h.session);
+      const [after] = await queued(h.store);
+      expect(after.id).not.toBe(before.id);
+      expect(await tokenOf(after.wrap)).toBe('ef'.repeat(32));
+      // and one the pairing already names is left alone
+      await h.store.set(KEYS.queue, [before]);
+      await h.store.set(KEYS.pairing, PAIRING);
+      await applyMove(h.store, device, ack, NOW, h.session);
+      expect((await queued(h.store)).map((e) => e.id)).toEqual([before.id]);
+    });
+  });
 });

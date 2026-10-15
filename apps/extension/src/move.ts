@@ -82,12 +82,30 @@ export type Follow = (was: string, to: string) => boolean;
 const mayHaveGone = (e: Queued, underWay: boolean) => underWay || e.why !== 'offline' || e.attempts > 0;
 
 /** The library a queued save's wrap was made for: its p tag. */
-const recipient = (e: Queued): string | null => e.wrap?.tags?.find((t) => t[0] === 'p')?.[1] ?? null;
+export const recipient = (e: Pick<Queued, 'wrap'>): string | null => e.wrap?.tags?.find((t) => t[0] === 'p')?.[1] ?? null;
 
-/** The queue wrapped again for the new user, in place, and the saves that went under a new wrap. */
+/**
+ * Whether a save's wrap is for the pairing: made for its user, its request carrying its token. A request that can't be
+ * read can't be wrapped again either, so a wrap for the pairing's user with one counts as for the pairing.
+ */
+export async function wrappedFor(e: Pick<Queued, 'wrap' | 'sealed'>, device: LocalSigner, pairing: Pairing): Promise<boolean> {
+  if (recipient(e) !== pairing.user_pubkey) return false;
+  try {
+    const kept = JSON.parse(await device.nip44Decrypt(device.pubkey(), e.sealed)) as { request?: { token?: unknown } };
+    return kept.request?.token === pairing.token;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * The queue wrapped again for the new user, in place, and the saves that went under a new wrap. A save already wrapped
+ * for the new pairing, one that read it as the move was written and joined the queue just before this, is left as it is.
+ */
 async function rewrapQueue(q: Queued[], device: LocalSigner, pairing: Pairing, now: number, follow: Follow): Promise<Renaming[]> {
   const renamed: Renaming[] = [];
   for (let i = 0; i < q.length; i++) {
+    if (await wrappedFor(q[i], device, pairing)) continue;
     const { entry, wrapKey } = await rewrap(q[i], device, pairing, now);
     if (wrapKey) {
       const underWay = follow(q[i].id, entry.id);
@@ -103,7 +121,9 @@ const holds = (p: Pairing, ack: PairAck): boolean => p.user_pubkey === ack.user_
 
 /**
  * Takes the move: the pairing replaced (its label and date kept) and the queue wrapped again for the new user, under the
- * queue's lock, so a save queued meanwhile isn't overwritten (F41). A save whose send is under way is wrapped again too,
+ * queue's lock, so a save queued meanwhile isn't overwritten (F41). The pairing is written first: a save that joins the
+ * queue after it was wrapped again then finds the new pairing before it goes (worker.ts forPairing), as does every save
+ * still waiting when a worker stopped between the two writes. A save whose send is under way is wrapped again too,
  * and `follow` is told, so its new wrap waits for that send (worker.ts). Undo's key for each save then moves to its new
  * wrap in the session (undo.ts), so Undo on a toast still naming the old one, such as the offline one, takes the save off
  * the queue rather than retracting a wrap that never went and saying it couldn't undo. An old wrap that may be on the
@@ -119,9 +139,9 @@ export function applyMove(store: Store, device: LocalSigner, ack: PairAck, now: 
     if (old && holds(old, ack)) return old;
     // its lists as the extension keeps them (store.ts addresses)
     const pairing: Pairing = { v: 1, user_pubkey: ack.user_pubkey, write_relays: addresses(ack.write_relays), blossom_servers: addresses(ack.blossom_servers), token: String(ack.token), label: old?.label ?? '', paired_at: old?.paired_at ?? now };
+    await store.set(KEYS.pairing, pairing);
     const renamed = await changeQueue(store, (q) => rewrapQueue(q, device, pairing, now, follow));
     for (const r of renamed) await moveUndoKey(session, r.was, r.to, r.wrapKey, r.sha256, r.wentTo).catch(() => undefined);
-    await store.set(KEYS.pairing, pairing);
     return pairing;
   });
 }
