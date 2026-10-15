@@ -312,9 +312,9 @@ function wrapsClosed(db: SqlDb, from: string): boolean {
 
 /**
  * RULED: S's kind 5s for the wraps its inbox took, due now at the operator relay as defaults.json names it now, where
- * a browser's Undo reads them (C§4.4). The person watches the move end with Back turned off, and each try of step 5
- * tries these once more: one the outbox had put off while the relay was out of reach waited for its next try, up to
- * an hour away (data/outbox backoff), and one queued for a relay defaults.json has since replaced waited for good.
+ * a browser's Undo reads them (C§4.4). Each try of step 5 tries them once more, a switch's with the person watching
+ * and Back turned off: one the outbox had put off while the relay was out of reach waited for its next try, up to an
+ * hour away (data/outbox backoff), and one queued for a relay defaults.json has since replaced waited for good.
  */
 function wrapsDue(db: SqlDb, from: string, relay: string, now: number): void {
   db.run(
