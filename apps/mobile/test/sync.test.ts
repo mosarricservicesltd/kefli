@@ -207,6 +207,26 @@ describe('inbound sync (mobile spec 4.5)', () => {
     expect(w.db.get('SELECT 1 FROM outbox WHERE subject = ?', h(6))).toBeUndefined();
   });
 
+  test('a copy from a newer version is held apart only while it is the newest: an older one, or one no newer than the row, is ignored', () => {
+    const w = world();
+    const ev = (id: string, created_at: number) => ({ id, created_at, tags: [['d', `kefli/item/${h(9)}`]] }) as unknown as NostrEvent;
+    const v = (n: unknown) => ({ item: { ...item().item, v: n }, extra: {} }) as unknown as ParsedItem;
+    applyItem(w.db, 100, w.pk, h(9), ev('e1', 6000), item());
+    // no newer than the row: ignored, the row kept
+    expect(applyItem(w.db, 100, w.pk, h(9), ev('e0', 6000), v(2))).toEqual({ outcome: 'ignored' });
+    expect(row(w, h(9))).toBeDefined();
+    // a version that isn't a number above 1 is no version this phone can hold apart (C§10)
+    for (const n of ['2', 0, null, NaN]) expect(applyItem(w.db, 100, w.pk, h(9), ev('ex', 9000), v(n))).toEqual({ outcome: 'ignored' });
+    expect(row(w, h(9))).toBeDefined();
+    // newer: held apart, the row gone
+    expect(applyItem(w.db, 100, w.pk, h(9), ev('e2', 7000), v(2))).toEqual({ outcome: 'future', textReplaced: true });
+    expect(row(w, h(9))).toBeUndefined();
+    // a copy no newer than the one held apart is ignored; a newer one takes its place
+    expect(applyItem(w.db, 100, w.pk, h(9), ev('e3', 7000), v(3))).toEqual({ outcome: 'ignored' });
+    expect(applyItem(w.db, 100, w.pk, h(9), ev('e4', 8000), v(3))).toEqual({ outcome: 'future', textReplaced: false });
+    expect(w.db.all('SELECT d, created_at FROM items_future')).toEqual([{ d: `kefli/item/${h(9)}`, created_at: 8000 }]);
+  });
+
   test('the article open in the Reader keeps its place, and the remote one is handed back', async () => {
     const w = world();
     w.publish(await remoteSave(w, h(7), 6000, null, { progress: 0.1 }));

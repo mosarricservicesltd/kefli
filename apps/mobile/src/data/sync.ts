@@ -271,12 +271,17 @@ export function applyItem(db: SqlDb, now: number, owner: string, hash: string, e
 const deletionWaiting = (db: SqlDb, owner: string, hash: string) =>
   !!db.get("SELECT 1 FROM outbox WHERE op = 'delete_item' AND signer = ? AND subject = ? AND state IN ('held', 'queued', 'sending')", owner, hash);
 
+/** Whether a copy dated at is newer than the one held apart for its address, if any, and than the row's own event. */
+function newest(held: { created_at: number } | undefined, row: Row | undefined, at: number): boolean {
+  if (held && held.created_at >= at) return false;
+  return !row || row.event_created_at === null || row.event_created_at < at;
+}
+
 function future(db: SqlDb, owner: string, hash: string, event: NostrEvent, row: Row | undefined, v: unknown): Applied {
   if (!(typeof v === 'number' && v > 1)) return { outcome: 'ignored' };
   const d = dOf(event) ?? ITEM_D_PREFIX + hash;
   const held = db.get<{ created_at: number }>('SELECT created_at FROM items_future WHERE owner = ? AND d = ?', owner, d);
-  if (held && held.created_at >= event.created_at) return { outcome: 'ignored' };
-  if (row && row.event_created_at !== null && row.event_created_at >= event.created_at) return { outcome: 'ignored' };
+  if (!newest(held, row, event.created_at)) return { outcome: 'ignored' };
   db.run('INSERT OR REPLACE INTO items_future (owner, d, event_json, created_at) VALUES (?, ?, ?, ?)', owner, d, JSON.stringify(event), event.created_at);
   if (row) removeItem(db, row.id, owner, hash);
   return { outcome: 'future', textReplaced: !!row };
