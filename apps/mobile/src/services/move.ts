@@ -10,7 +10,9 @@
 //      DELETE /account as S, then S off the phone.
 // S stays whole until step 5, so a save is never deleted before its copy exists under T.
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { DEVICES_D, KIND, LIBRARY_KEY_D, T_TAG, buildDeletions, httpAuth, readItemEvent, type CryptoPort, type NostrEvent, type Signer } from '@kefli/protocol';
+import {
+  DEVICES_D, KIND, LIBRARY_KEY_D, T_TAG, buildDeletions, httpAuth, readItemEvent, withoutTrailingSlashes, type CryptoPort, type NostrEvent, type Signer,
+} from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { enqueue } from '../data/outbox';
 import { itemAddresses, newestVersion } from '../data/libraryKey';
@@ -18,10 +20,11 @@ import { listServers, writeRelays } from '../data/lists';
 import { indexText } from '../data/sync';
 import { carryChanges, copySave, moveJob, newerInEither, retireLocal, saveMove, sourceMark, sourceSaves, type MoveJob } from '../data/move';
 import type { SaveTargets, StagedBlob } from '../data/saves';
+import { SERVER_TIMEOUT_MS, TimedOut, serverFetch, serverHops } from '../net/http';
 import { registered } from './connect';
 import type { RelayAnswer } from './send';
 import type { Filter } from './sync';
-import { pageStream } from './sync';
+import { TEXT_MAX_BYTES, TEXT_TIMEOUT_MS, pageStream } from './sync';
 
 export type MoveDefaults = { operator: { relay: string; blossom: string; api: string }; mirrors: string[] };
 
@@ -50,7 +53,19 @@ export type MovePorts = {
   /** Step 5's end: S out of the key file, and Block Store given T's mnemonic or emptied. */
   retireKeys: () => Promise<void>;
   report?: (moved: number, total: number) => void;
+  /** The local stack's build (services/config.ts LOCAL_STACK), whose servers a redirect may reach on loopback. */
+  localStack?: boolean;
 };
+
+/**
+ * p's fetch for a server, a blob server or Kefli's API (net/http serverFetch): each redirect followed a hop at a time,
+ * never into the phone's own network (on the local stack, loopback too), and the whole answer, at most maxBytes, had
+ * within timeoutMs. Left to OkHttp, a server's redirect had T take whatever answered at 192.168.1.1 as S's text, or
+ * S's account deleted there, and a server that never answered held the move, which Back can't leave, for good.
+ */
+function toServer(p: MovePorts, timeoutMs: number, maxBytes?: number): typeof fetch {
+  return serverFetch(p.fetch, { hops: serverHops(p.localStack === true), timeoutMs, ...(maxBytes === undefined ? {} : { maxBytes }) });
+}
 
 /** done; newer: a save from a newer Kefli stopped it before step 2; waiting: a later run carries on. */
 export type MoveOutcome = 'done' | 'newer' | 'waiting';
@@ -64,36 +79,55 @@ async function prepare(p: MovePorts, job: MoveJob): Promise<boolean> {
   return !!p.db.get('SELECT 1 FROM relays WHERE owner = ?', job.to);
 }
 
-/** S's ciphertext for a save, staged for T's upload: already on the phone, or fetched from where S's copy names. */
-export async function stagedBlob(p: MovePorts, from: string, hash: string): Promise<StagedBlob | null | 'missing'> {
+/**
+ * One server's copy of S's blob: its bytes, when they are the blob; 'slow', when the server didn't send it all within
+ * a text's time (sync.ts TEXT_TIMEOUT_MS), as a sync reads it; otherwise 'lacks': not there, not answering, sending
+ * where no hop may go, larger than any text (TEXT_MAX_BYTES) or another blob's bytes.
+ */
+async function blobFrom(p: MovePorts, server: string, sha: string): Promise<Uint8Array | 'lacks' | 'slow'> {
+  try {
+    const res = await toServer(p, TEXT_TIMEOUT_MS, TEXT_MAX_BYTES)(`${withoutTrailingSlashes(server)}/${sha}`, { method: 'GET' });
+    if (!res.ok) return 'lacks';
+    const got = new Uint8Array(await res.arrayBuffer());
+    return bytesToHex(p.crypto.sha256(got)) === sha ? got : 'lacks';
+  } catch (e) {
+    return e instanceof TimedOut ? 'slow' : 'lacks';
+  }
+}
+
+/**
+ * S's blob from the servers its copy names, then S's 10063 and the operator, in turn: its bytes; 'missing' when none
+ * sent it; 'slow' when none sent it and one ran out of time. A slow server isn't one without the text: read as missing,
+ * the HEAD a server then answered had T's copy made without its text, which S's retirement then took with it.
+ */
+async function fetchBlob(p: MovePorts, from: string, sha: string, named: string[]): Promise<Uint8Array | 'missing' | 'slow'> {
+  const servers = [...new Set([...named, ...listServers(p.db, from), (await p.defaults()).operator.blossom])];
+  let slow = false;
+  for (const s of servers) {
+    const got = await blobFrom(p, s, sha);
+    if (typeof got !== 'string') return got;
+    slow ||= got === 'slow';
+  }
+  return slow ? 'slow' : 'missing';
+}
+
+/**
+ * S's ciphertext for a save, staged for T's upload: already on the phone, or fetched from where S's copy names
+ * (fetchBlob); 'missing' or 'slow' when it can't be had now.
+ */
+export async function stagedBlob(p: MovePorts, from: string, hash: string): Promise<StagedBlob | null | 'missing' | 'slow'> {
   const row = p.db.get<{ text_sha256: string | null; text_servers: string | null }>('SELECT text_sha256, text_servers FROM items WHERE owner = ? AND hash = ?', from, hash);
   const sha = row?.text_sha256;
   if (!sha) return null;
-  let bytes = await p.readStaged(sha);
-  if (!bytes) {
-    const named = row.text_servers ? (JSON.parse(row.text_servers) as string[]) : [];
-    const servers = [...new Set([...named, ...listServers(p.db, from), (await p.defaults()).operator.blossom])];
-    for (const s of servers) {
-      try {
-        const res = await p.fetch(`${s.replace(/\/+$/, '')}/${sha}`, { method: 'GET' });
-        if (!res.ok) continue;
-        const got = new Uint8Array(await res.arrayBuffer());
-        if (bytesToHex(p.crypto.sha256(got)) === sha) {
-          bytes = got;
-          break;
-        }
-      } catch {
-        // the next server
-      }
-    }
-  }
-  if (!bytes) return 'missing';
+  const bytes = (await p.readStaged(sha)) ?? (await fetchBlob(p, from, sha, row.text_servers ? (JSON.parse(row.text_servers) as string[]) : []));
+  if (typeof bytes === 'string') return bytes;
   return { sha256: sha, size: bytes.length, path: p.stage(sha, bytes) };
 }
 
 /**
  * RULED: a text no server has (and the phone never staged) can't be owned by T, so its save is copied without
- * text, as a sync leaves a missing blob: the Reader says it couldn't get the text. Unreachable servers wait instead.
+ * text, as a sync leaves a missing blob: the Reader says it couldn't get the text. Unreachable servers wait instead,
+ * and so does a server too slow to send the text in its time (stagedBlob's 'slow').
  */
 async function copyAll(p: MovePorts, job: MoveJob): Promise<boolean> {
   const t = targetsOf(await p.defaults());
@@ -104,6 +138,7 @@ async function copyAll(p: MovePorts, job: MoveJob): Promise<boolean> {
   const total = job.moved.length + todo.length;
   for (const hash of todo) {
     let blob = await stagedBlob(p, job.from, hash);
+    if (blob === 'slow') return false;
     if (blob === 'missing') {
       if (!(await anyServerAnswers(p, job.from, hash))) return false;
       p.db.run("UPDATE items SET text_state = 'failed', fail_reason = 'blob_missing' WHERE owner = ? AND hash = ?", job.from, hash);
@@ -118,12 +153,14 @@ async function copyAll(p: MovePorts, job: MoveJob): Promise<boolean> {
   return true;
 }
 
+/** Whether any server S's copy names answers a HEAD for its text (through the hops, within 15 s): not all are down. */
 async function anyServerAnswers(p: MovePorts, from: string, hash: string): Promise<boolean> {
   const row = p.db.get<{ text_sha256: string; text_servers: string | null }>('SELECT text_sha256, text_servers FROM items WHERE owner = ? AND hash = ?', from, hash);
   const servers = row?.text_servers ? (JSON.parse(row.text_servers) as string[]) : [(await p.defaults()).operator.blossom];
+  const ask = toServer(p, SERVER_TIMEOUT_MS);
   for (const s of servers) {
     try {
-      const res = await p.fetch(`${s.replace(/\/+$/, '')}/${row?.text_sha256}`, { method: 'HEAD' });
+      const res = await ask(`${withoutTrailingSlashes(s)}/${row?.text_sha256}`, { method: 'HEAD' });
       if (res.status < 500 && res.status !== 429) return true;
     } catch {
       // unreachable
@@ -224,9 +261,9 @@ async function retireRemote(p: MovePorts, job: MoveJob): Promise<boolean> {
   await Promise.all(writeRelays(p.db, job.from).map(async (relay) => {
     for (const e of deletions) await p.publish(relay, e).catch(() => undefined);
   }));
-  const url = `${(await p.defaults()).operator.api.replace(/\/+$/, '')}/account`;
+  const url = `${withoutTrailingSlashes((await p.defaults()).operator.api)}/account`;
   try {
-    const res = await p.fetch(url, { method: 'DELETE', headers: { Authorization: await httpAuth(p.source, url, 'DELETE', null, p.crypto) } });
+    const res = await toServer(p, SERVER_TIMEOUT_MS)(url, { method: 'DELETE', headers: { Authorization: await httpAuth(p.source, url, 'DELETE', null, p.crypto) } });
     return res.ok || res.status === 404;
   } catch {
     return false;
