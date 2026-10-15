@@ -1,7 +1,7 @@
 // Backup space's data (FD 117, C§5, C§6; mobile spec 5.4, 5.8): the figures kept from Kefli's server, the saves whose
 // text waits on the phone by the reason it was refused, and what Advanced and the Saved sheet show from them.
 import {
-  DEFAULT_QUOTA, MB, NOTHING_WAITS, accountFigures, backupNotice, forgetFigures, readFigures, recordFigures, roomOf, shareLine,
+  BLOCK, DEFAULT_QUOTA, MB, NOTHING_WAITS, accountFigures, backupNotice, forgetFigures, readFigures, recordFigures, roomOf, shareLine,
   shareRoom, spaceOf, textsWaiting, waitsForRoom, type Waiting,
 } from '../src/data/account';
 import { markBacked, notBackedUp } from '../src/data/backup';
@@ -261,6 +261,16 @@ describe('the Backup space row (FD 117)', () => {
     expect(spaceOf(F, true, 'ok', true)).toMatchObject({ level: 'full' });
   });
 
+  test('Full once less than a block is left: each text counts a block at least, so none would be taken (RULED)', () => {
+    // read Full only at the quota, a library a few bytes short of it read as having room while its every text was refused
+    expect(spaceOf({ ...F, used: 50 * MB - BLOCK }, false, 'ok', true)).toMatchObject({ level: 'nearly' });
+    expect(spaceOf({ ...F, used: 50 * MB - BLOCK + 1 }, false, 'ok', true)).toEqual({ kind: 'figures', used: 50 * MB - BLOCK + 1, quota: F.quota, level: 'full' });
+    expect(spaceOf({ ...F, used: 50 * MB - 1 }, false, 'ok', true)).toMatchObject({ level: 'full' });
+    // a quota under a block, as one set by hand may be, has no room for a text even when nothing is used
+    expect(spaceOf({ quota: BLOCK - 1, used: 0 }, false, 'ok', true)).toMatchObject({ level: 'full' });
+    expect(spaceOf({ quota: BLOCK, used: 0 }, false, 'ok', true)).toMatchObject({ level: 'room' });
+  });
+
   test('figures held stay through a check offline or one that fails, until a new answer comes', () => {
     for (const check of ['checking', 'failed'] as const) {
       for (const online of [true, false]) expect(spaceOf(F, false, check, online)).toMatchObject({ kind: 'figures', used: F.used });
@@ -288,6 +298,18 @@ describe('the Saved sheet’s line (share-full, share-daily)', () => {
     expect(shareRoom(F, W({ full: true, daily: 1, dailyRecent: 1 }))).toBe('full');
     expect(shareRoom(F, W({ daily: 1, dailyRecent: 1 }))).toBe('daily');
     expect(shareRoom(F, W({ daily: 1 }))).toBeNull();
+    // full too with less than a block left, as Backup space reads it
+    expect(shareRoom({ ...F, used: 50 * MB - BLOCK + 1 }, NOTHING_WAITS)).toBe('full');
+    expect(shareRoom({ ...F, used: 50 * MB - BLOCK }, NOTHING_WAITS)).toBeNull();
+  });
+
+  test('a library with less than a block left tells the sheet it is full, until one of its uploads goes through', () => {
+    const db = world();
+    recordFigures(db, ME, { ...FIGURES, used: 50 * MB - 100 }, NOW - 60);
+    expect(shareLine(db, ME, NOW, null)).toBe('full');
+    // Kefli's server takes no upload into less than a block, so one taken since the figures came shows deleting made room
+    save(db, { operator_at: NOW - 10 });
+    expect(shareLine(db, ME, NOW, null)).toBeNull();
   });
 
   test('from the library as it stands', () => {
