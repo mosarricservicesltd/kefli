@@ -2,7 +2,7 @@
 // Kotlin: these read its source, standing in for the check on the phone listed in HANDOVER, and run the sheet's
 // reading of the text the spool holds (pickup.ts firstLink).
 import { SHARE_MAX_TRIES, firstLink } from '../src/share/pickup';
-import { kotlinSource, member as memberOf } from './kotlin';
+import { kotlinSource, member as memberOf, steps } from './kotlin';
 
 jest.mock('expo-modules-core', () => ({ requireNativeModule: () => ({}) }), { virtual: true });
 jest.mock('../src/services/save', () => ({}));
@@ -56,12 +56,14 @@ describe("the share's spool (8.5)", () => {
     // spool the start-up pickup had saved and deleted meanwhile, opened on a spool that was gone and said That didn't
     // save, though the intent the system keeps for it still held the text
     const activity = kotlinSource('kefli-share', 'share', 'ShareActivity.kt');
-    const onCreate = memberOf(activity, 'onCreate');
-    expect(onCreate).toContain('spoolId = spool(savedInstanceState?.getString(SPOOL_KEY))');
-    expect(onCreate.indexOf('spoolId = spool(')).toBeLessThan(onCreate.indexOf('super.onCreate(null)'));
+    // each function whole: a line added to one (an early return of the id it had, say) passed while these lines were
+    // looked for alone, and opened the sheet on a spool that went, as before
+    expect(steps(activity, 'onCreate')).toEqual([
+      'spoolId = spool(savedInstanceState?.getString(SPOOL_KEY))', 'spoolId?.let { live[it] = WeakReference(this) }', 'super.onCreate(null)',
+    ]);
     // the spool it had while that is still there, on disk or held in memory, and otherwise a new one from the intent
-    expect(memberOf(activity, 'spool')).toContain('kept?.takeIf { Spool.has(this, it) } ?: Spool.write(this, intent, referrer?.toString())');
-    expect(member('has')).toContain('unwritten.containsKey(id) || File(dir(context), "$id.json").exists()');
+    expect(steps(activity, 'spool')).toEqual(['return kept?.takeIf { Spool.has(this, it) } ?: Spool.write(this, intent, referrer?.toString())']);
+    expect(steps(kt, 'has')).toEqual(['return unwritten.containsKey(id) || File(dir(context), "$id.json").exists()']);
   });
 });
 

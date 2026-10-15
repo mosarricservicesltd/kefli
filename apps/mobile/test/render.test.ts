@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { publicWeb } from '../src/net/http';
 import { fetchPage, renderAnswer, type PagePorts, type ParserResult } from '../src/services/page';
-import { kotlinSource, member } from './kotlin';
+import { kotlinSource, member, statements, steps } from './kotlin';
 
 const kt = kotlinSource('kefli-parser', 'parser', 'PublicWeb.kt');
 const repo = (...path: string[]) => readFileSync(join(__dirname, '..', '..', '..', ...path), 'utf8');
@@ -64,14 +64,10 @@ const jsPieces = (name: string) => numbers(declared(js, `const ${name} = [`, '];
 /** The same in PublicWeb.kt: private val NAME = intArrayOf(…) */
 const ktPieces = (name: string) => numbers(declared(kt, `private val ${name} = intArrayOf(`, ')'));
 
-/** A function's statements, a line each: its closing braces, comment lines and blank lines gone. */
-function statements(lines: string[]): string[] {
-  return lines.map((l) => l.trim()).filter((l) => l !== '' && l !== '}' && !l.startsWith('//'));
-}
 /** The statements of a function in publicUrl.ts. */
 const jsSteps = (name: string) => statements(jsBody(name).split('\n'));
-/** The statements of a function in PublicWeb.kt, after its signature. */
-const ktSteps = (name: string) => statements(member(kt, name).split('\n').slice(1));
+/** The statements of a function in PublicWeb.kt. */
+const ktSteps = (name: string) => steps(kt, name);
 
 /**
  * privateV6 and the helpers it reads an address with, a statement at a time, each beside its port in PublicWeb.kt; null
