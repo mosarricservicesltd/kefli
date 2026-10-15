@@ -212,10 +212,16 @@ function heldTags(db: SqlDb, owner: string, kind: number): string[][] | null {
   }
 }
 
-// built from a string: the code gate's parser reads a regex literal's escaped slashes as a comment
-const TRAILING = new RegExp('/+$');
-/** An address as lists compare it, without a trailing slash (sameUrl). */
-const bare = (url: string) => url.replace(TRAILING, '');
+/**
+ * An address as lists compare it, without its trailing slashes (sameUrl), taken off by hand: the regex /\/+$/ backtracks
+ * through a run of slashes from every one of them, and a list held from a relay that keeps 64 KB events can carry a tag
+ * of 60,000, 46 s on Node at every list sent.
+ */
+export function bare(url: string): string {
+  let end = url.length;
+  while (end > 0 && url.charCodeAt(end - 1) === 47) end--;
+  return url.slice(0, end);
+}
 
 /**
  * The relays changed in Advanced since a 10002 last went out (FD 113): one removed, or put back as it was before it was
