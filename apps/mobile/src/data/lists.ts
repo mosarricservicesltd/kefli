@@ -146,7 +146,7 @@ function priorRow(prior: string | null): { read: number; write: number; source: 
 function takeEntry(db: SqlDb, owner: string, e: RelayEntry, row: HeldRelay | undefined, was: RelayEntry | undefined, madeAt: number): void {
   const marks = [Number(e.read), Number(e.write)];
   if (!row) {
-    if (!was) db.run("INSERT INTO relays (url, owner, read, write, source, added_by_app) VALUES (?, ?, ?, ?, 'user', 0)", e.url, owner, ...marks);
+    if (!was) db.run("INSERT OR IGNORE INTO relays (url, owner, read, write, source, added_by_app) VALUES (?, ?, ?, ?, 'user', 0)", e.url, owner, ...marks);
     return;
   }
   if (row.source === 'indexer') {
