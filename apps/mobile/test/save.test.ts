@@ -148,6 +148,22 @@ describe('a share too large for its event (C§3.3)', () => {
     await expect(buildItemEvent(mockWorld.signer, row.hash, itemJson(row, servers), 1_760_000_000, key)).resolves.toBeDefined();
   });
 
+  test('an X post linking to an article too long to publish saves nothing, as one linking to none', async () => {
+    setUp();
+    const fetched: string[] = [];
+    mockWorld.page = pageOf({}, fetched);
+    const realFetch = globalThis.fetch;
+    const embed = { html: `<a href="https://news.example/?q=${'x'.repeat(10_000)}">the story</a>` };
+    globalThis.fetch = (async () => new Response(JSON.stringify(embed), { status: 200, headers: { 'content-type': 'application/json' } })) as never;
+    try {
+      expect(await saveLink('https://x.com/someone/status/123', () => undefined)).toMatchObject({ kind: 'noarticle', hash: null, held: [] });
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    expect(fetched).toEqual([]);
+    expect(mockWorld.db.all('SELECT 1 FROM items')).toEqual([]);
+  });
+
   test('a shared address too long to publish is refused before anything is fetched', async () => {
     setUp();
     const fetched: string[] = [];
