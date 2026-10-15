@@ -97,8 +97,8 @@ async function blobFrom(p: MovePorts, server: string, sha: string): Promise<Uint
 
 /**
  * S's blob from the servers its copy names, then S's 10063 and the operator, in turn: its bytes; 'missing' when none
- * sent it; 'slow' when none sent it and one ran out of time. A slow server isn't one without the text: read as missing,
- * the HEAD a server then answered had T's copy made without its text, which S's retirement then took with it.
+ * sent it; 'slow' when none sent it and one ran out of time. A server that ran out of time may still hold the text:
+ * read as missing, the HEAD a server then answered had T's copy made without it, and S's retirement took it for good.
  */
 async function fetchBlob(p: MovePorts, from: string, sha: string, named: string[]): Promise<Uint8Array | 'missing' | 'slow'> {
   const servers = [...new Set([...named, ...listServers(p.db, from), (await p.defaults()).operator.blossom])];

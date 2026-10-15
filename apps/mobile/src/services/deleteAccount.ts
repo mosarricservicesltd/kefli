@@ -117,10 +117,10 @@ function save(p: DelPorts, prog: Progress): void {
   );
 }
 
-/** Tries until it succeeds or the minute is spent: 2 s, then doubling. */
 /** One try at a step's work: whether it went through. A named type, so the code gate's parser reads withinMinute whole. */
 type Attempt = () => Promise<boolean>;
 
+/** Tries until it succeeds or the minute is spent: 2 s, then doubling. */
 async function withinMinute(p: DelPorts, attempt: Attempt): Promise<boolean> {
   const budget = p.budgetMs ?? 60_000;
   let spent = 0;
