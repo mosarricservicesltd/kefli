@@ -165,6 +165,12 @@ describe("an address's user info is no part of its save (ruling 8)", () => {
       expect(withoutUserInfo(u)).toBe(u);
     }
   });
+
+  test('a value that isn’t a string is no link either, and comes back as it was given rather than throwing', () => {
+    // as it did before an address without an @ came back unread: a field read from a store or a message can be anything
+    const odd = [undefined, null, 5, true, {}, { includes: () => true }, ['@'], ['https://u:p@example.com/']] as unknown as string[];
+    for (const v of odd) expect(withoutUserInfo(v)).toBe(v);
+  });
 });
 
 describe('the d tag', () => {
