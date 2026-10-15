@@ -1,9 +1,9 @@
 // Sync's phase 7 (mobile spec 4.5): pending parses, one at a time, until the network goes or the run's minute is
 // spent. Each is fetched and parsed as a share is (page.ts), a public http address over https alone (net/http
 // overHttps); one whose site has no https fails once it is over three days old (page.ts HTTPS_WAIT_SECONDS), and one
-// whose page never answers once it is over 14 days old and tried again (page.ts ANSWER_WAIT_SECONDS), unless it would
-// make SLOW_RUN pages in a row that can't be had, which are the network; an X post whose check X never answers gets
-// the same 14-day rule (FD 119). Its text is encrypted under a fresh key,
+// whose page never answers once it is over 14 days old and tried again (page.ts ANSWER_WAIT_SECONDS), either unless it
+// would make SLOW_RUN pages in a row that can't be had, which are the network; an X post whose check X never answers
+// gets the same 14-day rule (FD 119). Its text is encrypted under a fresh key,
 // staged and written, and only then is the save marked as having it, indexed and its sends queued (data/pending.ts).
 // Ports, so this runs in tests.
 import { encryptText, isPublicWebUrl, itemHash, textHash, withoutUserInfo, type CryptoPort } from '@kefli/protocol';
@@ -44,9 +44,11 @@ export type PendingResult = { parsed: number; failed: number; waiting: number; x
 /**
  * Pages in a row that can't be had before the rest of the queue waits too, the network being down or slow rather
  * than one site: each times out, or doesn't answer at all (a dead domain, a broken certificate, a redirect loop). A
- * page failed for never answering (page.ts ANSWER_WAIT_SECONDS) is one of them, and the one that would complete a run
- * waits: a network that has stopped carrying anything can still be Android's validated one for a while, and every
- * page then fails as one that never answers.
+ * page failed for never answering (page.ts ANSWER_WAIT_SECONDS), or for having no https (HTTPS_WAIT_SECONDS), is one
+ * of them, and the one that would complete a run waits: a network that has stopped carrying anything can still be
+ * Android's validated one for a while, and every page then fails as one that never answers; a captive portal Android
+ * calls validated refuses every https, and failed several old http saves in one run while only the 14-day rule's
+ * failures counted (FD 119).
  */
 export const SLOW_RUN = 3;
 
@@ -75,8 +77,9 @@ export function nextRunIn(r: PendingResult, xFailures: number): number | null {
 
 /**
  * One pending parse taken as far as it goes; unreached: its page, or its X post's check, couldn't be had at all;
- * unanswered: its page couldn't be had and never has, so the save failed as one that can't be read (page.ts
- * ANSWER_WAIT_SECONDS), a page that couldn't be had all the same for the run that reads as the network (pass).
+ * unanswered: its page couldn't be had and never has, or its site has no https, so the save failed as one that can't
+ * be read (page.ts ANSWER_WAIT_SECONDS, HTTPS_WAIT_SECONDS), a page that couldn't be had all the same for the run that
+ * reads as the network (pass).
  */
 type Step = 'parsed' | 'failed' | 'xWaiting' | 'unreached' | 'unanswered';
 
@@ -91,7 +94,7 @@ async function step(p: PendingPorts, owner: string, queued: Pending, run: number
   // the reason alone, never the address (7.1)
   console.log(`[kefli-pending] ${JSON.stringify({ failed: reason, after: WAITED_FOR[reason] })}`);
   await settle(p, owner, item, { kind: 'failed', reason, finalUrl: item.url });
-  return reason === 'offline' ? 'unanswered' : 'failed';
+  return 'unanswered';
 }
 
 /**
@@ -151,8 +154,8 @@ type GivenUp = keyof typeof WAITED_FOR;
  * waitedForAnswer) and was tried before, so one that comes to this phone old, as another phone's save does, has a
  * second try before one slow answer can fail it. Either only with the phone on the internet, whose state is asked
  * only then; a phone that can't say, or a save with no saved_at, waits. run is the pages in a row before it that
- * couldn't be had (pass): RULED, one that would make SLOW_RUN of them waits whatever its age, a run of pages that
- * can't be had being the network's doing (F12).
+ * couldn't be had (pass): RULED, one that would make SLOW_RUN of them waits whatever its age and under either rule, a
+ * run of pages that can't be had being the network's doing (F12, FD 119).
  */
 async function givenUp(p: PendingPorts, item: Pending, outcome: PageOutcome, run: number): Promise<GivenUp | null> {
   const reason = waitedOut(item, outcome, p.now(), run);
@@ -161,9 +164,9 @@ async function givenUp(p: PendingPorts, item: Pending, outcome: PageOutcome, run
 
 /** The wait a save whose page came to outcome, after run pages in a row that couldn't be had, has outlasted, if any. */
 function waitedOut(item: Pending, outcome: PageOutcome, now: number, run: number): GivenUp | null {
-  if (item.saved_at === undefined) return null;
+  if (item.saved_at === undefined || run + 1 >= SLOW_RUN) return null;
   if (waitedForHttps(item.url, outcome, item.saved_at, now)) return 'http';
-  return run + 1 < SLOW_RUN && triedBefore(item) && waitedForAnswer(outcome, item.saved_at, now) ? 'offline' : null;
+  return triedBefore(item) && waitedForAnswer(outcome, item.saved_at, now) ? 'offline' : null;
 }
 
 /** Whether a pending parse was tried before and couldn't be had (F12). */

@@ -605,6 +605,30 @@ describe('a save at an http address whose site has no https (RULED: past three d
     expect(publishes(w)).toEqual([itemHash('http://old.example/post')]);
   });
 
+  test('three old http saves in a row refused are the network: a run fails two at most, as for pages that never answer (FD 119)', async () => {
+    // a captive portal Android calls validated refuses every https, and failed every old http save in one run
+    const w = world();
+    noHttps(w, REFUSED);
+    w.ports.online = async () => true;
+    for (let n = 1; 6 >= n; n++) w.share(`http://old.example/${n}`);
+    // under three days each waits: three in a row stop a run, the rest waiting unasked
+    at(w, DAY);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 0, waiting: 6, xWaiting: 0 });
+    at(w, DAY + 60);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 0, waiting: 6, xWaiting: 0 });
+    // past three days: two fail, the third is the network's and waits, the rest unasked
+    const failed = () => w.db.all<{ url: string }>("SELECT url FROM items WHERE text_state = 'failed' ORDER BY url").map((r) => r.url);
+    at(w, 3 * DAY + 1);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 2, waiting: 4, xWaiting: 0 });
+    expect(failed()).toEqual(['http://old.example/1', 'http://old.example/2']);
+    at(w, 3 * DAY + 61);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 2, waiting: 2, xWaiting: 0 });
+    at(w, 3 * DAY + 121);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 2, waiting: 0, xWaiting: 0 });
+    expect(failed()).toHaveLength(6);
+    expect(publishes(w)).toHaveLength(6);
+  });
+
   test('three days old or less it waits, as its share did: a captive portal or a TLS hiccup can’t fail it', async () => {
     const w = world();
     noHttps(w, TLS);
