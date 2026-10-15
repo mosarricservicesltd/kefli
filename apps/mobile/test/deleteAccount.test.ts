@@ -238,6 +238,36 @@ describe('a nostr user’s deletion (contract 4.7)', () => {
     expect([relayList.created_at, serverList.created_at]).toEqual([501, 501]);
   });
 
+  test('the newest lists on the relays are read first, so what they added in another app since the last sync stays theirs', async () => {
+    const w = world();
+    await signedIn(w, [['r', 'wss://mine']], [['server', 'https://my.blossom']]);
+    // since this phone last synced, they added a relay and a server in another app
+    const newer = [
+      await w.p.signer.signEvent({ kind: 10002, created_at: 900, tags: [['r', 'wss://mine'], ['r', 'wss://new.example', 'read']], content: '' }),
+      await w.p.signer.signEvent({ kind: 10063, created_at: 900, tags: [['server', 'https://my.blossom'], ['server', 'https://new.blossom']], content: '' }),
+    ];
+    const asked: string[] = [];
+    const p: DelPorts = {
+      ...w.p,
+      query: async (relay, filters) => {
+        asked.push(relay);
+        return filters[0].kinds.includes(10002) && relay === 'ws://idx' ? newer : [];
+      },
+    };
+    const signed = await signDeletion(p);
+    // rewritten from the list held, as it was, the new relay and server went from the lists their other apps share
+    expect(signed.lists.find((e) => e.kind === 10002)!.tags).toEqual([['r', 'wss://mine'], ['r', 'wss://new.example', 'read']]);
+    expect(signed.lists.find((e) => e.kind === 10063)!.tags).toEqual([['server', 'https://my.blossom'], ['server', 'https://new.blossom']]);
+    expect(signed.lists.map((e) => e.created_at)).toEqual([901, 901]);
+    // the relays they read from now are read for saves too
+    expect(asked).toContain('wss://new.example');
+    // a relay that doesn't answer the read stops nothing: the lists held are rewritten
+    const quiet = world();
+    await signedIn(quiet, [['r', 'wss://mine']], [['server', 'https://my.blossom']]);
+    const down = await signDeletion({ ...quiet.p, query: async () => Promise.reject(new Error('down')) });
+    expect(down.lists.map((e) => e.tags)).toEqual([[['r', 'wss://mine']], [['server', 'https://my.blossom']]]);
+  });
+
   test('a list of theirs too long for one event is left as it is; the deletion and the other list go on', async () => {
     const w = world();
     const huge = Array.from({ length: 1000 }, (_, i) => ['r', `wss://relay-number-${i}.example`]);

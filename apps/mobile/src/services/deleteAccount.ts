@@ -17,9 +17,9 @@ import {
 } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { deletesOwed, itemAddresses, newestVersion } from '../data/libraryKey';
-import { bare, nextListTime, relayEntries, relayListTags, serverListTags } from '../data/lists';
+import { bare, indexerRelays, nextListTime, relayEntries, relayListTags, serverListTags } from '../data/lists';
 import type { RelayAnswer } from './send';
-import { pageStream, type Filter } from './sync';
+import { pageStream, takeNewerLists, type Filter } from './sync';
 
 export type DelPorts = {
   db: SqlDb;
@@ -209,6 +209,22 @@ async function rewritten(p: DelPorts, kind: number, tags: string[][], name: stri
 }
 
 /**
+ * A nostr user's newest 10002 and 10063 on the indexer and their relays, taken in as the list send takes them just
+ * before it builds its own (C§3.1, send.ts readNewerLists), so the deletion's rewrite starts from them: from the lists
+ * held alone, a relay or server they added in another app since this phone last synced went from the lists their other
+ * apps share. Read before the saves are, so a relay they read from now is read for saves too. A relay that doesn't
+ * answer adds nothing, and with none answering the lists held are rewritten.
+ */
+async function takeNewestLists(p: DelPorts, owner: string): Promise<void> {
+  const query = p.query;
+  if (!query) return;
+  const relays = [...new Set([...p.defaults.indexer, ...indexerRelays(p.db, owner), ...relayEntries(p.db, owner).map((r) => r.url)])];
+  const kinds = [KIND.relayList, KIND.serverList];
+  const copies = await Promise.all(relays.map((r) => query(r, [{ kinds, authors: [owner] }]).catch((): NostrEvent[] => [])));
+  takeNewerLists(p.db, owner, copies.flat(), kinds, p.now());
+}
+
+/**
  * A nostr user's lists (C§4.7): never deleted, since their other apps share them, but republished without the
  * operator's relay and Blossom server, even where they listed these themselves (F32), and without any default this
  * phone added (its rows added_by_app). Each starts from the list as Kefli sends it, the list held entry for entry with
@@ -251,6 +267,7 @@ export type Signed = { wraps: NostrEvent[]; items: NostrEvent[]; lists: NostrEve
 export async function signDeletion(p: DelPorts): Promise<Signed> {
   const owner = p.signer.pubkey();
   const nostr = (p.db.get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local') !== 'local';
+  if (nostr) await takeNewestLists(p, owner);
   const held = allDs(p.db, owner);
   const remote = await onRelays(p, owner, new Set(held));
   const wraps = await wrapDeletions(p, owner);
