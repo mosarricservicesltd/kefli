@@ -1,13 +1,14 @@
 # The playbook test (server/deploy/ansible/test.sh): lint, then two runs against a fresh Debian container with systemd,
-# the second changing nothing, and the services checked through Caddy. About 25 minutes, so it runs only when the
-# server or its deployment changes, or by hand. Needs no secrets: the test inventory has no vault and no real host.
+# the second changing nothing, and the services checked through Caddy. About 25 minutes, so on a push it runs only
+# when the server or its deployment changes, or by hand. On a pull request it always runs, since main requires its
+# playbook check, and tests nothing when nothing under server/ changed, so one job of that name reports every time.
+# Needs no secrets: the test inventory has no vault and no real host.
 name: Playbook test
 
 on:
   push:
     paths: ['server/**', '.github/workflows/deploy-test.yml']
   pull_request:
-    paths: ['server/**', '.github/workflows/deploy-test.yml']
   workflow_dispatch:
 
 permissions:
@@ -19,4 +20,17 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - run: server/deploy/ansible/test.sh
+        with:
+          fetch-depth: 0
+      - name: Does anything under server/ change?
+        id: server
+        if: github.event_name == 'pull_request'
+        run: |
+          if git diff --quiet "origin/$GITHUB_BASE_REF...HEAD" -- server .github/workflows/deploy-test.yml; then
+            echo "Nothing under server/ changed, so the playbook test has nothing to test."
+            echo "changed=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=yes" >> "$GITHUB_OUTPUT"
+          fi
+      - if: github.event_name != 'pull_request' || steps.server.outputs.changed == 'yes'
+        run: server/deploy/ansible/test.sh
