@@ -213,6 +213,24 @@ describe('sending what adding a relay queues (FD 113)', () => {
     expect(w.db.get("SELECT 1 FROM outbox WHERE op = 'copy_relay'")).toBeUndefined();
   });
 
+  test('an added relay that holds a deletion of a save’s event already has what it needs: the copy goes on past it, and is done', async () => {
+    const w = world();
+    seedGeneratedLists(w.db, w.pk, D);
+    item(w.db, w.pk, 'h1');
+    const gone = await save(w, 'h1', 100, 'unread');
+    const rest = await save(w, 'h2', 200, 'unread');
+    const { p, sent } = ports(w, { [D.relays[0]]: [gone, rest] });
+    p.publish = async (url, event) => {
+      sent.push({ url, event });
+      // strfry's answer to an event its author's kind 5 removed there: OK false, the same for every try
+      return url === MINE && event.id === gone.id ? { ok: false, reason: 'deleted: user requested deletion' } : { ok: true };
+    };
+    addRelay(w.db, 10, w.pk, MINE, D);
+    await drain(p);
+    expect(sent.filter((s) => s.url === MINE && s.event.kind === 30078).map((s) => s.event.id).sort()).toEqual([gone.id, rest.id].sort());
+    expect(w.db.get("SELECT 1 FROM outbox WHERE op = 'copy_relay'")).toBeUndefined();
+  });
+
   test('waits while no other relay answers', async () => {
     const w = world();
     seedGeneratedLists(w.db, w.pk, D);

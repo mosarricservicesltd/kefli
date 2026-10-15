@@ -88,16 +88,17 @@ export function pastItsClock(reason: string): boolean {
 }
 
 /**
- * A relay that holds the event already, or a newer version of its address: NIP-01's duplicate:, and strfry's
- * "replaced: have newer event", which it answers with OK false to an older version of a replaceable or addressable
- * event than the one it holds, as when another phone or app sent it a newer one. Either way there is nothing more to
- * send it. Read as a retry, as "replaced:" was, an event sent as already signed (the library's copy to an added relay)
- * went again at every backoff for ever, and one signed at each send (a save, the lists) went over the version that
- * replaced it once this phone's clock passed that version's date, which a sync would have kept (merge.ts mergeItem).
+ * A relay that holds the event already, a newer version of its address, or its author's deletion of it: NIP-01's
+ * duplicate:, and strfry's "replaced: have newer event" and "deleted: user requested deletion", which it answers with
+ * OK false to an older version of a replaceable or addressable event than the one it holds, as when another phone or
+ * app sent it a newer one, and to an event a kind 5 of its author's removed there. Any way there is nothing more to
+ * send it. Read as a retry, as both were, an event sent as already signed (the library's copy to an added relay) went
+ * again at every backoff for ever, and one signed at each send (a save, the lists) went over the version or the
+ * deletion that replaced it once this phone's clock passed that one's date, where a sync keeps the newer (merge.ts).
  */
-const HELD = new RegExp('^(?:duplicate|replaced):');
+const HELD = new RegExp('^(?:duplicate|replaced|deleted):');
 
-/** Whether a relay's words say it holds the event, or a newer version of it, already (HELD): as good as taking it. */
+/** Whether a relay's words say it holds the event, a newer version or its deletion already (HELD): as good as taking it. */
 export function holdsAlready(reason: string): boolean {
   return HELD.test(reason);
 }

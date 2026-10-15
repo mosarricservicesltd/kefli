@@ -271,6 +271,8 @@ describe('sending a save (mobile spec 4.3)', () => {
     // strfry's OK false for an older version of a replaceable or addressable event than the one it holds: nothing
     // more to send it, where a retry sent the same event for ever when it went as already signed
     [{ ok: false, reason: 'replaced: have newer event' } as RelayAnswer, 'ok'],
+    // and its OK false for an event its author's kind 5 removed, which no later try changes
+    [{ ok: false, reason: 'deleted: user requested deletion' } as RelayAnswer, 'ok'],
     [{ ok: false, reason: 'rate-limited: slow down' } as RelayAnswer, 'retry'],
     [{ ok: false, reason: 'blocked: not on the list' } as RelayAnswer, 'rejected'],
     [{ ok: false, reason: 'invalid: bad' } as RelayAnswer, 'rejected'],

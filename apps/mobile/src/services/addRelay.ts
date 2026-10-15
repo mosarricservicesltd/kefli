@@ -32,14 +32,14 @@ export type AddRelayPorts = {
 const TOO_OLD = new RegExp('created_at too early|event too old', 'i');
 
 /**
- * Whether the relay's answer to the list leaves it one that takes this person's events: it took the list, or holds it
- * or a newer one already, as strfry says with "replaced: have newer event" when another app sent it a list since this
- * phone last read theirs (send.ts holdsAlready), or turned it away only for its date, an answer that says nothing of
- * the person, as for an identity with no list yet: ahead of the relay's clock (send.ts pastItsClock: the list held is
- * dated by this phone's clock, or after one another device dated so, nextListTime, and a phone running fast found
- * every strfry relay refusing, Kefli's own among them), or older than it keeps (TOO_OLD). The words are read by the
- * outbox's own tests, so the check and the sends to the relay read them alike. The lists then go to it as for any
- * relay added, dated now, with the outbox's backoff.
+ * Whether the relay's answer to the list leaves it one that takes this person's events: it took the list, or holds it,
+ * a newer one or their deletion of it already, as strfry says with "replaced: have newer event" when another app sent
+ * it a list since this phone last read theirs (send.ts holdsAlready), or turned it away only for its date, an answer
+ * that says nothing of the person, as for an identity with no list yet: ahead of the relay's clock (send.ts
+ * pastItsClock: the list held is dated by this phone's clock, or after one another device dated so, nextListTime, and
+ * a phone running fast found every strfry relay refusing, Kefli's own among them), or older than it keeps (TOO_OLD).
+ * The words are read by the outbox's own tests, so the check and the sends to the relay read them alike. The lists
+ * then go to it as for any relay added, dated now, with the outbox's backoff.
  */
 function takes(answer: RelayAnswer): boolean {
   return answer.ok || holdsAlready(answer.reason) || pastItsClock(answer.reason) || TOO_OLD.test(answer.reason);
