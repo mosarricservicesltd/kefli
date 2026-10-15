@@ -550,6 +550,25 @@ describe("Kefli's API follows no redirect, on any build (contract 6)", () => {
     }
   });
 
+  test('a refused answer is let go with its body unread, as a redirect named by a Location is', async () => {
+    // refused with its deadline ended and its request still open, an answer whose body never ended went on arriving for
+    // good: expo/fetch reads a body into the phone's memory whether or not it is asked for
+    const answers: Answer[] = [{ status: 300 }, { status: 302 }, { status: 399 }, { status: 200, redirected: true }, { status: 200, url: 'https://news.example/' }];
+    for (const a of answers) {
+      const signals: AbortSignal[] = [];
+      const f = (async (_url: string, init: RequestInit = {}) => {
+        signals.push(init.signal!);
+        const endless = new ReadableStream<Uint8Array>({ pull: (c) => c.enqueue(new Uint8Array(1024)) }, { highWaterMark: 0 });
+        const res = new Response(endless, { status: a.status });
+        if (a.redirected) Object.defineProperty(res, 'redirected', { value: true });
+        if (a.url) Object.defineProperty(res, 'url', { value: a.url });
+        return res;
+      }) as unknown as typeof fetch;
+      await expect(apiFetch(f)('https://api.example/account', { method: 'DELETE' })).rejects.toMatchObject({ name: 'Blocked', why: 'redirect' });
+      expect([a, signals.map((s) => s.aborted)]).toEqual([a, [true]]);
+    }
+  });
+
   test("the API's own answers come back as they are, a refusal's status and a server error's among them", async () => {
     for (const status of [200, 204, 400, 401, 403, 404, 409, 429, 500, 503]) {
       const res = await api({ status }).f('https://api.example/account', { method: 'DELETE' });

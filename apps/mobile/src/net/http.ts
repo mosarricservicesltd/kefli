@@ -340,6 +340,9 @@ export async function open(f: typeof fetch, url: string, init: RequestInit, time
     landed = await Promise.race([arrive(f, url, init, line, hops), deadline]);
   } catch (e) {
     end();
+    // an answer refused (arrived) is let go with its body unread, as a redirect's is: left open with its deadline
+    // ended, a body that never ended went on arriving, which expo/fetch reads in whether or not it is asked for
+    line.ctl.abort();
     throw failure(e, line.late);
   }
   const { res } = landed;
