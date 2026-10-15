@@ -47,9 +47,12 @@ export function readScan(raw: string, operator: Operator, now: number, verify?: 
 
 const targetsOf = (d: Awaited<ReturnType<ConnectPorts['defaults']>>) => ({ api: d.operator.api, blossom: d.operator.blossom, mirror: d.mirrors[0] });
 
+/** The row registered reads: a named type, since the code gate's parser, given it inline, ran registered on to lookupCode's end. */
+type Registration = { registered_at: number | null };
+
 /** A still-queued register runs first (5.5): GET /pair-offers needs a registered user. */
 export async function registered(p: Pick<ConnectPorts, 'db' | 'now' | 'owner' | 'defaults' | 'runOutbox'>): Promise<boolean> {
-  const is = () => !!p.db.get<{ registered_at: number | null }>('SELECT registered_at FROM identities WHERE pubkey = ?', p.owner)?.registered_at;
+  const is = () => !!p.db.get<Registration>('SELECT registered_at FROM identities WHERE pubkey = ?', p.owner)?.registered_at;
   if (is()) return true;
   registerFirst(p.db, p.now(), p.owner, targetsOf(await p.defaults()));
   await p.runOutbox().catch(() => 0);

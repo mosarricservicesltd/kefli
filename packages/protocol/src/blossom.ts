@@ -14,9 +14,13 @@ const SHA = /^[0-9a-f]{64}$/;
 /** A server's address without the slashes at its end, which a path then joins with one. */
 const trim = withoutTrailingSlashes;
 
-/** The Authorization header for one call: kind 24242 with t, x and a one-hour expiration. */
-export async function blossomAuth(signer: Signer, verb: BlossomVerb, sha256: string, now = Math.floor(Date.now() / 1000)): Promise<string> {
+/**
+ * The Authorization header for one call: kind 24242 with t, x and a one-hour expiration, dated at, or now. The clock is
+ * read in the body: the code gate's parser drops a function whose parameter's default calls another.
+ */
+export async function blossomAuth(signer: Signer, verb: BlossomVerb, sha256: string, at?: number): Promise<string> {
   if (!SHA.test(sha256)) throw new Error('not a sha256');
+  const now = at ?? Math.floor(Date.now() / 1000);
   const event = await signer.signEvent({
     kind: KIND.blossomAuth,
     created_at: now,
