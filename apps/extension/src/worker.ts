@@ -86,8 +86,8 @@ const WAITING: Record<ReturnType<typeof whyNot>, Outcome> = { offline: 'waiting,
 
 /**
  * Whether a waiting save may be on the relay all the same: one tried before, whose answer may have timed out though the
- * relay took it, or one a move put under a new wrap while its old one may have gone (undo.ts Earlier). Whether the
- * session still holds its key or not: without it the wrap can't be retracted, which Undo then says.
+ * relay took it, or one a move put under a new wrap while its old one may have gone (undo.ts Earlier). This holds with or
+ * without the session's key for it; without the key the wrap can't be retracted, which Undo then says.
  */
 const mayBeOnRelay = (e: Queued, kept: UndoKey | undefined) => e.why !== 'offline' || e.attempts > 0 || (kept?.earlier?.length ?? 0) > 0;
 
@@ -486,8 +486,9 @@ export function background(b: Browser) {
    * wrap never reached it, and the save is removed with its entry; a retraction it couldn't be asked for, out of reach or
    * refusing it for now, leaves a wrap that did reach it there for the phone to take, so Undo says it couldn't, as it
    * does for a save that went. Every failure read as removed said Removed from Kefli of a save sent before a move, whose
-   * wrap waited on the relay for the phone's last look at the old library's inbox. So does a key the session no longer
-   * holds, which can retract nothing: the save is still looked for on the phone, and otherwise Undo says it couldn't.
+   * wrap waited on the relay for the phone's last look at the old library's inbox. Without the key, which the session
+   * may not have kept, nothing retracts the wrap: the save is looked for on the phone, and otherwise Undo says it
+   * couldn't, where it said Removed from Kefli.
    */
   async function unqueue(u: UndoOf, waitingSave: Queued, device: SaveContext['device']): Promise<void> {
     await note(u.id, 'undo: off the queue');

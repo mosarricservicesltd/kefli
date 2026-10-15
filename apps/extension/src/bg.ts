@@ -30,7 +30,7 @@ chrome.runtime.onInstalled.addListener((d) => {
 // a save the browser closed on mid-send is still in the queue, and Firefox doesn't keep the alarm across a restart (F23)
 chrome.runtime.onStartup.addListener(() => void watchMoves().then(() => work.flushQueue()));
 
-/** How often the background looks for a move while the browser runs; a send may look again after five (move.ts). */
+/** How often the background looks for a move while the browser runs; a save may look five minutes after any look (lookDue). */
 const MOVES_EVERY_MINUTES = 30;
 
 /**

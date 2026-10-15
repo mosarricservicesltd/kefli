@@ -196,8 +196,8 @@ export interface Looking {
 }
 
 /**
- * How many answers of WRAPS_MAX a deep look reads, the newest among them: 500 wraps, each checked and opened, a few
- * seconds of the worker's time, and only while more than a hundred wraps are addressed to the browser.
+ * How many answers of WRAPS_MAX a deep look reads, the newest among them: 500 wraps at most, each checked and opened, and
+ * only while the newest answer stops at a hundred, which only a flood from strangers fills.
  */
 export const MOVE_PAGES = 5;
 
