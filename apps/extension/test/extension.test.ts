@@ -14,7 +14,7 @@ import { webCrypto } from '../src/crypto';
 import { loadDefaults, type Defaults } from '../src/defaults';
 import { deviceSigner } from '../src/device';
 import { ackFor, browserLabel, formatCode, newOffer, OFFER_LIFE, OFFER_REUSE_MIN, pairingFrom, postOffer, tryPairing, type Offer } from '../src/pair';
-import { ATTEMPTS_MAX, BLOB_KEEP_MAX, dequeue, enqueue, failed, flush, QUEUE_MAX, queued, shown, waiting, whyNot } from '../src/queue';
+import { ATTEMPTS_MAX, BLOB_KEEP_MAX, changeQueue, dequeue, enqueue, failed, flush, QUEUE_MAX, queued, shown, waiting, whyNot } from '../src/queue';
 import { deliver, prepare, retract, withoutText, type Delivered, type Net, type Pending } from '../src/save';
 import { KEYS, memoryStore, type Pairing } from '../src/store';
 import { applyMove, followMoves } from '../src/move';
@@ -405,6 +405,28 @@ describe('the queue (extension spec 4, decisions 30, 31 and 60)', () => {
     expect(await flush(store, async () => 'sent', true)).toEqual([]);
     expect(await flush(store, async () => 'sent', true, { all: true, only: 'other' })).toEqual([]);
     expect(await flush(store, async () => 'sent', true, { all: true, only: 'no' })).toEqual(['no']);
+  });
+  test('a try made while the browser is offline counts no attempt, so a save made offline never stops there', async () => {
+    const store = memoryStore();
+    await enqueue(store, p('a'), 'offline');
+    for (let i = 0; i <= ATTEMPTS_MAX; i++) await flush(store, async () => 'unreachable', false);
+    expect(await queued(store)).toMatchObject([{ id: 'a', why: 'offline', attempts: 0, stopped: false }]);
+    // online, a try that fails counts; a relay that answered and refused counts whatever the browser says
+    await flush(store, async () => 'unreachable', true);
+    await flush(store, async () => 'blocked', false);
+    expect(await queued(store)).toMatchObject([{ id: 'a', why: 'blocked', attempts: 2 }]);
+  });
+  test('a stopped save is listed under Couldn’t send, with Retry, whatever it waited on, and isn’t counted as waiting to send', async () => {
+    const store = memoryStore();
+    await enqueue(store, p('a'), 'offline');
+    await enqueue(store, p('b'), 'offline');
+    // stopped while waiting offline, as an earlier build left it, or Retried while the browser was offline
+    await changeQueue(store, (q) => void (q[0] = { ...q[0], attempts: ATTEMPTS_MAX, stopped: true }));
+    await flush(store, async () => 'unreachable', false, { all: true, only: 'a' });
+    const q = await queued(store);
+    expect(q[0]).toMatchObject({ id: 'a', why: 'offline', stopped: true });
+    expect(failed(q).map((e) => e.id)).toEqual(['a']);
+    expect(waiting(q)).toBe(1);
   });
 });
 

@@ -1,6 +1,6 @@
 // Saves waiting to send (extension spec 4, flow decisions 30, 31 and 60): at most eight, kept already encrypted in
 // storage.local, retried every minute while any wait. A ninth is refused rather than queued, so nothing is lost silently.
-// After 200 attempts an entry stops and waits for Retry on the options page.
+// After 200 attempts made while the browser is online an entry stops and waits for Retry on the options page.
 //
 // A save goes in before its first send, so a worker stopped or a browser closed mid-send leaves it here for the next
 // flush (F23). Every change reads and writes the queue under one lock (F41), and a save's send and its Undo run one at a
@@ -137,8 +137,10 @@ export type Settled = 'sent' | 'queued' | 'full' | 'gone';
 
 /**
  * What a send did to its entry: a sent one leaves; one that didn't send counts an attempt, says why and stops at 200.
- * After a save's first send (first), one that didn't send leaves as 'full' when eight others already wait. 'gone' is an
- * entry that had already left the queue (Disconnect).
+ * A try made while the browser is offline counts none: the minute's alarm went on trying a save made offline, so one
+ * whose laptop stayed awake and offline for 200 minutes, a long flight, stopped, unlisted and still counted as waiting,
+ * and never went once the browser was online again. After a save's first send (first), one that didn't send leaves as
+ * 'full' when eight others already wait. 'gone' is an entry that had already left the queue (Disconnect).
  */
 export async function settle(store: Store, p: Pick<Pending, 'id' | 'blob'>, d: Delivery, online: boolean, first = false): Promise<Settled> {
   return changeQueue(store, (q): Settled => {
@@ -148,20 +150,28 @@ export async function settle(store: Store, p: Pick<Pending, 'id' | 'blob'>, d: D
       q.splice(i, 1);
       return d === 'sent' ? 'sent' : 'full';
     }
-    const attempts = first ? 0 : q[i].attempts + 1;
-    q[i] = { ...q[i], blob: keepable(p.blob, q, p.id), attempts, why: whyNot(d, online), stopped: attempts >= ATTEMPTS_MAX };
+    const why = whyNot(d, online);
+    const attempts = first ? 0 : q[i].attempts + (why === 'offline' ? 0 : 1);
+    q[i] = { ...q[i], blob: keepable(p.blob, q, p.id), attempts, why, stopped: attempts >= ATTEMPTS_MAX };
     return 'queued';
   });
 }
 
-/** Offline saves only: what the badge, the button's name and the options notice count (decision 30). */
+/**
+ * Offline saves still trying: what the badge, the button's name and the options notice count (decision 30). A stopped
+ * one sends only on Retry, so it is listed as Couldn't send instead (failed) and isn't promised to send once online.
+ */
 export function waiting(q: Queued[]): number {
-  return q.filter((e) => e.why === 'offline').length;
+  return q.filter((e) => e.why === 'offline' && !e.stopped).length;
 }
 
-/** The options page's Couldn't send list: everything else still here but a save on its first send. */
+/**
+ * The options page's Couldn't send list: everything else still here but a save on its first send, and every stopped
+ * save, whatever it last waited on, since Retry alone sends one: a Retry made while the browser is offline leaves it
+ * offline and stopped.
+ */
 export function failed<T extends Queued>(q: T[]): T[] {
-  return q.filter((e) => e.why !== 'offline' && e.why !== 'sending');
+  return q.filter((e) => e.stopped || (e.why !== 'offline' && e.why !== 'sending'));
 }
 
 /** Why a delivery that didn't send leaves its save waiting. */

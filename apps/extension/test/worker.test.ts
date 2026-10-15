@@ -13,7 +13,7 @@ import { relayRows, type Defaults } from '../src/defaults';
 import { deviceSigner } from '../src/device';
 import { PerSave } from '../src/lock';
 import { applyMove, followMoves } from '../src/move';
-import { ATTEMPTS_MAX, BLOB_KEEP_MAX, BLOBS_KEEP_MAX, changeQueue, dequeue, enqueue, ENTRIES_MAX, flush, QUEUE_MAX, queued, settle } from '../src/queue';
+import { ATTEMPTS_MAX, BLOB_KEEP_MAX, BLOBS_KEEP_MAX, changeQueue, dequeue, enqueue, ENTRIES_MAX, failed, flush, QUEUE_MAX, queued, settle, waiting } from '../src/queue';
 import { ADDRESS_SURE_FIT_BYTES, AddressTooLongError, fetchNet, prepare, rumorBytes, timed, uploadTimeoutMs, WRAP_FRESH_FOR, type Net, type Pending } from '../src/save';
 import { KEYS, memoryStore, type Pairing, type Store } from '../src/store';
 import { toastCopy, type ToastState } from '../src/toastCopy';
@@ -196,6 +196,26 @@ describe('a save is in the queue before it is sent (F23)', () => {
     expect(signal).toBeInstanceOf(AbortSignal);
     expect(uploadTimeoutMs(0)).toBe(20_000);
     expect(uploadTimeoutMs(2_900_000)).toBeLessThan(120_000);
+  });
+});
+
+describe('a save made offline (decision 30, extension spec 4)', () => {
+  test('it waits however long the browser stays offline, the minute’s flushes counting no attempt, and goes once online', async () => {
+    const h = harness({ online: false, net: net({ publish: 'down' }).net });
+    await h.work.save(PAGE, 1, false);
+    expect(kinds(h.toasts)).toEqual(['saving', 'offline']);
+    // the alarm's flushes through a long flight, the laptop awake and its Wi-Fi off
+    for (let i = 0; i <= ATTEMPTS_MAX; i++) await h.work.flushQueue();
+    const q = await queued(h.store);
+    expect(q).toMatchObject([{ why: 'offline', attempts: 0, stopped: false }]);
+    expect([waiting(q), failed(q).length]).toEqual([1, 0]);
+    expect(h.alarm.on).toBe(true);
+    // the browser comes online, and the online event's flush sends it
+    const n = net();
+    const online = harness({ store: h.store, session: h.session, net: n.net });
+    await online.work.flushQueue();
+    expect(n.published).toHaveLength(1);
+    expect(await queued(h.store)).toEqual([]);
   });
 });
 
@@ -896,7 +916,7 @@ describe('a wrap that waited (contract 4.4: the phone reads its inbox from two d
     expect(n.published.filter((x) => x.kind === 5).map((x) => [x.pubkey, x.tags])).toEqual([[second.wrap.pubkey, [['e', second.id], ['k', '1059']]]]);
   });
 
-  test('offline, a wrap that waited is left as it is, since its send fails anyway', async () => {
+  test('offline, a wrap that waited is left as it is, since its send fails anyway, and the try counts no attempt', async () => {
     const h = harness({ online: false });
     at(h, NOW);
     await h.work.save(linkOnly(PAGE.url), 1, true);
@@ -904,7 +924,7 @@ describe('a wrap that waited (contract 4.4: the phone reads its inbox from two d
     const still = harness({ store: h.store, online: false, net: net({ publish: 'down' }).net });
     at(still, NOW + DAY);
     await still.work.flushQueue();
-    expect(await queued(h.store)).toMatchObject([{ id: e.id, wrapped_at: NOW, attempts: 1 }]);
+    expect(await queued(h.store)).toMatchObject([{ id: e.id, wrapped_at: NOW, attempts: 0 }]);
   });
 
   test('a save queued by an earlier build, with no time for its wrap, counts as wrapped long ago', async () => {
