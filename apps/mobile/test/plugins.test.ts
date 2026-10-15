@@ -32,6 +32,17 @@ describe('backup and permissions (mobile spec 7.1)', () => {
     expect(perms).not.toContain('android.permission.SYSTEM_ALERT_WINDOW');
     expect(perms.filter((p: string) => p.endsWith(' x'))).toHaveLength(BLOCKED.length);
     expect(secureManifest({ application: [{ $: {} }] })['uses-permission']).toHaveLength(BLOCKED.length);
+  });
+
+  test("the background worker's library adds no permission: WorkManager's WAKE_LOCK and RECEIVE_BOOT_COMPLETED are removed (4.8, FD 119)", () => {
+    expect(BLOCKED).toContain('android.permission.WAKE_LOCK');
+    expect(BLOCKED).toContain('android.permission.RECEIVE_BOOT_COMPLETED');
+    const m = secureManifest({
+      application: [{ $: {} }],
+      'uses-permission': [{ $: { 'android:name': 'android.permission.WAKE_LOCK' } }, { $: { 'android:name': 'android.permission.RECEIVE_BOOT_COMPLETED' } }, { $: { 'android:name': 'android.permission.ACCESS_NETWORK_STATE' } }],
+    });
+    const kept = m['uses-permission'].filter((p: { $: Record<string, string> }) => !p.$['tools:node']).map((p: { $: Record<string, string> }) => p.$['android:name']);
+    expect(kept).toEqual(['android.permission.ACCESS_NETWORK_STATE']);
     expect(() => secureManifest({})).toThrow('no application');
   });
 
