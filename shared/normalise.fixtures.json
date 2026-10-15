@@ -1,7 +1,7 @@
 {
   "v": 1,
   "contract": "1.12",
-  "about": "normalise(url, canonical?) from contract section 4.3. Every port must produce expect exactly; expect null means the input is refused as not a link. d is kefli/item/ followed by the lowercase hex sha256 of the UTF-8 of expect.",
+  "about": "normalise(url, canonical?) from contract section 4.3. Every port must produce expect exactly; expect null means the input is refused as not a link. A save's hash is the lowercase hex sha256 of the UTF-8 of expect. Since contract 1.10 its d is kefli/item/ followed by the hex HMAC-SHA256 of that hash under the library key (section 4.3); only a save published before then has kefli/item/ followed by the hash itself.",
   "rulings": [
     "Settled on 6 October 2026 with contract 1.4 (section 11.9), Richard having left these to the engineer's judgement. These cases pin choices the contract text leaves open:",
     "1. Parsing and serialisation follow the WHATWG URL Standard (the whatwg-url package on every engine), so default ports, dot segments, IPv4 forms and percent-encoding come out as a browser's location.href would give them.",
