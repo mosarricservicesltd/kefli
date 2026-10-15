@@ -344,6 +344,23 @@ describe('a save too large to wrap (F39)', () => {
     expect(pending).toMatchObject({ blob: null, sha256: null, host: 'example.com' });
   });
 
+  test('its toast is the one for a save without text, and Copy debug info says it went with no text', async () => {
+    const n = net();
+    const h = harness({ net: n.net });
+    await h.work.save({ ...PAGE, url: long(2400) }, 1, false);
+    expect(kinds(h.toasts)).toEqual(['saving', 'notext']);
+    expect(toastCopy({ ...h.toasts[1], shortcut: null })).toMatchObject({ title: 'Saved to Kefli', sub: 'example.com · your phone will fetch the text' });
+    expect((await history(h.store))[0]).toMatchObject({ outcome: 'sent, no text', link: false });
+    // nothing was uploaded for it, and the wrap that went names no text
+    expect(n.asked.uploads).toBe(0);
+    expect((JSON.parse((await unwrap(user, n.published[0])).rumor.content) as SaveRequest).html).toBeNull();
+    // a page whose text fits is Saved as before
+    const fits = harness();
+    await fits.work.save(PAGE, 1, false);
+    expect(kinds(fits.toasts)).toEqual(['saving', 'saved']);
+    expect((await history(fits.store))[0]).toMatchObject({ outcome: 'sent' });
+  });
+
   test('an address too long on its own is refused with a toast, and nothing is queued', async () => {
     await expect(prepare(linkOnly(long(6000)), ctx)).rejects.toBeInstanceOf(AddressTooLongError);
     const h = harness();

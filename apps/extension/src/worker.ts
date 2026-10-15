@@ -228,13 +228,17 @@ export function background(b: Browser) {
     // a second time beside this send
     const { d, s, online } = await saves.run(pending.id, () => firstSend(pending, ctx));
     // from here the toast names the wrap the save has now, a new one if its HTML was refused, so Undo retracts that
-    if (d === 'sent') return sentNow(c, pending, where, link);
+    if (d === 'sent') return sentNow(pending, where, link);
     await waits(pending, where, link, { d, s, online });
   }
 
-  /** Saved, or, for a save that went without its text, the toast saying the phone will fetch it. */
-  async function sentNow(c: Captured, pending: Pending, where: Where, link: boolean): Promise<void> {
-    const noText = textless.delete(pending.id) || c.html === null;
+  /**
+   * Saved, or, for a save whose request went without its text, the toast saying the phone will fetch it. That is a request
+   * whose HTML the operator refused, and one that names no inbox blob: a link, a page whose capture kept no HTML, and a
+   * page whose HTML was left out to fit the wrap (F39), though the capture had it.
+   */
+  async function sentNow(pending: Pending, where: Where, link: boolean): Promise<void> {
+    const noText = textless.delete(pending.id) || pending.sha256 === null;
     await note(pending.id, noText ? 'sent, no text' : 'sent', link);
     await queueChanged();
     await toast(where, { ...toasted(pending, link), kind: noText ? 'notext' : 'saved' });
