@@ -275,6 +275,15 @@ describe('the user’s own nostr app (contract 2)', () => {
     expect(bookmarkLinks([ev([['r', 'https://u:p@example.com/a'], ['r', 'https://example.com/a']])], PK)).toEqual(['https://example.com/a']);
   });
 
+  test('bookmarks: a 39701 whose d holds its scheme anyway, written in any case, is imported as https://<d> without it', () => {
+    // with the scheme in capitals kept, HTTPS://u:p@example.net/k was imported as https://https//u:p@example.net/k, a
+    // link to nowhere whose user name and password sat in its path, where withoutUserInfo can't see them
+    const d = (value: string) => ({ ...ev([['d', value]]), kind: 39701 });
+    expect(bookmarkSaves([d('HTTPS://u:p@example.net/k'), d('Http://example.net/m'), d('https://example.net/n'), d('example.net/o')], PK)).toEqual(
+      ['k', 'm', 'n', 'o'].map((p) => ({ url: `https://example.net/${p}`, hash: itemHash(`https://example.net/${p}`) })),
+    );
+  });
+
   // The time it saves (30 s for 40,000 links, 4.6 s now, on Node) is measured by a probe, not here: a bound on time
   // here failed under the whole suite's load.
   test('bookmarks: every link once across many lists, each found in a set rather than a list', () => {

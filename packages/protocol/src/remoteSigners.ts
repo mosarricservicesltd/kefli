@@ -305,8 +305,10 @@ export function bookmarkSaves(events: NostrEvent[], pubkey: string): { url: stri
   return out;
 }
 
-// built from a string: the code gate's parser reads a regex literal's escaped slashes as a comment
-const WEB_SCHEME = new RegExp('^https?://');
+// built from a string: the code gate's parser reads a regex literal's escaped slashes as a comment. In any case, as a
+// scheme may be written: d is the URL without it (NIP-B0), and one written HTTPS:// was kept, so the link went nowhere
+// and a user name and password in it sat in its path, where withoutUserInfo can't see them
+const WEB_SCHEME = new RegExp('^https?://', 'i');
 
 /** The links one event names, in its order: a 39701's d as https://<d>, the r tags of a 10003 or a 30003. */
 function eventLinks(e: NostrEvent): string[] {
