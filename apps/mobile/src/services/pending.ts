@@ -1,9 +1,10 @@
 // Sync's phase 7 (mobile spec 4.5): pending parses, one at a time, until the network goes or the run's minute is
 // spent. Each is fetched and parsed as a share is (page.ts), a public http address over https alone (net/http
 // overHttps); one whose site has no https fails once it is over three days old (page.ts HTTPS_WAIT_SECONDS), and one
-// whose page never answers once it is over 14 days old and tried again (page.ts ANSWER_WAIT_SECONDS). Its text is
-// encrypted under a fresh key, staged and written, and only then is the save marked as having it, indexed and its
-// sends queued (data/pending.ts). Ports, so this runs in tests.
+// whose page never answers once it is over 14 days old and tried again (page.ts ANSWER_WAIT_SECONDS), unless it would
+// make SLOW_RUN pages in a row that can't be had, which are the network. Its text is encrypted under a fresh key,
+// staged and written, and only then is the save marked as having it, indexed and its sends queued (data/pending.ts).
+// Ports, so this runs in tests.
 import { encryptText, isPublicWebUrl, itemHash, textHash, withoutUserInfo, type CryptoPort } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { applyFailed, applyParsed, pendingParses, timedOut, xFound, xNoArticle, type Pending } from '../data/pending';
@@ -41,7 +42,10 @@ export type PendingResult = { parsed: number; failed: number; waiting: number; x
 
 /**
  * Pages in a row that can't be had before the rest of the queue waits too, the network being down or slow rather
- * than one site: each times out, or doesn't answer at all (a dead domain, a broken certificate, a redirect loop).
+ * than one site: each times out, or doesn't answer at all (a dead domain, a broken certificate, a redirect loop). A
+ * page failed for never answering (page.ts ANSWER_WAIT_SECONDS) is one of them, and the one that would complete a run
+ * waits: a network that has stopped carrying anything can still be Android's validated one for a while, and every
+ * page then fails as one that never answers.
  */
 export const SLOW_RUN = 3;
 
@@ -68,19 +72,25 @@ export function nextRunIn(r: PendingResult, xFailures: number): number | null {
   return ms === Infinity ? null : ms;
 }
 
-/** One pending parse taken as far as it goes; unreached: its page, or its X post's check, couldn't be had at all. */
-type Step = 'parsed' | 'failed' | 'xWaiting' | 'unreached';
+/**
+ * One pending parse taken as far as it goes; unreached: its page, or its X post's check, couldn't be had at all;
+ * unanswered: its page couldn't be had and never has, so the save failed as one that can't be read (page.ts
+ * ANSWER_WAIT_SECONDS), a page that couldn't be had all the same for the run that reads as the network (pass).
+ */
+type Step = 'parsed' | 'failed' | 'xWaiting' | 'unreached' | 'unanswered';
 
-async function step(p: PendingPorts, owner: string, queued: Pending): Promise<Step> {
+/** A queued parse taken as far as it goes, after run pages in a row that couldn't be had (pass). */
+async function step(p: PendingPorts, owner: string, queued: Pending, run: number): Promise<Step> {
   const item = queued.x_state === 'pending' ? await xChecked(p, owner, queued) : queued;
   if (typeof item === 'string') return item;
   const outcome = await pageOf(p, item);
   if (outcome.kind !== 'offline') return settle(p, owner, item, outcome);
-  const reason = await givenUp(p, item, outcome);
+  const reason = await givenUp(p, item, outcome, run);
   if (!reason) return 'unreached';
   // the reason alone, never the address (7.1)
   console.log(`[kefli-pending] ${JSON.stringify({ failed: reason, after: WAITED_FOR[reason] })}`);
-  return settle(p, owner, item, { kind: 'failed', reason, finalUrl: item.url });
+  await settle(p, owner, item, { kind: 'failed', reason, finalUrl: item.url });
+  return reason === 'offline' ? 'unanswered' : 'failed';
 }
 
 /**
@@ -120,18 +130,20 @@ type GivenUp = keyof typeof WAITED_FOR;
  * as it may (page.ts waitedForHttps); offline once it has waited as long as it may for its page to answer (page.ts
  * waitedForAnswer) and was tried before, so one that comes to this phone old, as another phone's save does, has a
  * second try before one slow answer can fail it. Either only with the phone on the internet, whose state is asked
- * only then; a phone that can't say, or a save with no saved_at, waits.
+ * only then; a phone that can't say, or a save with no saved_at, waits. run is the pages in a row before it that
+ * couldn't be had (pass): RULED, one that would make SLOW_RUN of them waits whatever its age, since a run of pages
+ * that can't be had is the network (F12), not their own.
  */
-async function givenUp(p: PendingPorts, item: Pending, outcome: PageOutcome): Promise<GivenUp | null> {
-  const reason = waitedOut(item, outcome, p.now());
+async function givenUp(p: PendingPorts, item: Pending, outcome: PageOutcome, run: number): Promise<GivenUp | null> {
+  const reason = waitedOut(item, outcome, p.now(), run);
   return reason && (await p.online?.().catch(() => false)) === true ? reason : null;
 }
 
-/** The wait a save whose page came to outcome has outlasted, by its saved_at, if any. */
-function waitedOut(item: Pending, outcome: PageOutcome, now: number): GivenUp | null {
+/** The wait a save whose page came to outcome, after run pages in a row that couldn't be had, has outlasted, if any. */
+function waitedOut(item: Pending, outcome: PageOutcome, now: number, run: number): GivenUp | null {
   if (item.saved_at === undefined) return null;
   if (waitedForHttps(item.url, outcome, item.saved_at, now)) return 'http';
-  return triedBefore(item) && waitedForAnswer(outcome, item.saved_at, now) ? 'offline' : null;
+  return run + 1 < SLOW_RUN && triedBefore(item) && waitedForAnswer(outcome, item.saved_at, now) ? 'offline' : null;
 }
 
 /** Whether a pending parse was tried before and couldn't be had (F12). */
@@ -192,6 +204,16 @@ function stalled(out: PendingResult, rest: Pending[]): PendingResult {
   return untried ? { ...out, untried } : out;
 }
 
+/**
+ * The pages in a row that couldn't be had after step s, run before it (F12): one more after a page that couldn't be
+ * had, failed for no answer (unanswered) or waiting, as many after an X post X didn't answer, and none once a page or
+ * an X post answered.
+ */
+function runAfter(run: number, s: Step): number {
+  if (s === 'unreached' || s === 'unanswered') return run + 1;
+  return s === 'xWaiting' ? run : 0;
+}
+
 async function pass(p: PendingPorts, owner: string, until: number): Promise<PendingResult> {
   const out: PendingResult = { parsed: 0, failed: 0, waiting: 0, xWaiting: 0 };
   const queue = pendingParses(p.db, owner);
@@ -201,7 +223,7 @@ async function pass(p: PendingPorts, owner: string, until: number): Promise<Pend
     if (p.now() >= until) return { ...out, untried: neverTried(queue.slice(i)) };
     // a save whose parse threw (what its page held, or applying it) waits like one that couldn't be had, rather
     // than stopping the queue at it on every sync
-    const s = await step(p, owner, queue[i]).catch((e: unknown): Step => {
+    const s = await step(p, owner, queue[i], unreached).catch((e: unknown): Step => {
       console.log(`[kefli-pending] ${JSON.stringify({ threw: (e as Error)?.name ?? 'unknown' })}`);
       return 'unreached';
     });
@@ -209,18 +231,18 @@ async function pass(p: PendingPorts, owner: string, until: number): Promise<Pend
     // spend each run's time again ahead of the rest; one that never answers can't stop the shares behind it either:
     // a dead link shared offline once stopped every pending parse at every sync
     if (s === 'unreached' || s === 'xWaiting') timedOut(p.db, p.now(), queue[i].id);
-    if (s === 'unreached') {
-      // one page that can't be had waits for the next sync without holding up the rest; a run of them is the
-      // network (F12)
-      if (++unreached < SLOW_RUN) {
-        out.waiting++;
-        continue;
-      }
-      out.waiting += queue.length - i;
-      return stalled(out, queue.slice(i + 1));
+    unreached = runAfter(unreached, s);
+    if (s !== 'unreached') {
+      out[s === 'unanswered' ? 'failed' : s]++;
+      continue;
     }
-    if (s !== 'xWaiting') unreached = 0;
-    out[s]++;
+    // one page that can't be had waits for the next sync without holding up the rest; a run of them is the network
+    if (unreached < SLOW_RUN) {
+      out.waiting++;
+      continue;
+    }
+    out.waiting += queue.length - i;
+    return stalled(out, queue.slice(i + 1));
   }
   return out;
 }

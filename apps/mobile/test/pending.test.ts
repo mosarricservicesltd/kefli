@@ -748,6 +748,52 @@ describe('a save whose page never answers (RULED: past 14 days, tried again with
       expect(w.db.get('SELECT text_state FROM items')).toEqual({ text_state: 'cached' });
     }
   });
+
+  test('three pages in a row that can’t be had are the network, failed for no answer or not: a run fails two at most (F12)', async () => {
+    // a network that has stopped carrying anything is still Android's validated one for a while, and every page then
+    // fails as one that never answers: one run failed, for good, every save past its 14 days that had been tried
+    const w = world();
+    const asked = gone(w, NO_NAME);
+    w.ports.online = async () => true;
+    for (let n = 1; 6 >= n; n++) w.share(`https://gone.example/${n}`);
+    // each tried once: three in a row stop a run, the rest waiting unasked
+    at(w, DAY);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 0, waiting: 6, xWaiting: 0 });
+    at(w, DAY + 60);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 0, waiting: 6, xWaiting: 0 });
+    expect(asked).toHaveLength(6);
+    // past 14 days: two fail, the third is the network's and waits, the rest unasked
+    const failed = () => w.db.all<{ url: string }>("SELECT url FROM items WHERE text_state = 'failed' ORDER BY url").map((r) => r.url);
+    at(w, 15 * DAY);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 2, waiting: 4, xWaiting: 0 });
+    expect(asked).toHaveLength(9);
+    expect(failed()).toEqual(['https://gone.example/1', 'https://gone.example/2']);
+    // pages that never answer still fail, two a run
+    at(w, 15 * DAY + 60);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 2, waiting: 2, xWaiting: 0 });
+    at(w, 15 * DAY + 120);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 0, failed: 2, waiting: 0, xWaiting: 0 });
+    expect(failed()).toHaveLength(6);
+    expect(publishes(w)).toHaveLength(6);
+  });
+
+  test('a page that answers ends the run, so the pages after it that never answer fail as well', async () => {
+    const w = world({ 'https://back.example/a': {} });
+    gone(w, SLOW);
+    w.ports.online = async () => true;
+    // each tried before, the queue taking them in this order (F12)
+    const urls = ['https://gone.example/1', 'https://back.example/a', 'https://gone.example/2', 'https://gone.example/3'];
+    for (const [n, u] of urls.entries()) {
+      w.share(u);
+      w.db.run('UPDATE items SET timed_out_at = ? WHERE url = ?', 1000 + DAY + n, u);
+    }
+    at(w, 15 * DAY);
+    expect(await runPendingParses(w.ports, PK)).toEqual({ parsed: 1, failed: 3, waiting: 0, xWaiting: 0 });
+    expect(w.db.all('SELECT url, text_state FROM items ORDER BY id')).toEqual([
+      { url: urls[0], text_state: 'failed' }, { url: urls[1], text_state: 'cached' }, { url: urls[2], text_state: 'failed' },
+      { url: urls[3], text_state: 'failed' },
+    ]);
+  });
 });
 
 describe('a user name and password are never kept in a stored address (contract 4.3, ruling 8)', () => {
