@@ -2,6 +2,7 @@
 // operator that takes a request and never answers, an answer that never ends, and lists that aren't lists of addresses.
 import { hexToBytes } from '@noble/hashes/utils.js';
 import type { PairAck } from '../../../packages/protocol/src/pairing';
+import type { CryptoPort } from '../../../packages/protocol/src/ports';
 import { LocalSigner } from '../../../packages/protocol/src/signer';
 import { webCrypto } from '../src/crypto';
 import { DEFAULTS_LIST_MAX, loadDefaults, relayRows, type Defaults } from '../src/defaults';
@@ -30,6 +31,13 @@ function endless(headers: Record<string, string> = {}) {
 
 const json = (body: unknown) => (async () => new Response(JSON.stringify(body), { status: 200 })) as unknown as typeof fetch;
 
+/**
+ * The browser's crypto with a code key that costs nothing to derive, for the tests that time a post to the operator. The
+ * post derives the typed code's key first, scrypt in pure JS: a fifth of a second alone, and over five seconds on a
+ * loaded machine under coverage, which counted against the post's time limit and Jest's.
+ */
+const quickKey: CryptoPort = { ...webCrypto, scrypt: async (_password, _salt, _cost, length) => new Uint8Array(length) };
+
 /** How long a promise took to end, in ms, and whether it rejected. */
 async function timed(p: Promise<unknown>): Promise<{ ms: number; rejected: boolean; value: unknown }> {
   const t = Date.now();
@@ -55,7 +63,7 @@ describe('defaults.json from an operator that misbehaves', () => {
     await store.set(KEYS.defaults, DEFAULTS);
     expect(await timed(loadDefaults(store, 'u', deaf, 50))).toMatchObject({ rejected: false, value: DEFAULTS });
     const o = await newOffer(device, DEFAULTS, 'Chrome on a Mac', webCrypto, NOW);
-    expect(await timed(postOffer(device, DEFAULTS, o, webCrypto, deaf, 50))).toMatchObject({ rejected: true });
+    expect(await timed(postOffer(device, DEFAULTS, o, quickKey, deaf, 50))).toMatchObject({ rejected: true });
   });
 
   test('an answer that never ends is cut off as it is read, and the kept copy stands in', async () => {
@@ -99,7 +107,7 @@ describe('defaults.json from an operator that misbehaves', () => {
 describe('pairing with an operator that misbehaves', () => {
   test('POST /pair-offers that never answers rejects in time, so the page says it can’t connect and tries again', async () => {
     const o = await newOffer(device, DEFAULTS, 'Chrome on a Mac', webCrypto, NOW);
-    const r = await timed(postOffer(device, DEFAULTS, o, webCrypto, never, 50));
+    const r = await timed(postOffer(device, DEFAULTS, o, quickKey, never, 50));
     expect(r.rejected).toBe(true);
     expect(r.ms).toBeLessThan(5000);
     expect(o.posted).toBe(false);
@@ -150,7 +158,7 @@ describe('lists from the phone that aren’t lists of addresses', () => {
     const store = memoryStore();
     await store.set(KEYS.pairing, PAIRING);
     const T = new LocalSigner(hexToBytes('33'.repeat(32)));
-    const p = await applyMove(store, device, { ...ack({ write_relays: junk }), user_pubkey: T.pubkey(), moved_from: user.pubkey(), nonce: undefined }, NOW);
+    const p = await applyMove(store, device, { ...ack({ write_relays: junk }), user_pubkey: T.pubkey(), moved_from: user.pubkey(), nonce: undefined }, NOW, memoryStore());
     expect(p.write_relays).toEqual(['wss://ok.example']);
     expect((await store.get<Pairing>(KEYS.pairing))!.write_relays).toEqual(['wss://ok.example']);
   });

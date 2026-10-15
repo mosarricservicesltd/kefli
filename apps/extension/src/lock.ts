@@ -42,12 +42,14 @@ export class PerSave {
 
   /**
    * A save given a new id while a run under its old one goes on, as when its request is wrapped again (v1.12): the new id
-   * is busy, and runs under it wait, until that run has ended, so a flush can't send the new wrap beside it.
+   * is busy, and runs under it wait, until that run has ended, so a flush can't send the new wrap beside it. True when a
+   * run was under way, whose send of the old wrap may reach the relay all the same (move.ts).
    */
-  follow(was: string, to: string): void {
+  follow(was: string, to: string): boolean {
     const tail = this.runs.get(was);
-    if (!tail) return;
+    if (!tail) return false;
     this.runs.set(to, tail);
     void tail.then(() => this.runs.get(to) === tail && this.runs.delete(to));
+    return true;
   }
 }

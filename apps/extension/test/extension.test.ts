@@ -30,6 +30,13 @@ const PAIRING: Pairing = { v: 1, user_pubkey: user.pubkey(), write_relays: ['wss
 
 const json = (body: unknown, ok = true) => ({ ok, status: ok ? 200 : 500, json: async () => body }) as unknown as Response;
 
+/**
+ * How long a test that derives a typed code's key may take. That is scrypt at N 16,384 in pure JS (noble, src/crypto.ts):
+ * a fifth of a second alone, while a test that runs it twice took 6 to 15 seconds on a loaded machine under coverage,
+ * past Jest's five.
+ */
+const SCRYPT_MS = 60_000;
+
 describe('the browser label (contract 4.4)', () => {
   test.each([
     ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/141.0 Safari/537.36', [], 'Chrome on a Mac'],
@@ -62,7 +69,7 @@ describe('pairing (contract 4.4)', () => {
     const { lookup, key } = await derivePairCode(o.code, webCrypto);
     expect(body.lookup).toBe(lookup);
     expect(await openOffer(body.offer, key, webCrypto)).toEqual(o.offer);
-  });
+  }, SCRYPT_MS);
 
   test("the QR and the typed code's sealed offer both carry the device key's proof over the nonce, which the phone accepts", async () => {
     let sealed = '';
@@ -82,14 +89,14 @@ describe('pairing (contract 4.4)', () => {
     // and a proof only the device key makes: the user's own key can't stand in for it
     const forged = await newOffer(user, DEFAULTS, 'x', webCrypto, NOW);
     expect(proofHolds({ ...forged.offer, device_pubkey: device.pubkey() }, DEFAULTS.operator.api)).toBe(false);
-  });
+  }, SCRYPT_MS);
 
   test('an operator that refuses the offer is an error the page shows as offline', async () => {
     const get = (async () => json({}, false)) as unknown as typeof fetch;
     const o = await newOffer(device, DEFAULTS, 'x', webCrypto, NOW);
     await expect(postOffer(device, DEFAULTS, o, webCrypto, get)).rejects.toThrow('500');
     expect(o.posted).toBe(false);
-  });
+  }, SCRYPT_MS);
 
   describe('trying again after trouble (F42)', () => {
     const attempt = (last: { offer: Offer | null }, relayUp: boolean, at = NOW) => {
@@ -489,7 +496,7 @@ describe('following a move (contract 4.4 and 4.8)', () => {
     await store.set(KEYS.pairing, PAIRING);
     const { pending } = await prepare(PAGE, { device, defaults: DEFAULTS, pairing: PAIRING, crypto: webCrypto, now: NOW });
     await enqueue(store, pending, 'offline');
-    const p = await applyMove(store, device, ackFor(T, user.pubkey(), 'c1'.repeat(32)), NOW + 10);
+    const p = await applyMove(store, device, ackFor(T, user.pubkey(), 'c1'.repeat(32)), NOW + 10, memoryStore());
     expect(p).toMatchObject({ user_pubkey: T.pubkey(), token: 'c1'.repeat(32), label: PAIRING.label, paired_at: PAIRING.paired_at, write_relays: ['wss://t.example'] });
     const [moved] = await queued(store);
     expect(moved.id).not.toBe(pending.id);

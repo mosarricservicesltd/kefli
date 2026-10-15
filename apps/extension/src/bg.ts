@@ -49,7 +49,7 @@ async function checkMoves(): Promise<void> {
   const wraps = await fetchWraps(defaults.operator.relay, device, since).catch(() => null);
   if (!wraps) return;
   const ack = await followMoves(device, wraps, pairing.user_pubkey);
-  if (ack) await applyMove(store, device, ack, now());
+  if (ack) await applyMove(store, device, ack, now(), session, work.follow);
   await store.set(KEYS.movesChecked, now());
 }
 

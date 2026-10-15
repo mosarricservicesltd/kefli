@@ -30,12 +30,39 @@ c.on('Fetch.requestPaused', (e) => {
   } else void c.send('Fetch.failRequest', { requestId: e.requestId, errorReason: 'BlockedByClient' });
 });
 
+// Each page is read once its load event has fired. A fixed 700 ms read the larger pages while Chrome was still parsing
+// them whenever the machine was busy, so wikipedia-el (600 KB) differed from run to run; with Chrome's CPU slowed four
+// or eight times, up to five Wikipedia pages lost the end of their text, or their title, byline and site. Every request
+// but the page's own is refused at once, so a page's load follows its parse. Loads are kept by navigation, so one that
+// fires before Page.navigate answers is still found, and a frame or an earlier page can't stand in for it.
+const loads = new Set();
+c.on('Page.lifecycleEvent', (e) => void (e.name === 'load' && loads.add(e.loaderId)));
+await c.send('Page.setLifecycleEventsEnabled', { enabled: true });
+const LOAD_MS = 60_000;
+
+/** Opens url and waits for its load event: null once it has loaded, else why it didn't. */
+async function open(url) {
+  const { loaderId, errorText } = await c.send('Page.navigate', { url });
+  if (errorText) return `didn't open: ${errorText}`;
+  const until = Date.now() + LOAD_MS;
+  // no loaderId: a navigation within the page already loaded, which fires no load of its own
+  while (loaderId && !loads.has(loaderId)) {
+    if (Date.now() > until) return `didn't load within ${LOAD_MS / 1000} s`;
+    await sleep(10);
+  }
+  return null;
+}
+
 let bad = 0;
 for (const p of pages) {
   const want = expected[p.id];
   serving = { url: p.url, contentType: p.contentType, body: readFileSync(path.join(repo, 'shared', 'fixtures', 'pages', `${p.id}.html`)).toString('base64') };
-  await c.send('Page.navigate', { url: p.url });
-  await sleep(700);
+  const trouble = await open(p.url);
+  if (trouble) {
+    bad++;
+    console.log(`✗ ${p.id}: ${trouble}`);
+    continue;
+  }
   await c.eval(parser);
   await c.eval(capture);
   const got = await c.eval(`(() => { const k = kefliCapture(); const md = k.html === null ? null : kefliMarkdown(k.html, k.url).markdown; return { ...k, html: k.html !== null, markdown: md }; })()`);

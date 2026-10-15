@@ -56,11 +56,16 @@ describe('the guard on a page that isn’t readerable (contract 4.2)', () => {
       return { threw: String(e) };
     }
   };
-  // each of these, counted whole, overflowed the stack or ran for minutes in the page’s own thread
+  // counted whole, the first two overflowed the stack until the projection kept a stack of its own, and the parse still
+  // takes the last two a minute or more in the page’s own thread
   test.each([
     ['3 MB of prose', 'The quick brown fox jumps over the lazy dog. '.repeat(70_000), true],
     ['16,384 quotes inside quotes', '>'.repeat(16_384), false],
     ['32 KB of * and _', '*_'.repeat(16_384), false],
+    // the parse's dearest for its length, as Turndown leaves it in a pre whose lines open with a space: on each line,
+    // lists nested each inside the one before. Counted whole, these 1,000 lines took 158 s; 2,040 deep in the opening
+    // alone took 1.5 s here, and past this bound in a full parallel run on a busy machine, so the lines are 300 deep
+    ['1,000 lines of lists nested 300 deep', ` ${'- '.repeat(300)}x\n`.repeat(1_000), false],
   ])('%s is judged from its opening, in good time', (_name, markdown, kept) => {
     const r = guard(markdown);
     expect(r).toMatchObject({ kept });
