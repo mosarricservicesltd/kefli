@@ -1,0 +1,28 @@
+# The health check (backend spec 3.9; README, "Monitoring"): a script every five minutes that reports to a healthchecks
+# address, written by hand to /etc/kefli/health.env as the backup's is. Without the file it runs and only logs.
+- name: The health check
+  ansible.builtin.copy:
+    src: kefli-health
+    dest: /usr/local/lib/kefli/kefli-health
+    mode: "0755"
+
+- name: Its unit
+  ansible.builtin.template:
+    src: kefli-health.service.j2
+    dest: /etc/systemd/system/kefli-health.service
+    mode: "0644"
+
+- name: Its timer
+  ansible.builtin.copy:
+    src: kefli-health.timer
+    dest: /etc/systemd/system/kefli-health.timer
+    mode: "0644"
+
+- name: The check runs every five minutes
+  ansible.builtin.systemd_service:
+    name: kefli-health.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  # A dry run writes no unit, so there is no timer yet to find.
+  ignore_errors: "{{ ansible_check_mode }}"

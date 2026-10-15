@@ -54,6 +54,12 @@ box sh -c 'echo x > /var/www/kefli/downloads/t.xpi && echo x > /var/www/kefli/do
 check 'downloads are served as an add-on and an Android package' \
   'grep -qi "content-type: application/x-xpinstall" <<<"$(via kefli.app -I https://kefli.app/downloads/t.xpi)" && grep -qi "content-type: application/vnd.android.package-archive" <<<"$(via kefli.app -I https://kefli.app/downloads/t.apk)"'
 check 'HSTS is set' 'grep -qi strict-transport-security <<<"$(via api.kefli.app -I https://api.kefli.app/defaults.json)"'
+# The health check (README, "Monitoring"): its timer is on, a run passes on this box, and with keflid stopped a run
+# fails and the journal names what failed: keflid, and the API and Blossom answers Caddy proxies to it, nothing else.
+check 'the health timer is on' 'box systemctl is-active kefli-health.timer'
+check 'the health check passes' 'box systemctl start kefli-health.service'
+check 'and names a service that is down' \
+  'box systemctl stop keflid; ! box systemctl start kefli-health.service; box systemctl start keflid; grep -qx "failing: keflid api blossom" <<<"$(box journalctl -t kefli-health --no-pager -o cat)"'
 # F49: Caddy's admin API is on a socket only caddy (and root) can open, never on localhost:2019, and reloads use it.
 admin() { box runuser -u "$1" -- curl -s -m 2 -o /dev/null -w '%{http_code}' --unix-socket /run/caddy/admin.sock http://localhost/config/; }
 check "Caddy's admin API isn't on localhost:2019" '! box curl -s -m 2 -o /dev/null http://localhost:2019/config/'

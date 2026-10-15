@@ -110,6 +110,24 @@ The backup key can delete the repository (F48). restic needs write and delete ri
 
 The first backup on 10 October 2026 was restored to a scratch directory and matched the live data: keflid's database and the wraps record passed SQLite's integrity check with the same accounts, the relay export had every event, and every blob was byte for byte the same. Rehearse a restore like that after any change to the backup.
 
+## Monitoring
+
+Backend spec 3.9 asked for Prometheus, node_exporter and Alertmanager on the host and an Uptime Kuma on another provider. The box has 2 GB, most of it the relay's, and there is no second server, so what runs is smaller and asks for no new service:
+
+- **The health check on the box.** `kefli-health` (the playbook's `monitor` role, `/usr/local/lib/kefli/kefli-health`) runs every five minutes from `kefli-health.timer` and fails when any of these is wrong: keflid, strfry, Caddy, the sweep timer or the backup timer not active; the disk the blobs and databases share 80 per cent full; keflid's `/health`, the relay's NIP-11 or a Blossom HEAD not answering through Caddy; the website answering 5xx; a certificate with under 14 days left; or 5xx answers above one in a hundred over the access log's last five minutes, once there are a hundred. A failing run writes one line to the journal, `kefli-health: failing: <names>`, and nothing else, so the journal keeps no address, key or hash. `sudo systemctl start kefli-health` runs one now, and `journalctl -t kefli-health` shows the failures.
+- **Where it reports.** As the backup does: a healthchecks.io check, "Kefli health", period five minutes with five minutes' grace, hears each pass at its ping address and each failure at `/fail` with the names of the checks that failed. A box that stops pinging, down, off the network or wedged, is reported the same way. The address is written by hand, root only, and the check runs without it:
+
+```
+sudo install -m 600 /dev/stdin /etc/kefli/health.env <<'END'
+HEALTHCHECK_HEALTH_URL=https://hc-ping.com/…
+END
+sudo systemctl start kefli-health && journalctl -t kefli-health -n 3
+```
+
+- **The outside probe.** `.github/workflows/uptime.yml` runs every five minutes from GitHub's runners (a schedule runs only from `main`, can run a few minutes late, and is turned off after sixty days without a commit): the relay's NIP-11, `/health` and `defaults.json` on the API, a Blossom HEAD, the website, and each certificate's days left. A failed probe is a failed workflow run, which GitHub mails to whoever last changed the file. It sees the box as the phones do, from outside, which the on-box check can't.
+
+Not built, from the spec's list: Prometheus and a dashboard, ntfy, and the queue and worker alerts, whose worker left v1 with server audio (flow decision 22).
+
 ## Not yet on the box
 
-Monitoring and an outside uptime probe, NIP-11's operator pubkey, and the 90-day trim of unrelated public kinds (only registered keys can write, so none arrive yet). NIP-05's `_` name went live by hand on 10 October 2026, the same file the playbook writes.
+NIP-11's operator pubkey, and the 90-day trim of unrelated public kinds (only registered keys can write, so none arrive yet). NIP-05's `_` name went live by hand on 10 October 2026, the same file the playbook writes.
