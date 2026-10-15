@@ -38,7 +38,10 @@ export type SyncPorts = {
   db: SqlDb;
   now: () => number;
   signer: (pubkey: string) => Promise<Signer | null>;
-  /** The events matching filters until EOSE; throws when the relay can't be reached. */
+  /**
+   * The events matching filters once the relay has sent EOSE; throws when the relay can't be reached or doesn't finish
+   * its answer (net/pool CutShort), so a page is whole or the read fails, and a cursor never moves past a cut.
+   */
   query: (relay: string, filters: Filter[]) => Promise<NostrEvent[]>;
   fetch: typeof fetch;
   crypto: CryptoPort;
@@ -78,7 +81,9 @@ const addressOf = (e: NostrEvent) => (e.kind >= 30_000 && e.kind < 40_000 ? `${e
  * (replaces), which is all any reader of these uses: an archival relay, or a hostile one that kept everything, answered
  * a first read with every version of every save, 30,000 events (57 MB) for 300 saves of 100 versions each, and up to
  * MAX_PAGES answers a relay, all held at once. Every id read is still counted, so paging goes on as before. Given now,
- * an event dated past it by more than SKEW is left out (notYet), so the newest version kept is one that is due.
+ * an event dated past it by more than SKEW is left out (notYet), so the newest version kept is one that is due. A page
+ * the relay cuts short throws here as the query does (net/pool CutShort), rather than passing for an answer: one cut
+ * before anything new came was read as the stream's end, and the cursor moved past every event beneath it.
  */
 export async function pageStream(query: SyncPorts['query'], relay: string, base: Filter, now = Infinity): Promise<NostrEvent[]> {
   const ids = new Set<string>();
@@ -126,7 +131,7 @@ async function collect(p: SyncPorts, owner: string): Promise<Collected[]> {
         const events = await pageStream(p.query, relay, streamFilter(stream, owner, since), p.now());
         return { relay, stream, events };
       } catch {
-        return null; // unreachable: its cursor stays, and the next trigger asks again
+        return null; // unreachable, or an answer cut short: its cursor stays, and the next trigger asks again
       }
     }),
   );
@@ -383,7 +388,7 @@ export async function syncLibraryKey(p: SyncPorts, owner: string): Promise<void>
       found.push(...(await p.query(r, [{ kinds: [KIND.appData], authors: [owner], '#d': [LIBRARY_KEY_D] }])));
       answered++;
     } catch {
-      // unreachable: no say in whether a key exists
+      // unreachable, or an answer cut short: no say in whether a key exists
     }
   }));
   const records = [...new Map(found.filter((e) => e.pubkey === owner && e.tags.some((t) => t[0] === 'd' && t[1] === LIBRARY_KEY_D)).map((e) => [e.id, e])).values()];
