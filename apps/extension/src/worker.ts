@@ -19,7 +19,7 @@ import {
 } from './save';
 import { KEYS, type Pairing, type Store } from './store';
 import type { ToastKind, ToastState } from './toastCopy';
-import { moveUndoKey, settleUndo, type Earlier, type Renamed, type UndoKey } from './undo';
+import { moveUndoKey, settleUndo, type Earlier, type Found, type Renamed, type UndoKey } from './undo';
 
 /** Where a save's notices go: the tab's toast, the toolbar popup where no toast can run, or nowhere (a link menu). */
 export type Where = number | 'popup' | null;
@@ -42,8 +42,8 @@ export interface Browser {
   flushAlarm(on: boolean): Promise<void>;
   /** A look for a move first, so a save is wrapped for the library's current key. */
   checkMovesSoon(): Promise<void>;
-  /** Whether the phone has collected a save (relay.ts). */
-  collected(relay: string, wrapId: string, user: string): Promise<boolean>;
+  /** Whether the phone has collected a save (relay.ts): null when the relay gave no whole answer. */
+  collected(relay: string, wrapId: string, user: string): Promise<Found>;
   wait(ms: number): Promise<void>;
 }
 
@@ -60,9 +60,12 @@ interface UndoOf {
   where: Where;
   kept: UndoKey | undefined;
   retractIt(): Promise<void>;
-  collected(): Promise<boolean>;
+  collected(): Promise<Found>;
   forget(): Promise<void>;
 }
+
+/** A wrap of a save and the library it went to, whose kind 5 for it says the phone took it from that library's inbox. */
+type WentTo = Pick<Earlier, 'id' | 'user'>;
 
 const WAITING: Record<ReturnType<typeof whyNot>, Outcome> = { offline: 'waiting, offline', reach: 'waiting, couldn’t reach', blocked: 'waiting, blocked' };
 
@@ -336,10 +339,18 @@ export function background(b: Browser) {
     for (const e of earlier) await retract({ id: e.id, sha256: null }, hexToBytes(e.key), blossom, relay, ctx.device, b.net, b.now()).catch(() => undefined);
   }
 
-  /** Whether the phone took one of them: its deletion is signed by the library that wrap went to, as it read that inbox. */
-  async function collectedEarlier(earlier: Earlier[], relay: string): Promise<boolean> {
-    for (const e of earlier) if (await b.collected(relay, e.id, e.user)) return true;
-    return false;
+  /**
+   * Whether the phone took one of a save's wraps: its deletion is signed by the library that wrap went to, as it read
+   * that inbox. Found for one is found; otherwise a look the relay didn't answer whole leaves it unknown (null).
+   */
+  async function collectedAny(relay: string, wraps: WentTo[]): Promise<Found> {
+    let unknown = false;
+    for (const w of wraps) {
+      const found = await b.collected(relay, w.id, w.user);
+      if (found === true) return true;
+      unknown ||= found === null;
+    }
+    return unknown ? null : false;
   }
 
   /**
@@ -357,7 +368,7 @@ export function background(b: Browser) {
         if (!kept) throw new Error('no key');
         await retract({ id, sha256: kept.sha256 }, hexToBytes(kept.key), blossom, relay, ctx.device, b.net, b.now());
       },
-      collected: async () => (await b.collected(relay, id, ctx.pairing.user_pubkey)) || collectedEarlier(earlier, relay),
+      collected: () => collectedAny(relay, [{ id, user: ctx.pairing.user_pubkey }, ...earlier]),
       forget: async () => {
         undone.add(id);
         await b.session.remove(`undo:${id}`).catch(() => undefined);

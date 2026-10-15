@@ -46,9 +46,9 @@ async function checkMoves(): Promise<void> {
   if (!pairing || !defaults) return;
   const device = await deviceSigner(store, webCrypto);
   const since = ((await store.get<number>(KEYS.movesChecked)) ?? pairing.paired_at) - 172_800 - 300;
-  const wraps = await fetchWraps(defaults.operator.relay, device, since).catch(() => null);
-  if (!wraps) return;
-  const ack = await followMoves(device, wraps, pairing.user_pubkey);
+  const look = await fetchWraps(defaults.operator.relay, device, since).catch(() => null);
+  if (!look) return;
+  const ack = await followMoves(device, look.events, pairing.user_pubkey);
   if (ack) await applyMove(store, device, ack, now(), session, work.follow);
   await store.set(KEYS.movesChecked, now());
 }

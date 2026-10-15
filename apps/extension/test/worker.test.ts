@@ -17,6 +17,7 @@ import { ATTEMPTS_MAX, BLOB_KEEP_MAX, BLOBS_KEEP_MAX, changeQueue, dequeue, enqu
 import { ADDRESS_SURE_FIT_BYTES, AddressTooLongError, fetchNet, prepare, rumorBytes, timed, uploadTimeoutMs, WRAP_FRESH_FOR, type Net, type Pending } from '../src/save';
 import { KEYS, memoryStore, type Pairing, type Store } from '../src/store';
 import { toastCopy, type ToastState } from '../src/toastCopy';
+import type { Found } from '../src/undo';
 import { background, type Browser } from '../src/worker';
 
 const DEFAULTS: Defaults = { v: 1, operator: { relay: 'wss://relay.example', blossom: 'https://blossom.example', api: 'https://api.example' }, relays: ['wss://a.example', 'wss://b.example'], mirrors: ['https://m.example'] };
@@ -73,7 +74,7 @@ function net(o: { publish?: 'ok' | 'down'; retract?: 'ok' | 'refused'; hold?: Pr
 
 function harness(
   o: {
-    paired?: boolean; pairing?: Pairing; online?: boolean; net?: Net; collected?: boolean[]; store?: Store; session?: Store; alarmHold?: Promise<void>; toast?: Browser['toast'];
+    paired?: boolean; pairing?: Pairing; online?: boolean; net?: Net; collected?: Found[]; store?: Store; session?: Store; alarmHold?: Promise<void>; toast?: Browser['toast'];
     checkMovesSoon?: Browser['checkMovesSoon'];
     /** The phone's deletions on the relay, by wrap and library, in place of the answers in `collected`. */
     found?: Browser['collected'];
@@ -106,7 +107,8 @@ function harness(
       if (!on) alarm.cleared++;
     },
     checkMovesSoon: o.checkMovesSoon ?? (async () => undefined),
-    collected: o.found ?? (async () => answers.shift() ?? false),
+    // the relay's answers to Undo's looks for the phone's deletion, in turn; null is no answer, and past the last, not there
+    collected: o.found ?? (async () => (answers.length ? answers.shift()! : false)),
     wait: async () => undefined,
   };
   return { store, session, toasts, alarm, opened, clock, work: background(b) };
@@ -276,6 +278,24 @@ describe('Undo (F24, F40)', () => {
     expect((await history(h.store))[0]).toMatchObject({ outcome: 'undo: failed' });
     expect(await h.session.get(`undo:${id}`)).toBeDefined();
     expect(toastCopy({ ...h.toasts.at(-1)!, shortcut: null })).toMatchObject({ title: 'Couldn’t undo this save', mark: 'bad', timed: true });
+  });
+
+  test('looks the relay doesn’t answer whole can’t tell whether the phone has the save: Undo says it couldn’t, and keeps the key', async () => {
+    const n = net();
+    // the retraction went, but the relay, slow or gone, finished neither look with EOSE (relay.ts collected)
+    const h = harness({ net: n.net, collected: [null, null] });
+    await h.work.save(PAGE, 1, false);
+    const id = h.toasts[0].id!;
+    await h.work.undo(id, 1);
+    expect(n.published.filter((e) => e.kind === 5)).toHaveLength(1);
+    expect(h.toasts.at(-1)).toMatchObject({ kind: 'undofailed', hash: h.toasts[0].hash });
+    expect((await history(h.store))[0]).toMatchObject({ outcome: 'undo: failed' });
+    expect(await h.session.get(`undo:${id}`)).toBeDefined();
+    // the second look is the one that counts: one answered whole after a first that wasn't says the save is removed
+    const later = harness({ collected: [null, false] });
+    await later.work.save(PAGE, 1, false);
+    await later.work.undo(later.toasts[0].id!, 1);
+    expect(later.toasts.at(-1)!.kind).toBe('undone');
   });
 
   test('a key the session no longer holds still finds a save on the phone, or says Undo couldn’t', async () => {

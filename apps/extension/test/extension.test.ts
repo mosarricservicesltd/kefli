@@ -18,7 +18,7 @@ import { ATTEMPTS_MAX, BLOB_KEEP_MAX, changeQueue, dequeue, enqueue, failed, flu
 import { deliver, prepare, retract, withoutText, type Delivered, type Net, type Pending } from '../src/save';
 import { KEYS, memoryStore, type Pairing } from '../src/store';
 import { applyMove, followMoves } from '../src/move';
-import { SECOND_LOOK_MS, settleUndo } from '../src/undo';
+import { SECOND_LOOK_MS, settleUndo, type Found } from '../src/undo';
 import { markDelay, toastCopy } from '../src/toastCopy';
 import { debugText, history, HISTORY_MAX, record } from '../src/debug';
 
@@ -533,11 +533,11 @@ describe('following a move (contract 4.4 and 4.8)', () => {
 });
 
 describe('Undo (contract 4.4, decision 101)', () => {
-  const run = async (answers: boolean[]) => {
+  const run = async (answers: Found[]) => {
     const calls: string[] = [];
     const out = await settleUndo(
       async () => void calls.push('retract'),
-      async () => (calls.push('look'), answers.shift() ?? false),
+      async () => (calls.push('look'), answers.length ? answers.shift()! : false),
       async (ms) => void calls.push(`wait ${ms}`),
     );
     return { out, calls };
@@ -550,6 +550,13 @@ describe('Undo (contract 4.4, decision 101)', () => {
   });
   test('otherwise it is removed', async () => {
     expect((await run([false, false])).out).toBe('undone');
+  });
+  test('a second look the relay doesn’t answer whole can’t tell, so it is reported rather than removed (F40)', async () => {
+    await expect(run([false, null])).rejects.toThrow('no answer');
+    await expect(run([null, null])).rejects.toThrow('no answer');
+    // the second look is the later one: a deletion the first could have found, it finds too
+    expect((await run([null, false])).out).toBe('undone');
+    expect((await run([null, true])).out).toBe('onphone');
   });
   test('a refused retraction still finds the save on the phone, and is reported if it isn’t there', async () => {
     const refusing = async () => { throw new Error('blocked: deletes only a gift wrap of its own that this relay holds'); };

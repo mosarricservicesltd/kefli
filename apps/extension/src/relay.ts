@@ -1,6 +1,8 @@
 // Talking to the operator relay (extension spec 4): publishing an event, where OK true resolves and a refusal or ten
-// seconds without an answer rejects, and fetching the wraps addressed to the device. Both use connections held between
-// saves (relayPool.ts).
+// seconds without an answer rejects, and reading what it holds: the wraps addressed to the device, and the phone's
+// deletion of a save's wrap. Both use connections held between saves (relayPool.ts). A read is whole only once the
+// relay ends its answer with EOSE.
+import type { Filter } from 'nostr-tools/filter';
 import { Relay } from 'nostr-tools/relay';
 import type { LocalSigner, NostrEvent } from '../../../packages/protocol/src/signer';
 import { RelayPool } from './relayPool';
@@ -88,57 +90,99 @@ export async function publish(url: string, event: NostrEvent, device?: LocalSign
  */
 export const WRAPS_MAX = 100;
 
+/** A REQ's answer: the events that came, each once, and whether the relay ended it with EOSE before the read stopped. */
+export interface Answer {
+  events: NostrEvent[];
+  whole: boolean;
+  /** Why it ended: EOSE, the relay's CLOSED and its reason, so many events, or the time limit. */
+  why: string;
+}
+
+/** A read's limits: how long it may take, and how many events it keeps before it stops reading. */
+interface Limits {
+  ms: number;
+  most: number;
+}
+
 /**
- * The gift wraps addressed to the device key since a time (contract 4.4): the relay serves them only after NIP-42 AUTH by
- * that key, so a subscription it closes as auth-required authenticates and asks again. Resolves at the end of stored
- * events, with WRAPS_MAX of them, or with what has come after ten seconds. A wrap sent again is passed over before it is
- * parsed or its signature checked.
+ * The relay's answer to one REQ, ended by its EOSE, its CLOSED or the connection closing, `most` events, or `ms`; only
+ * EOSE ends it whole. nostr-tools' own wait for EOSE, 4.4 s from the REQ, ends a subscription as if the relay had sent
+ * EOSE however much was still to come, so it is set past `ms`, and run at once to an answer already settled when the
+ * answer ends any other way, so it is never left running. Read as whole, an answer cut at 4.4 s said the phone hadn't
+ * collected a save when its deletion was still coming (Undo then said Removed from Kefli of a save on the phone), and let
+ * a look for a move count as having read wraps it never had. An event sent again is passed over before it is parsed or
+ * its signature checked.
  */
-export async function fetchWraps(url: string, device: LocalSigner, since: number): Promise<NostrEvent[]> {
+function answer(relay: Relay, filters: Filter[], limits: Limits): Promise<Answer> {
+  return new Promise((settle) => {
+    const got = new Map<string, NostrEvent>();
+    let open = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // closed: nostr-tools has closed the subscription itself, at the relay's CLOSED or the connection's end
+    const end = (whole: boolean, why: string, closed = false) => {
+      if (!open) return;
+      open = false;
+      clearTimeout(timer);
+      if (!closed) sub.close();
+      if (!sub.eosed) sub.receivedEose();
+      settle({ events: [...got.values()], whole, why });
+    };
+    const sub = relay.subscribe(filters, {
+      eoseTimeout: limits.ms + 1_000,
+      alreadyHaveEvent: (id) => got.has(id),
+      onevent: (e) => {
+        got.set(e.id, e as NostrEvent);
+        if (got.size >= limits.most) end(false, `${limits.most} events`);
+      },
+      oneose: () => end(true, 'EOSE'),
+      // a relay's CLOSED may carry anything as its reason
+      onclose: (reason) => end(false, `closed: ${String(reason)}`, true),
+    });
+    timer = setTimeout(() => end(false, 'timeout'), limits.ms);
+  });
+}
+
+/** What is left of a deadline, in ms. */
+const left = (until: number) => Math.max(0, until - Date.now());
+
+/**
+ * A connection that sent nothing at all for a whole read is closed and let go, as one that doesn't answer a publish is,
+ * so the next read connects afresh rather than asking a socket the network dropped without a word.
+ */
+function heard(url: string, got: Answer): Answer {
+  if (got.why === 'timeout' && !got.events.length) pool.close(url);
+  return got;
+}
+
+/**
+ * The gift wraps addressed to the device key since a time (contract 4.4), and whether the relay finished its answer.
+ * The relay serves them only after NIP-42 AUTH by that key, so a subscription it closes as auth-required authenticates
+ * and asks again, all within ten seconds of connecting. An answer stopped at WRAPS_MAX, cut short by the relay or the
+ * connection, or unfinished after ten seconds keeps what came, but isn't whole, so the look doesn't count as having read
+ * its window (move.ts lookForMove).
+ */
+export async function fetchWraps(url: string, device: LocalSigner, since: number): Promise<Answer> {
   const relay = await pool.get(url);
+  const until = Date.now() + PUBLISH_TIMEOUT_MS;
   const sign = (evt: Parameters<LocalSigner['signEvent']>[0]) => device.signEvent(evt) as never;
   relay.onauth = sign;
-  const got = new Map<string, NostrEvent>();
-  let sub: { close(): void } | null = null;
-  try {
-    await within(
-      new Promise<void>((done) => {
-        const ask = () => {
-          sub = relay.subscribe([{ kinds: [1059], '#p': [device.pubkey()], since }], {
-            alreadyHaveEvent: (id) => got.has(id),
-            onevent: (e) => {
-              got.set(e.id, e as NostrEvent);
-              if (got.size >= WRAPS_MAX) done();
-            },
-            oneose: done,
-            // a relay's CLOSED may carry anything as its reason
-            onclose: (reason) => (String(reason).includes('auth-required') ? relay.auth(sign).then(ask, () => done()) : done()),
-          });
-        };
-        ask();
-      }),
-      PUBLISH_TIMEOUT_MS,
-    ).catch(() => undefined);
-  } finally {
-    (sub as { close(): void } | null)?.close();
-  }
-  return [...got.values()];
+  const filters = [{ kinds: [1059], '#p': [device.pubkey()], since }];
+  const first = heard(url, await answer(relay, filters, { ms: left(until), most: WRAPS_MAX }));
+  if (first.whole || !first.why.includes('auth-required')) return first;
+  const authed = await within(relay.auth(sign), left(until)).then(() => true, () => false);
+  return authed ? heard(url, await answer(relay, filters, { ms: left(until), most: WRAPS_MAX })) : first;
 }
 
 /**
  * Whether the phone has collected a save: it publishes a kind 5 for the wrap, signed by the user, once the save is in the
- * library (contract 4.4). Deletions are public, so no AUTH is needed. False when the relay can't be reached or doesn't
- * answer in time (F40).
+ * library (contract 4.4). Deletions are public, so no AUTH is needed. True once the relay sends one; false when it
+ * finishes its answer (EOSE) without one; null for no answer, when it can't be reached or doesn't finish within ten
+ * seconds, since the phone may have the save all the same (F40).
  */
-export async function collected(url: string, wrapId: string, user: string): Promise<boolean> {
-  return within(
-    pool.get(url).then((relay) => new Promise<boolean>((done) => {
-      let seen = false;
-      const sub = relay.subscribe([{ kinds: [5], authors: [user], '#e': [wrapId], limit: 1 }], {
-        onevent: () => void (seen = true),
-        oneose: () => (sub.close(), done(seen)),
-      });
-    })),
-    PUBLISH_TIMEOUT_MS,
-  ).catch(() => false);
+export async function collected(url: string, wrapId: string, user: string): Promise<boolean | null> {
+  const until = Date.now() + PUBLISH_TIMEOUT_MS;
+  const relay = await pool.get(url).catch(() => null);
+  if (!relay) return null;
+  const got = heard(url, await answer(relay, [{ kinds: [5], authors: [user], '#e': [wrapId], limit: 1 }], { ms: left(until), most: 1 }));
+  return got.events.length > 0 || (got.whole ? false : null);
 }

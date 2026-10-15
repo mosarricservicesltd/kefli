@@ -54,17 +54,28 @@ export const SECOND_LOOK_MS = 1500;
 
 export type UndoOutcome = 'undone' | 'onphone';
 
+/** What a look for the phone's deletion of a wrap found (relay.ts collected): it, not it, or null for no answer. */
+export type Found = boolean | null;
+
+/** Named, since the code gate's parser loses a function at a parameter typed as a function. */
+export type Retract = () => Promise<void>;
+export type Look = () => Promise<Found>;
+export type Wait = (ms: number) => Promise<void>;
+
 /**
  * The relay refuses the retraction once the phone has collected the save and deleted its wrap (contract 3.2: a kind 5
  * from an unregistered key may name only a wrap the relay holds), so a refusal still goes on to look; it is reported only
- * when the save isn't on the phone either.
+ * when the save isn't on the phone either. A second look the relay doesn't answer whole, unreachable or slow to finish,
+ * can't tell whether the phone has the save, so it is reported too, rather than as removed.
  */
-export async function settleUndo(retract: () => Promise<void>, collected: () => Promise<boolean>, wait: (ms: number) => Promise<void>): Promise<UndoOutcome> {
+export async function settleUndo(retract: Retract, collected: Look, wait: Wait): Promise<UndoOutcome> {
   let refused: unknown = null;
   await retract().catch((e: unknown) => void (refused = e));
-  if (await collected()) return 'onphone';
+  if ((await collected()) === true) return 'onphone';
   await wait(SECOND_LOOK_MS);
-  if (await collected()) return 'onphone';
+  const last = await collected();
+  if (last === true) return 'onphone';
   if (refused) throw refused;
+  if (last === null) throw new Error('no answer from the relay');
   return 'undone';
 }
