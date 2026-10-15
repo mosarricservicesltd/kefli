@@ -7,17 +7,19 @@
 // An accepted request becomes a save. Its HTML, when there is some, comes from the operator Blossom server only,
 // capped and checked against its sha256: Readability's content HTML, which the canonical Markdown conversion
 // (kefliMarkdown) turns into the save's text, with the title and the rest as the extension read them; a blob that can't be read is failed_blob and
-// tried again from wrap_json at each drain, for the save that drain made as it stands by then, while one the operator
-// answers 404 for is gone (v1.12) and one that can't be this capture is given up: either way the save fetches its page
-// at once. Only created, merged and unarchived queue delete_wrap, and with it the delete of the request's inbox blob
-// (v1.12); every other wrap is left, so a phone without the record yet can't remove a save another phone still
-// needs. A request whose save waits on its delete's Undo waits for the next drain.
+// tried again from wrap_json at each drain, for the save that drain made as it stands by then, and so is one the parser
+// couldn't convert because its renderer had gone, or whose taking failed part way once its save was made; past the
+// blob's 14 days the save fetches its page instead. One the operator answers 404 for is gone (v1.12) and one that
+// can't be this capture is given up: either way the save fetches its page at once. Only created, merged and
+// unarchived queue delete_wrap, and with it the delete of the request's inbox blob (v1.12); every other wrap is left,
+// so a phone without the record yet can't remove a save another phone still needs. A request whose save waits on its
+// delete's Undo waits for the next drain.
 //
 // RULED: a request naming another server for its HTML is taken without it, and the page is fetched instead, so a
 // save from a connected browser is never lost to a bad field.
 import {
-  KIND, SAVE_REQUEST_MAX_BYTES, UnwrapError, acceptSaveRequest, decryptText, eventBytes, opensWraps, unwrap, type DevicesRecord, type NostrEvent,
-  type Rumor, type SaveRequest, type Signer,
+  KIND, SAVE_REQUEST_MAX_BYTES, UnwrapError, acceptSaveRequest, decryptText, eventBytes, opensWraps, unwrap, withoutUserInfo, type DevicesRecord,
+  type NostrEvent, type Rumor, type SaveRequest, type Signer,
 } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { localRecord } from '../data/devices';
@@ -31,7 +33,7 @@ import { getCursor, setCursor } from '../data/sync';
 import { parsedOutcome, type PageOutcome, type ParserResult } from './page';
 import { settle, type PendingPorts } from './pending';
 import { PAGE, type Filter } from './sync';
-import { TooLarge, open } from '../net/http';
+import { TooLarge, open, serverHops } from '../net/http';
 
 /** The extension's 2 MB of HTML plus the GCM tag. */
 export const INBOX_MAX_BYTES = 2 * 1_048_576 + 16;
@@ -49,6 +51,8 @@ export type InboxPorts = Pick<PendingPorts, 'db' | 'now' | 'crypto' | 'stage' | 
   /** kefliMarkdown in the parser WebView (C§4.4). */
   markdown: (contentHtml: string, url: string) => Promise<ParserResult>;
   defaults: () => Promise<{ operator: { relay: string; blossom: string } }>;
+  /** The local stack's build (services/config.ts LOCAL_STACK), whose Blossom server a redirect may reach on loopback. */
+  localStack?: boolean;
 };
 
 export type InboxResult = Partial<Record<Outcome, number>>;
@@ -83,7 +87,10 @@ function readable(json: string): boolean {
   }
 }
 
-/** The parser port's answer when its WebView's renderer has gone, killed for memory or never loaded (page.ts). */
+/**
+ * The parser port's answer when its WebView's renderer has gone, killed for memory or never loaded: page.ts's own word
+ * for it, which a page's parse meets as a page that timed out.
+ */
 const RENDERER_GONE = 'renderer_gone';
 
 /**
@@ -93,15 +100,18 @@ const RENDERER_GONE = 'renderer_gone';
  * before sending HTML, so the browser's word stands for it. A conversion the parser refused for its size is too large,
  * as a page's is. Without them, a text too long was kept and refused at every upload, and one the derivation couldn't
  * take held its wrap for a week, its save at "Getting the text…". When the parser's renderer has gone, nothing about
- * the capture is known: this throws, as a part-way failure does, so the inbox reads it again at the next drain (take,
- * retake) rather than leaving the save without its text.
+ * the capture is known: it is offline, as a page whose renderer went is (page.ts), and the inbox keeps the capture to
+ * read again (textFromBlob). The HTML is converted at the page's address without a user name and password (ruling 8),
+ * as the save keeps it (data/inbox admit): at the address as sent, a relative link in the text took them, and the
+ * parse put them back on the save.
  */
-export async function fromBrowser(p: Pick<InboxPorts, 'markdown'>, r: SaveRequest, contentHtml: string): Promise<Exclude<PageOutcome, { kind: 'offline' }>> {
-  const m = await p.markdown(contentHtml, r.url).catch((): ParserResult => ({ ok: false, reason: 'error' }));
-  if (!m.ok && m.reason === RENDERER_GONE) throw new Error('the parser’s renderer has gone');
-  if (!m.ok) return { kind: 'failed', reason: m.reason === 'too_large' ? 'too_large' : 'not_readable', finalUrl: r.url };
+export async function fromBrowser(p: Pick<InboxPorts, 'markdown'>, r: SaveRequest, contentHtml: string): Promise<PageOutcome> {
+  const at = withoutUserInfo(r.url);
+  const m = await p.markdown(contentHtml, at).catch((): ParserResult => ({ ok: false, reason: 'error' }));
+  if (!m.ok && m.reason === RENDERER_GONE) return { kind: 'offline', timedOut: true };
+  if (!m.ok) return { kind: 'failed', reason: m.reason === 'too_large' ? 'too_large' : 'not_readable', finalUrl: at };
   const browser = { title: r.title, byline: r.byline, site: r.site, lang: r.lang, hero: r.hero, canonical: r.canonical };
-  return parsedOutcome({ ...m, ...browser, readerable: true }, r.url);
+  return parsedOutcome({ ...m, ...browser, readerable: true }, at);
 }
 
 /** How long the inbox blob's server has to send the whole blob, as for a text (F12). */
@@ -126,12 +136,15 @@ const refused = (status: number): BlobRead => (status === 404 ? GONE : status >=
 
 /**
  * The inbox blob's HTML, or why not. The deadline covers the whole body and the cap is counted as it streams
- * (net/http, F12), so a server that trickles or never ends can't hold the inbox.
+ * (net/http, F12), so a server that trickles or never ends can't hold the inbox. Its redirects are followed only as
+ * far as a hop may go (net/http serverHops), never into the phone's own network; one that would go there fails the
+ * read as a server not answering, and the capture is read again at the next drain.
  */
-export async function readBlob(p: Pick<InboxPorts, 'fetch' | 'crypto'>, html: NonNullable<SaveRequest['html']>): Promise<BlobRead> {
+export async function readBlob(p: Pick<InboxPorts, 'fetch' | 'crypto' | 'localStack'>, html: NonNullable<SaveRequest['html']>): Promise<BlobRead> {
   let blob: Uint8Array;
   try {
-    const o = await open(p.fetch, `${html.server.replace(/\/+$/, '')}/${html.sha256}`, { method: 'GET' }, INBOX_TIMEOUT_MS);
+    const url = `${html.server.replace(/\/+$/, '')}/${html.sha256}`;
+    const o = await open(p.fetch, url, { method: 'GET' }, INBOX_TIMEOUT_MS, serverHops(p.localStack === true));
     if (!o.res.ok) return (o.done(), refused(o.res.status));
     blob = await o.read(INBOX_MAX_BYTES);
   } catch (e) {
@@ -151,11 +164,28 @@ function pendingRow(db: SqlDb, owner: string, hash: string): Pending | undefined
 
 /**
  * What one drain learns as it goes: the connected-browsers record, read once; how many wraps it has opened; whether
- * the signer has stopped answering, and whether it has opened anything since it last didn't; and whether the Blossom
+ * the signer has stopped answering, and whether it has opened anything since it last didn't; whether the Blossom
  * server has stopped answering, after which the drain's other blobs wait for the next drain rather than each waiting
- * out the deadline.
+ * out the deadline; and whether the parser's renderer has gone, after which the drain's other captures wait unread, as
+ * the parser would refuse each of them the same way, one that never loads its bundle after 20 s.
  */
-type Drain = { devices: DevicesRecord; opens: number; waiting: boolean; answered: boolean; blobsDown: boolean };
+type Drain = { devices: DevicesRecord; opens: number; waiting: boolean; answered: boolean; blobsDown: boolean; parserGone: boolean };
+
+/** The request's inbox blob read, or DOWN unasked once this drain has found its server not answering; gone or bad, given up. */
+async function readCapture(p: InboxPorts, owner: string, hash: string, r: SaveRequest, drain: Drain): Promise<BlobRead> {
+  const read = drain.blobsDown ? DOWN : await readBlob(p, r.html!);
+  if (read.kind === 'failed' && read.down) drain.blobsDown = true;
+  if (read.kind === 'gone' || read.kind === 'bad') giveUpBlob(p.db, owner, hash);
+  return read;
+}
+
+/** The capture's text settled on its save; false, nothing settled, when the parser's renderer has gone (fromBrowser). */
+async function converted(p: InboxPorts, owner: string, item: Pending, r: SaveRequest, html: string): Promise<boolean> {
+  const text = await fromBrowser(p, r, html);
+  if (text.kind === 'offline') return false;
+  await settle(p, owner, item, text);
+  return true;
+}
 
 /**
  * The save's text from the request's inbox blob: what reading the blob gave, the save given its text when it brought
@@ -163,17 +193,33 @@ type Drain = { devices: DevicesRecord; opens: number; waiting: boolean; answered
  * trying again would only fetch the same bytes, up to 2 MB of them, at every drain for two weeks: either way the save
  * fetches its page at once, as a request without HTML does, rather than waiting out the blob's 14 days. One that
  * failed is tried again at the next drain, and once the server isn't answering, the drain's other blobs wait unasked.
- * A save deleted while its capture was read, its delete waiting on Undo, takes nothing from it (data/pending), so the
- * read counts as failed: the wrap is kept with its capture for the retry, which waits with the save (retake). Closed
- * then, with its capture deleted, it left a save shown again at "Getting the text…" for good.
+ * A capture the parser couldn't convert, its renderer gone (killed for memory, or never loaded), failed in the same
+ * way: kept and read again at each drain, and once its 14 days are past its save fetches its page instead (blobOrPage),
+ * so the save ends parsed or failed with its link. Thrown, as it was, it held its wrap a week, then the wrap was filed
+ * as someone else's message and its save stayed at "Getting the text…" for good; so did one whose taking failed part
+ * way once its save was made (a full disk at the stage, the database), which fails the same way now. A save deleted
+ * while its capture was read, its delete waiting on Undo, takes nothing from it (data/pending), so the read counts as
+ * failed: the wrap is kept with its capture for the retry, which waits with the save (retake). Closed then, with its
+ * capture deleted, it left a save shown again at "Getting the text…" for good.
  */
 async function textFromBlob(p: InboxPorts, owner: string, hash: string, r: SaveRequest, drain: Drain): Promise<BlobRead> {
-  const read = drain.blobsDown ? DOWN : await readBlob(p, r.html!);
-  if (read.kind === 'failed' && read.down) drain.blobsDown = true;
-  if (read.kind === 'gone' || read.kind === 'bad') giveUpBlob(p.db, owner, hash);
+  try {
+    return await captureText(p, owner, hash, r, drain);
+  } catch {
+    return FAILED;
+  }
+}
+
+/** The capture read and converted for its save (textFromBlob), which throws when a part of the phone fails part way. */
+async function captureText(p: InboxPorts, owner: string, hash: string, r: SaveRequest, drain: Drain): Promise<BlobRead> {
+  if (drain.parserGone) return FAILED;
+  const read = await readCapture(p, owner, hash, r, drain);
   if (read.kind !== 'html') return read;
   const item = pendingRow(p.db, owner, hash);
-  if (item) await settle(p, owner, item, await fromBrowser(p, r, read.html));
+  if (item && !(await converted(p, owner, item, r, read.html))) {
+    drain.parserGone = true;
+    return FAILED;
+  }
   return waitsOnDelete(p.db, owner, hash) ? FAILED : read;
 }
 
@@ -409,9 +455,10 @@ function notOurs(p: InboxPorts, owner: string, w: NostrEvent): Outcome {
 /**
  * One wrap opened and judged (4.7), or held for the next drain. The signer couldn't answer (out of sight, timed out,
  * declined): the wrap waits, and unless the signer is still answering (stillAnswering), the drain's other wraps wait
- * unasked. Taking it failed part way (a signer, the network, the database), or its save waits on its delete's Undo:
- * it is tried again at the next drain. Either way, one still waiting a week after its first try is filed as not ours,
- * and so is one this key doesn't open.
+ * unasked. Taking it failed part way before its save was made (the network, the database), or its save waits on its
+ * delete's Undo: it is tried again at the next drain; once the save is made, a capture that fails part way is a blob
+ * that failed (textFromBlob). Either way, one still waiting a week after its first try is filed as not ours, and so is
+ * one this key doesn't open.
  */
 async function openOne(p: InboxPorts, owner: string, w: NostrEvent, blossom: string, drain: Drain): Promise<Outcome | typeof HELD> {
   drain.opens++;
@@ -493,7 +540,7 @@ export async function drainInbox(p: InboxPorts, owner: string): Promise<InboxRes
   const out: InboxResult = {};
   const d = await p.defaults();
   const relay = d.operator.relay;
-  const drain: Drain = { devices: localRecord(p.db, owner), opens: 0, waiting: false, answered: false, blobsDown: false };
+  const drain: Drain = { devices: localRecord(p.db, owner), opens: 0, waiting: false, answered: false, blobsDown: false, parserGone: false };
   await retryBlobs(p, owner, d.operator.blossom, out, drain);
   const startedAt = p.now();
   const read = await windowSince(p, relay, owner, startedAt);

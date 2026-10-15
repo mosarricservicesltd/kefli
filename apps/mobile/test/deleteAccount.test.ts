@@ -193,6 +193,7 @@ describe('a nostr user’s lists', () => {
 });
 
 import { signDeletion } from '../src/services/deleteAccount';
+import { settleUserLists } from '../src/services/nostrSignIn';
 import { readRelayList, readServerList } from '@kefli/protocol';
 
 describe('a nostr user’s deletion (contract 4.7)', () => {
@@ -207,6 +208,74 @@ describe('a nostr user’s deletion (contract 4.7)', () => {
     expect(readRelayList(lists.find((e) => e.kind === 10002)!)).toEqual([{ url: 'wss://mine', read: true, write: false }]);
     expect(readServerList(lists.find((e) => e.kind === 10063)!)).toEqual(['https://my.blossom']);
     expect(w.sent.some((s) => s.event.kind === 5 && s.event.tags.some((t) => t[1]?.startsWith('10002:')))).toBe(false);
+  });
+
+  /** A nostr user signed in with Keep backup copies on, their lists as their other apps wrote them, read whole (C§3.1). */
+  async function signedIn(w: ReturnType<typeof world>, relays: string[][], servers: string[][], at = 500) {
+    w.db.run('DELETE FROM relays');
+    w.db.run('DELETE FROM servers');
+    w.db.run("UPDATE identities SET provider = 'nip55'");
+    const relayList = await w.p.signer.signEvent({ kind: 10002, created_at: at, tags: relays, content: '' });
+    const serverList = await w.p.signer.signEvent({ kind: 10063, created_at: at, tags: servers, content: '' });
+    settleUserLists(w.db, 90, w.pk, D, { relays: readRelayList(relayList), servers: readServerList(serverList), known: true, relayList, serverList }, true);
+  }
+
+  test('their lists are republished whole, past what Kefli uses of them, without Kefli’s relay, server and the defaults it added', async () => {
+    const w = world();
+    const relays = [
+      ...Array.from({ length: 60 }, (_, i) => (i % 7 === 3 ? ['r', `wss://r${i}.example`, 'read'] : ['r', `wss://r${i}.example`])),
+      ['r', 'wss://r60.example', 'outbox'], ['alt', 'relay list'],
+    ];
+    const servers = Array.from({ length: 55 }, (_, i) => ['server', `https://s${i}.example`]);
+    // their list names Kefli's second default relay itself, which Kefli didn't add and which stays
+    await signedIn(w, [...relays, ['r', 'ws://b', 'write']], servers);
+    const signed = await signDeletion(w.p);
+    const relayList = signed.lists.find((e) => e.kind === 10002)!;
+    const serverList = signed.lists.find((e) => e.kind === 10063)!;
+    expect(relayList.tags).toEqual([...relays, ['r', 'ws://b', 'write']]);
+    expect(serverList.tags).toEqual(servers);
+    // dated after the lists they replace, whatever this phone's clock says (C§3.1)
+    expect([relayList.created_at, serverList.created_at]).toEqual([501, 501]);
+  });
+
+  test('the newest lists on the relays are read first, so what they added in another app since the last sync stays theirs', async () => {
+    const w = world();
+    await signedIn(w, [['r', 'wss://mine']], [['server', 'https://my.blossom']]);
+    // since this phone last synced, they added a relay and a server in another app
+    const newer = [
+      await w.p.signer.signEvent({ kind: 10002, created_at: 900, tags: [['r', 'wss://mine'], ['r', 'wss://new.example', 'read']], content: '' }),
+      await w.p.signer.signEvent({ kind: 10063, created_at: 900, tags: [['server', 'https://my.blossom'], ['server', 'https://new.blossom']], content: '' }),
+    ];
+    const asked: string[] = [];
+    const p: DelPorts = {
+      ...w.p,
+      query: async (relay, filters) => {
+        asked.push(relay);
+        return filters[0].kinds.includes(10002) && relay === 'ws://idx' ? newer : [];
+      },
+    };
+    const signed = await signDeletion(p);
+    // rewritten from the list held, as it was, the new relay and server went from the lists their other apps share
+    expect(signed.lists.find((e) => e.kind === 10002)!.tags).toEqual([['r', 'wss://mine'], ['r', 'wss://new.example', 'read']]);
+    expect(signed.lists.find((e) => e.kind === 10063)!.tags).toEqual([['server', 'https://my.blossom'], ['server', 'https://new.blossom']]);
+    expect(signed.lists.map((e) => e.created_at)).toEqual([901, 901]);
+    // the relays they read from now are read for saves too
+    expect(asked).toContain('wss://new.example');
+    // a relay that doesn't answer the read stops nothing: the lists held are rewritten
+    const quiet = world();
+    await signedIn(quiet, [['r', 'wss://mine']], [['server', 'https://my.blossom']]);
+    const down = await signDeletion({ ...quiet.p, query: async () => Promise.reject(new Error('down')) });
+    expect(down.lists.map((e) => e.tags)).toEqual([[['r', 'wss://mine']], [['server', 'https://my.blossom']]]);
+  });
+
+  test('a list of theirs too long for one event is left as it is; the deletion and the other list go on', async () => {
+    const w = world();
+    const huge = Array.from({ length: 1000 }, (_, i) => ['r', `wss://relay-number-${i}.example`]);
+    await signedIn(w, huge, [['server', 'https://my.blossom']]);
+    const signed = await signDeletion(w.p);
+    expect(signed.lists.map((e) => e.kind)).toEqual([10063]);
+    expect(signed.lists[0].tags).toEqual([['server', 'https://my.blossom']]);
+    expect(signed.items.length).toBeGreaterThan(0);
   });
 
   test('declined in their app, nothing is sent and nothing deleted', async () => {

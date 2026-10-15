@@ -12,14 +12,14 @@
 //   3. the phone: the key file, Block Store, the database and the files.
 // Each step's result is kept in a delete_account job, so a deletion cut short resumes where it stopped.
 import {
-  DEVICES_D, ITEM_D_PREFIX, KIND, LIBRARY_KEY_D, T_TAG, buildDeletions, buildRelayList, buildServerList, deleteBlob, httpAuth, readItemEvent,
-  type CryptoPort, type NostrEvent, type Signer,
+  DEVICES_D, EventTooLargeError, ITEM_D_PREFIX, KIND, LIBRARY_KEY_D, T_TAG, buildDeletions, buildRelayList, buildServerList, deleteBlob, httpAuth,
+  readItemEvent, signWithinCeiling, type CryptoPort, type NostrEvent, type Signer,
 } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { deletesOwed, itemAddresses, newestVersion } from '../data/libraryKey';
-import { relayEntries } from '../data/lists';
+import { bare, indexerRelays, nextListTime, relayEntries, relayListTags, serverListTags } from '../data/lists';
 import type { RelayAnswer } from './send';
-import { pageStream, type Filter } from './sync';
+import { pageStream, takeNewerLists, type Filter } from './sync';
 
 export type DelPorts = {
   db: SqlDb;
@@ -68,7 +68,6 @@ const host = (u: string) => {
     return u;
   }
 };
-const trim = (u: string) => u.replace(/\/+$/, '');
 
 /**
  * The servers step 2 asks: other write relays in the 10002, and the other Blossom servers named in a save's
@@ -76,11 +75,11 @@ const trim = (u: string) => u.replace(/\/+$/, '');
  */
 export function deleteTargets(db: SqlDb, owner: string, operator: { relay: string; blossom: string }): Target[] {
   const relays = db.all<{ url: string; source: string }>("SELECT url, source FROM relays WHERE owner = ? AND write = 1 AND source != 'indexer' ORDER BY rowid", owner)
-    .filter((r) => trim(r.url) !== trim(operator.relay));
+    .filter((r) => bare(r.url) !== bare(operator.relay));
   const named = db.all<{ text_servers: string }>('SELECT text_servers FROM items WHERE owner = ? AND text_servers IS NOT NULL', owner)
     .flatMap((r) => JSON.parse(r.text_servers) as string[]);
-  const ownServers = new Set(db.all<{ url: string }>("SELECT url FROM servers WHERE owner = ? AND role = 'user'", owner).map((s) => trim(s.url)));
-  const servers = [...new Set(named.map(trim))].filter((u) => u !== trim(operator.blossom));
+  const ownServers = new Set(db.all<{ url: string }>("SELECT url FROM servers WHERE owner = ? AND role = 'user'", owner).map((s) => bare(s.url)));
+  const servers = [...new Set(named.map(bare))].filter((u) => u !== bare(operator.blossom));
   const seen = new Set<string>();
   return [
     ...relays.filter((r) => !seen.has(r.url) && seen.add(r.url)).map((r) => ({ url: r.url, kind: 'relay' as const, host: host(r.url), own: r.source === 'user' })),
@@ -191,23 +190,62 @@ async function listDeletion(p: DelPorts): Promise<NostrEvent> {
 }
 
 /**
+ * A list's tags without the entries of name the operator's url or a row Kefli added (kefli) names: everything else as
+ * the list is sent from here, tag for tag (data/lists relayListTags, serverListTags).
+ */
+function without(tags: string[][], name: string, operator: string, kefli: Set<string>): string[][] {
+  return tags.filter((t) => t[0] !== name || (bare(t[1] ?? '') !== bare(operator) && !kefli.has(bare(t[1] ?? ''))));
+}
+
+/** One rewritten list, signed, or null when nothing of theirs is left in it, or it is too long for one event (C§3.3). */
+async function rewritten(p: DelPorts, kind: number, tags: string[][], name: string, at: number): Promise<NostrEvent | null> {
+  if (!tags.some((t) => t[0] === name)) return null;
+  try {
+    return await signWithinCeiling(p.signer, { kind, created_at: at, tags, content: '' });
+  } catch (e) {
+    if (e instanceof EventTooLargeError) return null;
+    throw e;
+  }
+}
+
+/**
+ * A nostr user's newest 10002 and 10063 on the indexer and their relays, taken in as the list send takes them just
+ * before it builds its own (C§3.1, send.ts readNewerLists), so the deletion's rewrite starts from them: from the lists
+ * held alone, a relay or server they added in another app since this phone last synced went from the lists their other
+ * apps share. Read before the saves are, so a relay they read from now is read for saves too. A relay that doesn't
+ * answer adds nothing, and with none answering the lists held are rewritten.
+ */
+async function takeNewestLists(p: DelPorts, owner: string): Promise<void> {
+  const query = p.query;
+  if (!query) return;
+  const relays = [...new Set([...p.defaults.indexer, ...indexerRelays(p.db, owner), ...relayEntries(p.db, owner).map((r) => r.url)])];
+  const kinds = [KIND.relayList, KIND.serverList];
+  const copies = await Promise.all(relays.map((r) => query(r, [{ kinds, authors: [owner] }]).catch((): NostrEvent[] => [])));
+  takeNewerLists(p.db, owner, copies.flat(), kinds, p.now());
+}
+
+/**
  * A nostr user's lists (C§4.7): never deleted, since their other apps share them, but republished without the
  * operator's relay and Blossom server, even where they listed these themselves (F32), and without any default this
- * phone added. RULED: a list with nothing of theirs left in it (Kefli made it, finding none) is left as it is,
- * neither emptied nor deleted.
+ * phone added (its rows added_by_app). Each starts from the list as Kefli sends it, the list held entry for entry with
+ * Kefli's changes (relayListTags, serverListTags), so every entry of theirs stays in its place with its marker, those
+ * past the LIST_MAX Kefli uses and the tags it doesn't read among them; rebuilt from the tables, as it was, a list of
+ * theirs was cut to what Kefli used. It is dated after the lists it replaces, whatever this phone's clock says (C§3.1).
+ * RULED: a list with nothing of theirs left in it (Kefli made it, finding none) is left as it is, neither emptied nor
+ * deleted; and so is one too long for one event, as the list sends leave it (send.ts signList), since one cut to fit
+ * would lose some of their entries.
  */
 async function listRewrites(p: DelPorts): Promise<NostrEvent[]> {
   const pk = p.signer.pubkey();
   const op = p.defaults.operator;
-  const relays = p.db.all<{ url: string; read: number; write: number }>("SELECT url, read, write FROM relays WHERE owner = ? AND source != 'indexer' AND added_by_app = 0 ORDER BY rowid", pk)
-    .filter((r) => trim(r.url) !== trim(op.relay))
-    .map((r) => ({ url: r.url, read: !!r.read, write: !!r.write }));
-  const servers = p.db.all<{ url: string }>('SELECT url FROM servers WHERE owner = ? AND added_by_app = 0 AND in_10063 = 1 ORDER BY rowid', pk)
-    .map((r) => r.url).filter((u) => trim(u) !== trim(op.blossom));
-  const out: NostrEvent[] = [];
-  if (relays.length) out.push(await buildRelayList(p.signer, relays, p.now()));
-  if (servers.length) out.push(await buildServerList(p.signer, servers, p.now()));
-  return out;
+  const relays = new Set(p.db.all<{ url: string }>("SELECT url FROM relays WHERE owner = ? AND source != 'indexer' AND added_by_app = 1", pk).map((r) => bare(r.url)));
+  const servers = new Set(p.db.all<{ url: string }>('SELECT url FROM servers WHERE owner = ? AND added_by_app = 1', pk).map((r) => bare(r.url)));
+  const at = nextListTime(p.db, pk, p.now());
+  const lists = [
+    await rewritten(p, KIND.relayList, without(relayListTags(p.db, pk), 'r', op.relay, relays), 'r', at),
+    await rewritten(p, KIND.serverList, without(serverListTags(p.db, pk), 'server', op.blossom, servers), 'server', at),
+  ];
+  return lists.filter((e): e is NostrEvent => e !== null);
 }
 
 /**
@@ -229,6 +267,7 @@ export type Signed = { wraps: NostrEvent[]; items: NostrEvent[]; lists: NostrEve
 export async function signDeletion(p: DelPorts): Promise<Signed> {
   const owner = p.signer.pubkey();
   const nostr = (p.db.get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local') !== 'local';
+  if (nostr) await takeNewestLists(p, owner);
   const held = allDs(p.db, owner);
   const remote = await onRelays(p, owner, new Set(held));
   const wraps = await wrapDeletions(p, owner);
@@ -270,7 +309,7 @@ async function stepOperator(p: DelPorts, owner: string, signed: Signed): Promise
   const shas = allBlobs(p, owner, signed);
   const cleared = reached && (await withinMinute(p, () => deleteBlobs(p, op.blossom, shas)));
   if (!cleared) return false;
-  const url = `${trim(op.api)}/account`;
+  const url = `${bare(op.api)}/account`;
   return withinMinute(p, async () => {
     const res = await p.fetch(url, { method: 'DELETE', headers: { Authorization: await httpAuth(p.signer, url, 'DELETE', null, p.crypto) } });
     return res.ok || res.status === 404;

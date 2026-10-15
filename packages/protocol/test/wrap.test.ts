@@ -2,7 +2,7 @@ import { verifyEvent } from 'nostr-tools/pure';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import {
   acceptPairAck, EventTooLargeError, LocalSigner, UnwrapError, WRAP_BACKDATE_MAX, acceptSaveRequest, browserSavedAt,
-  buildDevicesEvent, checkOffer, derivePairCode, deviceProofTemplate, giftWrap, mergeDevices, newPairCode, nip44Length, nobleSecp, openOffer,
+  buildDevicesEvent, checkOffer, derivePairCode, deviceProofTemplate, giftWrap, itemHash, mergeDevices, newPairCode, nip44Length, nobleSecp, openOffer,
   opensWraps, proofHolds, readDevicesEvent, readPairCode, releaseTemplate, sealOffer, signStatement, signedSize, statementHolds, unwrap,
   wrapPairAck, wrapSaveRequest,
 } from '../src';
@@ -168,6 +168,30 @@ describe('accepting a save request (C§4.4)', () => {
       o = await open({ ...request(), url });
       expect(acceptSaveRequest(o.rumor, o.seal, devices, BLOSSOM)).toEqual({ ok: false, reason: 'malformed' });
     }
+  });
+
+  test('a canonical is kept only as the phone’s own parse keeps one: from the page’s own site, without user info, none past 2,048', async () => {
+    const { device, user, devices } = await setup();
+    const accepted = async (over: Partial<SaveRequest>) => {
+      const o = await unwrap(user, (await wrapSaveRequest(device, user.pubkey(), 'u', request(over), NOW)).wrap);
+      const v = acceptSaveRequest(o.rumor, o.seal, devices, BLOSSOM);
+      if (!v.ok) throw new Error(v.reason);
+      return v.request;
+    };
+    const amp = 'https://amp.news.example/2026/10/story';
+    const story = 'https://news.example/2026/10/story';
+    expect((await accepted({ url: amp, canonical: story })).canonical).toBe(story);
+    // another site's, from an AMP page, which would otherwise take that site's address (ruling 11)
+    expect((await accepted({ url: 'https://amp.evil.example/2026/10/story', canonical: story })).canonical).toBeNull();
+    // no user name or password is kept (ruling 8)
+    expect((await accepted({ url: amp, canonical: 'https://user:hunter2@news.example/2026/10/story' })).canonical).toBe(story);
+    // past 2,048 characters it is left out, as the phone's parse leaves out a page's, so the AMP page is the one save
+    // whether it was shared or saved in a browser
+    const long = `${story}?id=${'q'.repeat(2_100)}`;
+    const r = await accepted({ url: amp, canonical: long });
+    expect(r.canonical).toBeNull();
+    expect(itemHash(r.url, r.canonical)).toBe(itemHash(amp));
+    expect((await accepted({ url: amp, canonical: long.slice(0, 2_048) })).canonical).toBe(long.slice(0, 2_048));
   });
 
   test('another app’s message is left alone', async () => {

@@ -8,7 +8,7 @@
 import { httpAuth, type CryptoPort, type Signer } from '@kefli/protocol';
 import { forgetFigures, recordFigures, type Check } from '../data/account';
 import type { SqlDb } from '../data/db';
-import { open } from '../net/http';
+import { open, serverHops } from '../net/http';
 
 export type AccountPorts = {
   db: SqlDb;
@@ -20,6 +20,8 @@ export type AccountPorts = {
   signer: () => Promise<Signer | null>;
   fetch: typeof fetch;
   crypto: CryptoPort;
+  /** The local stack's build (services/config.ts LOCAL_STACK), whose API a redirect may reach on loopback. */
+  localStack?: boolean;
 };
 
 /**
@@ -46,10 +48,14 @@ function parse(text: string): unknown {
   }
 }
 
+/**
+ * The ask, its redirects followed only as far as a hop may go (net/http serverHops), never into the phone's own
+ * network, and its NIP-98 header sent to no other origin; one that would go further fails the check.
+ */
 async function ask(p: AccountPorts, signer: Signer): Promise<Answer> {
   const url = `${await p.api()}/account`;
   const auth = await httpAuth(signer, url, 'GET', null, p.crypto, p.now());
-  const o = await open(p.fetch, url, { method: 'GET', headers: { Authorization: auth } }, ACCOUNT_TIMEOUT_MS);
+  const o = await open(p.fetch, url, { method: 'GET', headers: { Authorization: auth } }, ACCOUNT_TIMEOUT_MS, serverHops(p.localStack === true));
   return { status: o.res.status, body: parse(new TextDecoder().decode(await o.read(MAX_BYTES))) };
 }
 

@@ -6,7 +6,7 @@
 import { KIND, bookmarkSaves, newest, probeSigner, readRelayList, readServerList, type NostrEvent, type RelayEntry, type Signer } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { addressFits } from '../data/saves';
-import { adoptUserLists, confirmedAbsent, markListsSettled, type DefaultsLike } from '../data/lists';
+import { adoptUserLists, confirmedAbsent, markListsSettled, recordList, type DefaultsLike } from '../data/lists';
 import { queueRecord } from '../data/devices';
 import type { Filter } from './sync';
 
@@ -17,7 +17,20 @@ export type SignInPorts = {
   query: (relay: string, filters: Filter[]) => Promise<NostrEvent[]>;
 };
 
-export type UserLists = { relays: RelayEntry[] | null; servers: string[] | null; known: boolean };
+/**
+ * The person's lists as read: their entries, as Kefli uses them (at most LIST_MAX of each), null for a list not found,
+ * and the newest copies themselves (relayList, serverList), every entry and tag as their other apps wrote them, which
+ * are kept as the lists held (settleUserLists), so the first lists Kefli sends start from them with no second read.
+ */
+export type UserLists = {
+  relays: RelayEntry[] | null; servers: string[] | null; known: boolean; relayList?: NostrEvent | null; serverList?: NostrEvent | null;
+};
+
+/**
+ * The furthest past this phone's clock a list read here may be dated and still be kept as the list held: the day
+ * sync's read allows another device's clock (services/sync.ts SKEW, notYet), which imports this module.
+ */
+const HELD_AHEAD = 86_400;
 
 /** The newest 10002 and 10063 on the indexer and default relays, and whether a missing one is confirmed absent. */
 export async function readUserLists(p: SignInPorts, pubkey: string): Promise<UserLists> {
@@ -34,6 +47,7 @@ export async function readUserLists(p: SignInPorts, pubkey: string): Promise<Use
     relays: relayList ? readRelayList(relayList) : null,
     servers: serverList ? readServerList(serverList) : null,
     known: (!!relayList || absent) && (!!serverList || absent),
+    relayList, serverList,
   };
 }
 
@@ -64,10 +78,19 @@ export async function checkSignIn(p: SignInPorts, signer: Signer): Promise<Check
 
 /**
  * The lists once known (4.6): kept, with Kefli's copies added when the switch is on, or the default set when
- * confirmed absent; published only when Kefli changed them. Returns false while still unknown.
+ * confirmed absent; published only when Kefli changed them. The copies read are kept whole as the lists held
+ * (recordList), so the 10002 and 10063 sent from here are theirs entry for entry (data/lists relayListTags): kept as
+ * parsed alone, at most LIST_MAX entries each, the first publish waited for a second read of every relay to bring the
+ * lists back, and stayed queued while a relay that held them didn't answer. A copy dated more than HELD_AHEAD past
+ * this phone's clock gives its entries but isn't kept as held, as sync's read leaves it to wait for its time: kept, it
+ * dated every list sent from here after it (nextListTime), which the relays that check dates refuse, and no list
+ * another app sent later was ever newer. Returns false while still unknown.
  */
 export function settleUserLists(db: SqlDb, now: number, owner: string, d: DefaultsLike, lists: UserLists, keepCopies: boolean): boolean {
   if (!lists.known) return false;
+  for (const e of [lists.relayList, lists.serverList]) {
+    if (e && e.created_at <= now + HELD_AHEAD) recordList(db, owner, e.kind, e.id, e.created_at, JSON.stringify(e));
+  }
   if (adoptUserLists(db, owner, d, lists.relays, lists.servers, keepCopies)) queueRecord(db, now, owner);
   markListsSettled(db, now, owner);
   return true;

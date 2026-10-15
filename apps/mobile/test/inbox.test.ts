@@ -816,8 +816,8 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
       if (refuse-- > 0) throw new Error('disk full');
       return stage(sha, bytes);
     };
-    // one retry stays as it was, the other and the new wrap go on
-    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 2 });
+    // one retry is kept as a blob that failed, the other and the new wrap go on
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 2, failed_blob: 1 });
     const left = w.db.all<{ hash: string }>("SELECT hash FROM inbox_seen WHERE outcome = 'failed_blob'");
     expect(left).toHaveLength(1);
     expect(w.item(left[0].hash)?.text_state).toBe('fetching');
@@ -827,30 +827,63 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     expect(['a', 'b'].map((p) => w.item(itemHash(`https://example.com/${p}`))?.text_state)).toEqual(['cached', 'cached']);
   });
 
-  test('a new wrap whose taking fails part way waits for the next drain, and is filed as not ours after a week (F3)', async () => {
+  test('a new wrap whose taking fails part way before its save is made waits for the next drain, and is filed as not ours after a week (F3)', async () => {
     const w = world();
-    const { html } = await w.withHtml('<h1>Full disk</h1>');
-    await w.send(w.request({ html }));
-    const stage = w.ports.stage;
-    w.ports.stage = () => {
-      throw new Error('disk full');
+    await w.send(w.request({ html: (await w.withHtml('<h1>No targets</h1>')).html }));
+    const targets = w.ports.targets;
+    w.ports.targets = async () => {
+      throw new Error('database locked');
     };
     expect(await drainInbox(w.ports, w.owner)).toEqual({});
     expect(w.db.get("SELECT 1 FROM inbox_seen WHERE outcome != 'waiting'")).toBeUndefined();
     expect(w.db.get("SELECT 1 FROM sync_cursors WHERE stream = 'inbox'")).toBeUndefined();
-    w.ports.stage = stage;
-    expect(await drainInbox(w.ports, w.owner)).toEqual({ merged: 1 });
+    expect(w.item(itemHash('https://example.com/a'))).toBeUndefined();
+    w.ports.targets = targets;
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
     expect(w.item(itemHash('https://example.com/a'))?.text_state).toBe('cached');
 
     const late = world();
     await late.send(late.request({ html: (await late.withHtml('<h1>Never</h1>')).html }));
-    late.ports.stage = () => {
-      throw new Error('disk full');
+    late.ports.targets = async () => {
+      throw new Error('database locked');
     };
     expect(await drainInbox(late.ports, late.owner)).toEqual({});
     late.tick(8 * 86_400);
     expect(await drainInbox(late.ports, late.owner)).toEqual({ ignored_foreign: 1 });
     expect(late.db.get("SELECT 1 AS n FROM sync_cursors WHERE stream = 'inbox'")).toEqual({ n: 1 });
+  });
+
+  test('a capture whose taking fails part way once its save is made is a blob that failed: read again, then its page fetched', async () => {
+    const w = world();
+    await w.send(w.request({ html: (await w.withHtml('<h1>Full disk</h1>')).html }));
+    const stage = w.ports.stage;
+    w.ports.stage = () => {
+      throw new Error('disk full');
+    };
+    // the save is made and waits for its text; the capture is kept to be read again, so the cursor moves on
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_blob: 1 });
+    expect(w.item(itemHash('https://example.com/a'))?.text_state).toBe('fetching');
+    expect(w.db.get("SELECT 1 AS n FROM sync_cursors WHERE stream = 'inbox'")).toEqual({ n: 1 });
+    w.ports.stage = stage;
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    expect(w.item(itemHash('https://example.com/a'))?.text_state).toBe('cached');
+
+    // a disk that keeps refusing: past the week a wrap may wait, it is still this save's capture, never someone else's
+    // message, and once its 14 days are past the save fetches its page, rather than staying at "Getting the text…"
+    const late = world();
+    await late.send(late.request({ html: (await late.withHtml('<h1>Never</h1>')).html }));
+    late.ports.stage = () => {
+      throw new Error('disk full');
+    };
+    expect(await drainInbox(late.ports, late.owner)).toEqual({ failed_blob: 1 });
+    late.tick(8 * 86_400);
+    expect(await drainInbox(late.ports, late.owner)).toEqual({ failed_blob: 1 });
+    expect(late.item(itemHash('https://example.com/a'))?.text_state).toBe('fetching');
+    late.tick(7 * 86_400);
+    expect(await drainInbox(late.ports, late.owner)).toEqual({ created: 1 });
+    expect(late.item(itemHash('https://example.com/a'))?.text_state).toBe('queued');
+    expect(pendingParses(late.db, late.owner).map((p) => p.url)).toEqual(['https://example.com/a']);
+    expect(late.ops()).toContain('delete_wrap');
   });
 
   test("a relay that can't be reached leaves the cursor where it was, and the retries still run", async () => {
@@ -896,6 +929,24 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
     expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
     expect(w.cursor()).toBe(w.now());
     expect(w.db.get('SELECT title, lang, canonical, hero, saved_at FROM items')).toEqual({ title: null, lang: null, canonical: null, hero: null, saved_at: w.now() });
+  });
+
+  test('a request whose address holds a user name and password is saved without them, its text read at that address', async () => {
+    const w = world();
+    const at: string[] = [];
+    const markdown = w.ports.markdown;
+    w.ports.markdown = async (html, url) => (at.push(url), markdown(html, url));
+    const { html } = await w.withHtml('<h1>Behind a login</h1>');
+    await w.send(w.request({ url: 'https://user:hunter2@example.com/a', html }));
+    await w.send(w.request({ url: 'https://me@example.com/b', html: null }));
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 2 });
+    expect(w.db.all('SELECT url, shared_url, text_state FROM items ORDER BY url')).toEqual([
+      { url: 'https://example.com/a', shared_url: 'https://example.com/a', text_state: 'cached' },
+      { url: 'https://example.com/b', shared_url: 'https://example.com/b', text_state: 'queued' },
+    ]);
+    // the browser's HTML is converted at the address without them, so no link in its text resolves to one with them
+    expect(at).toEqual(['https://example.com/a']);
+    expect(pendingParses(w.db, w.owner).map((p) => p.url)).toEqual(['https://example.com/b']);
   });
 
   test('a request whose address isn’t a link is failed_parse at once, rather than tried for a week', async () => {
@@ -960,7 +1011,8 @@ describe('the inbox (mobile spec 4.7, contract 4.4)', () => {
       return targets();
     };
     await w.send(w.request({ url: 'https://example.com/b' }));
-    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    // the retry is kept as a blob that failed again, and the new save arrives
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1, failed_blob: 1 });
     expect(w.item(itemHash('https://example.com/b'))).toBeDefined();
     expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
     expect(w.item(itemHash('https://example.com/a'))?.text_state).toBe('cached');
@@ -1291,13 +1343,61 @@ describe('the browser’s HTML takes the guards a parsed page’s text takes (C�
     const markdown = w.ports.markdown;
     w.ports.markdown = async (html, url) => (gone ? { ok: false, reason: 'renderer_gone' } : markdown(html, url));
     await capture(w);
-    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_blob: 1 });
     expect(textOf(w)).toEqual({ text_state: 'fetching', fail_reason: null });
     gone = false;
     w.tick(60);
-    expect(await drainInbox(w.ports, w.owner)).toEqual({ merged: 1 });
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
     expect(textOf(w)).toEqual({ text_state: 'cached', fail_reason: null });
     expect(w.texts.get(hash)).toContain('# Captured');
+    expect(w.ops()).toContain('delete_wrap');
+  });
+
+  test('a renderer gone at every drain keeps the capture as a blob that failed, then fetches the page once its 14 days are past', async () => {
+    const w = world();
+    w.ports.markdown = async () => ({ ok: false, reason: 'renderer_gone' });
+    const wrap = await capture(w);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_blob: 1 });
+    // past the week a wrap may wait for, it is still this save's capture, never filed as someone else's message
+    for (let day = 1; day <= 13; day++) {
+      w.tick(86_400);
+      expect([day, await drainInbox(w.ports, w.owner)]).toEqual([day, { failed_blob: 1 }]);
+    }
+    expect(w.db.get('SELECT outcome FROM inbox_seen WHERE wrap_id = ?', wrap)).toEqual({ outcome: 'failed_blob' });
+    expect(textOf(w)).toEqual({ text_state: 'fetching', fail_reason: null });
+    expect(pendingParses(w.db, w.owner)).toEqual([]);
+    // the capture's 14 days past: the save fetches its page as a request without HTML does, and the wrap closes
+    w.tick(86_400);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 1 });
+    expect(textOf(w)).toEqual({ text_state: 'queued', fail_reason: null });
+    expect(pendingParses(w.db, w.owner).map((p) => p.url)).toEqual(['https://example.com/a']);
+    expect(w.ops()).toContain('delete_wrap');
+    expect(await drainInbox(w.ports, w.owner)).toEqual({});
+  });
+
+  test('once the renderer has gone, the drain’s other captures wait for the next drain unread, and arrive once it is back', async () => {
+    const w = world();
+    let gone = true;
+    const markdown = w.ports.markdown;
+    let asked = 0;
+    w.ports.markdown = async (html, url) => (asked++, gone ? { ok: false, reason: 'renderer_gone' } : markdown(html, url));
+    let reads = 0;
+    const served = w.ports.fetch;
+    w.ports.fetch = (async (url: string, init?: RequestInit) => (reads++, served(url, init))) as never;
+    for (const path of ['a', 'b', 'c']) {
+      const { html } = await w.withHtml(`<h1>${path}</h1>`);
+      await w.send(w.request({ url: `https://example.com/${path}`, html }));
+    }
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_blob: 3 });
+    expect([asked, reads]).toEqual([1, 1]);
+    // the retries wait the same way, the first asking the parser again
+    w.tick(60);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ failed_blob: 3 });
+    expect([asked, reads]).toEqual([2, 2]);
+    gone = false;
+    w.tick(60);
+    expect(await drainInbox(w.ports, w.owner)).toEqual({ created: 3 });
+    expect(['a', 'b', 'c'].map((path) => w.item(itemHash(`https://example.com/${path}`))?.text_state)).toEqual(['cached', 'cached', 'cached']);
   });
 });
 

@@ -11,7 +11,7 @@
 // everything collected has been applied (F14).
 import {
   DEVICES_D, KIND, LIBRARY_KEY_D, LibraryKeyVersionError, T_TAG, decryptText, isSignerFailure, newest, readDevicesEvent, readItemEvent, readLibraryKeyEvent,
-  readRelayList, readServerList, replaces,
+  readServerList, replaces,
 } from '@kefli/protocol';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { deriveArticle, type Derived } from '../reader/blocks';
@@ -21,9 +21,10 @@ import { absorbRecord, queueRecord } from '../data/devices';
 import { KEEP_COPIES, getSetting } from '../data/settings';
 import { readUserLists, settleUserLists } from './nostrSignIn';
 import { markBacked } from '../data/backup';
-import { TooLarge, open } from '../net/http';
+import { TooLarge, open, serverHops } from '../net/http';
 import {
-  heldServerList, indexerRelays, keepListedServers, listServers, recordList, relayEntries, seedGeneratedLists, writeRelays, type DefaultsLike,
+  heldServerList, indexerRelays, keepListedRelays, keepListedServers, listServers, recordList, relayEntries, relaysNamed, seedGeneratedLists,
+  serversNamed, writeRelays, type DefaultsLike,
 } from '../data/lists';
 import { adoptLibraryKey, libraryKey, makeLibraryKey, moveToKeyedAddresses } from '../data/libraryKey';
 import {
@@ -46,6 +47,8 @@ export type SyncPorts = {
   /** The article open in the Reader, whose remote position waits. */
   openHash?: () => string | null;
   onHeldWord?: (hash: string, word: number) => void;
+  /** The local stack's build (services/config.ts LOCAL_STACK), whose blob servers a redirect may reach on loopback. */
+  localStack?: boolean;
 };
 
 /** Relays may send fewer than the limit (NIP-01), so paging stops only when a page brings nothing new. */
@@ -224,10 +227,12 @@ type Got = { status: number; bytes: Uint8Array | null };
 /**
  * One blob from one server, the deadline running until the whole body is in (F12, through net/http's open, as pages
  * and images are read): the status, and a 2xx's bytes (null past TEXT_MAX_BYTES, declared or streamed). Throws when
- * the server can't be reached or doesn't finish within TEXT_TIMEOUT_MS.
+ * the server can't be reached or doesn't finish within TEXT_TIMEOUT_MS, and when it redirects where no hop may go
+ * (net/http serverHops): a server named by a save or a 10063, the person's own or another app's, sent the phone on
+ * to 192.168.1.1 as OkHttp followed it, and is now as one that doesn't answer.
  */
 async function getBlob(p: SyncPorts, url: string): Promise<Got> {
-  const o = await open(p.fetch, url, { method: 'GET' }, TEXT_TIMEOUT_MS);
+  const o = await open(p.fetch, url, { method: 'GET' }, TEXT_TIMEOUT_MS, serverHops(p.localStack === true));
   if (!o.res.ok) {
     o.done();
     return { status: o.res.status, bytes: null };
@@ -343,11 +348,12 @@ export async function syncLists(p: SyncPorts, owner: string): Promise<void> {
 
 /**
  * Of the copies read, the newest of each kind, taken in when it is newer than the one held: recorded, and a 10002's or
- * a 10063's relays and servers joined, those of the person's own it no longer names removed. Sync reads them, and so
- * does the list send just before it builds its own, so a list another app published since the last sync isn't
- * overwritten. A relay or a server joins only when the held list didn't name it: one it named that is gone from the
- * table was removed here, and stays removed. Given now, a copy dated more than a day past it waits for its time
- * (notYet): taken, it froze the lists, every later one being older and every one sent from here dated after it.
+ * a 10063's relays and servers joined, those of the person's own it no longer names removed (data/lists
+ * keepListedRelays, keepListedServers). Sync reads them, and so does the list send just before it builds its own, so a
+ * list another app published since the last sync isn't overwritten. A relay or a server joins only when the held list
+ * didn't name it, every entry of it read, past the LIST_MAX Kefli uses: one it named that is gone from the table was
+ * removed here, and stays removed. Given now, a copy dated more than a day past it waits for its time (notYet): taken,
+ * it froze the lists, every later one being older and every one sent from here dated after it.
  */
 export function takeNewerLists(db: SqlDb, owner: string, copies: NostrEvent[], kinds: number[], now = Infinity): void {
   for (const kind of kinds) {
@@ -356,31 +362,8 @@ export function takeNewerLists(db: SqlDb, owner: string, copies: NostrEvent[], k
     if (!latest || (held && held.created_at >= latest.created_at)) continue;
     recordList(db, owner, kind, latest.id, latest.created_at, JSON.stringify(latest));
     const raw = held?.raw ?? null;
-    if (kind === KIND.serverList) keepListedServers(db, owner, readServerList(latest), heldNamed(raw, readServerList));
-    if (kind === KIND.relayList) takeRelayList(db, owner, latest, heldNamed(raw, (e) => readRelayList(e).map((r) => r.url)));
-  }
-}
-
-/** A newer 10002: each relay it names that the held list didn't joins as the person's own; one it dropped goes. */
-function takeRelayList(db: SqlDb, owner: string, latest: NostrEvent, before: string[]): void {
-  const entries = readRelayList(latest);
-  for (const e of entries.filter((x) => !before.includes(x.url))) {
-    db.run("INSERT OR IGNORE INTO relays (url, owner, read, write, source, added_by_app) VALUES (?, ?, ?, ?, 'user', 0)", e.url, owner, e.read ? 1 : 0, e.write ? 1 : 0);
-  }
-  // a relay of the person's own that the newer list dropped was removed elsewhere (FD 113), unless this phone
-  // added it after that list was made
-  const listed = new Set(entries.map((e) => e.url));
-  for (const r of db.all<{ url: string; added_at: number | null }>("SELECT url, added_at FROM relays WHERE owner = ? AND source = 'user'", owner)) {
-    if (!listed.has(r.url) && (r.added_at ?? 0) <= latest.created_at) db.run('DELETE FROM relays WHERE owner = ? AND url = ?', owner, r.url);
-  }
-}
-
-/** What a held list names, read as read reads it; nothing when there is no list or it doesn't read. */
-function heldNamed(raw: string | null, read: (e: NostrEvent) => string[]): string[] {
-  try {
-    return raw ? read(JSON.parse(raw) as NostrEvent) : [];
-  } catch {
-    return [];
+    if (kind === KIND.serverList) keepListedServers(db, owner, readServerList(latest), serversNamed(raw));
+    if (kind === KIND.relayList) keepListedRelays(db, owner, latest, relaysNamed(raw));
   }
 }
 

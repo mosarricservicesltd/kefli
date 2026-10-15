@@ -4,7 +4,7 @@ import { LIST_MAX, LocalSigner, readRelayList, readServerList, relayTags, type N
 import { nodeCrypto } from '@kefli/protocol/node';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
-import { addRelay, listEdits, listServers, recordList, relayEntries, removeRelay, writeRelays } from '../src/data/lists';
+import { addRelay, listEdits, listServers, recordList, relayEntries, relayListTags, removeRelay, serverListTags, writeRelays } from '../src/data/lists';
 import { settleUserLists } from '../src/services/nostrSignIn';
 import { takeNewerLists } from '../src/services/sync';
 import { drain, type SendPorts } from '../src/services/send';
@@ -215,5 +215,20 @@ describe('a nostr user’s lists as Kefli republishes them (C§3.1)', () => {
     w.tick(3600);
     await drain(w.p);
     expect(w.newest(10002)!.tags).toEqual([...THEIR_RELAYS, ['r', D.operator.relay], ['r', D.relays[0]]]);
+  });
+
+  test('a held list whose address ends in a long run of slashes is read in linear time, its tags as they were', () => {
+    const w = { db: memoryDb(), pk: 'ef'.repeat(32) };
+    migrate(w.db);
+    ensureIdentityRow(w.db, 1, w.pk, 'nostr_signin', false, 'nip55');
+    // a relay that keeps 64 KB events can hold one tag that is nearly all slashes; the regex /\/+$/ backtracks through
+    // the run from every slash in it, 10 s on Node for 50,000, at every list sent
+    const slashes = `wss://x.example/${'/'.repeat(60_000)}y`;
+    recordList(w.db, w.pk, 10002, 'r', 1, JSON.stringify({ tags: [['r', slashes], ['r', 'wss://ok.example/']] }));
+    recordList(w.db, w.pk, 10063, 's', 1, JSON.stringify({ tags: [['server', slashes.replace('wss', 'https')]] }));
+    const started = Date.now();
+    expect(relayListTags(w.db, w.pk)).toEqual([['r', slashes], ['r', 'wss://ok.example/']]);
+    expect(serverListTags(w.db, w.pk)).toEqual([['server', slashes.replace('wss', 'https')]]);
+    expect(Date.now() - started).toBeLessThan(1_000);
   });
 });

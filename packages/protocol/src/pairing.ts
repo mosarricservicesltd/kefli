@@ -9,7 +9,7 @@ import type { CryptoPort } from './ports';
 import { nobleSecp } from './secp';
 import { connectedEntry } from './devices';
 import type { DeviceEntry, DevicesRecord } from './devices';
-import { normalise } from './normalise';
+import { normalise, ownCanonical } from './normalise';
 import { giftWrap } from './wrap';
 import type { Rumor, WrapOptions } from './wrap';
 import type { EventTemplate, NostrEvent, Signer } from './signer';
@@ -216,6 +216,23 @@ export type SaveRequestVerdict =
 const textOr = (v: unknown) => (typeof v === 'string' ? v : null);
 const timeOr = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : null);
 
+/**
+ * The longest canonical a request keeps, in UTF-16 code units: the phone's own parse leaves out a page's canonical past
+ * this, unread (its page.ts FIELD_MAX.url), and a browser's must go the same way, or an AMP page with a longer one was
+ * one save shared and another saved in a browser.
+ */
+export const CANONICAL_MAX = 2_048;
+
+/**
+ * The request's canonical as the phone's own parse keeps a page's (C§4.3): none past CANONICAL_MAX, and otherwise one
+ * on the page's own site only, without a user name and password (ownCanonical, rulings 8 and 11). Kept as sent, as it
+ * was, a browser's canonical on another site sent its save to that site's address.
+ */
+function canonicalOf(url: string, v: unknown): string | null {
+  const canonical = textOr(v);
+  return canonical !== null && canonical.length <= CANONICAL_MAX ? ownCanonical(url, canonical) : null;
+}
+
 /** html, when it names a blob by its sha256 with a key and nonce to open it; anything else is no HTML. */
 function htmlOf(h: unknown): SaveRequest['html'] {
   const o = (h && typeof h === 'object' ? h : {}) as Record<string, unknown>;
@@ -229,7 +246,8 @@ function htmlOf(h: unknown): SaveRequest['html'] {
  * is null, so a save from a connected browser is never lost to it, and nothing the database can't hold reaches it.
  * captured_at is when the browser sent the request at the latest, the rumor's own time (the extension dates both
  * from one clock), so a time years ahead can't keep the inbox blob alive for ever; absent or not a time, it is the
- * rumor's. hero is kept only as an http(s) address, since the phone fetches it.
+ * rumor's. hero is kept only as an http(s) address, since the phone fetches it, and canonical only as the phone's own
+ * parse keeps a page's (canonicalOf).
  */
 function cleanRequest(r: SaveRequest, sentAt: number | null): SaveRequest | null {
   const captured = timeOr(r.captured_at);
@@ -237,7 +255,7 @@ function cleanRequest(r: SaveRequest, sentAt: number | null): SaveRequest | null
   if (at === null) return null;
   const hero = textOr(r.hero);
   return {
-    v: 1, url: r.url, canonical: textOr(r.canonical), title: textOr(r.title), site: textOr(r.site), byline: textOr(r.byline),
+    v: 1, url: r.url, canonical: canonicalOf(r.url, r.canonical), title: textOr(r.title), site: textOr(r.site), byline: textOr(r.byline),
     lang: textOr(r.lang), hero: hero && /^https?:\/\//i.test(hero) ? hero : null, captured_at: at, token: r.token,
     html: r.html === null ? null : htmlOf(r.html),
   };
