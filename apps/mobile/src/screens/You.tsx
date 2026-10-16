@@ -210,7 +210,9 @@ export default function You() {
           {!local && (asks
             ? <Row first icon="login" label={S.you.nostrApp} sub={S.nostrApp.asks} warn onPress={() => router.push('/nostr-app')} />
             : <Row first icon="login" label={S.you.nostrApp} value={S.you.signedIn} onPress={() => router.push('/nostr-app')} />)}
-          {local && <Row first icon="keyboard" label={S.you.recovery} sub={done ? S.you.written : S.you.notWritten} warn={!done} onPress={recovery} />}
+          {/* while the backup card is up it says what the row's "Not written down" would, so the row carries nothing;
+              once the card is snoozed the label is the standing reminder (FD 121, amending FD 17) */}
+          {local && <Row first icon="keyboard" label={S.you.recovery} sub={done ? S.you.written : card ? '' : S.you.notWritten} warn={!done && !card} onPress={recovery} />}
           {local && <Row icon="phone" label={S.you.addDevice} disabled={!online} sub={online ? undefined : S.you.needsConnection} onPress={() => router.push('/add-device')} />}
           <Row icon="laptop" label={S.you.browsers} value={String(stats.browsers)} onPress={() => router.push('/browsers')} />
           {langs.some((l) => l.voices.length > 1) && <Row icon="headphones" label={S.you.voice} value={langs[0]?.chosen?.place} onPress={() => router.push('/voice')} />}

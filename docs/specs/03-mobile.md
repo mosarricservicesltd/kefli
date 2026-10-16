@@ -538,7 +538,7 @@ Leaving moves the audio to the same word, and the Reader lights it for 1.6 s; wp
 
 | You | Build notes |
 |---|---|
-| Backup not done (`you`, FD 17, FD 25, FD 68) | Big counts beside the quilt; Later hides the card for ten more saves |
+| Backup not done (`you`, FD 17, FD 25, FD 68, FD 121) | Big counts beside the quilt; Later hides the card for ten more saves. While the card is up the Recovery code row carries no "Not written down", since the card says it; once the card is snoozed the row shows the label in the warning ink (FD 121) |
 | Backed up (`you-done`, FD 27) | No card; the row reads "Written down" |
 | Nostr user (`you-nostr`, FD 12, FD 26) | Picture and name from kind 0 (G12 without either); no recovery rows, and no Add another device (FD 90) |
 | Your nostr app (`nostrapp`, `nostrapp-asks`, `nostrapp-disc`, `nostrapp-disc-unsent`, FD 104, FD 105) | Sign out's sheet names the saves not yet sent (`unsentSaves`): those never sent to a relay, or with a change not yet sent. A save sent without the text Kefli's server hasn't taken isn't among them, since only the phone's copy of its text goes, which signing in again fetches from the page (C§4.2, v1.12) |
