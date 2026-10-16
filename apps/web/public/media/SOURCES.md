@@ -25,4 +25,4 @@ The crest profile in the page (`CREST`) is measured from the ridge cut and must 
 
 | File | Made from |
 |---|---|
-| `app-save-*.webp`, `app-read-*.webp`, `app-speed-*.webp`, `app-listen-*.webp` | The store screenshots in `apps/mobile/store/screenshots/` (`3-library`, `4-reader`, `5-speedread`, `6-listening`): release 0.0.1 on a Pixel 10a in Android's demo mode, with three notification icons painted out of the status bar. Scaled to 360 and 720 pixels wide as WebP. |
+| `app-save-*.webp`, `app-read-*.webp`, `app-speed-*.webp`, `app-listen-*.webp` | The store screenshots in `apps/mobile/store/screenshots/` (`3-library`, `4-reader`, `5-speedread`, `6-listening`): release 1.0.0 on a Pixel 10a in Android's demo mode, 16 October 2026, the notification shade cleared first. Scaled to 360 and 720 pixels wide as WebP by `apps/web/scripts/app-images.mjs` (headless Chrome). Rerun it after each new set. |
