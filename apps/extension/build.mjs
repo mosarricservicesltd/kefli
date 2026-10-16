@@ -125,6 +125,8 @@ async function build(browser) {
     legalComments: 'inline',
     define: { KEFLI_DEFAULTS_URL: JSON.stringify(defaultsUrl), KEFLI_FLAVOUR: JSON.stringify(flavour), KEFLI_BROWSER: JSON.stringify(browser), KEFLI_COMMIT: JSON.stringify(commit()) },
     loader: { '.svg': 'text' },
+    // statements Firefox never runs (options.ts CHROME_ONLY) leave its bundle, so the store's linter meets no API Firefox lacks
+    dropLabels: browser === 'firefox' ? ['CHROME_ONLY'] : [],
     plugins: [platformUrl],
     logLevel: 'warning',
   });

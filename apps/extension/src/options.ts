@@ -332,7 +332,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 for (const ev of ['focus', 'visibilitychange']) window.addEventListener(ev, () => void checkPinned());
-chrome.action.onUserSettingsChanged?.addListener(() => void checkPinned());
+// Chrome alone announces a pin or an unpin; Firefox has no such event and never will, so its build drops this statement by
+// its label (build.mjs dropLabels) rather than carry a call to an API it lacks for the store's linter to flag.
+CHROME_ONLY: chrome.action.onUserSettingsChanged?.addListener(() => void checkPinned());
 
 async function start() {
   await checkPinned();
