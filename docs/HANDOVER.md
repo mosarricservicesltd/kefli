@@ -180,6 +180,15 @@ The sixteen questions the reports had left under "For Richard to decide" were se
 
 Two of the sixteen were kept as known risks rather than built, and are listed under Known risks left: the address checks, which read an address as written and stay so for 1.0, and Chinese and Japanese text, which waits for 1.1.
 
+## Release 1.0.0 on the Pixel (16 October 2026)
+
+PR 12 merged to `main` as `3392388` on 16 October, after CI, the code gate (2,434 functions, none over 15) and every suite passed on its final commit. The 1.0.0 APK was built from it the same day (`apps/mobile/scripts/build-release.sh`; `dist/kefli-1.0.0.apk`, versionCode 9, target 36, sha256 `5cca691a…`), after two false starts on this machine that a fresh checkout meets too: `npm ci --ignore-scripts` leaves `expo-background-task` unresolved until it is run after the merge, and leaves Skia without its prebuilt binaries until `npm rebuild @shopify/react-native-skia`. Its manifest asks for exactly CAMERA, INTERNET, VIBRATE, FOREGROUND_SERVICE, FOREGROUND_SERVICE_MEDIA_PLAYBACK and ACCESS_NETWORK_STATE. Installed on the Pixel 10a as a fresh install:
+
+- **The background worker** (decision 119) checked: the task registered at New here with a 15-minute interval; with Kefli swiped away, WorkManager started a fresh process 30 minutes later (Android's deferral) and `kefli-background-sync` ran and finished in five seconds, re-enqueued for 15 minutes. The worker's log tags are `BackgroundTaskWork`, `BackgroundTaskScheduler`, `BackgroundTaskConsumer` and `TaskService`.
+- **Nine test pages shared** through the share activity from adb (`am start -n app.kefli/.share.ShareActivity -a android.intent.action.SEND -t text/plain --es android.intent.extra.TEXT <url>`), fifteen seconds apart: the Bitcoin white paper as a PDF, Wikipedia's Bitcoin, the Guardian, BBC News, Ars Technica, Paul Graham, Cloudflare, Astral Codex Ten and Alice in Wonderland. Saves showed eight unread at the capture; which one was still pending is to be checked.
+- **The screenshots retaken** in Android's demo mode (09:41, 5G, Wi-Fi, battery full, the notification shade cleared by hand, since demo mode doesn't hide app icons): `3-library`, `4-reader`, `5-speedread`, `6-listening` (the Paul Graham essay with the spoken word lit) and `7-listen`; `1-welcome` and `2-empty` stay from the last set, those screens being unchanged. `apps/mobile/scripts/play-screenshots.mjs` made the 9:16 set in `store/play/`, and the new `apps/web/scripts/app-images.mjs` the landing page's eight WebP images from them (`apps/web/public/media/SOURCES.md`).
+- **Still on the Pixel:** the other ten groups of the list below, and, once the server is deployed, pairing a browser and Backup space.
+
 ## For Richard to decide
 
 The sixteen questions the reports left here were settled on 15 October 2026 in flow decision 119, Richard making the six product calls and Claude the ten rulings, and built the same day (the section above). The two kept as known risks, the address checks and Chinese and Japanese text for 1.1, are listed under Known risks left.
