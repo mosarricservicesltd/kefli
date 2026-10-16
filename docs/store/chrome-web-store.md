@@ -1,6 +1,6 @@
 # Chrome Web Store listing
 
-The text for the Kefli extension's Chrome Web Store listing (extension spec section 12), field by field as the developer dashboard asks for it. The upload is `npm run build:store -w @kefli/extension` (spec 12). Written on 11 October 2026 against extension 0.1.0. Published on 15 October 2026 at https://chromewebstore.google.com/detail/kefli/dpeeheakbkjeobgpjdeeigjbdicfckei, and `apps/web/site.env` links the website to it from the next deploy.
+The text for the Kefli extension's Chrome Web Store listing (extension spec section 12), field by field as the developer dashboard asks for it. The upload is `npm run build:store -w @kefli/extension` (spec 12). Written on 11 October 2026 against extension 0.1.0. Published on 15 October 2026 at https://chromewebstore.google.com/detail/kefli/dpeeheakbkjeobgpjdeeigjbdicfckei (0.1.1), and `apps/web/site.env` links the website to it from the next deploy. 1.0.2 (contract 1.12, decision 119, the Mozilla linter's fixes) was uploaded for review on 16 October 2026, to be published in the same hour as the server deploy, since 0.1.1 can't pair with a server that requires contract 1.11's proof.
 
 ## Store listing tab
 
