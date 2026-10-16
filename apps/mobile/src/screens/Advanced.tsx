@@ -19,6 +19,7 @@ import { phoneCrypto } from '../crypto/port';
 import { DEFAULT_DAILY, DEFAULT_QUOTA, NOTHING_WAITS, accountFigures, backupNotice, spaceOf, textsWaiting, type Check } from '../data/account';
 import { notBackedUp } from '../data/backup';
 import { relayRows, removeRelay, type RelayRow } from '../data/lists';
+import { relayNames } from '../data/relayLabels';
 import { checkAccount } from '../services/account';
 import { useApp } from '../services/app';
 import { loadDefaults } from '../services/config';
@@ -144,6 +145,7 @@ export default function Advanced() {
   const online = useOnline();
   const owner = useApp()?.owner ?? '';
   const [operator, setOperator] = useState<string | null>(null);
+  const [defaultRelays, setDefaultRelays] = useState<string[]>([]);
   const [status, setStatus] = useState<Record<string, Status>>({});
   const [exportFailed, setExportFailed] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -158,7 +160,13 @@ export default function Advanced() {
   const space = spaceOf(figures, waiting.full, checked, online);
 
   useEffect(() => {
-    loadDefaults().then((d) => setOperator(d.operator.relay), () => undefined);
+    loadDefaults().then(
+      (d) => {
+        setOperator(d.operator.relay);
+        setDefaultRelays(d.relays);
+      },
+      () => undefined,
+    );
   }, []);
   // each relay asked on opening and every 15 s while the screen is in front
   useFocusEffect(useCallback(() => {
@@ -172,10 +180,15 @@ export default function Advanced() {
     };
   }, [relays.join(',')])); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Kefli's relay first, then the backups and the person's own in the 10002's order
+  // Kefli's relay first, then the backups and the person's own in the 10002's order. The names come from the
+  // operator's defaults, not from who listed the relay: a default a nostr user's own list carries too is still a
+  // Backup (relayLabels.ts, decision 113).
   const ordered = [...rows].sort((a, b) => (a.url === operator ? -1 : b.url === operator ? 1 : 0));
-  let k = 0;
-  const label = (r: RelayRow) => (r.url === operator ? S.adv.operator : r.source === 'user' ? S.adv.yours : S.adv.backup(++k));
+  const names = relayNames(ordered.map((r) => r.url), operator, defaultRelays);
+  const label = (i: number) => {
+    const name = names[i];
+    return name.kind === 'operator' ? S.adv.operator : name.kind === 'backup' ? S.adv.backup(name.n) : S.adv.yours;
+  };
   const askRemove = (url: string) => openSheet(S.adv.removeTitle, (close) => <RemoveSheet owner={owner} url={url} close={close} />);
   const statusOf = (u: string): Status => (!online ? 'off' : status[u] ?? 'checking');
   const down = online ? relays.filter((u) => status[u] === 'down').map(hostOf) : [];
@@ -201,7 +214,7 @@ export default function Advanced() {
       <T muted style={[ui(13, 'groupLabel', 1.3), { marginBottom: 8 }]}>{S.adv.relays}</T>
       <View style={{ marginBottom: 8, borderRadius: radius.container, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line, overflow: 'hidden' }}>
         {ordered.map((r, i) => (
-          <Row key={r.url} first={i === 0} icon="server" label={label(r)} sub={hostOf(r.url)} right={<Pill status={statusOf(r.url)} />}
+          <Row key={r.url} first={i === 0} icon="server" label={label(i)} sub={hostOf(r.url)} right={<Pill status={statusOf(r.url)} />}
             onPress={r.removable ? () => askRemove(r.url) : undefined} hint={r.removable ? S.adv.removeHint : undefined} />
         ))}
         <Row first={ordered.length === 0} icon="plus" label={S.adv.add} sub={online ? S.adv.addSub : S.adv.needsConnection} disabled={!online}
