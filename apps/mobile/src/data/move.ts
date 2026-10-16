@@ -2,14 +2,16 @@
 // target T on this phone. A copy is a new row under T, every field kept, sent through the outbox under T: its blob
 // uploaded and mirrored as T's, then the save published, signed by T. A save T already holds keeps T's copy, and is
 // only brought back from Archive when S's copy is unread, as a repeated save is (C§4.1). Listen history follows.
-import { savedD } from '@kefli/protocol';
+import { sameUrl, savedD } from '@kefli/protocol';
 import type { Param, SqlDb } from './db';
 import { enqueue } from './outbox';
-import { queueSends, type SaveTargets, type StagedBlob } from './saves';
+import { blobRow, queueSends, type SaveTargets, type StagedBlob } from './saves';
 import { writeRelays, type DefaultsLike } from './lists';
 import { ensureIdentityRow } from './saves';
 import { commitDelete, deleteItem } from './library';
 import { libraryKey } from './libraryKey';
+import { forgetFreed } from './backup';
+import { giveUpBlob } from './inbox';
 import { KEEP_COPIES, setSetting } from './settings';
 import { settleUserLists, type UserLists } from '../services/nostrSignIn';
 
@@ -71,8 +73,10 @@ export function sourceSaves(db: SqlDb, from: string, moved: string[]): string[] 
     .map((r) => r.hash).filter((h) => !done.has(h));
 }
 
-// Columns copied as they are; the row's identity, its events and its send state are T's own.
-const OWN = new Set(['id', 'owner', 'event_id', 'event_created_at', 'published', 'dirty', 'backed_event', 'modified_at', 'text_servers']);
+// Columns copied as they are; the row's identity, its events and its send state are T's own. So is its address
+// (remote_d, F5): copied, T's first publish retired S's address with a kind 5 under T, naming on T's relays the d of S's
+// events, which tied the two keys together save by save, or the plain hash of a save S held from before v1.10.
+const OWN = new Set(['id', 'owner', 'event_id', 'event_created_at', 'published', 'dirty', 'backed_event', 'modified_at', 'text_servers', 'remote_d']);
 
 function columns(db: SqlDb): string[] {
   return db.all<{ name: string }>('PRAGMA table_info(items)').map((c) => c.name).filter((n) => !OWN.has(n));
@@ -81,8 +85,29 @@ function columns(db: SqlDb): string[] {
 export type Copied = 'copied' | 'kept' | 'unarchived';
 
 /**
+ * The mirror that may hold S's blob of a save (C§4.8 step 3, v1.12), which T's copy names while the operator refuses
+ * T's upload, so a text backed up under S stays backed up under T: the one this phone's upload under S reached (seen),
+ * or, for a text another phone uploaded, the first server other than the operator that S's newest event names, which
+ * the caller asks before taking it (services/move mirrorHolding). Null when no mirror holds it, as for a text that
+ * waited on the phone under S too.
+ */
+export function sourceMirror(db: SqlDb, from: string, hash: string, operator: string): { url: string; seen: boolean } | null {
+  const s = db.get<{ text_sha256: string | null; text_servers: string | null }>('SELECT text_sha256, text_servers FROM items WHERE owner = ? AND hash = ?', from, hash);
+  if (!s?.text_sha256) return null;
+  const mine = blobRow(db, from, s.text_sha256);
+  if (mine) return mine.mirror_at && mine.mirror_url ? { url: mine.mirror_url, seen: true } : null;
+  const named = s.text_servers ? (JSON.parse(s.text_servers) as string[]) : [];
+  const url = named.find((u) => !sameUrl(u, operator));
+  return url ? { url, seen: false } : null;
+}
+
+/**
  * One save from S to T (C§4.8 step 3). blob is S's staged ciphertext, or null for a save without text (or one whose
- * blob T must fetch first, which the caller stages). Returns what happened.
+ * blob T must fetch first, which the caller stages), with the mirror that holds S's blob, if one is known to (blob.mirror,
+ * services/move mirrorHolding), which T's blob records. A browser
+ * save still waiting to read its capture waits on a wrap in S's inbox, which T never reads and whose capture S's last
+ * drain reads into S's row alone, so T's copy fetches its page itself, as one whose capture is gone does (giveUpBlob):
+ * copied as it was, it stayed at Getting the text… for good. Returns what happened.
  */
 export function copySave(db: SqlDb, now: number, job: MoveJob, hash: string, blob: StagedBlob | null, t: SaveTargets): Copied {
   return db.tx(() => {
@@ -101,6 +126,7 @@ export function copySave(db: SqlDb, now: number, job: MoveJob, hash: string, blo
       job.to, now, s.id,
     );
     db.run('INSERT OR IGNORE INTO listen_history (item, last_played_at) SELECT ?, last_played_at FROM listen_history WHERE item = ?', r.lastInsertRowId, s.id);
+    giveUpBlob(db, job.to, hash);
     queueSends(db, now, job.to, hash, blob, t, false, null);
     return 'copied';
   });
@@ -170,6 +196,7 @@ export function retireLocal(db: SqlDb, from: string, to: string | null): void {
     for (const t of ['relays', 'servers', 'lists', 'devices', 'sync_cursors', 'inbox_seen']) db.run(`DELETE FROM ${t} WHERE owner = ?`, from);
     db.run('DELETE FROM outbox WHERE signer = ?', from);
     db.run('DELETE FROM blobs WHERE owner = ?', from);
+    forgetFreed(db, from);
     db.run('DELETE FROM identities WHERE pubkey = ?', from);
     if (to) db.run("UPDATE identities SET role = 'active' WHERE pubkey = ?", to);
   });

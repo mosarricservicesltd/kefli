@@ -31,8 +31,9 @@ func (a *API) nip05(w http.ResponseWriter, r *http.Request) {
 	reply(w, http.StatusOK, map[string]any{"names": names, "relays": relays})
 }
 
-// register adds the caller to the allowlist with the default quota; idempotent (contract 6). Five a day per address,
-// and cfg.MaxRegistrations an hour from everyone.
+// register adds the caller to the allowlist with the default quota; idempotent (contract 6). It answers the library's
+// own quota, the default or one set for it, and what its blobs take of it. Five a day per address, and
+// cfg.MaxRegistrations an hour from everyone.
 func (a *API) register(w http.ResponseWriter, r *http.Request) {
 	req, ok := a.authed(w, r)
 	if !ok {
@@ -45,9 +46,38 @@ func (a *API) register(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, err)
 		return
 	}
-	used, _ := a.st.Used(r.Context(), req.pubkey)
+	f, ok := a.figures(w, r, req.pubkey)
+	if !ok {
+		return
+	}
 	a.log.Info("registered", "user", a.short(req.pubkey))
-	reply(w, http.StatusOK, map[string]any{"v": 1, "quota": store.DefaultQuota, "used": used})
+	reply(w, http.StatusOK, map[string]any{"v": 1, "quota": f.Quota, "used": f.Used})
+}
+
+// account answers a registered library's figures under fair use (contract 5, 6), in bytes: its quota and what its
+// blobs take of it, the most its uploads may add to the disk in any 24 hours and what they added in the last 24. The
+// phone asks when Advanced opens. Any other key gets 403 not_registered.
+func (a *API) account(w http.ResponseWriter, r *http.Request) {
+	req, ok := a.authed(w, r)
+	if !ok || !a.registered(w, r, req.pubkey) {
+		return
+	}
+	if f, ok := a.figures(w, r, req.pubkey); ok {
+		reply(w, http.StatusOK, map[string]any{"v": 1, "quota": f.Quota, "used": f.Used, "daily": f.Daily, "today": f.Today})
+	}
+}
+
+// figures reads the caller's library's figures, answering the request itself when it can't: 500 when the database
+// fails, and 403 not_registered when the account has gone.
+func (a *API) figures(w http.ResponseWriter, r *http.Request, pubkey string) (store.Figures, bool) {
+	f, ok, err := a.st.Figures(r.Context(), pubkey)
+	switch {
+	case err != nil:
+		a.serverError(w, err)
+	case !ok:
+		fail(w, http.StatusForbidden, "not_registered")
+	}
+	return f, err == nil && ok
 }
 
 // deleteAccount is idempotent: a caller with no account still gets 200, so a retry after a lost answer succeeds.
@@ -81,7 +111,7 @@ func (a *API) newAccountAllowed(w http.ResponseWriter, r *http.Request) bool {
 		fail(w, http.StatusTooManyRequests, "rate")
 		return false
 	}
-	ip := ClientIP(r, a.cfg.TrustProxy)
+	ip := limit.ClientIP(r, a.cfg.TrustProxy)
 	if ok, retry := a.regIP.Allow(limit.Addr(ip, 56)); !ok {
 		w.Header().Set("Retry-After", retryAfter(retry))
 		fail(w, http.StatusTooManyRequests, "rate")
@@ -158,6 +188,7 @@ func (a *API) addDevice(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, err)
 		return
 	}
+	a.devAdd.Allow(req.pubkey)
 	a.log.Info("device added", "user", a.short(req.pubkey), "device", a.short(device))
 	reply(w, http.StatusOK, map[string]any{"v": 1})
 }
@@ -181,17 +212,43 @@ func (a *API) mayTake(w http.ResponseWriter, r *http.Request, req *request, devi
 	case c.release && (!held || holder != c.signer):
 		fail(w, http.StatusForbidden, "release: holder")
 	default:
-		fresh, err := a.st.UseAuth(r.Context(), c.id, c.until)
-		if err != nil {
-			a.serverError(w, err)
-			return false
-		}
-		if !fresh {
-			fail(w, http.StatusForbidden, c.name()+": replayed")
-		}
-		return fresh
+		return a.roomForDevice(w, r, req.pubkey) && a.useConsent(w, r, c)
 	}
 	return false
+}
+
+// roomForDevice refuses a library that already has MaxDevices device keys authorised, before its proof or release is
+// used, so the same one works once a Disconnect makes room; and one that has connected MaxDeviceAdds browsers in the
+// day, with 429 and Retry-After, which the phone sends again later, its proof or release unused as well.
+func (a *API) roomForDevice(w http.ResponseWriter, r *http.Request, user string) bool {
+	n, err := a.st.DeviceCount(r.Context(), user)
+	if err != nil {
+		a.serverError(w, err)
+		return false
+	}
+	if n >= MaxDevices {
+		fail(w, http.StatusForbidden, "devices: too_many")
+		return false
+	}
+	if spent, retry := a.devAdd.Spent(user); spent {
+		w.Header().Set("Retry-After", retryAfter(retry))
+		fail(w, http.StatusTooManyRequests, "rate")
+		return false
+	}
+	return true
+}
+
+// useConsent marks a proof or release used, and refuses one used already.
+func (a *API) useConsent(w http.ResponseWriter, r *http.Request, c consented) bool {
+	fresh, err := a.st.UseAuth(r.Context(), c.id, c.until)
+	if err != nil {
+		a.serverError(w, err)
+		return false
+	}
+	if !fresh {
+		fail(w, http.StatusForbidden, c.name()+": replayed")
+	}
+	return fresh
 }
 
 // alreadyHeld answers a caller that holds the device already: 200, with a proof or release still in its life marked used
@@ -279,17 +336,20 @@ func (a *API) removeDevice(w http.ResponseWriter, r *http.Request) {
 
 // postOffer holds a pairing offer for five minutes (contract 6). A pair offer comes from an extension's device key,
 // which needn't be authorised yet; a phone offer comes from a registered user. Both are limited to 30 an hour per key
-// and per address.
+// and per address, MaxBlockOffers an hour per IPv6 /48, and cfg.MaxOffers held at once.
 func (a *API) postOffer(kind string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		req, ok := a.authed(w, r)
-		if !ok || (kind == "phone" && !a.registered(w, r, req.pubkey)) || !a.offerAllowed(w, r, req.pubkey) {
+		if !ok || (kind == "phone" && !a.registered(w, r, req.pubkey)) || !a.blockMayOffer(w, r) || !a.offerAllowed(w, r, req.pubkey) {
 			return
 		}
 		lookup, _ := req.body["lookup"].(string)
 		offer, _ := req.body["offer"].(string)
-		if !auth.IsHex64(lookup) || offer == "" || len(offer) > 8192 {
+		if !auth.IsHex64(lookup) || offer == "" || len(offer) > maxOffer {
 			fail(w, http.StatusBadRequest, "offer")
+			return
+		}
+		if !a.roomForOffer(w, r) {
 			return
 		}
 		err := a.st.PutOffer(r.Context(), kind, lookup, offer)
@@ -303,6 +363,40 @@ func (a *API) postOffer(kind string) http.HandlerFunc {
 		}
 		reply(w, http.StatusOK, map[string]any{"v": 1})
 	}
+}
+
+// blockMayOffer holds an IPv6 caller's /48 to MaxBlockOffers posted an hour, counted before its /64 and its key, so an
+// offer the block is refused leaves no window behind for either (F45).
+func (a *API) blockMayOffer(w http.ResponseWriter, r *http.Request) bool {
+	block := limit.Block(limit.ClientIP(r, a.cfg.TrustProxy))
+	if !strings.Contains(block, ":") {
+		return true
+	}
+	if ok, retry := a.offBlk.Allow(block); !ok {
+		w.Header().Set("Retry-After", retryAfter(retry))
+		fail(w, http.StatusTooManyRequests, "rate")
+		return false
+	}
+	return true
+}
+
+// roomForOffer refuses a new offer while cfg.MaxOffers are held, until one expires: a trade of availability for a
+// bound on the disk, like the hourly limit on registrations, and said in the journal as it is reached.
+func (a *API) roomForOffer(w http.ResponseWriter, r *http.Request) bool {
+	held, err := a.st.LiveOffers(r.Context())
+	if err != nil {
+		a.serverError(w, err)
+		return false
+	}
+	if held >= a.cfg.MaxOffers {
+		w.Header().Set("Retry-After", retryAfter(time.Minute))
+		fail(w, http.StatusTooManyRequests, "rate")
+		return false
+	}
+	if held+1 == a.cfg.MaxOffers {
+		a.log.Error("pairing offers held: the limit on offers held at once is reached", "limit", a.cfg.MaxOffers)
+	}
+	return true
 }
 
 // offerAllowed counts an offer request against its address and then its key: the address first, so a request the
@@ -331,7 +425,7 @@ func (a *API) getOffer(kind string) http.HandlerFunc {
 		if kind == "pair" && !a.registered(w, r, req.pubkey) {
 			return
 		}
-		block := limit.Block(ClientIP(r, a.cfg.TrustProxy))
+		block := limit.Block(limit.ClientIP(r, a.cfg.TrustProxy))
 		if kind == "phone" && (!a.offerAllowed(w, r, req.pubkey) || !a.guessesLeft(w, block)) {
 			return
 		}

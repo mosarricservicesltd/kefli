@@ -104,11 +104,14 @@ func compose(cfg Config, msg received, atts []outAttachment) outgoing {
 func (c client) api(method, path string, body any, idempotency string, into any) error {
 	var rd io.Reader
 	if body != nil {
-		b, err := json.Marshal(body)
-		if err != nil {
+		// as it came: json.Marshal writes each <, > and & of a message's HTML as six bytes
+		var b bytes.Buffer
+		enc := json.NewEncoder(&b)
+		enc.SetEscapeHTML(false)
+		if err := enc.Encode(body); err != nil {
 			return err
 		}
-		rd = bytes.NewReader(b)
+		rd = &b
 	}
 	req, err := http.NewRequestWithContext(c.req.Context(), method, c.cfg.APIBase+path, rd)
 	if err != nil {

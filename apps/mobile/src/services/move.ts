@@ -2,26 +2,30 @@
 // the target T, any signer. Its steps, each recorded in the move job so a move cut short resumes where it stopped:
 //   0. prepare T: registered, and its lists in place (as at any sign-in);
 //   1. collect both libraries; a save from a newer Kefli in either stops the move here, S untouched;
-//   2. copy each of S's saves to T through the outbox (data/move.ts), S's own unsent rows withdrawn;
+//   2. copy each of S's saves to T through the outbox (data/move.ts), S's own unsent rows withdrawn but the deletions
+//      it owes;
 //   3. move S's connected browsers: POST /devices as T, and a pair-ack sealed by S carrying T and moved_from;
 //   4. confirm: T's outbox empty, then every copied save read back and opened from min(2, n) of T's write relays;
-//   5. retire S: its inbox drained once more (anything found goes back to step 2), what changed under S since the
-//      copy carried to T, kind 5s for its saves and its connected-browsers record to its write relays,
-//      DELETE /account as S, then S off the phone.
+//   5. retire S: its inbox drained once more (anything found goes back to step 2) and the kind 5s for the wraps it
+//      took sent as S, what changed under S since the copy carried to T, kind 5s for its saves and its
+//      connected-browsers record to its write relays, DELETE /account as S, then S off the phone.
 // S stays whole until step 5, so a save is never deleted before its copy exists under T.
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { DEVICES_D, KIND, LIBRARY_KEY_D, T_TAG, buildDeletions, httpAuth, readItemEvent, type CryptoPort, type NostrEvent, type Signer } from '@kefli/protocol';
+import {
+  DEVICES_D, KIND, LIBRARY_KEY_D, T_TAG, buildDeletions, httpAuth, readItemEvent, withoutTrailingSlashes, type CryptoPort, type NostrEvent, type Signer,
+} from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { enqueue } from '../data/outbox';
 import { itemAddresses, newestVersion } from '../data/libraryKey';
 import { listServers, writeRelays } from '../data/lists';
 import { indexText } from '../data/sync';
-import { carryChanges, copySave, moveJob, newerInEither, retireLocal, saveMove, sourceMark, sourceSaves, type MoveJob } from '../data/move';
+import { carryChanges, copySave, moveJob, newerInEither, retireLocal, saveMove, sourceMark, sourceMirror, sourceSaves, type MoveJob } from '../data/move';
 import type { SaveTargets, StagedBlob } from '../data/saves';
+import { SERVER_TIMEOUT_MS, TimedOut, apiFetch, serverFetch, serverHops } from '../net/http';
 import { registered } from './connect';
 import type { RelayAnswer } from './send';
 import type { Filter } from './sync';
-import { pageStream } from './sync';
+import { TEXT_MAX_BYTES, TEXT_TIMEOUT_MS, pageStream } from './sync';
 
 export type MoveDefaults = { operator: { relay: string; blossom: string; api: string }; mirrors: string[] };
 
@@ -50,7 +54,19 @@ export type MovePorts = {
   /** Step 5's end: S out of the key file, and Block Store given T's mnemonic or emptied. */
   retireKeys: () => Promise<void>;
   report?: (moved: number, total: number) => void;
+  /** The local stack's build (services/config.ts LOCAL_STACK), whose blob servers a redirect may reach on loopback. */
+  localStack?: boolean;
 };
+
+/**
+ * p's fetch for a blob server (net/http serverFetch): each redirect followed a hop at a time, never into the phone's own
+ * network (on the local stack, loopback too), and the whole answer, at most maxBytes, had within timeoutMs. Left to
+ * OkHttp, a server's redirect sent the ask for S's text on to whatever answered at 192.168.1.1, and a server that never
+ * answered held the move, which Back can't leave, for good. S's DELETE /account follows no redirect (retireRemote).
+ */
+function toServer(p: MovePorts, timeoutMs: number, maxBytes?: number): typeof fetch {
+  return serverFetch(p.fetch, { hops: serverHops(p.localStack === true), timeoutMs, ...(maxBytes === undefined ? {} : { maxBytes }) });
+}
 
 /** done; newer: a save from a newer Kefli stopped it before step 2; waiting: a later run carries on. */
 export type MoveOutcome = 'done' | 'newer' | 'waiting';
@@ -64,53 +80,100 @@ async function prepare(p: MovePorts, job: MoveJob): Promise<boolean> {
   return !!p.db.get('SELECT 1 FROM relays WHERE owner = ?', job.to);
 }
 
-/** S's ciphertext for a save, staged for T's upload: already on the phone, or fetched from where S's copy names. */
-export async function stagedBlob(p: MovePorts, from: string, hash: string): Promise<StagedBlob | null | 'missing'> {
+/**
+ * One server's copy of S's blob: its bytes, when they are the blob; 'slow', when the server didn't send it all within
+ * a text's time (sync.ts TEXT_TIMEOUT_MS), as a sync reads it; otherwise 'lacks': not there, not answering, sending
+ * where no hop may go, larger than any text (TEXT_MAX_BYTES) or another blob's bytes.
+ */
+async function blobFrom(p: MovePorts, server: string, sha: string): Promise<Uint8Array | 'lacks' | 'slow'> {
+  try {
+    const res = await toServer(p, TEXT_TIMEOUT_MS, TEXT_MAX_BYTES)(`${withoutTrailingSlashes(server)}/${sha}`, { method: 'GET' });
+    if (!res.ok) return 'lacks';
+    const got = new Uint8Array(await res.arrayBuffer());
+    return bytesToHex(p.crypto.sha256(got)) === sha ? got : 'lacks';
+  } catch (e) {
+    return e instanceof TimedOut ? 'slow' : 'lacks';
+  }
+}
+
+/**
+ * S's blob from the servers its copy names, then S's 10063 and the operator, in turn: its bytes; 'missing' when none
+ * sent it; 'slow' when none sent it and one ran out of time. A server that ran out of time may still hold the text:
+ * read as missing, the HEAD a server then answered had T's copy made without it, and S's retirement took it for good.
+ */
+async function fetchBlob(p: MovePorts, from: string, sha: string, named: string[]): Promise<Uint8Array | 'missing' | 'slow'> {
+  const servers = [...new Set([...named, ...listServers(p.db, from), (await p.defaults()).operator.blossom])];
+  let slow = false;
+  for (const s of servers) {
+    const got = await blobFrom(p, s, sha);
+    if (typeof got !== 'string') return got;
+    slow ||= got === 'slow';
+  }
+  return slow ? 'slow' : 'missing';
+}
+
+/**
+ * S's ciphertext for a save, staged for T's upload: already on the phone, or fetched from where S's copy names
+ * (fetchBlob); 'missing' or 'slow' when it can't be had now.
+ */
+export async function stagedBlob(p: MovePorts, from: string, hash: string): Promise<StagedBlob | null | 'missing' | 'slow'> {
   const row = p.db.get<{ text_sha256: string | null; text_servers: string | null }>('SELECT text_sha256, text_servers FROM items WHERE owner = ? AND hash = ?', from, hash);
   const sha = row?.text_sha256;
   if (!sha) return null;
-  let bytes = await p.readStaged(sha);
-  if (!bytes) {
-    const named = row.text_servers ? (JSON.parse(row.text_servers) as string[]) : [];
-    const servers = [...new Set([...named, ...listServers(p.db, from), (await p.defaults()).operator.blossom])];
-    for (const s of servers) {
-      try {
-        const res = await p.fetch(`${s.replace(/\/+$/, '')}/${sha}`, { method: 'GET' });
-        if (!res.ok) continue;
-        const got = new Uint8Array(await res.arrayBuffer());
-        if (bytesToHex(p.crypto.sha256(got)) === sha) {
-          bytes = got;
-          break;
-        }
-      } catch {
-        // the next server
-      }
-    }
-  }
-  if (!bytes) return 'missing';
+  const bytes = (await p.readStaged(sha)) ?? (await fetchBlob(p, from, sha, row.text_servers ? (JSON.parse(row.text_servers) as string[]) : []));
+  if (typeof bytes === 'string') return bytes;
   return { sha256: sha, size: bytes.length, path: p.stage(sha, bytes) };
 }
 
 /**
+ * The mirror that holds S's blob of a save, for T's copy to name (data/move sourceMirror): the one this phone's upload
+ * under S reached, or the one S's event names once it answers a HEAD for the blob (through the hops, within 15 s).
+ * Another phone's event names its mirror as soon as the operator holds the text, before the mirror's copy has landed,
+ * as when that copy keeps failing with 5xx: taken on its word, T's copy named a mirror that held nothing and counted as
+ * backed up, and S's account deletion then took the operator's copy, leaving the text on this phone alone. Null when
+ * none is known to hold it.
+ */
+async function mirrorHolding(p: MovePorts, from: string, hash: string, operator: string, sha: string): Promise<string | null> {
+  const m = sourceMirror(p.db, from, hash, operator);
+  if (!m || m.seen) return m?.url ?? null;
+  try {
+    const res = await toServer(p, SERVER_TIMEOUT_MS)(`${withoutTrailingSlashes(m.url)}/${sha}`, { method: 'HEAD' });
+    return res.ok ? m.url : null;
+  } catch {
+    return null;
+  }
+}
+
+/** S's blob for T's copy, with the mirror that holds it (mirrorHolding); null for a save without text. */
+async function withMirror(p: MovePorts, from: string, hash: string, operator: string, blob: StagedBlob | null): Promise<StagedBlob | null> {
+  return blob && { ...blob, mirror: await mirrorHolding(p, from, hash, operator, blob.sha256) };
+}
+
+/**
  * RULED: a text no server has (and the phone never staged) can't be owned by T, so its save is copied without
- * text, as a sync leaves a missing blob: the Reader says it couldn't get the text. Unreachable servers wait instead.
+ * text, as a sync leaves a missing blob: the Reader says it couldn't get the text. Unreachable servers wait instead,
+ * and so does a server too slow to send the text in its time (stagedBlob's 'slow').
  */
 async function copyAll(p: MovePorts, job: MoveJob): Promise<boolean> {
   const t = targetsOf(await p.defaults());
-  // RULED: S's unsent rows go now that the newer check has passed: every save goes out under T instead
-  // except old addresses still to retire (F5), which step 5 names with S's saves
-  p.db.run("DELETE FROM outbox WHERE signer = ? AND state IN ('held','queued','dead') AND NOT (op = 'delete_item' AND subject LIKE 'retire:%')", job.from);
+  // RULED: S's unsent rows go now that the newer check has passed: every save goes out under T instead. The deletions
+  // S owes stay, which only S can sign: its saves' (old addresses still to retire, F5, and saves deleted under S, F20),
+  // which step 5 names with S's saves (deletesOwed), and the kind 5s for wraps its inbox took (wrapsClosed). Withdrawn
+  // here, a save deleted just before the move, or while it waited and the last drain sent it back, stayed on S's relays
+  p.db.run("DELETE FROM outbox WHERE signer = ? AND state IN ('held','queued','dead') AND op NOT IN ('delete_item', 'delete_wrap')", job.from);
   const todo = sourceSaves(p.db, job.from, job.moved);
   const total = job.moved.length + todo.length;
   for (const hash of todo) {
     let blob = await stagedBlob(p, job.from, hash);
+    if (blob === 'slow') return false;
     if (blob === 'missing') {
       if (!(await anyServerAnswers(p, job.from, hash))) return false;
       p.db.run("UPDATE items SET text_state = 'failed', fail_reason = 'blob_missing' WHERE owner = ? AND hash = ?", job.from, hash);
       blob = null;
     }
     job.marks[hash] = sourceMark(p.db, job.from, hash);
-    if (copySave(p.db, p.now(), job, hash, blob, t) === 'copied') indexCopy(p, job.to, hash);
+    const copy = await withMirror(p, job.from, hash, t.blossom, blob);
+    if (copySave(p.db, p.now(), job, hash, copy, t) === 'copied') indexCopy(p, job.to, hash);
     job.moved.push(hash);
     saveMove(p.db, p.now(), job);
     p.report?.(job.moved.length, total);
@@ -118,12 +181,14 @@ async function copyAll(p: MovePorts, job: MoveJob): Promise<boolean> {
   return true;
 }
 
+/** Whether any server S's copy names answers a HEAD for its text (through the hops, within 15 s): not all are down. */
 async function anyServerAnswers(p: MovePorts, from: string, hash: string): Promise<boolean> {
   const row = p.db.get<{ text_sha256: string; text_servers: string | null }>('SELECT text_sha256, text_servers FROM items WHERE owner = ? AND hash = ?', from, hash);
   const servers = row?.text_servers ? (JSON.parse(row.text_servers) as string[]) : [(await p.defaults()).operator.blossom];
+  const ask = toServer(p, SERVER_TIMEOUT_MS);
   for (const s of servers) {
     try {
-      const res = await p.fetch(`${s.replace(/\/+$/, '')}/${row?.text_sha256}`, { method: 'HEAD' });
+      const res = await ask(`${withoutTrailingSlashes(s)}/${row?.text_sha256}`, { method: 'HEAD' });
       if (res.status < 500 && res.status !== 429) return true;
     } catch {
       // unreachable
@@ -169,10 +234,17 @@ export function queueBrowsers(p: Pick<MovePorts, 'db' | 'now' | 'crypto'>, job: 
  * Step 4: T owns every blob and holds every browser, and every copied save reads back and opens on min(2, n) of T's
  * write relays. RULED: any two that answer in full will do, so a public relay that is down (its sends still
  * retrying) doesn't hold the move; the blobs must be T's first, since DELETE /account as S leaves only what T owns.
+ * An upload the operator refused under T counts as settled, and so does the mirror waiting on it (C§4.8 step 3,
+ * v1.12): its save went out naming the mirror that holds S's blob, or without text, and the text waits under T.
  */
 export async function confirmed(p: MovePorts, job: MoveJob): Promise<boolean> {
   // a row that died is left to the read-back, which finds what it failed to send
-  if (p.db.get("SELECT 1 FROM outbox WHERE signer = ? AND op IN ('register','upload_blob','mirror_blob','post_device','pair_ack') AND state IN ('held','queued','sending')", job.to)) return false;
+  if (p.db.get(
+    `SELECT 1 FROM outbox o WHERE o.signer = ? AND o.op IN ('register','upload_blob','mirror_blob','post_device','pair_ack') AND o.state IN ('held','queued','sending')
+     AND NOT (o.op IN ('upload_blob', 'mirror_blob')
+       AND EXISTS (SELECT 1 FROM blobs b WHERE b.sha256 = o.subject AND b.owner = o.signer AND b.operator_at IS NULL AND b.last_error IS NOT NULL))`,
+    job.to,
+  )) return false;
   const relays = writeRelays(p.db, job.to);
   const need = Math.min(2, relays.length);
   if (!need) return false;
@@ -217,18 +289,48 @@ async function retireRemote(p: MovePorts, job: MoveJob): Promise<boolean> {
   await Promise.all(writeRelays(p.db, job.from).map(async (relay) => {
     for (const e of deletions) await p.publish(relay, e).catch(() => undefined);
   }));
-  const url = `${(await p.defaults()).operator.api.replace(/\/+$/, '')}/account`;
+  const url = `${withoutTrailingSlashes((await p.defaults()).operator.api)}/account`;
   try {
-    const res = await p.fetch(url, { method: 'DELETE', headers: { Authorization: await httpAuth(p.source, url, 'DELETE', null, p.crypto) } });
+    // no redirect followed (net/http apiFetch), as no call to the API follows one: followed, a 303 to any page that
+    // answers 200 read as S's account deleted, and S's keys went with its library still on the operator's server
+    const res = await apiFetch(p.fetch)(url, { method: 'DELETE', headers: { Authorization: await httpAuth(p.source, url, 'DELETE', null, p.crypto) } });
     return res.ok || res.status === 404;
   } catch {
     return false;
   }
 }
 
+/**
+ * Whether the kind 5s for the wraps S's inbox took have gone out under S, or been given up on (C§4.4). A browser that
+ * wrapped a save again for T in the move reads S's kind 5 for the old wrap as the save on the phone when its Undo is
+ * pressed (C§4.4, 4.8 step 5), and once S's account is deleted the operator relay takes none of S's events. Queued by
+ * the last drain and never sent, they left the browser saying a save it never removed was gone from Kefli.
+ */
+function wrapsClosed(db: SqlDb, from: string): boolean {
+  return !db.get("SELECT 1 FROM outbox WHERE signer = ? AND op = 'delete_wrap' AND state IN ('held', 'queued', 'sending')", from);
+}
+
+/**
+ * RULED: S's kind 5s for the wraps its inbox took, due now at the operator relay as defaults.json names it now, where
+ * a browser's Undo reads them (C§4.4). Each try of step 5 tries them once more, a switch's with the person watching
+ * and Back turned off: one the outbox had put off while the relay was out of reach waited for its next try, up to an
+ * hour away (data/outbox backoff), and one queued for a relay defaults.json has since replaced waited for good.
+ */
+function wrapsDue(db: SqlDb, from: string, relay: string, now: number): void {
+  db.run(
+    `UPDATE outbox_targets SET target = ?, next_at = ? WHERE state = 'pending' AND outbox_id IN (
+       SELECT id FROM outbox WHERE signer = ? AND op = 'delete_wrap' AND state = 'queued')`,
+    relay, now, from,
+  );
+}
+
 async function retire(p: MovePorts, job: MoveJob): Promise<'again' | boolean> {
   await p.drainSourceInbox().catch(() => undefined);
   if (sourceSaves(p.db, job.from, job.moved).length) return 'again';
+  // the last drain's kind 5s go out while S may still publish; one that can't yet keeps S for a later run
+  wrapsDue(p.db, job.from, (await p.defaults()).operator.relay, p.now());
+  await p.runOutbox();
+  if (!wrapsClosed(p.db, job.from)) return false;
   // what changed under S since its saves were copied goes to T before S's rows go (F20), marked carried in the same
   // transaction and saved before any of S's retirement goes out, so a later pass reads S's missing rows as retired
   p.db.tx(() => {

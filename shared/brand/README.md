@@ -64,9 +64,8 @@ It reads `shared/cover/cover-v1.js` only for the strip of covers on the OG card,
 | `out/extension/icon-{16,32}.png` | Manifest `icons` and `action.default_icon` at 16 and 32: the toolbar button, the plain bookmark |
 | `out/extension/icon-{48,128}.png` | The same keys at 48 (the tuned cut of D, which Chrome's extensions page shows) and 128 (the 108 dp drawing as a tile with the Chrome Web Store's 16 px of transparent padding) |
 | `out/extension/amo-icon-64.png` (64) | addons.mozilla.org listing icon, uploaded in the Developer Hub: the 108 dp drawing as a tile with no padding, corners 14 px |
-| `out/extension/edge-logo-300.png` (300) | Microsoft Edge Add-ons extension logo, uploaded in Partner Center: the same tile, no padding, corners 66 px |
-| `out/extension/edge-large-tile.png` (1400 × 560) | Microsoft Edge Add-ons large promotional tile, 24-bit PNG with no alpha: the OG card's layout at 1.1, centred, tagline and all |
-| `out/extension/cws-promo-tile.png` (440 × 280) | Chrome Web Store small promo tile (Edge Add-ons takes it too), 24-bit PNG with no alpha: the feature graphic's layout at 0.7, centred |
+| `out/extension/cws-marquee-tile.png` (1400 × 560) | Chrome Web Store marquee promo tile, 24-bit PNG with no alpha: the OG card's layout at 1.1, centred, tagline and all |
+| `out/extension/cws-promo-tile.png` (440 × 280) | Chrome Web Store small promo tile, 24-bit PNG with no alpha: the feature graphic's layout at 0.7, centred |
 | `out/extension/icon-16.svg`, `icon-32.svg` | Firefox manifest `icons` keys "16" and "32": the toolbar button |
 | `out/extension/options-logo-28.svg` | The options page's logo: `small-28.svg` ready to inline in the brand row's 28 px slot, comments stripped and `aria-hidden`, since the name sits beside it |
 | `out/web/favicon.svg`, `favicon.ico` (16/32/48), `apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, `maskable-512.png`, `site.webmanifest` | Website. `favicon.svg` is the 16 px cut; the ICO carries the 16, 32 and 48 px cuts. The manifest's `theme_color` is ink (#17171A) and its `background_color` paper (#F3F2EE), and it fixes `id`, `start_url` and `scope` at `/` so installs keep one identity |

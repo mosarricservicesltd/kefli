@@ -4,7 +4,21 @@
 # has been gone 30 days. strfry delete prints counts only, so the journal holds no content.
 set -euo pipefail
 
-keys() { runuser -u kefli -- /usr/local/lib/kefli/keflictl -db /var/lib/kefli/keflid.db gone "$1"; }
+# Each sweep looks only at the keys whose time has come since the one before (F45), where it read all 60 days of
+# keflid's list every night: this file keeps when the last sweep that ran to the end began, and keflictl lists only the
+# keys removed, or gone 30 days, since then, less two days. Each key is so swept for on two or three nights, which
+# drops a wrap the write policy took in the seconds before it saw its key go, and finds a key removed after the clock
+# was put back, whose time can fall before the one kept, on the next night or the one after. With nothing kept, as on
+# a new box or once the file is removed after a restore, every key on the list is swept for.
+last=/var/lib/strfry/relay-sweep.last
+overlap=$(( 2 * 86400 ))
+start=$(date +%s)
+since=0
+if [ -s "$last" ] && read -r was < "$last" && [[ $was =~ ^[0-9]{1,12}$ ]] && (( was > overlap )); then
+    since=$(( was - overlap ))
+fi
+
+keys() { runuser -u kefli -- /usr/local/lib/kefli/keflictl -db /var/lib/kefli/keflid.db gone "$1" "$since"; }
 
 drop() {
     runuser -u strfry -- /usr/local/bin/strfry --config=/etc/strfry.conf delete --filter="$1"
@@ -18,6 +32,7 @@ drop_for() {
     done
 }
 
-drop "$(jq -cn --argjson until "$(( $(date +%s) - 30 * 86400 ))" '{kinds: [1059], until: $until}')"
+drop "$(jq -cn --argjson until "$(( start - 30 * 86400 ))" '{kinds: [1059], until: $until}')"
 keys 0 | drop_for '#p' '{"kinds": [1059]}'
 keys 30 | drop_for authors '{}'
+echo "$start" > "$last"

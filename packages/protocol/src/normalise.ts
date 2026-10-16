@@ -7,7 +7,7 @@ import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { normalise } from '../../../shared/normalise';
 import { ITEM_D_PREFIX } from './constants';
 
-export { normalise, NotALinkError } from '../../../shared/normalise';
+export { normalise, NotALinkError, ownCanonical, SHARED_HOSTING, withoutUserInfo } from '../../../shared/normalise';
 
 const ITEM_D = new RegExp(`^${ITEM_D_PREFIX}[0-9a-f]{64}$`);   // the prefix is letters and slashes only
 

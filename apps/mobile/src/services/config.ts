@@ -27,5 +27,7 @@ export async function loadDefaults(): Promise<Defaults> {
   return pickDefaults({
     url: DEFAULTS_URL, baked: validDefaults(build.baked) ? build.baked : null, fetch, now: Date.now,
     read: () => getSetting(db!(), DEFAULTS_KEY), write: (json) => setSetting(db!(), DEFAULTS_KEY, json),
+    // its redirects reach loopback on the local stack only, where its API is (net/http serverHops)
+    localStack: LOCAL_STACK,
   }, state);
 }

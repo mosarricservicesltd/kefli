@@ -3,7 +3,7 @@ import { articleBlocks } from '../src/reader/blocks';
 import { readPrefs, readerColors } from '../src/reader/palette';
 import { isDoubleTap, scrollYForWord, wordAtOffset, wordAtScroll, type Place } from '../src/reader/position';
 import { alpha, mix } from '../src/ui/colour';
-import { S, say, savedWhen } from '../src/ui/strings';
+import { S, articles, say, savedWhen } from '../src/ui/strings';
 
 const MD = normaliseMarkdown(['One two three four.', 'Five six seven eight nine ten.', '![x](https://e.com/a.png)', 'Eleven twelve.'].join('\n\n'));
 const H = '34331f690e10f4e9184b0c53e40388e8caeb8bd26c8f44a34ae11f7f9e62213d';
@@ -53,7 +53,11 @@ describe('the Reader (mobile spec 5.6, 6.7)', () => {
     expect(alpha('#17171A', 0.5)).toBe('#17171A80');
     expect(alpha('#17171A', 2)).toBe('#17171AFF');
     expect(mix('#000000', '#FFFFFF', 0.5)).toBe('#808080');
-    expect([say(1), say(9), say(10)]).toEqual(['one', 'nine', '10']);
+    // a thousand and up with a comma, as the fine print's "about 2,000 articles" (FD 119)
+    expect([say(1), say(9), say(10), say(999), say(1200), say(1_000_000)]).toEqual(['one', 'nine', '10', '999', '1,200', '1,000,000']);
+    expect(S.adv.full(1200)).toBe('Your backup space is full, so the text of 1,200 saves is only on this phone. Kefli tries again each day, and deleting saves makes room.');
+    expect(S.adv.daily(1000)).toContain('the text of 1,000 saves');
+    expect(articles(50 * 1_048_576)).toBe('2,000');
     expect(S.welcome.earlyMany(3)).toBe('You’ve already saved three articles. They’ll be in your library either way.');
     const now = Date.UTC(2026, 9, 7, 12) / 1000;
     expect(savedWhen(now - 60, now)).toBe('Saved today');

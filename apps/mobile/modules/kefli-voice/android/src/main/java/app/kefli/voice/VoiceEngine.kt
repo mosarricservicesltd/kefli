@@ -71,8 +71,11 @@ object VoiceEngine {
   private val segments = ArrayList<Segment>()
   private var framesWritten = 0L
   private var nextSentence = 0
-  private var firstOffset = 0
-  private var firstSentence = 0
+  /**
+   * Where in nextSentence its next file starts: at the run's first word, in the run's first sentence; past the last
+   * piece, in one written in pieces (Pieces); else 0.
+   */
+  private var nextOffset = 0
   private var synthesizing: Synth? = null
   /** Audio must be written again from `word` before it plays (after a pause, or a jump or a rate change). */
   private var stale = true
@@ -82,7 +85,7 @@ object VoiceEngine {
   private val writer = Handler(writerThread.looper)
   private var resumeOnGain = false
 
-  private class Synth(val gen: Int, val sentence: Int, val offset: Int, val text: String, val file: File) {
+  private class Synth(val id: String, val gen: Int, val sentence: Int, val offset: Int, val text: String, val file: File) {
     val ranges = ArrayList<IntArray>()
   }
 
@@ -309,9 +312,8 @@ object VoiceEngine {
     stale = false
     val si = sentenceOf(w)
     val s = sentences[si]
-    firstSentence = si
-    firstOffset = s.wordStarts[(w - s.firstWord).coerceIn(0, s.wordStarts.size - 1)]
     nextSentence = si
+    nextOffset = s.wordStarts[(w - s.firstWord).coerceIn(0, s.wordStarts.size - 1)]
     writeAhead()
     // reset() stopped the word's clock along with the old audio; a skip or a rate change while playing restarts it
     // here, or the word would stop following the voice (the battery hour, 7 October 2026)
@@ -330,24 +332,41 @@ object VoiceEngine {
   private fun head(): Long = track?.playbackHeadPosition?.toLong()?.and(0xFFFFFFFFL) ?: 0L
 
   private fun writeAhead() {
-    if (synthesizing != null || nextSentence >= sentences.size) return
-    val rate = segments.lastOrNull()?.sampleRate ?: 0
-    if (rate > 0 && (framesWritten - head()) * 1000 / rate >= AHEAD_MS) return
-    val si = nextSentence++
-    val offset = if (si == firstSentence) firstOffset else 0
-    val max = TextToSpeech.getMaxSpeechInputLength() - 1
-    val text = sentences[si].text.substring(offset).let { if (it.length > max) it.substring(0, max) else it }
-    val file = File(voiceDir(), "$generation-$si.wav")
-    val synth = Synth(generation, si, offset, text, file)
+    if (synthesizing != null || nextSentence >= sentences.size || aheadEnough()) return
+    val synth = nextPiece()
     synthesizing = synth
-    val id = "$hash:$generation:$si"
-    if (tts?.synthesizeToFile(text, Bundle(), file, id) != TextToSpeech.SUCCESS) {
+    if (tts?.synthesizeToFile(synth.text, Bundle(), synth.file, synth.id) != TextToSpeech.SUCCESS) {
       synthesizing = null
       emit(Event.Error(hash, "tts_synthesize"))
     }
   }
 
-  private fun current(id: String): Synth? = synthesizing?.takeIf { "$hash:${it.gen}:${it.sentence}" == id && it.gen == generation }
+  /** Whether AHEAD_MS of audio is already written past the playback head. */
+  private fun aheadEnough(): Boolean {
+    val rate = segments.lastOrNull()?.sampleRate ?: 0
+    return rate > 0 && (framesWritten - head()) * 1000 / rate >= AHEAD_MS
+  }
+
+  /**
+   * The next file to write: the next sentence, from the run's first word in the first. One longer than the engine takes
+   * at a time goes a piece at a time (Pieces), each a segment of the sentence from its own offset, so the voice speaks
+   * all of it and the word still follows; the rest past the limit was dropped unheard.
+   */
+  private fun nextPiece(): Synth {
+    val si = nextSentence
+    val whole = sentences[si].text
+    val offset = nextOffset.coerceIn(0, whole.length)
+    val end = Pieces.end(whole, offset, TextToSpeech.getMaxSpeechInputLength() - 1)
+    nextOffset = Pieces.next(whole, end)
+    if (nextOffset >= whole.length) {
+      nextSentence = si + 1
+      nextOffset = 0
+    }
+    val id = "$hash:$generation:$si:$offset"
+    return Synth(id, generation, si, offset, whole.substring(offset, end), File(voiceDir(), "$generation-$si-$offset.wav"))
+  }
+
+  private fun current(id: String): Synth? = synthesizing?.takeIf { it.id == id && it.gen == generation }
 
   private fun range(id: String, a: Int, b: Int, c: Int) {
     val s = current(id) ?: return
@@ -371,10 +390,26 @@ object VoiceEngine {
     if (pcm == null || pcm.frames == 0) return writeAhead()
     val t = track ?: newTrack(pcm) ?: return emit(Event.Error(hash, "audio_track"))
     val ranges = s.ranges.sortedBy { it[1] }
-    if (ranges.isEmpty()) wordTiming = false
+    noteTiming(s, ranges)
     learn(ranges, pcm)
     segments.add(Segment(s.sentence, s.offset, framesWritten, pcm.frames.toLong(), pcm.sampleRate, ranges))
     framesWritten += pcm.frames
+    feed(t, pcm)
+    if (playing && t.playState != AudioTrack.PLAYSTATE_PLAYING) t.play()
+    writeAhead()
+  }
+
+  /**
+   * An engine that reports no word ranges makes the sentence the unit (FD 91 (h)), from then on, once a file shows it
+   * (Timing.showsNoRanges). A paragraph that is only a rule ("—" between sections) may be said as silence with no
+   * ranges, which turned word timing off for every article after it, until Kefli restarted.
+   */
+  private fun noteTiming(s: Synth, ranges: List<IntArray>) {
+    if (ranges.isEmpty() && Timing.showsNoRanges(sentences[s.sentence].wordStarts, s.offset, s.text)) wordTiming = false
+  }
+
+  /** A file's audio to the track, on the writer's thread, until it is all written or a newer run has begun. */
+  private fun feed(t: AudioTrack, pcm: Pcm) {
     val gen = generation
     writer.post {
       var at = 0
@@ -384,8 +419,6 @@ object VoiceEngine {
         at += n
       }
     }
-    if (playing && t.playState != AudioTrack.PLAYSTATE_PLAYING) t.play()
-    writeAhead()
   }
 
   private fun newTrack(pcm: Pcm): AudioTrack? {

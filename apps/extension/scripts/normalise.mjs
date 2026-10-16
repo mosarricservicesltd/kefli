@@ -1,6 +1,7 @@
 // The shared normaliser as the extension builds it, on the browser's own URL (src/urlRecord.ts), against every case in
-// shared/normalise.fixtures.json, run in headless Chrome. A save's d tag is the sha256 of normalise's answer, so the
-// extension and the phone must agree on every case, or the same page would be two saves.
+// shared/normalise.fixtures.json, run in headless Chrome. A save's hash is the sha256 of normalise's answer, and its d tag
+// is keyed from that hash (contract 1.10), so the extension and the phone must agree on every case, or the same page
+// would be two saves.
 //
 //   node apps/extension/scripts/normalise.mjs
 import { build } from 'esbuild';

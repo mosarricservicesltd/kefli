@@ -1,16 +1,26 @@
 import { requireNativeModule } from 'expo-modules-core';
 import type { PdfRuns } from '@kefli/protocol';
 
-/** mobile spec 8.2. The markdown is normalised (contract 4.2); the guard is the caller's. */
+/**
+ * mobile spec 8.2. The markdown is normalised (contract 4.2); the guard is the caller's. too_large: the result was
+ * past what a save keeps, so it wasn't handed over; renderer_gone: the WebView's renderer was killed (for memory, or
+ * it never loaded the bundle), so the page may read another time.
+ */
 export type Parsed =
   | { ok: true; title: string | null; byline: string | null; site: string | null; lang: string | null; hero: string | null; canonical: string | null; readerable: boolean; markdown: string }
-  | { ok: false; reason: 'no_webview' | 'not_readable' | 'error'; message?: string };
+  | { ok: false; reason: 'no_webview' | 'not_readable' | 'error' | 'too_large' | 'renderer_gone'; message?: string };
 
-/** A page loaded once in a browser engine (8.2): its rendered HTML and final address, or why not. */
-export type Rendered = { ok: true; url: string; html: string } | { ok: false; reason: 'no_webview' | 'timeout' };
+/**
+ * A page loaded once in a browser engine (8.2): its rendered HTML and final address, or why not. refused: the page
+ * went for an address no hop of the fetch could go to (7.1), which the engine didn't ask for, and the render stopped.
+ */
+export type Rendered =
+  | { ok: true; url: string; html: string }
+  | { ok: false; reason: 'too_large'; url: string }
+  | { ok: false; reason: 'no_webview' | 'timeout' | 'refused' };
 
 /** A PDF's text runs (contract 4.2, PDFs), for pdfMarkdown to lay out, or why there are none. */
-export type PdfRead = ({ ok: true } & PdfRuns) | { ok: false; reason: 'no_webview' | 'pdf_locked' | 'pdf_too_long' | 'error'; message?: string };
+export type PdfRead = ({ ok: true } & PdfRuns) | { ok: false; reason: 'no_webview' | 'pdf_locked' | 'pdf_too_long' | 'too_large' | 'renderer_gone' | 'error'; message?: string };
 
 const native = requireNativeModule<{
   parse(b: string, ct: string, url: string): Promise<string>;

@@ -9,6 +9,7 @@ import type { CryptoPort } from './ports';
 import { nobleSecp } from './secp';
 import { connectedEntry } from './devices';
 import type { DeviceEntry, DevicesRecord } from './devices';
+import { normalise, ownCanonical } from './normalise';
 import { giftWrap } from './wrap';
 import type { Rumor, WrapOptions } from './wrap';
 import type { EventTemplate, NostrEvent, Signer } from './signer';
@@ -204,30 +205,97 @@ export function wrapSaveRequest(device: Signer, userPubkey: string, uuid: string
   );
 }
 
-/** Why a rumor isn't acted on. 'other' is someone else's message sharing the p tag: left alone, not an error. */
+/**
+ * Why a rumor isn't acted on. 'other' is someone else's message sharing the p tag: left alone, not an error.
+ * 'malformed' is a connected browser's request whose address isn't a link, which no save can be made from.
+ */
 export type SaveRequestVerdict =
   | { ok: true; request: SaveRequest; device: DeviceEntry }
-  | { ok: false; reason: 'other' | 'version' | 'token' | 'device' | 'server' };
+  | { ok: false; reason: 'other' | 'version' | 'malformed' | 'token' | 'device' | 'server' };
+
+const textOr = (v: unknown) => (typeof v === 'string' ? v : null);
+const timeOr = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : null);
+
+/**
+ * The longest canonical a request keeps, in UTF-16 code units: the phone's own parse leaves out a page's canonical past
+ * this, unread (its page.ts FIELD_MAX.url), and a browser's must go the same way, or an AMP page with a longer one was
+ * one save shared and another saved in a browser.
+ */
+export const CANONICAL_MAX = 2_048;
+
+/**
+ * The request's canonical as the phone's own parse keeps a page's (C§4.3): none past CANONICAL_MAX, and otherwise one
+ * on the page's own site only, without a user name and password (ownCanonical, rulings 8 and 11). Kept as sent, as it
+ * was, a browser's canonical on another site sent its save to that site's address.
+ */
+function canonicalOf(url: string, v: unknown): string | null {
+  const canonical = textOr(v);
+  return canonical !== null && canonical.length <= CANONICAL_MAX ? ownCanonical(url, canonical) : null;
+}
+
+/** html, when it names a blob by its sha256 with a key and nonce to open it; anything else is no HTML. */
+function htmlOf(h: unknown): SaveRequest['html'] {
+  const o = (h && typeof h === 'object' ? h : {}) as Record<string, unknown>;
+  const [sha256, key, nonce, server] = [o.sha256, o.key, o.nonce, o.server];
+  if (typeof sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(sha256) || typeof server !== 'string') return null;
+  return typeof key === 'string' && key !== '' && typeof nonce === 'string' && nonce !== '' ? { sha256, key, nonce, server } : null;
+}
+
+/**
+ * The request as the phone acts on it, every field of the type the contract gives it (C§4.4): a field of another type
+ * is null, so a save from a connected browser is never lost to it, and nothing the database can't hold reaches it.
+ * captured_at is when the browser sent the request at the latest, the rumor's own time (the extension dates both
+ * from one clock), so a time years ahead can't keep the inbox blob alive for ever; absent or not a time, it is the
+ * rumor's. hero is kept only as an http(s) address, since the phone fetches it, and canonical only as the phone's own
+ * parse keeps a page's (canonicalOf).
+ */
+function cleanRequest(r: SaveRequest, sentAt: number | null): SaveRequest | null {
+  const captured = timeOr(r.captured_at);
+  const at = captured === null ? sentAt : sentAt === null ? captured : Math.min(captured, sentAt);
+  if (at === null) return null;
+  const hero = textOr(r.hero);
+  return {
+    v: 1, url: r.url, canonical: canonicalOf(r.url, r.canonical), title: textOr(r.title), site: textOr(r.site), byline: textOr(r.byline),
+    lang: textOr(r.lang), hero: hero && /^https?:\/\//i.test(hero) ? hero : null, captured_at: at, token: r.token,
+    html: r.html === null ? null : htmlOf(r.html),
+  };
+}
+
+/** A rumor's content as a request this client reads: JSON, v 1, a url that is a string; otherwise null. */
+function requestOf(content: string): SaveRequest | null {
+  try {
+    const r = JSON.parse(content) as SaveRequest | null;
+    return r?.v === 1 && typeof r.url === 'string' ? r : null;
+  } catch {
+    return null;
+  }
+}
+
+function isLink(url: string): boolean {
+  try {
+    normalise(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * The phone's acceptance rules for an unwrapped rumor (C§4.4). unwrap has already matched the rumor's
  * author to the seal. html.server must be the operator Blossom server; the X rule, the download and the
- * sha256 check come after, in the app.
+ * sha256 check come after, in the app. An accepted request comes back cleaned (cleanRequest).
  */
 export function acceptSaveRequest(rumor: Rumor, seal: NostrEvent, devices: DevicesRecord, operatorBlossom: string): SaveRequestVerdict {
   const d = rumor.tags.find((t) => t[0] === 'd')?.[1] ?? '';
   if (rumor.kind !== KIND.appData || !d.startsWith(SAVE_REQUEST_D_PREFIX)) return { ok: false, reason: 'other' };
-  let request: SaveRequest;
-  try {
-    request = JSON.parse(rumor.content);
-  } catch {
-    return { ok: false, reason: 'version' };
-  }
-  if (request?.v !== 1 || typeof request.url !== 'string') return { ok: false, reason: 'version' };
-  const device = connectedEntry(devices, request.token);
+  const parsed = requestOf(rumor.content);
+  if (!parsed) return { ok: false, reason: 'version' };
+  const device = connectedEntry(devices, parsed.token);
   if (!device) return { ok: false, reason: 'token' };
   if (seal.pubkey !== device.device_pubkey) return { ok: false, reason: 'device' };
-  if (request.html !== null && request.html?.server !== operatorBlossom) return { ok: false, reason: 'server' };
+  const request = isLink(parsed.url) ? cleanRequest(parsed, timeOr(rumor.created_at)) : null;
+  if (!request) return { ok: false, reason: 'malformed' };
+  if (request.html !== null && request.html.server !== operatorBlossom) return { ok: false, reason: 'server' };
   return { ok: true, request, device };
 }
 

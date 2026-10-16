@@ -1,6 +1,6 @@
 # Chrome Web Store listing
 
-The text for the Kefli extension's Chrome Web Store listing (extension spec section 12), field by field as the developer dashboard asks for it. The upload is `npm run build:store -w @kefli/extension` (spec 12). Written on 11 October 2026 against extension 0.1.0.
+The text for the Kefli extension's Chrome Web Store listing (extension spec section 12), field by field as the developer dashboard asks for it. The upload is `npm run build:store -w @kefli/extension` (spec 12). Written on 11 October 2026 against extension 0.1.0. Published on 15 October 2026 at https://chromewebstore.google.com/detail/kefli/dpeeheakbkjeobgpjdeeigjbdicfckei (0.1.1), and `apps/web/site.env` links the website to it from the next deploy. 1.0.2 (contract 1.12, decision 119, the Mozilla linter's fixes) was uploaded for review on 16 October 2026, to be published in the same hour as the server deploy, since 0.1.1 can't pair with a server that requires contract 1.11's proof.
 
 ## Store listing tab
 
@@ -48,7 +48,7 @@ Kefli is open source under the AGPL. More at https://kefli.app
 3. `3-connect.png`: the options page's QR code for connecting the phone.
 4. `4-connected.png`: Connected, with the ways to save.
 
-They're drawn from the signed-off mockup (`docs/design/mockups/extension.html`), since headless Chrome draws no toolbar, by `node apps/extension/scripts/store-screenshots.mjs` after a dev build. The script swaps the mockup's real publication for an example address and draws a real QR code in place of the mockup's placeholder; run it again after any change to the mockup. The small promo tile, 440×280, is `shared/brand/out/extension/cws-promo-tile.png`, made by the brand build (`shared/brand/build-icons.cjs`) with the Play feature graphic's layout. The store icon, 128×128, is the package's own `shared/brand/out/extension/icon-128.png`, and the marquee promo tile, 1400×560 opaque 24-bit, is the Edge large tile, `shared/brand/out/extension/edge-large-tile.png`.
+They're drawn from the signed-off mockup (`docs/design/mockups/extension.html`), since headless Chrome draws no toolbar, by `node apps/extension/scripts/store-screenshots.mjs` after a dev build. The script swaps the mockup's real publication for an example address and draws a real QR code in place of the mockup's placeholder; run it again after any change to the mockup. The small promo tile, 440×280, is `shared/brand/out/extension/cws-promo-tile.png`, made by the brand build (`shared/brand/build-icons.cjs`) with the Play feature graphic's layout. The store icon, 128×128, is the package's own `shared/brand/out/extension/icon-128.png`, and the marquee promo tile, 1400×560 opaque 24-bit, is `shared/brand/out/extension/cws-marquee-tile.png`.
 
 **Official URL:** none (kefli.app needs verifying in Search Console first; optional).
 

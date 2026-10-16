@@ -1,5 +1,5 @@
 import { verifyEvent } from 'nostr-tools/pure';
-import { LocalSigner, blossomAuth, deleteBlob, mirrorBlob, uploadBlob } from '../src';
+import { LocalSigner, blossomAuth, deleteBlob, mirrorBlob, readFigures, uploadBlob } from '../src';
 import { nodeCrypto } from '../src/node';
 
 const SHA = 'ab'.repeat(32);
@@ -43,6 +43,32 @@ describe('Blossom (contract 4.2, 5)', () => {
     expect(await uploadBlob('http://b', new Uint8Array(), SHA, signer(), fakeFetch(503, 'down').f)).toMatchObject({ permanent: false });
   });
 
+  test("the operator's refusals for room carry their reason and the library's figures (contract 5, v1.12)", async () => {
+    const figures = { quota: 52_428_800, used: 52_400_000, daily: 20_971_520, today: 1_000 };
+    const quota = fakeFetch(413, { v: 1, error: 'quota', ...figures }, { 'x-reason': 'quota' });
+    expect(await uploadBlob('http://b', new Uint8Array(), SHA, signer(), quota.f)).toEqual({ ok: false, status: 413, permanent: true, reason: 'quota', figures });
+    // the body's error stands in for a missing X-Reason, and the figures come whichever names the reason
+    const daily = fakeFetch(413, { v: 1, error: 'daily', ...figures, today: 20_971_000 });
+    expect(await uploadBlob('http://b', new Uint8Array(), SHA, signer(), daily.f)).toMatchObject({ reason: 'daily', figures: { today: 20_971_000 } });
+    // too_large carries no figures; nor does a body whose figures aren't whole numbers of bytes
+    const big = fakeFetch(413, { v: 1, error: 'too_large' }, { 'x-reason': 'too_large' });
+    expect(await uploadBlob('http://b', new Uint8Array(), SHA, signer(), big.f)).toEqual({ ok: false, status: 413, permanent: true, reason: 'too_large' });
+    const odd = fakeFetch(413, { v: 1, error: 'quota', ...figures, used: -1 });
+    expect(await uploadBlob('http://b', new Uint8Array(), SHA, signer(), odd.f)).not.toHaveProperty('figures');
+    // a proxy's 413 page, with no reason of the operator's, keeps its text as before
+    const proxy = fakeFetch(413, '<html>Request Entity Too Large</html>');
+    expect(await uploadBlob('http://b', new Uint8Array(), SHA, signer(), proxy.f)).toEqual({ ok: false, status: 413, permanent: true, reason: '<html>Request Entity Too Large</html>' });
+    // a disk below its floor is a server error, not a refusal
+    expect(await uploadBlob('http://b', new Uint8Array(), SHA, signer(), fakeFetch(507, { v: 1, error: 'storage' }).f)).toMatchObject({ status: 507, permanent: false, reason: 'storage' });
+  });
+
+  test('figures are read only when all four are there', () => {
+    expect(readFigures({ quota: 1, used: 0, daily: 2, today: 0 })).toEqual({ quota: 1, used: 0, daily: 2, today: 0 });
+    for (const bad of [null, 'x', [], { quota: 1, used: 0, daily: 2 }, { quota: 1.5, used: 0, daily: 2, today: 0 }, { quota: '1', used: 0, daily: 2, today: 0 }]) {
+      expect(readFigures(bad)).toBeNull();
+    }
+  });
+
   test('mirror asks the mirror to fetch the url', async () => {
     const { f, calls } = fakeFetch(200, { sha256: SHA });
     const r = await mirrorBlob('http://m', `http://b/${SHA}`, SHA, signer(), f);
@@ -53,11 +79,29 @@ describe('Blossom (contract 4.2, 5)', () => {
     expect(await mirrorBlob('http://m', 'x', SHA, signer(), fakeFetch(200, { sha256: 'cd'.repeat(32) }).f)).toMatchObject({ ok: false, status: 502 });
   });
 
-  test('delete: done on success or 404', async () => {
+  test("a server's address loses its trailing slashes in linear time, however many it holds before them", async () => {
+    // 40,000 slashes and a letter: the pattern that took them off was tried from each slash, and took 6 s a call
+    const server = `http://b${'/'.repeat(40_000)}x`;
+    const up = fakeFetch(200, { sha256: SHA });
+    const mirror = fakeFetch(200, { sha256: SHA });
     const del = fakeFetch(200, '');
-    expect(await deleteBlob('http://b', SHA, signer(), del.f)).toMatchObject({ ok: true });
+    const key = signer();
+    await blossomAuth(key, 'upload', SHA); // the first signature's set-up is no part of the time
+    const t = Date.now();
+    expect(await uploadBlob(`${server}///`, new Uint8Array(), SHA, key, up.f)).toEqual({ ok: true, url: `${server}/${SHA}` });
+    expect(await mirrorBlob(`${server}/`, `http://b/${SHA}`, SHA, key, mirror.f)).toEqual({ ok: true, url: `${server}/${SHA}` });
+    expect(await deleteBlob(server, SHA, key, del.f)).toEqual({ ok: true, url: `${server}/${SHA}`, status: 200 });
+    expect(Date.now() - t).toBeLessThan(3_000);
+    expect([up.calls[0].url, mirror.calls[0].url, del.calls[0].url]).toEqual([`${server}/upload`, `${server}/mirror`, `${server}/${SHA}`]);
+  });
+
+  test('delete: done on success or 404, with the status the server answered', async () => {
+    const del = fakeFetch(200, '');
+    expect(await deleteBlob('http://b', SHA, signer(), del.f)).toEqual({ ok: true, url: `http://b/${SHA}`, status: 200 });
     expect(decode((del.calls[0].init.headers as Record<string, string>).Authorization).tags[0]).toEqual(['t', 'delete']);
-    expect(await deleteBlob('http://b', SHA, signer(), fakeFetch(404, '').f)).toMatchObject({ ok: true });
+    expect(await deleteBlob('http://b', SHA, signer(), fakeFetch(202, '').f)).toEqual({ ok: true, url: `http://b/${SHA}`, status: 202 });
+    // a server that held no such blob: done, but nothing was freed there, which a caller counting room must know (C§5)
+    expect(await deleteBlob('http://b', SHA, signer(), fakeFetch(404, '').f)).toEqual({ ok: true, url: `http://b/${SHA}`, status: 404 });
     expect(await deleteBlob('http://b', SHA, signer(), fakeFetch(500, 'x').f)).toMatchObject({ ok: false, permanent: false });
   });
 });

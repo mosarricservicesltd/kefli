@@ -1,18 +1,16 @@
-// The store screenshots (docs/store/chrome-web-store.md, firefox-add-ons.md, edge-add-ons.md): the signed-off extension
+// The store screenshots (docs/store/chrome-web-store.md, firefox-add-ons.md): the signed-off extension
 // mockup's browser window alone, drawn at 1024 x 640 and scaled by 1.25 to exactly 1280 x 800, in headless Chrome.
 //
 //   node apps/extension/scripts/store-screenshots.mjs [outdir]              Chrome's, default docs/store/screenshots
 //   node apps/extension/scripts/store-screenshots.mjs --firefox [outdir]    Firefox's, default docs/store/screenshots/firefox
-//   node apps/extension/scripts/store-screenshots.mjs --edge [outdir]       Edge's, default docs/store/screenshots/edge
 //
 // It runs in the same headless Chrome as chrome.mjs, which loads the dev build, so build that first
 // (npm run build -w @kefli/extension).
 //
 // Before each capture the address bar loses the mockup's real publication for an example address, and the placeholder
 // QR becomes a real one, drawn as src/options.ts draws it, carrying an offer of the real shape with throwaway values.
-// For Firefox and Edge the extension's address, the browser's label (src/pair.ts browserLabel) and the link menu take
-// that browser's wording; the Firefox build says Save Link to Kefli too (src/bg.ts and src/options.ts), and Edge runs the
-// Chrome build, so its item stays Save link to Kefli. Each shot gets a fresh browser.
+// For Firefox the extension's address, the browser's label (src/pair.ts browserLabel) and the link menu take its
+// wording; the Firefox build says Save Link to Kefli too (src/bg.ts and src/options.ts). Each shot gets a fresh browser.
 import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -34,15 +32,8 @@ const BROWSERS = {
       ['Open link in incognito window', 'Open Link in New Private Window'], ['Copy link address', 'Copy Link'], ['Save link to Kefli', 'Save Link to Kefli'],
     ],
   },
-  edge: {
-    name: 'Edge', dir: ['edge'], gone: ['[Cc]hrome', '[Ii]ncognito', 'Copy link address'],
-    swaps: [
-      ['chrome-extension://', 'extension://'], ['Chrome on a Windows PC', 'Edge on a Windows PC'],
-      ['Open link in incognito window', 'Open link in InPrivate window'], ['Copy link address', 'Copy link'],
-    ],
-  },
 };
-const browser = BROWSERS[['firefox', 'edge'].find((b) => process.argv.includes(`--${b}`)) ?? 'chrome'];
+const browser = BROWSERS[process.argv.includes('--firefox') ? 'firefox' : 'chrome'];
 const outdir = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? path.join(repo, 'docs', 'store', 'screenshots', ...browser.dir);
 const { toQR } = createRequire(import.meta.url)('toqr');
 

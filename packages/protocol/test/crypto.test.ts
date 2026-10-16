@@ -6,8 +6,9 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  EventTooLargeError, KIND, LocalSigner, MAX_EVENT_BYTES, buildItemEvent, cleanMnemonic, decryptText,
-  encryptText, newMnemonic, normaliseMarkdown, parseItem, readItemEvent, secretKeyFromMnemonic, signedSize, textHash,
+  CombiningRunError, EventTooLargeError, KIND, LocalSigner, MAX_COMBINING_RUN, MAX_EVENT_BYTES, buildItemEvent, cleanMnemonic, decryptText,
+  encryptText, longestCombiningRun, newMnemonic, normaliseMarkdown, parseItem, readItemEvent, readLibraryKeyEvent, secretKeyFromMnemonic,
+  signedSize, textHash,
 } from '../src';
 import { nodeCrypto } from '../src/node';
 
@@ -31,7 +32,10 @@ describe('keys (C§2)', () => {
       expect(m.split(' ')).toHaveLength(12);
       expect(bytesToHex(await secretKeyFromMnemonic(m, nodeCrypto))).toBe(bytesToHex(privateKeyFromSeedWords(m)));
     }
-  });
+    // each mnemonic's seed is 2,048 rounds of PBKDF2-SHA512 in plain JavaScript in nostr-tools, and its key five steps
+    // of secp256k1 there too: 0.6 s for the three on an idle machine, past Jest's default 5 s on one running every suite
+    // under coverage with others. The comparison needs that work, so its limit is generous instead
+  }, 60_000);
 
   test('typed words are cleaned, and bad ones refused', () => {
     expect(cleanMnemonic(`  ${NIP06.mnemonic.toUpperCase().replace(/ /g, '   ')}\n`)).toBe(NIP06.mnemonic);
@@ -73,6 +77,28 @@ describe('article text (C§4.2)', () => {
     expect(normaliseMarkdown('a \u2028b \rc')).toBe('a \u2028b \rc\n');
     const once = normaliseMarkdown(' x \r\n\r\n\r\ny ');
     expect(normaliseMarkdown(once)).toBe(once);
+  });
+
+  test('a long run of spaces inside a line, or deep indentation, normalises in linear time', () => {
+    // /[ \t]+$/ backtracked over each run: 10 s for this line, 21 s for the indented list, in Node
+    const started = Date.now();
+    expect(normaliseMarkdown('a' + ' '.repeat(80_000) + 'b  ')).toBe('a' + ' '.repeat(80_000) + 'b\n');
+    const deep = Array.from({ length: 2000 }, (_, i) => ' '.repeat(2000) + `- item ${i}\t `).join('\n');
+    expect(normaliseMarkdown(deep)).toBe(deep.replace(/\t /g, '') + '\n');
+    expect(Date.now() - started).toBeLessThan(5_000);
+  });
+
+  test('a run of combining marks too long to put in order is refused, unnormalised', () => {
+    // NFC orders a run of marks in quadratic time: 160,000 of two classes took 16 s in V8
+    const zalgo = 'a' + '̖́'.repeat(MAX_COMBINING_RUN / 2);
+    expect(longestCombiningRun(zalgo)).toBe(MAX_COMBINING_RUN);
+    expect(normaliseMarkdown(zalgo)).toBe(zalgo.normalize('NFC') + '\n');
+    const started = Date.now();
+    expect(() => normaliseMarkdown('a' + '̖́'.repeat(1_000_000))).toThrow(CombiningRunError);
+    expect(Date.now() - started).toBeLessThan(5_000);
+    // marks a script uses, one or a few to a letter, are any number in all
+    const hebrew = 'בְּרֵאשִׁ֖ית '.repeat(50_000);
+    expect(normaliseMarkdown(hebrew)).toBe(hebrew.normalize('NFC').trimEnd() + '\n');
   });
 
   test('text_hash is the SHA-256 of the UTF-8', () => {
@@ -137,6 +163,17 @@ describe('save events (C§4.1, C§3.3)', () => {
     const built = await buildItemEvent(s, HASH, item({ later: 'x'.repeat(4_000) }), 1);
     expect(built.overTarget).toBe(true);
     expect(signedSize({ ...built.event })).toBeLessThanOrEqual(MAX_EVENT_BYTES);
+  });
+
+  test('a save, or a library key record, over 16 KB isn’t one Kefli made: refused before it is decrypted', async () => {
+    const s = new LocalSigner(nodeCrypto.randomBytes(32));
+    const decrypt = jest.spyOn(s, 'nip44Decrypt');
+    const content = await s.nip44Encrypt(s.pubkey(), JSON.stringify({ ...item().item, later: 'x'.repeat(20_000) }));
+    const big = await s.signEvent({ kind: 30078, created_at: 1, tags: [['d', `kefli/item/${HASH}`], ['t', 'kefli']], content });
+    await expect(readItemEvent(s, big)).rejects.toThrow(EventTooLargeError);
+    const key = await s.signEvent({ kind: 30078, created_at: 1, tags: [['d', 'kefli/library-key'], ['t', 'kefli']], content });
+    await expect(readLibraryKeyEvent(s, key)).rejects.toThrow(EventTooLargeError);
+    expect(decrypt).not.toHaveBeenCalled();
   });
 
   test('another identity’s event or a non-save is refused', async () => {

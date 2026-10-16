@@ -1,5 +1,5 @@
 // A local stand-in for the operator HTTP API (contract section 6), enough for the phone's work: GET
-// /defaults.json pointing at the local stack, POST /register, DELETE /account, POST and DELETE /devices, POST and GET
+// /defaults.json pointing at the local stack, POST /register, GET and DELETE /account, POST and DELETE /devices, POST and GET
 // /pair-offers and /phone-offers, with NIP-98 checked as the contract says, and GET /fixtures/… for the
 // phone's fixture gate. Devices and offers live in memory. The real API is the backend's Go service (docs/specs/02-backend.md).
 //   node server/dev/api.mjs   (from the repository root, so nostr-tools resolves)
@@ -58,6 +58,11 @@ function send(res, status, obj) {
   res.end(JSON.stringify(obj));
 }
 
+// contract 5's defaults (v1.12). The local stack's blob servers keep no account, so use reads as nothing yet; a real
+// 413 quota or daily comes only from keflid (server/staging).
+const QUOTA = 52_428_800;
+const DAILY = 20_971_520;
+
 async function register(req, res) {
   const body = Buffer.concat(await req.toArray());
   const auth = checkNip98(req.headers.authorization, `${BASE}/register`, 'POST', body);
@@ -67,7 +72,12 @@ async function register(req, res) {
   mkdirSync(dirname(registeredPath), { recursive: true });
   writeFileSync(registeredPath, JSON.stringify([...keys], null, 1));
   console.log(`registered ${auth.pubkey}`);
-  send(res, 200, { v: 1 });
+  send(res, 200, { v: 1, quota: QUOTA, used: 0 });
+}
+
+async function getAccount(req, res) {
+  const a = await authed(req, res, '/account');
+  if (a) send(res, 200, { v: 1, quota: QUOTA, used: 0, daily: DAILY, today: 0 });
 }
 
 // device pubkey → { user }; lookup → { offer, expires }
@@ -80,7 +90,7 @@ async function authed(req, res, path, { registeredOnly = true } = {}) {
   const body = Buffer.concat(await req.toArray());
   const auth = checkNip98(req.headers.authorization, `${BASE}${path}`, req.method, body);
   if (!auth.ok) return send(res, 401, { v: 1, error: auth.why }), null;
-  if (registeredOnly && !registered().has(auth.pubkey)) return send(res, 403, { v: 1, error: 'not registered' }), null;
+  if (registeredOnly && !registered().has(auth.pubkey)) return send(res, 403, { v: 1, error: 'not_registered' }), null;
   let json = null;
   try {
     json = body.length ? JSON.parse(body.toString('utf8')) : null;
@@ -239,6 +249,7 @@ function route(req, res) {
   if (req.method === 'GET' && u.startsWith('/fixtures/')) return fixture(res, u.slice('/fixtures/'.length));
   if (req.method === 'GET' && u === '/defaults.json') return send(res, 200, DEFAULTS);
   if (req.method === 'POST' && u === '/register') return register(req, res);
+  if (req.method === 'GET' && u === '/account') return getAccount(req, res);
   if (req.method === 'DELETE' && u === '/account') return deleteAccount(req, res);
   if (req.method === 'POST' && u === '/devices') return postDevice(req, res);
   if (req.method === 'POST' && u === '/pair-offers') return postOffer(req, res);

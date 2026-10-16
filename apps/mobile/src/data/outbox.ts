@@ -9,7 +9,7 @@
 // - A row succeeds as soon as any target is ok, which releases its dependents; it is deleted once every target
 //   is ok, rejected or gave_up. A row whose targets all finish without success goes dead, and so do the rows
 //   that depend on it.
-import type { SqlDb } from './db';
+import type { Param, SqlDb } from './db';
 
 export type Lane = 'interactive' | 'bulk';
 export type RowState = 'held' | 'queued' | 'sending' | 'dead';
@@ -139,6 +139,28 @@ export function nextWakeAt(db: SqlDb): number | null {
      WHERE o.state = 'queued' AND t.state = 'pending' AND ${DEP_MET}`,
   );
   return r?.at ?? null;
+}
+
+/**
+ * The rows of op waiting on row id go without it, and so never die with it: a save's publish once the operator refuses
+ * the text it waited for (4.3, C§4.2, v1.12).
+ */
+export function releaseDependents(db: SqlDb, id: number, op: string): void {
+  db.run("UPDATE outbox SET depends_on = NULL WHERE depends_on = ? AND op = ? AND state != 'dead'", id, op);
+}
+
+/**
+ * releaseDependents for every row a query names (ids, a SELECT of outbox ids taking params), in one statement: a
+ * refusal for room releases the saves of every text it holds (data/backup.ts holdUploads), thousands for an import,
+ * and depends_on has no index, so a statement a row read the outbox through once for each.
+ */
+export function releaseDependentsIn(db: SqlDb, ids: string, params: Param[], op: string): void {
+  db.run(`UPDATE outbox SET depends_on = NULL WHERE op = ? AND state != 'dead' AND depends_on IN (${ids})`, op, ...params);
+}
+
+/** A row's waiting targets fall due now, as a text that fits the room a deletion made does (C§5). */
+export function wake(db: SqlDb, id: number, now: number): void {
+  db.run("UPDATE outbox_targets SET next_at = ? WHERE outbox_id = ? AND state = 'pending'", now, id);
 }
 
 export function begin(db: SqlDb, id: number): void {

@@ -8,6 +8,9 @@ kefli_admin_keys: []
 # Addresses (or, for IPv6, prefixes) allowed to reach SSH. Everything else gets 80 and 443 only.
 kefli_ssh_allow4: []
 kefli_ssh_allow6: []
+# Web connections (80 and 443) one client may hold open at once, an IPv4 address or an IPv6 /64; one more is reset.
+# A phone or a browser holds two or three, so a home or office behind one address has room for a crowd.
+kefli_web_conns: 512
 kefli_swap_mb: 2048
 # Only for a test host with no public name: Caddy signs its own certificates instead of asking Let's Encrypt.
 kefli_tls_internal: false
@@ -38,6 +41,14 @@ kefli_defaults:
 # keflid refuses uploads (507) that would leave less than this free on the disk the blobs, keflid's database and the
 # relay share, whatever the per-account quotas add up to (F8): about a tenth of the 38 GB box.
 kefli_min_free_mb: 4096
+# The relay's write policy holds every new event while that disk has less than this free, so the relay never fills
+# what keflid's database needs: below the blobs' floor, so uploads stop first, and saves, which are small, go on longer.
+kefli_relay_min_free_mb: 2048
+
+# The operator's identity for the relay's NIP-11 (backend spec 6): the Kefli account's key, the same as NIP-05's `_`
+# below, and the address its contact names. The key lives in Richard's signer, never on the box.
+kefli_operator_pubkey: 47d7b470fb54566252061f50e466de732b0bb1069e444a89d1987053c119245b
+kefli_operator_contact: "privacy@{{ kefli_domain }}"
 
 # NIP-05 for the operator's own identity (contract section 6; user names are v2), served by keflid at
 # https://<domain>/.well-known/nostr.json. The Kefli account's key lives in Richard's signer, never on the box.

@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/richardminton-glitch/Kefli/server/api/internal/blossom"
+	"github.com/richardminton-glitch/Kefli/server/api/internal/guard"
 	"github.com/richardminton-glitch/Kefli/server/api/internal/httpapi"
 	"github.com/richardminton-glitch/Kefli/server/api/internal/store"
 )
@@ -111,26 +112,39 @@ func run(ctx context.Context, log *slog.Logger) error {
 	if err != nil || minFree < 0 {
 		return fmt.Errorf("KEFLID_MIN_FREE_MB isn't a number of megabytes")
 	}
+	trustProxy := os.Getenv("KEFLID_TRUST_PROXY") == "1"
 	blobs := blossom.New(env("KEFLID_BLOBS", "blobs"), env("KEFLID_BLOSSOM_BASE", "http://localhost:3447"), st, log)
 	blobs.MinFree = minFree << 20
+	blobs.TrustProxy = trustProxy
 	api := httpapi.New(httpapi.Config{
 		Base: env("KEFLID_API_BASE", "http://localhost:8447"), Defaults: defaults, Names: names.Names, Relays: names.Relays,
-		TrustProxy: os.Getenv("KEFLID_TRUST_PROXY") == "1", Unlink: blobs.Unlink,
+		TrustProxy: trustProxy, Unlink: blobs.Unlink,
 	}, st, log)
 
 	apiMux, blobMux := http.NewServeMux(), http.NewServeMux()
 	api.Routes(apiMux)
 	blobs.Routes(blobMux)
+	// one guard for both servers, so a client's requests in flight count together
+	g := guard.New(trustProxy)
 	servers := []*http.Server{
-		server(env("KEFLID_API_ADDR", "127.0.0.1:8447"), httpapi.CORS(apiMux)),
-		server(env("KEFLID_BLOSSOM_ADDR", "127.0.0.1:3447"), httpapi.CORS(blobMux)),
+		server(env("KEFLID_API_ADDR", "127.0.0.1:8447"), g, httpapi.CORS(apiMux)),
+		server(env("KEFLID_BLOSSOM_ADDR", "127.0.0.1:3447"), g, httpapi.CORS(blobMux)),
 	}
 	go sweep(ctx, st, blobs, log)
 	return serve(ctx, servers, log)
 }
 
-func server(addr string, h http.Handler) *http.Server {
-	return &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 2 * time.Minute, WriteTimeout: 2 * time.Minute, IdleTimeout: 2 * time.Minute}
+// maxHeader is the most header a request may carry: a NIP-98 or Blossom authorisation is under a kilobyte and a
+// request's headers under 4 KB, where Go's default megabyte a request let a few hundred at once take 120 MB.
+const maxHeader = 64 << 10
+
+// server serves h behind g, which holds every request's body to its pace and gives each answer its own time to be
+// written, and which takes the place of a ReadTimeout: two minutes from the request's start, one cut an 8 MB upload
+// on any link slower than about 550 kbps, where the phone waits four and a half minutes for it, and left a body that
+// no route read keeping keflid for all of it. WriteTimeout bounds the writes before an answer begins, as of a 100
+// Continue. A request's headers have 10 seconds and 64 KB, and a connection may idle for two minutes between them.
+func server(addr string, g *guard.Guard, h http.Handler) *http.Server {
+	return &http.Server{Addr: addr, Handler: g.Wrap(h), ReadHeaderTimeout: 10 * time.Second, WriteTimeout: g.Answer, IdleTimeout: 2 * time.Minute, MaxHeaderBytes: maxHeader}
 }
 
 func serve(ctx context.Context, servers []*http.Server, log *slog.Logger) error {

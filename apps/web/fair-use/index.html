@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en-GB" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Fair use · Kefli</title>
+  <meta name="description" content="How much of your saves' text Kefli's server keeps for free: up to 50 MB, about 2,000 articles, taking up to 20 MB a day. What counts, what happens past it, and how to make room.">
+  <link rel="canonical" href="%VITE_SITE_URL%/fair-use/">
+  <meta name="theme-color" content="#F3F2EE">
+  <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <script type="module" src="/src/page.ts"></script>
+</head>
+<body class="page">
+<!--partial:nav-->
+
+<main id="main" class="doc">
+  <div class="wrap">
+    <header>
+      <span class="label">Fair use</span>
+      <h1>Room for about 2,000 articles.</h1>
+      <p class="lead">Kefli's server keeps up to 50&nbsp;MB of your saves' text for free, and takes up to 20&nbsp;MB a day. Past either, you can go on saving: each save is made and its link backed up as usual, and its text waits on your phone until it can be backed up too.</p>
+      <span class="updated">Last updated 15 October 2026</span>
+    </header>
+
+    <nav class="toc" aria-label="On this page">
+      <span class="label">On this page</span>
+      <ol>
+        <li><a href="#free">What's free</a></li>
+        <li><a href="#counts">What counts</a></li>
+        <li><a href="#past">Past the limits</a></li>
+        <li><a href="#room">Making room</a></li>
+        <li><a href="#see">Where to see it</a></li>
+      </ol>
+    </nav>
+
+    <div class="prose">
+      <h2 id="free">What's free</h2>
+      <p>Every library has two allowances on Kefli's server:</p>
+      <ul>
+        <li><strong>50&nbsp;MB of backup space</strong> for your saves' text, about 2,000 typical articles. From there, each text is also backed up on decentralised storage, which no one company runs.</li>
+        <li><strong>20&nbsp;MB of text a day</strong>, about 800 articles, counted over any 24 hours.</li>
+      </ul>
+      <p>A typical article's text takes about 25&nbsp;KB: a short news story a few kilobytes, a long essay 70&nbsp;KB or more, and the whole of <em>Alice's Adventures in Wonderland</em> about 150&nbsp;KB. At that size, two saves a day add up to about 18&nbsp;MB in a year, and five a day to about 45&nbsp;MB.</p>
+
+      <h2 id="counts">What counts</h2>
+      <p>Your phone and your browsers share the same space and the same day. Two things count towards them:</p>
+      <ul>
+        <li><strong>Each save's text</strong>, encrypted on your phone before it's sent.</li>
+        <li><strong>A page saved from your browser</strong>, which the extension sends to Kefli's server, encrypted, for your phone to collect. It counts towards the day as it's sent, so a save from your browser uses more of the day than one from your phone, and towards your space only until your phone has taken it. It's deleted from Kefli's server then, or after 14 days at the latest.</li>
+      </ul>
+      <p>Bookmarks you bring in when you sign in with an account you already use are saves like any other, so a large import can use the day's 20&nbsp;MB, and the rest of its text then goes up over the following days.</p>
+      <p>Nothing else counts. Kefli's server never stores pictures: your phone fetches them from the page when you first read it, and keeps them itself. A save's link, title, reading place and the rest of its record take a kilobyte or two, and are backed up whatever the space.</p>
+
+      <h2 id="past">Past the limits</h2>
+      <p>Once your backup space is full, or you've used the day's 20&nbsp;MB, you can go on saving as usual:</p>
+      <ul>
+        <li>the save is made, and its link, title and reading place are backed up like any other save's;</li>
+        <li>its text stays on your phone, where you can read it and listen to it as always;</li>
+        <li>Kefli tries again a day later, whenever the app is open, and until then Advanced counts the save as not backed up.</li>
+      </ul>
+      <p>On your phone, the Saved sheet says so once Kefli knows the space is full or the day's 20&nbsp;MB is used. A page you save from your browser still reaches your phone, which then fetches its text from the page itself, so a page that needs you to be signed in may come without its text.</p>
+      <p>A single text over 5&nbsp;MB, more than 700,000 words, is too long for Kefli to keep. The save keeps its link, backed up like any other, and opens the original page when you read it, as a save does when Kefli can't read its page.</p>
+      <div class="note">
+        <span class="label">If you lose your phone</span>
+        <p>A text that hasn't been backed up is only on your phone. If you lost the phone, a new one would bring the save back with the rest of your library, and Kefli would fetch its text again from the page, which may have changed or gone by then.</p>
+      </div>
+
+      <h2 id="room">Making room</h2>
+      <p>Delete the saves you no longer need. Deleting a save deletes its text from Kefli's server, which frees its space straight away, and Kefli then sends the texts waiting for room that now fit.</p>
+      <p>Archiving a save doesn't free space, since an archived save keeps its text. The day's 20&nbsp;MB counts what was sent, so deleting doesn't give any of it back.</p>
+
+      <h2 id="see">Where to see it</h2>
+      <p>In the app, go to <strong>You</strong>, then <strong>Advanced</strong>. Under <strong>Backup space</strong>, the row for Kefli's server shows how much of your 50&nbsp;MB your library uses, such as <em>12.4&nbsp;MB of 50&nbsp;MB</em>, and says when it's nearly full or full. When any save's text is waiting on your phone, Advanced also says how many saves, and why.</p>
+    </div>
+  </div>
+</main>
+
+<!--partial:footer-->
+</body>
+</html>

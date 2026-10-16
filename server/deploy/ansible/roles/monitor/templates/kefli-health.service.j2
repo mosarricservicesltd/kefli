@@ -1,0 +1,13 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Kefli's health check (backend spec 3.9; README, "Monitoring")
+After=caddy.service keflid.service strfry.service
+
+[Service]
+Type=oneshot
+# The healthchecks address is written by hand (README, "Monitoring"); without the file the check runs and only logs.
+EnvironmentFile=-/etc/kefli/health.env
+Environment=KEFLI_DOMAIN={{ kefli_domain }} HEALTH_DISK_PCT=80
+# A test box's own CA signs certificates for twelve hours, so there the days-left check is off and its CA accepted.
+Environment=HEALTH_CERT_DAYS={{ 0 if kefli_tls_internal else 14 }} HEALTH_INSECURE={{ 1 if kefli_tls_internal else 0 }}
+ExecStart=/usr/local/lib/kefli/kefli-health

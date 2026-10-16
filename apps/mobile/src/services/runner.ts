@@ -13,24 +13,24 @@ import { drain, outboxWaker } from './send';
 import { syncInbound, syncOwner, type SyncPorts, type SyncResult } from './sync';
 import { runMove, type MoveOutcome } from './move';
 import { moveJob } from '../data/move';
+import { accountFigures, recordFigures } from '../data/account';
 import { deriveArticle } from '../reader/blocks';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { getNetworkStateAsync, NetworkStateType } from 'expo-network';
 import { removeImages, syncImages, type ImagePorts } from './images';
-import { runPendingParses } from './pending';
+import { nextRunIn, runPendingParses } from './pending';
 import { drainInbox } from './inbox';
 import { pickUpSpools } from '../share/pickup';
-import { xRetryDelay } from './xpost';
 import { KefliParser } from '../../modules/kefli-parser/src';
 import type { ParserResult } from './page';
-import { stageBlob } from './staging';
+import { stageBlob, sweepStaged } from './staging';
 import { File } from 'expo-file-system';
 import { imageFiles, textFiles } from './textFiles';
 import { readStaged } from './staging';
 import { store } from './store';
 import { activeOwner } from '../data/library';
 import { beginRestore, settleRestore } from '../data/restore';
-import { interimRelays, queueImported } from '../data/saves';
+import { interimRelays, queueImported, reviveRefused } from '../data/saves';
 import { takeImport } from './nostrSignIn';
 import { disconnect } from '../data/devices';
 import type { ConnectPorts } from './connect';
@@ -39,9 +39,12 @@ import type { AddRelayPorts } from './addRelay';
 import { dailyCheck } from './nostrCheck';
 import { KefliKeystore } from '../../modules/kefli-keystore/src';
 import { KefliVoice } from '../../modules/kefli-voice/src';
+import type { BackgroundPorts } from './background';
 
 let running: Promise<number> | null = null;
 let defaults: Defaults | null = null;
+/** Whether this process has put back the saves a refusal held back before v1.12 (data/saves reviveRefused). */
+let revived = false;
 
 // One pool per process (mobile spec 4.4). ws:// only while the defaults point at the local stack.
 export const pool = new RelayPool({
@@ -65,6 +68,14 @@ export function runOutbox(): Promise<number> {
     try {
       defaults = await loadDefaults();
       const d = defaults;
+      if (!revived) {
+        revived = true;
+        try {
+          reviveRefused(store(), Math.floor(Date.now() / 1000));
+        } catch {
+          // left for the next start; the outbox sends what it has meanwhile
+        }
+      }
       return await drain({
         db: store(),
         now: () => Math.floor(Date.now() / 1000),
@@ -76,9 +87,16 @@ export function runOutbox(): Promise<number> {
         publish: (url, event) => pool.publish(url, event),
         readBlob: readStaged,
         query: (url, filters) => pool.query(url, filters),
+        // the library's last known figures reckon the room a confirmed deletion leaves, and a 413's replace them (C§5)
+        figures: (owner) => accountFigures(store(), owner),
+        onFigures: (owner, f) => void recordFigures(store(), owner, f, Math.floor(Date.now() / 1000)),
+        // a server's redirect to loopback is followed on the local stack only, where its servers are (net/http serverHops)
+        localStack: LOCAL_STACK,
       });
     } finally {
       running = null;
+      // texts no save names any more, a deleted save's or one another phone's replaced, leave the phone (C§4.1)
+      sweep();
       waker.arm();
     }
   })();
@@ -129,6 +147,8 @@ export function runSync(): Promise<SyncResult> {
       if (owner) await parsePending(owner).catch(() => undefined);
       return r;
     } finally {
+      // the staged texts of the saves this sync deleted, or whose text it replaced, in one sweep
+      sweep();
       syncing = null;
       syncListeners.forEach((l) => l());
     }
@@ -152,6 +172,7 @@ function syncPorts(): SyncPorts {
     defaults: loadDefaults,
     files: { ...textFiles, removeAll: removeAllFiles },
     openHash: () => reading,
+    localStack: LOCAL_STACK,
   };
 }
 
@@ -210,9 +231,11 @@ export function runMoveJob(): Promise<MoveOutcome> {
           db: store(), now: () => Math.floor(Date.now() / 1000), signer: source,
           query: (url, filters) => pool.query(url, filters as never), fetch,
           markdown: (html, u) => KefliParser.markdown(html, u) as Promise<ParserResult>, defaults: loadDefaults, ...parserPorts(),
+          localStack: LOCAL_STACK,
         }, job.from)),
         retireKeys: () => retireSourceKeys(job.from, job.to),
         report: (n, m) => moveListeners.forEach((l) => l(n, m)),
+        localStack: LOCAL_STACK,
       }, job);
       console.log(`[kefli-move] ${JSON.stringify({ outcome: r, step: moveJob(store())?.step ?? 'done' })}`);
       if (r === 'done') {
@@ -229,6 +252,23 @@ export function runMoveJob(): Promise<MoveOutcome> {
 }
 
 /**
+ * The foreground's one sync, as the background worker runs it too (background.ts, 4.8): always after the launch
+ * resolver, so a sync never runs before Block Store's key is adopted, and after the spool is picked up.
+ */
+export function syncOnce(log: (tag: string, v: unknown) => void = () => undefined): Promise<SyncResult> {
+  return launchPlan()
+    .catch(() => null)
+    // shares a killed process left in the spool are saved before the sync sends them (8.5)
+    .then(() => pickUpSpools().then((n) => n && log('pickup', { saved: n })).catch((e) => log('pickup', { error: String((e as Error).message) })))
+    .then(runSync);
+}
+
+/** The background worker's ports (background.ts): the sync above, and whether there is a library to sync. */
+export function backgroundPorts(): BackgroundPorts {
+  return { sync: () => syncOnce(), hasLibrary: () => activeOwner(store()) !== null };
+}
+
+/**
  * The app's sync triggers (4.5): start and each return to the foreground, always after the launch resolver,
  * so a sync never runs before Block Store's key is adopted. Returns the cleanup, for useEffect.
  */
@@ -237,11 +277,7 @@ export function startSync(): () => void {
   // a voice test log an earlier build wrote goes; a release build never writes one (F7)
   if (!LOCAL_STACK) KefliVoice.clearLog();
   const sync = () =>
-    launchPlan()
-      .catch(() => null)
-      // shares a killed process left in the spool are saved before the sync sends them (8.5)
-      .then(() => pickUpSpools().then((n) => n && log('pickup', { saved: n })).catch((e) => log('pickup', { error: String((e as Error).message) })))
-      .then(runSync)
+    syncOnce(log)
       .then(async (r) => log('sync', { owner: (await currentSigner())?.pubkey().slice(0, 12), ...r }))
       // an earlier sign-in with a nostr app is checked at most once a day, out of sight (FD 104)
       .then(() => dailyCheck().catch((e) => log('nostr-check', { error: String((e as Error).message) })))
@@ -279,10 +315,23 @@ export function imagePorts(): ImagePorts {
   };
 }
 
-/** Everything a save holds on the phone: its text, blocks and images (4.5: a deletion removes them all). */
+/**
+ * Everything a save holds on the phone: its text, blocks and images (4.5: a deletion removes them all). The staged
+ * ciphertext of a text no save names any more, as a deleted save's waiting upload (C§4.1, v1.12), goes in one sweep
+ * after the outbox's run or the sync's, rather than once for each of the many saves a sync can delete.
+ */
 export function removeAllFiles(hash: string): void {
   textFiles.removeAll(hash);
   removeImages(imagePorts(), hash);
+}
+
+/** The staged texts no save names any more leave the phone (C§4.1); a sweep that fails is left for the next. */
+function sweep(): void {
+  try {
+    sweepStaged(store());
+  } catch {
+    // the next run sweeps them
+  }
 }
 
 /** Phase 6 on an unmetered network only (4.5); metered networks fetch an article's images when it opens. */
@@ -291,7 +340,7 @@ async function imagesIfUnmetered(owner: string): Promise<void> {
   if (n?.type === NetworkStateType.WIFI || n?.type === NetworkStateType.ETHERNET) await syncImages(imagePorts(), owner);
 }
 
-/** Phase 7: pending parses, one at a time, then their sends (4.5). */
+/** Phase 7: pending parses, one at a time for a minute at most, then their sends (4.5). */
 async function parsePending(owner: string): Promise<void> {
   const r = await runPendingParses({
     db: store(),
@@ -309,13 +358,17 @@ async function parsePending(owner: string): Promise<void> {
       const d = await loadDefaults();
       return { api: d.operator.api, blossom: d.operator.blossom, mirror: d.mirrors[0], interim: interimRelays(d) };
     },
+    // Android's own judgement, which a network behind a captive portal fails (NET_CAPABILITY_VALIDATED)
+    online: async () => (await getNetworkStateAsync()).isInternetReachable === true,
   }, owner);
   if (r.parsed + r.failed > 0) await runOutbox().catch(() => 0);
-  // X posts whose check X didn't answer are tried again from 30 s, doubling to an hour (G3).
+  // X posts whose check X didn't answer are tried again from 30 s, doubling to an hour (G3); parses a run had no
+  // time for go on in a sync started soon after (pending.ts nextRunIn)
   if (xTimer) clearTimeout(xTimer);
   xTimer = null;
   xFailures = r.xWaiting > 0 ? xFailures + 1 : 0;
-  if (r.xWaiting > 0) xTimer = setTimeout(() => runSync().catch(() => undefined), xRetryDelay(xFailures) * 1000);
+  const next = nextRunIn(r, xFailures);
+  if (next !== null) xTimer = setTimeout(() => runSync().catch(() => undefined), next);
 }
 
 let xFailures = 0;
@@ -374,6 +427,7 @@ export function runInbox(owner: string): Promise<void> {
         markdown: (html, u) => KefliParser.markdown(html, u) as Promise<ParserResult>,
         defaults: loadDefaults,
         ...parserPorts(),
+        localStack: LOCAL_STACK,
       }, owner);
       console.log(`[kefli-inbox] ${JSON.stringify(r)}`);
       if (r.created || r.merged || r.unarchived) {

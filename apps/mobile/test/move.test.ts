@@ -1,5 +1,6 @@
 import {
-  LocalSigner, encryptText, normaliseMarkdown, readItemEvent, releaseTemplate, statementHolds, textHash, unwrap, type NostrEvent, type Signer,
+  LocalSigner, buildLibraryKeyEvent, encryptText, itemHash, normaliseMarkdown, readItemEvent, releaseTemplate, savedD, statementHolds, textHash, unwrap,
+  wrapSaveRequest, type NostrEvent, type SaveRequest, type Signer,
 } from '@kefli/protocol';
 import { nodeCrypto } from '@kefli/protocol/node';
 import { bytesToHex } from '@noble/hashes/utils.js';
@@ -10,11 +11,17 @@ import { seedGeneratedLists } from '../src/data/lists';
 import { enqueue, release } from '../src/data/outbox';
 import { absorbRecord } from '../src/data/devices';
 import { commitDelete, deleteItem, setArchived, setPosition } from '../src/data/library';
+import { notBackedUp } from '../src/data/backup';
+import { libraryKey } from '../src/data/libraryKey';
+import { pendingParses } from '../src/data/pending';
 import { drain } from '../src/services/send';
-import { syncOwner, type Filter } from '../src/services/sync';
+import { TEXT_TIMEOUT_MS, syncOwner, type Filter } from '../src/services/sync';
 import { runMove, type MovePorts } from '../src/services/move';
+import { drainInbox } from '../src/services/inbox';
 import type { Defaults } from '../src/services/config';
+import { SERVER_TIMEOUT_MS } from '../src/net/http';
 import { memoryDb } from './sqlite';
+import { inward, silent, watch } from './inward';
 
 const D: Defaults = {
   v: 1, operator: { relay: 'ws://op', blossom: 'http://blossom', api: 'http://api' },
@@ -33,7 +40,11 @@ function matches(e: NostrEvent, f: Filter): boolean {
   return true;
 }
 
-function world(o: { down?: Set<string>; accountStatus?: number } = {}) {
+function world(o: {
+  down?: Set<string>; accountStatus?: number; refuse?: (author: string) => boolean; dayUsed?: (author: string) => boolean; switch?: boolean;
+  /** Whether a mirror holds a blob, as its HEAD answers; every one does when left out. */
+  mirrorHas?: (mirror: string, sha: string) => boolean;
+} = {}) {
   const db = memoryDb();
   migrate(db);
   const S = new LocalSigner(nodeCrypto.randomBytes(32));
@@ -56,6 +67,14 @@ function world(o: { down?: Set<string>; accountStatus?: number } = {}) {
     if (o.down?.has(host)) throw new Error('down');
     log.push(`${method} ${url} ${authorOf(init).slice(0, 4)}`);
     const sha = url.split('/').pop()!;
+    // the operator refusing an author's texts for room (C§5): 413 quota with the library's figures
+    if (url.endsWith('/upload') && o.refuse?.(authorOf(init))) {
+      return new Response(JSON.stringify({ v: 1, error: 'quota', quota: 100, used: 100, daily: 100, today: 0 }), { status: 413, headers: { 'X-Reason': 'quota' } });
+    }
+    // an author's day of uploads used (C§5): a blob the server stores already adds nothing to the day, and is taken
+    if (url.endsWith('/upload') && o.dayUsed?.(authorOf(init)) && !blossom.has(bytesToHex(nodeCrypto.sha256(new Uint8Array(init.body as ArrayBuffer))))) {
+      return new Response(JSON.stringify({ v: 1, error: 'daily', quota: 52_428_800, used: 0, daily: 100, today: 100 }), { status: 413, headers: { 'X-Reason': 'daily' } });
+    }
     if (url.endsWith('/upload')) {
       const bytes = new Uint8Array(init.body as ArrayBuffer);
       const s = bytesToHex(nodeCrypto.sha256(bytes));
@@ -67,6 +86,7 @@ function world(o: { down?: Set<string>; accountStatus?: number } = {}) {
     if (url.endsWith('/mirror')) return new Response(JSON.stringify({ sha256: String(JSON.parse(String(init.body)).url).split('/').pop() }), { status: 200 });
     if (url.endsWith('/account')) return new Response('{}', { status: o.accountStatus ?? 200 });
     if (url.endsWith('/devices') && method === 'POST') devicePosts.push({ author: authorOf(init), body: JSON.parse(String(init.body)) });
+    if (method === 'HEAD' && o.mirrorHas && host !== D.operator.blossom) return new Response('', { status: o.mirrorHas(host, sha) ? 200 : 404 });
     if (method === 'GET' && blossom.has(sha)) return new Response(blossom.get(sha)!.bytes as never, { status: 200 });
     if (method === 'GET' || method === 'HEAD') return new Response('', { status: method === 'GET' && /^[0-9a-f]{64}$/.test(sha) ? 404 : 200 });
     return new Response('{}', { status: 200 });
@@ -101,15 +121,23 @@ function world(o: { down?: Set<string>; accountStatus?: number } = {}) {
     drainSourceInbox: async () => undefined,
     retireKeys: async () => void (keysRetired = true),
   };
-  ensureIdentityRow(db, clock, T.pubkey(), 'recovery_code', true);
-  ensureIdentityRow(db, clock, S.pubkey(), 'early_share', true);
-  seedGeneratedLists(db, T.pubkey(), D);
-  seedGeneratedLists(db, S.pubkey(), D);
-  // T was restored, so it learnt its library key at its first sync (F5); S was made here and makes its own
-  db.run('UPDATE identities SET library_key = ?, library_key_at = 1 WHERE pubkey = ?', '0a'.repeat(32), T.pubkey());
-  db.run("UPDATE identities SET role = 'move_source' WHERE pubkey = ?", S.pubkey());
-  db.run("INSERT INTO jobs (id, kind, state, step, data, started_at, updated_at) VALUES (?, 'move', 'queued', 0, ?, 1, 1)",
-    `move:${S.pubkey()}`, JSON.stringify({ from: S.pubkey(), to: T.pubkey() }));
+  if (o.switch) {
+    // Use my nostr app instead (C§4.8): S, made here, stays the phone's identity; T, the nostr app's key, joins beside it
+    // as the move's target, its lists confirmed absent, and learns its library key only from its relays or by making one
+    ensureIdentityRow(db, clock, S.pubkey(), 'new', true);
+    seedGeneratedLists(db, S.pubkey(), D);
+    queueSwitch(db, clock, S.pubkey(), T.pubkey(), 'nip55', { relays: null, servers: null, known: true }, false, D);
+  } else {
+    ensureIdentityRow(db, clock, T.pubkey(), 'recovery_code', true);
+    ensureIdentityRow(db, clock, S.pubkey(), 'early_share', true);
+    seedGeneratedLists(db, T.pubkey(), D);
+    seedGeneratedLists(db, S.pubkey(), D);
+    // T was restored, so it learnt its library key at its first sync (F5); S was made here and makes its own
+    db.run('UPDATE identities SET library_key = ?, library_key_at = 1 WHERE pubkey = ?', '0a'.repeat(32), T.pubkey());
+    db.run("UPDATE identities SET role = 'move_source' WHERE pubkey = ?", S.pubkey());
+    db.run("INSERT INTO jobs (id, kind, state, step, data, started_at, updated_at) VALUES (?, 'move', 'queued', 0, ?, 1, 1)",
+      `move:${S.pubkey()}`, JSON.stringify({ from: S.pubkey(), to: T.pubkey() }));
+  }
 
   /** A save under owner, its blob staged on the phone (or only on the operator's server), then sent. */
   async function save(owner: Signer, n: number, opts: { state?: 'unread' | 'archived'; stagedOnly?: boolean } = {}) {
@@ -130,7 +158,7 @@ function world(o: { down?: Set<string>; accountStatus?: number } = {}) {
     }
     return enc.text.sha256;
   }
-  return { db, S, T, p, log, devicePosts, relays, blossom, staged, save, tick: (s: number) => (clock += s), keysRetired: () => keysRetired };
+  return { db, S, T, p, log, devicePosts, relays, blossom, staged, save, syncPorts, tick: (s: number) => (clock += s), keysRetired: () => keysRetired };
 }
 
 /** Runs the move with relays a and b unreachable, so it stops at step 4's read-back with S whole; then time passes. */
@@ -393,6 +421,45 @@ describe('The move (contract 4.8, mobile spec 4.10)', () => {
     expect(named).toContain(`30078:${S}:${d2}`);
   });
 
+  /** The addresses S's kind 5s name on each of its write relays. */
+  const namedBy = (w: ReturnType<typeof world>) => (relay: string) =>
+    w.relays.get(relay)!.filter((e) => e.kind === 5 && e.pubkey === w.S.pubkey()).flatMap((e) => e.tags).map((t) => t[1]);
+
+  test("a save deleted under S just before the move, its kind 5 waiting on a retry, is deleted on S's relays (C§4.8 step 5)", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    await w.save(w.S, 2);
+    const S = w.S.pubkey();
+    const d2 = w.db.get<{ remote_d: string }>('SELECT remote_d FROM items WHERE owner = ? AND hash = ?', S, h(2))!.remote_d;
+    const del = deleteItem(w.db, w.p.now(), S, h(2));
+    commitDelete(w.db, S, h(2), del.held);
+    // a relay dropped the connection as it went out, and its retry isn't due before the copy withdraws S's rows
+    w.db.run("UPDATE outbox_targets SET attempts = 1, next_at = ? WHERE outbox_id IN (SELECT id FROM outbox WHERE op = 'delete_item' AND signer = ?)", w.p.now() + 3_600, S);
+    expect(await runMove(w.p)).toBe('done');
+    for (const r of ['ws://op', 'ws://a', 'ws://b']) expect([r, namedBy(w)(r)]).toEqual([r, expect.arrayContaining([`30078:${S}:${d2}`])]);
+    expect(rowsOf(w, w.T.pubkey()).map((r) => r.hash)).toEqual([h(1)]);
+  });
+
+  test("a save deleted under S as the move waits stays deleted on S's relays when the last drain sends the move back (F20)", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    await w.save(w.S, 2);
+    await waitAtReadBack(w);
+    const S = w.S.pubkey();
+    const d2 = w.db.get<{ remote_d: string }>('SELECT remote_d FROM items WHERE owner = ? AND hash = ?', S, h(2))!.remote_d;
+    // every relay refused the kind 5 until the outbox gave up on it
+    const del = deleteItem(w.db, 1_100, S, h(2));
+    commitDelete(w.db, S, h(2), del.held);
+    w.db.run("UPDATE outbox SET state = 'dead' WHERE op = 'delete_item' AND signer = ?", S);
+    w.db.run('UPDATE outbox_targets SET next_at = 0');
+    // and the last drain found a save, which sent the move back to the copy
+    let drained = false;
+    const p: MovePorts = { ...w.p, drainSourceInbox: async () => void (drained || ((drained = true), await w.save(w.S, 3))) };
+    expect(await runMove(p)).toBe('done');
+    expect(namedBy(w)('ws://op')).toContain(`30078:${S}:${d2}`);
+    expect(rowsOf(w, w.T.pubkey()).map((r) => r.hash)).toEqual([h(1), h(3)]);
+  });
+
   test('DELETE /account refused: S stays, to try again', async () => {
     const w = world({ accountStatus: 500 });
     await w.save(w.S, 1);
@@ -473,6 +540,296 @@ describe('The move (contract 4.8, mobile spec 4.10)', () => {
     expect(rowsOf(w, w.T.pubkey()).map((r) => r.hash)).toEqual([h(1), h(2)]);
   });
 
+  /**
+   * A browser connected to S whose saves are wrapped to S on the operator relay, and the move's last drain of S's inbox
+   * as the phone's runner wires it: the real drain, S's key opening its wraps (C§4.4, 4.8 step 5). deleted says whether
+   * S's kind 5 for a wrap was on the operator relay when S's DELETE /account went.
+   */
+  function browserOfS(w: ReturnType<typeof world>) {
+    const device = new LocalSigner(nodeCrypto.randomBytes(32));
+    const token = 'cd'.repeat(32);
+    absorbRecord(w.db, w.S.pubkey(), { v: 1, devices: [{ device_pubkey: device.pubkey(), label: 'Chrome on a Linux laptop', token, connected_at: 1, revoked_at: null }] }, 'ee'.repeat(32), 1);
+    let n = 0;
+    const send = async (url: string) => {
+      const now = w.p.now();
+      const request: SaveRequest = { v: 1, url, canonical: null, title: 'From the browser', site: 'e.com', byline: null, lang: 'en', hero: null, captured_at: now - 60, token, html: null };
+      // dated when it is sent, rather than up to two days before as NIP-59 has it, which the world's clock can't go back to
+      const { wrap } = await wrapSaveRequest(device, w.S.pubkey(), String(n++), request, now, { now, random: (k) => new Uint8Array(k) });
+      await w.p.publish('ws://op', wrap);
+      return wrap.id;
+    };
+    const drainS = async () => void (await drainInbox({
+      db: w.db, now: w.p.now, signer: w.S, crypto: nodeCrypto, query: w.p.query, fetch: w.p.fetch, defaults: async () => D,
+      markdown: async () => ({ ok: false, reason: 'error' }), stage: w.p.stage, unstage: () => undefined, writeText: () => undefined, targets: async () => T3,
+    }, w.S.pubkey()));
+    const fiveFor = (wrapId: string) => w.relays.get('ws://op')!.some((e) => e.kind === 5 && e.pubkey === w.S.pubkey()
+      && e.tags.some((t) => t[0] === 'e' && t[1] === wrapId) && e.tags.some((t) => t[0] === 'k' && t[1] === '1059'));
+    const atDelete = new Map<string, boolean>();
+    const watching = (wrapIds: () => string[]) => (async (url: string, init: RequestInit = {}) => {
+      if (init.method === 'DELETE' && url.endsWith('/account')) for (const id of wrapIds()) atDelete.set(id, fiveFor(id));
+      return w.p.fetch(url, init);
+    }) as typeof fetch;
+    return { send, drainS, fiveFor, watching, deleted: (id: string) => atDelete.get(id) };
+  }
+
+  test("the last drain's new save goes back through the copy, its wrap's kind 5 out under S before S's account goes", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    const b = browserOfS(w);
+    // the browser saved a page while the move ran: its wrap waits in S's inbox for the last drain
+    const wrap = await b.send('https://e.com/from-the-browser');
+    expect(await runMove({ ...w.p, drainSourceInbox: b.drainS, fetch: b.watching(() => [wrap]) })).toBe('done');
+    expect(rowsOf(w, w.T.pubkey()).map((r) => r.hash)).toEqual(expect.arrayContaining([h(1), itemHash('https://e.com/from-the-browser')]));
+    // the browser's Undo reads S's kind 5 for its old wrap as the save on the phone (C§4.4)
+    expect(b.fiveFor(wrap)).toBe(true);
+    expect(b.deleted(wrap)).toBe(true);
+  });
+
+  test("the last drain's repeat save of one S holds has its wrap's kind 5 out under S before S's account goes", async () => {
+    const w = world();
+    const b = browserOfS(w);
+    // a page the browser saved before the move, taken by S's inbox then, and saved again while the move ran
+    const first = await b.send('https://e.com/again');
+    await b.drainS();
+    await w.p.runOutbox();
+    expect(b.fiveFor(first)).toBe(true);
+    w.tick(10);
+    const again = await b.send('https://e.com/again');
+    expect(await runMove({ ...w.p, drainSourceInbox: b.drainS, fetch: b.watching(() => [again]) })).toBe('done');
+    expect(rowsOf(w, w.T.pubkey()).map((r) => r.hash)).toEqual([itemHash('https://e.com/again')]);
+    expect(b.deleted(again)).toBe(true);
+  });
+
+  test("a wrap's kind 5 the operator relay can't take yet keeps S, whose account goes once it is out", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    const b = browserOfS(w);
+    const first = await b.send('https://e.com/1-again');
+    await b.drainS();
+    w.tick(10);
+    // the relay drops the connection whenever S sends a kind 5 for the wrap the last drain takes
+    let wrap = '';
+    let down = true;
+    const publish: MovePorts['publish'] = (r, e) => (down && e.kind === 5 && e.tags.some((t) => t[1] === wrap) ? Promise.reject(new Error('down')) : w.p.publish(r, e));
+    const outbox = () => drain({ db: w.db, now: w.p.now, signer: async (pk) => (pk === w.S.pubkey() ? w.S : pk === w.T.pubkey() ? w.T : null), fetch: w.p.fetch, crypto: nodeCrypto, defaults: () => D, publish, readBlob: w.p.readStaged });
+    await outbox();
+    expect(b.fiveFor(first)).toBe(true);
+    wrap = await b.send('https://e.com/1-again');
+    const p: MovePorts = { ...w.p, publish, runOutbox: outbox, drainSourceInbox: b.drainS, fetch: b.watching(() => [wrap]) };
+    expect(await runMove(p)).toBe('waiting');
+    expect(moveJob(w.db)?.step).toBe(5);
+    expect(w.log.some((l) => l.startsWith('DELETE http://api/account'))).toBe(false);
+    expect(w.db.get('SELECT 1 AS n FROM identities WHERE pubkey = ?', w.S.pubkey())).toEqual({ n: 1 });
+    down = false;
+    w.tick(60);
+    expect(await runMove(p)).toBe('done');
+    expect(b.deleted(wrap)).toBe(true);
+  });
+
+  test("a wrap's kind 5 the outbox put off for an hour, the operator relay having been out of reach, goes out at once at the end", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    const b = browserOfS(w);
+    // taken by S's inbox before the move, its kind 5 failing while the relay was out of reach, so the outbox's next
+    // try is an hour off (data/outbox backoff)
+    const wrap = await b.send('https://e.com/taken-before');
+    await b.drainS();
+    w.db.run("UPDATE outbox_targets SET attempts = 8, next_at = ? WHERE outbox_id IN (SELECT id FROM outbox WHERE op = 'delete_wrap')", w.p.now() + 3_600);
+    w.tick(10);
+    // the person watches the move with Back turned off: it ends now that the relay answers, rather than in an hour
+    expect(await runMove({ ...w.p, drainSourceInbox: b.drainS, fetch: b.watching(() => [wrap]) })).toBe('done');
+    expect(b.deleted(wrap)).toBe(true);
+  });
+
+  test("a wrap's kind 5 the operator relay refuses for good doesn't hold S: the move ends", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    const b = browserOfS(w);
+    const wrap = await b.send('https://e.com/refused');
+    const publish: MovePorts['publish'] = async (r, e) => (e.kind === 5 && e.tags.some((t) => t[1] === wrap) ? { ok: false, reason: 'blocked: not allowed' } : w.p.publish(r, e));
+    const outbox = () => drain({
+      db: w.db, now: w.p.now, signer: async (pk) => (pk === w.S.pubkey() ? w.S : pk === w.T.pubkey() ? w.T : null),
+      fetch: w.p.fetch, crypto: nodeCrypto, defaults: () => D, publish, readBlob: w.p.readStaged,
+    });
+    expect(await runMove({ ...w.p, publish, runOutbox: outbox, drainSourceInbox: b.drainS })).toBe('done');
+    expect(rowsOf(w, w.T.pubkey()).map((r) => r.hash)).toEqual(expect.arrayContaining([h(1), itemHash('https://e.com/refused')]));
+  });
+
+  test("a wrap's kind 5 queued for an operator relay defaults.json has since replaced goes to the one it names now", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    const b = browserOfS(w);
+    const wrap = await b.send('https://e.com/relay-moved');
+    // S's inbox took it as the move began, its kind 5 queued for the operator relay as defaults.json named it then;
+    // the operator has since moved the relay to a new address, the browser's Undo reading S's kind 5s there, and the
+    // old one answers no more
+    await b.drainS();
+    const now = { ...D, operator: { ...D.operator, relay: 'ws://op2' } };
+    const publish: MovePorts['publish'] = (r, e) => (r === 'ws://op' && e.kind === 5 ? Promise.reject(new Error('gone')) : w.p.publish(r, e));
+    const outbox = () => drain({
+      db: w.db, now: w.p.now, signer: async (pk) => (pk === w.S.pubkey() ? w.S : pk === w.T.pubkey() ? w.T : null),
+      fetch: w.p.fetch, crypto: nodeCrypto, defaults: () => now, publish, readBlob: w.p.readStaged,
+    });
+    const p: MovePorts = { ...w.p, defaults: async () => now, publish, runOutbox: outbox, drainSourceInbox: b.drainS };
+    // waited on at the old address, it held S, and the move, for good
+    expect(await runMove(p)).toBe('done');
+    const at = (relay: string) => (w.relays.get(relay) ?? []).some((e) => e.kind === 5 && e.pubkey === w.S.pubkey() && e.tags.some((t) => t[0] === 'e' && t[1] === wrap));
+    expect([at('ws://op'), at('ws://op2')]).toEqual([false, true]);
+  });
+
+  /** T's newest copy of a save on a relay the operator doesn't run. */
+  async function tCopy(w: ReturnType<typeof world>, hash: string) {
+    const T = w.T.pubkey();
+    const mine = await Promise.all(w.relays.get('ws://a')!.filter((e) => e.kind === 30078 && e.pubkey === T && e.tags.some((t) => t[1]?.startsWith('kefli/item/')))
+      .map((e) => readItemEvent(w.T, e)));
+    return mine.find((m) => m.hash === hash)!.item.item;
+  }
+
+  test("an upload refused under T counts as settled: T's copy names the mirror holding S's text, which waits under T (C§4.8, v1.12)", async () => {
+    let refused = '';
+    const w = world({ refuse: (author) => author === refused });
+    refused = w.T.pubkey();
+    const T = w.T.pubkey();
+    const sha = await w.save(w.S, 1);
+    expect(await runMove(w.p)).toBe('done');
+    expect((await tCopy(w, h(1))).text).toMatchObject({ sha256: sha, servers: ['http://m1'] });
+    // the text waits under T, its ciphertext kept on the phone, and it stays backed up on the mirror
+    expect(w.db.get('SELECT owner, operator_at, last_error, mirror_url FROM blobs')).toEqual({ owner: T, operator_at: null, last_error: 'quota', mirror_url: 'http://m1' });
+    expect(w.staged.has(sha)).toBe(true);
+    expect(notBackedUp(w.db, T)).toBe(0);
+    // room comes: T's upload goes from the phone's copy, and the save goes out again naming both
+    refused = 'nobody';
+    w.tick(86_400);
+    await w.p.runOutbox();
+    expect((await tCopy(w, h(1))).text).toMatchObject({ sha256: sha, servers: ['http://blossom', 'http://m1'] });
+    expect(w.blossom.get(sha)!.owners.has(T)).toBe(true);
+    expect(notBackedUp(w.db, T)).toBe(0);
+  });
+
+  test("T's day used: its copies of texts the operator holds under S still go, costing nothing against the day, and stay T's", async () => {
+    let dayUsed = '';
+    const w = world({ dayUsed: (author) => author === dayUsed });
+    const T = w.T.pubkey();
+    // S's later save is on the operator under S; its first waits on the phone, refused for S's day
+    const taken = await w.save(w.S, 2);
+    dayUsed = w.S.pubkey();
+    const waiting = await w.save(w.S, 1, { stagedOnly: true });
+    await w.p.runOutbox();
+    expect([w.blossom.get(taken)?.owners.has(w.S.pubkey()), w.blossom.has(waiting)]).toEqual([true, false]);
+    // T's day is used too: the first copy's text, which only the phone has, is refused for it
+    dayUsed = T;
+    expect(await runMove(w.p)).toBe('done');
+    expect(w.blossom.has(waiting)).toBe(false);
+    expect(w.db.get('SELECT owner, last_error FROM blobs WHERE sha256 = ?', waiting)).toEqual({ owner: T, last_error: 'daily' });
+    // the text the operator held under S went under T all the same, so S's retirement leaves it there
+    expect(w.blossom.get(taken)!.owners.has(T)).toBe(true);
+    expect((await tCopy(w, h(2))).text).toMatchObject({ sha256: taken, servers: ['http://blossom', 'http://m1'] });
+    expect(notBackedUp(w.db, T)).toBe(1);
+  });
+
+  test('a text that waited on the phone under S goes under T without text, and waits there', async () => {
+    const w = world({ refuse: () => true });
+    const T = w.T.pubkey();
+    const sha = await w.save(w.S, 1, { stagedOnly: true });
+    await w.p.runOutbox();
+    expect(w.db.get('SELECT owner, last_error FROM blobs')).toEqual({ owner: w.S.pubkey(), last_error: 'quota' });
+    expect(await runMove(w.p)).toBe('done');
+    expect((await tCopy(w, h(1))).text).toBeNull();
+    expect(w.db.get('SELECT owner, operator_at, last_error, mirror_url FROM blobs')).toEqual({ owner: T, operator_at: null, last_error: 'quota', mirror_url: null });
+    expect(w.staged.has(sha)).toBe(true);
+    expect(w.db.get("SELECT 1 AS n FROM outbox WHERE signer = ? AND op = 'upload_blob' AND state = 'queued'", T)).toEqual({ n: 1 });
+    expect(notBackedUp(w.db, T)).toBe(1);
+  });
+
+  test("a text S had from another phone's upload: T's copy names the mirror S's copy named", async () => {
+    let refused = '';
+    const w = world({ refuse: (author) => author === refused });
+    refused = w.T.pubkey();
+    const md = normaliseMarkdown('# From another phone\n\nWords.');
+    const enc = await encryptText(md, nodeCrypto);
+    w.blossom.set(enc.text.sha256, { bytes: enc.blob, owners: new Set(['another']) });
+    w.db.run(
+      `INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, text_sha256, text_key, text_nonce, text_hash, text_servers, words)
+       VALUES (?, ?, 'https://e.com/9', 5, 'unread', 'cached', 'sync', ?, ?, ?, ?, ?, 4)`,
+      w.S.pubkey(), h(9), enc.text.sha256, enc.text.key, enc.text.nonce, textHash(md, nodeCrypto), JSON.stringify(['http://blossom', 'http://m2']),
+    );
+    expect(await runMove(w.p)).toBe('done');
+    expect((await tCopy(w, h(9))).text).toMatchObject({ sha256: enc.text.sha256, servers: ['http://m2'] });
+    expect(w.db.get('SELECT mirror_url FROM blobs')).toEqual({ mirror_url: 'http://m2' });
+  });
+
+  test("T's copies start at no address of S's: T sends no kind 5, and names none of S's addresses under its own key", async () => {
+    const w = world();
+    const T = w.T.pubkey();
+    await w.save(w.S, 1);
+    await w.save(w.S, 2);
+    // one S still held at its unkeyed address from before v1.10, its move to the keyed one not yet out
+    w.db.run('UPDATE items SET remote_d = ? WHERE owner = ? AND hash = ?', `kefli/item/${h(2)}`, w.S.pubkey(), h(2));
+    expect(await runMove(w.p)).toBe('done');
+    for (const r of ['ws://op', 'ws://a', 'ws://b']) expect(w.relays.get(r)!.filter((e) => e.kind === 5 && e.pubkey === T)).toEqual([]);
+    const key = libraryKey(w.db, T)!;
+    expect(w.db.all('SELECT hash, remote_d FROM items WHERE owner = ? ORDER BY hash', T)).toEqual([
+      { hash: h(1), remote_d: savedD(key, h(1)) },
+      { hash: h(2), remote_d: savedD(key, h(2)) },
+    ]);
+  });
+
+  test("a browser save still waiting to read its capture under S is copied for T to fetch its page itself", async () => {
+    const w = world();
+    const T = w.T.pubkey();
+    // the capture couldn't be read yet (the server answered 5xx, or the parser's renderer had gone): S's row waits on a
+    // wrap in S's inbox, which T never reads, and whose capture S's last drain would read into S's row alone
+    w.db.run(`INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, words) VALUES (?, ?, 'https://e.com/7', 5, 'unread', 'fetching', 'browser', 132)`,
+      w.S.pubkey(), h(7));
+    expect(await runMove(w.p)).toBe('done');
+    expect(w.db.get('SELECT text_state, text_sha256, words FROM items WHERE owner = ? AND hash = ?', T, h(7))).toEqual({ text_state: 'queued', text_sha256: null, words: 132 });
+    expect(pendingParses(w.db, T).map((r) => r.hash)).toEqual([h(7)]);
+  });
+
+  test("a switch's target learns its library key through its own signer, though the sync's answers only for the phone's identity, S", async () => {
+    for (const held of [false, true]) {
+      const w = world({ switch: true });
+      const T = w.T.pubkey();
+      // T's record from another phone, when it has used Kefli before
+      const theirs = nodeCrypto.randomBytes(32);
+      if (held) for (const r of ['ws://op', 'ws://a', 'ws://b']) await w.p.publish(r, await buildLibraryKeyEvent(w.T, theirs, 900));
+      await w.save(w.S, 1);
+      await w.save(w.S, 2);
+      // the phone's sync ports (services/runner.ts) answer for the signer slot alone, which is S's until the move ends
+      const phone = { ...w.syncPorts, signer: async (pk: string) => (pk === w.S.pubkey() ? w.S : null) };
+      const p: MovePorts = { ...w.p, collect: async (owner, signer) => (await syncOwner(phone, owner, signer)).waiting === 0 };
+      expect(await runMove(p)).toBe('done');
+      const key = libraryKey(w.db, T)!;
+      if (held) expect(key).toEqual(theirs);
+      // T's copies went out at the addresses T's own key makes, on every write relay
+      for (const r of ['ws://op', 'ws://a', 'ws://b']) {
+        const ds = w.relays.get(r)!.filter((e) => e.kind === 30078 && e.pubkey === T).map((e) => e.tags.find((t) => t[0] === 'd')?.[1]);
+        expect(ds).toEqual(expect.arrayContaining([savedD(key, h(1)), savedD(key, h(2))]));
+      }
+      expect(rowsOf(w, T).map((r) => r.hash)).toEqual([h(1), h(2)]);
+    }
+  });
+
+  test("a text another phone uploaded, whose mirror holds nothing yet: T's copy names no mirror, and the text counts as not backed up", async () => {
+    let refused = '';
+    const w = world({ refuse: (author) => author === refused, mirrorHas: () => false });
+    refused = w.T.pubkey();
+    const T = w.T.pubkey();
+    const md = normaliseMarkdown('# From another phone\n\nWords.');
+    const enc = await encryptText(md, nodeCrypto);
+    // the other phone's upload reached the operator, and its event named the mirror, whose copy kept failing with 5xx
+    w.blossom.set(enc.text.sha256, { bytes: enc.blob, owners: new Set(['another']) });
+    w.db.run(
+      `INSERT INTO items (owner, hash, url, saved_at, state, text_state, origin, text_sha256, text_key, text_nonce, text_hash, text_servers, words)
+       VALUES (?, ?, 'https://e.com/9', 5, 'unread', 'cached', 'sync', ?, ?, ?, ?, ?, 4)`,
+      w.S.pubkey(), h(9), enc.text.sha256, enc.text.key, enc.text.nonce, textHash(md, nodeCrypto), JSON.stringify(['http://blossom', 'http://m1']),
+    );
+    expect(await runMove(w.p)).toBe('done');
+    expect((await tCopy(w, h(9))).text).toBeNull();
+    expect(w.db.get('SELECT mirror_at, mirror_url FROM blobs')).toEqual({ mirror_at: null, mirror_url: null });
+    expect(notBackedUp(w.db, T)).toBe(1);
+  });
+
   test('a switch puts T beside S as the target, its lists settled, and queues the move', () => {
     const db = memoryDb();
     migrate(db);
@@ -485,5 +842,78 @@ describe('The move (contract 4.8, mobile spec 4.10)', () => {
     expect(db.get<{ value: string }>("SELECT value FROM settings WHERE key = 'lists.keep_copies'")?.value).toBe('0');
     expect(db.get('SELECT 1 FROM relays WHERE owner = ?', 'b'.repeat(64))).toBeTruthy();
     expect(moveJob(db)).toMatchObject({ from: 'a'.repeat(64), to: 'b'.repeat(64), step: 0 });
+  });
+});
+
+describe("the move's calls to servers take the hops, each with a deadline (7.1)", () => {
+  afterEach(() => jest.useRealTimers());
+  const blobAt = (url: string) => /\/[0-9a-f]{64}$/.test(url);
+
+  test("S's servers sending the text's GET and HEAD into the phone's network: nothing is asked there, and the move waits", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    const net = inward(w.p.fetch, (m, url) => (m === 'GET' || m === 'HEAD') && blobAt(url));
+    // followed as OkHttp followed it, S's text was asked for at 192.168.1.1
+    expect(await runMove({ ...w.p, fetch: net.f })).toBe('waiting');
+    expect(net.asked).toEqual([]);
+    expect(moveJob(w.db)?.step).toBe(2);
+    expect(rowsOf(w, w.T.pubkey())).toEqual([]);
+  });
+
+  test("the API sending S's DELETE /account into the phone's network: nothing is asked there, and S stays to retire later", async () => {
+    const w = world();
+    await w.save(w.S, 1);
+    const net = inward(w.p.fetch, (m, url) => m === 'DELETE' && url.endsWith('/account'));
+    expect(await runMove({ ...w.p, fetch: net.f })).toBe('waiting');
+    expect(net.asked).toEqual([]);
+    expect(moveJob(w.db)?.step).toBe(5);
+    expect(w.keysRetired()).toBe(false);
+  });
+
+  test("the API answering S's DELETE /account with any redirect: nothing it names is asked, and S stays to retire later", async () => {
+    // every call to the API is signed for its exact address (C§6), so it never answers through a redirect. Followed, a
+    // 303 to any page that answers 200 read as S's account deleted, and S's keys went with its library still held there
+    for (const [status, location] of [[303, 'https://news.example/'], [307, '/v1/account'], [302, null]] as const) {
+      const w = world();
+      await w.save(w.S, 1);
+      const base = w.p.fetch;
+      const asked: string[] = [];
+      const away = (async (url: string, init: RequestInit = {}) => {
+        if (init.method !== 'DELETE' || !url.endsWith('/account')) return base(url, init);
+        asked.push(url);
+        return url === 'http://api/account' ? new Response(null, { status, headers: location ? { location } : {} }) : new Response('{}', { status: 200 });
+      }) as typeof fetch;
+      expect([status, await runMove({ ...w.p, fetch: away })]).toEqual([status, 'waiting']);
+      expect([status, asked, moveJob(w.db)?.step, w.keysRetired()]).toEqual([status, ['http://api/account'], 5, false]);
+      expect(w.db.get('SELECT 1 AS n FROM identities WHERE pubkey = ?', w.S.pubkey())).toEqual({ n: 1 });
+    }
+  });
+
+  test('a server too slow to send the text in its time makes the move wait: the text is never copied as missing', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    const w = world();
+    await w.save(w.S, 1);
+    const base = w.p.fetch;
+    // the servers answer a HEAD at once, but never send the text itself
+    const slow = (async (url: string, init: RequestInit) => ((init.method ?? 'GET') === 'GET' && blobAt(url) ? silent(url, init) : base(url, init))) as typeof fetch;
+    const run = watch(runMove({ ...w.p, fetch: slow }));
+    await jest.advanceTimersByTimeAsync(4 * TEXT_TIMEOUT_MS);
+    // without a deadline it waited for ever; read as missing, the HEAD's answer had T's copy made without its text,
+    // and S's retirement took the text with it
+    expect(run).toMatchObject({ settled: true, value: 'waiting' });
+    expect(moveJob(w.db)?.step).toBe(2);
+    expect(w.db.get("SELECT 1 FROM items WHERE fail_reason = 'blob_missing'")).toBeUndefined();
+  });
+
+  test('an API that takes DELETE /account and never answers is let go at its deadline; S stays to retire later', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    const w = world();
+    await w.save(w.S, 1);
+    const base = w.p.fetch;
+    const stalls = (async (url: string, init: RequestInit) => (init.method === 'DELETE' && url.endsWith('/account') ? silent(url, init) : base(url, init))) as typeof fetch;
+    const run = watch(runMove({ ...w.p, fetch: stalls }));
+    await jest.advanceTimersByTimeAsync(SERVER_TIMEOUT_MS + 1_000);
+    expect(run).toMatchObject({ settled: true, value: 'waiting' });
+    expect(moveJob(w.db)?.step).toBe(5);
   });
 });

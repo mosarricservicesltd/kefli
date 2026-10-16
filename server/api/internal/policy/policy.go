@@ -69,11 +69,11 @@ type Wrap struct{ ID, Author, P string }
 
 // The limits, each in fixed windows. An address is an IPv6 sender's /64 (F8). A wrap from a sender that isn't AUTHed as
 // its recipient or one of the recipient's devices counts against its address, then against the recipient from that
-// address, then against the recipient from everyone: someone filling one recipient's allowance uses up only its own
-// (F9), and the ceiling keeps junk from many addresses out of the recipient's inbox.
+// address, then against the recipient from everyone, whoever signed it (decision 119): someone filling one recipient's
+// allowance uses up only its own (F9), and the ceiling keeps junk from many addresses out of the recipient's inbox.
 const (
 	UserMax      = 60   // events a minute from a registered author, or wraps from a connection AUTHed as the recipient's
-	AddrMax      = 240  // unregistered events an hour from an address
+	AddrMax      = 240  // wraps and Undo's deletions an hour from an address
 	ToAddrMax    = 120  // wraps an hour to one recipient from one address
 	RecipientMax = 1200 // wraps an hour to one recipient from unAUTHed senders everywhere
 )
@@ -84,6 +84,8 @@ type Policy struct {
 	addr      *limit.Limiter
 	toAddr    *limit.Limiter
 	recipient *limit.Limiter
+	// Full says whether the relay's disk is below its floor, when every new event waits (nil: never).
+	Full func() bool
 }
 
 func New(look Lookups, now func() time.Time) *Policy {
@@ -115,8 +117,22 @@ func tags(ev Event, name string) []string {
 	return out
 }
 
-// Decide is the rule table (contract 3.2). Imports by the operator (a restore) are taken as they are.
+// Full is the answer to every new event the rules would take while the relay's disk is below its floor. Both clients
+// send a rate-limited event again later, the phone after a minute and the extension at its next try, so a save waits
+// for room rather than being dropped (blocked, invalid and error are final to the phone).
+const Full = "rate-limited: the relay is nearly full, try again later"
+
+// Decide is the rule table (contract 3.2), with the disk's floor over it. Imports by the operator (a restore) are taken
+// as they are.
 func (p *Policy) Decide(in Input) Verdict {
+	v := p.decide(in)
+	if v.Out.Action == "accept" && in.Type == "new" && in.SourceType != "Import" && p.Full != nil && p.Full() {
+		return reject(v.Out.ID, Full)
+	}
+	return v
+}
+
+func (p *Policy) decide(in Input) Verdict {
 	var ev Event
 	if err := json.Unmarshal(in.Event, &ev); err != nil || ev.ID == "" {
 		return reject("", "invalid: unreadable event")
@@ -127,39 +143,30 @@ func (p *Policy) Decide(in Input) Verdict {
 	if (ev.Kind == KindAppData || ev.Kind == KindWrap) && len(in.Event) > SmallMax {
 		return reject(ev.ID, fmt.Sprintf("invalid: kind %d events are at most %d bytes", ev.Kind, SmallMax))
 	}
+	// every wrap gets the recipient test, whoever signs it (decision 119): a registered author's own kind 1059, which
+	// no Kefli client sends, was taken to any key, a removed one included, and counted only against its author
 	switch {
-	case p.look.Registered(ev.Pubkey):
-		return p.fromUser(in, ev)
 	case ev.Kind == KindWrap:
 		return p.wrap(in, ev)
+	case p.look.Registered(ev.Pubkey):
+		return p.fromUser(in, ev)
 	case ev.Kind == KindDeletion:
 		return p.undo(in, ev)
 	}
 	return reject(ev.ID, "blocked: this relay keeps Kefli libraries, and this key isn't registered")
 }
 
-// fromUser: a registered author writes what it likes, 60 events a minute. A wrap it sends is recorded; a deletion it
-// sends also removes the wraps it names that are addressed to it.
+// fromUser: a registered author writes what it likes but a wrap, 60 events a minute. A deletion it sends also removes
+// the wraps it names that are addressed to it.
 func (p *Policy) fromUser(in Input, ev Event) Verdict {
 	if !allowed(p.user, ev.Pubkey) {
 		return reject(ev.ID, "rate-limited: slow down")
 	}
 	v := accept(ev.ID)
-	switch ev.Kind {
-	case KindWrap:
-		v.Record = p.record(ev)
-	case KindDeletion:
+	if ev.Kind == KindDeletion {
 		v.Deletes = p.consumed(ev)
 	}
 	return v
-}
-
-func (p *Policy) record(ev Event) *Wrap {
-	ps := tags(ev, "p")
-	if len(ps) != 1 {
-		return nil
-	}
-	return &Wrap{ID: ev.ID, Author: ev.Pubkey, P: ps[0]}
 }
 
 // consumed is the wraps a deletion names that are addressed to its author: the recipient deleting a wrap it has
@@ -174,9 +181,10 @@ func (p *Policy) consumed(ev Event) []string {
 	return out
 }
 
-// wrap: a gift wrap from a throwaway key, taken when its one p tag names a registered user or an authorised device.
-// One sent on a connection AUTHed as its recipient's own key or device (a browser's save to its user, the phone's
-// pair-ack to its browser) counts only against that key; any other against the limits above.
+// wrap: a gift wrap, from a throwaway key or any other, taken when its one p tag names a registered user or an
+// authorised device, and so never a key DELETE /account removed. One sent on a connection AUTHed as its recipient's
+// own key or device (a browser's save to its user, the phone's pair-ack to its browser) counts only against that key;
+// any other, a registered author's included, against the limits above.
 func (p *Policy) wrap(in Input, ev Event) Verdict {
 	ps := tags(ev, "p")
 	if len(ps) != 1 || !(p.look.Registered(ps[0]) || p.look.Authorised(ps[0])) {

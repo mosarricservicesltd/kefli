@@ -17,3 +17,5 @@
       tags: [deploy]
     - role: backup
       tags: [host]
+    - role: monitor
+      tags: [host, monitor]

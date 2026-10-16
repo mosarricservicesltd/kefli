@@ -24,3 +24,4 @@ export * from './phonePair';
 export * from './remoteSigners';
 export * from './publicUrl';
 export * from './pdf';
+export * from './defaults';

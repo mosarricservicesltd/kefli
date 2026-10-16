@@ -6,7 +6,8 @@ import { addRelay, listServers, recordList, relayAddress, relayEntries, relayRow
 import { begin, enqueue, finish } from '../src/data/outbox';
 import { commitDelete, deleteItem } from '../src/data/library';
 import { addTypedRelay, type AddRelayPorts } from '../src/services/addRelay';
-import { drain, type SendPorts } from '../src/services/send';
+import * as send from '../src/services/send';
+import { drain, relayResult, type SendPorts } from '../src/services/send';
 import type { RelayAnswer } from '../src/net/pool';
 import { memoryDb } from './sqlite';
 
@@ -162,6 +163,74 @@ describe('sending what adding a relay queues (FD 113)', () => {
     expect(w.db.get("SELECT 1 FROM outbox WHERE op = 'copy_relay'")).toBeUndefined();
   });
 
+  test('a save dated ahead of the added relay’s clock keeps no other from it: the rest go now, it once its time comes', async () => {
+    const w = world();
+    seedGeneratedLists(w.db, w.pk, D);
+    item(w.db, w.pk, 'h1');
+    // signed on a phone running 20 minutes fast, and on one a year ahead
+    const ahead = await save(w, 'h1', 1000 + 1200, 'archived while fast');
+    const far = await save(w, 'h2', 1000 + 365 * 86_400, 'a clock a year ahead');
+    const rest = await Promise.all(['h3', 'h4'].map((h, i) => save(w, h, 500 + i, 'unread')));
+    const { p, sent, setClock } = ports(w, { [D.relays[0]]: [far, ahead, ...rest] });
+    // the added relay is strfry, which takes an event dated no more than 15 minutes past its own clock
+    let relayClock = 1000;
+    p.publish = async (url, event) => {
+      if (url === MINE && event.created_at > relayClock + 900) return { ok: false, reason: 'invalid: created_at too late' };
+      sent.push({ url, event });
+      return { ok: true };
+    };
+    addRelay(w.db, 10, w.pk, MINE, D);
+    await drain(p);
+    const copied = () => sent.filter((s) => s.url === MINE && s.event.kind === 30078).map((s) => s.event.id);
+    expect(copied().sort()).toEqual(rest.map((e) => e.id).sort());
+    expect(w.db.get("SELECT t.next_at FROM outbox o JOIN outbox_targets t ON t.outbox_id = o.id WHERE o.op = 'copy_relay'")).toEqual({ next_at: 1000 + 1200 });
+    // its time comes: it goes too, and the copy is done; the one a year ahead is passed over
+    setClock(1000 + 1200);
+    relayClock = 1000 + 1200;
+    await drain(p);
+    expect(copied()).toContain(ahead.id);
+    expect(copied()).not.toContain(far.id);
+    expect(w.db.get("SELECT 1 FROM outbox WHERE op = 'copy_relay'")).toBeUndefined();
+  });
+
+  test('an added relay that holds a newer version of a save already has it: the copy goes on past it, and is done', async () => {
+    const w = world();
+    seedGeneratedLists(w.db, w.pk, D);
+    item(w.db, w.pk, 'h1');
+    // the person's other phone sent the added relay a newer version of h1 than the write relays hold
+    const older = await save(w, 'h1', 100, 'unread');
+    const rest = await Promise.all(['h2', 'h3'].map((h, i) => save(w, h, 200 + i, 'unread')));
+    const { p, sent } = ports(w, { [D.relays[0]]: [older, ...rest] });
+    p.publish = async (url, event) => {
+      sent.push({ url, event });
+      // strfry's answer to an older version of an address it holds a newer one of: OK false
+      return url === MINE && event.id === older.id ? { ok: false, reason: 'replaced: have newer event' } : { ok: true };
+    };
+    addRelay(w.db, 10, w.pk, MINE, D);
+    await drain(p);
+    expect(sent.filter((s) => s.url === MINE && s.event.kind === 30078).map((s) => s.event.id).sort()).toEqual([older, ...rest].map((e) => e.id).sort());
+    // read as a retry, the copy stopped at it and sent it again at every backoff, for ever, since it goes as signed
+    expect(w.db.get("SELECT 1 FROM outbox WHERE op = 'copy_relay'")).toBeUndefined();
+  });
+
+  test('an added relay that holds a deletion of a save’s event already has what it needs: the copy goes on past it, and is done', async () => {
+    const w = world();
+    seedGeneratedLists(w.db, w.pk, D);
+    item(w.db, w.pk, 'h1');
+    const gone = await save(w, 'h1', 100, 'unread');
+    const rest = await save(w, 'h2', 200, 'unread');
+    const { p, sent } = ports(w, { [D.relays[0]]: [gone, rest] });
+    p.publish = async (url, event) => {
+      sent.push({ url, event });
+      // strfry's answer to an event its author's kind 5 removed there: OK false, the same for every try
+      return url === MINE && event.id === gone.id ? { ok: false, reason: 'deleted: user requested deletion' } : { ok: true };
+    };
+    addRelay(w.db, 10, w.pk, MINE, D);
+    await drain(p);
+    expect(sent.filter((s) => s.url === MINE && s.event.kind === 30078).map((s) => s.event.id).sort()).toEqual([gone.id, rest.id].sort());
+    expect(w.db.get("SELECT 1 FROM outbox WHERE op = 'copy_relay'")).toBeUndefined();
+  });
+
   test('waits while no other relay answers', async () => {
     const w = world();
     seedGeneratedLists(w.db, w.pk, D);
@@ -248,6 +317,95 @@ describe('checking a typed relay (FD 113)', () => {
     seedGeneratedLists(w.db, w.pk, D);
     expect(await addTypedRelay(ports(w).p, w.pk, 'Relay.Mine.Example')).toEqual({ check: 'ok', url: MINE });
     expect(writeRelays(w.db, w.pk)).toContain(MINE);
+  });
+
+  // the relays' words for an event dated past their clock, as send.ts relayResult reads them: strfry's, khatru's and
+  // nostr-rs-relay's, which it sends only for a date ahead
+  const AHEAD = [
+    'invalid: created_at too late', 'blocked: event too much in the future',
+    'invalid: The event created_at field is out of the acceptable range (+900sec) for this relay.',
+  ];
+
+  test('a relay that turns the list away only as dated ahead of its clock answered: it is added, and the list goes to it once the clock allows', async () => {
+    for (const reason of AHEAD) {
+      const w = world();
+      seedGeneratedLists(w.db, w.pk, D);
+      // the newest list held, dated by a clock running fast, or after a list another device dated so
+      const list = await buildRelayList(w.s, relayEntries(w.db, w.pk), 10 + 3_600);
+      recordList(w.db, w.pk, 10002, list.id, list.created_at, JSON.stringify(list));
+      const r = ports(w, { answer: { ok: false, reason } });
+      expect([reason, await addTypedRelay(r.p, w.pk, MINE)]).toEqual([reason, { check: 'ok', url: MINE }]);
+      expect(writeRelays(w.db, w.pk)).toContain(MINE);
+      expect(targets(w.db, 'publish_lists', w.pk)).toContain(MINE);
+      // the send reads the same words as the clock's, and tries the list again with the backoff (send.ts relayResult)
+      expect(relayResult(MINE, { ok: false, reason }, list.id).kind).toBe('retry');
+    }
+  });
+
+  test('a relay that turns the list away only as older than it keeps answered: it is added, and the new list goes to it', async () => {
+    // strfry keeps nothing older than three years by default, khatru's policy says "event too old": a nostr user's
+    // list from 2023 that Kefli never republished (Keep backup copies off) is the list held, and the check sends it
+    for (const reason of ['invalid: created_at too early', 'blocked: event too old']) {
+      const w = world('nip55');
+      w.db.run('UPDATE identities SET lists_settled = 1');
+      w.db.run("INSERT INTO relays (url, owner, read, write, source, added_by_app) VALUES ('wss://theirs.example', ?, 1, 1, 'user', 0)", w.pk);
+      const old = await buildRelayList(w.s, [{ url: 'wss://theirs.example', read: true, write: true }], 1_690_000_000);
+      recordList(w.db, w.pk, 10002, old.id, old.created_at, JSON.stringify(old));
+      const r = ports(w, { answer: { ok: false, reason } });
+      expect([reason, await addTypedRelay(r.p, w.pk, MINE)]).toEqual([reason, { check: 'ok', url: MINE }]);
+      expect(r.sent.map((s) => s.event.id)).toEqual([old.id]);
+      expect(writeRelays(w.db, w.pk)).toEqual(['wss://theirs.example', MINE]);
+      // the list that goes to it is a new one, dated now, which it takes; the old list itself stays refused
+      expect(targets(w.db, 'publish_lists', w.pk)).toContain(MINE);
+      expect(relayResult(MINE, { ok: false, reason }, old.id).kind).toBe('rejected');
+    }
+  });
+
+  test('a relay that already holds the list took it before; one that refuses it otherwise isn’t added', async () => {
+    const w = world();
+    seedGeneratedLists(w.db, w.pk, D);
+    const list = await buildRelayList(w.s, relayEntries(w.db, w.pk), 5);
+    recordList(w.db, w.pk, 10002, list.id, 5, JSON.stringify(list));
+    const duplicate = { ok: false as const, reason: 'duplicate: have this event' };
+    expect(await addTypedRelay(ports(w, { answer: duplicate }).p, w.pk, MINE)).toEqual({ check: 'ok', url: MINE });
+    expect(relayResult(MINE, duplicate, list.id).kind).toBe('ok');
+    // strfry's answer when it holds a newer list of theirs than this phone's, one another app sent it since the last
+    // sync: it has taken this person's list already
+    const v = world();
+    seedGeneratedLists(v.db, v.pk, D);
+    recordList(v.db, v.pk, 10002, list.id, 5, JSON.stringify(list));
+    expect(await addTypedRelay(ports(v, { answer: { ok: false, reason: 'replaced: have newer event' } }).p, v.pk, MINE)).toEqual({ check: 'ok', url: MINE });
+    expect(writeRelays(v.db, v.pk)).toContain(MINE);
+    // and the sends to it read the same words the same way: nothing more to send it
+    expect(relayResult(MINE, { ok: false, reason: 'replaced: have newer event' }, list.id).kind).toBe('ok');
+    for (const reason of ['restricted: not on the allow list', 'pow: difficulty 28 is required', 'blocked: you are banned', 'invalid: bad signature']) {
+      const v = world();
+      seedGeneratedLists(v.db, v.pk, D);
+      recordList(v.db, v.pk, 10002, list.id, 5, JSON.stringify(list));
+      expect([reason, (await addTypedRelay(ports(v, { answer: { ok: false, reason } }).p, v.pk, MINE)).check]).toEqual([reason, 'refused']);
+      expect(writeRelays(v.db, v.pk)).not.toContain(MINE);
+      expect(relayResult(MINE, { ok: false, reason }, list.id).kind).toBe('rejected');
+    }
+  });
+
+  test("the check reads a relay's words by the outbox's own tests, so the two can't drift apart", async () => {
+    // copies of their own here had already parted once: the check took "replaced:" while the sends retried it
+    const holds = jest.spyOn(send, 'holdsAlready');
+    const clock = jest.spyOn(send, 'pastItsClock');
+    try {
+      for (const reason of ['replaced: have newer event', 'invalid: created_at too late']) {
+        const w = world();
+        seedGeneratedLists(w.db, w.pk, D);
+        const list = await buildRelayList(w.s, relayEntries(w.db, w.pk), 5);
+        recordList(w.db, w.pk, 10002, list.id, 5, JSON.stringify(list));
+        expect(await addTypedRelay(ports(w, { answer: { ok: false, reason } }).p, w.pk, MINE)).toEqual({ check: 'ok', url: MINE });
+      }
+      expect(holds).toHaveBeenCalledWith('replaced: have newer event');
+      expect(clock).toHaveBeenCalledWith('invalid: created_at too late');
+    } finally {
+      holds.mockRestore();
+      clock.mockRestore();
+    }
   });
 });
 

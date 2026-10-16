@@ -15,7 +15,9 @@ import { connectBrowser, lookupCode, readScan, type ConnectPorts } from '../src/
 import { drain, type RelayAnswer, type SendPorts } from '../src/services/send';
 import { syncInbound, type SyncPorts } from '../src/services/sync';
 import type { Defaults } from '../src/services/config';
+import { SERVER_TIMEOUT_MS } from '../src/net/http';
 import { memoryDb } from './sqlite';
+import { inward, silent, watch } from './inward';
 
 const D: Defaults = {
   v: 1, operator: { relay: 'ws://op', blossom: 'http://blossom', api: 'http://api' },
@@ -141,6 +143,53 @@ describe('connected browsers (mobile spec 5.5, contract 4.4 and 4.9)', () => {
     expect(await lookupCode(w.ports, 'ABCD-EFGH')).toEqual({ problem: 'offline' });
     expect(w.calls[0]).toBe('POST http://api/register');
   });
+
+  test("the API sending a typed code's lookup into the phone's network: nothing is asked there, and it reads as offline", async () => {
+    const w = world();
+    const net = inward(w.ports.fetch, (_m, url) => url.includes('/pair-offers/'));
+    // followed as OkHttp followed it, whatever answered at 192.168.1.1 had the lookup, and its answer was read as the offer
+    expect(await lookupCode({ ...w.ports, fetch: net.f }, 'ABCD-EFGH')).toEqual({ problem: 'offline' });
+    expect(net.asked).toEqual([]);
+  }, 20_000);
+
+  test("the API answering a typed code's lookup with any redirect: offline, never a wrong code, and nothing it names is asked", async () => {
+    // every call to the API is signed for its exact address (C§6), so it never answers through a redirect. Followed, a
+    // 303 to another of its paths, which answers 404, or a 302 to a page that answers 200, read as a wrong code
+    const w = world();
+    for (const [status, location] of [[303, '/pair-offers/elsewhere'], [302, 'https://news.example/'], [300, null]] as const) {
+      const asked: string[] = [];
+      const away = (async (url: string, init: RequestInit = {}) => {
+        if (!url.includes('/pair-offers/') && url.startsWith('http://api/')) return w.ports.fetch(url, init);
+        asked.push(url.replace(/[0-9a-f]{64}$/, '<lookup>'));
+        if (!url.startsWith('http://api/')) return new Response('<p>a page</p>', { status: 200 });
+        return url.endsWith('/elsewhere') ? w.ports.fetch(url, init) : new Response(null, { status, headers: location ? { location } : {} });
+      }) as typeof fetch;
+      expect([status, await lookupCode({ ...w.ports, fetch: away }, 'ABCD-EFGH')]).toEqual([status, { problem: 'offline' }]);
+      expect([status, asked]).toEqual([status, ['http://api/pair-offers/<lookup>']]);
+    }
+    // each lookup runs scrypt at N = 16384 (contract 4.4)
+  }, 30_000);
+
+  test('an API that takes the lookup and never answers is let go at its deadline: offline, where Connect waited for good', async () => {
+    const w = world();
+    let asked = (): void => undefined;
+    const started = new Promise<void>((ok) => (asked = ok));
+    const stalls = (async (url: string, init: RequestInit) => {
+      if (!url.includes('/pair-offers/')) return w.ports.fetch(url, init);
+      asked();
+      return silent(url, init);
+    }) as typeof fetch;
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    try {
+      const run = watch(lookupCode({ ...w.ports, fetch: stalls }, 'ABCD-EFGH'));
+      // the code is stretched first (scrypt), in real time
+      await started;
+      await jest.advanceTimersByTimeAsync(SERVER_TIMEOUT_MS + 1_000);
+      expect(run).toMatchObject({ settled: true, value: { problem: 'offline' } });
+    } finally {
+      jest.useRealTimers();
+    }
+  }, 20_000);
 
   test('Connect posts the device, wraps the pair-ack to it, and republishes the record', async () => {
     const w = world();

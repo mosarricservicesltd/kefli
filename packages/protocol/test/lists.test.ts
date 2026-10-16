@@ -1,6 +1,7 @@
 import { verifyEvent } from 'nostr-tools/pure';
 import {
-  EventTooLargeError, LocalSigner, buildRelayList, buildServerList, newest, readRelayList, readServerList, withBackupRelays, withBackupServers,
+  EventTooLargeError, LIST_MAX, LocalSigner, buildRelayList, buildServerList, newest, readRelayList, readServerList, sameUrl, withBackupRelays,
+  withBackupServers, withoutTrailingSlashes,
 } from '../src';
 import { nodeCrypto } from '../src/node';
 
@@ -40,6 +41,46 @@ describe('relay and server lists (contract 3.1, mobile spec 4.6)', () => {
   test('readers ignore tags they don’t understand', () => {
     expect(readRelayList({ tags: [['r'], ['x', 'wss://a'], ['r', 'wss://b']] })).toEqual([{ url: 'wss://b', read: true, write: true }]);
     expect(readServerList({ tags: [['server'], ['server', 'https://s'], ['r', 'https://t']] })).toEqual(['https://s']);
+  });
+
+  test('a list of 10,000 reads as its first LIST_MAX usable entries; other schemes, credentials and repeats are left out', () => {
+    const relays = Array.from({ length: 10_000 }, (_, i) => ['r', `wss://r${i}.example`]);
+    expect(readRelayList({ tags: relays })).toHaveLength(LIST_MAX);
+    expect(readRelayList({ tags: relays })[LIST_MAX - 1].url).toBe(`wss://r${LIST_MAX - 1}.example`);
+    const odd = [['r', 'javascript:alert(1)'], ['r', 'https://r.example'], ['r', 'wss://user:pw@r.example'], ['r', 'wss://'], ['r', 'wss://a b'],
+      ['r', `wss://${'x'.repeat(3000)}.example`], ['r', 'wss://ok.example'], ['r', 'wss://ok.example/'], ['r', 'ws://localhost:4869']];
+    expect(readRelayList({ tags: odd }).map((e) => e.url)).toEqual(['wss://ok.example', 'ws://localhost:4869']);
+    const servers = [...Array.from({ length: 10_000 }, (_, i) => ['server', `https://s${i}.example`])];
+    expect(readServerList({ tags: servers })).toHaveLength(LIST_MAX);
+    expect(readServerList({ tags: [['server', 'file:///etc'], ['server', 'content://x'], ['server', 'http://192.168.1.2:3000'], ['server', 'https://s/']] }))
+      .toEqual(['http://192.168.1.2:3000', 'https://s/']);
+  });
+
+  test('trailing slashes come off exactly as the pattern took them off, on every string of up to seven characters', () => {
+    const old = (s: string) => s.replace(/\/+$/, '');
+    const differ: string[] = [];
+    let level = [''];
+    for (let n = 0; n <= 7; n++) {
+      for (const s of level) if (withoutTrailingSlashes(s) !== old(s)) differ.push(s);
+      if (n < 7) level = level.flatMap((s) => ['/', 'a', ':', '\\', '\u2215'].map((c) => s + c));
+    }
+    expect(differ).toEqual([]);
+    expect(['wss://r.example/', 'wss://r.example//', 'https://s.example/a///'].map(withoutTrailingSlashes))
+      .toEqual(['wss://r.example', 'wss://r.example', 'https://s.example/a']);
+  });
+
+  test('a run of 40,000 slashes before a letter is read in linear time: the pattern took 6 s for each', () => {
+    const run = `wss://r.example${'/'.repeat(40_000)}x`;
+    const t = Date.now();
+    expect(sameUrl(run, `${run}///`)).toBe(true);
+    expect(sameUrl(run, `${run}y`)).toBe(false);
+    expect(withoutTrailingSlashes(`${run}${'/'.repeat(40_000)}`)).toBe(run);
+    expect(Date.now() - t).toBeLessThan(1_000);
+  });
+
+  test('a list keeps each address once, slash or not, and the entry as it was written', () => {
+    const tags = [['r', 'wss://a.example/'], ['r', 'wss://a.example'], ['r', 'wss://a.example//'], ['r', 'wss://b.example//'], ['r', 'wss://b.example/x/']];
+    expect(readRelayList({ tags }).map((e) => e.url)).toEqual(['wss://a.example/', 'wss://b.example//', 'wss://b.example/x/']);
   });
 
   test('an edit starts from the newest copy seen', () => {

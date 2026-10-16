@@ -14,11 +14,11 @@ import { webCrypto } from '../src/crypto';
 import { loadDefaults, type Defaults } from '../src/defaults';
 import { deviceSigner } from '../src/device';
 import { ackFor, browserLabel, formatCode, newOffer, OFFER_LIFE, OFFER_REUSE_MIN, pairingFrom, postOffer, tryPairing, type Offer } from '../src/pair';
-import { ATTEMPTS_MAX, BLOB_KEEP_MAX, dequeue, enqueue, failed, flush, QUEUE_MAX, queued, shown, waiting, whyNot } from '../src/queue';
-import { deliver, prepare, retract, type Net, type Pending } from '../src/save';
+import { ATTEMPTS_MAX, BLOB_KEEP_MAX, changeQueue, dequeue, enqueue, failed, flush, QUEUE_MAX, queued, shown, waiting, whyNot } from '../src/queue';
+import { deliver, prepare, retract, withoutText, type Delivered, type Net, type Pending } from '../src/save';
 import { KEYS, memoryStore, type Pairing } from '../src/store';
 import { applyMove, followMoves } from '../src/move';
-import { SECOND_LOOK_MS, settleUndo } from '../src/undo';
+import { retracted, SECOND_LOOK_MS, settleUndo, together, type Found, type Retracted } from '../src/undo';
 import { markDelay, toastCopy } from '../src/toastCopy';
 import { debugText, history, HISTORY_MAX, record } from '../src/debug';
 
@@ -29,6 +29,13 @@ const device = new LocalSigner(hexToBytes('22'.repeat(32)));
 const PAIRING: Pairing = { v: 1, user_pubkey: user.pubkey(), write_relays: ['wss://relay.example'], blossom_servers: ['https://blossom.example'], token: 'ab'.repeat(32), label: 'Chrome on a Mac', paired_at: NOW };
 
 const json = (body: unknown, ok = true) => ({ ok, status: ok ? 200 : 500, json: async () => body }) as unknown as Response;
+
+/**
+ * How long a test that derives a typed code's key may take. That is scrypt at N 16,384 in pure JS (noble, src/crypto.ts):
+ * a fifth of a second alone, while a test that runs it twice took 6 to 15 seconds on a loaded machine under coverage,
+ * past Jest's five.
+ */
+const SCRYPT_MS = 60_000;
 
 describe('the browser label (contract 4.4)', () => {
   test.each([
@@ -62,7 +69,7 @@ describe('pairing (contract 4.4)', () => {
     const { lookup, key } = await derivePairCode(o.code, webCrypto);
     expect(body.lookup).toBe(lookup);
     expect(await openOffer(body.offer, key, webCrypto)).toEqual(o.offer);
-  });
+  }, SCRYPT_MS);
 
   test("the QR and the typed code's sealed offer both carry the device key's proof over the nonce, which the phone accepts", async () => {
     let sealed = '';
@@ -82,14 +89,14 @@ describe('pairing (contract 4.4)', () => {
     // and a proof only the device key makes: the user's own key can't stand in for it
     const forged = await newOffer(user, DEFAULTS, 'x', webCrypto, NOW);
     expect(proofHolds({ ...forged.offer, device_pubkey: device.pubkey() }, DEFAULTS.operator.api)).toBe(false);
-  });
+  }, SCRYPT_MS);
 
   test('an operator that refuses the offer is an error the page shows as offline', async () => {
     const get = (async () => json({}, false)) as unknown as typeof fetch;
     const o = await newOffer(device, DEFAULTS, 'x', webCrypto, NOW);
     await expect(postOffer(device, DEFAULTS, o, webCrypto, get)).rejects.toThrow('500');
     expect(o.posted).toBe(false);
-  });
+  }, SCRYPT_MS);
 
   describe('trying again after trouble (F42)', () => {
     const attempt = (last: { offer: Offer | null }, relayUp: boolean, at = NOW) => {
@@ -210,6 +217,42 @@ describe('a save (contract 4.4)', () => {
   });
 });
 
+describe('a request sent again without its HTML (contract 4.4, v1.12)', () => {
+  const ctx = { device, defaults: DEFAULTS, pairing: PAIRING, crypto: webCrypto, now: NOW };
+  const open = async (w: NostrEvent) => {
+    const { rumor, seal } = await unwrap(user, w);
+    return { rumor, seal, req: JSON.parse(rumor.content) as SaveRequest };
+  };
+
+  test('is the same save request, its uuid kept, with html null, under a new wrap and key, signed again by the device', async () => {
+    const { pending, wrapKey } = await prepare(PAGE, ctx);
+    const again = (await withoutText(pending, device, NOW + 60))!;
+    expect(again.wrap.id).not.toBe(pending.wrap.id);
+    expect(again.wrap.pubkey).not.toBe(pending.wrap.pubkey);
+    expect(again.wrapKey).not.toEqual(wrapKey);
+    expect(again.wrap.tags).toEqual([['p', user.pubkey()]]);
+    const before = await open(pending.wrap);
+    const after = await open(again.wrap);
+    expect(after.rumor.tags).toEqual(before.rumor.tags);
+    expect(before.req.html).not.toBeNull();
+    expect(after.req).toEqual({ ...before.req, html: null });
+    expect(after.rumor.created_at).toBe(NOW + 60);
+    expect(after.seal.pubkey).toBe(device.pubkey());
+    // the copy sealed to the device says the same, so a move wraps the request without its HTML too
+    expect(JSON.parse(await device.nip44Decrypt(device.pubkey(), again.sealed))).toEqual({ uuid: before.rumor.tags[0][1].split('/').pop(), request: after.req });
+    // and the phone takes it from a connected browser, a request without HTML naming no server
+    const devices = { v: 1 as const, devices: [{ device_pubkey: device.pubkey(), label: 'x', token: PAIRING.token, connected_at: NOW, revoked_at: null }] };
+    expect(acceptSaveRequest(after.rumor, after.seal, devices, DEFAULTS.operator.blossom)).toMatchObject({ ok: true, request: { html: null } });
+  });
+
+  test('can’t be made from a sealed copy that doesn’t open, or a wrap that names no recipient', async () => {
+    const { pending } = await prepare(PAGE, ctx);
+    expect(await withoutText({ ...pending, sealed: 'not a sealed request' }, device, NOW)).toBeNull();
+    expect(await withoutText({ ...pending, wrap: { ...pending.wrap, tags: [] } }, device, NOW)).toBeNull();
+    expect(await withoutText({ ...pending, wrap: { id: pending.id } as NostrEvent }, device, NOW)).toBeNull();
+  });
+});
+
 function fakeNet(o: { upload?: 'ok' | 'down' | 'refused'; publish?: 'ok' | 'down' | 'blocked' } = {}) {
   const calls: string[] = [];
   const published: NostrEvent[] = [];
@@ -235,10 +278,13 @@ function fakeNet(o: { upload?: 'ok' | 'down' | 'refused'; publish?: 'ok' | 'down
 
 describe('delivery', () => {
   const ctx = { device, defaults: DEFAULTS, pairing: PAIRING, crypto: webCrypto, now: NOW };
-  const send = async (o: Parameters<typeof fakeNet>[0]) => {
+  /** The step before every publish, which notes only a refused upload among the network's calls. */
+  const noting = (calls: string[]) => async (_p: Delivered, refused: boolean) => void (refused && calls.push('refused'));
+  /** A delivery whose refusal, unless the test says otherwise, is only noted among the network's calls. */
+  const send = async (o: Parameters<typeof fakeNet>[0], before?: (p: Delivered, refused: boolean) => Promise<void>) => {
     const { pending } = await prepare(PAGE, ctx);
     const f = fakeNet(o);
-    return { d: await deliver(pending, 'b', 'r', device, f.net), pending, ...f };
+    return { d: await deliver(pending, 'b', 'r', device, f.net, before ?? noting(f.calls)), pending, ...f };
   };
 
   test('the blob goes up before the wrap, and is then dropped', async () => {
@@ -248,18 +294,47 @@ describe('delivery', () => {
     expect(r.calls).toEqual(['upload', `publish 1059 as ${device.pubkey().slice(0, 4)}`]);
     expect(r.pending.blob).toBeNull();
   });
+  test('the step before the publish runs after every upload that went or had nothing to send, and says whether it was refused', async () => {
+    const seen: boolean[] = [];
+    const before = async (_p: Delivered, refused: boolean) => void seen.push(refused);
+    for (const upload of ['ok', 'refused', 'down'] as const) await send({ upload }, before);
+    expect(seen).toEqual([false, true]);
+    const f = fakeNet();
+    await deliver((await prepare(linkOnly(PAGE.url), ctx)).pending, 'b', 'r', device, f.net, before);
+    expect(seen).toEqual([false, true, false]);
+  });
   test('an unreachable server leaves the save to wait, the blob kept', async () => {
     const r = await send({ upload: 'down' });
     expect(r.d).toBe('unreachable');
     expect(r.calls).toEqual(['upload']);
     expect(r.pending.blob).not.toBeNull();
   });
-  test('a blob refused for good is dropped and the request still goes, for the phone to fetch the page', async () => {
-    expect((await send({ upload: 'refused' })).d).toBe('sent');
+  test('a blob refused for good isn’t sent again, and the wrap that refused leaves in its place goes (v1.12)', async () => {
+    const other = (await prepare(linkOnly(PAGE.url), ctx)).pending.wrap;
+    const seen: string[] = [];
+    const r = await send({ upload: 'refused' }, async (p, refused) => {
+      seen.push(`refused ${refused}, blob ${p.blob === null ? 'gone' : 'kept'}`);
+      p.wrap = other;
+    });
+    expect(r.d).toBe('sent');
+    expect(seen).toEqual(['refused true, blob gone']);
+    expect(r.calls).toEqual(['upload', `publish 1059 as ${device.pubkey().slice(0, 4)}`]);
+    expect(r.published.map((w) => w.id)).toEqual([other.id]);
   });
-  test("a relay that times out, and one that refuses", async () => {
+  test('a save with no blob, or one already uploaded, is only published', async () => {
+    const link = (await prepare(linkOnly(PAGE.url), ctx)).pending;
+    const uploaded = { ...(await prepare(PAGE, ctx)).pending, blob: null };
+    expect(uploaded.sha256).not.toBeNull();
+    for (const p of [link, uploaded]) {
+      const f = fakeNet({ upload: 'refused' });
+      expect(await deliver(p, 'b', 'r', device, f.net, noting(f.calls))).toBe('sent');
+      expect(f.calls).toEqual([`publish 1059 as ${device.pubkey().slice(0, 4)}`]);
+      expect(f.published.map((w) => w.id)).toEqual([p.id]);
+    }
+  });
+  test('a relay that times out, and one that refuses, which is the relay’s own answer and nothing in the browser', async () => {
     expect((await send({ publish: 'down' })).d).toBe('unreachable');
-    expect((await send({ publish: 'blocked' })).d).toBe('blocked');
+    expect((await send({ publish: 'blocked' })).d).toBe('unreachable');
   });
   test('Undo is a kind 5 by the wrap key, and the inbox blob goes', async () => {
     const { pending, wrapKey } = await prepare(PAGE, ctx);
@@ -309,11 +384,14 @@ describe('the queue (extension spec 4, decisions 30, 31 and 60)', () => {
     const store = memoryStore();
     await enqueue(store, p('a'), 'offline');
     await enqueue(store, p('b'), 'reach');
-    await enqueue(store, p('c'), 'blocked');
+    // c: an entry an earlier build stored as blocked in this browser, a state since retired (decision 119)
+    await changeQueue(store, (q) => void q.push({ ...p('c'), why: 'blocked' as 'reach', stopped: false }));
     const q = await queued(store);
     expect(waiting(q)).toBe(1);
+    // it is read as couldn't reach, and listed with the rest
+    expect(q.map((e) => e.why)).toEqual(['offline', 'reach', 'reach']);
     expect(failed(q).map((e) => e.id)).toEqual(['b', 'c']);
-    expect([whyNot('blocked', true), whyNot('unreachable', true), whyNot('unreachable', false)]).toEqual(['blocked', 'reach', 'offline']);
+    expect([whyNot(true), whyNot(false)]).toEqual(['reach', 'offline']);
   });
   test('a pass sends what it can, counts attempts, and stops at 200', async () => {
     const store = memoryStore();
@@ -331,11 +409,46 @@ describe('the queue (extension spec 4, decisions 30, 31 and 60)', () => {
     expect(await flush(store, async () => 'sent', true, { all: true, only: 'other' })).toEqual([]);
     expect(await flush(store, async () => 'sent', true, { all: true, only: 'no' })).toEqual(['no']);
   });
+  test('a try made while the browser is offline counts no attempt, so a save made offline never stops there', async () => {
+    const store = memoryStore();
+    await enqueue(store, p('a'), 'offline');
+    for (let i = 0; i <= ATTEMPTS_MAX; i++) await flush(store, async () => 'unreachable', false);
+    expect(await queued(store)).toMatchObject([{ id: 'a', why: 'offline', attempts: 0, stopped: false }]);
+    // online, a try that fails counts, the relay out of reach or refusing it
+    await flush(store, async () => 'unreachable', true);
+    expect(await queued(store)).toMatchObject([{ id: 'a', why: 'reach', attempts: 1 }]);
+  });
+  test('a stopped save is listed under Couldn’t send, with Retry, whatever it waited on, and isn’t counted as waiting to send', async () => {
+    const store = memoryStore();
+    await enqueue(store, p('a'), 'offline');
+    await enqueue(store, p('b'), 'offline');
+    // stopped while waiting offline, as an earlier build left it, or Retried while the browser was offline
+    await changeQueue(store, (q) => void (q[0] = { ...q[0], attempts: ATTEMPTS_MAX, stopped: true }));
+    await flush(store, async () => 'unreachable', false, { all: true, only: 'a' });
+    const q = await queued(store);
+    expect(q[0]).toMatchObject({ id: 'a', why: 'offline', stopped: true });
+    expect(failed(q).map((e) => e.id)).toEqual(['a']);
+    expect(waiting(q)).toBe(1);
+  });
 });
 
 describe('capture (contract 4.2 and 4.4)', () => {
   const words = (n: number) => Array.from({ length: n }, () => 'word').join(' ') + '\n';
   test('the address loses its fragment', () => expect(pageUrl('https://a.example/x?y=1#z')).toBe('https://a.example/x?y=1'));
+  test('an address goes to the phone without its user name and password (contract 4.3, ruling 8)', async () => {
+    // a link's address keeps them (a link's href does in Chrome); Chrome's location.href leaves them out, but pageUrl
+    // doesn't count on every browser doing so
+    expect(pageUrl('https://user:hunter2@a.example/x?y=1#z')).toBe('https://a.example/x?y=1');
+    expect(linkOnly('https://user:hunter2@a.example/x#z').url).toBe('https://a.example/x#z');
+    expect(linkOnly('https://www.bank.example@evil.example/x').url).toBe('https://evil.example/x');
+    // a link without any is sent exactly as it was
+    expect(linkOnly('https://a.example/x y#z').url).toBe('https://a.example/x y#z');
+    const { pending } = await prepare(linkOnly('https://user:hunter2@a.example/x'), { device, defaults: DEFAULTS, pairing: PAIRING, crypto: webCrypto, now: NOW });
+    const req = JSON.parse((await unwrap(user, pending.wrap)).rumor.content) as SaveRequest;
+    expect(req.url).toBe('https://a.example/x');
+    expect(JSON.stringify(req)).not.toContain('hunter2');
+    expect(pending.hash).toBe(itemHash('https://a.example/x'));
+  });
   test('only web addresses can be saved (decision 100)', () => {
     expect(['https://a.example/', 'HTTP://b.example/x.pdf'].every(isWebAddress)).toBe(true);
     expect(['chrome://settings/', 'about:blank', 'file:///tmp/a.html', 'chrome-extension://x/options.html'].some(isWebAddress)).toBe(false);
@@ -363,7 +476,10 @@ describe('the toast', () => {
     expect(toastCopy({ ...s, kind: 'saving', link: true })).toMatchObject({ sub: 'example.com', timed: false });
   });
   test('the refusal and the failures', () => {
-    expect(toastCopy({ ...s, kind: 'full' }).title).toBe(`Not saved: ${QUEUE_MAX} are already waiting`);
+    // decision 119: eight really waiting opens the Couldn't send list; a save neither sent nor kept says only that
+    expect(toastCopy({ ...s, kind: 'full' })).toMatchObject({ title: `Not saved: ${QUEUE_MAX} are already waiting`, action: 'Options', tile: 'alert', tone: 'bad', timed: true });
+    expect(toastCopy({ ...s, kind: 'unsent' })).toMatchObject({ title: 'Couldn’t send this save', sub: 'Save this again.', tile: 'alert', tone: 'bad', timed: true, say: 'Couldn’t send this save. Save this again.' });
+    expect(toastCopy({ ...s, kind: 'unsent' }).action).toBeUndefined();
     expect(toastCopy({ ...s, kind: 'failed' })).toMatchObject({ mark: 'bad', action: 'Options' });
     expect(toastCopy({ ...s, kind: 'offline' }).mark).toBe('off');
     expect(toastCopy({ ...s, kind: 'notext' }).sub).toBe('example.com · your phone will fetch the text');
@@ -407,7 +523,7 @@ describe('following a move (contract 4.4 and 4.8)', () => {
     await store.set(KEYS.pairing, PAIRING);
     const { pending } = await prepare(PAGE, { device, defaults: DEFAULTS, pairing: PAIRING, crypto: webCrypto, now: NOW });
     await enqueue(store, pending, 'offline');
-    const p = await applyMove(store, device, ackFor(T, user.pubkey(), 'c1'.repeat(32)), NOW + 10);
+    const p = await applyMove(store, device, ackFor(T, user.pubkey(), 'c1'.repeat(32)), NOW + 10, memoryStore());
     expect(p).toMatchObject({ user_pubkey: T.pubkey(), token: 'c1'.repeat(32), label: PAIRING.label, paired_at: PAIRING.paired_at, write_relays: ['wss://t.example'] });
     const [moved] = await queued(store);
     expect(moved.id).not.toBe(pending.id);
@@ -422,11 +538,11 @@ describe('following a move (contract 4.4 and 4.8)', () => {
 });
 
 describe('Undo (contract 4.4, decision 101)', () => {
-  const run = async (answers: boolean[]) => {
+  const run = async (answers: Found[], r: Retracted = 'taken') => {
     const calls: string[] = [];
     const out = await settleUndo(
-      async () => void calls.push('retract'),
-      async () => (calls.push('look'), answers.shift() ?? false),
+      async () => (calls.push('retract'), r),
+      async () => (calls.push('look'), answers.length ? answers.shift()! : false),
       async (ms) => void calls.push(`wait ${ms}`),
     );
     return { out, calls };
@@ -440,10 +556,32 @@ describe('Undo (contract 4.4, decision 101)', () => {
   test('otherwise it is removed', async () => {
     expect((await run([false, false])).out).toBe('undone');
   });
-  test('a refused retraction still finds the save on the phone, and is reported if it isn’t there', async () => {
-    const refusing = async () => { throw new Error('blocked: deletes only a gift wrap of its own that this relay holds'); };
-    expect(await settleUndo(refusing, async () => true, async () => undefined)).toBe('onphone');
-    await expect(settleUndo(refusing, async () => false, async () => undefined)).rejects.toThrow('blocked');
+  test('a second look the relay doesn’t answer whole can’t tell, so it is reported rather than removed (F40)', async () => {
+    expect((await run([false, null])).out).toBe('failed');
+    expect((await run([null, null])).out).toBe('failed');
+    // the second look is the later one: a deletion the first could have found, it finds too
+    expect((await run([null, false])).out).toBe('undone');
+    expect((await run([null, true])).out).toBe('onphone');
+  });
+  test('a refused retraction still finds the save on the phone; otherwise the caller hears that the relay held no such wrap', async () => {
+    expect((await run([true], 'absent')).out).toBe('onphone');
+    expect((await run([false, false], 'absent')).out).toBe('absent');
+  });
+  test('a retraction that couldn’t be made is reported, unless the save is found on the phone', async () => {
+    expect((await run([false, false], 'unreached')).out).toBe('failed');
+    expect((await run([false, true], 'unreached')).out).toBe('onphone');
+  });
+  test('a retraction is read from the relay’s answer: taken, refused as holding no such wrap, or not made', async () => {
+    expect(await retracted(Promise.resolve())).toBe('taken');
+    expect(await retracted(Promise.reject(new Error('blocked: deletes only a gift wrap of its own that this relay holds')))).toBe('absent');
+    for (const e of [new Error('timeout'), new Error('publish timed out'), 'connection failed', new Error('rate-limited: slow down'), new Error('relay connection closed')]) {
+      expect(await retracted(Promise.reject(e))).toBe('unreached');
+    }
+    // the save's own wrap, its last, decides between taken and absent; any that couldn't be made, wherever it is, is reported
+    expect(together(['absent', 'taken'])).toBe('taken');
+    expect(together(['taken', 'absent'])).toBe('absent');
+    expect(together(['unreached', 'taken'])).toBe('unreached');
+    expect(together(['taken', 'unreached'])).toBe('unreached');
   });
 });
 
@@ -480,7 +618,7 @@ describe('Copy debug info (extension spec 11, decision 108)', () => {
     });
     expect(text).toContain('Kefli extension 0.1.0 (beta, abc1234)');
     expect(text).toContain(`Library key: ${PAIRING.user_pubkey.slice(0, 8)}…`);
-    expect(text).toContain('Waiting: 1 (sending 0, offline 0, couldn’t reach 1, blocked 0, stopped 0; most attempts 0)');
+    expect(text).toContain('Waiting: 1 (sending 0, offline 0, couldn’t reach 1, stopped 0; most attempts 0)');
     expect(text).toContain(`page  ${pending.id.slice(0, 8)}  waiting, couldn’t reach`);
     expect(text).toContain('Last look for a move: never');
     for (const secret of ['example.com', 'A private title', (await store.get<string>(KEYS.device))!, dev.pubkey(), PAIRING.user_pubkey, PAIRING.token]) expect(text).not.toContain(secret);

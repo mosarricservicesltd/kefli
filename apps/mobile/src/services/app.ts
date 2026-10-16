@@ -8,6 +8,7 @@ import { launchPlan } from './launchState';
 import { adoptRecovery, newHere } from './identity';
 import { store } from './store';
 import { onMoveDone, runSync } from './runner';
+import { keepBackgroundSync } from './background';
 
 export type AppState = { route: 'welcome' | 'welcome-early' | 'saves'; owner: string | null; restoreCard: boolean };
 
@@ -16,6 +17,9 @@ const listeners = new Set<() => void>();
 const set = (s: AppState) => {
   state = s;
   listeners.forEach((l) => l());
+  // the background worker (4.8) runs while the phone has a library and stops when it goes: Delete my data and Sign out
+  // both end here, at Welcome
+  keepBackgroundSync(s.owner !== null).catch((e) => console.log(`[kefli-background] ${JSON.stringify({ error: String((e as Error).message) })}`));
 };
 
 export function useApp(): AppState | null {

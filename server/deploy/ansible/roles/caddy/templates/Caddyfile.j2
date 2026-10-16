@@ -9,6 +9,18 @@
 	# A test host has no public name, so Caddy signs its own certificates.
 	local_certs
 {% endif %}
+	# A request's body must arrive within 20 minutes, where nothing bounded it: a body sent a byte at a time held its
+	# connection for good, as over HTTP/1.1 Caddy reads the rest of a body before it passes on an answer keflid wrote
+	# early. 20 minutes is past keflid's own pace for the most Caddy lets through (internal/guard: 30 seconds and a
+	# second for every 8 KB, under 19 minutes for 9 MB) and past every phone's and browser's wait for an upload (four
+	# and a half minutes for 8 MB), so it cuts what keflid would cut and what nothing else bounds, a body sent to the
+	# website, the relay or the mail hook. A WebSocket to the relay, once upgraded, isn't held to it, and nor is the
+	# server Caddy makes itself on port 80 for its redirects to https, which this option doesn't reach.
+	servers {
+		timeouts {
+			read_body 20m
+		}
+	}
 	# Everything but the access log (below) goes to the journal through the default logger, including the error log
 	# each failed upstream writes: no address, query, header or certificate in it either (F6, backend spec 5).
 	log default {

@@ -10,22 +10,26 @@
 //      confirmed when it answered OK to every kind 5, a server when it answered 2xx or 404 to every delete; each
 //      gets a minute.
 //   3. the phone: the key file, Block Store, the database and the files.
-// Each step's result is kept in a delete_account job, so a deletion cut short resumes where it stopped.
+// Each step's result is kept in a delete_account job, so a deletion cut short resumes where it stopped. Before step
+// 1, every relay is read for the saves it holds, and the read must come whole (FD 119): the operator relay's cut short
+// or unanswered fails step 1 as unreachable, so nothing is sent and the deletion is tried again; another relay's
+// marks it as not confirming, so no save it alone holds is skipped in silence.
 import {
-  DEVICES_D, ITEM_D_PREFIX, KIND, LIBRARY_KEY_D, T_TAG, buildDeletions, buildRelayList, buildServerList, deleteBlob, httpAuth, readItemEvent,
-  type CryptoPort, type NostrEvent, type Signer,
+  DEVICES_D, EventTooLargeError, ITEM_D_PREFIX, KIND, LIBRARY_KEY_D, T_TAG, buildDeletions, buildRelayList, buildServerList, deleteBlob, httpAuth,
+  readItemEvent, signWithinCeiling, withoutTrailingSlashes, type CryptoPort, type NostrEvent, type Signer,
 } from '@kefli/protocol';
 import type { SqlDb } from '../data/db';
 import { deletesOwed, itemAddresses, newestVersion } from '../data/libraryKey';
-import { relayEntries } from '../data/lists';
-import type { RelayAnswer } from './send';
-import { pageStream, type Filter } from './sync';
+import { bare, indexerRelays, nextListTime, relayEntries, relayListTags, serverListTags } from '../data/lists';
+import { SERVER_TIMEOUT_MS, apiFetch, serverFetch, serverHops } from '../net/http';
+import { holdsAlready, type RelayAnswer } from './send';
+import { StreamCut, pageStream, takeNewerLists, type Filter } from './sync';
 
 export type DelPorts = {
   db: SqlDb;
   now: () => number;
   signer: Signer;
-  defaults: { operator: { relay: string; blossom: string; api: string }; indexer: string[] };
+  defaults: { operator: { relay: string; blossom: string; api: string }; relays: string[]; indexer: string[] };
   publish: (relay: string, event: NostrEvent) => Promise<RelayAnswer>;
   /** The relays' saves and records, read before signing; without it, only what the phone holds is deleted. */
   query?: (relay: string, filters: Filter[]) => Promise<NostrEvent[]>;
@@ -34,9 +38,21 @@ export type DelPorts = {
   sleep: (ms: number) => Promise<void>;
   /** Step 3, on the phone's storage. */
   wipePhone: () => Promise<void>;
-  /** Each server's minute (spec 7.2). */
+  /** Each server's minute (spec 7.2), in milliseconds of wall time, its tries counted with the waits between them. */
   budgetMs?: number;
+  /** The local stack's build (services/config.ts LOCAL_STACK), whose blob servers a redirect may reach on loopback. */
+  localStack?: boolean;
 };
+
+/**
+ * p's fetch for a blob server (net/http serverFetch): each redirect followed a hop at a time, never into the phone's own
+ * network (on the local stack, loopback too), and each answer had within the API's 15 s. Left to OkHttp, a redirect
+ * sent a blob's deletion on to whatever answered at 192.168.1.1 (its authorisation left behind, as OkHttp does at
+ * another host), whose 2xx the phone then took for the server's. DELETE /account follows no redirect (stepOperator).
+ */
+function toServer(p: DelPorts): typeof fetch {
+  return serverFetch(p.fetch, { hops: serverHops(p.localStack === true), timeoutMs: SERVER_TIMEOUT_MS });
+}
 
 /** What the screen hands deletePorts: the relay pool among them, which both publishes and reads. */
 export type DelDeps = Omit<DelPorts, 'now' | 'publish' | 'query' | 'sleep'> & {
@@ -60,6 +76,8 @@ export type Target = { url: string; kind: 'relay' | 'server'; host: string; own:
 export type Result = 'wait' | 'done' | 'fail';
 export type Progress = { operator: Result; others: Record<string, Result>; phone: Result };
 export type Outcome = 'done' | 'partial' | 'failed';
+/** The screen's view of the deletion, told each step as it resolves. A named type, so the code gate reads deleteEverything whole. */
+export type Report = (prog: Progress) => void;
 
 const host = (u: string) => {
   try {
@@ -68,7 +86,6 @@ const host = (u: string) => {
     return u;
   }
 };
-const trim = (u: string) => u.replace(/\/+$/, '');
 
 /**
  * The servers step 2 asks: other write relays in the 10002, and the other Blossom servers named in a save's
@@ -76,11 +93,11 @@ const trim = (u: string) => u.replace(/\/+$/, '');
  */
 export function deleteTargets(db: SqlDb, owner: string, operator: { relay: string; blossom: string }): Target[] {
   const relays = db.all<{ url: string; source: string }>("SELECT url, source FROM relays WHERE owner = ? AND write = 1 AND source != 'indexer' ORDER BY rowid", owner)
-    .filter((r) => trim(r.url) !== trim(operator.relay));
+    .filter((r) => bare(r.url) !== bare(operator.relay));
   const named = db.all<{ text_servers: string }>('SELECT text_servers FROM items WHERE owner = ? AND text_servers IS NOT NULL', owner)
     .flatMap((r) => JSON.parse(r.text_servers) as string[]);
-  const ownServers = new Set(db.all<{ url: string }>("SELECT url FROM servers WHERE owner = ? AND role = 'user'", owner).map((s) => trim(s.url)));
-  const servers = [...new Set(named.map(trim))].filter((u) => u !== trim(operator.blossom));
+  const ownServers = new Set(db.all<{ url: string }>("SELECT url FROM servers WHERE owner = ? AND role = 'user'", owner).map((s) => bare(s.url)));
+  const servers = [...new Set(named.map(bare))].filter((u) => u !== bare(operator.blossom));
   const seen = new Set<string>();
   return [
     ...relays.filter((r) => !seen.has(r.url) && seen.add(r.url)).map((r) => ({ url: r.url, kind: 'relay' as const, host: host(r.url), own: r.source === 'user' })),
@@ -103,15 +120,24 @@ function save(p: DelPorts, prog: Progress): void {
   );
 }
 
-/** Tries until it succeeds or the minute is spent: 2 s, then doubling. */
-async function withinMinute(p: DelPorts, attempt: () => Promise<boolean>): Promise<boolean> {
+/** One try at a step's work: whether it went through. A named type, so the code gate's parser reads withinMinute whole. */
+type Attempt = () => Promise<boolean>;
+
+/**
+ * Tries until it succeeds or the minute is spent (spec 7.2): 2 s, then doubling. The minute is wall time, the tries as
+ * well as the waits between them, and a try starts only while a request's deadline (net/http SERVER_TIMEOUT_MS) would
+ * still end it within the minute. Counting the waits alone, as it did, five tries of 15 s each held the screen, which
+ * swallows Back while the deletion runs, for 1 min 45 s before the step read as failed. RULED: the time is read from
+ * the steady clock (performance.now), which the phone's clock being set doesn't move: read from Date.now, a phone set
+ * back an hour while a try ran, as a network's time sets one whose clock was wrong, held the screen for 37 minutes.
+ */
+async function withinMinute(p: DelPorts, attempt: Attempt): Promise<boolean> {
   const budget = p.budgetMs ?? 60_000;
-  let spent = 0;
+  const started = performance.now();
   for (let wait = 2000; ; wait *= 2) {
     if (await attempt().catch(() => false)) return true;
-    if (spent + wait > budget) return false;
+    if (performance.now() - started + wait + SERVER_TIMEOUT_MS > budget) return false;
     await p.sleep(wait);
-    spent += wait;
   }
 }
 
@@ -131,22 +157,30 @@ function blobs(db: SqlDb, owner: string): string[] {
   return [...new Set([...held, ...deletesOwed(db, owner).blobs])];
 }
 
-type OnRelays = { ds: string[]; blobs: string[]; newest: number };
+type OnRelays = { ds: string[]; blobs: string[]; newest: number; unread: string[] };
 
 /**
  * Every kind 30078 with #t kefli on the user's relays, whatever its v (C§4.7 step 2), so a save another device made
  * since this phone last synced is deleted too (F32). A save the phone doesn't hold is opened for its text's blob,
- * which goes with the rest; one that doesn't open still gets its kind 5. A relay that doesn't answer adds nothing.
- * newest: the newest event's time, which the kind 5s are dated past (F36).
+ * which goes with the rest; one that doesn't open still gets its kind 5. A relay that doesn't answer, or cuts its
+ * answer short (sync.ts StreamCut), is unread: what came of its answer is named all the same, and the relay can't
+ * confirm the deletion, since a save it alone holds may not have come (FD 119); read as holding nothing, as it was, a
+ * relay that cut its answer short had its saves skipped in silence. newest: the newest event's time, which the kind
+ * 5s are dated past (F36).
  */
 async function onRelays(p: DelPorts, owner: string, held: Set<string>): Promise<OnRelays> {
   const query = p.query;
-  if (!query) return { ds: [], blobs: [], newest: 0 };
+  if (!query) return { ds: [], blobs: [], newest: 0, unread: [] };
   const filter: Filter = { kinds: [KIND.appData], authors: [owner], '#t': [T_TAG] };
   const relays = [...new Set([p.defaults.operator.relay, ...relayEntries(p.db, owner).map((r) => r.url)])];
   const found = new Map<string, NostrEvent>();
+  const unread: string[] = [];
   await Promise.all(relays.map(async (relay) => {
-    for (const e of await pageStream(query, relay, filter).catch(() => [])) {
+    const events = await pageStream(query, relay, filter).catch((e: unknown) => {
+      unread.push(relay);
+      return e instanceof StreamCut ? e.events : [];
+    });
+    for (const e of events) {
       const d = e.tags.find((t) => t[0] === 'd')?.[1];
       if (e.pubkey !== owner || !d) continue;
       const had = found.get(d);
@@ -157,13 +191,15 @@ async function onRelays(p: DelPorts, owner: string, held: Set<string>): Promise<
   for (const [d, e] of found) {
     if (held.has(d) || !d.startsWith(ITEM_D_PREFIX)) continue;
     try {
-      const sha = (await readItemEvent(p.signer, e)).item.item.text?.sha256;
+      // opened apart from its read: the code gate's parser, given a bracketed await, lost its place in this function
+      const opened = await readItemEvent(p.signer, e);
+      const sha = opened.item.item.text?.sha256;
       if (typeof sha === 'string') shas.push(sha);
     } catch {
       // not one that opens: its kind 5 goes all the same
     }
   }
-  return { ds: [...found.keys()], blobs: shas, newest: Math.max(0, ...[...found.values()].map((e) => e.created_at)) };
+  return { ds: [...found.keys()], blobs: shas, newest: Math.max(0, ...[...found.values()].map((e) => e.created_at)), unread };
 }
 
 async function wrapDeletions(p: DelPorts, owner: string): Promise<NostrEvent[]> {
@@ -191,23 +227,65 @@ async function listDeletion(p: DelPorts): Promise<NostrEvent> {
 }
 
 /**
+ * A list's tags without the entries of name the operator's url or a row Kefli added (kefli) names: everything else as
+ * the list is sent from here, tag for tag (data/lists relayListTags, serverListTags).
+ */
+function without(tags: string[][], name: string, operator: string, kefli: Set<string>): string[][] {
+  return tags.filter((t) => t[0] !== name || (bare(t[1] ?? '') !== bare(operator) && !kefli.has(bare(t[1] ?? ''))));
+}
+
+/** One rewritten list, signed, or null when nothing of theirs is left in it, or it is too long for one event (C§3.3). */
+async function rewritten(p: DelPorts, kind: number, tags: string[][], name: string, at: number): Promise<NostrEvent | null> {
+  if (!tags.some((t) => t[0] === name)) return null;
+  try {
+    return await signWithinCeiling(p.signer, { kind, created_at: at, tags, content: '' });
+  } catch (e) {
+    if (e instanceof EventTooLargeError) return null;
+    throw e;
+  }
+}
+
+/**
+ * A nostr user's newest 10002 and 10063 on the indexer relays, the default relays and their own relays, taken in as
+ * the list send takes them just before it builds its own (C§3.1, send.ts readNewerLists), so the deletion's rewrite
+ * starts from them: from the lists held alone, a relay or server they added in another app since this phone last
+ * synced went from the lists their other apps share, and so did one whose list reached only a default relay that isn't
+ * in theirs, as the second is not when Kefli adds the first. Read before the saves are, so a relay they read from now
+ * is read for saves too. A relay that doesn't answer adds nothing, and with none answering the lists held are
+ * rewritten.
+ */
+async function takeNewestLists(p: DelPorts, owner: string): Promise<void> {
+  const query = p.query;
+  if (!query) return;
+  const d = p.defaults;
+  const relays = [...new Set([...d.indexer, ...indexerRelays(p.db, owner), ...d.relays, ...relayEntries(p.db, owner).map((r) => r.url)])];
+  const kinds = [KIND.relayList, KIND.serverList];
+  const copies = await Promise.all(relays.map((r) => query(r, [{ kinds, authors: [owner] }]).catch((): NostrEvent[] => [])));
+  takeNewerLists(p.db, owner, copies.flat(), kinds, p.now());
+}
+
+/**
  * A nostr user's lists (C§4.7): never deleted, since their other apps share them, but republished without the
  * operator's relay and Blossom server, even where they listed these themselves (F32), and without any default this
- * phone added. RULED: a list with nothing of theirs left in it (Kefli made it, finding none) is left as it is,
- * neither emptied nor deleted.
+ * phone added (its rows added_by_app). Each starts from the list as Kefli sends it, the list held entry for entry with
+ * Kefli's changes (relayListTags, serverListTags), so every entry of theirs stays in its place with its marker, those
+ * past the LIST_MAX Kefli uses and the tags it doesn't read among them; rebuilt from the tables, as it was, a list of
+ * theirs was cut to what Kefli used. It is dated after the lists it replaces, whatever this phone's clock says (C§3.1).
+ * RULED: a list with nothing of theirs left in it (Kefli made it, finding none) is left as it is, neither emptied nor
+ * deleted; and so is one too long for one event, as the list sends leave it (send.ts signList), since one cut to fit
+ * would lose some of their entries.
  */
 async function listRewrites(p: DelPorts): Promise<NostrEvent[]> {
   const pk = p.signer.pubkey();
   const op = p.defaults.operator;
-  const relays = p.db.all<{ url: string; read: number; write: number }>("SELECT url, read, write FROM relays WHERE owner = ? AND source != 'indexer' AND added_by_app = 0 ORDER BY rowid", pk)
-    .filter((r) => trim(r.url) !== trim(op.relay))
-    .map((r) => ({ url: r.url, read: !!r.read, write: !!r.write }));
-  const servers = p.db.all<{ url: string }>('SELECT url FROM servers WHERE owner = ? AND added_by_app = 0 AND in_10063 = 1 ORDER BY rowid', pk)
-    .map((r) => r.url).filter((u) => trim(u) !== trim(op.blossom));
-  const out: NostrEvent[] = [];
-  if (relays.length) out.push(await buildRelayList(p.signer, relays, p.now()));
-  if (servers.length) out.push(await buildServerList(p.signer, servers, p.now()));
-  return out;
+  const relays = new Set(p.db.all<{ url: string }>("SELECT url FROM relays WHERE owner = ? AND source != 'indexer' AND added_by_app = 1", pk).map((r) => bare(r.url)));
+  const servers = new Set(p.db.all<{ url: string }>('SELECT url FROM servers WHERE owner = ? AND added_by_app = 1', pk).map((r) => bare(r.url)));
+  const at = nextListTime(p.db, pk, p.now());
+  const lists = [
+    await rewritten(p, KIND.relayList, without(relayListTags(p.db, pk), 'r', op.relay, relays), 'r', at),
+    await rewritten(p, KIND.serverList, without(serverListTags(p.db, pk), 'server', op.blossom, servers), 'server', at),
+  ];
+  return lists.filter((e): e is NostrEvent => e !== null);
 }
 
 /**
@@ -222,43 +300,61 @@ async function emptyLists(p: DelPorts, deletion: NostrEvent): Promise<NostrEvent
 /**
  * Everything the deletion publishes, signed before anything is sent: for a nostr user, the approval in their app.
  * empties: a generated identity's emptied lists, sent after the kind 5s and not counted towards a relay's confirmation.
- * blobs: the texts of saves found only on the relays, deleted with the phone's.
+ * blobs: the texts of saves found only on the relays, deleted with the phone's. unread: the relays whose saves
+ * weren't read whole (onRelays), which can't confirm the deletion (FD 119).
  */
-export type Signed = { wraps: NostrEvent[]; items: NostrEvent[]; lists: NostrEvent[]; empties?: NostrEvent[]; blobs?: string[]; nostr: boolean };
+export type Signed = { wraps: NostrEvent[]; items: NostrEvent[]; lists: NostrEvent[]; empties?: NostrEvent[]; blobs?: string[]; nostr: boolean; unread: string[] };
+
+/** The row the identity's provider is read from: a named type, so the code gate's parser reads signDeletion whole. */
+type Provider = { provider: string };
 
 export async function signDeletion(p: DelPorts): Promise<Signed> {
   const owner = p.signer.pubkey();
-  const nostr = (p.db.get<{ provider: string }>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local') !== 'local';
+  // read, then compared: bracketed into the comparison, the read lost the code gate's parser its place, and only this
+  // function's first three lines were scored
+  const provider = p.db.get<Provider>('SELECT provider FROM identities WHERE pubkey = ?', owner)?.provider ?? 'local';
+  const nostr = provider !== 'local';
+  if (nostr) await takeNewestLists(p, owner);
   const held = allDs(p.db, owner);
   const remote = await onRelays(p, owner, new Set(held));
   const wraps = await wrapDeletions(p, owner);
   // dated past the newest version of anything they name, whatever this phone's clock says (F36)
   const newest = Math.max(remote.newest, newestVersion(p.db, owner));
   const items = await buildDeletions(p.signer, [...new Set([...held, ...remote.ds])], Math.max(p.now(), newest + 1));
-  const extra = { blobs: remote.blobs, nostr };
+  const extra = { blobs: remote.blobs, nostr, unread: remote.unread };
   if (nostr) return { wraps, items, lists: await listRewrites(p), ...extra };
   const deletion = await listDeletion(p);
   return { wraps, items, lists: [deletion], empties: await emptyLists(p, deletion), ...extra };
 }
 
-/** Sends every event to a relay; true when it answered OK to each (a relay that refuses one hasn't confirmed). */
+/**
+ * Sends every event to a relay; true when it took each, or holds it, a newer version or its deletion already
+ * (send.ts holdsAlready, C§3.1): a relay that refuses one hasn't confirmed. Read as refusals, as they were, strfry's
+ * replaced: and deleted: had a relay that took every kind 5 reported as not confirming the deletion.
+ */
 async function sendAll(p: DelPorts, relay: string, events: NostrEvent[]): Promise<boolean> {
   for (const e of events) {
     const a = await p.publish(relay, e);
-    if (!a.ok && !/^duplicate:/.test(a.reason)) return false;
+    if (!a.ok && !holdsAlready(a.reason)) return false;
   }
   return true;
 }
 
 async function deleteBlobs(p: DelPorts, server: string, shas: string[]): Promise<boolean> {
-  for (const s of shas) if (!(await deleteBlob(server, s, p.signer, p.fetch)).ok) return false;
+  const get = toServer(p);
+  for (const s of shas) if (!(await deleteBlob(server, s, p.signer, get)).ok) return false;
   return true;
 }
 
 const allBlobs = (p: DelPorts, owner: string, signed: Signed) => [...new Set([...blobs(p.db, owner), ...(signed.blobs ?? [])])];
 
+/** Whether a relay's saves weren't read whole before signing (onRelays), by its address as the lists hold it. */
+const unread = (signed: Signed, relay: string) => signed.unread.some((u) => bare(u) === bare(relay));
+
 async function stepOperator(p: DelPorts, owner: string, signed: Signed): Promise<boolean> {
   const op = p.defaults.operator;
+  // its answer cut short or missing is the relay unreachable (FD 119): nothing is sent, and the deletion is tried again
+  if (unread(signed, op.relay)) return false;
   const inList = !!p.db.get("SELECT 1 FROM relays WHERE owner = ? AND url = ? AND source != 'indexer'", owner, op.relay);
   // in the 10002, it gets everything step 2 sends the other relays: the saves' deletions and the lists'
   const events = [...signed.wraps, ...(inList ? [...signed.items, ...signed.lists, ...(signed.empties ?? [])] : [])];
@@ -270,48 +366,78 @@ async function stepOperator(p: DelPorts, owner: string, signed: Signed): Promise
   const shas = allBlobs(p, owner, signed);
   const cleared = reached && (await withinMinute(p, () => deleteBlobs(p, op.blossom, shas)));
   if (!cleared) return false;
-  const url = `${trim(op.api)}/account`;
+  // the API follows no redirect (net/http apiFetch): followed, a 303 to any page that answers 200 read as the account
+  // deleted, and the phone was wiped; and an API that took the call and never answered held the screen, which swallows
+  // Back while the deletion runs, for good
+  const url = `${withoutTrailingSlashes(op.api)}/account`;
+  const get = apiFetch(p.fetch);
   return withinMinute(p, async () => {
-    const res = await p.fetch(url, { method: 'DELETE', headers: { Authorization: await httpAuth(p.signer, url, 'DELETE', null, p.crypto) } });
+    const res = await get(url, { method: 'DELETE', headers: { Authorization: await httpAuth(p.signer, url, 'DELETE', null, p.crypto) } });
     return res.ok || res.status === 404;
   });
 }
 
+/**
+ * One other server's part of step 2. A relay is confirmed by its answers to the kind 5s alone (C§4.7), a generated
+ * identity's lists' deletion among them; a nostr user's lists republished go after them, as a generated identity's
+ * emptied lists do, their answers counting for nothing. Counted, a relay that took every kind 5 but turned a list away,
+ * holding a newer one from another app or keeping no lists, was named as not having confirmed the deletion, and the
+ * other list never reached it. A relay whose saves weren't read whole (onRelays, FD 119) gets the kind 5s all the
+ * same, for every save known, and is reported as not confirming, since one it alone holds may be left.
+ */
 async function stepOther(p: DelPorts, owner: string, t: Target, signed: Signed): Promise<boolean> {
   if (t.kind === 'server') return withinMinute(p, () => deleteBlobs(p, t.url, allBlobs(p, owner, signed)));
-  const confirmed = await withinMinute(p, () => sendAll(p, t.url, [...signed.items, ...signed.lists]));
-  await Promise.all((signed.empties ?? []).map((e) => p.publish(t.url, e).catch(() => undefined)));
-  return confirmed;
+  const kind5s = [...signed.items, ...signed.lists].filter((e) => e.kind === KIND.deletion);
+  const after = [...signed.lists.filter((e) => e.kind !== KIND.deletion), ...(signed.empties ?? [])];
+  const confirmed = await withinMinute(p, () => sendAll(p, t.url, kind5s));
+  await Promise.all(after.map((e) => p.publish(t.url, e).catch(() => undefined)));
+  return confirmed && !unread(signed, t.url);
+}
+
+/** Step 1, unless a run cut short has done it: false when the operator failed, the job then gone, to start afresh. */
+async function operatorStep(p: DelPorts, owner: string, signed: Signed, prog: Progress, report: Report): Promise<boolean> {
+  if (prog.operator === 'done') return true;
+  prog.operator = (await stepOperator(p, owner, signed)) ? 'done' : 'fail';
+  report({ ...prog });
+  if (prog.operator === 'fail') {
+    p.db.run('DELETE FROM jobs WHERE id = ?', JOB);
+    return false;
+  }
+  save(p, prog);
+  return true;
+}
+
+/**
+ * The lists to the indexer as well, unreported: it holds nothing else of this identity. It refuses kind 5, so a
+ * generated identity's lists are emptied there rather than deleted (C§4.7).
+ */
+async function listsToIndexer(p: DelPorts, signed: Signed): Promise<void> {
+  const forIndexer = signed.nostr ? signed.lists : signed.empties ?? [];
+  await Promise.all(p.defaults.indexer.flatMap((r) => forIndexer.map((e) => p.publish(r, e).catch(() => undefined))));
+}
+
+/** Step 2: every other server still waiting, each saved and reported as it resolves. */
+async function othersStep(p: DelPorts, owner: string, targets: Target[], signed: Signed, prog: Progress, report: Report): Promise<void> {
+  await Promise.all(targets.filter((t) => prog.others[t.url] === 'wait').map(async (t) => {
+    prog.others[t.url] = (await stepOther(p, owner, t, signed)) ? 'done' : 'fail';
+    save(p, prog);
+    report({ ...prog, others: { ...prog.others } });
+  }));
 }
 
 /**
  * Runs or resumes the deletion, reporting each step as it resolves. failed: the operator couldn't be reached or
  * refused, and nothing else ran. partial: some other server didn't confirm; the phone is wiped all the same.
  */
-export async function deleteEverything(p: DelPorts, report: (prog: Progress) => void, presigned?: Signed): Promise<Outcome> {
+export async function deleteEverything(p: DelPorts, report: Report, presigned?: Signed): Promise<Outcome> {
   const owner = p.signer.pubkey();
   const signed = presigned ?? (await signDeletion(p));
   const targets = deleteTargets(p.db, owner, p.defaults.operator);
   const prog: Progress = progressOf(p.db) ?? { operator: 'wait', others: Object.fromEntries(targets.map((t) => [t.url, 'wait'])), phone: 'wait' };
   report(prog);
-  if (prog.operator !== 'done') {
-    prog.operator = (await stepOperator(p, owner, signed)) ? 'done' : 'fail';
-    report({ ...prog });
-    if (prog.operator === 'fail') {
-      p.db.run('DELETE FROM jobs WHERE id = ?', JOB);
-      return 'failed';
-    }
-    save(p, prog);
-  }
-  // the lists go to the indexer as well, unreported: it holds nothing else of this identity. It refuses kind 5, so a
-  // generated identity's lists are emptied there rather than deleted (C§4.7)
-  const forIndexer = signed.nostr ? signed.lists : signed.empties ?? [];
-  await Promise.all(p.defaults.indexer.flatMap((r) => forIndexer.map((e) => p.publish(r, e).catch(() => undefined))));
-  await Promise.all(targets.filter((t) => prog.others[t.url] === 'wait').map(async (t) => {
-    prog.others[t.url] = (await stepOther(p, owner, t, signed)) ? 'done' : 'fail';
-    save(p, prog);
-    report({ ...prog, others: { ...prog.others } });
-  }));
+  if (!(await operatorStep(p, owner, signed, prog, report))) return 'failed';
+  await listsToIndexer(p, signed);
+  await othersStep(p, owner, targets, signed, prog, report);
   await p.wipePhone();
   prog.phone = 'done';
   report({ ...prog });

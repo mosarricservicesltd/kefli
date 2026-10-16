@@ -12,6 +12,10 @@ EnvironmentFile=/etc/kefli/kefli-mailfwd.secret.env
 ExecStart=/usr/local/bin/kefli-mailfwd
 Restart=on-failure
 RestartSec=5
+# Anyone can send mail to the address, and a message is held whole while it is forwarded: a large one is this
+# service's to fail on (Resend sends it again), never the relay's or keflid's memory on the 2 GB box.
+MemoryMax=768M
+MemorySwapMax=0
 
 NoNewPrivileges=true
 ProtectSystem=strict

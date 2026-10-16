@@ -2,10 +2,15 @@
 // reader-original-failed, reader-original-offline, reader-error-menu): react-native-webview under Kefli's bar, with
 // ⋯ (Open in browser, Copy link, Delete) and the floating Archive. A save whose text couldn't be fetched opens here
 // with its notice. While the page loads, the Reader's skeleton sits under the bar; a page that won't load points to
-// Open in browser; offline, the view says it needs a connection. The page stays on the web and opens no other app
-// (net/navigation.ts), and runs incognito, holding the jar while open and emptying it when it closes (net/cookies.ts).
+// Open in browser, as does one whose renderer the system ended (for memory, often with Kefli in the background) or
+// Kefli did, since every WebView here shares one renderer, and ending a parse stuck in it (kefli-parser's Parser.kt)
+// left this view a blank page; offline, the view says it needs a connection. The page stays on the web and opens no
+// other app (net/navigation.ts), and runs incognito, holding the jar while open and emptying it when it closes
+// (net/cookies.ts). A save whose page https refused never reaches the view: its address goes to the browser and the
+// view goes back to where it was opened from (FD 119, failNotice.ts browserInstead).
 import { useCallback, useEffect, useState } from 'react';
-import { Linking, View } from 'react-native';
+import { View } from 'react-native';
+import * as Linking from 'expo-linking';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -31,7 +36,7 @@ import { archive, remove } from './actions';
 import { ArchiveDock, DOCK_LIFTED } from './ArchiveDock';
 import { stopIfPlaying, useVoice } from '../services/voice';
 import { IconButton } from './Onb';
-import { failNotice } from './failNotice';
+import { browserInstead, failNotice } from './failNotice';
 import { hostOf } from './SaveRow';
 import { Skeleton } from './Skeleton';
 
@@ -41,9 +46,19 @@ export function OriginalView({ row, failedSave }: { row: LibRow; failedSave: boo
   const online = useOnline();
   const [st, setSt] = useState<'loading' | 'page' | 'failed'>('loading');
   const playing = !!useVoice();
+  const toBrowser = failedSave && browserInstead(row.fail_reason);
   useFocusEffect(useCallback(() => setToastFloor((playing ? DOCK_LIFTED : 16) + 52), [playing]));
-  useEffect(() => holdJar(), []);
+  useEffect(() => (toBrowser ? undefined : holdJar()), [toBrowser]);
   const leave = () => router.back();
+  useEffect(() => {
+    if (!toBrowser) return;
+    // the browser gets the address whether or not it can open it; the view has nothing to show either way
+    Linking.openURL(row.url).catch(() => undefined);
+    leave();
+    // once, as the view opens
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toBrowser]);
+  if (toBrowser) return <View style={{ flex: 1, backgroundColor: c.background }} />;
   const reopen = () => router.push(`/reader/${row.hash}`);
   const menu = () => openSheet(row.title ?? row.url, () => (
     <View>
@@ -94,6 +109,7 @@ export function OriginalView({ row, failedSave }: { row: LibRow; failedSave: boo
             onLoadEnd={() => setSt((s) => (s === 'failed' ? s : 'page'))}
             onError={() => setSt('failed')}
             onHttpError={(e) => e.nativeEvent.statusCode >= 400 && setSt('failed')}
+            onRenderProcessGone={() => setSt('failed')}
             style={{ flex: 1, backgroundColor: '#FFFFFF', opacity: st === 'page' ? 1 : 0 }}
           />
           {st === 'loading' && (

@@ -15,6 +15,12 @@ export function exclusive<T>(name: string, work: () => Promise<T>): Promise<T> {
 }
 
 /**
+ * A save's run. The type is named, and run reads its chain on a line of its own, since lizard, which the code gate uses,
+ * misreads a function type in a method's signature and a call on a bracketed expression, and then scores nothing after.
+ */
+type Work<T> = () => Promise<T>;
+
+/**
  * One at a time for each save, within the background: its delivery and Undo never overlap, so Undo waits for a send
  * already under way and then knows whether it went (F40). busy says whether one is running, so a flush can leave it be.
  */
@@ -25,11 +31,25 @@ export class PerSave {
     return this.runs.has(id);
   }
 
-  run<T>(id: string, work: () => Promise<T>): Promise<T> {
-    const run = (this.runs.get(id) ?? Promise.resolve()).then(work);
+  run<T>(id: string, work: Work<T>): Promise<T> {
+    const before = this.runs.get(id) ?? Promise.resolve();
+    const run = before.then(work);
     const tail = run.catch(() => undefined);
     this.runs.set(id, tail);
     void tail.then(() => this.runs.get(id) === tail && this.runs.delete(id));
     return run;
+  }
+
+  /**
+   * A save given a new id while a run under its old one goes on, as when its request is wrapped again (v1.12): the new id
+   * is busy, and runs under it wait, until that run has ended, so a flush can't send the new wrap beside it. True when a
+   * run was under way, whose send of the old wrap may reach the relay all the same (move.ts).
+   */
+  follow(was: string, to: string): boolean {
+    const tail = this.runs.get(was);
+    if (!tail) return false;
+    this.runs.set(to, tail);
+    void tail.then(() => this.runs.get(to) === tail && this.runs.delete(to));
+    return true;
   }
 }

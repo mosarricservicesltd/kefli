@@ -1,11 +1,12 @@
 // Enter your recovery code (mobile spec 5.3, FD 23, FD 40, FD 106; prototype code-empty, code-wrong, code-ready,
-// code-checking, code-notfound). Twelve fields, numbered down the columns: a space moves on, Paste (or pasting into
-// any field) fills all twelve, a word fills itself in once its letters fit only one (typeIntoCode), and up to three
-// words from the list are offered for the field being typed. A word not on the list is
+// code-checking, code-notfound, code-offline). Twelve fields, numbered down the columns: a space moves on, Paste (or
+// pasting into any field) fills all twelve, a word fills itself in once its letters fit only one (typeIntoCode), and
+// up to three words from the list are offered for the field being typed. A word not on the list is
 // flagged at its field; once all twelve are words, Bring back my library derives the key and asks the relays whether
 // anything was saved with it, storing the key only if so. Nothing found offers Try again (clearing the fields) or
-// Start fresh instead. The window is secured while the words are on screen (7.1), and the keyboard is the kind
-// that neither suggests nor learns.
+// Start fresh instead. Offline, or when nothing answers in time, the connection banner shows above the words, which
+// stay as typed for another try. The window is secured while the words are on screen (7.1), and the keyboard is the
+// kind that neither suggests nor learns.
 import { useEffect, useRef, useState } from 'react';
 import { TextInput, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';

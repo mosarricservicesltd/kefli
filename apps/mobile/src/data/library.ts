@@ -5,6 +5,7 @@ import { progressAt } from '@kefli/protocol';
 import type { SqlDb } from './db';
 import { enqueue, release, undo } from './outbox';
 import { writeRelays } from './lists';
+import { blobDeletion, blobRow, namesText, queueBlobDelete, textHolders, undoSave, withdrawText, type Prior } from './saves';
 
 /** Reading speed for "N min" (FD 1). */
 export const WPM = 230;
@@ -92,55 +93,82 @@ export function setArchived(db: SqlDb, now: number, owner: string, hash: string,
 
 /**
  * Delete (FD 34): the row is hidden at once and a kind 5 is held; Undo shows it again. Once the toast closes without
- * Undo, commitDelete removes the row, and the blob goes from its servers after the deletion is out (4.3).
+ * Undo, commitDelete removes the row, and its text goes from the phone's outbox and its servers (4.3).
  */
 export function deleteItem(db: SqlDb, now: number, owner: string, hash: string): Change {
   return db.tx(() => {
-    const row = db.get<{ text_sha256: string | null; text_servers: string | null; event_created_at: number | null; remote_d: string | null }>(
-      'SELECT text_sha256, text_servers, event_created_at, remote_d FROM items WHERE owner = ? AND hash = ?', owner, hash);
+    const row = db.get<{ event_created_at: number | null; remote_d: string | null }>('SELECT event_created_at, remote_d FROM items WHERE owner = ? AND hash = ?', owner, hash);
     if (!row) return { held: [], revert: () => {} };
     db.run('UPDATE items SET pending_delete_at = ? WHERE owner = ? AND hash = ?', now, owner, hash);
     // after: the newest version's time, which the kind 5 must be dated past (F36); the row is gone by the time it's sent.
     // ds: the address it was published at, if any; the sender adds its keyed one (F5), so a save never published
     // anywhere names nothing in public
-    const del = enqueue(db, now, {
+    const held = [enqueue(db, now, {
       op: 'delete_item', signer: owner, subject: hash, payload: { ds: row.remote_d ? [row.remote_d] : [], hash, after: row.event_created_at ?? 0 },
       targets: writeRelays(db, owner), held: true,
-    });
-    const held = [del];
-    const servers = row.text_sha256 ? blobServers(db, owner, hash, row.text_sha256, row.text_servers) : [];
-    if (row.text_sha256 && servers.length) {
-      held.push(enqueue(db, now, { op: 'delete_blob', signer: owner, subject: row.text_sha256, payload: { sha256: row.text_sha256 }, targets: servers, dependsOn: del, lane: 'bulk', held: true }));
-    }
+    })];
     return {
       held,
       revert: () => db.tx(() => {
         db.run('UPDATE items SET pending_delete_at = NULL WHERE owner = ? AND hash = ?', owner, hash);
-        undo(db, held);
+        undo(db, ownRows(db, owner, hash, held));
       }),
     };
   });
 }
 
 /**
- * Where a deleted save's blob goes from (C§4.1): every server its text.servers names, whichever phone uploaded it
- * (F33), and the mirror this phone's upload reached. None while another save of the owner's still names the blob.
+ * The delete's own rows among the ids its toast holds. A share that kept the save undid them (data/saves.ts), and
+ * the outbox may since have given an id to another row, such as that share's held publish, which the toast must
+ * neither send nor undo.
  */
-function blobServers(db: SqlDb, owner: string, hash: string, sha256: string, named: string | null): string[] {
-  if (db.get('SELECT 1 FROM items WHERE owner = ? AND text_sha256 = ? AND hash != ?', owner, sha256, hash)) return [];
-  const mirror = db.get<{ mirror_url: string }>('SELECT mirror_url FROM blobs WHERE sha256 = ? AND owner = ? AND mirror_at IS NOT NULL', sha256, owner)?.mirror_url;
-  return [...new Set([...(named ? (JSON.parse(named) as string[]) : []), ...(mirror ? [mirror] : [])])];
+function ownRows(db: SqlDb, owner: string, hash: string, ids: number[]): number[] {
+  return ids.filter((id) => db.get("SELECT 1 FROM outbox WHERE id = ? AND op = 'delete_item' AND signer = ? AND subject = ?", id, owner, hash));
 }
 
-/** The delete's toast closed without Undo: the row goes, with its search entry and any unsent publish. */
+/**
+ * A deleted save's text (C§4.1, v1.12), once no other save of the owner's names it: its upload and mirror, waiting or
+ * under way, are cancelled, and the blob is deleted after the save's kind 5 from every server the save named,
+ * whichever phone uploaded it (F33), and the mirror this phone's upload reached, as they stand when the delete goes
+ * through. An upload under way then deletes what it delivered (send.ts), and the staged file goes with the blob's row
+ * (orphanBlobs). Queued at the delete's own time, since committing one reads no clock.
+ */
+function dropText(db: SqlDb, at: number, owner: string, hash: string, sha256: string, named: string | null): void {
+  if (namesText(db, owner, sha256)) return;
+  withdrawText(db, owner, sha256);
+  const blob = blobRow(db, owner, sha256);
+  const targets = textHolders(named, blob);
+  if (!targets.length) return;
+  const del = db.get<{ id: number }>("SELECT id FROM outbox WHERE op = 'delete_item' AND signer = ? AND subject = ? AND state IN ('held', 'queued')", owner, hash)?.id;
+  queueBlobDelete(db, at, owner, sha256, targets, blobDeletion(sha256, blob), del ?? null);
+}
+
+/** The delete's toast closed without Undo: the row goes, with its search entry, any unsent publish, and its text. */
 export function commitDelete(db: SqlDb, owner: string, hash: string, held: number[]): void {
   db.tx(() => {
-    release(db, held);
-    const row = db.get<{ id: number }>('SELECT id FROM items WHERE owner = ? AND hash = ? AND pending_delete_at IS NOT NULL', owner, hash);
+    release(db, ownRows(db, owner, hash, held));
+    const row = db.get<{ id: number; text_sha256: string | null; text_servers: string | null; pending_delete_at: number }>(
+      'SELECT id, text_sha256, text_servers, pending_delete_at FROM items WHERE owner = ? AND hash = ? AND pending_delete_at IS NOT NULL', owner, hash);
     if (!row) return;
     db.run('DELETE FROM items_fts WHERE rowid = ?', row.id);
     db.run('DELETE FROM items WHERE id = ?', row.id);
     db.run("DELETE FROM outbox WHERE op = 'publish_item' AND signer = ? AND subject = ? AND state IN ('held', 'queued')", owner, hash);
+    if (row.text_sha256) dropText(db, row.pending_delete_at, owner, hash, row.text_sha256, row.text_servers);
+  });
+}
+
+/**
+ * Undo on the Saved sheet. A share that brought back a save waiting on its delete's Undo (data/saves.ts) found a save
+ * that had gone out before, so undoing the share deletes it as Delete does, its kind 5 and text included, where
+ * dropping the row would let the next sync bring it back. Any other share is undone by undoSave.
+ */
+export function undoShare(db: SqlDb, now: number, owner: string, hash: string, held: number[], prior: Prior): { staged: string[] } {
+  const revived = !prior && !!db.get('SELECT 1 FROM items WHERE owner = ? AND hash = ? AND event_id IS NOT NULL', owner, hash);
+  if (!revived) return undoSave(db, owner, hash, held, prior);
+  return db.tx(() => {
+    undo(db, held);
+    commitDelete(db, owner, hash, deleteItem(db, now, owner, hash).held);
+    return { staged: [] };
   });
 }
 
@@ -161,9 +189,16 @@ export function commitOrphans(db: SqlDb): string[] {
   return hashes.filter((h) => !hashInUseAfterDelete(db, h));
 }
 
-/** Archive and next's next: the first Unread row in list order whose text is here, other than this one (5.6). */
+/**
+ * Archive and next's next: the first Unread row in list order whose text is here, other than this one (5.6). One row
+ * read: the Reader asks on every render, and reading the whole list there stalled it in a library of thousands.
+ */
 export function nextUnread(db: SqlDb, owner: string, hash: string): LibRow | undefined {
-  return listRows(db, owner, 'unread').find((r) => r.hash !== hash && r.text_state === 'cached');
+  return db.get<LibRow>(
+    `SELECT ${LIB_COLS} FROM items WHERE owner = ? AND state = 'unread' AND pending_delete_at IS NULL AND text_state = 'cached' AND hash != ?
+     ORDER BY saved_at DESC, id DESC LIMIT 1`,
+    owner, hash,
+  );
 }
 
 /**
@@ -171,6 +206,8 @@ export function nextUnread(db: SqlDb, owner: string, hash: string): LibRow | und
  * while reading (4.5). publish false only stores it.
  */
 export function setPosition(db: SqlDb, now: number, owner: string, hash: string, word: number, publish: boolean): void {
+  // a position from layout or the voice that isn't a number would be stored as NULL, and published as one
+  if (!Number.isFinite(word)) return;
   db.tx(() => {
     const r = db.get<{ words: number | null; position_word: number }>('SELECT words, position_word FROM items WHERE owner = ? AND hash = ?', owner, hash);
     if (!r) return;

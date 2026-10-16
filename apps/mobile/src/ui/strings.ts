@@ -1,10 +1,53 @@
 // Every user-facing string, in British English, copied verbatim from its prototype state (mobile spec 6.11). The
 // state id each comes from is beside it. "nostr" appears only on the routes the signed-off screens use it on, and
 // "relay" only in Advanced (FD 86, FD 76).
+import type { Notice, Space } from '../data/account';
 
-/** One to nine in words, 10 and up in figures (the prototype's say()). */
+/**
+ * A count's figures with a comma each three from the right, "1,200", as the fine print's "about 2,000 articles" (FD
+ * 119): a whole number of zero or more; anything else as it is. Written out rather than as a regex, which the code
+ * gate misreads.
+ */
+function grouped(n: number): string {
+  if (!Number.isInteger(n) || n < 0) return String(n);
+  const digits = String(n);
+  let out = '';
+  for (let i = 0; i < digits.length; i++) out += (i && (digits.length - i) % 3 === 0 ? ',' : '') + digits[i];
+  return out;
+}
+
+/** One to nine in words, 10 and up in figures, a thousand and up with a comma: "1,200" (the prototype's say(), FD 119). */
 export function say(n: number): string {
-  return n >= 1 && n <= 9 ? ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'][n - 1] : String(n);
+  return n >= 1 && n <= 9 ? ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'][n - 1] : grouped(n);
+}
+
+/** "one save", "three saves", "12 saves" (the prototype's saves()). */
+const saves = (n: number) => `${say(n)} ${n === 1 ? 'save' : 'saves'}`;
+
+/**
+ * Bytes in megabytes of 1,048,576, as Kefli's server counts them, to one decimal, rounded down, so a library short of
+ * its quota never reads as the quota (FD 117, the prototype's mb()): 0 MB, 12.4 MB, 49.9 MB, 50 MB. Worked in tenths,
+ * which are whole numbers, so no binary fraction rounds a figure up or down.
+ */
+export function mb(bytes: number): string {
+  const tenths = Math.floor((Math.max(0, bytes) * 10) / 1_048_576);
+  const rest = tenths % 10;
+  return `${(tenths - rest) / 10}${rest ? `.${rest}` : ''} MB`;
+}
+
+/** About how many articles a quota holds, at 25 KB of text each, rounded to the hundred: "2,000" for 50 MB (FD 117). */
+export function articles(quota: number): string {
+  return grouped(Math.round(quota / 25_600 / 100) * 100);
+}
+
+// the Backup space row's sub with no figures held (adv-space-loading, adv-space-offline, adv-space-error)
+const SPACE_WAIT = { checking: 'Checking…', offline: 'Checks when you’re online', failed: 'Couldn’t check' } as const;
+
+/** The Backup space row's sub (adv, adv-space-nearly, adv-full, adv-space-empty and the three above). */
+function spaceSub(s: Space): string {
+  if (s.kind !== 'figures') return SPACE_WAIT[s.kind];
+  const of = `${mb(s.used)} of ${mb(s.quota)}`;
+  return s.level === 'full' ? `Full · ${of}` : s.level === 'nearly' ? `${of} · nearly full` : of;
 }
 
 export const S = {
@@ -239,6 +282,17 @@ export const S = {
     notBacked: (n: number) => (n === 1
       ? 'One save isn’t backed up yet. Kefli keeps trying until a backup server accepts it.'
       : `${say(n).charAt(0).toUpperCase()}${say(n).slice(1)} saves aren’t backed up yet. Kefli keeps trying until a backup server accepts them.`),
+    // FD 117: saves whose text waits on the phone (prototype adv-full, adv-daily, adv-toolarge)
+    full: (n: number) => `Your backup space is full, so the text of ${saves(n)} is only on this phone. Kefli tries again each day, and deleting saves makes room.`,
+    daily: (n: number) => `You’ve saved a lot today, so the text of ${saves(n)} is only on this phone for now. Kefli tries again tomorrow.`,
+    tooLong: (n: number) => `The text of ${saves(n)} is too long to back up, so it’s only on this phone. ${n === 1 ? 'Its link is' : 'Their links are'} backed up.`,
+    // FD 117: Backup space (prototype adv-space-nearly, adv-full, adv-space-empty, adv-space-loading, adv-space-offline,
+    // adv-space-error), its figures the library's own from Kefli's server, the defaults until the first answer
+    space: 'Backup space',
+    server: 'Kefli’s server',
+    spaceSub,
+    spaceNote: (quota: number, daily: number) =>
+      `Kefli’s server keeps up to ${mb(quota)} of your saves’ text, about ${articles(quota)} articles, and takes up to ${mb(daily)} a day. Past that, a save’s text stays on this phone. Every save’s link is backed up whatever the space.`,
     export: 'Export my saves',
     exportSub: 'One file with every link and its text',
     exported: 'Saved kefli-export.html to Downloads',
@@ -321,6 +375,9 @@ export const S = {
     saved: 'Saved to Kefli',
     again: 'Already in your library',
     savedSub: 'Private. Ready to read offline in a moment.',
+    // FD 117: share-full, share-daily
+    fullSub: 'Private. Your backup space is full, so its text stays on this phone.',
+    dailySub: 'Private. You’ve saved a lot today, so its text stays on this phone for now.',
     againSub: 'Still in Unread, where you left it.',
     offlineSub: 'Saved · will fetch when you’re online',
     xwaitSub: 'Saved · will check the post when X answers',
@@ -502,6 +559,12 @@ export function connectedWhen(at: number, now = Date.now() / 1000): string {
   const d = new Date(at * 1000);
   const year = d.getFullYear() !== new Date(now * 1000).getFullYear();
   return S.browsers.connectedOn(d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', ...(year ? { year: 'numeric' } : {}) }));
+}
+
+/** Advanced's notice about saves not backed up, in the words of its state (adv-full, adv-daily, adv-notbacked, adv-toolarge). */
+export function noticeText(n: Notice): string {
+  const line = { full: S.adv.full, daily: S.adv.daily, trying: S.adv.notBacked, toolarge: S.adv.tooLong }[n.kind];
+  return line(n.n);
 }
 
 /** a, b and c */

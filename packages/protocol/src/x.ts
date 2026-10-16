@@ -35,11 +35,48 @@ export function xEmbedUrl(post: string): string {
 const AMP = /&(amp|quot|#39|#x27|lt|gt);/g;
 const ENTITIES: Record<string, string> = { amp: '&', quot: '"', '#39': "'", '#x27': "'", lt: '<', gt: '>' };
 
-/** The href of every link in the embed's html, in order. */
+// Built from strings, as the code gate's parser misreads regex literals.
+const TAG = new RegExp('<a\\s', 'gi');
+const HREF = new RegExp('href\\s*=\\s*', 'gi');
+
+/**
+ * The href of every link in the embed's html, in order: exactly what /<a\s[^>]*?href\s*=\s*(?:"([^"]*)"|'([^']*)')/gi
+ * finds, in one pass. That pattern read on from each "<a " to the tag's ">" looking for an href, and again from every
+ * "<a " inside it, so an answer of "<a " with no ">" took time that grows with the square of its length: 512 KB of
+ * it, the embed's cap, held the JavaScript for three minutes here. Here every `href =` is found once, and a tag
+ * takes the first before its ">" whose quote closes (the value itself may hold a ">"); a tag with none passes over
+ * every "<a " up to its ">", since those would find none either.
+ */
 export function linksInEmbed(html: string): string[] {
   const out: string[] = [];
-  const re = /<a\s[^>]*?href\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
-  for (let m = re.exec(html); m; m = re.exec(html)) out.push((m[1] ?? m[2]).replace(AMP, (_, e: string) => ENTITIES[e]));
+  // each quote's last place: an unclosed value is known at once, rather than read to the end for every tag
+  const last: Record<string, number> = { '"': html.lastIndexOf('"'), "'": html.lastIndexOf("'") };
+  // every `href =`: where it starts, and where the quote of its value would be
+  const hrefs = [...html.matchAll(HREF)].map((m) => [m.index, m.index + m[0].length]);
+  let k = 0;
+  // the tag's ">", found once for all the tags before it
+  let gt = -1;
+  TAG.lastIndex = 0;
+  for (let m = TAG.exec(html); m; m = TAG.exec(html)) {
+    const from = m.index + m[0].length;
+    if (gt < from) {
+      gt = html.indexOf('>', from);
+      if (gt === -1) gt = html.length;
+    }
+    while (k < hrefs.length && hrefs[k][0] < from) k++;
+    let next = gt;
+    for (; k < hrefs.length && hrefs[k][0] < gt; k++) {
+      const at = hrefs[k][1];
+      const q = html[at];
+      if ((q === '"' || q === "'") && last[q] > at) {
+        const close = html.indexOf(q, at + 1);
+        out.push(html.slice(at + 1, close).replace(AMP, (_, e: string) => ENTITIES[e]));
+        next = close + 1;
+        break;
+      }
+    }
+    TAG.lastIndex = next;
+  }
   return out;
 }
 

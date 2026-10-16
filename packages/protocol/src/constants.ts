@@ -1,7 +1,7 @@
 // Kinds, addresses and limits from the contract. Kind numbers and d namespaces never change after launch (C§10).
 
 /** The contract version this code implements; test/contractVersion.test.ts holds it to the contract's header. */
-export const CONTRACT_VERSION = '1.11';
+export const CONTRACT_VERSION = '1.12';
 
 export const KIND = {
   /** NIP-01 profile: a nostr user's name and picture for You (FD 12, G12). */

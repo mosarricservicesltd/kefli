@@ -3,11 +3,14 @@ package app.kefli.parser
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.webkit.CookieManager
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebStorage
 import android.webkit.WebView
@@ -15,6 +18,8 @@ import android.webkit.WebViewClient
 import expo.modules.kotlin.Promise
 import org.json.JSONObject
 import org.json.JSONTokener
+import java.io.ByteArrayInputStream
+import java.util.concurrent.atomic.AtomicBoolean
 
 // A page that turns Kefli's own fetch away (a bot check answering 403) is loaded once in a browser engine, as a person's
 // browser would load it (mobile spec 8.2, 7.1), and its rendered HTML handed back for the usual parse. The WebView is
@@ -23,12 +28,32 @@ import org.json.JSONTokener
 // SVG, frames or embeds, and no style, data-, aria-, event, srcset or sizes attributes, none of which the parse reads
 // (class and id stay, which Readability scores by); a page's own scripts can build it past the 5 MB cap otherwise. A challenge page is waited out until the page itself
 // arrives or the time runs out. One page at a time; others queue behind it.
+//
+// The page is a stranger's and runs its own scripts, so: HTML past the 16 MB the parse takes is never handed over, since
+// a script can build a page of hundreds of MB and the string would be copied into the app's own memory several times
+// over; a renderer that goes (crashed, or killed for memory) answers the load, rather than taking the app with it; and a
+// page whose script never returns, holding the renderer every WebView shares, has its renderer ended when its time is
+// up (Android 10 and later), so the parse behind it isn't held too.
+//
+// Nor does the page make the phone ask an address a hop of Kefli's fetch couldn't go to (7.1, PublicWeb): a private,
+// loopback or link-local one, a local name, or expo/fetch's stand-in for the phone's files. A redirect or navigation
+// to one isn't followed; a frame's or a subresource's request to one, a form's POST among them, is answered here,
+// empty, in place of the network; and the page's own going there ends the render, which page.ts fails as such a
+// redirect fails the fetch, the save keeping its link. The address given is the caller's, and may be on the person's
+// own network, as a page they shared from there may be: the engine asks for it once, as the fetch did, and for no
+// other address that isn't public. Android hands the client nothing else to check: a subresource's redirect (only its
+// first address is seen), a POST sent on by a 307 or 308, a WebSocket, WebRTC, a service worker's requests and a
+// preconnect go as the engine makes them, as does a public name that resolves to a private address.
 object Renderer {
   private const val TIMEOUT_MS = 20_000L
   /** A challenge that reloads itself is given this long after each finished load to move on. */
   private const val SETTLE_MS = 1_500L
+  /** How long a WebView past its time has to answer a trivial script before its renderer is taken as stuck. */
+  private const val PROBE_MS = 2_000L
   private val main = Handler(Looper.getMainLooper())
 
+  // 16777216 is RENDER_MAX_BYTES in page.ts, in UTF-16 code units: UTF-8 is at least a byte a unit, so a page past it
+  // here is past it there too.
   private const val READ = """(function(){
     var d = document, t = d.title || '';
     var challenge = /just a moment|attention required|checking your browser/i.test(t)
@@ -42,12 +67,18 @@ object Renderer {
         if (a === 'style' || a === 'srcset' || a === 'sizes' || a.indexOf('data-') === 0 || a.indexOf('aria-') === 0 || a.indexOf('on') === 0) n.removeAttribute(a);
       }
     });
-    return JSON.stringify({ challenge: false, url: location.href, html: '<!doctype html>' + c.outerHTML });
+    var html = '<!doctype html>' + c.outerHTML;
+    if (html.length > 16777216) return JSON.stringify({ challenge: false, url: location.href, html: '', tooLarge: true });
+    return JSON.stringify({ challenge: false, url: location.href, html: html });
   })()"""
 
   private class Load(val url: String, val promise: Promise) {
     var view: WebView? = null
     var done = false
+    /** The host of the address given, as PublicWeb reads it, which the engine may ask for once though it isn't public. */
+    val host = PublicWeb.hostname(url)
+    /** Until the engine first asks for the page itself; read on the engine's own thread as well as the main one. */
+    val unasked = AtomicBoolean(true)
   }
 
   private var current: Load? = null
@@ -89,12 +120,14 @@ object Renderer {
     start(app, load)
   }
 
+  private fun failure(reason: String): JSONObject = JSONObject().put("ok", false).put("reason", reason)
+
   @SuppressLint("SetJavaScriptEnabled")
   private fun start(context: Context, load: Load) {
     val view = try {
       WebView(context)
     } catch (e: Exception) {
-      return finish(load, JSONObject().put("ok", false).put("reason", "no_webview"))
+      return finish(load, failure("no_webview"))
     }
     load.view = view
     // a phone-sized layout, so the page renders as it would on screen
@@ -116,8 +149,17 @@ object Renderer {
     view.webViewClient = object : WebViewClient() {
       override fun shouldOverrideUrlLoading(v: WebView, request: WebResourceRequest): Boolean {
         val scheme = request.url.scheme?.lowercase()
-        return scheme != "https" && scheme != "http"
+        if (scheme != "https" && scheme != "http") return true
+        if (PublicWeb.isPublicWebUrl(request.url.toString())) return false
+        // a redirect or navigation to an address no hop of the fetch could go to (7.1) isn't followed; the page's own
+        // going there ends the render, as such a redirect ends the fetch
+        if (request.isForMainFrame) main.post { refused(load) }
+        return true
       }
+
+      // on the engine's own thread, for every request it makes but a redirect's
+      override fun shouldInterceptRequest(v: WebView, request: WebResourceRequest): WebResourceResponse? =
+        if (askable(load, request)) null else refusal(load, request)
 
       override fun onPageStarted(v: WebView, url: String, favicon: Bitmap?) {
         main.removeCallbacksAndMessages(load)
@@ -129,9 +171,49 @@ object Renderer {
         main.removeCallbacksAndMessages(load)
         main.postAtTime({ read(load) }, load, android.os.SystemClock.uptimeMillis() + SETTLE_MS)
       }
+
+      // the renderer went (crashed, or killed for memory): the load fails as a timed-out one does, and the app stays
+      override fun onRenderProcessGone(v: WebView, detail: RenderProcessGoneDetail): Boolean {
+        if (load.view === v && !load.done) {
+          load.view = null
+          v.destroy()
+          finish(load, failure("timeout"))
+        }
+        return true
+      }
     }
-    main.postDelayed({ if (!load.done) finish(load, JSONObject().put("ok", false).put("reason", "timeout")) }, TIMEOUT_MS)
+    main.postDelayed({ if (!load.done) expire(load) }, TIMEOUT_MS)
     view.loadUrl(load.url)
+  }
+
+  /**
+   * Whether the engine may make a request (7.1): one for anything but http(s), which asks no address (data:, about:;
+   * file: and content: are off); the page's own first, for the address the caller gave; and otherwise only one to a
+   * public address, as every hop of the fetch goes. Called on the engine's own thread.
+   */
+  private fun askable(load: Load, request: WebResourceRequest): Boolean {
+    val scheme = request.url.scheme?.lowercase()
+    if (scheme != "https" && scheme != "http") return true
+    val url = request.url.toString()
+    val given = request.isForMainFrame && load.host != null && PublicWeb.hostname(url) == load.host && load.unasked.getAndSet(false)
+    return given || PublicWeb.isPublicWebUrl(url)
+  }
+
+  /**
+   * What a request the engine may not make is answered with, in place of the network: an empty 403. One for the page
+   * itself ends the render.
+   */
+  private fun refusal(load: Load, request: WebResourceRequest): WebResourceResponse {
+    if (request.isForMainFrame) main.post { refused(load) }
+    return WebResourceResponse("text/plain", "utf-8", 403, "Forbidden", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+  }
+
+  /**
+   * The page went for an address no hop of the fetch could go to (7.1): the render fails, so page.ts keeps the
+   * fetch's own answer, and the save its link.
+   */
+  private fun refused(load: Load) {
+    finish(load, failure("refused"))
   }
 
   private fun read(load: Load) {
@@ -146,8 +228,31 @@ object Renderer {
       }
       // still on the challenge: wait for its next load, or the timeout
       if (page.optBoolean("challenge")) return@evaluateJavascript
-      finish(load, JSONObject().put("ok", true).put("url", page.optString("url", load.url)).put("html", page.optString("html")))
+      val url = page.optString("url", load.url)
+      if (page.optBoolean("tooLarge")) {
+        finish(load, failure("too_large").put("url", url))
+        return@evaluateJavascript
+      }
+      finish(load, JSONObject().put("ok", true).put("url", url).put("html", page.optString("html")))
     }
+  }
+
+  /**
+   * A load past its time, answered as timed out. Its WebView goes once it has had PROBE_MS to answer a trivial script:
+   * one that doesn't is held by the page's own script, and so is the renderer every WebView shares, which is ended.
+   */
+  private fun expire(load: Load) {
+    val view = load.view
+    load.view = null
+    finish(load, failure("timeout"))
+    if (view == null) return
+    view.stopLoading()
+    var answered = false
+    view.evaluateJavascript("1") { answered = true }
+    main.postDelayed({
+      if (!answered && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) view.webViewRenderProcess?.terminate()
+      view.destroy()
+    }, PROBE_MS)
   }
 
   private fun finish(load: Load, result: JSONObject) {

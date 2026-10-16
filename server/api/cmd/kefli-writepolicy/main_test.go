@@ -48,3 +48,32 @@ func TestRun(t *testing.T) {
 		t.Fatal("accepted an unknown flag")
 	}
 }
+
+// The relay's floor: with less free under -room than -min-free-mb, a registered user's event waits, rate-limited.
+func TestRunKeepsTheFloor(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "k.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := strings.Repeat("1", 64)
+	_ = st.Register(context.Background(), user)
+	st.Close()
+	in := `{"type":"new","event":{"id":"e1","pubkey":"` + user + `","kind":30078,"tags":[]},"sourceType":"IP4","sourceInfo":"x"}` + "\n"
+	for _, c := range []struct {
+		floor, want string
+	}{{"1", "accept"}, {"1000000000", "reject"}} {
+		var out bytes.Buffer
+		args := []string{"-db", filepath.Join(dir, "k.db"), "-wraps", filepath.Join(dir, "w.db"), "-room", dir, "-min-free-mb", c.floor}
+		if err := run(args, strings.NewReader(in), &out); err != nil {
+			t.Fatal(err)
+		}
+		var o map[string]string
+		if err := json.Unmarshal(out.Bytes(), &o); err != nil || o["action"] != c.want {
+			t.Fatalf("floor %s MB: %s %v", c.floor, out.String(), err)
+		}
+	}
+	if err := run([]string{"-min-free-mb", "-1"}, strings.NewReader(""), &bytes.Buffer{}); err == nil {
+		t.Fatal("took a negative floor")
+	}
+}

@@ -8,6 +8,7 @@ import { checkOffer, derivePairCode, httpAuth, openOffer, readPairCode, type Cry
 import type { SqlDb } from '../data/db';
 import { cancelConnect, connectState, queueConnect } from '../data/devices';
 import { registerFirst } from '../data/saves';
+import { apiFetch } from '../net/http';
 
 export type ConnectPorts = {
   db: SqlDb;
@@ -46,9 +47,18 @@ export function readScan(raw: string, operator: Operator, now: number, verify?: 
 
 const targetsOf = (d: Awaited<ReturnType<ConnectPorts['defaults']>>) => ({ api: d.operator.api, blossom: d.operator.blossom, mirror: d.mirrors[0] });
 
+/** The row registered reads: a named type, since the code gate's parser, given it inline, ran registered on to lookupCode's end. */
+type Registration = { registered_at: number | null };
+
+/**
+ * GET /pair-offers' answer as read: a named type given as the body's, not a cast, since the code gate's parser, given a
+ * cast of a bracketed await, ended lookupCode there and scored none of what follows it.
+ */
+type Offered = { offer?: unknown } | null;
+
 /** A still-queued register runs first (5.5): GET /pair-offers needs a registered user. */
 export async function registered(p: Pick<ConnectPorts, 'db' | 'now' | 'owner' | 'defaults' | 'runOutbox'>): Promise<boolean> {
-  const is = () => !!p.db.get<{ registered_at: number | null }>('SELECT registered_at FROM identities WHERE pubkey = ?', p.owner)?.registered_at;
+  const is = () => !!p.db.get<Registration>('SELECT registered_at FROM identities WHERE pubkey = ?', p.owner)?.registered_at;
   if (is()) return true;
   registerFirst(p.db, p.now(), p.owner, targetsOf(await p.defaults()));
   await p.runOutbox().catch(() => 0);
@@ -65,13 +75,15 @@ export async function lookupCode(p: ConnectPorts, typed: string): Promise<OfferR
   const url = `${d.operator.api}/pair-offers/${lookup}`;
   let res: Response;
   try {
-    res = await p.fetch(url, { method: 'GET', headers: { Authorization: await httpAuth(signer, url, 'GET', null, p.crypto) } });
+    // no redirect followed, and the whole answer within the API's 15 s (net/http apiFetch): a 3xx, or an API that never
+    // answers, is offline, where a redirect's page was taken for the API's answer and one never answering held Connect
+    res = await apiFetch(p.fetch)(url, { method: 'GET', headers: { Authorization: await httpAuth(signer, url, 'GET', null, p.crypto) } });
   } catch {
     return { problem: 'offline' };
   }
   if (res.status === 404) return { problem: 'wrong' };
   if (!res.ok) return { problem: 'offline' };
-  const body = (await res.json().catch(() => null)) as { offer?: unknown } | null;
+  const body: Offered = await res.json().catch(() => null);
   const offer = typeof body?.offer === 'string' ? await openOffer(body.offer, key, p.crypto) : null;
   return checked(offer, d.operator, p.now(), p.verify);
 }

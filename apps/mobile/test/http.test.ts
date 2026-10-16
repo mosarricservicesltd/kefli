@@ -4,7 +4,7 @@ import { xEmbedUrl } from '@kefli/protocol';
 import { migrate } from '../src/data/schema';
 import { ensureIdentityRow } from '../src/data/saves';
 import { MAX_IMAGE_BYTES } from '../src/data/images';
-import { open, TimedOut, TooLarge } from '../src/net/http';
+import { SERVER_TIMEOUT_MS, movingMs, open, overHttps, serverFetch, serverHops, TimedOut, TooLarge } from '../src/net/http';
 import { fetchImage, imageState, IMAGE_TIMEOUT_MS, type ImagePorts } from '../src/services/images';
 import { fetchPage, PAGE_MAX_BYTES, PAGE_TIMEOUT_MS, type PagePorts } from '../src/services/page';
 import { checkXPost, X_TIMEOUT_MS } from '../src/services/xpost';
@@ -109,6 +109,115 @@ describe('no read sends or keeps cookies (F27)', () => {
   });
 });
 
+describe('plain http, which release builds refuse (7.1)', () => {
+  const words = (cause: string) => (async () => {
+    throw new Error(`fetch failed: ${cause}`);
+  }) as unknown as typeof fetch;
+
+  test("OkHttp's refusal of cleartext is a failure of what was asked for; any other error is still the network", async () => {
+    // as expo/fetch reports OkHttp's refusal, which comes before any connection
+    const refused = words('java.net.UnknownServiceException: CLEARTEXT communication to g.example not permitted by network security policy');
+    await expect(open(refused, 'http://g.example/', {}, 1_000)).rejects.toMatchObject({ name: 'Blocked', why: 'cleartext' });
+    expect(await fetchPage(pagePorts(refused), 'http://g.example/')).toEqual({ kind: 'failed', reason: 'http', finalUrl: 'http://g.example/' });
+    const offline = words('java.net.UnknownHostException: Unable to resolve host "g.example": No address associated with hostname');
+    await expect(open(offline, 'https://g.example/', {}, 1_000)).rejects.toThrow('Unable to resolve host');
+    expect(await fetchPage(pagePorts(offline), 'https://g.example/')).toEqual({ kind: 'offline' });
+  });
+
+  test('a public http address is asked for over https; a local one, or one with a port, keeps its http', () => {
+    expect(overHttps('http://news.example/a?b=1#c')).toBe('https://news.example/a?b=1#c');
+    expect(overHttps('HTTP://news.example/a')).toBe('https://news.example/a');
+    expect(overHttps('http://user@news.example/a')).toBe('https://user@news.example/a');
+    expect(overHttps('http://localhost:8080/a')).toBe('http://localhost:8080/a');
+    expect(overHttps('http://192.168.1.1/')).toBe('http://192.168.1.1/');
+    expect(overHttps('http://printer.local/')).toBe('http://printer.local/');
+    expect(overHttps('http://news.example:8080/a')).toBe('http://news.example:8080/a');
+    expect(overHttps('https://news.example/a')).toBe('https://news.example/a');
+  });
+
+  test("http's own port written out is no port: the address goes over https without it, as it would with none", async () => {
+    // the URL parser drops a port of 80, leading zeros and all, and an empty one; kept, https would knock on port 80
+    expect(overHttps('http://news.example:80/a?b=1#c')).toBe('https://news.example/a?b=1#c');
+    expect(overHttps('HTTP://news.example:80')).toBe('https://news.example');
+    expect(overHttps('http://user:pw@news.example:080/a')).toBe('https://user:pw@news.example/a');
+    expect(overHttps('http://news.example:/a')).toBe('https://news.example/a');
+    // an IPv6 host's colons are no port either
+    expect(overHttps('http://[2606:4700::1111]/a')).toBe('https://[2606:4700::1111]/a');
+    expect(overHttps('http://[2606:4700::1111]:80/a')).toBe('https://[2606:4700::1111]/a');
+    // any other port, and a local address with http's own, keep their http
+    for (const kept of ['http://news.example:8080/a', 'http://news.example:443/a', 'http://news.example:800/a', 'http://news.example:8/a',
+      'http://localhost:80/a', 'http://[::1]:80/a', 'http://192.168.1.1:80/']) expect(overHttps(kept)).toBe(kept);
+    // a share of such an address in a release build, which refuses plain http before it connects: its page is had
+    // over https, where with :80 kept as a port it failed at once as cleartext
+    const asked: string[] = [];
+    const release = (async (url: string) => {
+      asked.push(url);
+      if (url.startsWith('http://')) throw new Error('fetch failed: java.net.UnknownServiceException: CLEARTEXT communication to news.example not permitted by network security policy');
+      return Object.defineProperty(html('<p>x</p>'), 'url', { value: url });
+    }) as unknown as typeof fetch;
+    const parsed: PagePorts = { fetch: release, parse: async () => ({ ok: true, title: 'A story', byline: null, site: null, lang: 'en', hero: null, canonical: null, readerable: true, markdown: `${'word '.repeat(150)}\n` }) };
+    expect(await fetchPage(parsed, overHttps('http://news.example:80/story'))).toMatchObject({ kind: 'parsed', finalUrl: 'https://news.example/story' });
+    expect(asked).toEqual(['https://news.example/story']);
+  });
+});
+
+describe("a server's answer, read whole before it is handed back (serverFetch)", () => {
+  const ask = (maxBytes?: number) => ({ hops: serverHops(false), timeoutMs: 1_000, ...(maxBytes === undefined ? {} : { maxBytes }) });
+
+  test('the status, headers and body as bytes, text or JSON, as often as asked; the body decoded as UTF-8', async () => {
+    const { f, calls } = recording(() => new Response('{"error":"déjà","n":1}', { status: 403, headers: { 'X-Reason': 'blocked: déjà' } }));
+    const res = await serverFetch(f, ask())(new URL('https://api.example/devices'), { method: 'POST', body: '{}' });
+    expect([res.ok, res.status, res.headers.get('x-reason'), res.url]).toEqual([false, 403, 'blocked: déjà', 'https://api.example/devices']);
+    expect(await res.json()).toEqual({ error: 'déjà', n: 1 });
+    expect(await res.text()).toBe('{"error":"déjà","n":1}');
+    // each read its own copy
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    bytes[0] = 0;
+    expect(new TextDecoder().decode(await res.arrayBuffer()).startsWith('{')).toBe(true);
+    // asked without cookies and with redirect: 'manual', so each hop is checked here
+    expect([calls[0].url, calls[0].init.method, calls[0].init.credentials, calls[0].init.redirect]).toEqual(['https://api.example/devices', 'POST', 'omit', 'manual']);
+    // a Request's own method, headers and body would go unread: none is taken
+    await expect(serverFetch(f, ask())(new Request('https://api.example/x'))).rejects.toThrow(TypeError);
+  });
+
+  test('a body past the cap fails only when read: the status and headers are still there', async () => {
+    const { f } = recording(() => new Response('x'.repeat(100), { status: 200 }));
+    const res = await serverFetch(f, ask(10))('https://blossom.example/abc', { method: 'DELETE' });
+    expect([res.ok, res.status]).toEqual([true, 200]);
+    await expect(res.text()).rejects.toBeInstanceOf(TooLarge);
+    await expect(res.json()).rejects.toBeInstanceOf(TooLarge);
+    // and one declared past it is never read at all
+    const declared = await serverFetch(recording(() => new Response('x', { headers: { 'content-length': '1000000' } })).f, ask(10))('https://blossom.example/abc');
+    await expect(declared.arrayBuffer()).rejects.toMatchObject({ bytes: 1_000_000 });
+  });
+
+  test("a server that never answers, or stalls its body, is let go at the deadline; a hop into the phone's network isn't asked", async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    try {
+      const never = recording(() => new Promise<Response>(() => undefined));
+      const p = serverFetch(never.f, ask())('https://api.example/account', { method: 'DELETE' });
+      p.catch(() => undefined);
+      await jest.advanceTimersByTimeAsync(1_001);
+      await expect(p).rejects.toBeInstanceOf(TimedOut);
+      const trickle = recording(() => new Response(stalled()));
+      const q = serverFetch(trickle.f, ask())('https://api.example/account');
+      q.catch(() => undefined);
+      await jest.advanceTimersByTimeAsync(1_001);
+      await expect(q).rejects.toBeInstanceOf(TimedOut);
+    } finally {
+      jest.useRealTimers();
+    }
+    const inside = recording((url) => (url.startsWith('https://') ? new Response('', { status: 302, headers: { location: 'http://10.0.0.1/' } }) : new Response('{}')));
+    await expect(serverFetch(inside.f, ask())('https://api.example/register', { method: 'POST' })).rejects.toMatchObject({ name: 'Blocked', why: 'redirect' });
+    expect(inside.calls.map((c) => c.url)).toEqual(['https://api.example/register']);
+  });
+
+  test('an upload has a second more for every 32 KB it sends', () => {
+    expect([movingMs(0), movingMs(1), movingMs(32_768), movingMs(32_769), movingMs(8_388_608)])
+      .toEqual([SERVER_TIMEOUT_MS, SERVER_TIMEOUT_MS + 1_000, SERVER_TIMEOUT_MS + 1_000, SERVER_TIMEOUT_MS + 2_000, SERVER_TIMEOUT_MS + 256_000]);
+  });
+});
+
 describe('open() against a real server', () => {
   let server: Server;
   let base = '';
@@ -139,12 +248,19 @@ describe('open() against a real server', () => {
     return closed.includes(path);
   };
 
-  test('a trickling body times out and the connection is let go', async () => {
-    const started = Date.now();
-    await expect(open(fetch, `${base}/trickle`, {}, 1000).then((o) => o.read(PAGE_MAX_BYTES))).rejects.toBeInstanceOf(TimedOut);
-    expect(Date.now() - started).toBeLessThan(4000);
+  test('a trickling body is cut at the deadline it was given, though it never stops, and the connection is let go', async () => {
+    // only the deadline's own timer throws TimedOut (open's line.late), so no clock is read here: a bound of 4 s round
+    // the 1 s deadline was what a busy machine's late timers broke. What is checked is that the timer was armed for the
+    // second asked; a read the deadline never ends fails at the test's own limit, the trickle having no end
+    const timers = jest.spyOn(globalThis, 'setTimeout');
+    try {
+      await expect(open(fetch, `${base}/trickle`, {}, 1000).then((o) => o.read(PAGE_MAX_BYTES))).rejects.toBeInstanceOf(TimedOut);
+      expect(timers.mock.calls.some(([, ms]) => ms === 1000)).toBe(true);
+    } finally {
+      timers.mockRestore();
+    }
     expect(await letGo('/trickle')).toBe(true);
-  });
+  }, 30_000);
 
   test('a flood is refused at the cap and the connection is let go', async () => {
     await expect(open(fetch, `${base}/flood`, {}, 10_000).then((o) => o.read(1024 * 1024))).rejects.toBeInstanceOf(TooLarge);

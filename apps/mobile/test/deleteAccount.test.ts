@@ -5,7 +5,10 @@ import { ensureIdentityRow } from '../src/data/saves';
 import { seedGeneratedLists } from '../src/data/lists';
 import { deleteEverything, deletePorts, deleteTargets, progressOf, type DelPorts, type Progress } from '../src/services/deleteAccount';
 import type { RelayAnswer } from '../src/services/send';
+import { SERVER_TIMEOUT_MS } from '../src/net/http';
+import { CutShort } from '../src/net/pool';
 import { memoryDb } from './sqlite';
+import { inward, silent, watch, type Sends } from './inward';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -193,6 +196,7 @@ describe('a nostr user’s lists', () => {
 });
 
 import { signDeletion } from '../src/services/deleteAccount';
+import { settleUserLists } from '../src/services/nostrSignIn';
 import { readRelayList, readServerList } from '@kefli/protocol';
 
 describe('a nostr user’s deletion (contract 4.7)', () => {
@@ -207,6 +211,118 @@ describe('a nostr user’s deletion (contract 4.7)', () => {
     expect(readRelayList(lists.find((e) => e.kind === 10002)!)).toEqual([{ url: 'wss://mine', read: true, write: false }]);
     expect(readServerList(lists.find((e) => e.kind === 10063)!)).toEqual(['https://my.blossom']);
     expect(w.sent.some((s) => s.event.kind === 5 && s.event.tags.some((t) => t[1]?.startsWith('10002:')))).toBe(false);
+  });
+
+  /** A nostr user signed in with Keep backup copies on, their lists as their other apps wrote them, read whole (C§3.1). */
+  async function signedIn(w: ReturnType<typeof world>, relays: string[][], servers: string[][], at = 500) {
+    w.db.run('DELETE FROM relays');
+    w.db.run('DELETE FROM servers');
+    w.db.run("UPDATE identities SET provider = 'nip55'");
+    const relayList = await w.p.signer.signEvent({ kind: 10002, created_at: at, tags: relays, content: '' });
+    const serverList = await w.p.signer.signEvent({ kind: 10063, created_at: at, tags: servers, content: '' });
+    settleUserLists(w.db, 90, w.pk, D, { relays: readRelayList(relayList), servers: readServerList(serverList), known: true, relayList, serverList }, true);
+  }
+
+  test('their lists are republished whole, past what Kefli uses of them, without Kefli’s relay, server and the defaults it added', async () => {
+    const w = world();
+    const relays = [
+      ...Array.from({ length: 60 }, (_, i) => (i % 7 === 3 ? ['r', `wss://r${i}.example`, 'read'] : ['r', `wss://r${i}.example`])),
+      ['r', 'wss://r60.example', 'outbox'], ['alt', 'relay list'],
+    ];
+    const servers = Array.from({ length: 55 }, (_, i) => ['server', `https://s${i}.example`]);
+    // their list names Kefli's second default relay itself, which Kefli didn't add and which stays
+    await signedIn(w, [...relays, ['r', 'ws://b', 'write']], servers);
+    const signed = await signDeletion(w.p);
+    const relayList = signed.lists.find((e) => e.kind === 10002)!;
+    const serverList = signed.lists.find((e) => e.kind === 10063)!;
+    expect(relayList.tags).toEqual([...relays, ['r', 'ws://b', 'write']]);
+    expect(serverList.tags).toEqual(servers);
+    // dated after the lists they replace, whatever this phone's clock says (C§3.1)
+    expect([relayList.created_at, serverList.created_at]).toEqual([501, 501]);
+  });
+
+  test('the newest lists on the relays are read first, so what they added in another app since the last sync stays theirs', async () => {
+    const w = world();
+    await signedIn(w, [['r', 'wss://mine']], [['server', 'https://my.blossom']]);
+    // since this phone last synced, they added a relay and a server in another app
+    const newer = [
+      await w.p.signer.signEvent({ kind: 10002, created_at: 900, tags: [['r', 'wss://mine'], ['r', 'wss://new.example', 'read']], content: '' }),
+      await w.p.signer.signEvent({ kind: 10063, created_at: 900, tags: [['server', 'https://my.blossom'], ['server', 'https://new.blossom']], content: '' }),
+    ];
+    const asked: string[] = [];
+    const p: DelPorts = {
+      ...w.p,
+      query: async (relay, filters) => {
+        asked.push(relay);
+        return filters[0].kinds.includes(10002) && relay === 'ws://idx' ? newer : [];
+      },
+    };
+    const signed = await signDeletion(p);
+    // rewritten from the list held, as it was, the new relay and server went from the lists their other apps share
+    expect(signed.lists.find((e) => e.kind === 10002)!.tags).toEqual([['r', 'wss://mine'], ['r', 'wss://new.example', 'read']]);
+    expect(signed.lists.find((e) => e.kind === 10063)!.tags).toEqual([['server', 'https://my.blossom'], ['server', 'https://new.blossom']]);
+    expect(signed.lists.map((e) => e.created_at)).toEqual([901, 901]);
+    // the relays they read from now are read for saves too
+    expect(asked).toContain('wss://new.example');
+    // a relay that doesn't answer the read stops nothing: the lists held are rewritten
+    const quiet = world();
+    await signedIn(quiet, [['r', 'wss://mine']], [['server', 'https://my.blossom']]);
+    const down = await signDeletion({ ...quiet.p, query: async () => Promise.reject(new Error('down')) });
+    expect(down.lists.map((e) => e.tags)).toEqual([[['r', 'wss://mine']], [['server', 'https://my.blossom']]]);
+  });
+
+  test("a default relay Kefli doesn't write to for this person is read for the newest lists too (C§3.1)", async () => {
+    const w = world();
+    // signed in with Keep backup copies on: Kefli added its own relay and its first default relay, ws://a, not ws://b
+    await signedIn(w, [['r', 'wss://mine']], [['server', 'https://my.blossom']]);
+    expect(w.db.all("SELECT url FROM relays WHERE url = 'ws://b'")).toEqual([]);
+    // since this phone last synced, another app of theirs added a relay, and its list reached Kefli's second default
+    // relay and no other relay this phone reads
+    const newer = await w.p.signer.signEvent({ kind: 10002, created_at: 900, tags: [['r', 'wss://mine'], ['r', 'wss://new.example']], content: '' });
+    const asked: string[] = [];
+    const p: DelPorts = {
+      ...w.p,
+      query: async (relay, filters) => (asked.push(relay), filters[0].kinds.includes(10002) && relay === 'ws://b' ? [newer] : []),
+    };
+    const signed = await signDeletion(p);
+    expect(asked).toEqual(expect.arrayContaining(['ws://idx', 'ws://a', 'ws://b']));
+    // rewritten from the list held, the newer list's relay went from the list their other apps share, by a list dated after it
+    const relayList = signed.lists.find((e) => e.kind === 10002)!;
+    expect(relayList.tags).toEqual([['r', 'wss://mine'], ['r', 'wss://new.example']]);
+    expect(relayList.created_at).toBe(901);
+  });
+
+  test('a relay holding a newer list from another app, or one that keeps no lists, is confirmed by its answers to the kind 5s alone', async () => {
+    const w = world();
+    w.db.run("UPDATE identities SET provider = 'nip55'");
+    w.db.run("INSERT INTO relays (url, owner, read, write, source, added_by_app) VALUES ('wss://mine', ?, 1, 0, 'user', 0)", w.pk);
+    w.db.run("INSERT INTO servers (url, owner, role, in_10063, added_by_app) VALUES ('https://my.blossom', ?, 'user', 1, 0)", w.pk);
+    const lists: string[] = [];
+    const p: DelPorts = {
+      ...w.p,
+      publish: async (relay, e) => {
+        if (e.kind !== 5) lists.push(`${relay} ${e.kind}`);
+        // another app's 10002, newer than the rewrite signed before the deletion ran, reached this relay meanwhile
+        if (relay === 'ws://a' && e.kind === 10002) return { ok: false, reason: 'replaced: have newer event' };
+        if (relay === 'ws://b' && e.kind !== 5) return { ok: false, reason: 'blocked: lists are not kept here' };
+        return w.p.publish(relay, e);
+      },
+    };
+    let last: Progress | null = null;
+    expect(await deleteEverything(p, (pr) => (last = pr))).toBe('done');
+    expect(last!.others).toMatchObject({ 'ws://a': 'done', 'ws://b': 'done' });
+    // and the other list still went to the relay that held a newer one of the first
+    expect(lists).toEqual(expect.arrayContaining(['ws://a 10002', 'ws://a 10063', 'ws://b 10002', 'ws://b 10063']));
+  });
+
+  test('a list of theirs too long for one event is left as it is; the deletion and the other list go on', async () => {
+    const w = world();
+    const huge = Array.from({ length: 1000 }, (_, i) => ['r', `wss://relay-number-${i}.example`]);
+    await signedIn(w, huge, [['server', 'https://my.blossom']]);
+    const signed = await signDeletion(w.p);
+    expect(signed.lists.map((e) => e.kind)).toEqual([10063]);
+    expect(signed.lists[0].tags).toEqual([['server', 'https://my.blossom']]);
+    expect(signed.items.length).toBeGreaterThan(0);
   });
 
   test('declined in their app, nothing is sent and nothing deleted', async () => {
@@ -251,10 +367,45 @@ describe('Delete my data covers every save (contract 4.7, F32)', () => {
     expect(w.log).toContain(`DELETE http://m1/${h(709)}`);
   });
 
-  test('a relay that doesn’t answer the read adds nothing and stops nothing', async () => {
+  // FD 119: every relay's answer must come whole before the deletions are built; read as holding nothing, as it was, a
+  // relay that cut its answer short had the saves it alone held skipped in silence
+  test("the operator relay's read cut short or unanswered fails the deletion as unreachable: nothing sent, the key kept", async () => {
     const w = world();
-    const p: DelPorts = { ...w.p, query: async () => Promise.reject(new Error('down')) };
-    expect(await deleteEverything(p, () => undefined, await signDeletion(p))).toBe('done');
+    const p: DelPorts = { ...w.p, query: async (relay) => (relay === 'ws://op' ? Promise.reject(new Error('down')) : []) };
+    expect(await deleteEverything(p, () => undefined, await signDeletion(p))).toBe('failed');
+    expect(w.sent).toHaveLength(0);
+    expect(w.log.some((l) => l.startsWith('DELETE'))).toBe(false);
+    expect(progressOf(w.db)).toBeNull();
+  });
+
+  test('a backup relay whose answer is cut short gets kind 5s for what came and is reported as not confirming', async () => {
+    const w = world();
+    const theirs = await elsewhere(w, 9, 500);
+    const p: DelPorts = {
+      ...w.p,
+      query: async (relay) => {
+        if (relay === 'ws://b') throw new CutShort('ws://b', [theirs], 'no EOSE within 60000 ms');
+        return [];
+      },
+    };
+    const reports: Progress[] = [];
+    expect(await deleteEverything(p, (prog) => reports.push(prog), await signDeletion(p))).toBe('partial');
+    const last = reports[reports.length - 1];
+    expect(last.others['ws://a']).toBe('done');
+    expect(last.others['ws://b']).toBe('fail');
+    // the save that came before the cut is named everywhere, dated past it, and its text goes from the mirror
+    const d = theirs.tags.find((t) => t[0] === 'd')![1];
+    for (const relay of ['ws://op', 'ws://a', 'ws://b']) expect(named(w, relay)).toContain(d);
+    expect(named(w, 'ws://b')).toEqual(expect.arrayContaining([`kefli/item/${h(1)}`, 'kefli/devices']));
+    expect(w.log).toContain(`DELETE http://m1/${h(709)}`);
+  });
+
+  test("a backup relay that doesn't answer the read is reported the same way, the rest unaffected", async () => {
+    const w = world();
+    const p: DelPorts = { ...w.p, query: async (relay) => (relay === 'ws://a' ? Promise.reject(new Error('down')) : []) };
+    const reports: Progress[] = [];
+    expect(await deleteEverything(p, (prog) => reports.push(prog), await signDeletion(p))).toBe('partial');
+    expect(reports[reports.length - 1].others).toMatchObject({ 'ws://a': 'fail', 'ws://b': 'done' });
     expect(named(w, 'ws://a')).toEqual(expect.arrayContaining([`kefli/item/${h(1)}`, 'kefli/devices']));
   });
 
@@ -307,5 +458,169 @@ describe('Delete my data covers every save (contract 4.7, F32)', () => {
     const signed = await signDeletion(w.p);
     expect(signed.items.flatMap((e) => e.tags).map((t) => t[1])).toContain(`30078:${w.pk}:kefli/item/${h(6)}`);
     expect(signed.items.every((e) => e.created_at > 900)).toBe(true);
+  });
+});
+
+describe('Delete my data asks its servers through the hops, each within a deadline (7.1, 7.2)', () => {
+  afterEach(() => jest.useRealTimers());
+
+  test("the operator sending DELETE /account or a blob's deletion into the phone's network: nothing is asked there, and the step fails", async () => {
+    const sendsOn: Sends[] = [(_m, url) => url.endsWith('/account'), (_m, url) => url.startsWith('http://blossom/')];
+    for (const sends of sendsOn) {
+      const w = world();
+      const net = inward(w.p.fetch, sends);
+      w.p.fetch = net.f;
+      // followed as OkHttp followed it, the phone took whatever answers at 192.168.1.1 for the operator, and wiped itself
+      expect(await deleteEverything(w.p, () => undefined)).toBe('failed');
+      expect(net.asked).toEqual([]);
+      expect(w.wiped()).toBe(false);
+    }
+  });
+
+  test("the local stack's operator moving a blob's deletion to its other address on loopback: followed there, and only there", async () => {
+    for (const localStack of [true, false]) {
+      const w = world();
+      // as the screen hands them over (screens/Delete.tsx), the build's word with them
+      const ports = deletePorts({
+        db: w.db, signer: w.p.signer, defaults: { ...D, operator: { ...D.operator, blossom: 'http://localhost:3447' } }, crypto: nodeCrypto,
+        fetch: w.p.fetch, wipePhone: w.p.wipePhone, localStack,
+        pool: { publish: w.p.publish, query: async () => [] },
+      });
+      const base = ports.fetch;
+      ports.fetch = (async (url: string, init: RequestInit) => {
+        const moved = /^http:\/\/localhost:3447\/([0-9a-f]{64})$/.exec(url);
+        return moved ? new Response(null, { status: 307, headers: { location: `/v1/${moved[1]}` } }) : base(url, init);
+      }) as typeof fetch;
+      ports.sleep = async () => undefined;
+      ports.budgetMs = 0;
+      expect([localStack, await deleteEverything(ports, () => undefined)]).toEqual([localStack, localStack ? 'done' : 'failed']);
+      expect([localStack, w.log.some((l) => l.startsWith('DELETE http://localhost:3447/v1/')), w.wiped()]).toEqual([localStack, localStack, localStack]);
+    }
+  });
+
+  test('DELETE /account answered by any redirect, on any build, is the API not answering: the step fails and the phone keeps everything', async () => {
+    // every call to the API is signed for its exact address (C§6), so it never answers through a redirect. Followed, a
+    // 303 to any page that answers 200 read as the account deleted, and Delete my data went on to wipe the phone
+    const answers: [number, string | null][] = [
+      [303, 'https://news.example/'], [302, 'https://news.example/'], [301, '/v1/account'], [307, '/v1/account'], [308, 'http://api/v2/account'],
+      [302, null], [300, null], [304, null],
+    ];
+    for (const localStack of [true, false]) {
+      for (const [status, location] of answers) {
+        const w = world();
+        w.p.localStack = localStack;
+        const base = w.p.fetch;
+        const asked: string[] = [];
+        w.p.fetch = (async (url: string, init: RequestInit = {}) => {
+          asked.push(`${init.method ?? 'GET'} ${url}`);
+          if (url === 'http://api/account') return new Response(null, { status, headers: location ? { location } : {} });
+          return base(url, init);
+        }) as typeof fetch;
+        const named = [localStack, status, location];
+        expect([...named, await deleteEverything(w.p, () => undefined)]).toEqual([...named, 'failed']);
+        expect([...named, w.wiped(), progressOf(w.db)]).toEqual([...named, false, null]);
+        // the operator's blob deletions and DELETE /account, tried within the minute; nothing a redirect names
+        expect([...named, asked.filter((a) => !a.startsWith('DELETE http://blossom/') && a !== 'DELETE http://api/account')]).toEqual([...named, []]);
+        expect([...named, asked.includes('DELETE http://api/account')]).toEqual([...named, true]);
+      }
+    }
+  });
+
+  test('an API that takes DELETE /account and never answers fails the step at its deadline, where it held the screen for good', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    const w = world();
+    const base = w.p.fetch;
+    w.p.fetch = (async (url: string, init: RequestInit) => (url.endsWith('/account') ? silent(url, init) : base(url, init))) as typeof fetch;
+    // one try, as the minute's last
+    w.p.budgetMs = 0;
+    const run = watch(deleteEverything(w.p, () => undefined));
+    await jest.advanceTimersByTimeAsync(SERVER_TIMEOUT_MS - 1_000);
+    expect(run.settled).toBe(false);
+    await jest.advanceTimersByTimeAsync(2_000);
+    expect(run).toMatchObject({ settled: true, value: 'failed' });
+    expect(w.wiped()).toBe(false);
+  });
+
+  /** w's ports as the screen builds them (deletePorts), whose waits are timers and whose minute is the clock's. */
+  const screenPorts = (w: ReturnType<typeof world>, fetch: typeof globalThis.fetch) => deletePorts({
+    db: w.db, signer: w.p.signer, defaults: D, crypto: nodeCrypto, fetch, wipePhone: w.p.wipePhone,
+    pool: { publish: w.p.publish, query: async () => [] },
+  });
+
+  test('an API that never answers DELETE /account holds the first step a minute at most, its tries counted with its waits', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    const w = world();
+    const base = w.p.fetch;
+    let tries = 0;
+    const ports = screenPorts(w, (async (url: string, init: RequestInit) => {
+      if (!url.endsWith('/account')) return base(url, init);
+      tries++;
+      return silent(url, init);
+    }) as typeof fetch);
+    const run = watch(deleteEverything(ports, () => undefined));
+    let ms = 0;
+    while (!run.settled && 300_000 > ms) {
+      await jest.advanceTimersByTimeAsync(1_000);
+      ms += 1_000;
+    }
+    // the waits alone were counted: five tries of 15 s and 30 s of waits held the screen for 1 min 45 s
+    expect(run).toMatchObject({ settled: true, value: 'failed' });
+    expect(ms).toBeLessThanOrEqual(60_000);
+    expect([tries, w.wiped()]).toEqual([3, false]);
+  });
+
+  test('an operator that fails at once is still tried through its minute, and one that answers by then is done', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    const w = world();
+    const base = w.p.fetch;
+    const at: number[] = [];
+    const t0 = Date.now();
+    // the API unreachable for its first 20 s, then answering
+    const ports = screenPorts(w, (async (url: string, init: RequestInit) => {
+      if (!url.endsWith('/account')) return base(url, init);
+      at.push(Date.now() - t0);
+      if (Date.now() - t0 < 20_000) throw new Error('unreachable');
+      return base(url, init);
+    }) as typeof fetch);
+    const run = watch(deleteEverything(ports, () => undefined));
+    for (let s = 0; 120 > s && !run.settled; s++) await jest.advanceTimersByTimeAsync(1_000);
+    expect(run).toMatchObject({ settled: true, value: 'done' });
+    expect(at).toEqual([0, 2_000, 6_000, 14_000, 30_000]);
+  });
+
+  test("the phone's clock set back or forward while the first step runs neither stretches nor cuts its minute", async () => {
+    // the minute was read from the wall clock: set back an hour during the first try, as a network's time can set a phone
+    // whose clock was wrong, a never-answering API held the screen, which swallows Back, for 37 minutes of eleven tries
+    for (const step of [-3_600_000, 3_600_000]) {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+      const w = world();
+      const base = w.p.fetch;
+      let tries = 0;
+      const ports = screenPorts(w, (async (url: string, init: RequestInit) => {
+        if (!url.endsWith('/account')) return base(url, init);
+        if (++tries === 1) jest.setSystemTime(Date.now() + step);
+        return silent(url, init);
+      }) as typeof fetch);
+      const run = watch(deleteEverything(ports, () => undefined));
+      let ms = 0;
+      while (!run.settled && 7_200_000 > ms) {
+        await jest.advanceTimersByTimeAsync(1_000);
+        ms += 1_000;
+      }
+      expect([step, run, ms, tries, w.wiped()]).toEqual([step, expect.objectContaining({ settled: true, value: 'failed' }), 51_000, 3, false]);
+      jest.useRealTimers();
+    }
+  });
+
+  test("a mirror that never answers a deletion is let go at its deadline: it isn't confirmed, and the phone is wiped all the same", async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    const w = world();
+    const base = w.p.fetch;
+    w.p.fetch = (async (url: string, init: RequestInit) => (url.startsWith('http://m1/') ? silent(url, init) : base(url, init))) as typeof fetch;
+    w.p.budgetMs = 0;
+    const run = watch(deleteEverything(w.p, () => undefined));
+    await jest.advanceTimersByTimeAsync(SERVER_TIMEOUT_MS + 1_000);
+    expect(run).toMatchObject({ settled: true, value: 'partial' });
+    expect(w.wiped()).toBe(true);
   });
 });

@@ -2,7 +2,8 @@
 // bar, its field focused on arrival. Before typing, the caption; results on every keystroke across Unread and
 // Archive, archived ones tagged; "Nothing matches" only once typing has paused for 250 ms, the last results staying
 // until then. A swipe archives or restores a result in place. Back from a Reader opened here keeps the query,
-// results and scroll; the query resets only when Search is entered from Saves.
+// results and scroll; the query resets only when Search is entered from Saves. The field holds what search reads of
+// a query and no more (data/search.ts QUERY_MAX_CHARS): a page pasted in keeps its first 4 KB.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, TextInput, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -10,7 +11,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { motion, radius } from '@kefli/tokens';
 import type { LibRow } from '../data/library';
-import { search } from '../data/search';
+import { QUERY_MAX_CHARS, search } from '../data/search';
 import { useApp } from '../services/app';
 import { store } from '../services/store';
 import { Button } from '../ui/Button';
@@ -82,6 +83,7 @@ export default function Search() {
           <TextInput
             ref={input} value={q} onChangeText={setQ} autoFocus placeholder={S.search.field} placeholderTextColor={c.muted}
             accessibilityLabel={S.search.field} autoCorrect={false} autoCapitalize="none" returnKeyType="search"
+            maxLength={QUERY_MAX_CHARS}
             style={[ui(15, 'body', 1.2), { flex: 1, color: c.text, paddingVertical: 0 }]}
           />
         </View>

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { countWords, normaliseMarkdown, pdfMarkdown, project, textHash, type PdfPage, type PdfRun } from '../src';
+import { countWords, isPageNumber, normaliseMarkdown, pdfMarkdown, project, textHash, type PdfPage, type PdfRun } from '../src';
 import { nodeCrypto } from '../src/node';
 
 const FIXTURES = join(__dirname, '..', '..', '..', 'shared', 'fixtures', 'pdfs');
@@ -140,5 +140,101 @@ describe('PDF layout (C§4.2)', () => {
 
   test('no runs is no text', () => {
     expect(md([page(), page()]).markdown).toBe('\n');
+  });
+
+  test('a word broken over three lines is joined whole', () => {
+    expect(md([page(...lines(['An organi-', 'sa-', 'tion keeps its files.'], 72, 100))]).markdown).toBe('An organisation keeps its files.\n');
+  });
+});
+
+describe('PDF layout at any length (a hostile or merely long file)', () => {
+  const POOL = ['reading', 'later', 'quietly', 'library', 'saved', 'article', 'phone', 'voice', 'offline', 'clean', 'text', 'every', 'page', 'keeps', 'place'];
+  // words that differ line to line, so no line repeats as a running header would
+  const say = (i: number) => [0, 1, 2, 3, 4, 5].map((k) => POOL[(i * 7 + k * 11 + Math.floor(i / 13)) % POOL.length]).join(' ');
+  const timed = <T,>(f: () => T): { out: T; ms: number } => {
+    const started = Date.now();
+    const out = f();
+    return { out, ms: Date.now() - started };
+  };
+
+  // Each was quadratic: 34 s in Node for this paragraph (every line took the block's least x and greatest right
+  // again, through a spread that a longer block would take past the stack), 31 s for the hyphens, 8 s for half
+  // these runs. Linear, each takes about 2 s under Jest.
+  test('a paragraph that never ends a sentence, 20,000 lines over 334 pages', () => {
+    const pages: PdfPage[] = [];
+    for (let i = 0; i < 20_000; i += 60) pages.push(page(...Array.from({ length: Math.min(60, 20_000 - i) }, (_, k) => run(`the ${say(i + k)} goes on`, 72, 60 + k * 12))));
+    const { out, ms } = timed(() => md(pages));
+    expect(ms).toBeLessThan(30_000);
+    expect(out.markdown).toBe(Array.from({ length: 20_000 }, (_, i) => `the ${say(i)} goes on`).join(' ') + '\n');
+  });
+
+  test('20,000 lines each ending in a hyphen', () => {
+    const pages: PdfPage[] = [];
+    for (let i = 0; i < 20_000; i += 60) pages.push(page(...Array.from({ length: Math.min(60, 20_000 - i) }, (_, k) => run(`${say(i + k).replace(/ /g, '')}-`, 72, 60 + k * 12))));
+    expect(timed(() => md(pages)).ms).toBeLessThan(30_000);
+  });
+
+  test('one line of 200,000 runs set apart', () => {
+    const runs = Array.from({ length: 200_000 }, (_, i) => run('w', 72 + i * 8, 100));
+    const { out, ms } = timed(() => md([{ w: 595, h: 842, runs }]));
+    expect(ms).toBeLessThan(30_000);
+    expect(out.markdown).toBe('\n'); // one word of a letter, two hundred thousand times: numbers more than prose
+  });
+
+  // Each run holding only a soft hyphen, which clean empties, adds a space to its line. The page-number pattern tried
+  // every split of a long run of them when the line went on past it: 2.3 s for 20,000, 6.6 s for 40,000.
+  test('a line spaced by 60,000 soft hyphens is read as one with a single space, and in good time', () => {
+    const paragraph = (opening: string, spaces: number) => {
+      const middle: PdfRun[] = [run(opening, 72, 112)];
+      for (let i = 0; i < spaces; i++) middle.push(['\u00ad', 72 + opening.length * 4.5 + 4 + i * 4, 112, 10, 1, 0]);
+      middle.push(run('x', 72 + opening.length * 4.5 + 4 + spaces * 4, 112));
+      return [page(run('Saved articles are read on the train and kept', 72, 100), ...middle, run('for the voice to read aloud later.', 72, 124))];
+    };
+    for (const opening of ['page', '12']) {
+      const { out, ms } = timed(() => md(paragraph(opening, 60_000)));
+      expect(ms).toBeLessThan(5_000);
+      expect(out).toEqual(md(paragraph(opening, 1)));
+      expect(out.markdown).toBe(`Saved articles are read on the train and kept ${opening} x for the voice to read aloud later.\n`);
+    }
+  });
+});
+
+describe('page numbers (a line that is one is left out)', () => {
+  // the pattern isPageNumber's replaced, which must agree with it on every line
+  const OLD = /^(?:page\s*)?[-–—]?\s*\d{1,4}\s*[-–—]?(?:\s*(?:of|\/)\s*\d{1,4})?$/i;
+  const TOKENS = ['page', 'PAGE', 'Page', ' ', '  ', '\t', '\u00a0', '-', '–', '—', '1', '12', '1234', '12345', 'of', 'OF', '/', 'x', 'p', 'o', '.'];
+
+  test('a line is a page number exactly when the old pattern said so: every line of up to four of these, and more', () => {
+    const differ: string[] = [];
+    let found = 0;
+    const check = (s: string) => {
+      const was = OLD.test(s);
+      if (was) found++;
+      if (isPageNumber(s) !== was) differ.push(s);
+    };
+    let level = [''];
+    for (let n = 0; n <= 4; n++) {
+      level.forEach(check);
+      if (n < 4) level = level.flatMap((s) => TOKENS.map((t) => s + t));
+    }
+    // and 50,000 lines of five to twelve, the same on every run
+    let seed = 117;
+    const next = () => (seed = (Math.imul(seed, 1_664_525) + 1_013_904_223) >>> 0) / 4_294_967_296;
+    for (let i = 0; i < 50_000; i++) check(Array.from({ length: 5 + Math.floor(next() * 8) }, () => TOKENS[Math.floor(next() * TOKENS.length)]).join(''));
+    expect(differ).toEqual([]);
+    expect(found).toBeGreaterThan(1_000);
+    expect(['3', '- 3 -', 'Page 3', '3 of 12', '3/12', 'page—12 OF 30'].every(isPageNumber)).toBe(true);
+    expect(['3 x', 'Page 3.', 'page', '12345', 'pages 3'].some(isPageNumber)).toBe(false);
+  }, 30_000);
+
+  // 40,000 spaces after page or a number, and then a letter, took the old pattern 3 s each; three such runs, past measuring
+  test('a long run of spaces is read in linear time, whatever follows it', () => {
+    const spaces = ' '.repeat(40_000);
+    const started = Date.now();
+    for (const s of [`page${spaces}x`, `12${spaces}x`, `- 12 -${spaces}x`, `12 of${spaces}x`, spaces]) expect([s.length, isPageNumber(s)]).toEqual([s.length, false]);
+    expect(isPageNumber(`page${spaces}-${spaces}12${spaces}-${spaces}of${spaces}30`)).toBe(true);
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(isPageNumber(`Page${spaces}12${spaces}of${spaces}x`)).toBe(false);
+    expect(Date.now() - started).toBeLessThan(1_000);
   });
 });

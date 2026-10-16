@@ -143,8 +143,8 @@ const feature = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 500">
   <text x="506" y="265" font-family="${NAME_FONT}" font-size="120" letter-spacing="-3" fill="${INK}">Kefli</text>
   ${strip(512, 297, 28, 4, 3)}
 </svg>`;
-// Microsoft Edge Add-ons large promotional tile, 1400 x 560, opaque: the OG card's layout at 1.1, centred.
-const edgeLarge = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 560">
+// Chrome Web Store marquee promo tile, 1400 x 560, opaque: the OG card's layout at 1.1, centred.
+const marquee = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 560">
   <rect width="1400" height="560" fill="${PAPER}"/>
   ${iconTile(170, 115, 330, 74.8)}
   <text x="570.4" y="217.3" font-family="${NAME_FONT}" font-size="123.2" letter-spacing="-3.3" fill="${INK}">Kefli</text>
@@ -273,9 +273,7 @@ pngRgb(promo, 440, 'extension/cws-promo-tile.png');
 // addons.mozilla.org's listing icon, uploaded in the Developer Hub: no padding, since AMO shows it at 64 and 32 and
 // would otherwise take icon-128's Chrome padding; the corners in the web icons' proportion (42 in 192).
 png(tile(64, 0, 14), 64, 'extension/amo-icon-64.png');
-// Microsoft Edge Add-ons' extension logo, uploaded in Partner Center: 1:1, 300 recommended; the same tile, no padding.
-png(tile(300, 0, 66), 300, 'extension/edge-logo-300.png');
-pngRgb(edgeLarge, 1400, 'extension/edge-large-tile.png');
+pngRgb(marquee, 1400, 'extension/cws-marquee-tile.png');
 
 // Website. favicon.svg stays the 16 px drawing because tabs show it at 16 CSS px; the ICO carries the 16, 32 and 48 cuts.
 copy(small, 'web/favicon.svg');
@@ -306,7 +304,7 @@ const SIZES = {
   'android/notification-icon.png': [96, 96],
   'android/play-store-icon.png': [512, 512], 'android/play-feature-graphic.png': [1024, 500],
   'extension/icon-16.png': [16, 16], 'extension/icon-32.png': [32, 32], 'extension/icon-48.png': [48, 48], 'extension/icon-128.png': [128, 128],
-  'extension/cws-promo-tile.png': [440, 280], 'extension/amo-icon-64.png': [64, 64], 'extension/edge-logo-300.png': [300, 300], 'extension/edge-large-tile.png': [1400, 560],
+  'extension/cws-promo-tile.png': [440, 280], 'extension/amo-icon-64.png': [64, 64], 'extension/cws-marquee-tile.png': [1400, 560],
   'web/apple-touch-icon.png': [180, 180], 'web/icon-192.png': [192, 192], 'web/icon-512.png': [512, 512], 'web/maskable-512.png': [512, 512], 'web/og-card.png': [1200, 630],
 };
 for (const [file, [w, h]] of Object.entries(SIZES)) {

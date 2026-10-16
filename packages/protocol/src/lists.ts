@@ -7,22 +7,69 @@ import type { NostrEvent, Signer } from './signer';
 
 export type RelayEntry = { url: string; read: boolean; write: boolean };
 
+const SLASH = 0x2f;
+
+/**
+ * s without the slashes at its end, counted back from the end. The pattern for them, a run of slashes and then the
+ * end, was tried from every slash of a run that something else follows, so 40,000 slashes and a letter took 6 s.
+ */
+export function withoutTrailingSlashes(s: string): string {
+  let end = s.length;
+  while (end > 0 && s.charCodeAt(end - 1) === SLASH) end--;
+  return s.slice(0, end);
+}
+
 /** Relay URLs compare without a trailing slash, as NIP-65 lists write them either way. */
-export const sameUrl = (a: string, b: string) => a.replace(/\/+$/, '') === b.replace(/\/+$/, '');
+export const sameUrl = (a: string, b: string) => withoutTrailingSlashes(a) === withoutTrailingSlashes(b);
 
 export function relayTags(entries: RelayEntry[]): string[][] {
   return entries.filter((e) => e.read || e.write).map((e) => (e.read && e.write ? ['r', e.url] : ['r', e.url, e.read ? 'read' : 'write']));
 }
 
-/** A 10002's entries; an r tag without a marker is read and write (NIP-65). */
-export function readRelayList(event: Pick<NostrEvent, 'tags'>): RelayEntry[] {
-  return event.tags
-    .filter((t) => t[0] === 'r' && typeof t[1] === 'string')
-    .map((t) => ({ url: t[1], read: t[2] !== 'write', write: t[2] !== 'read' }));
+/**
+ * The most entries read from one 10002 or 10063. NIP-65 asks for two to four relays of each kind; the phone asks every
+ * read relay at each sync and sends each save to every write relay, so a list of 10,000, which a relay keeping 64 KB
+ * events holds, cost a socket a relay at every sync and an outbox target a relay for every save. A longer list is
+ * read to its first 50 usable entries, in its order.
+ */
+export const LIST_MAX = 50;
+
+// built from strings: the code gate's parser reads a regex literal's escaped slashes as a comment
+const RELAY_URL = new RegExp('^wss?://[^\\s/?#@]+(?:[/?#]\\S*)?$', 'i');
+const SERVER_URL = new RegExp('^https?://[^\\s/?#@]+(?:[/?#]\\S*)?$', 'i');
+const usable = (url: unknown, form: RegExp): url is string => typeof url === 'string' && url.length <= 2048 && form.test(url);
+
+/** Whether url can be a relay's: ws:// or wss://, a host, no credentials or spaces. */
+export const isRelayUrl = (url: unknown): url is string => usable(url, RELAY_URL);
+/** Whether url can be a Blossom server's: http:// or https://, a host, no credentials or spaces. */
+export const isServerUrl = (url: unknown): url is string => usable(url, SERVER_URL);
+
+/** Whether a tag's value is an address of the kind a list holds (named so the code gate's parser reads listed whole). */
+type UrlCheck = (url: unknown) => url is string;
+
+/** The tags named name whose value passes ok, each address once (slash or not), at most LIST_MAX. */
+function listed(event: Pick<NostrEvent, 'tags'>, name: string, ok: UrlCheck): string[][] {
+  const seen = new Set<string>();
+  const out: string[][] = [];
+  for (const t of event.tags) {
+    if (out.length >= LIST_MAX) break;
+    if (t[0] !== name || !ok(t[1])) continue;
+    const bare = withoutTrailingSlashes(t[1]);
+    if (seen.has(bare)) continue;
+    seen.add(bare);
+    out.push(t);
+  }
+  return out;
 }
 
+/** A 10002's entries; an r tag without a marker is read and write (NIP-65). Relay addresses only, at most LIST_MAX. */
+export function readRelayList(event: Pick<NostrEvent, 'tags'>): RelayEntry[] {
+  return listed(event, 'r', isRelayUrl).map((t) => ({ url: t[1], read: t[2] !== 'write', write: t[2] !== 'read' }));
+}
+
+/** A 10063's servers: http(s) addresses only, at most LIST_MAX. */
 export function readServerList(event: Pick<NostrEvent, 'tags'>): string[] {
-  return event.tags.filter((t) => t[0] === 'server' && typeof t[1] === 'string').map((t) => t[1]);
+  return listed(event, 'server', isServerUrl).map((t) => t[1]);
 }
 
 /** Keep backup copies (CR12): add each missing relay, read and write, at the end; leave the rest untouched. */

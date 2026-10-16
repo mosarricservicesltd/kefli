@@ -2,7 +2,8 @@
 // toolbar button with the save's state in storage.session, and updates it there as Saving… becomes Saved. It is the
 // toast's anatomy in the page's own scheme; it closes after eight seconds and on Escape or ✕, and the browser closes it
 // when it loses focus.
-import { icon } from './icons';
+import { add, el, style, svg } from './dom';
+import { icon, MARKS } from './icons';
 import { markDelay, toastCopy, type ToastCopy, type ToastState } from './toastCopy';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -19,36 +20,40 @@ let closeAt: ReturnType<typeof setTimeout> | undefined;
 let left = COUNTDOWN_MS;
 let since = 0;
 
-document.head.insertAdjacentHTML('beforeend', `<style>${ShelfCover.css}</style>`);
-const esc = (x: string) => x.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-const MARKS = { ok: icon('check', 12, 'stroke-width="3"'), bad: icon('bang', 12, 'stroke-width="3"'), off: icon('wifioff', 12, 'stroke-width="2.25"') };
+document.head.append(style(ShelfCover.css));
 
 /** The leading slot: the save's cover, kept while Saving… becomes Saved so its drawing isn't restarted, and its mark. */
 function paintLead(t: ToastCopy): void {
-  let el = row.querySelector<HTMLElement>('.lead');
-  if (!el) {
-    row.insertAdjacentHTML('afterbegin', '<div class="lead"></div>');
-    el = row.querySelector<HTMLElement>('.lead')!;
+  let lead = row.querySelector<HTMLElement>('.lead');
+  if (!lead) {
+    lead = el('div', { class: 'lead' });
+    row.prepend(lead);
   }
-  if (!t.cover || t.cover !== drawnHash || !el.querySelector('.cv')) {
-    el.innerHTML = t.cover ? `<span class="cv" aria-hidden="true">${ShelfCover.svg(t.cover, { draw: true })}</span>` : `<span class="tile ${t.tone === 'bad' ? 'bad' : ''}" aria-hidden="true">${icon(t.tile ?? 'undo', 20)}</span>`;
+  if (!t.cover || t.cover !== drawnHash || !lead.querySelector('.cv')) {
+    lead.replaceChildren(t.cover
+      ? el('span', { class: 'cv', 'aria-hidden': 'true' }, svg(ShelfCover.svg(t.cover, { draw: true })))
+      : el('span', { class: `tile ${t.tone === 'bad' ? 'bad' : ''}`, 'aria-hidden': 'true' }, svg(icon(t.tile ?? 'undo', 20))));
     drawnHash = t.cover ?? null;
     drawnAt = performance.now();
   }
-  el.querySelector('.mk')?.remove();
+  lead.querySelector('.mk')?.remove();
   if (!t.cover || !t.mark) return;
   const delay = Math.max(0, markDelay(ShelfCover.leaves(t.cover).length) - (performance.now() - drawnAt));
-  el.insertAdjacentHTML('beforeend', `<span class="mk ${t.mark}" style="--mk-delay:${Math.round(delay)}ms" aria-hidden="true">${MARKS[t.mark]}</span>`);
+  lead.append(el('span', { class: `mk ${t.mark}`, style: `--mk-delay:${Math.round(delay)}ms`, 'aria-hidden': 'true' }, svg(MARKS[t.mark])));
 }
 
 function paint(s: ToastState): void {
   const t = toastCopy(s);
   paintLead(t);
   row.querySelectorAll(':scope > :not(.lead)').forEach((n) => n.remove());
-  row.insertAdjacentHTML('beforeend', `<div class="tx"><b>${esc(t.title)}</b>${t.sub ? `<span class="${t.wrap ? 'wrap2' : ''}">${esc(t.sub)}</span>` : ''}</div>${t.action ? `<button class="act" data-act="${t.action.toLowerCase()}">${t.action}</button>` : ''}<button class="x" data-act="close" aria-label="Close">${icon('x', 18)}</button>`);
+  add(row,
+    el('div', { class: 'tx' }, el('b', {}, t.title), t.sub ? el('span', { class: t.wrap ? 'wrap2' : '' }, t.sub) : null),
+    t.action ? el('button', { class: 'act', 'data-act': t.action.toLowerCase() }, t.action) : null,
+    el('button', { class: 'x', 'data-act': 'close', 'aria-label': 'Close' }, svg(icon('x', 18))),
+  );
   const cs = getComputedStyle(card);
   card.style.setProperty('--ink', t.cover ? ShelfCover.lineInk(t.cover, cs.getPropertyValue('--surface').trim(), cs.getPropertyValue('--text').trim()) : '');
-  card.querySelector('.timer')!.innerHTML = t.timed ? '<i></i>' : '';
+  card.querySelector('.timer')!.replaceChildren(...(t.timed ? [el('i')] : []));
   live.textContent = '';
   if (t.say) setTimeout(() => (live.textContent = t.say), 80);
   clearTimeout(closeAt);

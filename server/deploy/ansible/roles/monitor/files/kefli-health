@@ -1,0 +1,52 @@
+#!/bin/bash
+# Kefli's health check (backend spec 3.9 as built for the 2 GB box; README, "Monitoring"), run as root by
+# kefli-health.timer every five minutes. It looks at what an outside probe can't: the services and timers, the disk,
+# the certificates' days left, keflid, the relay and Blossom through Caddy, and the share of 5xx answers in the access
+# log's last five minutes. A healthchecks address, when /etc/kefli/health.env sets one, hears each pass, and each
+# failure with the names of the checks that failed and nothing else, so a box that goes quiet is reported too. The
+# journal gets one line per failing run, the names only: no address, key or hash ever appears in it.
+set -u
+domain=${KEFLI_DOMAIN:?}
+cert_days=${HEALTH_CERT_DAYS:-14}   # 0 skips the certificate check (a test box's own CA signs for twelve hours)
+insecure=${HEALTH_INSECURE:-0}      # 1 accepts that CA's certificates
+disk_pct=${HEALTH_DISK_PCT:-80}
+failed=()
+fail() { failed+=("$1"); }
+curlc=(curl -s -m 10 -o /dev/null -w '%{http_code}')
+[ "$insecure" = 1 ] && curlc+=(-k)
+via() { "${curlc[@]}" --resolve "$1:443:127.0.0.1" "${@:2}" 2>/dev/null; }
+
+for unit in keflid strfry caddy relay-sweep.timer kefli-backup.timer; do
+  systemctl -q is-active "$unit" || fail "$unit"
+done
+used=$(df --output=pcent /var/lib/kefli 2>/dev/null | tail -1 | tr -dc 0-9)
+{ [ -n "$used" ] && [ "$used" -lt "$disk_pct" ]; } || fail disk
+[ "$(via "api.$domain" "https://api.$domain/health")" = 200 ] || fail api
+[ "$(via "relay.$domain" -H 'Accept: application/nostr+json' "https://relay.$domain/")" = 200 ] || fail relay
+[ "$(via "blossom.$domain" -I "https://blossom.$domain/$(printf %064d 0)")" = 404 ] || fail blossom
+code=$(via "$domain" "https://$domain/")
+{ [ -n "$code" ] && [ "$code" -lt 500 ]; } || fail website
+if [ "$cert_days" -gt 0 ]; then
+  for host in "$domain" "api.$domain" "relay.$domain" "blossom.$domain"; do
+    end=$(echo | openssl s_client -connect 127.0.0.1:443 -servername "$host" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
+    { [ -n "$end" ] && [ $(( ($(date -d "$end" +%s) - $(date +%s)) / 86400 )) -ge "$cert_days" ]; } || fail "cert:$host"
+  done
+fi
+# 5xx above one in a hundred of the last five minutes' answers, once there are a hundred of them. Caddy's log keeps
+# each answer's time and status (and no address, README "Caddy").
+log=/var/log/caddy/access.log
+if [ -r "$log" ]; then
+  read -r total bad < <(tail -n 20000 "$log" | jq -rs --argjson since "$(( $(date +%s) - 300 ))" \
+    '[.[] | select(.ts >= $since)] | "\(length) \(map(select(.status >= 500)) | length)"' 2>/dev/null || echo "0 0")
+  { [ "${total:-0}" -lt 100 ] || [ $((${bad:-0} * 100)) -le "$total" ]; } || fail 5xx
+fi
+
+ping() { [ -z "${HEALTHCHECK_HEALTH_URL:-}" ] || curl -fsS -m 10 --retry 3 -o /dev/null "$@" || true; }
+if [ ${#failed[@]} -eq 0 ]; then
+  ping "${HEALTHCHECK_HEALTH_URL:-}"
+  exit 0
+fi
+names="${failed[*]}"
+logger -t kefli-health "failing: $names"
+ping --data-raw "failing: $names" "${HEALTHCHECK_HEALTH_URL:-}/fail"
+exit 1

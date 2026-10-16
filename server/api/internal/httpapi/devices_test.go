@@ -1,8 +1,12 @@
 package httpapi_test
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
+	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
@@ -259,6 +263,113 @@ func TestDeviceMoveTakesARelease(t *testing.T) {
 	if s, _ := e.fetch(hash(before)); s != 404 {
 		t.Fatal("S's inbox blob outlived S's account")
 	}
+}
+
+// A library could authorise device keys without end, 60 a minute: each is a wrap recipient on the relay, and the write
+// policy loads every one into memory every five seconds (probe plugindevices: a million devices, 470 MB and answers held
+// up to five seconds at each reload). The phone's connected-browsers record holds about 42 browsers under the 16 KB
+// ceiling, so MaxDevices a library is room enough; past it Connect shows Can't connect, and a move leaves the browser
+// with its old library, as for any refusal.
+func TestDevicesPerLibrary(t *testing.T) {
+	e := newEnv(t)
+	user, T := newKey(), newKey()
+	e.registered(user, T)
+	var first key
+	for i := 0; i < httpapi.MaxDevices; i++ {
+		e.clock = e.clock.Add(time.Second)
+		d := newKey()
+		if i == 0 {
+			first = d
+		}
+		if s := e.addDevice(user, d); s != 200 {
+			t.Fatalf("device %d: %d", i, s)
+		}
+	}
+	e.clock = e.clock.Add(time.Second)
+	extra := newKey()
+	s, b := e.call(user, "POST", "/devices", map[string]any{"v": 1, "device_pubkey": extra.pk, "proof": e.proof(extra, nonce(), e.clock)})
+	wantError(t, s, b, 403, "devices: too_many")
+	if e.holder(extra) != "" {
+		t.Fatal("a device past the limit was authorised")
+	}
+	// one it holds already is still a 200, as after a lost answer
+	e.clock = e.clock.Add(time.Second)
+	s, b = e.call(user, "POST", "/devices", map[string]any{"v": 1, "device_pubkey": first.pk, "proof": e.proof(first, nonce(), e.clock)})
+	expect(t, s, 200, b)
+	// a move into a full library is refused the same way, and the browser stays where it was
+	expect(t, e.addDevice(T, extra), 200, nil)
+	e.clock = e.clock.Add(time.Second)
+	s, b = e.call(user, "POST", "/devices", map[string]any{"v": 1, "device_pubkey": extra.pk, "release": e.release(T, extra.pk, user.pk, e.clock)})
+	wantError(t, s, b, 403, "devices: too_many")
+	if e.holder(extra) != T.pk {
+		t.Fatal("the browser left its library")
+	}
+	// Disconnect makes room
+	s, b = e.call(user, "DELETE", "/devices/"+first.pk, nil)
+	expect(t, s, 200, b)
+	e.clock = e.clock.Add(time.Second)
+	s, b = e.call(user, "POST", "/devices", map[string]any{"v": 1, "device_pubkey": extra.pk, "release": e.release(T, extra.pk, user.pk, e.clock)})
+	expect(t, s, 200, b)
+}
+
+// A library could connect a fresh browser key and disconnect it again and again, 30 times a minute within the API's 60
+// calls a key, a browser's proof costing nothing to make: each Disconnect lists the browser as gone for 60 days, and
+// every nightly relay sweep and the write policy's hourly prune read the whole list (F45), so one library put 43,200
+// rows a day on it, 2.6 million in 60 days (probe churn). Now a library connects at most MaxDeviceAdds browsers a day,
+// beside MaxDevices at once; past it POST /devices gets 429 rate with Retry-After, which the phone sends again later,
+// and its proof isn't used up. A browser the library holds already is still answered 200, and other libraries connect
+// theirs as before.
+func TestDevicesConnectedADay(t *testing.T) {
+	e := newEnv(t)
+	user, other, kept := newKey(), newKey(), newKey()
+	e.registered(user, other)
+	expect(t, e.addDevice(user, kept), 200, nil)
+	for i := 1; i < httpapi.MaxDeviceAdds; i++ {
+		if i%25 == 0 {
+			e.clock = e.clock.Add(time.Minute) // within the API's calls a key
+		}
+		d := newKey()
+		expect(t, e.addDevice(user, d), 200, nil)
+		s, b := e.call(user, "DELETE", "/devices/"+d.pk, nil)
+		expect(t, s, 200, b)
+	}
+	if gone, _ := e.st.Gone(t.Context(), 0); len(gone) != httpapi.MaxDeviceAdds-1 {
+		t.Fatalf("%d browsers gone", len(gone))
+	}
+	e.clock = e.clock.Add(time.Minute)
+	extra := newKey()
+	body := map[string]any{"v": 1, "device_pubkey": extra.pk, "proof": e.proof(extra, nonce(), e.clock)}
+	s, wait, b := e.posted(user, "/devices", body)
+	if s != 429 || b["error"] != "rate" || wait < 1 || wait > 24*60*60+1 {
+		t.Fatalf("past a day's browsers: %d %v, Retry-After %d", s, b, wait)
+	}
+	if e.holder(extra) != "" {
+		t.Fatal("a browser past the day's was connected")
+	}
+	// one it holds already, as after a lost answer, is still a 200; another library connects the refused browser with
+	// the same proof, which the refusal didn't use up
+	expect(t, e.addDevice(user, kept), 200, nil)
+	s, b = e.call(other, "POST", "/devices", body)
+	expect(t, s, 200, b)
+	e.clock = e.clock.Add(24 * time.Hour)
+	expect(t, e.addDevice(user, newKey()), 200, nil)
+}
+
+// posted is a NIP-98 POST of body signed by k: the status, Retry-After in seconds and the answer.
+func (e *env) posted(k key, path string, body map[string]any) (int, int, map[string]any) {
+	e.t.Helper()
+	raw, _ := json.Marshal(body)
+	req, _ := http.NewRequest("POST", e.api.URL+path, bytes.NewReader(raw))
+	req.Header.Set("Authorization", k.sign(e.t, 27235, nostr.Tags{{"u", e.api.URL + path}, {"method", "POST"}, {"payload", hash(raw)}}, e.clock))
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	defer res.Body.Close()
+	var out map[string]any
+	_ = json.NewDecoder(res.Body).Decode(&out)
+	wait, _ := strconv.Atoi(res.Header.Get("Retry-After"))
+	return res.StatusCode, wait, out
 }
 
 // A browser that shows a new code consents afresh: its proof connects it to whichever library uses it first.
