@@ -46,7 +46,7 @@ LISTEN TO IT
 YOURS TO KEEP
 • No signup, no account and no password: your phone makes a key that belongs to you alone, and shows it to you as a twelve-word recovery code.
 • Every save is encrypted with that key before it leaves your phone. Kefli's servers see encrypted files and nothing more.
-• Your library is also copied to independent servers we don't run, so it outlives us: if Kefli's service ever stops, your saves don't.
+• Your encrypted library is also backed up on decentralised storage that no one company runs, Kefli included, so it outlives us: if Kefli's service ever stops, your saves don't.
 • Bring your library back on any phone with your recovery code, or pair a second phone by scanning a code.
 • Delete everything, from every server, from inside the app.
 • No ads, no tracking, no analytics.
@@ -136,7 +136,7 @@ The console's deletion URL is https://kefli.app/delete-account/. The app deletes
 **Release notes** (500 characters at most), for the first release:
 
 ```
-Kefli's first release on Google Play: save articles from any app or the browser extension, read them clean and offline, and listen with your phone's own voice. Your library is encrypted with a key only you hold and copied beyond our servers.
+Kefli's first release on Google Play: save articles from any app or the browser extension, read them clean and offline, and listen with your phone's own voice. Your library is encrypted with a key only you hold and backed up on decentralised storage.
 ```
 
 Later versions: bump `version` and `android.versionCode` in `app.json`, build the bundle on the release commit, retake the screenshots if a screen the listing shows has changed, and upload under the track's new release.
