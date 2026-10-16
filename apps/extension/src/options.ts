@@ -8,7 +8,8 @@ import { webCrypto } from './crypto';
 import { debugText, history } from './debug';
 import { loadDefaults, relayRows, type Defaults } from './defaults';
 import { deviceSigner } from './device';
-import { icon } from './icons';
+import { el, svg, type Child } from './dom';
+import { icon, type IconName } from './icons';
 import type { PairAck } from '../../../packages/protocol/src/pairing';
 import { exclusive } from './lock';
 import { browserLabel, formatCode, listenForAck, newOffer, pairingFrom, postOffer, tryPairing, type Listening, type Offer } from './pair';
@@ -45,112 +46,141 @@ const sent = new Map<string, Shown>();
 /** The queue with each save's title, host and hash read from its sealed request, held in this page only (F31). */
 const reveal = async (q: Queued[]) => shown(q, await deviceSigner(store, webCrypto));
 
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const say = (msg: string) => { live.textContent = ''; setTimeout(() => (live.textContent = msg), 80); };
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 const now = () => Math.floor(Date.now() / 1000);
 const label = () => browserLabel(navigator.userAgent, ((navigator as { userAgentData?: { brands: { brand: string }[] } }).userAgentData?.brands ?? []).map((b) => b.brand));
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
-function qrSvg(text: string, size: number): string {
+function qrSvg(text: string, size: number): SVGSVGElement {
   const m = toQR(text);
   const n = Math.sqrt(m.length);
   let d = '';
   for (let i = 0; i < m.length; i++) if (m[i]) d += `M${i % n} ${Math.floor(i / n)}h1v1h-1z`;
-  return `<svg width="${size}" height="${size}" viewBox="-1 -1 ${n + 2} ${n + 2}" fill="currentColor" shape-rendering="crispEdges" role="img" aria-label="Connection code"><path d="${d}"/></svg>`;
+  return svg(`<svg width="${size}" height="${size}" viewBox="-1 -1 ${n + 2} ${n + 2}" fill="currentColor" shape-rendering="crispEdges" role="img" aria-label="Connection code"><path d="${d}"/></svg>`);
 }
 
 /** Rows of a group: the first carries the group's top edge, the last its bottom (the mockup's plates). */
-function list(rows: string[], cls = 'list'): string {
-  return `<div class="${cls}">${rows.map((r, i) => r.replace('class="li', `class="li${i === 0 ? ' edge-t' : ''}${i === rows.length - 1 ? ' edge-b' : ''}`)).join('')}</div>`;
+function list(rows: HTMLElement[], cls = 'list'): HTMLElement {
+  rows.forEach((r, i) => (r.className = r.className.replace(/^li/, `li${i === 0 ? ' edge-t' : ''}${i === rows.length - 1 ? ' edge-b' : ''}`)));
+  return el('div', { class: cls }, rows);
 }
 
-const head = () => `<div class="brandrow"><span class="lg">${LOGO}</span>Kefli</div>`;
-const PIN = `<span class="ic">${icon('puzzle')}</span><span class="t">Pin Kefli to your toolbar: click the puzzle piece, then the pin next to Kefli.</span>`;
+/** A list row led by an icon: the row's text, then anything at its end. */
+const iconRow = (name: IconName, text: Child, ...end: Child[]) => el('div', { class: 'li' }, el('span', { class: 'ic' }, svg(icon(name))), el('span', { class: 't' }, text), ...end);
+
+const head = () => el('div', { class: 'brandrow' }, el('span', { class: 'lg' }, svg(LOGO)), 'Kefli');
+const pinLine = () => [el('span', { class: 'ic' }, svg(icon('puzzle'))), el('span', { class: 't' }, 'Pin Kefli to your toolbar: click the puzzle piece, then the pin next to Kefli.')];
 const WHY = {
   reach: 'Couldn’t reach Kefli’s server. It will keep trying.',
   stopped: 'Couldn’t reach Kefli’s server. Retry to send it.',
 };
 
-function pairHTML(): string {
+function pairView(): HTMLElement {
   const dim = view.kind !== 'show';
-  const qr = view.kind === 'show' ? qrSvg(view.offer.qr, 168) : `<svg width="168" height="168" role="img" aria-label="Connection code, not available"></svg>`;
-  const code = view.kind === 'show' ? `<div class="code" id="paircode">${formatCode(view.offer.code)}</div>` : '<div class="code" aria-hidden="true">––––-––––</div>';
+  const qr = view.kind === 'show' ? qrSvg(view.offer.qr, 168) : svg('<svg width="168" height="168" role="img" aria-label="Connection code, not available"></svg>');
+  const code = view.kind === 'show' ? el('div', { class: 'code', id: 'paircode' }, formatCode(view.offer.code)) : el('div', { class: 'code', 'aria-hidden': 'true' }, '––––-––––');
   const status = view.kind === 'expired'
-    ? `<div class="status plain"><div class="errline" style="margin:0;flex:1">${icon('alert', 16)}<span>This code has expired.</span></div><button class="btn primary" data-act="newcode">${icon('refresh', 18)}Show a new one</button></div>`
-    : view.kind === 'show' ? `<div class="status"><span class="pdot" aria-hidden="true"></span>Waiting for your phone<span class="cd">Code expires in <span id="cd">${mmss(view.left)}</span></span></div>` : '';
-  const err = view.kind === 'offline' ? `<div class="errline">${icon('alert', 16)}<span>Can’t connect right now. Check your connection. Trying again every ten seconds.</span></div>` : '';
-  const pin = pinned ? '' : `<div class="seg pinseg first edge-t"><div class="li pinline">${PIN}</div></div>`;
-  return `<div class="in">${head()}<h1 tabindex="-1">Connect to your phone</h1>${err}
-    <p class="lead">Pages you save here arrive in Kefli on your phone. Your phone decides which browsers it trusts, so you connect them from there.</p>
-    <div class="card">${pin}<div class="seg ${pinned ? 'first edge-t' : ''} last edge-b"><div class="pair">
-      <div class="qr ${dim ? 'faded' : ''}" data-theme="light">${qr}${code}</div>
-      <ol class="steps"><li>Open Kefli on your phone.</li><li>Go to <strong>You</strong>, then <strong>Connected browsers</strong>, then <strong>Connect a browser</strong>.</li><li>Scan the code, or type the code under it.</li><li>Check that your phone names this browser <strong>${esc(label())}</strong>, then tap <strong>Connect</strong>.</li></ol>
-    </div>${status}</div></div></div>`;
+    ? el('div', { class: 'status plain' },
+      el('div', { class: 'errline', style: 'margin:0;flex:1' }, svg(icon('alert', 16)), el('span', {}, 'This code has expired.')),
+      el('button', { class: 'btn primary', 'data-act': 'newcode' }, svg(icon('refresh', 18)), 'Show a new one'))
+    : view.kind === 'show'
+      ? el('div', { class: 'status' }, el('span', { class: 'pdot', 'aria-hidden': 'true' }), 'Waiting for your phone', el('span', { class: 'cd' }, 'Code expires in ', el('span', { id: 'cd' }, mmss(view.left))))
+      : null;
+  const err = view.kind === 'offline' ? el('div', { class: 'errline' }, svg(icon('alert', 16)), el('span', {}, 'Can’t connect right now. Check your connection. Trying again every ten seconds.')) : null;
+  const pin = pinned ? null : el('div', { class: 'seg pinseg first edge-t' }, el('div', { class: 'li pinline' }, pinLine()));
+  return el('div', { class: 'in' }, head(), el('h1', { tabindex: '-1' }, 'Connect to your phone'), err,
+    el('p', { class: 'lead' }, 'Pages you save here arrive in Kefli on your phone. Your phone decides which browsers it trusts, so you connect them from there.'),
+    el('div', { class: 'card' }, pin, el('div', { class: `seg ${pinned ? 'first edge-t' : ''} last edge-b` },
+      el('div', { class: 'pair' },
+        el('div', { class: `qr ${dim ? 'faded' : ''}`, 'data-theme': 'light' }, qr, code),
+        el('ol', { class: 'steps' },
+          el('li', {}, 'Open Kefli on your phone.'),
+          el('li', {}, 'Go to ', el('strong', {}, 'You'), ', then ', el('strong', {}, 'Connected browsers'), ', then ', el('strong', {}, 'Connect a browser'), '.'),
+          el('li', {}, 'Scan the code, or type the code under it.'),
+          el('li', {}, 'Check that your phone names this browser ', el('strong', {}, label()), ', then tap ', el('strong', {}, 'Connect'), '.'))),
+      status)));
 }
 
-function retryChip(e: Shown): string {
+function retryChip(e: Shown): HTMLElement {
   const s = sending.get(e.id);
-  return `<button class="chip stack${s?.dots ? ' showbusy' : ''}" data-act="retry" data-id="${e.id}"${s ? ' aria-busy="true"' : ''} aria-label="${s ? 'Sending' : 'Retry'} ${esc(e.title)}"><span class="lbl-idle">Retry</span><span class="lbl-busy" aria-hidden="true"><span class="dots inbtn"><i></i><i></i><i></i></span>Sending</span></button>`;
+  return el('button', { class: `chip stack${s?.dots ? ' showbusy' : ''}`, 'data-act': 'retry', 'data-id': e.id, 'aria-busy': s ? 'true' : null, 'aria-label': `${s ? 'Sending' : 'Retry'} ${e.title}` },
+    el('span', { class: 'lbl-idle' }, 'Retry'),
+    el('span', { class: 'lbl-busy', 'aria-hidden': 'true' }, el('span', { class: 'dots inbtn' }, el('i'), el('i'), el('i')), 'Sending'));
 }
 
-function failRow(e: Shown): string {
+function failRow(e: Shown): HTMLElement {
   const done = sent.has(e.id);
-  const end = done ? `<span class="sent">${icon('check')}</span>` : retryChip(e);
-  return `<div class="li"><span class="cv" aria-hidden="true">${ShelfCover.svg(e.hash)}</span><span class="t">${esc(e.title)}<small>${esc(e.host)} · ${done ? 'Sent' : WHY[e.stopped ? 'stopped' : 'reach']}</small></span>${end}</div>`;
+  const end = done ? el('span', { class: 'sent' }, svg(icon('check'))) : retryChip(e);
+  return el('div', { class: 'li' },
+    el('span', { class: 'cv', 'aria-hidden': 'true' }, svg(ShelfCover.svg(e.hash))),
+    el('span', { class: 't' }, e.title, el('small', {}, `${e.host} · ${done ? 'Sent' : WHY[e.stopped ? 'stopped' : 'reach']}`)),
+    end);
 }
 
-function failedHTML(): string {
+function failedView(): HTMLElement | null {
   const rows = [...failed(queue), ...[...sent.values()].filter((e) => !queue.some((q) => q.id === e.id))];
-  return rows.length ? `<section class="sect" aria-labelledby="failhead"><h2 id="failhead">Couldn’t send</h2>${list(rows.map(failRow), 'list saves')}</section>` : '';
+  return rows.length ? el('section', { class: 'sect', 'aria-labelledby': 'failhead' }, el('h2', { id: 'failhead' }, 'Couldn’t send'), list(rows.map(failRow), 'list saves')) : null;
 }
 
-function noticeHTML(): string {
+function notice(): HTMLElement | null {
   const n = waiting(queue);
-  if (!n) return '';
-  return `<div class="notice">${icon('wifioff', 16)}<span>${n === 1 ? '1 save waiting to send. It’ll send when you’re online.' : `${n} saves waiting to send. They’ll send when you’re online.`}</span></div>`;
+  if (!n) return null;
+  return el('div', { class: 'notice' }, svg(icon('wifioff', 16)), el('span', {}, n === 1 ? '1 save waiting to send. It’ll send when you’re online.' : `${n} saves waiting to send. They’ll send when you’re online.`));
 }
 
-function waysHTML(shortcut: string | null): string {
+function ways(shortcut: string | null): HTMLElement {
   const key = shortcut
-    ? `<div class="li"><span class="ic">${icon('keyboard')}</span><span class="t">Press a shortcut<small>Press it again to reach Undo</small></span><span class="keys">${shortcut.split('+').map((k) => `<span class="kbd">${esc(k)}</span>`).join('')}</span></div>`
-    : `<div class="li"><span class="ic">${icon('keyboard')}</span><span class="t">No shortcut set</span><button class="chip" data-act="setkey">Set a shortcut</button></div>`;
+    ? iconRow('keyboard', ['Press a shortcut', el('small', {}, 'Press it again to reach Undo')], el('span', { class: 'keys' }, shortcut.split('+').map((k) => el('span', { class: 'kbd' }, k))))
+    : iconRow('keyboard', 'No shortcut set', el('button', { class: 'chip', 'data-act': 'setkey' }, 'Set a shortcut'));
   const menu = BROWSER === 'firefox' ? 'Save Link to Kefli' : 'Save link to Kefli';
   const rows = [
-    ...(pinned ? [] : [`<div class="li">${PIN}</div>`]),
-    `<div class="li"><span class="ic">${icon('bookmark')}</span><span class="t">Click the Kefli button in the toolbar</span></div>`,
+    ...(pinned ? [] : [el('div', { class: 'li' }, pinLine())]),
+    iconRow('bookmark', 'Click the Kefli button in the toolbar'),
     key,
-    `<div class="li"><span class="ic">${icon('mouse')}</span><span class="t">Right-click a link, then ${menu}</span></div>`,
+    iconRow('mouse', `Right-click a link, then ${menu}`),
   ];
-  return `<section class="sect"><h2>Ways to save</h2>${list(rows)}</section>`;
+  return el('section', { class: 'sect' }, el('h2', {}, 'Ways to save'), list(rows));
 }
 
-function advancedHTML(p: Pairing, open: boolean): string {
-  const relays = relayRows(p.write_relays, kept).map((r) => `<div class="li"><span class="ic">${icon('server')}</span><span class="t">${esc(r.label)}<small>${esc(r.url.replace(/^wss?:\/\//, ''))}</small></span></div>`);
-  const build = `<div class="li"><span class="ic">${icon('info')}</span><span class="t">Kefli ${esc(chrome.runtime.getManifest().version)}<small>${FLAVOUR} · ${esc(COMMIT)}</small></span><button class="chip" data-act="debug">${copied ? 'Copied' : 'Copy debug info'}</button></div>`;
+function advanced(p: Pairing, open: boolean): HTMLElement {
+  const relays = relayRows(p.write_relays, kept).map((r) => iconRow('server', [r.label, el('small', {}, r.url.replace(/^wss?:\/\//, ''))]));
+  const build = iconRow('info', [`Kefli ${chrome.runtime.getManifest().version}`, el('small', {}, `${FLAVOUR} · ${COMMIT}`)], el('button', { class: 'chip', 'data-act': 'debug' }, copied ? 'Copied' : 'Copy debug info'));
   const body = open
-    ? `<section class="sect" style="margin-top:var(--space-8)"><h2>Relays</h2>${list(relays)}<p class="fine">Set by your phone when you connected this browser.</p></section>
-      <section class="sect"><h2>This browser</h2>${list([build])}<p class="fine">For a bug report. It lists what became of your last twenty saves, without their addresses or titles, and nothing that could open them.</p></section>`
-    : '';
-  return `<details class="adv" ${open ? 'open' : ''}><summary data-act="adv"><span class="ic">${icon('settings')}</span><span class="t">Advanced</span><span class="chev"><span class="chevr">${icon('chev', 18)}</span></span></summary>${body}</details>`;
+    ? [
+      el('section', { class: 'sect', style: 'margin-top:var(--space-8)' }, el('h2', {}, 'Relays'), list(relays), el('p', { class: 'fine' }, 'Set by your phone when you connected this browser.')),
+      el('section', { class: 'sect' }, el('h2', {}, 'This browser'), list([build]), el('p', { class: 'fine' }, 'For a bug report. It lists what became of your last twenty saves, without their addresses or titles, and nothing that could open them.')),
+    ]
+    : null;
+  return el('details', { class: 'adv', open },
+    el('summary', { 'data-act': 'adv' }, el('span', { class: 'ic' }, svg(icon('settings'))), el('span', { class: 't' }, 'Advanced'), el('span', { class: 'chev' }, el('span', { class: 'chevr' }, svg(icon('chev', 18))))),
+    body);
 }
 
-function unpairHTML(confirm: boolean): string {
+function unpair(confirm: boolean): Child {
   const n = queue.length;
-  if (!confirm) return `<button class="btn secondary destructive" data-act="unpair">Disconnect this browser</button><p class="fine">To stop this browser completely, also remove it under Connected browsers on your phone. If you undo a save your phone already picked up, remove it there too.</p>`;
+  if (!confirm) {
+    return [
+      el('button', { class: 'btn secondary destructive', 'data-act': 'unpair' }, 'Disconnect this browser'),
+      el('p', { class: 'fine' }, 'To stop this browser completely, also remove it under Connected browsers on your phone. If you undo a save your phone already picked up, remove it there too.'),
+    ];
+  }
   const unsent = n ? `${n} ${plural(n, 'save hasn’t', 'saves haven’t')} reached your phone yet. Disconnecting deletes ${plural(n, 'it', 'them')} from this browser. ` : '';
   const yes = n ? `Disconnect and delete ${n} ${plural(n, 'save', 'saves')}` : 'Disconnect';
-  return `<div class="confirm" role="group" aria-labelledby="unpairhead"><h2 id="unpairhead">Disconnect this browser?</h2><p>${unsent}This browser will stop sending saves to your phone. To stop it completely, also remove it under Connected browsers on your phone.</p><div class="row"><button class="btn secondary" data-act="unpair-cancel">Cancel</button><button class="btn danger" data-act="unpair-yes">${yes}</button></div></div>`;
+  return el('div', { class: 'confirm', role: 'group', 'aria-labelledby': 'unpairhead' },
+    el('h2', { id: 'unpairhead' }, 'Disconnect this browser?'),
+    el('p', {}, `${unsent}This browser will stop sending saves to your phone. To stop it completely, also remove it under Connected browsers on your phone.`),
+    el('div', { class: 'row' }, el('button', { class: 'btn secondary', 'data-act': 'unpair-cancel' }, 'Cancel'), el('button', { class: 'btn danger', 'data-act': 'unpair-yes' }, yes)));
 }
 
-function connectedHTML(v: Extract<View, { kind: 'connected' }>, shortcut: string | null): string {
+function connectedView(v: Extract<View, { kind: 'connected' }>, shortcut: string | null): HTMLElement {
   const since = new Date(v.pairing.paired_at * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
-  return `<div class="in">${head()}
-    <div class="titlerow"><span class="ok">${icon('check', 20, 2.5)}</span><h1 tabindex="-1">Connected to your phone</h1></div>
-    ${noticeHTML()}
-    <p class="lead">Since ${since} · your phone shows this browser as “${esc(v.pairing.label)}”</p>
-    ${failedHTML()}${waysHTML(shortcut)}${advancedHTML(v.pairing, v.advanced)}
-    <div class="sect">${unpairHTML(v.confirm)}</div></div>`;
+  return el('div', { class: 'in' }, head(),
+    el('div', { class: 'titlerow' }, el('span', { class: 'ok' }, svg(icon('check', 20, 2.5))), el('h1', { tabindex: '-1' }, 'Connected to your phone')),
+    notice(),
+    el('p', { class: 'lead' }, `Since ${since} · your phone shows this browser as “${v.pairing.label}”`),
+    failedView(), ways(shortcut), advanced(v.pairing, v.advanced),
+    el('div', { class: 'sect' }, unpair(v.confirm)));
 }
 
 async function shortcut(): Promise<string | null> {
@@ -159,7 +189,7 @@ async function shortcut(): Promise<string | null> {
 }
 
 async function render() {
-  root.innerHTML = view.kind === 'connected' ? connectedHTML(view, await shortcut()) : view.kind === 'loading' ? '' : pairHTML();
+  root.replaceChildren(...(view.kind === 'connected' ? [connectedView(view, await shortcut())] : view.kind === 'loading' ? [] : [pairView()]));
 }
 
 /** Whether Kefli is on the toolbar (Chrome 91+, Firefox 118+); the pin line goes once it is (mockup build notes). */
