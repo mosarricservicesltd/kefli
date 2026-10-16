@@ -2254,7 +2254,8 @@ function youScreen(){
         <div class="row"><button class="btn secondary" data-you-act="later">Later</button><button class="btn primary" data-you-act="show-code">Show recovery code</button></div></div>` : '';
   const first = Y.nostrUser
     ? (Y.asks ? yrow('nostrapp', 'login', 'Your nostr app', '', { warn: true, sub: 'Asks before each save' }) : yrow('nostrapp', 'login', 'Your nostr app', 'Signed in'))
-    : yrow('recovery', 'keyboard', 'Recovery code', '', { warn: !done, sub: done ? 'Written down' : 'Not written down', xf: 'sub-recovery', xfDelay: after });
+    // with the backup card up, the row carries no 'Not written down': the card says it (decision 121, amending 17)
+    : yrow('recovery', 'keyboard', 'Recovery code', '', { warn: !done && !!Y.backupHidden, sub: done ? 'Written down' : (Y.backupHidden ? 'Not written down' : ''), xf: 'sub-recovery', xfDelay: after });
   // offline: no banner on You; the rows carry the reason (fix 27). A nostr user has no Add another device: their nostr app
   // holds the identity, so there are no twelve words to pass on, and a second phone signs in with it (decision 90)
   return `<div class="screen" data-mk="screen-you"><div class="scroll">
