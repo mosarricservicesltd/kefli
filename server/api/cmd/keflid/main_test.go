@@ -174,14 +174,23 @@ func started(t *testing.T, api, blob string) {
 	done := make(chan error, 1)
 	go func() { done <- run(ctx, slog.New(slog.NewTextHandler(io.Discard, nil))) }()
 	t.Cleanup(func() { cancel(); <-done })
-	for i := 0; i < 50; i++ {
+	// A loaded runner under the race detector can take more than a second to bring keflid up (CI, 16 October 2026),
+	// so the wait is generous; a run that ends first is reported with its error rather than as a slow start.
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		select {
+		case err := <-done:
+			done <- nil
+			t.Fatalf("keflid stopped before it answered: %v", err)
+		default:
+		}
 		if res, err := http.Get("http://" + api + "/health"); err == nil {
 			res.Body.Close()
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatal("keflid didn't start")
+	t.Fatal("keflid didn't start within 20 s")
 }
 
 // sent opens a connection and sends head, the start of a request whose body never finishes arriving.
