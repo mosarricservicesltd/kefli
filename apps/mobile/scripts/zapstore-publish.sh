@@ -22,7 +22,7 @@ work="apps/mobile/dist/zap${version//./}"
 phase=${1:-}
 
 sign() { # signs the event JSON on stdin through the bunker; prints the signed event, or nothing if Amber didn't answer
-  NOSTR_SECRET_KEY="$(git config nostr.bunker-uri)" NOSTR_CLIENT_KEY="$(git config nostr.bunker-app-key)" nak event "$@" 2>/dev/null
+  NOSTR_SECRET_KEY="$(git config nostr.bunker-uri)" NOSTR_CLIENT_KEY="$(git config nostr.bunker-app-key)" nak event "$@" 2>>"$work/nak.err"
 }
 
 case "$phase" in
@@ -42,13 +42,13 @@ prepare)
   #    Amber auto-approves them), skipped when the server already holds the hash. The reply's sha256 and url are kept:
   #    images come back re-encoded under a new hash.
   : > "$work/uploads.tsv"
-  grep -E '^\s+Path:' "$work/zsp.err" | awk '{print $2}' | while read -r f; do
+  grep -E '^\s+Path:' "$work/zsp.err" | sed -E 's/^\s+Path:\s*//' | while read -r f; do
     sha=$(sha256sum "$f" | cut -d' ' -f1)
     if [ "$(curl -s -o /dev/null -w '%{http_code}' -I "$cdn/$sha")" = 200 ]; then
       echo "  held already: $(basename "$f")"; printf '%s\t%s\t%s\n' "$sha" "$sha" "$cdn/$sha" >> "$work/uploads.tsv"; continue
     fi
     exp=$(( $(date +%s) + 3600 ))
-    auth=$(sign -k 24242 -c "upload $(basename "$f")" -t t=upload -t "x=$sha" -t "expiration=$exp")
+    auth=$(sign -k 24242 -c "upload $(basename "$f")" -t t=upload -t "x=$sha" -t "expiration=$exp" </dev/null)
     [ -n "$auth" ] || { echo "Amber didn't answer for $(basename "$f"); run prepare again" >&2; exit 1; }
     reply=$(curl -sS -X PUT "$cdn/upload" -H "Authorization: Nostr $(printf '%s' "$auth" | base64 -w0)" \
       -H "Content-Digest: $sha" -H "Content-Type: $(file -b --mime-type "$f")" --data-binary "@$f")
@@ -66,6 +66,18 @@ work, pk = sys.argv[1], sys.argv[2]
 ups = {}
 for line in open(f"{work}/uploads.tsv"):
     local, got, url = line.rstrip("\n").split("\t"); ups[local] = (got, url)
+# zsp names each image in the app event by a hash of its own (its SHA256 line under the file's Path), which differs
+# from the file's sha256, so the tags are keyed by that hash and replaced with the address the server gave the file.
+import hashlib, re
+path = None
+for line in open(f"{work}/zsp.err"):
+    m = re.match(r"\s+Path:\s*(.+?)\s*$", line)
+    if m: path = m.group(1); continue
+    m = re.match(r"\s+SHA256:\s*([0-9a-f]{64})", line)
+    if m and path:
+        local = hashlib.sha256(open(path, "rb").read()).hexdigest()
+        if local in ups: ups[m.group(1)] = ups[local]
+        path = None
 events = [json.loads(l) for l in open(f"{work}/unsigned.jsonl") if l.strip() and l.strip() != "null"]
 out = {}
 for e in events:
