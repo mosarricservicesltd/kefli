@@ -1,4 +1,4 @@
-// The landing page's four app images (public/media/app-*.webp, SOURCES.md): the store screenshots in
+// The landing page's four app images (src/media/app-*.webp, so Vite hashes their names; public/media/SOURCES.md): the store screenshots in
 // apps/mobile/store/screenshots, scaled to 360 and 720 pixels wide as WebP. Drawn in headless Chrome through
 // tools/design-qa/cdp.mjs, whose screenshot can be WebP, since the repository relies on no other image tool.
 //   node apps/web/scripts/app-images.mjs
@@ -10,7 +10,7 @@ import { launch, sleep } from '../../../tools/design-qa/cdp.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const shots = path.join(here, '..', '..', 'mobile', 'store', 'screenshots');
-const media = path.join(here, '..', 'public', 'media');
+const media = path.join(here, '..', 'src', 'media');
 const SOURCES = { save: '3-library.png', read: '4-reader.png', speed: '5-speedread.png', listen: '6-listening.png' };
 const WIDTHS = [360, 720];
 const RATIO = 2424 / 1080;
