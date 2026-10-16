@@ -34,6 +34,9 @@ const BROWSERS = { dev: ['chrome', 'firefox'], beta: ['chrome', 'firefox'], stor
 // Firefox's data consent (extensionworkshop.com, firefox-builtin-data-consent): anything handled outside the add-on
 // counts, encrypted or not, and a save sends the page's text, title and address to Kefli's server for the user's phone.
 const DATA_COLLECTION = { required: ['websiteContent', 'browsingActivity'] };
+// The first Firefox that reads data_collection_permissions (140; Firefox for Android 142): an earlier minimum had the
+// linter warn that the key predates it, and the esbuild target follows the desktop minimum.
+const FIREFOX_MIN = { desktop: '140.0', android: '142.0' };
 
 const direct = process.argv[1] === fileURLToPath(import.meta.url);
 const flavour = direct ? (process.argv[2] ?? 'dev') : 'dev';
@@ -68,8 +71,12 @@ function manifest(browser) {
     ...(flavour === 'dev' ? { content_security_policy: { extension_pages: "script-src 'self'" } } : {}),
     // The beta .xpi is signed unlisted and served from kefli.app, so it updates itself from the manifest
     // apps/web/publish-downloads.sh writes beside it.
-    browser_specific_settings: { gecko: { id: GECKO_ID[flavour], strict_min_version: '121.0', data_collection_permissions: DATA_COLLECTION,
-      ...(flavour === 'beta' ? { update_url: 'https://kefli.app/downloads/firefox-updates.json' } : {}) } },
+    browser_specific_settings: {
+      gecko: { id: GECKO_ID[flavour], strict_min_version: FIREFOX_MIN.desktop, data_collection_permissions: DATA_COLLECTION,
+        ...(flavour === 'beta' ? { update_url: 'https://kefli.app/downloads/firefox-updates.json' } : {}) },
+      // the add-on is desktop-only (docs/store), and the key states where Firefox for Android reads the consent key
+      gecko_android: { strict_min_version: FIREFOX_MIN.android },
+    },
   };
 }
 
@@ -113,11 +120,13 @@ async function build(browser) {
     absWorkingDir: here,
     bundle: true,
     format: 'iife',
-    target: browser === 'chrome' ? 'chrome116' : 'firefox121',
+    target: browser === 'chrome' ? 'chrome116' : `firefox${FIREFOX_MIN.desktop.split('.')[0]}`,
     minify: false,
     legalComments: 'inline',
     define: { KEFLI_DEFAULTS_URL: JSON.stringify(defaultsUrl), KEFLI_FLAVOUR: JSON.stringify(flavour), KEFLI_BROWSER: JSON.stringify(browser), KEFLI_COMMIT: JSON.stringify(commit()) },
     loader: { '.svg': 'text' },
+    // statements Firefox never runs (options.ts CHROME_ONLY) leave its bundle, so the store's linter meets no API Firefox lacks
+    dropLabels: browser === 'firefox' ? ['CHROME_ONLY'] : [],
     plugins: [platformUrl],
     logLevel: 'warning',
   });

@@ -111,7 +111,7 @@ WHAT IT DOES AND DOESN'T DO
 - Network: api.kefli.app (the settings file and the pairing offer), the WebSocket server at relay.kefli.app (a nostr relay) and Kefli's encrypted file store. Every save is encrypted in the browser before it is sent (NIP-44 and AES-GCM), so only the user's phone can read it.
 - Data collection: websiteContent and browsingActivity, declared as required, are the saved page's text, title and address, sent encrypted for the user's own phone. Nothing is sent for a page the user doesn't save; no analytics or telemetry.
 - No remote code: nothing is loaded or run from outside the package.
-- The linter's innerHTML warnings are our own pages (options, popup, toast), where every value is escaped or is the cover's SVG drawn by our own code, plus the vendored Readability and Turndown. The action.onUserSettingsChanged warning is a feature check used only where Firefox has it.
+- The linter's four warnings are in npm code: Readability's two innerHTML writes in parser.js (lines 1553, 1932), and in capture.js an entity decoded via innerHTML (decode-named-character-reference, line 236) and micromark's parse().document().write(), a parser method the linter takes for DOM document.write (line 4423).
 ```
 
 ## After the first approval

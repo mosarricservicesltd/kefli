@@ -4,6 +4,7 @@
 // countdown that pauses on hover or on focus given to it. It never takes focus by itself; a second press of the
 // shortcut reaches Undo (decision 58). One live region, made once, announces what it says.
 import { colors, radius, type ThemeColors } from '../../../packages/tokens/src/index';
+import { add, el, style, svg } from './dom';
 import { icon, MARKS } from './icons';
 import { markDelay, toastCopy, type ToastState } from './toastCopy';
 
@@ -85,7 +86,11 @@ let m: Mounted | null = null;
 function mount(): Mounted {
   const host = document.createElement('kefli-toast');
   const root = host.attachShadow({ mode: 'closed' });
-  root.innerHTML = `<style>${CSS}${ShelfCover.css}</style><div class="toast" role="group" aria-label="Kefli"><div class="row"></div><div class="timer"></div></div><div class="sr" role="status" aria-live="polite"></div>`;
+  root.append(
+    style(CSS + ShelfCover.css),
+    el('div', { class: 'toast', role: 'group', 'aria-label': 'Kefli' }, el('div', { class: 'row' }), el('div', { class: 'timer' })),
+    el('div', { class: 'sr', role: 'status', 'aria-live': 'polite' }),
+  );
   const card = root.querySelector<HTMLElement>('.toast')!;
   const parent = document.fullscreenElement ?? document.documentElement;
   parent.appendChild(host);
@@ -108,16 +113,16 @@ function lead(t: ReturnType<typeof toastCopy>): void {
     slot.querySelector('.mk')?.remove();
   } else {
     slot?.remove();
-    const el = document.createElement('div');
-    el.className = 'lead';
-    el.innerHTML = t.cover ? `<span class="cv" aria-hidden="true">${ShelfCover.svg(t.cover, { draw: true })}</span>` : `<span class="tile ${t.tone === 'bad' ? 'bad' : ''}" aria-hidden="true">${icon(t.tile ?? 'undo', 20)}</span>`;
-    m!.card.querySelector('.row')!.prepend(el);
+    const made = el('div', { class: 'lead' }, t.cover
+      ? el('span', { class: 'cv', 'aria-hidden': 'true' }, svg(ShelfCover.svg(t.cover, { draw: true })))
+      : el('span', { class: `tile ${t.tone === 'bad' ? 'bad' : ''}`, 'aria-hidden': 'true' }, svg(icon(t.tile ?? 'undo', 20))));
+    m!.card.querySelector('.row')!.prepend(made);
     m!.hash = t.cover ?? null;
     m!.started = performance.now();
   }
   if (t.cover && t.mark) {
     const delay = Math.max(0, markDelay(ShelfCover.leaves(t.cover).length) - (performance.now() - m!.started));
-    m!.card.querySelector('.lead')!.insertAdjacentHTML('beforeend', `<span class="mk ${t.mark}" style="--mk-delay:${Math.round(delay)}ms" aria-hidden="true">${MARKS[t.mark]}</span>`);
+    m!.card.querySelector('.lead')!.append(el('span', { class: `mk ${t.mark}`, style: `--mk-delay:${Math.round(delay)}ms`, 'aria-hidden': 'true' }, svg(MARKS[t.mark])));
   }
 }
 
@@ -126,16 +131,18 @@ function paint(s: ToastState): void {
   lead(t);
   const row = m!.card.querySelector('.row')!;
   row.querySelectorAll(':scope > :not(.lead)').forEach((n) => n.remove());
-  row.insertAdjacentHTML('beforeend', `<div class="tx"><b>${esc(t.title)}</b>${t.sub ? `<span class="${t.wrap ? 'wrap2' : ''}">${esc(t.sub)}</span>` : ''}</div>${t.action ? `<button class="act" data-act="${t.action.toLowerCase()}">${t.action}</button>` : ''}<button class="x" data-act="close" aria-label="Close">${icon('x', 18)}</button>`);
+  add(row,
+    el('div', { class: 'tx' }, el('b', {}, t.title), t.sub ? el('span', { class: t.wrap ? 'wrap2' : '' }, t.sub) : null),
+    t.action ? el('button', { class: 'act', 'data-act': t.action.toLowerCase() }, t.action) : null,
+    el('button', { class: 'x', 'data-act': 'close', 'aria-label': 'Close' }, svg(icon('x', 18))),
+  );
   m!.card.style.setProperty('--ink', t.cover ? ShelfCover.lineInk(t.cover, getComputedStyle(m!.card).getPropertyValue('--toast-bg').trim(), getComputedStyle(m!.card).getPropertyValue('--toast-fg').trim()) : '');
-  m!.card.querySelector('.timer')!.innerHTML = t.timed ? '<i></i>' : '';
+  m!.card.querySelector('.timer')!.replaceChildren(...(t.timed ? [el('i')] : []));
   say(t.say);
   clearTimeout(m!.timer);
   m!.left = COUNTDOWN_MS;
   if (t.timed) countdown();
 }
-
-const esc = (x: string) => x.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 function say(text: string): void {
   const live = m!.live;
