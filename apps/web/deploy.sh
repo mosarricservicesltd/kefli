@@ -48,6 +48,19 @@ if grep -rl '%VITE_[A-Z_]*%' dist --include='*.html'; then
 fi
 
 rsync_opts=(-rlcz --itemize-changes --chmod=D755,F644)
+
+# Caddy tells browsers to keep /assets, /media and /fonts for a year without asking again (README, Serving it),
+# and there is no cache on the server to clear: a file changed under one of those names would sit behind every
+# visitor's old copy until next year. So a changed file there is refused; give it a new name (Vite does that for
+# anything under src/, which is where the app images live). A new name or an identical file passes.
+echo "== Check nothing changes under a name browsers keep"
+stale=$(rsync "${rsync_opts[@]}" --dry-run dist/ "$host:$dest" | grep -E '^<fc[^ ]* (assets|media|fonts)/' || true)
+if [ -n "$stale" ]; then
+  echo "deploy.sh: these files changed under names browsers hold for a year; rename them instead:" >&2
+  echo "$stale" >&2
+  exit 1
+fi
+
 if $dry_run; then
   echo "== What the upload would change on $host:$dest"
   rsync "${rsync_opts[@]}" --dry-run dist/ "$host:$dest"
