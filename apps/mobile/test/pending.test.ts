@@ -153,6 +153,14 @@ describe('pending parses (mobile spec 4.5 phase 7, 5.4)', () => {
     const early = (async (url: string) => ({ status: 103, url, headers: new Headers(), arrayBuffer: async () => new ArrayBuffer(0) })) as never;
     expect(await fetchPage({ ...w.ports.page, fetch: early, render: page.render }, 'https://sub.com/p')).toMatchObject({ kind: 'parsed' });
     expect(seen.at(-1)).toBe('https://sub.com/p');
+    // and so does one whose body the page's real answer has already reached: OkHttp holds the 103 to its empty body
+    // and throws on the page's bytes (the Pixel, 20 October 2026), which was read as the network, the save offline
+    const overrun = (async (url: string) => ({
+      status: 103, url, headers: new Headers(),
+      arrayBuffer: async () => { throw new Error('expected 0 bytes but received 1360'); },
+    })) as never;
+    expect(await fetchPage({ ...w.ports.page, fetch: overrun, render: page.render }, 'https://acx.com/p')).toMatchObject({ kind: 'parsed' });
+    expect(seen.at(-1)).toBe('https://acx.com/p');
   });
 
   test("a browser's save naming a private address is never fetched; the phone's own share of one is", async () => {
