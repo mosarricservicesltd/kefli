@@ -17,9 +17,10 @@
 // - Undo: "Removed from Kefli" for 1.5 s, then back to the host app.
 //
 // The spool goes once the save is written, so a process that dies before then leaves it for the start-up pickup
-// (pickup.ts). A sheet that leaves the screen closes without Undo (stage 1 gate, share then lock).
+// (pickup.ts). A sheet that leaves the screen closes without Undo (stage 1 gate, share then lock); one under a second
+// share's sheet stays up beneath it, its countdown held.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, AppState, BackHandler, Pressable, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, BackHandler, Pressable, StyleSheet, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { File } from 'expo-file-system';
 import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
@@ -249,6 +250,9 @@ function SavedSheet({ spoolId }: { spoolId?: string }) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reader = useRef(false);
   const touching = useRef(false);
+  // another sheet in front of this one: a share arriving while this one is up rises over it (mobile spec 8.5), and
+  // this one holds, as a countdown does under a sheet's scrim, to run on with the time left once it is in front again
+  const covered = useRef(false);
   const pause = () => {
     if (timer.current === null || left.current === null) return;
     clearTimeout(timer.current);
@@ -257,7 +261,7 @@ function SavedSheet({ spoolId }: { spoolId?: string }) {
     cancelAnimation(bar);
   };
   const run = () => {
-    if (timer.current !== null || left.current === null || reader.current || touching.current || !counts) return;
+    if (timer.current !== null || left.current === null || reader.current || touching.current || covered.current || !counts) return;
     started.current = Date.now();
     const total = left.current;
     timer.current = setTimeout(() => close('host'), total);
@@ -290,16 +294,25 @@ function SavedSheet({ spoolId }: { spoolId?: string }) {
     if (mode === 'checking') cancelled.current = true;
     close('host');
   };
-  const latest = useRef({ close, scrimTap });
-  latest.current = { close, scrimTap };
+  // Leaving is this sheet's own (ShareActivity's left), since AppState is the whole app's and goes to background when
+  // a second sheet rises over this one.
+  const latest = useRef({ close, scrimTap, pause, run });
+  latest.current = { close, scrimTap, pause, run };
   useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => state === 'background' && latest.current.close('host'));
+    const mine = (id: string | null) => !spoolId || id === spoolId;
+    const gone = KefliShare.addListener('left', (e) => mine(e.spoolId) && latest.current.close('host'));
+    const top = KefliShare.addListener('top', (e) => {
+      covered.current = e.spoolId !== null && !mine(e.spoolId);
+      if (covered.current) latest.current.pause();
+      else latest.current.run();
+    });
     const back = BackHandler.addEventListener('hardwareBackPress', () => (latest.current.scrimTap(), true));
     return () => {
-      sub.remove();
+      gone.remove();
+      top.remove();
       back.remove();
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- what the sheet says ----
   const ink = shown.hash ? ShelfCover.lineInk(shown.hash, c.surface, c.text) : c.text;
