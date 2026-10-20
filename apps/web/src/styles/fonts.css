@@ -24,12 +24,3 @@
   font-display: swap;
   unicode-range: U+20-7e, U+a0-17f, U+1ea-1ed, U+1fa-1ff, U+2010-2027, U+2030-203a, U+20ac, U+2190-2193, U+2212;
 }
-@font-face {
-  font-family: 'Martian Mono';
-  src: url('/fonts/martian-mono.woff2') format('woff2');
-  font-style: normal;
-  font-weight: 100 800;
-  font-stretch: 75% 112.5%;
-  font-display: swap;
-  unicode-range: U+20-7e, U+a0-17f, U+1ea-1ed, U+1fa-1ff, U+2010-2027, U+2030-203a, U+20ac, U+2190-2193, U+2212;
-}
