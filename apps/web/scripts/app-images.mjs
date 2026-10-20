@@ -11,7 +11,7 @@ import { launch, sleep } from '../../../tools/design-qa/cdp.mjs';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const shots = path.join(here, '..', '..', 'mobile', 'store', 'screenshots');
 const media = path.join(here, '..', 'src', 'media');
-const SOURCES = { save: '3-library.png', read: '4-reader.png', speed: '5-speedread.png', listen: '6-listening.png' };
+const SOURCES = { save: '3-library.png', read: '4-reader.png', speed: '5-speedread.png', listen: '7-listen.png' };
 const WIDTHS = [360, 720];
 const RATIO = 2424 / 1080;
 

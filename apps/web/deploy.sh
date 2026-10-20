@@ -54,7 +54,8 @@ rsync_opts=(-rlcz --itemize-changes --chmod=D755,F644)
 # visitor's old copy until next year. So a changed file there is refused; give it a new name (Vite does that for
 # anything under src/, which is where the app images live). A new name or an identical file passes.
 echo "== Check nothing changes under a name browsers keep"
-stale=$(rsync "${rsync_opts[@]}" --dry-run dist/ "$host:$dest" | grep -E '^<fc[^ ]* (assets|media|fonts)/' || true)
+# A note such as media/SOURCES.md is for people reading the folder, not something a page loads, so it may change in place.
+stale=$(rsync "${rsync_opts[@]}" --dry-run dist/ "$host:$dest" | grep -E '^<fc[^ ]* (assets|media|fonts)/' | grep -v '\.md$' || true)
 if [ -n "$stale" ]; then
   echo "deploy.sh: these files changed under names browsers hold for a year; rename them instead:" >&2
   echo "$stale" >&2
