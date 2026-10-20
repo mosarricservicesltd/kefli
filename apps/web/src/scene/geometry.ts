@@ -79,12 +79,6 @@ export function descent(heroTop: number, heroHeight: number, stageHeight: number
   return span > 0 ? clamp01(-heroTop / span) : 0;
 }
 
-/** The cloud bank's offset, in percent of its own height: 100 hides it below, -30 fills the stage with paper. */
-export function veilOffset(d: number): number {
-  const p = smooth(0, 0.8, d);
-  return (1 - p) * 100 - p * 30;
-}
-
 /** How far the dusk scene has come into view: 0 as its top meets the bottom of the screen. */
 export function duskProgress(top: number, height: number, viewport: number): number {
   return clamp01((viewport - top) / (viewport * 0.75 + height * 0.25));

@@ -1,4 +1,4 @@
-// The nav: marks the current page, and on the landing page turns solid once you're through the cloud.
+// The nav: marks the current page, and on the landing page turns solid once the page has risen over the summit.
 
 export function initNav(hero: HTMLElement | null = null): void {
   const nav = document.getElementById('nav');
@@ -9,7 +9,9 @@ export function initNav(hero: HTMLElement | null = null): void {
     if (!a.hash && a.pathname === here) a.setAttribute('aria-current', 'page');
   }
   if (!hero) return;
-  const update = () => nav.classList.toggle('solid', window.scrollY > hero.offsetTop + hero.offsetHeight - 80);
+  // The section after the hero rises over it (landing.css), so the page meets the nav at that section's top.
+  const next = hero.nextElementSibling as HTMLElement | null;
+  const update = () => nav.classList.toggle('solid', window.scrollY > (next ? next.offsetTop : hero.offsetTop + hero.offsetHeight) - 80);
   window.addEventListener('scroll', update, { passive: true });
   update();
 }

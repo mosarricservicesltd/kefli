@@ -42,25 +42,25 @@
   will-change: transform;
   user-select: none;
 }
-/* The cloud you descend into: a bank of paper-coloured fog that rises from below with a billowing crest,
-   until it is the page. Its solid part starts 30% down, so at the end of the descent it fills the stage. */
-.veil {
-  position: absolute; left: -10%; right: -10%; top: 0; height: 150%; z-index: 3; pointer-events: none;
-  transform: translate3d(0, 100%, 0);
-  will-change: transform;
+/* The page rises over the summit: the first section overlaps the hero's last screen, paper with a bank of cloud
+   on its top edge, so the cloud covers the peaks as the sections arrive, never ahead of them. The hero is tall
+   enough that the bank starts just below the first screen. */
+.hero + .block { margin-top: -100vh; z-index: 5; background: var(--background); padding-top: clamp(40px, 5vw, 72px); }
+.fogbank {
+  position: absolute; left: 0; right: 0; bottom: 100%; height: 35vh; pointer-events: none;
   background: linear-gradient(to bottom,
     color-mix(in srgb, var(--background) 0%, transparent) 0%,
-    color-mix(in srgb, var(--background) 55%, transparent) 12%,
-    color-mix(in srgb, var(--background) 92%, transparent) 22%,
-    var(--background) 30%);
+    color-mix(in srgb, var(--background) 55%, transparent) 40%,
+    color-mix(in srgb, var(--background) 92%, transparent) 73%,
+    var(--background) 100%);
 }
-.veil::before, .veil::after, .dusk-fog::after {
+.fogbank::before, .fogbank::after, .dusk-fog::after {
   content: ""; position: absolute; left: 0; right: 0;
   filter: blur(14px);
   animation: billow 26s ease-in-out infinite alternate;
 }
-.veil::before, .veil::after {
-  top: -6%; height: 22%;
+.fogbank::before, .fogbank::after {
+  top: -10%; height: 60%;
   background:
     radial-gradient(14% 46% at 8% 70%, rgba(243,242,238,.95), rgba(243,242,238,0) 70%),
     radial-gradient(18% 60% at 27% 62%, rgba(246,245,242,.9), rgba(246,245,242,0) 70%),
@@ -69,7 +69,7 @@
     radial-gradient(13% 44% at 81% 72%, rgba(243,242,238,.95), rgba(243,242,238,0) 70%),
     radial-gradient(16% 52% at 96% 64%, rgba(246,245,242,.9), rgba(246,245,242,0) 70%);
 }
-.veil::after { top: 2%; opacity: .8; transform: scaleX(-1); animation-duration: 34s; animation-direction: alternate-reverse; }
+.fogbank::after { top: 8%; opacity: .8; transform: scaleX(-1); animation-duration: 34s; animation-direction: alternate-reverse; }
 @keyframes billow { from { translate: -4% 0; } to { translate: 4% 0; } }
 
 .hero-copy {
@@ -115,6 +115,7 @@
 @keyframes bob { 50% { transform: translateY(4px); } }
 @media (max-width: 760px) {
   .hero { height: 200vh; }
+  .hero + .block { margin-top: -65vh; }
   .word { font-size: 31vw; }
   .cue { left: auto; right: var(--gutter); transform: none; }
   .cue .label { display: none; }
@@ -239,7 +240,9 @@ section.block { padding-block: clamp(84px, 11vw, 168px); position: relative; }
 /* Reduced motion: the photographs alone, no loops, no descent, nothing drifting */
 @media (prefers-reduced-motion: reduce) {
   .hero { height: auto; }
+  .hero + .block { margin-top: 0; }
+  .fogbank { display: none; }
   .stage { position: relative; }
-  .cue svg.i, .veil::before, .veil::after, .drift, .dusk-fog::after { animation: none; }
+  .cue svg.i, .fogbank::before, .fogbank::after, .drift, .dusk-fog::after { animation: none; }
   .stage::after { content: ""; position: absolute; inset: auto 0 0 0; height: 18%; z-index: 3; background: linear-gradient(to bottom, transparent, var(--background)); }
 }

@@ -1,5 +1,5 @@
 import {
-  BURY, CREST, SUMMIT_ASPECT, coverFrame, crestAt, descent, duskProgress, duskState, smooth, veilOffset, wordTop,
+  BURY, CREST, SUMMIT_ASPECT, coverFrame, crestAt, descent, duskProgress, duskState, smooth, wordTop,
 } from '../src/scene/geometry';
 
 describe('smooth', () => {
@@ -72,14 +72,6 @@ describe('descent', () => {
   });
   it('is 0 when there is no track to scroll', () => {
     expect(descent(-100, 900, 900)).toBe(0);
-  });
-});
-
-describe('veilOffset', () => {
-  it('hides the bank before the descent and fills the stage with paper at the end', () => {
-    expect(veilOffset(0)).toBe(100);
-    expect(veilOffset(1)).toBe(-30);
-    expect(veilOffset(0.4)).toBeLessThan(100);
   });
 });
 

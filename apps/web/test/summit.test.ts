@@ -9,7 +9,6 @@ function mount(): void {
     <section id="hero">
       <div id="stage">
         <div id="frame"><video id="loop"></video><h1 id="word">Kefli</h1><img id="ridge" alt=""></div>
-        <div id="veil"></div>
         <div id="heroCopy"></div>
         <a id="cue" href="#how"></a>
       </div>
@@ -33,7 +32,7 @@ describe('initSummit', () => {
   });
 
   it('does nothing when the scene is incomplete', () => {
-    $('veil').remove();
+    $('ridge').remove();
     expect(() => initSummit(false)).not.toThrow();
     expect($('frame').classList.contains('fitted')).toBe(false);
   });
@@ -50,7 +49,7 @@ describe('initSummit', () => {
 
   it('shows the summit at rest under reduced motion: no loop, no descent, the copy in full', () => {
     initSummit(true);
-    expect($('veil').style.transform).toBe('translate3d(0,100.00%,0)');
+    expect($('frame').style.transform).toBe('translate3d(0,0.00px,0) scale(1.0000)');
     expect(Number($('heroCopy').style.opacity)).toBe(1);
     expect(($('loop') as HTMLVideoElement).getAttribute('src')).toBeNull();
     expect(observers).toHaveLength(0);
@@ -66,7 +65,7 @@ describe('initSummit', () => {
 
     setBox($('hero'), { top: -1260, height: 2160 }); // all the way down the track
     frames.step(120);
-    expect($('veil').style.transform).toBe('translate3d(0,-30.00%,0)');
+    expect($('frame').style.transform).toMatch(/scale\(1\.3[12]\d\d\)$/);
     expect($('heroCopy').style.visibility).toBe('hidden');
     expect(Number($('cue').style.opacity)).toBe(0);
   });

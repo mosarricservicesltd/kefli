@@ -41,6 +41,21 @@ describe('initNav', () => {
     expect(nav.classList.contains('solid')).toBe(true);
   });
 
+  it('turns solid as the section that rises over the summit reaches it', () => {
+    const hero = document.getElementById('hero')!;
+    const how = document.createElement('section');
+    hero.after(how);
+    setBox(hero, { offsetTop: 0, height: 2000 });
+    setBox(how, { offsetTop: 1100 });
+    const nav = document.getElementById('nav')!;
+    Object.defineProperty(window, 'scrollY', { configurable: true, writable: true, value: 1000 });
+    initNav(hero);
+    expect(nav.classList.contains('solid')).toBe(false);
+    (window as unknown as { scrollY: number }).scrollY = 1050;
+    window.dispatchEvent(new Event('scroll'));
+    expect(nav.classList.contains('solid')).toBe(true);
+  });
+
   it('leaves the nav alone on pages without a summit', () => {
     initNav(null);
     window.dispatchEvent(new Event('scroll'));

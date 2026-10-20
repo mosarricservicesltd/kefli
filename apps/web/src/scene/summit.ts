@@ -1,6 +1,6 @@
 // The summit: a photographed plate, its locked-off cloud loop, the wordmark standing behind the near ridge,
-// and the scroll-linked descent into the cloud until it is the page. Scroll-linked, never scroll-jacked.
-import { BURY, NARROW, coverFrame, descent, smooth, veilOffset, wordTop, type Frame } from './geometry';
+// and the scroll-linked descent while the page, the cloud on its top edge, rises over the peaks (landing.css). Scroll-linked, never scroll-jacked.
+import { BURY, NARROW, coverFrame, descent, smooth, wordTop, type Frame } from './geometry';
 
 interface Els {
   hero: HTMLElement;
@@ -8,7 +8,6 @@ interface Els {
   frame: HTMLElement;
   ridge: HTMLElement;
   video: HTMLVideoElement;
-  veil: HTMLElement;
   word: HTMLElement;
   copy: HTMLElement;
   cue: HTMLElement;
@@ -18,7 +17,7 @@ function find(): Els | null {
   const q = (id: string) => document.getElementById(id);
   const els = {
     hero: q('hero'), stage: q('stage'), frame: q('frame'), ridge: q('ridge'), video: q('loop'),
-    veil: q('veil'), word: q('word'), copy: q('heroCopy'), cue: q('cue'),
+    word: q('word'), copy: q('heroCopy'), cue: q('cue'),
   };
   return Object.values(els).every(Boolean) ? (els as unknown as Els) : null;
 }
@@ -26,7 +25,7 @@ function find(): Els | null {
 export function initSummit(reducedMotion: boolean): void {
   const els = find();
   if (!els) return;
-  const { hero, stage, frame, ridge, video, veil, word, copy, cue } = els;
+  const { hero, stage, frame, ridge, video, word, copy, cue } = els;
   let box: Frame = coverFrame(stage.clientWidth, stage.clientHeight);
 
   function layout(): void {
@@ -40,13 +39,12 @@ export function initSummit(reducedMotion: boolean): void {
   }
 
   // Every layer rides one camera: lowering it lifts the scene from its foot, the near ridge lifts most,
-  // and the cloud bank climbs past you. The pointer moves the wordmark against the scene, up and down only, for depth.
+  // while the page climbs past you. The pointer moves the wordmark against the scene, up and down only, for depth.
   function place(d: number, py: number): void {
     const h = stage.clientHeight;
     frame.style.transform = `translate3d(0,${(py * 6).toFixed(2)}px,0) scale(${(1 + d * 0.32).toFixed(4)})`;
     word.style.transform = `translate3d(-50%,${(d * 0.05 * box.height + py * -8).toFixed(2)}px,0)`;
     ridge.style.transform = `translate3d(0,${(-d * 0.04 * box.height).toFixed(2)}px,0)`;
-    veil.style.transform = `translate3d(0,${veilOffset(d).toFixed(2)}%,0)`;
     const o = 1 - smooth(0.06, 0.38, d);
     copy.style.opacity = o.toFixed(3);
     copy.style.transform = `translate3d(0,${(-d * 0.22 * h).toFixed(1)}px,0)`;
