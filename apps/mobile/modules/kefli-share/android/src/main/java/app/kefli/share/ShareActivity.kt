@@ -87,6 +87,12 @@ class ShareActivity : ReactActivity() {
     noTransition(this)
   }
 
+  /** What the share module passes on to the sheets' JavaScript. */
+  sealed class Event {
+    data class Top(val spoolId: String?) : Event()
+    data class Left(val spoolId: String) : Event()
+  }
+
   companion object {
     private const val SPOOL_KEY = "kefli.spoolId"
 
@@ -96,11 +102,6 @@ class ShareActivity : ReactActivity() {
     /** The spool of the sheet in front (resumed), or null when no sheet is. */
     var top: String? = null
       private set
-
-    sealed class Event {
-      data class Top(val spoolId: String?) : Event()
-      data class Left(val spoolId: String) : Event()
-    }
 
     val listeners = mutableListOf<(Event) -> Unit>()
 
