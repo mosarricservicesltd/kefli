@@ -6,8 +6,19 @@ import expo.modules.kotlin.modules.ModuleDefinition
 class KefliShareModule : Module() {
   private val context get() = requireNotNull(appContext.reactContext) { "no React context" }
 
+  private val forward: (ShareActivity.Event) -> Unit = { e ->
+    when (e) {
+      is ShareActivity.Event.Top -> sendEvent("top", mapOf("spoolId" to e.spoolId))
+      is ShareActivity.Event.Left -> sendEvent("left", mapOf("spoolId" to e.spoolId))
+    }
+  }
+
   override fun definition() = ModuleDefinition {
     Name("KefliShare")
+    Events("top", "left")
+
+    OnCreate { ShareActivity.listeners.add(forward) }
+    OnDestroy { ShareActivity.listeners.remove(forward) }
 
     Function("readSpool") { id: String -> Spool.read(context, id) }
     Function("deleteSpool") { id: String -> Spool.delete(context, id) }

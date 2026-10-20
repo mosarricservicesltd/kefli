@@ -34,6 +34,30 @@ class ShareActivity : ReactActivity() {
     return kept?.takeIf { Spool.has(this, it) } ?: Spool.write(this, intent, referrer?.toString())
   }
 
+  // Which sheet is in front, and when one has left the screen (mobile spec 8.5). React Native's AppState is the
+  // whole app's, so a second sheet rising paused the first and AppState called that leaving: the first sheet closed
+  // under the second. A sheet now leaves only when it stops with no sheet in front of it (locked, another app on top,
+  // or recreated), and one covered by another sheet holds its countdown until it is in front again.
+  override fun onResume() {
+    super.onResume()
+    top = spoolId
+    emit(Event.Top(top))
+  }
+
+  override fun onPause() {
+    if (top == spoolId) {
+      top = null
+      emit(Event.Top(null))
+    }
+    super.onPause()
+  }
+
+  override fun onStop() {
+    super.onStop()
+    val id = spoolId
+    if (top == null && id != null) emit(Event.Left(id))
+  }
+
   override fun onDestroy() {
     spoolId?.let { if (live[it]?.get() === this) live.remove(it) }
     super.onDestroy()
@@ -63,11 +87,25 @@ class ShareActivity : ReactActivity() {
     noTransition(this)
   }
 
+  /** What the share module passes on to the sheets' JavaScript. */
+  sealed class Event {
+    data class Top(val spoolId: String?) : Event()
+    data class Left(val spoolId: String) : Event()
+  }
+
   companion object {
     private const val SPOOL_KEY = "kefli.spoolId"
 
     /** The open sheets by spool id: several can be up at once, each in its own task, and each closes its own. */
     val live = mutableMapOf<String, WeakReference<ShareActivity>>()
+
+    /** The spool of the sheet in front (resumed), or null when no sheet is. */
+    var top: String? = null
+      private set
+
+    val listeners = mutableListOf<(Event) -> Unit>()
+
+    private fun emit(e: Event) = listeners.toList().forEach { it(e) }
 
     fun noTransition(activity: Activity) {
       if (Build.VERSION.SDK_INT >= 34) {
