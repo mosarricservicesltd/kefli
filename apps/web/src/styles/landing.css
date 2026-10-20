@@ -6,14 +6,15 @@
   --rock: #1A1A1D;         /* the near ridge's rock, below its own photographed edge */
 }
 
-/* Hero: the summit */
-.hero { position: relative; height: 240vh; height: 240svh; background: var(--background); }
-.stage { position: sticky; top: 0; height: 100vh; height: 100svh; min-height: 560px; overflow: hidden; background: var(--stage-ground); }
+/* Hero: the summit. Its heights are in vh, the screen with the browser's toolbar hidden: in svh the stage
+   came up short once a phone's toolbar slid away, and the page showed white below it. */
+.hero { position: relative; height: 240vh; background: var(--background); }
+.stage { position: sticky; top: 0; height: 100vh; min-height: 560px; overflow: hidden; background: var(--stage-ground); }
 /* The frame is the photograph's own box, cover-fitted to the stage by script, so the plate, the video,
    the wordmark and the cut-out ridge share one coordinate system. The CSS here is the no-script fit. */
 .frame {
   position: absolute; left: 50%; top: 50%;
-  width: max(100%, calc(100svh * 2.332)); aspect-ratio: 2206 / 946;
+  width: max(100%, calc(100vh * 2.332)); aspect-ratio: 2206 / 946;
   transform: translate(-50%, -50%);
   transform-origin: 50% 100%;
   will-change: transform;
@@ -41,25 +42,25 @@
   will-change: transform;
   user-select: none;
 }
-/* The cloud you descend into: a bank of paper-coloured fog that rises from below with a billowing crest,
-   until it is the page. Its solid part starts 30% down, so at the end of the descent it fills the stage. */
-.veil {
-  position: absolute; left: -10%; right: -10%; top: 0; height: 150%; z-index: 3; pointer-events: none;
-  transform: translate3d(0, 100%, 0);
-  will-change: transform;
+/* The page rises over the summit: the first section overlaps the hero's last screen, paper with a bank of cloud
+   on its top edge, so the cloud covers the peaks as the sections arrive, never ahead of them. The hero is tall
+   enough that the bank starts just below the first screen. */
+.hero + .block { margin-top: -100vh; z-index: 5; background: var(--background); padding-top: clamp(40px, 5vw, 72px); }
+.fogbank {
+  position: absolute; left: 0; right: 0; bottom: 100%; height: 35vh; pointer-events: none;
   background: linear-gradient(to bottom,
     color-mix(in srgb, var(--background) 0%, transparent) 0%,
-    color-mix(in srgb, var(--background) 55%, transparent) 12%,
-    color-mix(in srgb, var(--background) 92%, transparent) 22%,
-    var(--background) 30%);
+    color-mix(in srgb, var(--background) 55%, transparent) 40%,
+    color-mix(in srgb, var(--background) 92%, transparent) 73%,
+    var(--background) 100%);
 }
-.veil::before, .veil::after, .dusk-fog::after {
+.fogbank::before, .fogbank::after, .dusk-fog::after {
   content: ""; position: absolute; left: 0; right: 0;
   filter: blur(14px);
   animation: billow 26s ease-in-out infinite alternate;
 }
-.veil::before, .veil::after {
-  top: -6%; height: 22%;
+.fogbank::before, .fogbank::after {
+  top: -10%; height: 60%;
   background:
     radial-gradient(14% 46% at 8% 70%, rgba(243,242,238,.95), rgba(243,242,238,0) 70%),
     radial-gradient(18% 60% at 27% 62%, rgba(246,245,242,.9), rgba(246,245,242,0) 70%),
@@ -68,7 +69,7 @@
     radial-gradient(13% 44% at 81% 72%, rgba(243,242,238,.95), rgba(243,242,238,0) 70%),
     radial-gradient(16% 52% at 96% 64%, rgba(246,245,242,.9), rgba(246,245,242,0) 70%);
 }
-.veil::after { top: 2%; opacity: .8; transform: scaleX(-1); animation-duration: 34s; animation-direction: alternate-reverse; }
+.fogbank::after { top: 8%; opacity: .8; transform: scaleX(-1); animation-duration: 34s; animation-direction: alternate-reverse; }
 @keyframes billow { from { translate: -4% 0; } to { translate: 4% 0; } }
 
 .hero-copy {
@@ -84,11 +85,27 @@
   font-variation-settings: "opsz" 72;
 }
 .hero-copy .sub { color: var(--body-text); max-width: 31rem; }
+.hero-copy .btn-line { background: var(--background); }
+/* The copy runs down onto the peaks, so the sky behind it is hazed to paper, fading out below the buttons
+   (and, on a wide screen, beyond the column); the haze fades with the copy as the descent begins. */
+.hero-copy::before {
+  content: ""; position: absolute; z-index: -1; left: 0; right: 0;
+  top: calc(-68px - clamp(28px, 6vh, 72px)); bottom: -72px;
+  background: linear-gradient(to bottom,
+    color-mix(in srgb, var(--background) 55%, transparent) 0%,
+    color-mix(in srgb, var(--background) 88%, transparent) 62%,
+    color-mix(in srgb, var(--background) 0%, transparent) 100%);
+  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 42%, transparent 66%);
+  mask-image: linear-gradient(to right, #000 0%, #000 42%, transparent 66%);
+  pointer-events: none;
+}
+@media (max-aspect-ratio: 1/1) { .hero-copy::before { -webkit-mask-image: none; mask-image: none; } }
 .cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; }
 .cue {
   position: absolute; z-index: 4; left: 50%; bottom: max(22px, env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
   display: inline-flex; align-items: center; gap: 10px; white-space: nowrap;
+  bottom: calc(max(22px, env(safe-area-inset-bottom, 0px)) + (100lvh - 100svh)); /* above a phone's toolbar while it shows */
   text-decoration: none; color: var(--night-text);
   text-shadow: 0 1px 8px rgba(17,17,18,.6);
 }
@@ -97,7 +114,8 @@
 .cue svg.i { width: 16px; height: 16px; animation: bob 2.4s ease-in-out infinite; }
 @keyframes bob { 50% { transform: translateY(4px); } }
 @media (max-width: 760px) {
-  .hero { height: 200vh; height: 200svh; }
+  .hero { height: 200vh; }
+  .hero + .block { margin-top: -65vh; }
   .word { font-size: 31vw; }
   .cue { left: auto; right: var(--gutter); transform: none; }
   .cue .label { display: none; }
@@ -171,11 +189,11 @@ section.block { padding-block: clamp(84px, 11vw, 168px); position: relative; }
 .card .top { display: flex; align-items: center; gap: 12px; }
 .card p { font-family: var(--font-reader); color: var(--body-text); }
 .card .cta { margin-top: 4px; }
-.meta { font-family: var(--font-mono); font-size: 12px; color: var(--muted); letter-spacing: .02em; }
+.meta { font-family: var(--font-ui); font-size: 13px; color: var(--muted); }
 .pill {
   display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px; justify-self: start;
   border: 1px dashed var(--line-strong); border-radius: var(--radius-pill);
-  font: 500 12px/1 var(--font-mono); color: var(--muted);
+  font: 500 12px/1 var(--font-ui); color: var(--muted);
 }
 .guide { margin-top: 28px; display: inline-flex; align-items: center; gap: 8px; font-weight: 600; text-decoration: none; border-bottom: 1px solid var(--text); padding-bottom: 2px; }
 .guide svg.i { width: 16px; height: 16px; }
@@ -222,7 +240,9 @@ section.block { padding-block: clamp(84px, 11vw, 168px); position: relative; }
 /* Reduced motion: the photographs alone, no loops, no descent, nothing drifting */
 @media (prefers-reduced-motion: reduce) {
   .hero { height: auto; }
+  .hero + .block { margin-top: 0; }
+  .fogbank { display: none; }
   .stage { position: relative; }
-  .cue svg.i, .veil::before, .veil::after, .drift, .dusk-fog::after { animation: none; }
+  .cue svg.i, .fogbank::before, .fogbank::after, .drift, .dusk-fog::after { animation: none; }
   .stage::after { content: ""; position: absolute; inset: auto 0 0 0; height: 18%; z-index: 3; background: linear-gradient(to bottom, transparent, var(--background)); }
 }

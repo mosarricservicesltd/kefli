@@ -25,7 +25,6 @@ const faces = [
   { file: 'Archivo[wdth,wght].ttf', out: 'archivo.woff2', family: 'Archivo', style: 'normal', weight: '100 900', stretch: '62% 125%' },
   { file: 'Literata[opsz,wght].ttf', out: 'literata.woff2', family: 'Literata', style: 'normal', weight: '200 900' },
   { file: 'Literata-Italic[opsz,wght].ttf', out: 'literata-italic.woff2', family: 'Literata', style: 'italic', weight: '200 900' },
-  { file: 'MartianMono[wdth,wght].ttf', out: 'martian-mono.woff2', family: 'Martian Mono', style: 'normal', weight: '100 800', stretch: '75% 112.5%' },
 ];
 
 mkdirSync(join(web, 'public', 'fonts'), { recursive: true });
