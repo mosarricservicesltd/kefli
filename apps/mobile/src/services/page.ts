@@ -222,6 +222,13 @@ async function answer(p: PagePorts, url: string): Promise<Answer> {
       o = await get(p, url, MOBILE_UA);
     }
     const { res } = o;
+    // RULED: a 1xx's body is never read. OkHttp hands back a 103 Early Hints as the answer and holds it to an empty
+    // body, so the page's own bytes, once they have arrived, fail its read ("expected 0 bytes but received 1360"),
+    // which was taken for the network: the share said it was offline and never reached the engine (fetchPage)
+    if (res.status < 200) {
+      o.done();
+      return { res, url: o.url, bytes: new Uint8Array(0) };
+    }
     return { res, url: o.url, bytes: await o.read(capFor(p, res.headers.get('content-type') ?? '')) };
   } catch (e) {
     return unfetched(e, o, url);
